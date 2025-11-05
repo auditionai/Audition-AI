@@ -392,7 +392,7 @@ const AITool: React.FC = () => {
                 </div>
 
                 {/* Content based on tab */}
-                <div className="pb-32 md:pb-0"> {/* Padding bottom for mobile footer */}
+                <div>
                     {activeTool === 'generate' ? AiGeneratorTool : BgRemoverTool}
                 </div>
             </div>

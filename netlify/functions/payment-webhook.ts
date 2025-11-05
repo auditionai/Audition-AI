@@ -11,7 +11,7 @@ const createSignature = (data: Record<string, any>, checksumKey: string): string
 };
 
 const handler: Handler = async (event: HandlerEvent) => {
-    console.log("--- [START] PayOS Webhook Received (v2) ---");
+    console.log("--- [START] PayOS Webhook Received (Manual Approval Flow) ---");
 
     if (event.httpMethod !== 'POST') {
         return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
@@ -49,21 +49,22 @@ const handler: Handler = async (event: HandlerEvent) => {
         const isFailure = status?.toUpperCase() === 'CANCELLED' || status?.toUpperCase() === 'FAILED';
 
         if (isSuccess) {
-            console.log(`[SUCCESS] Order ${numericOrderCode} is PAID. Calling database function to process...`);
+            console.log(`[SUCCESS] Order ${numericOrderCode} is PAID. Updating status to 'awaiting_approval'.`);
             
-            // Gọi hàm cơ sở dữ liệu để xử lý giao dịch một cách toàn vẹn
-            const { data: rpcData, error: rpcError } = await supabaseAdmin
-                .rpc('process_paid_transaction', { p_order_code: numericOrderCode });
-
-            if (rpcError) {
-                // Lỗi này có nghĩa là đã có sự cố bên trong hàm RPC
-                console.error(`[DB_RPC_ERROR] Error processing transaction for order ${numericOrderCode}:`, rpcError.message);
-                return { statusCode: 500, body: JSON.stringify({ error: `Database processing failed: ${rpcError.message}` }) };
+            // Chuyển sang quy trình thủ công: chỉ cập nhật trạng thái để admin phê duyệt
+            const { error: updateError } = await supabaseAdmin
+                .from('transactions')
+                .update({ status: 'awaiting_approval', updated_at: new Date().toISOString() })
+                .eq('order_code', numericOrderCode)
+                .eq('status', 'pending'); // Chỉ cập nhật các giao dịch đang chờ
+            
+            if (updateError) {
+                console.error(`[DB_ERROR] Failed to update transaction ${numericOrderCode} to awaiting_approval:`, updateError.message);
+                // Trả về lỗi nhưng vẫn báo 200 cho PayOS để tránh retry
+                return { statusCode: 200, body: JSON.stringify({ message: 'Webhook received, but DB update failed.' }) };
             }
             
-            // Hàm trả về một hàng với { success, message }
-            const result = rpcData[0];
-            console.log(`[DB_RPC_SUCCESS] Result for order ${numericOrderCode}: ${result.message}`);
+            console.log(`[DB_SUCCESS] Transaction ${numericOrderCode} moved to admin approval queue.`);
 
         } else if (isFailure) {
             const dbStatus = status.toUpperCase() === 'CANCELLED' ? 'canceled' : 'failed';
@@ -81,7 +82,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         return { statusCode: 500, body: JSON.stringify({ error: 'Internal server error.' }) };
     }
 
-    console.log("--- [END] Webhook Processed Successfully (v2) ---");
+    console.log("--- [END] Webhook Processed Successfully (Manual Approval Flow) ---");
     // Luôn trả về 200 OK cho PayOS để tránh họ gửi lại yêu cầu
     return { statusCode: 200, body: JSON.stringify({ message: 'Webhook received.' }) };
 };

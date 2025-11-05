@@ -65,8 +65,8 @@ const BuyCreditsPage: React.FC = () => {
 
         if (status && orderCode) {
             if (status === 'PAID') {
-                // Sửa đổi thông báo để phản ánh việc cộng kim cương tự động
-                showToast(`Thanh toán thành công! Kim cương và XP đã được cộng vào tài khoản của bạn.`, 'success');
+                // Sửa đổi thông báo để phản ánh việc chờ phê duyệt thủ công
+                showToast(`Thanh toán thành công! Giao dịch của bạn đang chờ quản trị viên phê duyệt.`, 'success');
             } else if (status === 'CANCELLED') {
                 showToast(`Bạn đã hủy thanh toán cho đơn hàng #${orderCode}.`, 'error');
             }

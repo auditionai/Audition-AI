@@ -89,6 +89,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 if (typeof profile.xp === 'number') {
                     profile.level = calculateLevelFromXp(profile.xp);
                 }
+                setUser(profile);
                 return profile;
             }
             return null;
@@ -104,45 +105,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         previousUserRef.current = user;
     }, [user]);
 
-    // Effect for initializing and listening to auth state changes. Solves hanging issues.
+    // Effect to handle real-time notifications
     useEffect(() => {
-        setLoading(true);
-
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-            setSession(session);
-            let userProfile: User | null = null;
-            if (session?.user) {
-                const createdAt = new Date(session.user.created_at).getTime();
-                const isNewUser = (Date.now() - createdAt) < 60000;
-                
-                if (isNewUser && _event === 'SIGNED_IN') {
-                    // Delay slightly to ensure user profile is created by trigger
-                     await new Promise(res => setTimeout(res, 1500));
-                     try {
-                        await fetch('/.netlify/functions/set-initial-diamonds', {
-                            method: 'POST',
-                            headers: { 'Authorization': `Bearer ${session.access_token}` }
-                        });
-                     } catch (e) {
-                        console.error("Failed to set initial diamonds.", e);
-                     }
-                }
-                userProfile = await fetchUserProfile(session.user);
-            }
-            setUser(userProfile);
-            setLoading(false);
-        });
-    
-        return () => {
-            subscription.unsubscribe();
-        };
-    }, [fetchUserProfile]);
-
-
-    // Effect to handle real-time notifications and profile updates
-    useEffect(() => {
-        if (!user?.id || !session) return;
-
         const previousUser = previousUserRef.current;
         if (user && previousUser) {
             // Notify on diamond increase
@@ -155,13 +119,55 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                  showToast(`Chúc mừng! Bạn đã thăng cấp ${user.level}!`, 'success');
             }
         }
+    }, [user, showToast]);
 
+
+    useEffect(() => {
+        const initializeAuth = async () => {
+            const { data: { session } } = await supabase.auth.getSession();
+            setSession(session);
+            if (session?.user) {
+                await fetchUserProfile(session.user);
+            }
+            setLoading(false);
+        };
+        
+        initializeAuth();
+
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+            setSession(session);
+            if (session?.user) {
+                const createdAt = new Date(session.user.created_at).getTime();
+                const isNewUser = (Date.now() - createdAt) < 60000;
+
+                if (isNewUser) {
+                    setTimeout(async () => {
+                        try {
+                            await fetch('/.netlify/functions/set-initial-diamonds', {
+                                method: 'POST',
+                                headers: { 'Authorization': `Bearer ${session.access_token}` }
+                            });
+                        } catch (e) {
+                            console.error("Failed to set initial diamonds.", e);
+                        } finally {
+                            await fetchUserProfile(session.user);
+                        }
+                    }, 2000);
+                } else {
+                    // For existing users, just ensure profile is fresh on login
+                    await fetchUserProfile(session.user);
+                }
+            } else {
+                setUser(null);
+            }
+        });
+        
         // Real-time listener for user profile changes
         const userChannel = supabase
-            .channel(`public:users:${user.id}`)
+            .channel('public:users')
             .on(
                 'postgres_changes',
-                { event: 'UPDATE', schema: 'public', table: 'users', filter: `id=eq.${user.id}` },
+                { event: 'UPDATE', schema: 'public', table: 'users', filter: `id=eq.${user?.id}` },
                 (payload) => {
                     console.log('Realtime user update received:', payload.new);
                     updateUserProfile(payload.new as Partial<User>);
@@ -170,16 +176,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             .subscribe();
 
         return () => {
+            subscription?.unsubscribe();
             supabase.removeChannel(userChannel);
         };
-    }, [user, session, showToast, updateUserProfile]);
+    }, [fetchUserProfile, updateUserProfile, user?.id]);
     
     const hasCheckedInToday = useMemo(() => {
-        if (!user?.last_check_in_ct) return false;
+        if (!user?.last_check_in_at) return false;
         const todayVnString = getVNDateString(new Date());
-        const lastCheckInVnString = getVNDateString(new Date(user.last_check_in_ct));
+        const lastCheckInVnString = getVNDateString(new Date(user.last_check_in_at));
         return todayVnString === lastCheckInVnString;
-    }, [user?.last_check_in_ct]);
+    }, [user?.last_check_in_at]);
 
     const login = useCallback(async () => {
         const { error } = await supabase.auth.signInWithOAuth({

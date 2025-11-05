@@ -1,6 +1,7 @@
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
-// Fix: Use `require` for CommonJS module compatibility to resolve the "not constructable" error.
+// Fix: Use `require` to import the CommonJS `@payos/node` module and access its `default` export,
+// which contains the class constructor. This resolves the "not constructable" error.
 const PayOS = require("@payos/node").default;
 
 const payos = new PayOS(

@@ -76,6 +76,7 @@
         mask-composite: exclude;
         opacity: 0;
         transition: opacity 0.3s ease-in-out;
+        pointer-events: none;
       }
       .group:hover .glowing-border::before, .glowing-border-active::before {
         opacity: 0.6;
@@ -226,7 +227,6 @@
   }
 }
 </script>
-<link rel="stylesheet" href="/index.css">
 </head>
   <body>
     <div id="root"></div>

@@ -1,13 +1,24 @@
-import type { Handler, HandlerEvent, HandlerContext } from "@netlify/functions";
+import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
 import { Buffer } from 'buffer';
 
-const handler: Handler = async (event: HandlerEvent, context: HandlerContext) => {
+const handler: Handler = async (event: HandlerEvent) => {
     // 1. Auth check
-    const { user } = context.clientContext as any;
-    if (!user) {
-        return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized' }) };
+    const authHeader = event.headers['authorization'];
+    if (!authHeader) {
+        return { statusCode: 401, body: JSON.stringify({ error: 'Authorization header is required.' }) };
     }
+    const token = authHeader.split(' ')[1];
+    if (!token) {
+        return { statusCode: 401, body: JSON.stringify({ error: 'Bearer token is missing.' }) };
+    }
+
+    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+    
+    if (authError || !user) {
+        return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized: Invalid token.' }) };
+    }
+
     if (event.httpMethod !== 'POST') {
         return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
     }
@@ -24,7 +35,7 @@ const handler: Handler = async (event: HandlerEvent, context: HandlerContext) =>
         const mimeType = header.match(/:(.*?);/)?.[1] || 'image/png';
         const imageBuffer = Buffer.from(base64, 'base64');
         const fileExtension = mimeType.split('/')[1] || 'png';
-        const fileName = `public/${user.sub}.${fileExtension}`;
+        const fileName = `public/${user.id}.${fileExtension}`;
 
         const { error: uploadError } = await supabaseAdmin.storage
             .from('avatars')
@@ -46,7 +57,7 @@ const handler: Handler = async (event: HandlerEvent, context: HandlerContext) =>
         const { data: updatedUser, error: updateError } = await supabaseAdmin
             .from('users')
             .update({ photo_url: finalUrl })
-            .eq('id', user.sub)
+            .eq('id', user.id)
             .select('photo_url')
             .single();
 

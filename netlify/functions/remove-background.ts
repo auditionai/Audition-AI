@@ -1,18 +1,28 @@
-import type { Handler, HandlerEvent, HandlerContext } from "@netlify/functions";
+import type { Handler, HandlerEvent } from "@netlify/functions";
 import { GoogleGenAI, Modality } from "@google/genai";
 import { supabaseAdmin } from './utils/supabaseClient';
 import { Buffer } from 'buffer';
 
 const COST_PER_REMOVAL = 1;
 
-const handler: Handler = async (event: HandlerEvent, context: HandlerContext) => {
+const handler: Handler = async (event: HandlerEvent) => {
     if (event.httpMethod !== 'POST') {
         return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
     }
 
-    const { user } = context.clientContext as any;
-    if (!user) {
-        return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized' }) };
+    const authHeader = event.headers['authorization'];
+    if (!authHeader) {
+        return { statusCode: 401, body: JSON.stringify({ error: 'Authorization header is required.' }) };
+    }
+    const token = authHeader.split(' ')[1];
+    if (!token) {
+        return { statusCode: 401, body: JSON.stringify({ error: 'Bearer token is missing.' }) };
+    }
+
+    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+
+    if (authError || !user) {
+        return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized: Invalid token.' }) };
     }
 
     const { image: imageDataUrl } = JSON.parse(event.body || '{}');
@@ -21,7 +31,7 @@ const handler: Handler = async (event: HandlerEvent, context: HandlerContext) =>
     const { data: userData, error: userError } = await supabaseAdmin
         .from('users')
         .select('diamonds')
-        .eq('id', user.sub)
+        .eq('id', user.id)
         .single();
     
     if (userError || !userData) {
@@ -72,7 +82,7 @@ const handler: Handler = async (event: HandlerEvent, context: HandlerContext) =>
         // 4. Update database
         const newDiamondCount = userData.diamonds - COST_PER_REMOVAL;
         await Promise.all([
-            supabaseAdmin.from('users').update({ diamonds: newDiamondCount }).eq('id', user.sub),
+            supabaseAdmin.from('users').update({ diamonds: newDiamondCount }).eq('id', user.id),
             supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id })
         ]);
 

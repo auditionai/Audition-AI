@@ -1,10 +1,20 @@
-import type { Handler, HandlerEvent, HandlerContext } from "@netlify/functions";
+import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
 
-const handler: Handler = async (event: HandlerEvent, context: HandlerContext) => {
-    const { user } = context.clientContext as any;
-    if (!user) {
-        return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized' }) };
+const handler: Handler = async (event: HandlerEvent) => {
+    const authHeader = event.headers['authorization'];
+    if (!authHeader) {
+        return { statusCode: 401, body: JSON.stringify({ error: 'Authorization header is required.' }) };
+    }
+    const token = authHeader.split(' ')[1];
+    if (!token) {
+        return { statusCode: 401, body: JSON.stringify({ error: 'Bearer token is missing.' }) };
+    }
+
+    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+
+    if (authError || !user) {
+        return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized: Invalid token.' }) };
     }
 
     switch (event.httpMethod) {
@@ -12,7 +22,7 @@ const handler: Handler = async (event: HandlerEvent, context: HandlerContext) =>
             const { data, error } = await supabaseAdmin
                 .from('users')
                 .select('*')
-                .eq('id', user.sub)
+                .eq('id', user.id)
                 .single();
 
             if (error) {
@@ -31,7 +41,7 @@ const handler: Handler = async (event: HandlerEvent, context: HandlerContext) =>
             const { data, error } = await supabaseAdmin
                 .from('users')
                 .update({ display_name: display_name.trim() })
-                .eq('id', user.sub)
+                .eq('id', user.id)
                 .select('display_name')
                 .single();
 

@@ -1,4 +1,4 @@
-import type { Handler, HandlerEvent, HandlerContext } from "@netlify/functions";
+import type { Handler, HandlerEvent } from "@netlify/functions";
 import { GoogleGenAI, Modality } from "@google/genai";
 import { supabaseAdmin } from './utils/supabaseClient';
 import { Buffer } from 'buffer';
@@ -12,14 +12,24 @@ const dataUrlToBuffer = (dataUrl: string) => {
     return Buffer.from(base64, 'base64');
 };
 
-const handler: Handler = async (event: HandlerEvent, context: HandlerContext) => {
+const handler: Handler = async (event: HandlerEvent) => {
     if (event.httpMethod !== 'POST') {
         return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
     }
+    
+    const authHeader = event.headers['authorization'];
+    if (!authHeader) {
+        return { statusCode: 401, body: JSON.stringify({ error: 'Authorization header is required.' }) };
+    }
+    const token = authHeader.split(' ')[1];
+    if (!token) {
+        return { statusCode: 401, body: JSON.stringify({ error: 'Bearer token is missing.' }) };
+    }
 
-    const { user } = context.clientContext as any;
-    if (!user) {
-        return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized' }) };
+    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+
+    if (authError || !user) {
+        return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized: Invalid token.' }) };
     }
 
     const { prompt, characterImage, styleImage, model, style, aspectRatio } = JSON.parse(event.body || '{}');
@@ -28,7 +38,7 @@ const handler: Handler = async (event: HandlerEvent, context: HandlerContext) =>
     const { data: userData, error: userError } = await supabaseAdmin
         .from('users')
         .select('diamonds, xp')
-        .eq('id', user.sub)
+        .eq('id', user.id)
         .single();
     
     if (userError || !userData) {
@@ -103,7 +113,7 @@ const handler: Handler = async (event: HandlerEvent, context: HandlerContext) =>
         
         // 4. Upload result to Supabase Storage
         const imageBuffer = Buffer.from(finalImageBase64, 'base64');
-        const fileName = `${user.sub}/${Date.now()}.jpg`;
+        const fileName = `${user.id}/${Date.now()}.jpg`;
         const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
             .from('generated_images')
             .upload(fileName, imageBuffer, { contentType: finalImageMimeType });
@@ -118,8 +128,8 @@ const handler: Handler = async (event: HandlerEvent, context: HandlerContext) =>
 
         // Using Promise.all to run updates concurrently
         await Promise.all([
-            supabaseAdmin.from('users').update({ diamonds: newDiamondCount, xp: newXp }).eq('id', user.sub),
-            supabaseAdmin.from('generated_images').insert({ user_id: user.sub, prompt: prompt, image_url: publicUrl, model_used: model }),
+            supabaseAdmin.from('users').update({ diamonds: newDiamondCount, xp: newXp }).eq('id', user.id),
+            supabaseAdmin.from('generated_images').insert({ user_id: user.id, prompt: prompt, image_url: publicUrl, model_used: model }),
             supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id })
         ]);
 

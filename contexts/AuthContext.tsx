@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, Rea
 import { supabase } from '../utils/supabaseClient';
 import { Session, User as SupabaseUser } from '@supabase/supabase-js';
 import { User, Stats } from '../types';
+import { calculateLevelFromXp } from '../utils/rankUtils';
 
 // Define the shape of the context
 interface AuthContextType {
@@ -124,7 +125,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }, []);
 
     const updateUserProfile = useCallback((updates: Partial<User>) => {
-        setUser(currentUser => currentUser ? { ...currentUser, ...updates } : null);
+        setUser(currentUser => {
+            if (!currentUser) return null;
+            
+            const updatedUser = { ...currentUser, ...updates };
+
+            // If XP was updated, also recalculate and update the level
+            if (updates.xp !== undefined) {
+                updatedUser.level = calculateLevelFromXp(updates.xp);
+            }
+
+            return updatedUser;
+        });
     }, []);
 
     const value = useMemo(() => ({

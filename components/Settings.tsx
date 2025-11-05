@@ -8,39 +8,52 @@ import Modal from './common/Modal';
 import { RANKS } from '../constants/ranks';
 
 // Component for a single API Key in the admin panel
-const ApiKeyRow: React.FC<{ apiKey: ApiKey; onUpdate: (id: string, status: 'active' | 'inactive') => void; onDelete: (id: string) => void; }> = ({ apiKey, onUpdate, onDelete }) => (
-    <div className="grid grid-cols-12 gap-4 items-center p-3 bg-white/5 rounded-lg">
-        <div className="col-span-4 truncate">
-            <p className="font-semibold text-white">{apiKey.name}</p>
-            <p className="text-xs text-gray-500 truncate">{apiKey.id}</p>
+const ApiKeyRow: React.FC<{ apiKey: ApiKey; onUpdate: (id: string, status: 'active' | 'inactive') => void; onDelete: (id: string) => void; }> = ({ apiKey, onUpdate, onDelete }) => {
+    const cost = apiKey.usage_count * 1000;
+    return (
+        <div className="grid grid-cols-12 gap-4 items-center p-3 bg-white/5 rounded-lg text-sm">
+            <div className="col-span-3 truncate">
+                <p className="font-semibold text-white">{apiKey.name}</p>
+                <p className="text-xs text-gray-500 truncate">{apiKey.id}</p>
+            </div>
+            <div className="col-span-3 text-xs text-gray-400 truncate">{apiKey.key_value}</div>
+            <div className="col-span-2 text-center">
+                <p className="font-mono text-lg text-white">{apiKey.usage_count}</p>
+            </div>
+            <div className="col-span-2 text-center">
+                <p className="font-mono text-lg text-pink-400">{cost.toLocaleString('vi-VN')}đ</p>
+            </div>
+            <div className="col-span-2 flex items-center justify-end gap-2">
+                <button
+                    onClick={() => onUpdate(apiKey.id, apiKey.status === 'active' ? 'inactive' : 'active')}
+                    className={`px-3 py-1 text-xs font-semibold rounded-full ${apiKey.status === 'active' ? 'bg-green-500/20 text-green-300' : 'bg-gray-500/20 text-gray-400'}`}
+                >
+                    {apiKey.status === 'active' ? 'Active' : 'Inactive'}
+                </button>
+                <button onClick={() => onDelete(apiKey.id)} className="text-gray-400 hover:text-red-500 transition-colors"><i className="ph-fill ph-trash"></i></button>
+            </div>
         </div>
-        <div className="col-span-4 text-xs text-gray-400 truncate">{apiKey.key_value}</div>
-        <div className="col-span-1 text-center font-mono text-lg">{apiKey.usage_count}</div>
-        <div className="col-span-3 flex items-center justify-end gap-2">
-            <button
-                onClick={() => onUpdate(apiKey.id, apiKey.status === 'active' ? 'inactive' : 'active')}
-                className={`px-3 py-1 text-xs font-semibold rounded-full ${apiKey.status === 'active' ? 'bg-green-500/20 text-green-300' : 'bg-gray-500/20 text-gray-400'}`}
-            >
-                {apiKey.status === 'active' ? 'Active' : 'Inactive'}
-            </button>
-            <button onClick={() => onDelete(apiKey.id)} className="text-gray-400 hover:text-red-500 transition-colors"><i className="ph-fill ph-trash"></i></button>
-        </div>
-    </div>
-);
+    );
+};
+
 
 const EditUserModal: React.FC<{ user: AdminManagedUser; onClose: () => void; onSave: (userId: string, updates: any) => Promise<void>; }> = ({ user, onClose, onSave }) => {
     const [diamonds, setDiamonds] = useState(user.diamonds);
     const [xp, setXp] = useState(user.xp);
     const [isAdmin, setIsAdmin] = useState(!!user.is_admin);
+    const [newPassword, setNewPassword] = useState('');
     const [isSaving, setIsSaving] = useState(false);
 
     const handleSave = async () => {
         setIsSaving(true);
-        const updates = {
+        const updates: { [key: string]: any } = {
             diamonds: Number(diamonds),
             xp: Number(xp),
             is_admin: isAdmin,
         };
+        if (newPassword.trim()) {
+            updates.password = newPassword.trim();
+        }
         await onSave(user.id, updates);
         setIsSaving(false);
         onClose();
@@ -57,7 +70,11 @@ const EditUserModal: React.FC<{ user: AdminManagedUser; onClose: () => void; onS
                     <label className="block text-sm font-medium text-gray-400 mb-1">XP</label>
                     <input type="number" value={xp} onChange={(e) => setXp(Number(e.target.value))} className="auth-input" />
                 </div>
-                <div className="flex items-center justify-between">
+                 <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-1">Mật khẩu mới (bỏ trống nếu không đổi)</label>
+                    <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="auth-input" placeholder="••••••••" />
+                </div>
+                <div className="flex items-center justify-between pt-2">
                     <label className="text-sm font-medium text-gray-300">Quyền Admin</label>
                     <input type="checkbox" checked={isAdmin} onChange={(e) => setIsAdmin(e.target.checked)} className="w-5 h-5 rounded text-pink-500 bg-gray-700 border-gray-600 focus:ring-pink-600" />
                 </div>
@@ -346,6 +363,13 @@ const Settings: React.FC = () => {
                                         {isAddingKey ? <i className="ph-fill ph-spinner animate-spin"></i> : 'Thêm'}
                                     </button>
                                 </form>
+                                 <div className="grid grid-cols-12 gap-4 px-3 text-xs font-semibold text-gray-400 border-b border-white/10 pb-2">
+                                    <div className="col-span-3">Tên / ID</div>
+                                    <div className="col-span-3">Key</div>
+                                    <div className="col-span-2 text-center">Sử dụng</div>
+                                    <div className="col-span-2 text-center">Chi phí</div>
+                                    <div className="col-span-2 text-right">Thao tác</div>
+                                </div>
                                 <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar pr-2">
                                     {apiKeys.length > 0 ? (
                                         apiKeys.map(key => <ApiKeyRow key={key.id} apiKey={key} onUpdate={handleUpdateApiKey} onDelete={handleDeleteApiKey} />)
@@ -364,17 +388,23 @@ const Settings: React.FC = () => {
                                 {allUsers.length > 0 ? (
                                 <div className="space-y-2">
                                     {allUsers.map(u => (
-                                        <div key={u.id} className="flex items-center gap-4 p-2 bg-white/5 rounded-lg">
-                                            <img src={u.photo_url} alt={u.display_name} className="w-10 h-10 rounded-full" />
-                                            <div className="flex-grow">
-                                                <p className="font-semibold text-white">{u.display_name} {u.is_admin && <span className="text-xs text-yellow-400">(Admin)</span>}</p>
-                                                <p className="text-xs text-gray-400">{u.email}</p>
+                                        <div key={u.id} className="grid grid-cols-12 gap-4 items-center p-2 bg-white/5 rounded-lg">
+                                            <div className="col-span-12 sm:col-span-6 flex items-center gap-4">
+                                                <img src={u.photo_url} alt={u.display_name} className="w-10 h-10 rounded-full flex-shrink-0" />
+                                                <div className="truncate">
+                                                    <p className="font-semibold text-white truncate">{u.display_name} {u.is_admin && <span className="text-xs text-yellow-400">(Admin)</span>}</p>
+                                                    <p className="text-xs text-gray-400 truncate">{u.email}</p>
+                                                </div>
                                             </div>
-                                            <div className="text-right text-xs">
-                                                <p className="text-pink-300 font-mono">♦ {u.diamonds}</p>
+                                            <div className="col-span-6 sm:col-span-2 text-left sm:text-right text-xs">
+                                                <p className="text-pink-300 font-mono flex items-center gap-1"><i className="ph-fill ph-diamonds-four"></i> {u.diamonds}</p>
+                                            </div>
+                                            <div className="col-span-6 sm:col-span-2 text-left sm:text-right text-xs">
                                                 <p className="text-cyan-300 font-mono">{u.xp} XP</p>
                                             </div>
-                                            <button onClick={() => setEditingUser(u)} className="p-2 text-gray-300 hover:text-white"><i className="ph-fill ph-pencil-simple"></i></button>
+                                            <div className="col-span-12 sm:col-span-2 flex justify-end items-center">
+                                                <button onClick={() => setEditingUser(u)} className="p-2 text-gray-300 hover:text-white"><i className="ph-fill ph-pencil-simple text-lg"></i></button>
+                                            </div>
                                         </div>
                                     ))}
                                 </div>

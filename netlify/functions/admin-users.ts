@@ -43,32 +43,51 @@ const handler: Handler = async (event: HandlerEvent) => {
         }
 
         case 'PUT': {
-            // Update a specific user's data (e.g., diamonds, is_admin)
             const { userId, updates } = JSON.parse(event.body || '{}');
             if (!userId || !updates) {
                 return { statusCode: 400, body: JSON.stringify({ error: 'User ID and updates are required.' }) };
             }
 
-            // Sanitize updates to prevent updating sensitive fields unintentionally
+            // 1. Handle password update separately
+            if (updates.password && typeof updates.password === 'string' && updates.password.length >= 6) {
+                const { error: passwordUpdateError } = await supabaseAdmin.auth.admin.updateUserById(
+                    userId,
+                    { password: updates.password }
+                );
+                if (passwordUpdateError) {
+                    return { statusCode: 500, body: JSON.stringify({ error: `Password update failed: ${passwordUpdateError.message}` }) };
+                }
+            }
+
+            // 2. Handle profile data update
             const allowedUpdates: { [key: string]: any } = {};
-            if (updates.diamonds !== undefined) allowedUpdates.diamonds = updates.diamonds;
-            if (updates.xp !== undefined) allowedUpdates.xp = updates.xp;
-            if (updates.is_admin !== undefined) allowedUpdates.is_admin = updates.is_admin;
-            if (Object.keys(allowedUpdates).length === 0) {
-                 return { statusCode: 400, body: JSON.stringify({ error: 'No valid fields to update.' }) };
+            if (updates.diamonds !== undefined) allowedUpdates.diamonds = Number(updates.diamonds);
+            if (updates.xp !== undefined) allowedUpdates.xp = Number(updates.xp);
+            if (updates.is_admin !== undefined) allowedUpdates.is_admin = Boolean(updates.is_admin);
+            
+            if (Object.keys(allowedUpdates).length > 0) {
+                 const { error: profileUpdateError } = await supabaseAdmin
+                    .from('users')
+                    .update(allowedUpdates)
+                    .eq('id', userId);
+                
+                if (profileUpdateError) {
+                    return { statusCode: 500, body: JSON.stringify({ error: `Profile update failed: ${profileUpdateError.message}` }) };
+                }
             }
             
-            const { data, error } = await supabaseAdmin
+            // 3. Fetch final user state to return to client
+            const { data: finalUserData, error: fetchError } = await supabaseAdmin
                 .from('users')
-                .update(allowedUpdates)
-                .eq('id', userId)
                 .select()
+                .eq('id', userId)
                 .single();
 
-            if (error) {
-                return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
+            if (fetchError) {
+                 return { statusCode: 500, body: JSON.stringify({ error: `Failed to fetch updated user: ${fetchError.message}` }) };
             }
-            return { statusCode: 200, body: JSON.stringify(data) };
+            
+            return { statusCode: 200, body: JSON.stringify(finalUserData) };
         }
 
         default:

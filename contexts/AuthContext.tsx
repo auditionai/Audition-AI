@@ -104,47 +104,39 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         previousUserRef.current = user;
     }, [user]);
 
-    // DECISIVE FIX: Robust initialization and auth state listener.
+    // Effect for initializing and listening to auth state changes. Solves hanging issues.
     useEffect(() => {
         setLoading(true);
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-            try {
-                setSession(session);
-                let userProfile: User | null = null;
-                if (session?.user) {
-                    const createdAt = new Date(session.user.created_at).getTime();
-                    const isNewUser = (Date.now() - createdAt) < 60000;
-                    
-                    if (isNewUser && _event === 'SIGNED_IN') {
-                         await new Promise(res => setTimeout(res, 1500));
-                         try {
-                            await fetch('/.netlify/functions/set-initial-diamonds', {
-                                method: 'POST',
-                                headers: { 'Authorization': `Bearer ${session.access_token}` }
-                            });
-                         } catch (e) {
-                            console.error("Failed to set initial diamonds.", e);
-                         }
-                    }
-                    userProfile = await fetchUserProfile(session.user);
+            setSession(session);
+            let userProfile: User | null = null;
+            if (session?.user) {
+                const createdAt = new Date(session.user.created_at).getTime();
+                const isNewUser = (Date.now() - createdAt) < 60000;
+                
+                if (isNewUser && _event === 'SIGNED_IN') {
+                    // Delay slightly to ensure user profile is created by trigger
+                     await new Promise(res => setTimeout(res, 1500));
+                     try {
+                        await fetch('/.netlify/functions/set-initial-diamonds', {
+                            method: 'POST',
+                            headers: { 'Authorization': `Bearer ${session.access_token}` }
+                        });
+                     } catch (e) {
+                        console.error("Failed to set initial diamonds.", e);
+                     }
                 }
-                setUser(userProfile);
-            } catch (error) {
-                console.error("Critical error during auth state change processing:", error);
-                showToast('Đã xảy ra lỗi xác thực.', 'error');
-                setUser(null);
-                setSession(null);
-            } finally {
-                // This block is GUARANTEED to run, ensuring the loading screen always disappears.
-                setLoading(false);
+                userProfile = await fetchUserProfile(session.user);
             }
+            setUser(userProfile);
+            setLoading(false);
         });
     
         return () => {
             subscription.unsubscribe();
         };
-    }, [fetchUserProfile, showToast]);
+    }, [fetchUserProfile]);
 
 
     // Effect to handle real-time notifications and profile updates
@@ -183,11 +175,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }, [user, session, showToast, updateUserProfile]);
     
     const hasCheckedInToday = useMemo(() => {
-        if (!user?.last_check_in_at) return false;
+        if (!user?.last_check_in_ct) return false;
         const todayVnString = getVNDateString(new Date());
-        const lastCheckInVnString = getVNDateString(new Date(user.last_check_in_at));
+        const lastCheckInVnString = getVNDateString(new Date(user.last_check_in_ct));
         return todayVnString === lastCheckInVnString;
-    }, [user?.last_check_in_at]);
+    }, [user?.last_check_in_ct]);
 
     const login = useCallback(async () => {
         const { error } = await supabase.auth.signInWithOAuth({

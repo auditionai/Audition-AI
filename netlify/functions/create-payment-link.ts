@@ -62,7 +62,7 @@ const handler: Handler = async (event: HandlerEvent) => {
              if (transactionError.message.toLowerCase().includes("column") && transactionError.message.toLowerCase().includes("does not exist")) {
                  const missingColumnMatch = transactionError.message.match(/column "(.*?)"/);
                  const missingColumn = missingColumnMatch ? missingColumnMatch[1] : 'không xác định';
-                 const specificError = `Lỗi Database: Bảng 'transactions' bị thiếu cột '${missingColumn}'. Vui lòng chạy lại script SQL để cập nhật cấu trúc bảng.`;
+                 const specificError = `Lỗi Database: Cấu trúc bảng 'transactions' không đúng. Thiếu cột '${missingColumn}'. Vui lòng dùng script sửa lỗi SQL để đảm bảo bảng có đủ các cột: id, order_code, user_id, package_id, amount, status, created_at, updated_at.`;
                  console.error(specificError, transactionError);
                  throw new Error(specificError);
              }

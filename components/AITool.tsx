@@ -38,6 +38,7 @@ const AITool: React.FC = () => {
     const [isModelModalOpen, setModelModalOpen] = useState(false);
     const [isInstructionModalOpen, setInstructionModalOpen] = useState(false);
     const [instructionKey, setInstructionKey] = useState<'character' | 'style' | 'prompt' | 'advanced' | null>(null);
+    const [isPreviewModalOpen, setPreviewModalOpen] = useState(false);
     
     const [generationStep, setGenerationStep] = useState(0);
     const [isStyleDropdownOpen, setStyleDropdownOpen] = useState(false);
@@ -356,8 +357,8 @@ const AITool: React.FC = () => {
             <div className="bg-[#1a1a22]/80 rounded-2xl border border-white/10 shadow-lg p-4 md:p-6">
                 {/* Tab switcher */}
                 <div className="mb-6 max-w-md mx-auto p-1 bg-black/30 rounded-full flex items-center">
-                    <button onClick={() => setActiveTool('generate')} className={`w-1/2 py-2 rounded-full font-bold transition-all ${activeTool === 'generate' ? 'bg-pink-600 shadow-lg shadow-pink-500/30' : 'text-gray-400'}`}>Tạo Ảnh AI</button>
                     <button onClick={() => setActiveTool('removeBg')} className={`w-1/2 py-2 rounded-full font-bold transition-all ${activeTool === 'removeBg' ? 'bg-pink-600 shadow-lg shadow-pink-500/30' : 'text-gray-400'}`}>Tách Nền</button>
+                    <button onClick={() => setActiveTool('generate')} className={`w-1/2 py-2 rounded-full font-bold transition-all ${activeTool === 'generate' ? 'bg-pink-600 shadow-lg shadow-pink-500/30' : 'text-gray-400'}`}>Tạo Ảnh AI</button>
                 </div>
 
                 {/* Content based on tab */}
@@ -370,13 +371,16 @@ const AITool: React.FC = () => {
             {activeTool === 'generate' && (
                 <div className="md:hidden fixed bottom-16 left-0 w-full p-3 z-30 mobile-ai-footer">
                     <div className="flex items-center gap-3">
-                        <div className="w-20 h-20 flex-shrink-0 bg-black/30 rounded-lg flex items-center justify-center overflow-hidden border border-white/10">
+                        <div 
+                            onClick={() => generatedImage && setPreviewModalOpen(true)}
+                            className={`w-[90px] h-[90px] flex-shrink-0 bg-black/30 rounded-lg flex items-center justify-center overflow-hidden border border-white/10 ${generatedImage ? 'cursor-pointer' : ''}`}
+                        >
                             {isLoading ? <GenerationProgress currentStep={generationStep} /> : 
                              generatedImage ? <img src={generatedImage} alt="Generated" className="w-full h-full object-contain"/> :
                              <i className="ph-fill ph-image text-3xl text-gray-600"></i>
                             }
                         </div>
-                        <button onClick={handleGenerateClick} disabled={isLoading} className="w-full py-3 font-bold text-lg text-white bg-gradient-to-r from-[#F72585] to-[#CA27FF] rounded-full flex items-center justify-center gap-2 disabled:opacity-60">
+                        <button onClick={handleGenerateClick} disabled={isLoading} className="flex-grow py-3 font-bold text-lg text-white bg-gradient-to-r from-[#F72585] to-[#CA27FF] rounded-full flex items-center justify-center gap-2 disabled:opacity-60">
                            <i className="ph-fill ph-magic-wand"></i>
                            {isLoading ? "Đang xử lý..." : `Tạo ảnh`}
                        </button>
@@ -387,6 +391,16 @@ const AITool: React.FC = () => {
             <ConfirmationModal isOpen={isConfirmationOpen} onClose={() => setConfirmationOpen(false)} onConfirm={handleConfirmGeneration} cost={COST_PER_IMAGE}/>
             <ModelSelectionModal isOpen={isModelModalOpen} onClose={() => setModelModalOpen(false)} selectedModelId={selectedModelId} onSelectModel={setSelectedModelId} characterImage={characterImages.length > 0}/>
             <InstructionModal isOpen={isInstructionModalOpen} onClose={() => setInstructionModalOpen(false)} instructionKey={instructionKey}/>
+
+            {/* Simplified modal for mobile preview */}
+            {isPreviewModalOpen && generatedImage && (
+                <div 
+                  className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+                  onClick={() => setPreviewModalOpen(false)}
+                >
+                    <img src={generatedImage} alt="Generated Preview" className="max-w-full max-h-full rounded-lg" />
+                </div>
+            )}
         </div>
     );
 };

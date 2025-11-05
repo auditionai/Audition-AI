@@ -21,5 +21,13 @@
     "noFallthroughCasesInSwitch": true
   },
   "include": ["**/*.ts", "**/*.tsx"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "vite.config.ts",
+    "tailwind.config.js",
+    "postcss.config.js",
+    "netlify"
+  ],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

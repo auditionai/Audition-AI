@@ -130,6 +130,7 @@ export interface Transaction {
     user_id: string;
     package_id: string;
     amount_vnd: number;
+    diamonds_received: number;
     status: 'pending' | 'completed' | 'failed' | 'canceled';
     created_at: string;
     updated_at: string;

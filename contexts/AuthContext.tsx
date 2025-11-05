@@ -134,12 +134,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         stats,
         toast,
         route,
-        login,
-        logout,
-        updateUserDiamonds,
-        updateUserProfile,
-        showToast,
-        navigate,
+        login: useCallback(login, [showToast]),
+        logout: useCallback(logout, [navigate]),
+        updateUserDiamonds: useCallback(updateUserDiamonds, []),
+        updateUserProfile: useCallback(updateUserProfile, []),
+        showToast: useCallback(showToast, []),
+        navigate: useCallback(navigate, []),
     };
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -315,9 +315,9 @@ const Settings: React.FC = () => {
             </div>
 
             <div className="bg-[#12121A]/80 border border-white/10 rounded-2xl shadow-lg p-6 mb-8">
-                <h3 className="text-2xl font-bold mb-4">Tác phẩm của bạn</h3>
+                <h3 className="text-2xl font-bold mb-4">Thư viện Sáng tạo Cá nhân</h3>
                 {isImagesLoading ? <p>Đang tải...</p> : userImages.length > 0 ? (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-4">
                         {userImages.map(img => (
                             <div key={img.id} className="group relative aspect-square rounded-lg overflow-hidden cursor-pointer" onClick={() => setSelectedImage(img)}>
                                 <img src={img.image_url} alt={img.prompt} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110" />

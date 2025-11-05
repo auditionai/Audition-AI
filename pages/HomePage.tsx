@@ -8,7 +8,6 @@ import Pricing from '../components/Pricing';
 import FAQ from '../components/FAQ';
 import Footer from '../components/Footer';
 import AuthModal from '../components/AuthModal';
-import TopUpModal from '../components/TopUpModal';
 import AnimatedSection from '../components/common/AnimatedSection';
 // Fix: Import `useAuth` from `AuthContext` to get all context functionality.
 import { useAuth } from '../contexts/AuthContext';
@@ -19,9 +18,8 @@ import ImageModal from '../components/common/ImageModal';
 
 const HomePage: React.FC = () => {
     // Fix: Use `useAuth` as the single source for context state and functions.
-    const { user, login, updateUserDiamonds, stats, showToast, navigate } = useAuth();
+    const { user, login, stats, showToast, navigate } = useAuth();
     const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-    const [isTopUpModalOpen, setIsTopUpModalOpen] = useState(false);
     const [infoModalKey, setInfoModalKey] = useState<'terms' | 'policy' | 'contact' | null>(null);
     const [activeSection, setActiveSection] = useState('hero');
     const [selectedImage, setSelectedImage] = useState<GalleryImage | null>(null);
@@ -44,15 +42,6 @@ const HomePage: React.FC = () => {
         return () => sections.forEach((section) => observer.unobserve(section));
     }, []);
 
-    const handleTopUpSuccess = (amount: number) => {
-        // This is a demo update. In a real app, you'd refetch user data.
-        if (user) {
-            updateUserDiamonds(user.diamonds + amount);
-        }
-        setIsTopUpModalOpen(false);
-        showToast(`Nạp thành công ${amount} kim cương!`, 'success');
-    };
-
     const handleOpenInfoModal = (key: 'terms' | 'policy' | 'contact') => {
         setInfoModalKey(key);
     };
@@ -68,6 +57,14 @@ const HomePage: React.FC = () => {
             element.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
     };
+    
+    const handleTopUpClick = () => {
+        if (user) {
+            navigate('buy-credits');
+        } else {
+            setIsAuthModalOpen(true);
+        }
+    };
 
     return (
         <>
@@ -76,13 +73,13 @@ const HomePage: React.FC = () => {
             </div>
             <LandingHeader
                 user={user}
-                onTopUpClick={() => setIsTopUpModalOpen(true)}
+                onTopUpClick={handleTopUpClick}
                 onScrollTo={scrollToSection}
             />
             <main className="relative z-10">
                 <section id="hero">
                     <Hero
-                        onCtaClick={() => setIsAuthModalOpen(true)}
+                        onCtaClick={() => user ? navigate('tool') : setIsAuthModalOpen(true)}
                         onGoogleLoginClick={handleDirectGoogleLogin}
                     />
                 </section>
@@ -118,7 +115,7 @@ const HomePage: React.FC = () => {
                     </div>
                 </AnimatedSection>
                 <AnimatedSection id="pricing">
-                    <Pricing onTopUpClick={() => { user ? setIsTopUpModalOpen(true) : setIsAuthModalOpen(true); }} />
+                    <Pricing onTopUpClick={handleTopUpClick} />
                 </AnimatedSection>
                 <AnimatedSection id="faq">
                     <FAQ />
@@ -130,11 +127,6 @@ const HomePage: React.FC = () => {
             <AuthModal
                 isOpen={isAuthModalOpen}
                 onClose={() => setIsAuthModalOpen(false)}
-            />
-            <TopUpModal
-                isOpen={isTopUpModalOpen}
-                onClose={() => setIsTopUpModalOpen(false)}
-                onTopUpSuccess={handleTopUpSuccess}
             />
             <InfoModal
                 isOpen={!!infoModalKey}

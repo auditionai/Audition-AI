@@ -33,6 +33,9 @@ const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeTab, onTabChange, onT
             <NavButton 
                 icon="ph-diamonds-four"
                 label="Nạp Kim cương"
+                // Fix: Corrected the `isActive` condition. The `activeTab` prop, of type `CreatorTab`,
+                // will never equal 'buy-credits', causing a type error. This button navigates to a
+                // separate page and is not a tab within the CreatorPage, so its active state should be false.
                 isActive={false}
                 onClick={onTopUpClick}
             />

@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import CreatorHeader from '../components/CreatorHeader';
 import CreatorFooter from '../components/CreatorFooter';
 import AITool from '../components/AITool';
-import TopUpModal from '../components/TopUpModal';
 import { useAuth } from '../contexts/AuthContext';
 import Leaderboard from '../components/Leaderboard';
 import Settings from '../components/Settings';
@@ -14,18 +13,9 @@ export type CreatorTab = 'tool' | 'leaderboard' | 'settings';
 
 const CreatorPage: React.FC = () => {
     // Fix: `updateUserDiamonds` is now correctly provided by the `useAuth` hook.
-    const { user, updateUserDiamonds, showToast } = useAuth();
-    const [isTopUpModalOpen, setIsTopUpModalOpen] = useState(false);
+    const { navigate } = useAuth();
     const [activeTab, setActiveTab] = useState<CreatorTab>('tool');
     const [infoModalKey, setInfoModalKey] = useState<'terms' | 'policy' | 'contact' | null>(null);
-
-    const handleTopUpSuccess = (amount: number) => {
-        if(user) {
-            updateUserDiamonds(user.diamonds + amount);
-        }
-        setIsTopUpModalOpen(false);
-        showToast(`Nạp thành công ${amount} kim cương!`, 'success');
-    };
 
     const handleOpenInfoModal = (key: 'terms' | 'policy' | 'contact') => {
         setInfoModalKey(key);
@@ -47,7 +37,7 @@ const CreatorPage: React.FC = () => {
     return (
         <div className="flex flex-col min-h-screen bg-[#0B0B0F]">
             <CreatorHeader 
-                onTopUpClick={() => setIsTopUpModalOpen(true)}
+                onTopUpClick={() => navigate('buy-credits')}
                 activeTab={activeTab}
                 setActiveTab={setActiveTab}
             />
@@ -62,13 +52,7 @@ const CreatorPage: React.FC = () => {
             <BottomNavBar
                 activeTab={activeTab}
                 onTabChange={setActiveTab}
-                onTopUpClick={() => setIsTopUpModalOpen(true)}
-            />
-
-            <TopUpModal
-                isOpen={isTopUpModalOpen}
-                onClose={() => setIsTopUpModalOpen(false)}
-                onTopUpSuccess={handleTopUpSuccess}
+                onTopUpClick={() => navigate('buy-credits')}
             />
 
             <InfoModal

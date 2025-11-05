@@ -2,6 +2,7 @@ import HomePage from './pages/HomePage';
 import CreatorPage from './pages/CreatorPage';
 import GalleryPage from './pages/GalleryPage';
 import { useAuth } from './contexts/AuthContext';
+import BuyCreditsPage from './pages/BuyCreditsPage';
 
 const AppLoadingScreen = () => (
   <div className="fixed inset-0 bg-[#0B0B0F] flex items-center justify-center z-[9999]">
@@ -25,6 +26,9 @@ function App() {
   const renderPage = () => {
     if (route === 'gallery') {
       return <GalleryPage />;
+    }
+    if (route === 'buy-credits') {
+      return <BuyCreditsPage />;
     }
     // For 'home' and any other route, use the default logic based on auth state
     return user ? <CreatorPage /> : <HomePage />;

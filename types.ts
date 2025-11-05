@@ -110,3 +110,27 @@ export interface LeaderboardUser {
     // creations_count sẽ được tính toán
     creations_count: number;
 }
+
+// Dành cho các gói nạp kim cương
+export interface CreditPackage {
+    id: string;
+    credits_amount: number;
+    bonus_credits: number;
+    price_vnd: number;
+    is_flash_sale: boolean;
+    is_active: boolean;
+    display_order: number;
+    created_at: string;
+}
+
+// Dành cho lịch sử giao dịch
+export interface Transaction {
+    id: string;
+    order_code: number;
+    user_id: string;
+    package_id: string;
+    amount: number;
+    status: 'pending' | 'completed' | 'failed' | 'canceled';
+    created_at: string;
+    updated_at: string;
+}

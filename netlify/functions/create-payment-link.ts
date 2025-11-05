@@ -1,8 +1,9 @@
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
-// Fix: Use `require` to import the CommonJS `@payos/node` module and access its `default` export,
-// which contains the class constructor. This resolves the "not constructable" error.
-const PayOS = require("@payos/node").default;
+
+// Fix: The PayOS library is a CommonJS module. Using `require` is a robust way to import it 
+// in a Node.js environment and resolves the "not constructable" type error.
+const PayOS = require("@payos/node");
 
 const payos = new PayOS(
     process.env.PAYOS_CLIENT_ID!,
@@ -55,23 +56,24 @@ const handler: Handler = async (event: HandlerEvent) => {
                 order_code: orderCode,
                 user_id: user.id,
                 package_id: pkg.id,
-                amount_vnd: pkg.price_vnd,
+                amount_vnd: pkg.price_vnd, // Use the correct, single column
                 diamonds_received: totalCredits,
                 status: 'pending'
             });
         
+        // NEW: Improved error handling for schema mismatch
         if (transactionError) {
              if (transactionError.message.toLowerCase().includes("column") && transactionError.message.toLowerCase().includes("does not exist")) {
                  const missingColumnMatch = transactionError.message.match(/column "(.*?)"/);
                  const missingColumn = missingColumnMatch ? missingColumnMatch[1] : 'không xác định';
-                 const specificError = `Lỗi Database: Thiếu cột '${missingColumn}' trong bảng 'transactions'. Vui lòng chạy script SQL để cập nhật.`;
+                 const specificError = `Lỗi Database: Cấu trúc bảng 'transactions' không đúng. Thiếu cột '${missingColumn}'. Vui lòng dùng script sửa lỗi SQL để đảm bảo bảng có đủ các cột: id, order_code, user_id, package_id, amount_vnd, diamonds_received, status, created_at, updated_at.`;
                  console.error(specificError, transactionError);
                  throw new Error(specificError);
              }
              if (transactionError.message.includes('violates not-null constraint')) {
                 const missingColumnMatch = transactionError.message.match(/column "(.*?)"/);
                 const missingColumn = missingColumnMatch ? missingColumnMatch[1] : 'không xác định';
-                const specificError = `Lỗi Database: Cột '${missingColumn}' trong bảng 'transactions' không được để trống.`;
+                const specificError = `Lỗi Database: Cột '${missingColumn}' trong bảng 'transactions' không được để trống. Vui lòng kiểm tra lại mã nguồn hoặc schema.`;
                 console.error(specificError, transactionError);
                 throw new Error(specificError);
              }
@@ -95,7 +97,8 @@ const handler: Handler = async (event: HandlerEvent) => {
             };
         } catch (payosError: any) {
             console.error("PayOS API Error:", payosError);
-            throw new Error(`Lỗi kết nối đến cổng thanh toán: ${payosError.message}.`);
+            // This will catch errors like invalid credentials
+            throw new Error(`Lỗi kết nối đến cổng thanh toán: ${payosError.message}. Vui lòng kiểm tra lại cấu hình PayOS.`);
         }
 
 

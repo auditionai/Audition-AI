@@ -72,13 +72,18 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
           </div>
           
           <div className="hidden md:flex items-center gap-4">
-            <div className="flex items-center gap-2 bg-white/5 p-1 pr-3 rounded-full border border-white/10">
-                <div className="flex items-center gap-1.5 bg-black/20 px-3 py-1.5 rounded-full">
-                    <i className="ph-fill ph-diamonds-four text-pink-400"></i>
-                    <span className="font-bold text-sm">{user.diamonds}</span>
-                </div>
-                <button onClick={onTopUpClick} className="text-xs font-bold text-white hover:text-pink-300 transition-colors">NẠP</button>
-            </div>
+            <button
+              onClick={onTopUpClick}
+              className="relative flex items-center p-1.5 font-bold text-white bg-black/50 rounded-full transition-all duration-300 hover:-translate-y-0.5 group"
+              style={{ animation: 'button-neon-glow 4s infinite alternate' }}
+            >
+              <div className="absolute -inset-px bg-gradient-to-r from-[#F72585] to-[#CA27FF] rounded-full opacity-50 group-hover:opacity-80 transition-opacity duration-300 blur"></div>
+              <div className="relative flex items-center gap-2 bg-black/80 px-4 py-1.5 rounded-full">
+                  <i className="ph-fill ph-diamonds-four text-xl text-pink-400 neon-text-glow"></i>
+                  <span className="text-base">{user.diamonds}</span>
+              </div>
+              <span className="relative pr-4 pl-2 text-sm tracking-widest text-gray-300 group-hover:text-white transition-colors">NẠP</span>
+            </button>
             
             <div className="relative flex items-center gap-3" ref={dropdownRef}>
                 <div className="hidden sm:flex items-center gap-2 text-right">

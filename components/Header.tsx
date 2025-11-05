@@ -48,14 +48,7 @@ const LandingHeader: React.FC<LandingHeaderProps> = ({ user, onLoginRegisterClic
                  <img src={user.photo_url || undefined} alt={user.display_name || 'User'} className="w-10 h-10 rounded-full" />
               </div>
             ) : (
-              <div className="flex items-center gap-3">
-                <button onClick={onLoginRegisterClick} className="px-4 py-2 font-semibold bg-white/10 border border-transparent text-white rounded-full hover:bg-white/20 transition-colors duration-300 text-sm">
-                    Đăng nhập
-                </button>
-                <button onClick={onLoginRegisterClick} className="px-4 py-2 font-bold text-sm text-white bg-gradient-to-r from-[#F72585] to-[#CA27FF] rounded-full transition-transform hover:scale-105 shadow-lg shadow-[#F72585]/20">
-                    Đăng ký
-                </button>
-              </div>
+              null
             )}
           </div>
         </div>

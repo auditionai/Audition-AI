@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { User, Stats } from '../types';
 import { supabase } from '../utils/supabaseClient';
 import { Session } from '@supabase/supabase-js';
@@ -30,6 +30,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       visits: 4200,
       images: 9001,
   });
+
+  const showToast = useCallback((message: string, type: 'success' | 'error') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000);
+  }, []);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
@@ -76,14 +81,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, []);
 
   const logout = async () => {
-    await supabase.auth.signOut();
-    setUser(null);
-    setSession(null);
-  };
-
-  const showToast = (message: string, type: 'success' | 'error') => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 4000);
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+        console.error("Error logging out:", error);
+        showToast(`Đăng xuất thất bại: ${error.message}`, 'error');
+    }
+    // The onAuthStateChange listener will handle clearing user and session state.
+    // Removing the manual setUser(null) and setSession(null) calls here
+    // resolves a race condition that was causing the application to freeze.
   };
   
   const updateUserProfile = (updates: Partial<User>) => {

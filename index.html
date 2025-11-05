@@ -210,18 +210,18 @@
       .animate-fade-in-down { animation: fade-in-down 0.3s ease-out forwards; }
 
     </style>
-  <script type="importmap">
+<script type="importmap">
 {
   "imports": {
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-    "react/": "https://aistudiocdn.com/react@^19.2.0/",
-    "react": "https://aistudiocdn.com/react@^19.2.0",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.28.0",
-    "buffer": "https://aistudiocdn.com/buffer@^6.0.3",
     "@supabase/supabase-js": "https://aistudiocdn.com/@supabase/supabase-js@^2.79.0",
     "@netlify/functions": "https://aistudiocdn.com/@netlify/functions@^5.0.1",
+    "buffer": "https://aistudiocdn.com/buffer@^6.0.3",
     "vite": "https://aistudiocdn.com/vite@^7.1.12",
-    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.0"
+    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.0",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.28.0"
   }
 }
 </script>
@@ -229,48 +229,5 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
-
-    <!-- Basic Security Layer: Deters casual inspection. NOTE: This is not foolproof security. -->
-    <script>
-      // Disable right-click context menu
-      document.addEventListener('contextmenu', function(e) {
-        e.preventDefault();
-      });
-
-      // Detect DevTools opening
-      document.addEventListener('keydown', function(e) {
-        // F12
-        if (e.keyCode == 123) {
-          e.preventDefault();
-          return false;
-        }
-        // Ctrl+Shift+I
-        if (e.ctrlKey && e.shiftKey && e.keyCode == 'I'.charCodeAt(0)) {
-          e.preventDefault();
-          return false;
-        }
-        // Ctrl+Shift+C
-        if (e.ctrlKey && e.shiftKey && e.keyCode == 'C'.charCodeAt(0)) {
-          e.preventDefault();
-          return false;
-        }
-        // Ctrl+Shift+J
-        if (e.ctrlKey && e.shiftKey && e.keyCode == 'J'.charCodeAt(0)) {
-          e.preventDefault();
-          return false;
-        }
-        // Ctrl+U
-        if (e.ctrlKey && e.keyCode == 'U'.charCodeAt(0)) {
-          e.preventDefault();
-          return false;
-        }
-      });
-
-      // Console warning
-      setTimeout(function() {
-        console.log("%cDừng lại!", "color:red;font-size:40px;font-weight:bold;");
-        console.log("%cĐây là một tính năng dành cho nhà phát triển. Việc sao chép hoặc thực thi mã lạ ở đây có thể cho phép kẻ tấn công đánh cắp thông tin của bạn hoặc mạo danh bạn.", "font-size:16px;");
-      }, 1000);
-    </script>
   </body>
 </html>

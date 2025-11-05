@@ -6,7 +6,7 @@ interface CreatorFooterProps {
 
 const CreatorFooter: React.FC<CreatorFooterProps> = ({ onInfoLinkClick }) => {
   return (
-    <footer className="bg-[#0B0B0F] border-t border-pink-500/10 text-white">
+    <footer className="fixed bottom-16 md:bottom-0 left-0 w-full z-40 bg-[#0B0B0F]/90 backdrop-blur-sm border-t border-pink-500/10 text-white">
       <div className="container mx-auto px-4 py-6">
         <div className="flex flex-col sm:flex-row justify-between items-center text-center sm:text-left">
           <p className="text-gray-400 text-sm mb-4 sm:mb-0">

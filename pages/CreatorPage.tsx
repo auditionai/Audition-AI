@@ -36,9 +36,6 @@ const CreatorPage: React.FC = () => {
         }
     }
     
-    // Define padding based on active tab for mobile view
-    const mainPaddingBottomClass = activeTab === 'tool' ? 'pb-32' : 'pb-20';
-
     return (
         <div className="flex flex-col min-h-screen bg-[#0B0B0F]">
             <CreatorHeader 
@@ -47,13 +44,14 @@ const CreatorPage: React.FC = () => {
                 setActiveTab={setActiveTab}
                 onCheckInClick={() => setCheckInModalOpen(true)} // Add click handler
             />
-            <main className={`flex-grow pt-20 relative md:pb-0 ${mainPaddingBottomClass}`}>
+            <main className="flex-grow pt-20 relative pb-32 md:pb-20">
                  <div className="absolute inset-0 z-0 aurora-background opacity-70"></div>
                  <div className="relative z-10">
                     {renderContent()}
-                    <CreatorFooter onInfoLinkClick={handleOpenInfoModal} />
                 </div>
             </main>
+            <CreatorFooter onInfoLinkClick={handleOpenInfoModal} />
+
 
             <BottomNavBar
                 activeTab={activeTab}

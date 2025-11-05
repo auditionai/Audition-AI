@@ -313,22 +313,25 @@ const Settings: React.FC = () => {
                     <XPProgressBar currentXp={user.xp} currentLevel={user.level} />
                 </div>
             </div>
-
-            <div className="bg-[#12121A]/80 border border-white/10 rounded-2xl shadow-lg p-6 mb-8">
-                <h3 className="text-2xl font-bold mb-4">Thư viện Sáng tạo Cá nhân</h3>
-                {isImagesLoading ? <p>Đang tải...</p> : userImages.length > 0 ? (
-                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-4">
-                        {userImages.map(img => (
-                            <div key={img.id} className="group relative aspect-square rounded-lg overflow-hidden cursor-pointer" onClick={() => setSelectedImage(img)}>
-                                <img src={img.image_url} alt={img.prompt} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110" />
-                                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                    <i className="ph-fill ph-eye text-3xl text-white"></i>
+            
+            <div className="mb-8">
+                <h3 className="text-2xl font-bold mb-4 text-center">Tác phẩm của bạn</h3>
+                <div className="bg-[#12121A]/80 border border-white/10 rounded-2xl shadow-lg p-6">
+                    {isImagesLoading ? <p className="text-center text-gray-400">Đang tải tác phẩm...</p> : userImages.length > 0 ? (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                            {userImages.map(img => (
+                                <div key={img.id} className="group relative aspect-square rounded-lg overflow-hidden cursor-pointer" onClick={() => setSelectedImage(img)}>
+                                    <img src={img.image_url} alt={img.prompt} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110" />
+                                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                        <i className="ph-fill ph-eye text-3xl text-white"></i>
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
-                    </div>
-                ) : <p className="text-gray-400">Bạn chưa tạo ảnh nào. Hãy bắt đầu sáng tạo ngay!</p>}
+                            ))}
+                        </div>
+                    ) : <p className="text-center text-gray-400 py-8">Bạn chưa tạo ảnh nào. Hãy bắt đầu sáng tạo ngay!</p>}
+                </div>
             </div>
+
 
             {user.is_admin && (
                 <div className="space-y-8">

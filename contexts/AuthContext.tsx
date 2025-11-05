@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode, useMemo } from 'react';
 import { supabase } from '../utils/supabaseClient';
 import { Session, User as SupabaseUser } from '@supabase/supabase-js';
 import { User, Stats } from '../types';
@@ -127,20 +127,23 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setUser(currentUser => currentUser ? { ...currentUser, ...updates } : null);
     }, []);
 
-    const value = {
+    const value = useMemo(() => ({
         session,
         user,
         loading,
         stats,
         toast,
         route,
-        login: useCallback(login, [showToast]),
-        logout: useCallback(logout, [navigate]),
-        updateUserDiamonds: useCallback(updateUserDiamonds, []),
-        updateUserProfile: useCallback(updateUserProfile, []),
-        showToast: useCallback(showToast, []),
-        navigate: useCallback(navigate, []),
-    };
+        login,
+        logout,
+        updateUserDiamonds,
+        updateUserProfile,
+        showToast,
+        navigate,
+    }), [
+        session, user, loading, stats, toast, route, 
+        login, logout, updateUserDiamonds, updateUserProfile, showToast, navigate
+    ]);
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

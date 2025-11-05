@@ -4,8 +4,6 @@ import crypto from 'crypto';
 
 const PAYOS_CHECKSUM_KEY = process.env.PAYOS_CHECKSUM_KEY;
 
-// PayOS docs: The signature is created by sorting parameters alphabetically,
-// joining them with '&', and then creating an HMAC-SHA256 hash.
 const createSignature = (data: Record<string, any>, checksumKey: string): string => {
     const sortedKeys = Object.keys(data).sort();
     const dataString = sortedKeys.map(key => `${key}=${data[key]}`).join('&');
@@ -37,7 +35,6 @@ const handler: Handler = async (event: HandlerEvent) => {
             return { statusCode: 400, body: JSON.stringify({ error: 'Missing webhook data or signature.' }) };
         }
         
-        // 1. Signature Validation
         const calculatedSignature = createSignature(webhookData, PAYOS_CHECKSUM_KEY);
         if (calculatedSignature !== signatureFromHeader) {
             console.warn(`[SECURITY_WARNING] Invalid signature. Calculated: ${calculatedSignature}, Received: ${signatureFromHeader}`);
@@ -45,7 +42,6 @@ const handler: Handler = async (event: HandlerEvent) => {
         }
         console.log("[INFO] Signature validated successfully.");
 
-        // 2. Data Extraction and Validation
         const { orderCode, status } = webhookData;
         
         console.log(`[INFO] Extracted Data - Order Code: ${orderCode}, Status: ${status}`);
@@ -60,21 +56,54 @@ const handler: Handler = async (event: HandlerEvent) => {
         const isFailure = status?.toUpperCase() === 'CANCELLED' || status?.toUpperCase() === 'FAILED';
 
         if (isSuccess) {
-            console.log(`[SUCCESS] Order ${numericOrderCode} is PAID. Updating status to 'awaiting_approval'.`);
+            console.log(`[SUCCESS] Order ${numericOrderCode} is PAID. Processing transaction...`);
             
-            const { error: updateError } = await supabaseAdmin
+            // Lấy giao dịch đang chờ xử lý
+            const { data: transaction, error: fetchError } = await supabaseAdmin
                .from('transactions')
-               .update({ status: 'awaiting_approval', updated_at: new Date().toISOString() })
+               .select('id, user_id, diamonds_received, amount_vnd')
                .eq('order_code', numericOrderCode)
-               .eq('status', 'pending');
-            
-            if (updateError) {
-                 console.error(`[DB_ERROR] Failed to update status to 'awaiting_approval' for order ${numericOrderCode}:`, updateError.message);
-                 // Still return 200 to PayOS, but log the error.
-                 return { statusCode: 500, body: JSON.stringify({ error: `Database update failed: ${updateError.message}` }) };
+               .eq('status', 'pending')
+               .single();
+
+            if (fetchError || !transaction) {
+                console.error(`[DB_ERROR] Transaction for order ${numericOrderCode} not found or already processed. Error:`, fetchError?.message);
+                return { statusCode: 404, body: JSON.stringify({ error: 'Transaction not found or already processed.' }) };
             }
 
-            console.log(`[DB_SUCCESS] Updated order ${numericOrderCode} to awaiting_approval.`);
+            // Lấy thông tin XP hiện tại của người dùng
+            const { data: userProfile, error: userFetchError } = await supabaseAdmin
+                .from('users')
+                .select('xp, diamonds')
+                .eq('id', transaction.user_id)
+                .single();
+            
+            if (userFetchError || !userProfile) {
+                 console.error(`[DB_ERROR] User profile not found for user ${transaction.user_id}.`);
+                 return { statusCode: 404, body: JSON.stringify({ error: 'User profile not found.' }) };
+            }
+
+            // Tính toán giá trị mới
+            const xpToAdd = Math.floor(transaction.amount_vnd / 1000);
+            const newXp = (userProfile.xp || 0) + xpToAdd;
+            const newDiamonds = (userProfile.diamonds || 0) + transaction.diamonds_received;
+
+            // Cập nhật tài khoản người dùng và trạng thái giao dịch
+            const { error: userUpdateError } = await supabaseAdmin
+                .from('users')
+                .update({ diamonds: newDiamonds, xp: newXp })
+                .eq('id', transaction.user_id);
+
+            if (userUpdateError) throw new Error(`Failed to credit user: ${userUpdateError.message}`);
+
+            const { error: transactionUpdateError } = await supabaseAdmin
+                .from('transactions')
+                .update({ status: 'completed', updated_at: new Date().toISOString() })
+                .eq('id', transaction.id);
+            
+            if (transactionUpdateError) throw new Error(`Failed to update transaction status: ${transactionUpdateError.message}`);
+            
+            console.log(`[DB_SUCCESS] Successfully processed order ${numericOrderCode}. User ${transaction.user_id} credited.`);
 
         } else if (isFailure) {
             const dbStatus = status.toUpperCase() === 'CANCELLED' ? 'canceled' : 'failed';

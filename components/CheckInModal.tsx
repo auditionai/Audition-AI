@@ -1,121 +1,153 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import Modal from './common/Modal';
 import { useAuth } from '../contexts/AuthContext';
 
+const getVNDateString = (date: Date) => {
+    const vietnamTime = new Date(date.getTime() + 7 * 3600 * 1000);
+    return vietnamTime.toISOString().split('T')[0];
+};
+
 const CheckInModal: React.FC<{ isOpen: boolean; onClose: () => void; }> = ({ isOpen, onClose }) => {
-    const { session, showToast, updateUserDiamonds, setHasCheckedInToday } = useAuth();
-    const [currentDate, setCurrentDate] = useState(new Date());
-    const [checkedInDates, setCheckedInDates] = useState<Set<string>>(new Set());
-    const [isLoading, setIsLoading] = useState(false);
+    const { user, session, showToast, updateUserProfile } = useAuth();
+    const [checkIns, setCheckIns] = useState<Set<string>>(new Set());
     const [isCheckingIn, setIsCheckingIn] = useState(false);
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0); // Normalize today's date
+    const today = useMemo(() => new Date(), []);
+    const [currentMonth, setCurrentMonth] = useState(today.getMonth());
+    const [currentYear, setCurrentYear] = useState(today.getFullYear());
+    const todayVnString = getVNDateString(today);
 
-    const fetchHistory = useCallback(async (date: Date) => {
-        if (!session) return;
-        setIsLoading(true);
+    const fetchCheckInHistory = useCallback(async () => {
+        if (!session || !isOpen) return;
         try {
-            const year = date.getFullYear();
-            const month = date.getMonth() + 1;
-            const res = await fetch(`/.netlify/functions/check-in-history?year=${year}&month=${month}`, {
-                headers: { 'Authorization': `Bearer ${session.access_token}` }
+            const res = await fetch(`/.netlify/functions/check-in-history?year=${currentYear}&month=${currentMonth + 1}`, {
+                headers: { Authorization: `Bearer ${session.access_token}` }
             });
-            if (!res.ok) throw new Error('Could not fetch history');
+            if (!res.ok) throw new Error('Không thể tải lịch sử điểm danh.');
             const data: string[] = await res.json();
-            setCheckedInDates(new Set(data));
-        } catch (error) {
-            showToast('Lỗi khi tải lịch sử điểm danh.', 'error');
-        } finally {
-            setIsLoading(false);
+            setCheckIns(new Set(data));
+        } catch (error: any) {
+            showToast(error.message, 'error');
         }
-    }, [session, showToast]);
-
+    }, [session, isOpen, currentYear, currentMonth, showToast]);
+    
     useEffect(() => {
-        if (isOpen) {
-            fetchHistory(currentDate);
-        }
-    }, [isOpen, currentDate, fetchHistory]);
+        fetchCheckInHistory();
+    }, [fetchCheckInHistory]);
 
     const handleCheckIn = async () => {
         if (!session) return;
         setIsCheckingIn(true);
         try {
-            const res = await fetch('/.netlify/functions/daily-check-in', {
+            const response = await fetch('/.netlify/functions/daily-check-in', {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${session.access_token}` }
             });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Điểm danh thất bại.');
-
-            showToast(`Điểm danh thành công! +${data.reward.diamonds} KC, chuỗi ${data.streak} ngày.`, 'success');
-            updateUserDiamonds(data.newDiamondCount);
-            setHasCheckedInToday(true);
-            setCheckedInDates(prev => new Set(prev).add(data.checkInDate)); // Add today's date
-            onClose(); // Close modal on success
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || 'Điểm danh thất bại.');
+            
+            showToast(data.message, 'success');
+            updateUserProfile({
+                diamonds: data.newTotalDiamonds,
+                consecutive_check_in_days: data.consecutiveDays,
+                last_check_in_ct: new Date().toISOString(),
+            });
+            setCheckIns(prev => new Set(prev).add(todayVnString)); // Update UI immediately
         } catch (error: any) {
             showToast(error.message, 'error');
         } finally {
             setIsCheckingIn(false);
         }
     };
+
+    const firstDayOfMonth = new Date(currentYear, currentMonth, 1).getDay();
+    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+    const dayBlanks = Array(firstDayOfMonth).fill(null);
+    const dayCells = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+    const weekdays = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
     
-    const changeMonth = (offset: number) => {
-        setCurrentDate(prev => {
-            const newDate = new Date(prev);
-            newDate.setMonth(newDate.getMonth() + offset);
-            return newDate;
-        });
-    };
+    const hasCheckedInToday = checkIns.has(todayVnString) || (user?.last_check_in_ct && getVNDateString(new Date(user.last_check_in_ct)) === todayVnString);
 
-    const renderCalendar = () => {
-        const year = currentDate.getFullYear();
-        const month = currentDate.getMonth();
-        const firstDay = new Date(year, month, 1).getDay();
-        const daysInMonth = new Date(year, month + 1, 0).getDate();
-        const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
-        const blanks = Array.from({ length: firstDay }, (_, i) => <div key={`blank-${i}`} className="w-10 h-10"></div>);
-
-        return (
-            <div className="grid grid-cols-7 gap-2 text-center">
-                {['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'].map(day => <div key={day} className="font-bold text-xs text-gray-400">{day}</div>)}
-                {blanks}
-                {days.map(day => {
-                    const date = new Date(year, month, day);
-                    const dateString = date.toISOString().split('T')[0];
-                    const isCheckedIn = checkedInDates.has(dateString);
-                    const isToday = date.getTime() === today.getTime();
-
-                    return (
-                        <div key={day} className={`w-10 h-10 flex items-center justify-center rounded-full text-sm font-semibold
-                            ${isCheckedIn ? 'bg-pink-500/30 text-pink-300 border border-pink-500' : 'bg-white/5 text-gray-300'}
-                            ${isToday ? 'ring-2 ring-cyan-400' : ''}
-                        `}>
-                            {day}
-                        </div>
-                    );
-                })}
-            </div>
-        );
-    };
+    const rewards = [
+        { day: 7, prize: '20 Kim Cương', icon: 'ph-gift' },
+        { day: 14, prize: '50 Kim Cương', icon: 'ph-gift' },
+        { day: 30, prize: '100 Kim Cương', icon: 'ph-gift' },
+    ];
 
     return (
         <Modal isOpen={isOpen} onClose={onClose} title="Điểm Danh Hàng Ngày">
-            <div className="space-y-4">
-                <div className="flex justify-between items-center px-4 py-2 bg-white/5 rounded-lg">
-                    <button onClick={() => changeMonth(-1)} className="p-2 hover:bg-white/10 rounded-full"><i className="ph-fill ph-caret-left"></i></button>
-                    <h3 className="font-bold text-lg text-white">{`Tháng ${currentDate.getMonth() + 1}, ${currentDate.getFullYear()}`}</h3>
-                    <button onClick={() => changeMonth(1)} className="p-2 hover:bg-white/10 rounded-full"><i className="ph-fill ph-caret-right"></i></button>
+            <div className="text-white max-h-[80vh] overflow-y-auto custom-scrollbar">
+                <div className="bg-white/5 p-4 rounded-lg text-center mb-4">
+                    <p className="text-gray-400">Chuỗi điểm danh liên tục của bạn</p>
+                    <p className="text-3xl font-bold text-cyan-400 neon-text-glow">{user?.consecutive_check_in_days || 0} ngày</p>
                 </div>
-                {isLoading ? <div className="text-center p-8">Đang tải...</div> : renderCalendar()}
-                <p className="text-xs text-center text-gray-500 pt-2">Điểm danh mỗi ngày để nhận Kim cương và duy trì chuỗi điểm danh của bạn!</p>
-                <button
-                    onClick={handleCheckIn}
-                    disabled={isCheckingIn || checkedInDates.has(today.toISOString().split('T')[0])}
-                    className="w-full py-3 font-bold text-white bg-gradient-to-r from-pink-500 to-fuchsia-600 rounded-lg transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    {isCheckingIn ? 'Đang xử lý...' : checkedInDates.has(today.toISOString().split('T')[0]) ? 'Hôm nay bạn đã điểm danh' : 'Điểm danh ngay!'}
-                </button>
+
+                <div className="bg-black/20 p-4 rounded-lg">
+                    <div className="flex justify-between items-center mb-4">
+                        <button onClick={() => {
+                            setCurrentMonth(m => m === 0 ? 11 : m - 1);
+                            if (currentMonth === 0) setCurrentYear(y => y - 1);
+                        }} className="p-2 rounded-full hover:bg-white/10"><i className="ph-fill ph-caret-left"></i></button>
+                        <h3 className="font-bold text-lg">Tháng {currentMonth + 1}, {currentYear}</h3>
+                        <button onClick={() => {
+                            setCurrentMonth(m => m === 11 ? 0 : m + 1);
+                            if (currentMonth === 11) setCurrentYear(y => y - 1);
+                        }} className="p-2 rounded-full hover:bg-white/10"><i className="ph-fill ph-caret-right"></i></button>
+                    </div>
+
+                    <div className="grid grid-cols-7 gap-1 text-center text-xs font-semibold text-gray-400 mb-2">
+                        {weekdays.map(day => <div key={day}>{day}</div>)}
+                    </div>
+
+                    <div className="grid grid-cols-7 gap-1">
+                        {dayBlanks.map((_, i) => <div key={`blank-${i}`} />)}
+                        {dayCells.map(day => {
+                            const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                            const isCheckedIn = checkIns.has(dateStr);
+                            const isToday = dateStr === todayVnString;
+                            const isFuture = new Date(dateStr) > today;
+
+                            let specialReward = null;
+                            if (day === 7 || day === 14 || day === 30) {
+                                specialReward = 'gift';
+                            }
+                            
+                            return (
+                                <div key={day} className={`relative w-full aspect-square flex items-center justify-center rounded-lg text-sm
+                                    ${isToday ? 'bg-pink-500/30 border-2 border-pink-500' : ''}
+                                    ${isCheckedIn ? 'bg-green-500/20' : 'bg-white/5'}
+                                    ${isFuture ? 'opacity-50' : ''}
+                                `}>
+                                    <span className={isCheckedIn ? 'font-bold text-white' : 'text-gray-300'}>{day}</span>
+                                    {isCheckedIn && <i className="ph-fill ph-check-circle text-green-300 absolute bottom-1 right-1 text-xs"></i>}
+                                    {specialReward === 'gift' && <i className="ph-fill ph-gift text-yellow-400 absolute top-1 left-1 text-xs opacity-70"></i>}
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                <div className="mt-4">
+                    <h4 className="font-semibold mb-2">Các mốc thưởng</h4>
+                    <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                        {rewards.map(reward => (
+                             <div key={reward.day} className="bg-yellow-500/10 border border-yellow-500/30 p-2 rounded-lg">
+                                <i className={`ph-fill ${reward.icon} text-yellow-400 text-2xl mb-1`}></i>
+                                <p className="font-bold">Ngày {reward.day}</p>
+                                <p className="text-gray-300">{reward.prize}</p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="mt-6">
+                    <button 
+                        onClick={handleCheckIn}
+                        disabled={hasCheckedInToday || isCheckingIn}
+                        className="w-full py-3 font-bold text-white bg-gradient-to-r from-pink-500 to-fuchsia-600 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90">
+                        {isCheckingIn ? 'Đang xử lý...' : hasCheckedInToday ? 'Đã điểm danh hôm nay' : 'Điểm danh ngay'}
+                    </button>
+                </div>
             </div>
         </Modal>
     );

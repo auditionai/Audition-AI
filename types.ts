@@ -1,51 +1,11 @@
 import React from 'react';
 
-// Core user and authentication types
-export interface User {
-  id: string;
-  email: string;
-  display_name: string;
-  photo_url: string;
-  diamonds: number;
-  xp: number;
-  level: number;
-  is_admin?: boolean;
+export interface Stats {
+  users: number;
+  visits: number;
+  images: number;
 }
 
-// For admin user management, can be an alias for User
-export type AdminManagedUser = User;
-
-// Type for leaderboard entries
-export interface LeaderboardUser {
-    id: string;
-    rank: number;
-    display_name: string;
-    photo_url: string;
-    xp: number;
-    level: number; // Derived from xp
-    creations_count: number;
-}
-
-
-// Gallery and Image types
-export interface Creator {
-  display_name: string;
-  photo_url: string;
-  level: number;
-}
-
-export interface GalleryImage {
-  id: string;
-  title: string;
-  image_url: string;
-  prompt: string;
-  user_id: string;
-  model_used: string;
-  created_at: string; // ISO date string
-  creator: Creator;
-}
-
-// Landing page content types
 export interface Feature {
   icon: React.ReactNode;
   title: string;
@@ -71,16 +31,44 @@ export interface FaqItem {
   answer: string;
 }
 
-// AI Tool types
+// Cập nhật để khớp với schema của Supabase
+export interface User {
+    id: string; // Trước đây là uid
+    display_name: string; // snake_case
+    email: string;
+    photo_url: string; // snake_case
+    diamonds: number;
+    xp: number;
+    level: number;
+    is_admin?: boolean; // snake_case
+    last_check_in_ct?: string;
+    consecutive_check_in_days?: number;
+}
+
+export interface AdminManagedUser extends User {
+    created_at: string;
+    last_check_in_ct?: string;
+    consecutive_check_in_days?: number;
+}
+
+
+export interface Rank {
+  levelThreshold: number;
+  title: string;
+  icon: React.ReactNode;
+  color: string; // e.g., 'text-yellow-400'
+}
+
+
 export interface AIModel {
   id: string;
-  name: string;
+  name:string;
   description: string;
   apiModel: string;
-  tags: Array<{ text: string; color: string }>;
+  tags: { text: string; color: string; }[];
   details: string[];
   recommended?: boolean;
-  supportedModes: Array<'image-to-image' | 'text-to-image'>;
+  supportedModes: ('text-to-image' | 'image-to-image')[];
 }
 
 export interface StylePreset {
@@ -88,24 +76,46 @@ export interface StylePreset {
   name: string;
 }
 
-// Ranking system types
-export interface Rank {
-  levelThreshold: number;
-  title: string;
-  icon: React.ReactNode;
-  color: string;
+// Cập nhật để khớp với schema
+export interface GalleryImage {
+  id: string; // uuid
+  user_id: string;
+  prompt: string;
+  image_url: string;
+  model_used: string;
+  created_at: string;
+  // Fix: Add optional `title` for demo data compatibility.
+  title?: string;
+  creator: { // Dữ liệu này sẽ được JOIN từ bảng users
+    display_name: string;
+    photo_url: string;
+    level: number;
+  };
 }
 
-// Admin panel and billing types
+
+// Cập nhật để khớp với schema của Supabase
 export interface ApiKey {
   id: string;
   name: string;
-  key_value: string;
-  usage_count: number;
+  key_value: string; // snake_case
   status: 'active' | 'inactive';
+  usage_count: number; // snake_case
   created_at: string;
 }
 
+export interface LeaderboardUser {
+    id: string;
+    rank: number;
+    display_name: string;
+    photo_url: string;
+    level: number;
+    xp: number;
+    // creations_count sẽ được tính toán
+    creations_count: number;
+}
+
+// Dành cho các gói nạp kim cương
 export interface CreditPackage {
     id: string;
     credits_amount: number;
@@ -114,4 +124,18 @@ export interface CreditPackage {
     is_flash_sale: boolean;
     is_active: boolean;
     display_order: number;
+    created_at: string;
+}
+
+// Dành cho lịch sử giao dịch
+export interface Transaction {
+    id: string;
+    order_code: number;
+    user_id: string;
+    package_id: string;
+    amount_vnd: number;
+    diamonds_received: number;
+    status: 'pending' | 'completed' | 'failed' | 'canceled';
+    created_at: string;
+    updated_at: string;
 }

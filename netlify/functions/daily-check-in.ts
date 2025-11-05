@@ -22,7 +22,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     try {
         const { data: userProfile, error: profileError } = await supabaseAdmin
             .from('users')
-            .select('diamonds, last_check_in_ct, consecutive_check_in_days')
+            .select('diamonds, last_check_in_at, consecutive_check_in_days')
             .eq('id', user.id)
             .single();
 
@@ -31,7 +31,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         const now = new Date();
         const todayVnString = getVNDateString(now);
 
-        const lastCheckInDate = userProfile.last_check_in_ct ? new Date(userProfile.last_check_in_ct) : null;
+        const lastCheckInDate = userProfile.last_check_in_at ? new Date(userProfile.last_check_in_at) : null;
         const lastCheckInVnString = lastCheckInDate ? getVNDateString(lastCheckInDate) : null;
 
         if (lastCheckInVnString === todayVnString) {
@@ -71,7 +71,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             .from('users')
             .update({
                 diamonds: newTotalDiamonds,
-                last_check_in_ct: now.toISOString(),
+                last_check_in_at: now.toISOString(),
                 consecutive_check_in_days: newConsecutiveDays,
             })
             .eq('id', user.id);

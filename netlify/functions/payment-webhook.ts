@@ -62,14 +62,24 @@ const handler: Handler = async (event: HandlerEvent) => {
                 const creditsToAdd = transaction.diamonds_received;
                 const newDiamondCount = user.diamonds + creditsToAdd;
 
-                // Gọi hàm RPC để cập nhật database một cách an toàn
-                const { error: updateError } = await supabaseAdmin.rpc('complete_transaction_and_add_credits', {
-                    p_order_code: orderCode,
-                    p_user_id: transaction.user_id,
-                    p_new_diamond_count: newDiamondCount
-                });
+                // Cập nhật database một cách an toàn và rõ ràng
+                const updateUserPromise = supabaseAdmin
+                    .from('users')
+                    .update({ diamonds: newDiamondCount })
+                    .eq('id', transaction.user_id);
 
-                if (updateError) throw updateError;
+                const updateTransactionPromise = supabaseAdmin
+                    .from('transactions')
+                    .update({ status: 'completed' })
+                    .eq('order_code', orderCode);
+
+                const [userUpdateResult, transactionUpdateResult] = await Promise.all([
+                    updateUserPromise,
+                    updateTransactionPromise
+                ]);
+
+                if (userUpdateResult.error) throw userUpdateResult.error;
+                if (transactionUpdateResult.error) throw transactionUpdateResult.error;
             }
         } else {
             console.log(`Received non-processing webhook event (code: ${webhookBody.code}). Acknowledging.`);

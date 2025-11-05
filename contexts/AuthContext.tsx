@@ -162,11 +162,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }, [fetchUserProfile, loading]);
     
     const hasCheckedInToday = useMemo(() => {
-        if (!user?.last_check_in_ct) return false;
+        if (!user?.last_check_in_at) return false;
         const todayVnString = getVNDateString(new Date());
-        const lastCheckInVnString = getVNDateString(new Date(user.last_check_in_ct));
+        const lastCheckInVnString = getVNDateString(new Date(user.last_check_in_at));
         return todayVnString === lastCheckInVnString;
-    }, [user?.last_check_in_ct]);
+    }, [user?.last_check_in_at]);
 
     const login = useCallback(async () => {
         const { error } = await supabase.auth.signInWithOAuth({

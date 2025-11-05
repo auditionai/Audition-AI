@@ -14,16 +14,21 @@ const handler: Handler = async () => {
 
         // Lấy số lượng ảnh đã tạo cho những người dùng này
         const userIds = users.map(u => u.id);
-        const { data: counts, error: countsError } = await supabaseAdmin
+        // Fix: The original query with `.groupBy()` is not supported as written, as the method cannot be chained after `.in()`.
+        // This is replaced with a query to fetch all relevant images and then count them in code.
+        // This approach is acceptable for a small number of users (top 10).
+        const { data: images, error: imagesError } = await supabaseAdmin
             .from('generated_images')
-            .select('user_id', { count: 'exact' })
-            .in('user_id', userIds)
-            .groupBy('user_id');
+            .select('user_id')
+            .in('user_id', userIds);
 
-        if (countsError) throw countsError;
+        if (imagesError) throw imagesError;
 
         // Map số lượng ảnh vào cho từng người dùng
-        const countMap = new Map(counts.map(c => [c.user_id, c.count]));
+        const countMap = (images || []).reduce((acc, image) => {
+            acc.set(image.user_id, (acc.get(image.user_id) || 0) + 1);
+            return acc;
+        }, new Map<string, number>());
 
         const leaderboard = users.map((user, index) => ({
             ...user,

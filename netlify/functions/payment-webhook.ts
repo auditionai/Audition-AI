@@ -1,5 +1,5 @@
-// Fix: Use a standard ES module default import for the PayOS library to resolve module compatibility errors.
-import PayOS = require("@payos/node");
+// Fix: Use ES module default import syntax for PayOS to resolve module compatibility errors.
+import PayOS from "@payos/node";
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
 

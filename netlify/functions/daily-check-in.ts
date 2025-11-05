@@ -1,9 +1,5 @@
 import type { Handler, HandlerEvent } from "@netlify/functions";
-import { supabaseAdmin } from './utils/supabaseClient.ts';
-
-const BASE_REWARD = 2;
-const STREAK_BONUS = 1; // 1 extra diamond per day of streak
-const MAX_STREAK_BONUS = 5;
+import { supabaseAdmin } from './utils/supabaseClient';
 
 const handler: Handler = async (event: HandlerEvent) => {
     if (event.httpMethod !== 'POST') {
@@ -21,67 +17,86 @@ const handler: Handler = async (event: HandlerEvent) => {
     }
 
     try {
-        const { data: userData, error: userError } = await supabaseAdmin
+        const { data: userProfile, error: profileError } = await supabaseAdmin
             .from('users')
-            .select('diamonds, last_check_in, streak')
+            .select('diamonds, last_check_in_at, consecutive_check_in_days')
             .eq('id', user.id)
             .single();
-        
-        if (userError || !userData) {
-            return { statusCode: 404, body: JSON.stringify({ error: 'User not found.' }) };
+
+        if (profileError || !userProfile) {
+            return { statusCode: 404, body: JSON.stringify({ error: 'User profile not found.' }) };
         }
+        
+        // Helper to get YYYY-MM-DD string in Vietnam's timezone (UTC+7)
+        const getVietnamDateString = (d: Date): string => {
+            const vietnamTime = new Date(d.getTime() + 7 * 3600 * 1000);
+            return vietnamTime.toISOString().split('T')[0];
+        };
+        
+        const nowUTC = new Date();
+        const todayVnString = getVietnamDateString(nowUTC);
+        
+        if (userProfile.last_check_in_at) {
+            const lastCheckInUTC = new Date(userProfile.last_check_in_at);
+            const lastCheckInVnString = getVietnamDateString(lastCheckInUTC);
 
-        const today = new Date();
-        today.setHours(0, 0, 0, 0); // Normalize to start of day in UTC
-
-        if (userData.last_check_in) {
-            const lastCheckInDate = new Date(userData.last_check_in);
-            lastCheckInDate.setHours(0, 0, 0, 0);
-            if (lastCheckInDate.getTime() === today.getTime()) {
-                return { statusCode: 429, body: JSON.stringify({ error: 'Bạn đã điểm danh hôm nay rồi.' }) };
+            if (todayVnString === lastCheckInVnString) {
+                return { statusCode: 200, body: JSON.stringify({ message: 'Bạn đã điểm danh hôm nay rồi.', checkedIn: true, newTotalDiamonds: undefined }) };
             }
         }
 
-        const yesterday = new Date(today);
-        yesterday.setDate(today.getDate() - 1);
-        
-        let newStreak = 1;
-        if (userData.last_check_in) {
-             const lastCheckInDate = new Date(userData.last_check_in);
-             lastCheckInDate.setHours(0, 0, 0, 0);
-             if (lastCheckInDate.getTime() === yesterday.getTime()) {
-                 newStreak = (userData.streak || 0) + 1;
-             }
+        // --- New Check-in Logic ---
+        let consecutiveDays = 1;
+        if (userProfile.last_check_in_at) {
+            const yesterdayUTC = new Date(nowUTC.getTime() - 24 * 3600 * 1000);
+            const yesterdayVnString = getVietnamDateString(yesterdayUTC);
+            const lastCheckInVnString = getVietnamDateString(new Date(userProfile.last_check_in_at));
+            
+            if (lastCheckInVnString === yesterdayVnString) {
+                consecutiveDays = (userProfile.consecutive_check_in_days || 0) + 1;
+            }
         }
-        
-        const bonus = Math.min(newStreak - 1, MAX_STREAK_BONUS) * STREAK_BONUS;
-        const totalReward = BASE_REWARD + bonus;
-        const newDiamondCount = userData.diamonds + totalReward;
+
+        let diamondsAwarded = 10; // Daily base reward
+        let bonusMessage = `Điểm danh thành công! Bạn nhận được 10 kim cương.`;
+
+        if (consecutiveDays === 30) {
+            diamondsAwarded += 100;
+            bonusMessage = `Chúc mừng chuỗi 30 ngày! Bạn nhận được 10 kim cương và +100 kim cương thưởng!`;
+        } else if (consecutiveDays === 14) {
+            diamondsAwarded += 50;
+            bonusMessage = `Chúc mừng chuỗi 14 ngày! Bạn nhận được 10 kim cương và +50 kim cương thưởng!`;
+        } else if (consecutiveDays === 7) {
+            diamondsAwarded += 20;
+            bonusMessage = `Chúc mừng chuỗi 7 ngày! Bạn nhận được 10 kim cương và +20 kim cương thưởng!`;
+        }
+
+        const newTotalDiamonds = userProfile.diamonds + diamondsAwarded;
 
         const { error: updateError } = await supabaseAdmin
             .from('users')
             .update({
-                diamonds: newDiamondCount,
-                last_check_in: new Date().toISOString(),
-                streak: newStreak,
+                diamonds: newTotalDiamonds,
+                last_check_in_at: nowUTC.toISOString(),
+                consecutive_check_in_days: consecutiveDays
             })
             .eq('id', user.id);
-            
+
         if (updateError) throw updateError;
 
         return {
             statusCode: 200,
             body: JSON.stringify({
-                message: `Điểm danh thành công! Bạn nhận được ${totalReward} kim cương.`,
-                reward: totalReward,
-                streak: newStreak,
-                newDiamondCount: newDiamondCount,
+                message: bonusMessage,
+                newTotalDiamonds,
+                consecutiveDays,
+                checkedIn: true
             }),
         };
 
     } catch (error: any) {
-        console.error("Check-in error:", error);
-        return { statusCode: 500, body: JSON.stringify({ error: 'Lỗi máy chủ.' }) };
+        console.error("Daily check-in failed:", error);
+        return { statusCode: 500, body: JSON.stringify({ error: error.message || 'Server error' }) };
     }
 };
 

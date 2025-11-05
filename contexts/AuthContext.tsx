@@ -32,6 +32,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     // Demo stats
     const [stats] = useState<Stats>({ users: 1250, visits: 8700, images: 25000 });
     const [route, setRoute] = useState('home'); // initial route
+    const [checkInAttempted, setCheckInAttempted] = useState(false);
 
     const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
         setToast({ message, type });
@@ -57,7 +58,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 // This can happen on first login if the DB trigger hasn't run yet.
                 if (error.code === 'PGRST116') {
                     console.warn("User profile not found, it might be creating.");
-                    return; 
+                    return null; 
                 }
                 throw error;
             }
@@ -69,10 +70,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                     profile.level = calculateLevelFromXp(profile.xp);
                 }
                 setUser(profile);
+                return profile;
             }
+            return null;
         } catch (error) {
             console.error('Error fetching user profile:', error);
             showToast('Không thể tải thông tin người dùng.', 'error');
+            return null;
         }
     }, [showToast]);
     
@@ -95,6 +99,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 setTimeout(() => fetchUserProfile(session.user), 500);
             } else {
                 setUser(null);
+                setCheckInAttempted(false); // Reset check-in status on logout
             }
             // Only set loading to false on initial load, not every auth change
             if(loading) setLoading(false);
@@ -104,6 +109,34 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             subscription?.unsubscribe();
         };
     }, [fetchUserProfile, loading]);
+    
+    // Effect for daily check-in
+    useEffect(() => {
+        const attemptCheckIn = async () => {
+            if (user && session && !checkInAttempted) {
+                setCheckInAttempted(true);
+                try {
+                    const response = await fetch('/.netlify/functions/daily-check-in', {
+                        method: 'POST',
+                        headers: { 'Authorization': `Bearer ${session.access_token}` }
+                    });
+                    if (!response.ok) return; // Fail silently
+                    const data = await response.json();
+                    if (data.newTotalDiamonds !== undefined) {
+                        showToast(data.message, 'success');
+                        updateUserProfile({
+                            diamonds: data.newTotalDiamonds,
+                            consecutive_check_in_days: data.consecutiveDays
+                        });
+                    }
+                } catch (error) {
+                    console.error('Daily check-in request failed:', error);
+                }
+            }
+        };
+        attemptCheckIn();
+    }, [user, session, checkInAttempted, showToast]);
+
 
     const login = useCallback(async () => {
         const { error } = await supabase.auth.signInWithOAuth({

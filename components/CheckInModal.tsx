@@ -50,6 +50,7 @@ const CheckInModal: React.FC<{ isOpen: boolean; onClose: () => void; }> = ({ isO
             updateUserProfile({
                 diamonds: data.newTotalDiamonds,
                 consecutive_check_in_days: data.consecutiveDays,
+                // Fix: Correct property name to 'last_check_in_ct' to match the User type.
                 last_check_in_ct: new Date().toISOString(),
             });
             setCheckIns(prev => new Set(prev).add(todayVnString)); // Update UI immediately
@@ -66,6 +67,7 @@ const CheckInModal: React.FC<{ isOpen: boolean; onClose: () => void; }> = ({ isO
     const dayCells = Array.from({ length: daysInMonth }, (_, i) => i + 1);
     const weekdays = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
     
+    // Fix: Correct property name to 'last_check_in_ct' to match the User type.
     const hasCheckedInToday = checkIns.has(todayVnString) || (user?.last_check_in_ct && getVNDateString(new Date(user.last_check_in_ct)) === todayVnString);
 
     const rewards = [
@@ -106,11 +108,6 @@ const CheckInModal: React.FC<{ isOpen: boolean; onClose: () => void; }> = ({ isO
                             const isCheckedIn = checkIns.has(dateStr);
                             const isToday = dateStr === todayVnString;
                             const isFuture = new Date(dateStr) > today;
-
-                            let specialReward = null;
-                            if (day === 7 || day === 14 || day === 30) {
-                                specialReward = 'gift';
-                            }
                             
                             return (
                                 <div key={day} className={`relative w-full aspect-square flex items-center justify-center rounded-lg text-sm
@@ -120,7 +117,6 @@ const CheckInModal: React.FC<{ isOpen: boolean; onClose: () => void; }> = ({ isO
                                 `}>
                                     <span className={isCheckedIn ? 'font-bold text-white' : 'text-gray-300'}>{day}</span>
                                     {isCheckedIn && <i className="ph-fill ph-check-circle text-green-300 absolute bottom-1 right-1 text-xs"></i>}
-                                    {specialReward === 'gift' && <i className="ph-fill ph-gift text-yellow-400 absolute top-1 left-1 text-xs opacity-70"></i>}
                                 </div>
                             );
                         })}

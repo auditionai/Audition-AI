@@ -40,8 +40,9 @@ function App() {
 
       {/* Toast Notification */}
       {toast && (
-          <div className={`fixed bottom-5 right-5 p-4 rounded-lg shadow-lg text-white animate-fade-in-up z-50 ${toast.type === 'success' ? 'bg-gradient-to-r from-green-500 to-emerald-600' : 'bg-gradient-to-r from-red-500 to-rose-600'}`}>
-              {toast.message}
+          <div className={`fixed bottom-5 left-1/2 -translate-x-1/2 w-auto max-w-[90%] p-4 rounded-xl shadow-2xl text-white flex items-center gap-4 animate-fade-in-up z-[9999] ${toast.type === 'success' ? 'bg-gradient-to-r from-green-500 to-emerald-600' : 'bg-gradient-to-r from-red-500 to-rose-600'}`}>
+              <i className={`ph-fill ${toast.type === 'success' ? 'ph-gift' : 'ph-warning-circle'} text-3xl flex-shrink-0`}></i>
+              <span className="font-semibold text-base">{toast.message}</span>
           </div>
       )}
     </div>

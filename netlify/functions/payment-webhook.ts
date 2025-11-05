@@ -33,7 +33,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             // Tìm giao dịch trong database
             const { data: transaction, error: transactionError } = await supabaseAdmin
                 .from('transactions')
-                .select('*, credit_packages(credits_amount, bonus_credits)')
+                .select('*')
                 .eq('order_code', orderCode)
                 .single();
 
@@ -49,23 +49,25 @@ const handler: Handler = async (event: HandlerEvent) => {
             }
 
             if (status === 'PAID') {
-                // Lấy số kim cương hiện tại của người dùng
+                // Lấy số kim cương và XP hiện tại của người dùng
                 const { data: user, error: userError } = await supabaseAdmin
                     .from('users')
-                    .select('diamonds')
+                    .select('diamonds, xp')
                     .eq('id', transaction.user_id)
                     .single();
                 
                 if (userError || !user) throw new Error(`User not found for transaction ${orderCode}`);
 
-                // Tính toán số kim cương mới
+                // Tính toán số kim cương và XP mới
                 const creditsToAdd = transaction.diamonds_received;
+                const xpToAdd = Math.floor(transaction.amount_vnd / 100); // 1 XP per 100 VND
                 const newDiamondCount = user.diamonds + creditsToAdd;
+                const newXp = user.xp + xpToAdd;
 
                 // Cập nhật database một cách an toàn và rõ ràng
                 const updateUserPromise = supabaseAdmin
                     .from('users')
-                    .update({ diamonds: newDiamondCount })
+                    .update({ diamonds: newDiamondCount, xp: newXp })
                     .eq('id', transaction.user_id);
 
                 const updateTransactionPromise = supabaseAdmin

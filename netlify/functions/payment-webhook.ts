@@ -4,123 +4,115 @@ import crypto from 'crypto';
 
 const PAYOS_CHECKSUM_KEY = process.env.PAYOS_CHECKSUM_KEY;
 
-// PayOS signature verification for webhooks
-const verifySignature = (data: string, signature: string, checksumKey: string): boolean => {
-    try {
-        const expectedSignature = crypto.createHmac('sha256', checksumKey).update(data).digest('hex');
-        return expectedSignature === signature;
-    } catch (error) {
-        console.error("Error during signature verification:", error);
-        return false;
-    }
+// PayOS docs: The signature is created by sorting parameters alphabetically,
+// joining them with '&', and then creating an HMAC-SHA256 hash.
+const createSignature = (data: Record<string, any>, checksumKey: string): string => {
+    const sortedKeys = Object.keys(data).sort();
+    const dataString = sortedKeys.map(key => `${key}=${data[key]}`).join('&');
+    return crypto.createHmac('sha256', checksumKey).update(dataString).digest('hex');
 };
 
 const handler: Handler = async (event: HandlerEvent) => {
     if (event.httpMethod !== 'POST') {
         return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
     }
-
+    
     if (!PAYOS_CHECKSUM_KEY) {
         console.error('PayOS checksum key is not set.');
         return { statusCode: 500, body: JSON.stringify({ error: 'Webhook configuration error.' }) };
     }
+    
+    const signatureFromHeader = event.headers['x-payos-signature'];
+    const body = JSON.parse(event.body || '{}');
+    const webhookData = body.data;
 
-    const webhookSignature = event.headers['x-payos-signature'];
-    const webhookBody = event.body;
-
-    if (!webhookSignature || !webhookBody) {
-        return { statusCode: 400, body: JSON.stringify({ error: 'Missing signature or body.' }) };
+    if (!webhookData || !signatureFromHeader) {
+        return { statusCode: 400, body: JSON.stringify({ error: 'Missing webhook data or signature.' }) };
     }
+    
+    const calculatedSignature = createSignature(webhookData, PAYOS_CHECKSUM_KEY);
 
-    // 1. Verify the webhook signature
-    if (!verifySignature(webhookBody, webhookSignature, PAYOS_CHECKSUM_KEY)) {
-        console.error("Invalid webhook signature.");
+    if (calculatedSignature !== signatureFromHeader) {
+        console.warn('Invalid webhook signature received.');
         return { statusCode: 401, body: JSON.stringify({ error: 'Invalid signature.' }) };
     }
 
+    const { orderCode, status } = webhookData;
+
     try {
-        const payload = JSON.parse(webhookBody);
-        
-        // According to PayOS, only webhooks with code '00' are successful transactions.
-        if (payload.code !== '00' || !payload.data) {
-            console.log("Received non-success webhook from PayOS:", payload.desc);
-            return { statusCode: 200, body: JSON.stringify({ message: 'Webhook received but not a success event.' }) };
+        if (body.code === '00' && status === 'PAID') {
+            // Find the pending transaction
+            const { data: transaction, error: findError } = await supabaseAdmin
+                .from('transactions')
+                .select('id, user_id, diamonds_received, status')
+                .eq('order_code', orderCode)
+                .single();
+
+            if (findError) {
+                // If no rows found, it might be an invalid order code
+                if (findError.code === 'PGRST116') {
+                    console.error(`Webhook received for non-existent order code: ${orderCode}`);
+                    // Still return 200, as there's nothing to do.
+                    return { statusCode: 200, body: JSON.stringify({ message: 'Order code not found.' }) };
+                }
+                throw findError; // Other DB errors
+            }
+
+            // --- Idempotency Check ---
+            // If transaction is not pending, it means it's already processed or failed.
+            if (transaction.status !== 'pending') {
+                console.log(`Webhook for order ${orderCode} already has status '${transaction.status}'. Ignoring.`);
+                return { statusCode: 200, body: JSON.stringify({ message: 'Webhook already processed.' }) };
+            }
+            
+            // Fetch current user diamonds
+            const { data: userProfile, error: userError } = await supabaseAdmin
+                .from('users')
+                .select('diamonds')
+                .eq('id', transaction.user_id)
+                .single();
+
+            if (userError || !userProfile) {
+                throw new Error(`User not found for transaction ${orderCode}`);
+            }
+
+            // Perform updates
+            const newDiamondCount = userProfile.diamonds + transaction.diamonds_received;
+
+            const [
+                { error: userUpdateError },
+                { error: transactionUpdateError }
+            ] = await Promise.all([
+                supabaseAdmin
+                    .from('users')
+                    .update({ diamonds: newDiamondCount })
+                    .eq('id', transaction.user_id),
+                supabaseAdmin
+                    .from('transactions')
+                    .update({ status: 'completed', updated_at: new Date().toISOString() })
+                    .eq('id', transaction.id)
+            ]);
+
+            if (userUpdateError) throw new Error(`Failed to update user diamonds: ${userUpdateError.message}`);
+            if (transactionUpdateError) throw new Error(`Failed to update transaction status: ${transactionUpdateError.message}`);
+            
+            console.log(`Successfully processed payment for order code: ${orderCode}`);
+
+        } else if (status === 'CANCELLED' || status === 'FAILED') {
+            const dbStatus = status === 'CANCELLED' ? 'canceled' : 'failed';
+            await supabaseAdmin
+               .from('transactions')
+               .update({ status: dbStatus, updated_at: new Date().toISOString() })
+               .eq('order_code', orderCode)
+               .eq('status', 'pending');
+            console.log(`Updated transaction ${orderCode} to status '${dbStatus}'.`);
         }
-        
-        const { orderCode, status } = payload.data;
-        
-        if (!orderCode) {
-            return { statusCode: 400, body: JSON.stringify({ error: 'Missing order code.' }) };
-        }
-
-        // We only care about PAID status.
-        if (status !== 'PAID') {
-            console.log(`Received status "${status}" for order ${orderCode}. Ignoring.`);
-            return { statusCode: 200, body: JSON.stringify({ message: 'Status is not PAID.' }) };
-        }
-
-        // 2. Fetch the transaction from DB
-        const { data: transaction, error: transactionError } = await supabaseAdmin
-            .from('transactions')
-            .select('*')
-            .eq('order_code', orderCode)
-            .single();
-
-        if (transactionError || !transaction) {
-            console.error(`Transaction with order code ${orderCode} not found.`);
-            // Return 200 to prevent PayOS from retrying for a transaction we don't know about.
-            return { statusCode: 200, body: JSON.stringify({ error: 'Transaction not found.' }) };
-        }
-
-        // 3. Idempotency check: If already completed, do nothing.
-        if (transaction.status === 'completed') {
-            return { statusCode: 200, body: JSON.stringify({ message: 'Transaction already processed.' }) };
-        }
-        
-        // 4. Credit Diamonds and XP to the user
-        const { data: user, error: userFetchError } = await supabaseAdmin
-            .from('users')
-            .select('diamonds, xp')
-            .eq('id', transaction.user_id)
-            .single();
-        
-        if (userFetchError || !user) {
-            throw new Error(`User ${transaction.user_id} not found for transaction ${transaction.id}.`);
-        }
-        
-        const newDiamonds = user.diamonds + transaction.diamonds_received;
-        // XP calculation: 100 VND = 1 XP
-        const xpGained = Math.floor(transaction.amount_vnd / 100);
-        const newXp = user.xp + xpGained;
-
-        const { error: userUpdateError } = await supabaseAdmin
-            .from('users')
-            .update({ diamonds: newDiamonds, xp: newXp })
-            .eq('id', transaction.user_id);
-
-        if (userUpdateError) {
-            // This is a critical failure. Log it for manual intervention.
-            console.error(`CRITICAL: Failed to credit diamonds/XP for user ${transaction.user_id} on order ${orderCode}. DB Error: ${userUpdateError.message}`);
-            // Don't mark transaction as completed if user update fails. Let it be retried or handled manually.
-            throw new Error('Failed to update user balance.');
-        }
-
-        // 5. Mark the transaction as completed
-        const { error: updateTransactionError } = await supabaseAdmin
-            .from('transactions')
-            .update({ status: 'completed', updated_at: new Date().toISOString() })
-            .eq('id', transaction.id);
-        
-        if (updateTransactionError) {
-            throw new Error(`Failed to update transaction status for order ${orderCode}: ${updateTransactionError.message}`);
-        }
-
-        return { statusCode: 200, body: JSON.stringify({ success: true, message: `Order ${orderCode} processed successfully.` }) };
-
     } catch (error: any) {
-        console.error('Webhook processing error:', error);
-        return { statusCode: 500, body: JSON.stringify({ error: 'Internal Server Error' }) };
+        console.error(`Error processing webhook for order ${orderCode}:`, error);
+        return { statusCode: 500, body: JSON.stringify({ error: 'Internal server error.' }) };
     }
+
+    return { statusCode: 200, body: JSON.stringify({ message: 'Webhook received.' }) };
 };
 
 export { handler };

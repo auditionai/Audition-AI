@@ -51,8 +51,8 @@ const CreatorPage: React.FC = () => {
                  <div className="absolute inset-0 z-0 aurora-background opacity-70"></div>
                  <div className="relative z-10">
                     {renderContent()}
+                    <CreatorFooter onInfoLinkClick={handleOpenInfoModal} />
                 </div>
-                <CreatorFooter onInfoLinkClick={handleOpenInfoModal} />
             </main>
 
             <BottomNavBar

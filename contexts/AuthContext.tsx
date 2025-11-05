@@ -115,49 +115,63 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
     }, [user, showToast]);
 
-    // Failsafe authentication flow with timeout
+    // Decisive "Hard Reset" function
+    const hardReset = async () => {
+        console.warn("Forcing hard reset. Clearing Supabase localStorage and reloading page...");
+        await supabase.auth.signOut().catch(e => console.error("Sign out on reset failed:", e));
+        
+        Object.keys(localStorage).forEach(key => {
+            if (key.startsWith('sb-')) { // Aggressively clear all Supabase keys
+                localStorage.removeItem(key);
+            }
+        });
+
+        window.location.reload();
+    };
+
+    // Failsafe authentication flow with timeout and hard reset
     useEffect(() => {
         let isCancelled = false;
 
+        const authTimeout = setTimeout(() => {
+            if (!isCancelled) {
+                console.error("Authentication timed out after 6 seconds. Triggering hard reset.");
+                hardReset();
+            }
+        }, 6000); // 6-second aggressive timeout
+
         const initializeAuth = async () => {
-            const timeoutPromise = new Promise((_, reject) =>
-                setTimeout(() => reject(new Error('Authentication timed out after 8 seconds.')), 8000)
-            );
-
             try {
-                // Race the session fetching against the timeout
-                const sessionResult = await Promise.race([
-                    supabase.auth.getSession(),
-                    timeoutPromise
-                ]) as { data: { session: Session | null }, error: Error | null };
-
+                const { data: { session: currentSession }, error: sessionError } = await supabase.auth.getSession();
+                
                 if (isCancelled) return;
-
-                const { data: { session: currentSession }, error: sessionError } = sessionResult;
                 if (sessionError) throw sessionError;
 
                 if (currentSession) {
                     const profile = await fetchUserProfile(currentSession.user);
                     if (profile) {
+                        // Success path: session and profile are valid
                         setSession(currentSession);
                         setUser(profile);
                     } else {
-                        throw new Error("Session found but user profile is invalid. Forcing sign out.");
+                        // Critical failure: session exists but profile is missing/invalid.
+                        throw new Error("User profile is missing for an active session. Data is corrupted.");
                     }
                 } else {
+                    // Normal logged-out state
                     setSession(null);
                     setUser(null);
                 }
-            } catch (e) {
+
+                // If we successfully reach this point, it means auth is stable.
+                clearTimeout(authTimeout);
+                setLoading(false);
+
+            } catch (error) {
                 if (isCancelled) return;
-                console.error("A critical error or timeout occurred during auth initialization. Force signing out.", e);
-                await supabase.auth.signOut();
-                setSession(null);
-                setUser(null);
-            } finally {
-                if (!isCancelled) {
-                    setLoading(false);
-                }
+                console.error("A critical error occurred during auth initialization. Triggering hard reset.", error);
+                clearTimeout(authTimeout);
+                await hardReset();
             }
         };
 
@@ -178,6 +192,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
         return () => {
             isCancelled = true;
+            clearTimeout(authTimeout);
             subscription.unsubscribe();
         };
     }, [fetchUserProfile]);

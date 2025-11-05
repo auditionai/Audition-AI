@@ -122,52 +122,42 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }, [user, showToast]);
 
 
+    // Effect for handling authentication state
     useEffect(() => {
-        const initializeAuth = async () => {
-            const { data: { session } } = await supabase.auth.getSession();
-            setSession(session);
-            if (session?.user) {
-                await fetchUserProfile(session.user);
-            }
-            setLoading(false);
-        };
-        
-        initializeAuth();
-
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-            setSession(session);
-            if (session?.user) {
-                const createdAt = new Date(session.user.created_at).getTime();
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
+            setSession(newSession);
+            if (newSession?.user) {
+                const createdAt = new Date(newSession.user.created_at).getTime();
                 const isNewUser = (Date.now() - createdAt) < 60000;
 
                 if (isNewUser) {
-                    setTimeout(async () => {
-                        try {
-                            await fetch('/.netlify/functions/set-initial-diamonds', {
-                                method: 'POST',
-                                headers: { 'Authorization': `Bearer ${session.access_token}` }
-                            });
-                        } catch (e) {
-                            console.error("Failed to set initial diamonds.", e);
-                        } finally {
-                            await fetchUserProfile(session.user);
-                        }
-                    }, 2000);
-                } else {
-                    // For existing users, just ensure profile is fresh on login
-                    await fetchUserProfile(session.user);
+                    fetch('/.netlify/functions/set-initial-diamonds', {
+                        method: 'POST',
+                        headers: { 'Authorization': `Bearer ${newSession.access_token}` }
+                    }).catch(e => console.error("Failed to set initial diamonds.", e));
                 }
+                
+                await fetchUserProfile(newSession.user);
             } else {
                 setUser(null);
             }
+            setLoading(false);
         });
-        
-        // Real-time listener for user profile changes
+
+        return () => {
+            subscription?.unsubscribe();
+        };
+    }, [fetchUserProfile]);
+
+    // Effect for handling user-specific real-time updates
+    useEffect(() => {
+        if (!user?.id) return;
+
         const userChannel = supabase
-            .channel('public:users')
+            .channel(`public:users:id=eq.${user.id}`)
             .on(
                 'postgres_changes',
-                { event: 'UPDATE', schema: 'public', table: 'users', filter: `id=eq.${user?.id}` },
+                { event: 'UPDATE', schema: 'public', table: 'users', filter: `id=eq.${user.id}` },
                 (payload) => {
                     console.log('Realtime user update received:', payload.new);
                     updateUserProfile(payload.new as Partial<User>);
@@ -176,10 +166,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             .subscribe();
 
         return () => {
-            subscription?.unsubscribe();
             supabase.removeChannel(userChannel);
         };
-    }, [fetchUserProfile, updateUserProfile, user?.id]);
+    }, [user?.id, updateUserProfile]);
     
     const hasCheckedInToday = useMemo(() => {
         if (!user?.last_check_in_at) return false;

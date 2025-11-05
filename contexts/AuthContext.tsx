@@ -60,7 +60,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
 
         if (error) {
-          console.error('Error fetching user profile, even after retry:', error);
+          console.error('Error fetching user profile, even after retry. Signing out to clear invalid session.', error);
+          // CRITICAL FIX: If the session is invalid (user profile not found),
+          // force a sign-out to clear the corrupted local storage token.
+          // This will re-trigger onAuthStateChange with a null session, breaking the hang loop.
+          supabase.auth.signOut();
           setUser(null);
         } else if (data) {
           const level = calculateLevelFromXp(data.xp);

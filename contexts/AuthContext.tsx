@@ -12,7 +12,6 @@ interface AppContextType {
   showToast: (message: string, type: 'success' | 'error') => void;
   toast: { message: string, type: 'success' | 'error' } | null;
   updateUserProfile: (updates: Partial<User>) => void;
-  // Fix: Add missing functions and state to the context type.
   login: () => Promise<void>;
   loginAsAdmin: () => void;
   updateUserDiamonds: (newDiamondCount: number) => void;
@@ -27,7 +26,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
-  // Fix: Provide stats data through the context.
   const [stats] = useState<Stats>({
       users: 1337,
       visits: 4200,
@@ -38,14 +36,31 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setSession(session);
       if (session?.user) {
-        const { data, error } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
+        
+        const fetchUserProfile = async (userId: string) => {
+            return await supabase
+                .from('users')
+                .select('*')
+                .eq('id', userId)
+                .single();
+        };
+        
+        let { data, error } = await fetchUserProfile(session.user.id);
+
+        // **FIX: Handle Race Condition on New User Signup**
+        // If the profile is not found immediately after signing in,
+        // it might be because the database trigger to create the profile hasn't finished yet.
+        // We wait for a short period and try fetching again.
+        if (error && _event === 'SIGNED_IN') {
+            console.log('Initial profile fetch failed, retrying after a short delay for trigger execution...');
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+            const retryResult = await fetchUserProfile(session.user.id);
+            data = retryResult.data;
+            error = retryResult.error;
+        }
 
         if (error) {
-          console.error('Error fetching user profile:', error);
+          console.error('Error fetching user profile, even after retry:', error);
           setUser(null);
         } else if (data) {
           const level = calculateLevelFromXp(data.xp);
@@ -89,7 +104,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       });
   }
 
-  // Fix: Implement the login function.
   const login = async () => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
@@ -98,7 +112,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (error) showToast(error.message, 'error');
   };
 
-  // Fix: Implement the demo admin login function.
   const loginAsAdmin = () => {
     const adminUser: User = {
         id: '00000000-0000-0000-0000-000000000000', // Dummy UUID
@@ -114,19 +127,22 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setSession({} as Session); // Dummy session for demo purposes
   };
 
-  // Fix: Implement the diamond update utility function.
   const updateUserDiamonds = (newDiamondCount: number) => {
     if (user) {
         updateUserProfile({ diamonds: newDiamondCount });
     }
   };
 
-  // Fix: Implement a dummy navigation function.
   const navigate = (path: string) => {
     console.log(`Navigating to ${path}`);
-    // In a real app with React Router, you would use the useNavigate hook.
-    // For this demo, a simple redirect will suffice.
-    window.location.href = path === 'home' ? '/' : `/${path}`;
+    if (path === 'home') {
+        window.location.pathname = '/';
+    } else if (path === 'gallery') {
+        // This is a placeholder. In a real multi-page app, you'd use a router.
+        // For now, we'll just log it. A full gallery page doesn't exist yet.
+        console.log("Navigation to gallery page requested.");
+        showToast("Gallery page is for demo purposes.", "success");
+    }
   };
 
   const value = {

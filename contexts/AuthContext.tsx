@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { supabase } from '../utils/supabaseClient';
 import { User } from '../types';
 import { Session } from '@supabase/supabase-js';
@@ -41,6 +41,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   // Mock stats for the demo
   const [stats] = useState({ users: 1250, visits: 8700, images: 25000 });
 
+  const updateUserProfile = (updates: Partial<User>) => {
+    setUser(prevUser => {
+      if (!prevUser) return null;
+      const updatedUser = { ...prevUser, ...updates };
+      // Recalculate level if XP changes
+      if (updates.xp !== undefined) {
+        updatedUser.level = calculateLevelFromXp(updates.xp);
+      }
+      return updatedUser;
+    });
+  };
+
+  const updateUserDiamonds = (newAmount: number) => {
+    if (user) {
+        updateUserProfile({ diamonds: newAmount });
+    }
+  };
+
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
@@ -81,6 +99,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     );
 
     return () => subscription.unsubscribe();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   
   // Check daily check-in status on user load
@@ -132,24 +151,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const navigate = (path: AppRoute) => {
     setRoute(path);
     window.scrollTo(0, 0); // Scroll to top on page change
-  };
-
-  const updateUserProfile = (updates: Partial<User>) => {
-    setUser(prevUser => {
-      if (!prevUser) return null;
-      const updatedUser = { ...prevUser, ...updates };
-      // Recalculate level if XP changes
-      if (updates.xp !== undefined) {
-        updatedUser.level = calculateLevelFromXp(updates.xp);
-      }
-      return updatedUser;
-    });
-  };
-
-  const updateUserDiamonds = (newAmount: number) => {
-    if (user) {
-        updateUserProfile({ diamonds: newAmount });
-    }
   };
 
   const value = {

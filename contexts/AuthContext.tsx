@@ -115,17 +115,26 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
     }, [user, showToast]);
 
-    // New, more robust authentication flow
+    // Failsafe authentication flow with timeout
     useEffect(() => {
-        const initializeAuth = async () => {
-            try {
-                const { data: { session: currentSession }, error: sessionError } = await supabase.auth.getSession();
+        let isCancelled = false;
 
-                if (sessionError) {
-                    console.error("Error fetching session, signing out:", sessionError);
-                    await supabase.auth.signOut();
-                    return;
-                }
+        const initializeAuth = async () => {
+            const timeoutPromise = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('Authentication timed out after 8 seconds.')), 8000)
+            );
+
+            try {
+                // Race the session fetching against the timeout
+                const sessionResult = await Promise.race([
+                    supabase.auth.getSession(),
+                    timeoutPromise
+                ]) as { data: { session: Session | null }, error: Error | null };
+
+                if (isCancelled) return;
+
+                const { data: { session: currentSession }, error: sessionError } = sessionResult;
+                if (sessionError) throw sessionError;
 
                 if (currentSession) {
                     const profile = await fetchUserProfile(currentSession.user);
@@ -133,22 +142,22 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                         setSession(currentSession);
                         setUser(profile);
                     } else {
-                        console.warn("Session found but user profile is invalid. Forcing sign out.");
-                        await supabase.auth.signOut();
-                        setSession(null);
-                        setUser(null);
+                        throw new Error("Session found but user profile is invalid. Forcing sign out.");
                     }
                 } else {
                     setSession(null);
                     setUser(null);
                 }
             } catch (e) {
-                console.error("A critical error occurred during auth initialization, signing out:", e);
+                if (isCancelled) return;
+                console.error("A critical error or timeout occurred during auth initialization. Force signing out.", e);
                 await supabase.auth.signOut();
                 setSession(null);
                 setUser(null);
             } finally {
-                setLoading(false);
+                if (!isCancelled) {
+                    setLoading(false);
+                }
             }
         };
 
@@ -156,10 +165,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
             async (_event, newSession) => {
+                if (isCancelled) return;
                 setSession(newSession);
                 if (newSession?.user) {
                     const profile = await fetchUserProfile(newSession.user);
-                    setUser(profile); // Will be null if fetch fails
+                    setUser(profile);
                 } else {
                     setUser(null);
                 }
@@ -167,6 +177,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         );
 
         return () => {
+            isCancelled = true;
             subscription.unsubscribe();
         };
     }, [fetchUserProfile]);

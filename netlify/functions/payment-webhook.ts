@@ -1,10 +1,11 @@
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
-// FIX: The default ES module import for PayOS (a CJS module) is not working correctly.
-// This uses a namespace import to correctly reference the constructor in an ESM environment.
-import * as PayOS from "@payos/node";
+import * as PayOS_NS from "@payos/node";
 
-const payos = new (PayOS as any)(
+// Handle CJS/ESM interop for PayOS. The constructor might be on .default or the namespace itself.
+const PayOS = (PayOS_NS as any).default || PayOS_NS;
+
+const payos = new PayOS(
     process.env.PAYOS_CLIENT_ID!,
     process.env.PAYOS_API_KEY!,
     process.env.PAYOS_CHECKSUM_KEY!

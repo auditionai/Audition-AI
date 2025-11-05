@@ -24,8 +24,7 @@ const GalleryPage: React.FC = () => {
         <>
             <LandingHeader
                 user={user}
-                onAuthClick={() => setIsAuthModalOpen(true)}
-                onRegisterClick={() => setIsAuthModalOpen(true)}
+                onLoginRegisterClick={() => setIsAuthModalOpen(true)}
                 onTopUpClick={() => setIsTopUpModalOpen(true)}
                 // Fix: Rename unused parameter `id` to `_id` to satisfy linter.
                 onScrollTo={(_id) => navigate('home')} // Navigate home on logo/nav clicks

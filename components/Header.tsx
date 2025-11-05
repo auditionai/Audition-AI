@@ -3,13 +3,12 @@ import { User } from '../types';
 
 interface LandingHeaderProps {
   user: User | null;
-  onAuthClick: () => void;
-  onRegisterClick: () => void;
+  onLoginRegisterClick: () => void;
   onTopUpClick: () => void;
   onScrollTo: (id: string) => void;
 }
 
-const LandingHeader: React.FC<LandingHeaderProps> = ({ user, onAuthClick, onRegisterClick, onTopUpClick, onScrollTo }) => {
+const LandingHeader: React.FC<LandingHeaderProps> = ({ user, onLoginRegisterClick, onTopUpClick, onScrollTo }) => {
   const [isScrolled, setIsScrolled] = React.useState(false);
 
   React.useEffect(() => {
@@ -50,10 +49,10 @@ const LandingHeader: React.FC<LandingHeaderProps> = ({ user, onAuthClick, onRegi
               </div>
             ) : (
               <div className="flex items-center gap-3">
-                <button onClick={onAuthClick} className="px-4 py-2 font-semibold bg-white/10 border border-transparent text-white rounded-full hover:bg-white/20 transition-colors duration-300 text-sm">
+                <button onClick={onLoginRegisterClick} className="px-4 py-2 font-semibold bg-white/10 border border-transparent text-white rounded-full hover:bg-white/20 transition-colors duration-300 text-sm">
                     Đăng nhập
                 </button>
-                <button onClick={onRegisterClick} className="px-4 py-2 font-bold text-sm text-white bg-gradient-to-r from-[#F72585] to-[#CA27FF] rounded-full transition-transform hover:scale-105 shadow-lg shadow-[#F72585]/20">
+                <button onClick={onLoginRegisterClick} className="px-4 py-2 font-bold text-sm text-white bg-gradient-to-r from-[#F72585] to-[#CA27FF] rounded-full transition-transform hover:scale-105 shadow-lg shadow-[#F72585]/20">
                     Đăng ký
                 </button>
               </div>

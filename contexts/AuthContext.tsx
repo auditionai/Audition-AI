@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User, Stats } from '../types';
 import { supabase } from '../utils/supabaseClient';
-import { Session, SignUpWithPasswordCredentials } from '@supabase/supabase-js';
+import { Session } from '@supabase/supabase-js';
 import { calculateLevelFromXp } from '../utils/rankUtils';
 
 interface AppContextType {
@@ -12,11 +12,6 @@ interface AppContextType {
   showToast: (message: string, type: 'success' | 'error') => void;
   toast: { message: string, type: 'success' | 'error' } | null;
   updateUserProfile: (updates: Partial<User>) => void;
-  // Functions for manual auth
-  signUp: (credentials: SignUpWithPasswordCredentials & { options: { data: { display_name: string } } }) => Promise<void>;
-  signIn: (credentials: SignUpWithPasswordCredentials) => Promise<void>;
-  resetPassword: (email: string) => Promise<void>;
-  // Functions for OAuth and Admin demo
   login: () => Promise<void>;
   loginAsAdmin: () => void;
   updateUserDiamonds: (newDiamondCount: number) => void;
@@ -103,25 +98,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       });
   }
 
-  // --- Real Auth Functions ---
-  const signUp = async (credentials: SignUpWithPasswordCredentials & { options: { data: { display_name: string } } }) => {
-      const { error } = await supabase.auth.signUp(credentials);
-      if (error) throw error;
-  };
-
-  const signIn = async (credentials: SignUpWithPasswordCredentials) => {
-      const { error } = await supabase.auth.signInWithPassword(credentials);
-      if (error) throw error;
-  };
-
-  const resetPassword = async (email: string) => {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: `${window.location.origin}/reset-password`, // A future page for handling this
-      });
-      if (error) throw error;
-  };
-
-  // --- OAuth & Demo Functions ---
   const login = async () => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
@@ -143,6 +119,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
     setUser(adminUser);
     setSession({} as Session);
+    showToast('Đăng nhập với tư cách Quản trị viên thành công!', 'success');
   };
 
   const updateUserDiamonds = (newDiamondCount: number) => {
@@ -169,9 +146,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     showToast,
     toast,
     updateUserProfile,
-    signUp,
-    signIn,
-    resetPassword,
     login,
     loginAsAdmin,
     updateUserDiamonds,

@@ -10,7 +10,6 @@ const getVNDateString = (date: Date) => {
 const CheckInModal: React.FC<{ isOpen: boolean; onClose: () => void; }> = ({ isOpen, onClose }) => {
     const { user, session, showToast, updateUserProfile } = useAuth();
     const [checkIns, setCheckIns] = useState<Set<string>>(new Set());
-    const [isLoading, setIsLoading] = useState(true);
     const [isCheckingIn, setIsCheckingIn] = useState(false);
 
     const today = useMemo(() => new Date(), []);
@@ -20,7 +19,6 @@ const CheckInModal: React.FC<{ isOpen: boolean; onClose: () => void; }> = ({ isO
 
     const fetchCheckInHistory = useCallback(async () => {
         if (!session || !isOpen) return;
-        setIsLoading(true);
         try {
             const res = await fetch(`/.netlify/functions/check-in-history?year=${currentYear}&month=${currentMonth + 1}`, {
                 headers: { Authorization: `Bearer ${session.access_token}` }
@@ -30,8 +28,6 @@ const CheckInModal: React.FC<{ isOpen: boolean; onClose: () => void; }> = ({ isO
             setCheckIns(new Set(data));
         } catch (error: any) {
             showToast(error.message, 'error');
-        } finally {
-            setIsLoading(false);
         }
     }, [session, isOpen, currentYear, currentMonth, showToast]);
     
@@ -95,7 +91,7 @@ const CheckInModal: React.FC<{ isOpen: boolean; onClose: () => void; }> = ({ isO
                         <h3 className="font-bold text-lg">Tháng {currentMonth + 1}, {currentYear}</h3>
                         <button onClick={() => {
                             setCurrentMonth(m => m === 11 ? 0 : m + 1);
-                            if (currentMonth === 11) setCurrentYear(y => y + 1);
+                            if (currentMonth === 11) setCurrentYear(y => y - 1);
                         }} className="p-2 rounded-full hover:bg-white/10"><i className="ph-fill ph-caret-right"></i></button>
                     </div>
 

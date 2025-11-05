@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { getRankForLevel } from '../utils/rankUtils';
-import { LeaderboardUser } from '../types';
-import { useAuth } from '../contexts/AuthContext';
+// Fix: Add .ts/.tsx extensions to module imports.
+import { getRankForLevel } from '../utils/rankUtils.ts';
+import { LeaderboardUser } from '../types.ts';
+import { useAuth } from '../contexts/AuthContext.tsx';
 
 
 const PodiumItem: React.FC<{ user: LeaderboardUser, rankNum: number }> = ({ user, rankNum }) => {
@@ -48,7 +49,7 @@ const Leaderboard: React.FC = () => {
             }
         };
         fetchLeaderboard();
-    }, []);
+    }, [showToast]);
 
     if (isLoading) return <div className="text-center p-12">Đang tải bảng xếp hạng...</div>;
     if (users.length === 0) return <div className="text-center p-12">Chưa có dữ liệu xếp hạng.</div>;

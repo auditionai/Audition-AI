@@ -1,11 +1,27 @@
 import React from 'react';
 
-export interface Stats {
-  users: number;
-  visits: number;
-  images: number;
+// From Supabase Auth + custom table
+export interface User {
+  id: string;
+  email: string;
+  display_name: string;
+  photo_url: string;
+  diamonds: number;
+  xp: number;
+  is_admin?: boolean;
+  last_check_in?: string;
+  streak?: number;
 }
 
+// For Leaderboard
+export interface LeaderboardUser extends Omit<User, 'email' | 'is_admin' | 'last_check_in' | 'streak'> {
+  rank: number;
+  creations_count: number;
+  level: number; // calculated from xp
+}
+
+
+// For Landing Page Sections
 export interface Feature {
   icon: React.ReactNode;
   title: string;
@@ -31,40 +47,43 @@ export interface FaqItem {
   answer: string;
 }
 
-// Cập nhật để khớp với schema của Supabase
-export interface User {
-    id: string; // Trước đây là uid
-    display_name: string; // snake_case
-    email: string;
-    photo_url: string; // snake_case
-    diamonds: number;
-    xp: number;
+// For Image Gallery
+export interface GalleryImageCreator {
+    display_name: string;
+    photo_url: string;
     level: number;
-    is_admin?: boolean; // snake_case
 }
 
-export interface AdminManagedUser extends User {
-    created_at: string;
+export interface GalleryImage {
+  id: string;
+  title: string;
+  image_url: string;
+  user_id: string;
+  prompt: string;
+  model_used: string;
+  created_at: string;
+  creator: GalleryImageCreator;
 }
 
-
+// For Ranks/Levels
 export interface Rank {
   levelThreshold: number;
   title: string;
   icon: React.ReactNode;
-  color: string; // e.g., 'text-yellow-400'
+  color: string;
 }
 
 
+// For AI Tool
 export interface AIModel {
   id: string;
-  name:string;
+  name: string;
   description: string;
   apiModel: string;
-  tags: { text: string; color: string; }[];
+  tags: { text: string; color: string }[];
   details: string[];
   recommended?: boolean;
-  supportedModes: ('text-to-image' | 'image-to-image')[];
+  supportedModes: ('image-to-image' | 'text-to-image')[];
 }
 
 export interface StylePreset {
@@ -72,66 +91,13 @@ export interface StylePreset {
   name: string;
 }
 
-// Cập nhật để khớp với schema
-export interface GalleryImage {
-  id: string; // uuid
-  user_id: string;
-  prompt: string;
-  image_url: string;
-  model_used: string;
-  created_at: string;
-  // Fix: Add optional `title` for demo data compatibility.
-  title?: string;
-  creator: { // Dữ liệu này sẽ được JOIN từ bảng users
-    display_name: string;
-    photo_url: string;
-    level: number;
-  };
-}
-
-
-// Cập nhật để khớp với schema của Supabase
-export interface ApiKey {
+// For TopUp/Payments
+export interface CreditPackage {
   id: string;
   name: string;
-  key_value: string; // snake_case
-  status: 'active' | 'inactive';
-  usage_count: number; // snake_case
-  created_at: string;
-}
-
-export interface LeaderboardUser {
-    id: string;
-    rank: number;
-    display_name: string;
-    photo_url: string;
-    level: number;
-    xp: number;
-    // creations_count sẽ được tính toán
-    creations_count: number;
-}
-
-// Dành cho các gói nạp kim cương
-export interface CreditPackage {
-    id: string;
-    credits_amount: number;
-    bonus_credits: number;
-    price_vnd: number;
-    is_flash_sale: boolean;
-    is_active: boolean;
-    display_order: number;
-    created_at: string;
-}
-
-// Dành cho lịch sử giao dịch
-export interface Transaction {
-    id: string;
-    order_code: number;
-    user_id: string;
-    package_id: string;
-    amount_vnd: number;
-    diamonds_received: number;
-    status: 'pending' | 'completed' | 'failed' | 'canceled';
-    created_at: string;
-    updated_at: string;
+  description: string;
+  price: number;
+  credits_amount: number;
+  bonus_credits: number;
+  is_best_value: boolean;
 }

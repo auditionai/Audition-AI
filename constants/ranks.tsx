@@ -1,4 +1,6 @@
-import { Rank } from '../types';
+// Fix: Add .ts extension to module import.
+import { Rank } from '../types.ts';
+import React from 'react';
 
 export const RANKS: Rank[] = [
   {

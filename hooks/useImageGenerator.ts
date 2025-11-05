@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { useAuth } from '../contexts/AuthContext';
-import { AIModel, StylePreset } from '../types';
+// Fix: Add .tsx/.ts extensions to module imports.
+import { useAuth } from '../contexts/AuthContext.tsx';
+import { AIModel, StylePreset } from '../types.ts';
 
 const fileToBase64 = (file: File): Promise<string> => new Promise((resolve, reject) => {
     const reader = new FileReader();

@@ -1,5 +1,7 @@
-import { Rank } from '../types';
-import { RANKS } from '../constants/ranks';
+// Fix: Add .ts extension to module import.
+import { Rank } from '../types.ts';
+// Fix: Add .tsx extension to module import.
+import { RANKS } from '../constants/ranks.tsx';
 
 /**
  * Calculates a user's level based on their total XP.

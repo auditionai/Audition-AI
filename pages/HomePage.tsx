@@ -1,144 +1,124 @@
-import React, { useState, useEffect } from 'react';
-import LandingHeader from '../components/Header';
-import Hero from '../components/Hero';
-import Features from '../components/Features';
-import HowItWorks from '../components/HowItWorks';
-import Gallery from '../components/Gallery';
-import Pricing from '../components/Pricing';
-import FAQ from '../components/FAQ';
-import Footer from '../components/Footer';
-import AuthModal from '../components/AuthModal';
-import AnimatedSection from '../components/common/AnimatedSection';
-// Fix: Import `useAuth` from `AuthContext` to get all context functionality.
-import { useAuth } from '../contexts/AuthContext';
-import InfoModal from '../components/InfoModal';
-import DynamicBackground from '../components/common/DynamicBackground';
-import { GalleryImage } from '../types';
-import ImageModal from '../components/common/ImageModal';
+import React, { useState, useEffect, useRef } from 'react';
+import Header from '../components/Header.tsx';
+import Hero from '../components/Hero.tsx';
+import Features from '../components/Features.tsx';
+import HowItWorks from '../components/HowItWorks.tsx';
+import Gallery from '../components/Gallery.tsx';
+import Pricing from '../components/Pricing.tsx';
+import FAQ from '../components/FAQ.tsx';
+import Footer from '../components/Footer.tsx';
+import ImageModal from '../components/common/ImageModal.tsx';
+import AnimatedSection from '../components/common/AnimatedSection.tsx';
+import DynamicBackground from '../components/common/DynamicBackground.tsx';
 
-const HomePage: React.FC = () => {
-    // Fix: Use `useAuth` as the single source for context state and functions.
-    const { user, login, stats, showToast, navigate } = useAuth();
-    const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-    const [infoModalKey, setInfoModalKey] = useState<'terms' | 'policy' | 'contact' | null>(null);
-    const [activeSection, setActiveSection] = useState('hero');
+import { useAuth } from '../contexts/AuthContext.tsx';
+import { GalleryImage, PricingPlan } from '../types.ts';
+import { InfoKey } from '../App.tsx';
+
+interface HomePageProps {
+    onCtaClick: () => void;
+    onTopUpClick: () => void;
+    onInfoLinkClick: (key: InfoKey) => void;
+    onNavigateToCreator: () => void;
+}
+
+const HomePage: React.FC<HomePageProps> = ({ onCtaClick, onTopUpClick, onInfoLinkClick, onNavigateToCreator }) => {
+    const { user } = useAuth();
     const [selectedImage, setSelectedImage] = useState<GalleryImage | null>(null);
+    const [activeSection, setActiveSection] = useState('hero');
+
+    const sectionRefs = {
+        hero: useRef<HTMLDivElement>(null),
+        features: useRef<HTMLDivElement>(null),
+        'how-it-works': useRef<HTMLDivElement>(null),
+        gallery: useRef<HTMLDivElement>(null),
+        pricing: useRef<HTMLDivElement>(null),
+        faq: useRef<HTMLDivElement>(null),
+    };
 
     useEffect(() => {
-        const sections = document.querySelectorAll('section[id]');
         const observer = new IntersectionObserver(
             (entries) => {
-                entries.forEach((entry) => {
+                entries.forEach(entry => {
                     if (entry.isIntersecting) {
                         setActiveSection(entry.target.id);
                     }
                 });
             },
-            { rootMargin: '-50% 0px -50% 0px' } // Trigger when the section is in the middle of the viewport
+            { rootMargin: '-50% 0px -50% 0px', threshold: 0 }
         );
 
-        sections.forEach((section) => observer.observe(section));
+        Object.values(sectionRefs).forEach(ref => {
+            if (ref.current) observer.observe(ref.current);
+        });
 
-        return () => sections.forEach((section) => observer.unobserve(section));
+        return () => {
+            Object.values(sectionRefs).forEach(ref => {
+                if (ref.current) observer.unobserve(ref.current);
+            });
+        };
     }, []);
 
-    const handleOpenInfoModal = (key: 'terms' | 'policy' | 'contact') => {
-        setInfoModalKey(key);
-    };
-    
-    const handleDirectGoogleLogin = () => {
-        showToast('Đang đăng nhập bằng Google...', 'success');
-        login();
+    const handleScrollTo = (id: string) => {
+        const element = document.getElementById(id);
+        element?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     };
 
-    const scrollToSection = (id: string) => {
-        const element = document.getElementById(id);
-        if (element) {
-            element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-    };
-    
-    const handleTopUpClick = () => {
-        if (user) {
-            navigate('buy-credits');
-        } else {
-            setIsAuthModalOpen(true);
-        }
+    const handlePlanClick = (plan: PricingPlan) => {
+        console.log("Selected plan:", plan.name);
+        onTopUpClick();
     };
 
     return (
-        <>
-            <div className="hidden lg:block">
-                <DynamicBackground activeSection={activeSection} />
-            </div>
-            <LandingHeader
-                user={user}
-                onTopUpClick={handleTopUpClick}
-                onScrollTo={scrollToSection}
-            />
-            <main className="relative z-10">
-                <section id="hero">
-                    <Hero
-                        onCtaClick={() => user ? navigate('tool') : setIsAuthModalOpen(true)}
-                        onGoogleLoginClick={handleDirectGoogleLogin}
-                    />
-                </section>
-                <AnimatedSection id="features">
+        <div className="bg-[#0B0B0F] text-white">
+            <DynamicBackground activeSection={activeSection} />
+            <Header user={user} onTopUpClick={onTopUpClick} onScrollTo={handleScrollTo} />
+            <main>
+                <div id="hero" ref={sectionRefs.hero}>
+                    <Hero onCtaClick={onCtaClick} onGoogleLoginClick={onCtaClick} />
+                </div>
+
+                <AnimatedSection id="features" ref={sectionRefs.features}>
                     <Features />
                 </AnimatedSection>
-                <AnimatedSection id="how-it-works">
+
+                <AnimatedSection id="how-it-works" ref={sectionRefs['how-it-works']}>
                     <HowItWorks />
                 </AnimatedSection>
-                 <AnimatedSection id="gallery" className="py-20 sm:py-32">
-                    <div className="container mx-auto px-4">
-                        <div className="text-center max-w-3xl mx-auto mb-12">
+
+                <AnimatedSection id="gallery" ref={sectionRefs.gallery}>
+                    <section className="py-20 sm:py-32 bg-[#0B0B0F] text-white w-full">
+                        <div className="text-center max-w-3xl mx-auto mb-16">
                             <h2 className="text-3xl md:text-4xl font-bold mb-4">
-                                <span className="bg-gradient-to-r from-pink-400 to-fuchsia-500 text-transparent bg-clip-text">Thư viện Sáng tạo</span>
+                                <span className="bg-gradient-to-r from-pink-400 to-fuchsia-500 text-transparent bg-clip-text">Thư Viện Sáng Tạo</span>
                             </h2>
                             <p className="text-lg text-gray-400">
                                 Khám phá những tác phẩm độc đáo được tạo ra bởi cộng đồng Audition AI.
                             </p>
                         </div>
-                        <Gallery 
-                          displayMode="slider"
-                          onImageClick={setSelectedImage}
-                        />
-                         <div className="mt-12 text-center">
-                            <button
-                                onClick={() => navigate('gallery')}
-                                className="px-8 py-4 font-bold text-lg text-white bg-white/10 backdrop-blur-sm border border-white/20 rounded-full transition-all duration-300 hover:bg-white/20 hover:shadow-lg hover:shadow-white/10 hover:-translate-y-1"
-                            >
-                                Xem thêm trong thư viện
-                                <i className="ph-fill ph-arrow-right ml-2"></i>
-                            </button>
-                        </div>
-                    </div>
+                        <Gallery onImageClick={setSelectedImage} limit={8} showSeeMore onSeeMoreClick={onNavigateToCreator} />
+                    </section>
                 </AnimatedSection>
-                <AnimatedSection id="pricing">
-                    <Pricing onTopUpClick={handleTopUpClick} />
+                
+                 <AnimatedSection id="gallery-slider" >
+                     <Gallery onImageClick={setSelectedImage} displayMode="slider" />
                 </AnimatedSection>
-                <AnimatedSection id="faq">
+
+                <AnimatedSection id="pricing" ref={sectionRefs.pricing}>
+                    <Pricing onPlanClick={handlePlanClick} />
+                </AnimatedSection>
+
+                <AnimatedSection id="faq" ref={sectionRefs.faq}>
                     <FAQ />
                 </AnimatedSection>
             </main>
-            <Footer onCtaClick={() => setIsAuthModalOpen(true)} stats={stats} onInfoLinkClick={handleOpenInfoModal}/>
-
-            {/* Modals */}
-            <AuthModal
-                isOpen={isAuthModalOpen}
-                onClose={() => setIsAuthModalOpen(false)}
+            <Footer 
+                onCtaClick={onCtaClick} 
+                stats={{ users: 1573, visits: 8420, images: 4219 }} 
+                onInfoLinkClick={onInfoLinkClick}
             />
-            <InfoModal
-                isOpen={!!infoModalKey}
-                onClose={() => setInfoModalKey(null)}
-                contentKey={infoModalKey}
-            />
-            <ImageModal 
-                isOpen={!!selectedImage}
-                onClose={() => setSelectedImage(null)}
-                image={selectedImage}
-            />
-        </>
+            <ImageModal isOpen={!!selectedImage} onClose={() => setSelectedImage(null)} image={selectedImage} />
+        </div>
     );
 };
 

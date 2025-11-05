@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import Modal from './common/Modal';
-import { useAuth } from '../contexts/AuthContext';
+import Modal from './common/Modal.tsx';
+// Fix: Add .tsx extension to module import.
+import { useAuth } from '../contexts/AuthContext.tsx';
 
 interface AuthModalProps {
   isOpen: boolean;

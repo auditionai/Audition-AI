@@ -1,7 +1,8 @@
 import React from 'react';
-import { GALLERY_IMAGES } from '../constants/landingPageData';
-import { GalleryImage } from '../types';
-import { getRankForLevel } from '../utils/rankUtils';
+import { GALLERY_IMAGES } from '../constants/landingPageData.ts';
+// Fix: Add .ts extension to module import.
+import { GalleryImage } from '../types.ts';
+import { getRankForLevel } from '../utils/rankUtils.ts';
 
 interface GalleryProps {
   onImageClick: (image: GalleryImage) => void;

@@ -14,25 +14,28 @@ const InfoModalContent: React.FC<{ contentKey: InfoKey }> = ({ contentKey }) => 
         case 'terms':
             return (
                 <div className="text-sm text-gray-300 space-y-3 custom-scrollbar pr-2 max-h-[60vh] overflow-y-auto">
-                    <p className="font-bold text-white">1. Chấp nhận Điều khoản</p>
-                    <p>Bằng việc truy cập và sử dụng dịch vụ AUDITION AI ("Dịch vụ"), bạn đồng ý tuân thủ các điều khoản và điều kiện này. Nếu bạn không đồng ý, vui lòng không sử dụng Dịch vụ.</p>
+                    <p className="font-bold text-white">1. "Kim Cương" là gì?</p>
+                    <p>"Kim Cương" là một loại tiền tệ ảo được thiết kế để đáp ứng nhu cầu của người dùng muốn truy cập nhiều hơn vào các dịch vụ của AUDITION AI. "Kim Cương" có thể được sử dụng để quy đổi quyền truy cập vào các tính năng sáng tạo AI trong nền tảng. "Kim Cương" chỉ có thể được nhận và sử dụng bởi người dùng đã đăng nhập.</p>
+                    <p>Để tránh hiểu nhầm, dịch vụ Kim Cương không phải là dịch vụ thanh toán trực tuyến, và Kim Cương không phải là token, tiền ảo, hoặc voucher trả trước. Chúng không có giá trị tiền tệ, không thể được chuyển nhượng, tặng, hoàn lại hoặc quy đổi thành tiền mặt.</p>
+
+                    <p className="font-bold text-white mt-4">2. Thời hạn và cách thức sử dụng "Kim Cương"</p>
+                    <ul className="list-disc list-inside pl-4 space-y-2">
+                        <li><strong>Kim Cương Mua:</strong> Nhận được thông qua việc mua các gói nạp. Có hiệu lực sử dụng trong 2 năm kể từ ngày nhận.</li>
+                        <li><strong>Kim Cương Miễn Phí:</strong> Được nhận qua các hoạt động khuyến mãi hoặc ưu đãi hàng ngày của nền tảng. Thời hạn sử dụng sẽ tuân theo quy định của từng chương trình (ví dụ: kim cương miễn phí hàng ngày sẽ được reset sau 24 giờ).</li>
+                        <li><strong>Sử dụng Kim Cương:</strong> Việc sử dụng các chức năng sáng tạo AI (như tạo ảnh, tách nền) sẽ tiêu thụ một lượng Kim Cương nhất định. Số Kim Cương tương ứng sẽ bị trừ ngay khi thực hiện thao tác. Nếu thao tác thất bại do lỗi hệ thống, số Kim Cương đã trừ sẽ được hoàn lại vào tài khoản của bạn.</li>
+                    </ul>
                     
-                    <p className="font-bold text-white">2. Trách nhiệm người dùng</p>
-                    <ul className="list-disc list-inside pl-4">
-                        <li>Bạn hoàn toàn chịu trách nhiệm về bản quyền và tính hợp pháp của hình ảnh bạn tải lên.</li>
-                        <li>Nghiêm cấm sử dụng Dịch vụ để tạo ra nội dung bất hợp pháp, vi phạm pháp luật, 18+, bạo lực, xúc phạm, phỉ báng hoặc vi phạm quyền của bất kỳ bên thứ ba nào.</li>
-                        <li>Bạn đồng ý không sử dụng Dịch vụ cho bất kỳ mục đích thương mại nào mà không có sự cho phép trước của chúng tôi.</li>
-                    </ul>
+                    <p className="font-bold text-white mt-4">3. Tiêu chuẩn giá</p>
+                    <p>Giá của các gói nạp Kim Cương được niêm yết rõ ràng trên trang "Nạp Kim Cương". Chúng tôi có thể thỉnh thoảng triển khai các hoạt động khuyến mãi với chiết khấu mua hàng. Giá ưu đãi sẽ tuân theo giao diện sản phẩm và các quy tắc hoạt động được công bố tại thời điểm đó.</p>
 
-                    <p className="font-bold text-white">3. Giới hạn Dịch vụ</p>
-                     <ul className="list-disc list-inside pl-4">
-                        <li>Đây là một phiên bản DEMO. Các chức năng, dữ liệu và kết quả có thể không chính xác và chỉ nhằm mục đích minh họa.</li>
-                        <li>Chất lượng hình ảnh do AI tạo ra phụ thuộc vào nhiều yếu tố và không được đảm bảo luôn hoàn hảo hoặc đúng ý bạn 100%.</li>
-                        <li>Chúng tôi có quyền sửa đổi hoặc chấm dứt Dịch vụ bất kỳ lúc nào mà không cần thông báo trước.</li>
-                    </ul>
+                    <p className="font-bold text-white mt-4">4. Thứ tự sử dụng</p>
+                    <p>Thứ tự ưu tiên sử dụng dựa trên thời hạn của Kim Cương. Những viên Kim Cương có thời hạn sử dụng ngắn hơn (ví dụ: Kim Cương miễn phí hàng ngày) sẽ được hệ thống tự động sử dụng trước.</p>
 
-                    <p className="font-bold text-white">4. Miễn trừ trách nhiệm</p>
-                    <p>AUDITION AI không chịu trách nhiệm cho bất kỳ thiệt hại nào phát sinh từ việc sử dụng hoặc không thể sử dụng Dịch vụ.</p>
+                    <p className="font-bold text-white mt-4">5. "Kim Cương" được sử dụng cho việc gì?</p>
+                    <p>Hiện tại, người dùng có thể sử dụng Kim Cương cho các tính năng sáng tạo AI có sẵn trên nền tảng AUDITION AI, bao gồm nhưng không giới hạn ở việc tạo ảnh và tách nền.</p>
+                    
+                    <p className="font-bold text-white mt-4">6. Làm thế nào để kiểm tra số dư và chi tiết sử dụng?</p>
+                    <p>Bạn có thể kiểm tra số dư Kim Cương hiện tại ở phần đầu trang (Header) khi đã đăng nhập, hoặc xem chi tiết hơn trong trang "Cài đặt tài khoản".</p>
                 </div>
             );
         case 'policy':
@@ -93,7 +96,7 @@ const InfoModalContent: React.FC<{ contentKey: InfoKey }> = ({ contentKey }) => 
 
 const getTitle = (key: InfoKey | null): string => {
     switch (key) {
-        case 'terms': return 'Điều khoản Dịch vụ';
+        case 'terms': return 'Chính sách Kim Cương';
         case 'policy': return 'Chính sách Bảo mật';
         case 'contact': return 'Thông tin Liên hệ';
         default: return '';

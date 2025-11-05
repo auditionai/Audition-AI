@@ -157,6 +157,23 @@
         }
       }
 
+      /* Footer Neon Text Effect */
+      .footer-neon-text {
+        background: linear-gradient(90deg, #f9a8d4, #ffffff, #d8b4fe, #f9a8d4);
+        background-size: 250% auto;
+        color: #fff;
+        background-clip: text;
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        animation: footer-neon-flow 6s linear infinite;
+        text-shadow: 0 0 2px rgba(255, 255, 255, 0.7), 0 0 5px rgba(247, 37, 133, 0.5), 0 0 10px rgba(247, 37, 133, 0.5), 0 0 15px rgba(202, 39, 255, 0.5), 0 0 20px rgba(202, 39, 255, 0.5);
+      }
+      @keyframes footer-neon-flow {
+        to {
+          background-position: 250% center;
+        }
+      }
+
       /* New 3D effect for cards */
       .interactive-3d {
         transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), box-shadow 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
@@ -283,7 +300,6 @@
   }
 }
 </script>
-<link rel="stylesheet" href="/index.css">
 </head>
   <body>
     <div id="root"></div>

@@ -75,13 +75,13 @@ const Footer: React.FC<FooterProps> = ({ onCtaClick, stats, onInfoLinkClick }) =
         </div>
         
         <div className="flex flex-col md:flex-row justify-between items-center text-center md:text-left border-t border-gray-800 pt-8">
-          <p className="font-semibold text-sm mb-4 md:mb-0 neon-text-flow">
-            &copy; {new Date().getFullYear()} AUDITION AI. All Rights Reserved.
+          <p className="font-semibold text-base mb-4 md:mb-0 footer-neon-text">
+            &copy; {new Date().getFullYear()} AUDITION AI Studio.
           </p>
           <div className="flex gap-2 text-gray-400">
-            <a onClick={() => onInfoLinkClick('terms')} className="px-4 py-2 rounded-full bg-white/5 hover:bg-pink-500/10 text-gray-300 hover:text-white border border-transparent hover:border-pink-500/20 transition-all duration-300 cursor-pointer text-sm">Điều khoản</a>
-            <a onClick={() => onInfoLinkClick('policy')} className="px-4 py-2 rounded-full bg-white/5 hover:bg-pink-500/10 text-gray-300 hover:text-white border border-transparent hover:border-pink-500/20 transition-all duration-300 cursor-pointer text-sm">Chính sách</a>
-            <a onClick={() => onInfoLinkClick('contact')} className="px-4 py-2 rounded-full bg-white/5 hover:bg-pink-500/10 text-gray-300 hover:text-white border border-transparent hover:border-pink-500/20 transition-all duration-300 cursor-pointer text-sm">Liên hệ</a>
+            <a onClick={() => onInfoLinkClick('terms')} className="px-4 py-2 rounded-full bg-white/5 hover:bg-pink-500/10 text-gray-300 hover:text-white border border-transparent hover:border-pink-500/20 transition-all duration-300 cursor-pointer text-sm font-semibold">Điều khoản</a>
+            <a onClick={() => onInfoLinkClick('policy')} className="px-4 py-2 rounded-full bg-white/5 hover:bg-pink-500/10 text-gray-300 hover:text-white border border-transparent hover:border-pink-500/20 transition-all duration-300 cursor-pointer text-sm font-semibold">Chính sách</a>
+            <a onClick={() => onInfoLinkClick('contact')} className="px-4 py-2 rounded-full bg-white/5 hover:bg-pink-500/10 text-gray-300 hover:text-white border border-transparent hover:border-pink-500/20 transition-all duration-300 cursor-pointer text-sm font-semibold">Liên hệ</a>
           </div>
         </div>
          <div className="mt-8 text-center text-xs text-gray-500">

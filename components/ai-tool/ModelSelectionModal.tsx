@@ -1,6 +1,5 @@
 import React from 'react';
 import Modal from '../common/Modal';
-import { AIModel } from '../../types';
 import { DETAILED_AI_MODELS } from '../../constants/aiToolData';
 
 interface ModelSelectionModalProps {
@@ -8,7 +7,6 @@ interface ModelSelectionModalProps {
     onClose: () => void;
     selectedModelId: string;
     onSelectModel: (id: string) => void;
-    // Fix: Changed type from `unknown` to `boolean` for type safety.
     characterImage: boolean;
 }
 

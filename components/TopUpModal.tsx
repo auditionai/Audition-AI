@@ -5,12 +5,14 @@ import { useAuth } from '../contexts/AuthContext';
 interface TopUpModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onTopUpSuccess: (amount: number) => void;
+  // Fix: Add the onTopUpSuccess prop to resolve type errors in parent components.
+  // It's marked as optional because the component's demo logic doesn't call it.
+  onTopUpSuccess?: (amount: number) => void;
 }
 
 type TopUpTab = 'qr' | 'bank';
 
-const TopUpModal: React.FC<TopUpModalProps> = ({ isOpen, onClose, onTopUpSuccess }) => {
+const TopUpModal: React.FC<TopUpModalProps> = ({ isOpen, onClose }) => {
     const { user } = useAuth();
     const [activeTab, setActiveTab] = useState<TopUpTab>('qr');
     const [isProcessing, setIsProcessing] = useState(false);

@@ -1,17 +1,13 @@
-<script>
-// The user wants to make the "Hướng Dẫn" button more prominent with a neon effect.
-// I'll change the classes to give it a pink border, pink text, and a subtle pink shadow to create a glow.
-// Old classes: `flex items-center gap-1 text-xs text-gray-400 hover:text-pink-400 transition-colors px-2 py-1 rounded-md bg-white/5 hover:bg-white/10 flex-shrink-0`
-// New classes: `flex items-center gap-1 text-xs text-pink-300 hover:text-pink-200 transition-all px-2 py-1 rounded-md bg-pink-500/10 border border-pink-500/30 hover:bg-pink-500/20 shadow-[0_0_8px_rgba(247,37,133,0.3)] hover:shadow-[0_0_12px_rgba(247,37,133,0.5)] flex-shrink-0`
-</script>
 import React from 'react';
+
+type InstructionKey = 'character' | 'style' | 'prompt' | 'advanced';
 
 interface SettingsBlockProps {
     title: string;
-    instructionKey: string;
+    instructionKey: InstructionKey;
     children: React.ReactNode;
     step: number;
-    onInstructionClick: (key: string) => void;
+    onInstructionClick: (key: InstructionKey) => void;
 }
 
 const SettingsBlock: React.FC<SettingsBlockProps> = ({ title, instructionKey, children, step, onInstructionClick }) => {

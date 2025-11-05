@@ -10,7 +10,7 @@ type SettingsTab = 'profile' | 'history' | 'gallery' | 'user_management' | 'rank
 // --- Admin Components ---
 const UserManagement = () => {
     // In a real app, this data would be fetched from a secure admin endpoint
-    const [users, setUsers] = useState<AppUser[]>([]);
+    // const [users, setUsers] = useState<AppUser[]>([]); // Removed unused state
     // useEffect(() => { /* fetch users */ }, []);
 
     return (
@@ -23,7 +23,7 @@ const UserManagement = () => {
 
 const RankManagement = () => {
     // In a real app, this would fetch and update ranks in the database
-    const [ranks, setRanks] = useState<Rank[]>(RANKS);
+    // const [ranks, setRanks] = useState<Rank[]>(RANKS); // Removed unused state
      return (
         <div>
             <h2 className="text-xl font-bold mb-4">Quản lý Cấp bậc & Danh hiệu (Demo)</h2>

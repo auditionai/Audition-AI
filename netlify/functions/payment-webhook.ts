@@ -55,27 +55,26 @@ const handler: Handler = async (event: HandlerEvent) => {
             console.error(`[VALIDATION_ERROR] orderCode '${orderCode}' is not a valid number.`);
             return { statusCode: 400, body: JSON.stringify({ error: 'Invalid orderCode format.' }) };
         }
-
-        // 3. THE DEFINITIVE SUCCESS CHECK:
-        // This is the "intelligent" and "robust" solution. We ONLY care about a valid signature
-        // and a 'PAID' status. The top-level 'code' is irrelevant and fragile for webhooks.
+        
         const isSuccess = status?.toUpperCase() === 'PAID';
         const isFailure = status?.toUpperCase() === 'CANCELLED' || status?.toUpperCase() === 'FAILED';
 
         if (isSuccess) {
-            console.log(`[SUCCESS] Order ${numericOrderCode} is PAID. Calling atomic database function 'complete_paid_transaction'.`);
+            console.log(`[SUCCESS] Order ${numericOrderCode} is PAID. Updating status to 'awaiting_approval'.`);
             
-            // 4. Atomic Database Update via RPC
-            const { data: rpcData, error: rpcError } = await supabaseAdmin
-                .rpc('complete_paid_transaction', { order_code_param: numericOrderCode });
-
-            if (rpcError) {
-                console.error(`[DB_ERROR] RPC failed for order ${numericOrderCode}:`, JSON.stringify(rpcError, null, 2));
-                // Still return 200 to PayOS so it doesn't retry, but log the critical error.
-                return { statusCode: 500, body: JSON.stringify({ error: `Database function failed: ${rpcError.message}` }) };
+            const { error: updateError } = await supabaseAdmin
+               .from('transactions')
+               .update({ status: 'awaiting_approval', updated_at: new Date().toISOString() })
+               .eq('order_code', numericOrderCode)
+               .eq('status', 'pending');
+            
+            if (updateError) {
+                 console.error(`[DB_ERROR] Failed to update status to 'awaiting_approval' for order ${numericOrderCode}:`, updateError.message);
+                 // Still return 200 to PayOS, but log the error.
+                 return { statusCode: 500, body: JSON.stringify({ error: `Database update failed: ${updateError.message}` }) };
             }
 
-            console.log(`[DB_SUCCESS] RPC Response for order ${numericOrderCode}:`, JSON.stringify(rpcData, null, 2));
+            console.log(`[DB_SUCCESS] Updated order ${numericOrderCode} to awaiting_approval.`);
 
         } else if (isFailure) {
             const dbStatus = status.toUpperCase() === 'CANCELLED' ? 'canceled' : 'failed';

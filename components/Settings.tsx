@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { ApiKey, GalleryImage, AdminManagedUser, CreditPackage } from '../types';
+import { ApiKey, GalleryImage, AdminManagedUser, CreditPackage, AdminTransaction } from '../types';
 import { getRankForLevel } from '../utils/rankUtils';
 import XPProgressBar from './common/XPProgressBar';
 import ImageModal from './common/ImageModal';
@@ -149,6 +149,11 @@ const Settings: React.FC = () => {
     const [editingPackage, setEditingPackage] = useState<CreditPackage | null>(null);
     const [newPackage, setNewPackage] = useState({ credits_amount: 0, bonus_credits: 0, price_vnd: 0 });
 
+    // Transaction management state
+    const [pendingTransactions, setPendingTransactions] = useState<AdminTransaction[]>([]);
+    const [isTransactionsLoading, setIsTransactionsLoading] = useState(false);
+    const [processingTransactionId, setProcessingTransactionId] = useState<string | null>(null);
+
     // Gallery state
     const [userImages, setUserImages] = useState<GalleryImage[]>([]);
     const [isImagesLoading, setIsImagesLoading] = useState(false);
@@ -185,6 +190,15 @@ const Settings: React.FC = () => {
             setPackages(await res.json());
         } catch (error: any) { showToast(error.message, 'error'); }
         finally { setIsPackagesLoading(false); }
+
+        // Fetch Pending Transactions
+        setIsTransactionsLoading(true);
+        try {
+            const res = await fetch('/.netlify/functions/admin-transactions', { headers: { Authorization: `Bearer ${session.access_token}` } });
+            if (!res.ok) throw new Error('Không thể tải các giao dịch chờ duyệt.');
+            setPendingTransactions(await res.json());
+        } catch (error: any) { showToast(error.message, 'error'); }
+        finally { setIsTransactionsLoading(false); }
 
     }, [session, showToast, user?.is_admin]);
 
@@ -354,6 +368,26 @@ const Settings: React.FC = () => {
         } catch (e: any) { showToast(e.message, 'error'); }
     };
 
+    const handleTransactionAction = async (transactionId: string, action: 'approve' | 'reject') => {
+        setProcessingTransactionId(transactionId);
+        try {
+            const response = await fetch('/.netlify/functions/admin-transactions', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+                body: JSON.stringify({ transactionId, action }),
+            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.error);
+            
+            setPendingTransactions(prev => prev.filter(t => t.id !== transactionId));
+            showToast(`Giao dịch đã được ${action === 'approve' ? 'phê duyệt' : 'từ chối'}!`, 'success');
+        } catch (error: any) {
+            showToast(error.message, 'error');
+        } finally {
+            setProcessingTransactionId(null);
+        }
+    };
+
 
     if (!user || !rank) return null;
 
@@ -430,6 +464,43 @@ const Settings: React.FC = () => {
 
             {user.is_admin && (
                 <div className="space-y-8">
+                     {/* Quản lý Giao dịch */}
+                    <div className="bg-[#12121A]/80 border border-blue-500/20 rounded-2xl shadow-lg p-6">
+                        <h3 className="text-2xl font-bold mb-4 text-blue-400 flex items-center gap-2"><i className="ph-fill ph-check-square-offset"></i>Admin: Phê Duyệt Giao Dịch</h3>
+                        {isTransactionsLoading ? <p>Đang tải giao dịch...</p> : (
+                            <div className="max-h-96 overflow-y-auto custom-scrollbar pr-2">
+                                {pendingTransactions.length > 0 ? (
+                                    <div className="space-y-3">
+                                        {pendingTransactions.map(t => (
+                                            <div key={t.id} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center p-3 bg-white/5 rounded-lg text-sm">
+                                                <div className="md:col-span-5 flex items-center gap-3">
+                                                    <img src={t.users.photo_url} alt={t.users.display_name} className="w-10 h-10 rounded-full flex-shrink-0" />
+                                                    <div className="truncate">
+                                                        <p className="font-semibold text-white truncate">{t.users.display_name}</p>
+                                                        <p className="text-xs text-gray-400 truncate">{t.users.email}</p>
+                                                    </div>
+                                                </div>
+                                                <div className="md:col-span-3">
+                                                    <p className="font-mono text-xs text-gray-300">Order: {t.order_code}</p>
+                                                    <p className="font-semibold text-green-400">{t.amount_vnd.toLocaleString('vi-VN')}đ</p>
+                                                </div>
+                                                <div className="md:col-span-2 text-pink-400 font-bold flex items-center gap-1.5">
+                                                    <i className="ph-fill ph-diamonds-four"></i> +{t.diamonds_received}
+                                                </div>
+                                                <div className="md:col-span-2 flex justify-end items-center gap-2">
+                                                    <button onClick={() => handleTransactionAction(t.id, 'reject')} disabled={processingTransactionId === t.id} className="px-3 py-1 text-xs font-semibold bg-red-500/20 text-red-300 rounded-md hover:bg-red-500/30 disabled:opacity-50">Từ chối</button>
+                                                    <button onClick={() => handleTransactionAction(t.id, 'approve')} disabled={processingTransactionId === t.id} className="px-3 py-1 text-xs font-semibold bg-green-500/20 text-green-300 rounded-md hover:bg-green-500/30 disabled:opacity-50">Duyệt</button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="text-center text-gray-500 py-8">Không có giao dịch nào đang chờ phê duyệt.</p>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                    
                     {/* Quản lý Gói Nạp */}
                     <div className="bg-[#12121A]/80 border border-green-500/20 rounded-2xl shadow-lg p-6">
                         <h3 className="text-2xl font-bold mb-4 text-green-400 flex items-center gap-2"><i className="ph-fill ph-package"></i>Admin: Quản lý Gói Nạp</h3>

@@ -135,7 +135,16 @@ export interface Transaction {
     package_id: string;
     amount_vnd: number;
     diamonds_received: number;
-    status: 'pending' | 'completed' | 'failed' | 'canceled';
+    status: 'pending' | 'awaiting_approval' | 'completed' | 'failed' | 'canceled' | 'rejected';
     created_at: string;
     updated_at: string;
+}
+
+// For admin panel, includes joined user data
+export interface AdminTransaction extends Transaction {
+    users: {
+        display_name: string;
+        email: string;
+        photo_url: string;
+    }
 }

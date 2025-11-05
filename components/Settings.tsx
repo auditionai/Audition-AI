@@ -163,11 +163,15 @@ const Settings: React.FC = () => {
     
     const fetchAdminData = useCallback(async () => {
         if (!session || !user?.is_admin) return;
+        const fetchOptions = {
+            headers: { Authorization: `Bearer ${session.access_token}` },
+            cache: 'no-cache' as RequestCache
+        };
 
         // Fetch API Keys
         setIsKeysLoading(true);
         try {
-             const response = await fetch('/.netlify/functions/api-keys', { headers: { Authorization: `Bearer ${session.access_token}` } });
+             const response = await fetch('/.netlify/functions/api-keys', fetchOptions);
             if (!response.ok) throw new Error('Không thể tải API keys.');
             setApiKeys(await response.json());
         } catch (error: any) { showToast(error.message, 'error'); } 
@@ -176,7 +180,7 @@ const Settings: React.FC = () => {
         // Fetch All Users
         setIsUsersLoading(true);
         try {
-             const response = await fetch('/.netlify/functions/admin-users', { headers: { Authorization: `Bearer ${session.access_token}` } });
+             const response = await fetch('/.netlify/functions/admin-users', fetchOptions);
             if (!response.ok) throw new Error('Không thể tải danh sách người dùng.');
             setAllUsers(await response.json());
         } catch (error: any) { showToast(error.message, 'error'); }
@@ -185,7 +189,7 @@ const Settings: React.FC = () => {
         // Fetch Credit Packages
         setIsPackagesLoading(true);
         try {
-            const res = await fetch('/.netlify/functions/credit-packages?include_inactive=true', { headers: { Authorization: `Bearer ${session.access_token}` } });
+            const res = await fetch('/.netlify/functions/credit-packages?include_inactive=true', fetchOptions);
             if (!res.ok) throw new Error('Không thể tải gói nạp.');
             setPackages(await res.json());
         } catch (error: any) { showToast(error.message, 'error'); }
@@ -194,7 +198,7 @@ const Settings: React.FC = () => {
         // Fetch Pending Transactions
         setIsTransactionsLoading(true);
         try {
-            const res = await fetch('/.netlify/functions/admin-transactions', { headers: { Authorization: `Bearer ${session.access_token}` } });
+            const res = await fetch('/.netlify/functions/admin-transactions', fetchOptions);
             if (!res.ok) throw new Error('Không thể tải các giao dịch chờ duyệt.');
             setPendingTransactions(await res.json());
         } catch (error: any) { showToast(error.message, 'error'); }
@@ -207,7 +211,10 @@ const Settings: React.FC = () => {
             if (!session) return;
             setIsImagesLoading(true);
             try {
-                const response = await fetch('/.netlify/functions/user-gallery', { headers: { Authorization: `Bearer ${session.access_token}` } });
+                const response = await fetch('/.netlify/functions/user-gallery', { 
+                    headers: { Authorization: `Bearer ${session.access_token}` },
+                    cache: 'no-cache'
+                });
                 if (!response.ok) throw new Error('Không thể tải ảnh của bạn.');
                 setUserImages(await response.json());
             } catch (error: any) { showToast(error.message, 'error'); } 

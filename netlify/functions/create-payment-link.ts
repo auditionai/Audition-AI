@@ -47,7 +47,6 @@ const handler: Handler = async (event: HandlerEvent) => {
         // 3. Create a unique order code
         const orderCode = Date.now();
         const totalCredits = pkg.credits_amount + pkg.bonus_credits;
-        const userEmailPrefix = user.email ? user.email.split('@')[0] : user.id;
 
         // 4. Create a transaction record in your database
         const { error: transactionError } = await supabaseAdmin
@@ -83,7 +82,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         const paymentData = {
             orderCode,
             amount: pkg.price_vnd,
-            description: `NAP AUAI ${userEmailPrefix} - ${totalCredits.toLocaleString()} Kim cương`,
+            description: `NAP AUAI ${pkg.credits_amount}KC`, // Shortened description
             returnUrl: process.env.PAYOS_RETURN_URL!,
             cancelUrl: process.env.PAYOS_CANCEL_URL!,
         };

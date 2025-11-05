@@ -76,7 +76,6 @@ const HomePage: React.FC = () => {
             </div>
             <LandingHeader
                 user={user}
-                onLoginRegisterClick={() => setIsAuthModalOpen(true)}
                 onTopUpClick={() => setIsTopUpModalOpen(true)}
                 onScrollTo={scrollToSection}
             />

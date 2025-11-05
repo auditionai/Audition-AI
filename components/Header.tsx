@@ -3,12 +3,11 @@ import { User } from '../types';
 
 interface LandingHeaderProps {
   user: User | null;
-  onLoginRegisterClick: () => void;
   onTopUpClick: () => void;
   onScrollTo: (id: string) => void;
 }
 
-const LandingHeader: React.FC<LandingHeaderProps> = ({ user, onLoginRegisterClick, onTopUpClick, onScrollTo }) => {
+const LandingHeader: React.FC<LandingHeaderProps> = ({ user, onTopUpClick, onScrollTo }) => {
   const [isScrolled, setIsScrolled] = React.useState(false);
 
   React.useEffect(() => {

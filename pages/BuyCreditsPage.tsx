@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { CreditPackage } from '../types';
 import InfoModal from '../components/InfoModal';
 import CheckInModal from '../components/CheckInModal';
+import BottomNavBar from '../components/common/BottomNavBar';
 
 const BuyCreditsPage: React.FC = () => {
     const { session, navigate, showToast } = useAuth();
@@ -77,15 +78,13 @@ const BuyCreditsPage: React.FC = () => {
 
     return (
         <div className="flex flex-col min-h-screen bg-[#0B0B0F]">
-            {/* Fix: Add the required `onCheckInClick` prop. */}
             <CreatorHeader onTopUpClick={() => {}} activeTab={'tool'} setActiveTab={(tab) => navigate(tab)} onCheckInClick={() => setCheckInModalOpen(true)} />
-            <main className="flex-grow pt-24 pb-12 relative">
+            <main className="flex-grow pt-24 pb-28 md:pb-12 relative">
                 <div className="absolute inset-0 z-0 aurora-background opacity-70"></div>
                 <div className="container mx-auto px-4 relative z-10">
                     <div className="max-w-4xl mx-auto text-center">
                         <h1 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-pink-400 to-fuchsia-500 text-transparent bg-clip-text">Nạp Kim Cương</h1>
                         
-                        {/* Redesigned Info Section */}
                         <div className="max-w-3xl mx-auto mt-6 bg-black/30 border border-white/10 rounded-2xl p-4 text-sm shadow-lg">
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-y-3 md:gap-x-4">
                                 <div className="flex items-center justify-center gap-2.5 p-2 rounded-lg bg-white/5">
@@ -160,6 +159,12 @@ const BuyCreditsPage: React.FC = () => {
                 </div>
             </main>
             <CreatorFooter onInfoLinkClick={setInfoModalKey} />
+            <BottomNavBar
+                activeTab="buy-credits"
+                onTabChange={navigate}
+                onTopUpClick={() => {}}
+                onCheckInClick={() => setCheckInModalOpen(true)}
+            />
             <InfoModal isOpen={!!infoModalKey} onClose={() => setInfoModalKey(null)} contentKey={infoModalKey} />
             <CheckInModal 
                 isOpen={isCheckInModalOpen}

@@ -41,8 +41,17 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
         <div className="flex justify-center md:justify-between items-center h-20">
           
           <div className="flex items-center gap-4 md:gap-8">
-            <div className="text-2xl font-bold cursor-pointer" onClick={() => handleNavClick('tool')}>
-               <span className="bg-gradient-to-r from-[#FF3FA4] to-[#CA27FF] text-transparent bg-clip-text">Audition AI Studio</span>
+            <div className="flex flex-col items-center">
+              <div className="text-2xl font-bold cursor-pointer" onClick={() => handleNavClick('tool')}>
+                <span className="bg-gradient-to-r from-[#FF3FA4] to-[#CA27FF] text-transparent bg-clip-text">Audition AI Studio</span>
+              </div>
+              <button
+                onClick={onTopUpClick}
+                className="md:hidden flex items-center gap-1.5 -mt-1 bg-black/50 px-3 py-1 rounded-full text-xs cursor-pointer active:scale-95 transition-transform border border-white/10"
+              >
+                  <i className="ph-fill ph-diamonds-four text-pink-400"></i>
+                  <span className="font-bold text-white">{user.diamonds}</span>
+              </button>
             </div>
              <nav className="hidden md:flex items-center gap-2">
                 <button 

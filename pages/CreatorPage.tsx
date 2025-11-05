@@ -44,7 +44,7 @@ const CreatorPage: React.FC = () => {
                 setActiveTab={setActiveTab}
                 onCheckInClick={() => setCheckInModalOpen(true)} // Add click handler
             />
-            <main className="flex-grow pt-20 relative pb-16 md:pb-0">
+            <main className="flex-grow pt-20 relative pb-28 md:pb-0">
                  <div className="absolute inset-0 z-0 aurora-background opacity-70"></div>
                  <div className="relative z-10">
                     {renderContent()}
@@ -56,6 +56,7 @@ const CreatorPage: React.FC = () => {
                 activeTab={activeTab}
                 onTabChange={setActiveTab}
                 onTopUpClick={() => navigate('buy-credits')}
+                onCheckInClick={() => setCheckInModalOpen(true)}
             />
 
             <CheckInModal 

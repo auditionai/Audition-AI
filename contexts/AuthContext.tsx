@@ -63,7 +63,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             }
 
             if (data) {
-                setUser(data as User);
+                const profile = data as User;
+                // Ensure level is always calculated and consistent to prevent NaN errors
+                if (typeof profile.xp === 'number') {
+                    profile.level = calculateLevelFromXp(profile.xp);
+                }
+                setUser(profile);
             }
         } catch (error) {
             console.error('Error fetching user profile:', error);

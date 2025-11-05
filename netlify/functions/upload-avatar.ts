@@ -35,7 +35,8 @@ const handler: Handler = async (event: HandlerEvent) => {
         const mimeType = header.match(/:(.*?);/)?.[1] || 'image/png';
         const imageBuffer = Buffer.from(base64, 'base64');
         const fileExtension = mimeType.split('/')[1] || 'png';
-        const fileName = `public/${user.id}.${fileExtension}`;
+        // Use a user-specific path for RLS compliance
+        const fileName = `${user.id}/avatar.${fileExtension}`;
 
         const { error: uploadError } = await supabaseAdmin.storage
             .from('avatars')

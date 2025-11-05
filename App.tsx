@@ -1,11 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from './contexts/AuthContext.tsx';
 import HomePage from './pages/HomePage.tsx';
 import CreatorPage from './pages/CreatorPage.tsx';
 import AuthModal from './components/AuthModal.tsx';
 import TopUpModal from './components/TopUpModal.tsx';
 import InfoModal from './components/InfoModal.tsx';
-import { User } from './types.ts';
 
 type ModalType = 'auth' | 'topup' | 'info';
 export type InfoKey = 'terms' | 'policy' | 'contact';
@@ -88,7 +87,6 @@ function App() {
       ) : (
         <CreatorPage 
           onNavigateHome={() => handleNavigation('home')}
-          onTopUpClick={() => handleOpenModal('topup')}
           onInfoLinkClick={handleInfoLinkClick}
         />
       )}

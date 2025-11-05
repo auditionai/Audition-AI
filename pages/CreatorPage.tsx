@@ -14,11 +14,10 @@ type CreatorView = 'tool' | 'gallery' | 'leaderboard' | 'buy' | 'settings';
 
 interface CreatorPageProps {
   onNavigateHome: () => void;
-  onTopUpClick: () => void;
   onInfoLinkClick: (key: InfoKey) => void;
 }
 
-const CreatorPage: React.FC<CreatorPageProps> = ({ onNavigateHome, onTopUpClick, onInfoLinkClick }) => {
+const CreatorPage: React.FC<CreatorPageProps> = ({ onNavigateHome, onInfoLinkClick }) => {
     const { user } = useAuth();
     const [activeView, setActiveView] = useState<CreatorView>('tool');
 

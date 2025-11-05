@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext.tsx';
 import { CreditPackage } from '../types.ts';
-import DiamondIcon from '../components/common/DiamondIcon.tsx';
 
 interface BuyCreditsPageProps {
   onPackageSelect: (pkg: CreditPackage) => void; // This can be used for analytics or other parent actions

@@ -210,6 +210,44 @@
       .animate-fade-in-up { animation: fade-in-up 0.5s ease-out forwards; }
       .animate-fade-in-down { animation: fade-in-down 0.3s ease-out forwards; }
 
+      /* Keyframes for Reward Notification */
+      @keyframes reward-enter {
+        from { opacity: 0; transform: scale(0.8) translateY(20px); }
+        to { opacity: 1; transform: scale(1) translateY(0); }
+      }
+      @keyframes reward-exit {
+        from { opacity: 1; transform: scale(1); }
+        to { opacity: 0; transform: scale(0.9); }
+      }
+      @keyframes reward-icon-pop {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.2) rotate(10deg); }
+      }
+      .animate-reward-icon-pop {
+        animation: reward-icon-pop 1s cubic-bezier(0.25, 0.8, 0.25, 1);
+      }
+      @keyframes reward-item-enter {
+        from { opacity: 0; transform: translateX(-20px); }
+        to { opacity: 1; transform: translateX(0); }
+      }
+      .animate-reward-item-enter {
+        opacity: 0;
+        animation: reward-item-enter 0.5s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
+      }
+      @keyframes sparkle-anim {
+        0% { transform: scale(0) rotate(0deg); opacity: 0.5; }
+        50% { opacity: 1; }
+        100% { transform: scale(1.5) rotate(90deg); opacity: 0; }
+      }
+      .reward-sparkles::before, .reward-sparkles::after {
+        content: '✨';
+        position: absolute;
+        font-size: 30px;
+        animation: sparkle-anim 2s infinite;
+      }
+      .reward-sparkles::before { top: 10%; left: 20%; animation-delay: 0s; }
+      .reward-sparkles::after { top: 80%; left: 80%; animation-delay: 1s; }
+
     </style>
 <script type="importmap">
 {
@@ -223,7 +261,8 @@
     "react": "https://aistudiocdn.com/react@^19.2.0",
     "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
     "@google/genai": "https://aistudiocdn.com/@google/genai@^1.28.0",
-    "@payos/node": "https://aistudiocdn.com/@payos/node@^2.0.3"
+    "@payos/node": "https://aistudiocdn.com/@payos/node@^2.0.3",
+    "crypto": "https://aistudiocdn.com/crypto@^1.0.1"
   }
 }
 </script>

@@ -29,6 +29,7 @@ interface AuthContextType {
     stats: Stats;
     toast: { message: string; type: 'success' | 'error' } | null;
     route: string; // for simple routing
+    reward: { diamonds: number; xp: number } | null;
     hasCheckedInToday: boolean;
     login: () => Promise<void>;
     logout: () => Promise<void>;
@@ -36,6 +37,7 @@ interface AuthContextType {
     updateUserProfile: (updates: Partial<User>) => void;
     showToast: (message: string, type: 'success' | 'error') => void;
     navigate: (path: string) => void;
+    clearReward: () => void;
 }
 
 // Create the context with a default value
@@ -48,20 +50,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const [loading, setLoading] = useState(true);
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
     const [stats] = useState<Stats>({ users: 1250, visits: 8700, images: 25000 });
-    // Initialize route state from the current URL path.
     const [route, setRoute] = useState(() => getRouteFromPath(window.location.pathname));
+    const [reward, setReward] = useState<{ diamonds: number; xp: number } | null>(null);
 
-    // Ref to store previous user state for comparison
     const previousUserRef = useRef<User | null>(null);
 
     const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
         setToast({ message, type });
         setTimeout(() => {
             setToast(null);
-        }, 4000); // Increased duration
+        }, 4000); 
     }, []);
     
-    // Update the navigate function to also manipulate browser history.
     const navigate = useCallback((path: string) => {
         const targetPath = path === 'home' ? '/' : `/${path}`;
         if (window.location.pathname !== targetPath) {
@@ -70,8 +70,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setRoute(path);
         window.scrollTo(0, 0);
     }, []);
+    
+    const clearReward = useCallback(() => {
+        setReward(null);
+    }, []);
 
-    // Add an effect to handle browser back/forward button clicks.
     useEffect(() => {
         const handlePopState = () => {
             setRoute(getRouteFromPath(window.location.pathname));
@@ -133,17 +136,23 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     useEffect(() => {
         const previousUser = previousUserRef.current;
         if (user && previousUser) {
-            if (user.diamonds > previousUser.diamonds) {
-                const diff = user.diamonds - previousUser.diamonds;
-                showToast(`Bạn đã nhận được ${diff} Kim cương!`, 'success');
+            const diamondDiff = user.diamonds - previousUser.diamonds;
+            const xpDiff = user.xp - previousUser.xp;
+
+            // Only trigger reward if there's a positive change from a transaction
+            if (diamondDiff > 0 || xpDiff > 0) {
+                 setReward({ 
+                    diamonds: diamondDiff > 0 ? diamondDiff : 0, 
+                    xp: xpDiff > 0 ? xpDiff : 0 
+                });
             }
+            
             if (user.level > previousUser.level) {
                  showToast(`Chúc mừng! Bạn đã thăng cấp ${user.level}!`, 'success');
             }
         }
     }, [user, showToast]);
 
-    // Decisive "Hard Reset" function that does not depend on the Supabase client.
     const hardReset = () => {
         console.warn("Forcing hard reset: Bypassing Supabase client, clearing storage, and reloading page...");
         try {
@@ -165,14 +174,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             window.location.reload();
         } catch (e) {
             console.error("Hard reset failed during storage clear or reload:", e);
-            // Fallback if reload is blocked or fails.
             setLoading(false); 
             setUser(null);
             setSession(null);
         }
     };
 
-    // Failsafe authentication flow with timeout and hard reset
     useEffect(() => {
         let isCancelled = false;
         let timeoutId: number | null = null;
@@ -239,8 +246,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         };
     }, [fetchUserProfile, loading]);
 
-
-    // Effect for real-time user profile updates
     useEffect(() => {
         if (!user?.id || loading) return;
 
@@ -287,11 +292,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }, [navigate]);
 
     const value = useMemo(() => ({
-        session, user, loading, stats, toast, route, hasCheckedInToday,
-        login, logout, updateUserDiamonds, updateUserProfile, showToast, navigate,
+        session, user, loading, stats, toast, route, hasCheckedInToday, reward,
+        login, logout, updateUserDiamonds, updateUserProfile, showToast, navigate, clearReward,
     }), [
-        session, user, loading, stats, toast, route, hasCheckedInToday,
-        login, logout, updateUserDiamonds, updateUserProfile, showToast, navigate
+        session, user, loading, stats, toast, route, hasCheckedInToday, reward,
+        login, logout, updateUserDiamonds, updateUserProfile, showToast, navigate, clearReward
     ]);
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -3,6 +3,7 @@ import CreatorPage from './pages/CreatorPage';
 import GalleryPage from './pages/GalleryPage';
 import { useAuth } from './contexts/AuthContext';
 import BuyCreditsPage from './pages/BuyCreditsPage';
+import RewardNotification from './components/common/RewardNotification';
 
 const AppLoadingScreen = () => (
   <div className="fixed inset-0 bg-[#0B0B0F] flex items-center justify-center z-[9999]">
@@ -17,7 +18,7 @@ const AppLoadingScreen = () => (
 );
 
 function App() {
-  const { user, toast, loading, route } = useAuth();
+  const { user, toast, loading, route, reward, clearReward } = useAuth();
 
   if (loading) {
     return <AppLoadingScreen />;
@@ -37,6 +38,9 @@ function App() {
   return (
     <div className="bg-[#0B0B0F] text-white selection:bg-pink-500 selection:text-white">
       {renderPage()}
+
+      {/* Reward Notification */}
+      {reward && <RewardNotification reward={reward} onDismiss={clearReward} />}
 
       {/* Toast Notification */}
       {toast && (

@@ -75,10 +75,11 @@ const BuyCreditsPage: React.FC = () => {
     return (
         <div className="flex flex-col min-h-screen bg-[#0B0B0F]">
             <CreatorHeader onTopUpClick={() => {}} activeTab={'tool'} setActiveTab={(tab) => navigate(tab)} />
-            <main className="flex-grow pt-24 pb-12">
-                <div className="container mx-auto px-4">
+            <main className="flex-grow pt-24 pb-12 relative">
+                <div className="absolute inset-0 z-0 aurora-background opacity-70"></div>
+                <div className="container mx-auto px-4 relative z-10">
                     <div className="max-w-4xl mx-auto text-center">
-                        <h1 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-cyan-400 to-teal-400 text-transparent bg-clip-text">Mua Credits</h1>
+                        <h1 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-pink-400 to-fuchsia-500 text-transparent bg-clip-text">Mua Credits</h1>
                         <p className="text-sm text-gray-400 max-w-2xl mx-auto">
                             Lưu ý: Credits không thể quy đổi thành tư cách thành viên, cũng không được hoàn tiền, chuyển nhượng hay rút. Thời hạn sử dụng 2 năm kể từ khi quy đổi. 
                             <a onClick={() => setInfoModalKey('terms')} className="text-cyan-400 underline cursor-pointer ml-1">Chính sách Credits</a>
@@ -88,22 +89,26 @@ const BuyCreditsPage: React.FC = () => {
 
                     {isLoading ? (
                          <div className="flex justify-center items-center py-20">
-                            <div className="w-12 h-12 border-4 border-t-cyan-400 border-white/20 rounded-full animate-spin"></div>
+                            <div className="w-12 h-12 border-4 border-t-pink-400 border-white/20 rounded-full animate-spin"></div>
                          </div>
                     ) : (
                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 mt-12 max-w-6xl mx-auto">
                             {packages.map(pkg => {
                                 const totalCredits = pkg.credits_amount + pkg.bonus_credits;
                                 return (
-                                <div key={pkg.id} className="relative bg-[#12121A]/80 border border-white/10 rounded-2xl shadow-lg p-6 flex flex-col text-center interactive-3d">
+                                <div key={pkg.id} className="relative bg-[#12121A]/80 border border-pink-500/20 rounded-2xl shadow-lg p-6 flex flex-col text-center interactive-3d group">
+                                    <div className="glowing-border"></div>
                                     {pkg.is_flash_sale && (
-                                        <div className="absolute top-4 right-4 bg-red-600 text-white text-xs font-bold px-3 py-1 rounded-full animate-pulse">
+                                        <div 
+                                            className="absolute top-4 right-4 bg-gradient-to-r from-pink-500 to-fuchsia-600 text-white text-xs font-bold px-3 py-1 rounded-full"
+                                            style={{ animation: 'subtle-pulse 2s infinite' }}
+                                        >
                                             Flash Sale
                                         </div>
                                     )}
                                     <div className="flex-grow">
                                         <div className="flex items-center justify-center gap-2 mb-2">
-                                            <i className="ph-fill ph-diamonds-four text-3xl text-cyan-400"></i>
+                                            <i className="ph-fill ph-diamonds-four text-3xl text-pink-400"></i>
                                             <p className="text-4xl font-extrabold text-white">{totalCredits.toLocaleString('vi-VN')}</p>
                                         </div>
                                         <p className="text-gray-400 text-sm mb-4">cPIX</p>
@@ -117,7 +122,7 @@ const BuyCreditsPage: React.FC = () => {
                                     <button
                                         onClick={() => handleBuyClick(pkg)}
                                         disabled={isProcessingPayment === pkg.id}
-                                        className="w-full py-3 font-bold rounded-lg transition-all duration-300 bg-gradient-to-r from-cyan-500 to-teal-500 text-white hover:shadow-lg hover:shadow-cyan-500/30 hover:-translate-y-1 disabled:opacity-50 disabled:cursor-wait"
+                                        className="w-full py-3 font-bold rounded-lg transition-all duration-300 bg-gradient-to-r from-[#F72585] to-[#CA27FF] text-white hover:shadow-lg hover:shadow-pink-500/30 hover:-translate-y-1 disabled:opacity-50 disabled:cursor-wait"
                                     >
                                         {isProcessingPayment === pkg.id ? 'Đang xử lý...' : 'Mua'}
                                     </button>

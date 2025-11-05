@@ -32,17 +32,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const [stats] = useState<Stats>({ users: 1250, visits: 8700, images: 25000 });
     const [route, setRoute] = useState('home'); // initial route
 
-    const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
         setToast({ message, type });
         setTimeout(() => {
             setToast(null);
         }, 3000);
-    };
+    }, []);
     
-    const navigate = (path: string) => {
+    const navigate = useCallback((path: string) => {
         setRoute(path);
         window.scrollTo(0, 0);
-    };
+    }, []);
 
     const fetchUserProfile = useCallback(async (supabaseUser: SupabaseUser) => {
         try {
@@ -68,7 +68,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             console.error('Error fetching user profile:', error);
             showToast('Không thể tải thông tin người dùng.', 'error');
         }
-    }, []);
+    }, [showToast]);
     
     useEffect(() => {
         const checkSession = async () => {
@@ -99,7 +99,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         };
     }, [fetchUserProfile, loading]);
 
-    const login = async () => {
+    const login = useCallback(async () => {
         const { error } = await supabase.auth.signInWithOAuth({
             provider: 'google',
             options: {
@@ -110,26 +110,22 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             showToast('Đăng nhập thất bại: ' + error.message, 'error');
             throw error;
         }
-    };
+    }, [showToast]);
 
-    const logout = async () => {
+    const logout = useCallback(async () => {
         await supabase.auth.signOut();
         setUser(null);
         setSession(null);
         navigate('home'); // Go to home page after logout
-    };
+    }, [navigate]);
 
-    const updateUserDiamonds = (newAmount: number) => {
-        if (user) {
-            setUser({ ...user, diamonds: newAmount });
-        }
-    };
+    const updateUserDiamonds = useCallback((newAmount: number) => {
+        setUser(currentUser => currentUser ? { ...currentUser, diamonds: newAmount } : null);
+    }, []);
 
-    const updateUserProfile = (updates: Partial<User>) => {
-        if (user) {
-            setUser({ ...user, ...updates });
-        }
-    };
+    const updateUserProfile = useCallback((updates: Partial<User>) => {
+        setUser(currentUser => currentUser ? { ...currentUser, ...updates } : null);
+    }, []);
 
     const value = {
         session,

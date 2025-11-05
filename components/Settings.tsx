@@ -5,6 +5,7 @@ import { getRankForLevel } from '../utils/rankUtils';
 import XPProgressBar from './common/XPProgressBar';
 import ImageModal from './common/ImageModal';
 import Modal from './common/Modal';
+import { RANKS } from '../constants/ranks';
 
 // Component for a single API Key in the admin panel
 const ApiKeyRow: React.FC<{ apiKey: ApiKey; onUpdate: (id: string, status: 'active' | 'inactive') => void; onDelete: (id: string) => void; }> = ({ apiKey, onUpdate, onDelete }) => (
@@ -342,7 +343,13 @@ const Settings: React.FC = () => {
                                         {isAddingKey ? <i className="ph-fill ph-spinner animate-spin"></i> : 'Thêm'}
                                     </button>
                                 </form>
-                                <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar pr-2">{apiKeys.map(key => <ApiKeyRow key={key.id} apiKey={key} onUpdate={handleUpdateApiKey} onDelete={handleDeleteApiKey} />)}</div>
+                                <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar pr-2">
+                                    {apiKeys.length > 0 ? (
+                                        apiKeys.map(key => <ApiKeyRow key={key.id} apiKey={key} onUpdate={handleUpdateApiKey} onDelete={handleDeleteApiKey} />)
+                                    ) : (
+                                        <p className="text-center text-gray-500 py-4">Chưa có API key nào. Hãy thêm một key mới ở trên.</p>
+                                    )}
+                                </div>
                             </div>
                         )}
                     </div>
@@ -351,6 +358,7 @@ const Settings: React.FC = () => {
                         <h3 className="text-2xl font-bold mb-4 text-cyan-400 flex items-center gap-2"><i className="ph-fill ph-users"></i>Admin: Quản lý Người dùng</h3>
                         {isUsersLoading ? <p>Đang tải danh sách người dùng...</p> : (
                             <div className="max-h-96 overflow-y-auto custom-scrollbar pr-2">
+                                {allUsers.length > 0 ? (
                                 <div className="space-y-2">
                                     {allUsers.map(u => (
                                         <div key={u.id} className="flex items-center gap-4 p-2 bg-white/5 rounded-lg">
@@ -367,8 +375,31 @@ const Settings: React.FC = () => {
                                         </div>
                                     ))}
                                 </div>
+                                ) : (
+                                     <p className="text-center text-gray-500 py-4">Không tìm thấy người dùng nào.</p>
+                                )}
                             </div>
                         )}
+                    </div>
+
+                    <div className="bg-[#12121A]/80 border border-purple-500/20 rounded-2xl shadow-lg p-6">
+                        <h3 className="text-2xl font-bold mb-4 text-purple-400 flex items-center gap-2"><i className="ph-fill ph-barricade"></i>Admin: Quản lý Cấp Bậc (Xem)</h3>
+                        <p className="text-sm text-gray-400 mb-4">
+                            Các cấp bậc hiện được định cấu hình tĩnh trong mã nguồn. Việc chỉnh sửa yêu cầu thay đổi ở backend và không có sẵn trong giao diện này.
+                        </p>
+                        <div className="space-y-2 max-h-72 overflow-y-auto custom-scrollbar pr-2">
+                            {RANKS.map(rank => (
+                                <div key={rank.levelThreshold} className="grid grid-cols-12 gap-4 items-center p-3 bg-white/5 rounded-lg">
+                                    <div className="col-span-3 lg:col-span-2 font-bold text-lg text-center">
+                                        Cấp {rank.levelThreshold}+
+                                    </div>
+                                    <div className={`col-span-9 lg:col-span-10 flex items-center gap-4 ${rank.color}`}>
+                                        <span className="text-3xl">{rank.icon}</span>
+                                        <span className="font-semibold text-lg">{rank.title}</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 </div>
             )}

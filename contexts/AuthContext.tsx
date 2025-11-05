@@ -89,10 +89,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (error) {
         console.error("Error logging out:", error);
         showToast(`Đăng xuất thất bại: ${error.message}`, 'error');
+    } else {
+        // TRIỆT ĐỂ: Buộc tải lại trang để "reset" hoàn toàn trạng thái ứng dụng.
+        // Điều này sẽ giải quyết mọi vấn đề treo trang do race condition.
+        window.location.href = '/';
     }
-    // The onAuthStateChange listener will handle clearing user and session state.
-    // Removing the manual setUser(null) and setSession(null) calls here
-    // resolves a race condition that was causing the application to freeze.
   };
   
   const updateUserProfile = (updates: Partial<User>) => {

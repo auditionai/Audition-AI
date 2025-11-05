@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import { AuthProvider } from './contexts/AuthContext';
 import './utils/supabaseClient'; // Khởi tạo kết nối supabase
+import './index.css'; // Import Tailwind CSS
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {

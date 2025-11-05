@@ -59,9 +59,11 @@ const handler: Handler = async (event: HandlerEvent) => {
         
         // NEW: Improved error handling for schema mismatch
         if (transactionError) {
-             if (transactionError.message.includes("column") && transactionError.message.includes("does not exist")) {
-                 const specificError = `Lỗi Database: Cấu trúc bảng 'transactions' không đúng. Lỗi cụ thể: ${transactionError.message}. Vui lòng kiểm tra lại schema database.`;
-                 console.error(specificError);
+             if (transactionError.message.toLowerCase().includes("column") && transactionError.message.toLowerCase().includes("does not exist")) {
+                 const missingColumnMatch = transactionError.message.match(/column "(.*?)"/);
+                 const missingColumn = missingColumnMatch ? missingColumnMatch[1] : 'không xác định';
+                 const specificError = `Lỗi Database: Bảng 'transactions' bị thiếu cột '${missingColumn}'. Vui lòng chạy lại script SQL để cập nhật cấu trúc bảng.`;
+                 console.error(specificError, transactionError);
                  throw new Error(specificError);
              }
             throw transactionError;

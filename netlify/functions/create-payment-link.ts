@@ -53,7 +53,7 @@ const handler: Handler = async (event: HandlerEvent) => {
                 order_code: orderCode,
                 user_id: user.id,
                 package_id: pkg.id,
-                amount: pkg.price_vnd, // Reverted to 'amount'
+                amount_vnd: pkg.price_vnd, // Use the correct, single column
                 diamonds_received: totalCredits,
                 status: 'pending'
             });
@@ -63,7 +63,7 @@ const handler: Handler = async (event: HandlerEvent) => {
              if (transactionError.message.toLowerCase().includes("column") && transactionError.message.toLowerCase().includes("does not exist")) {
                  const missingColumnMatch = transactionError.message.match(/column "(.*?)"/);
                  const missingColumn = missingColumnMatch ? missingColumnMatch[1] : 'không xác định';
-                 const specificError = `Lỗi Database: Cấu trúc bảng 'transactions' không đúng. Thiếu cột '${missingColumn}'. Vui lòng dùng script sửa lỗi SQL để đảm bảo bảng có đủ các cột: id, order_code, user_id, package_id, amount, diamonds_received, status, created_at, updated_at.`;
+                 const specificError = `Lỗi Database: Cấu trúc bảng 'transactions' không đúng. Thiếu cột '${missingColumn}'. Vui lòng dùng script sửa lỗi SQL để đảm bảo bảng có đủ các cột: id, order_code, user_id, package_id, amount_vnd, diamonds_received, status, created_at, updated_at.`;
                  console.error(specificError, transactionError);
                  throw new Error(specificError);
              }

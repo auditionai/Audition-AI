@@ -129,7 +129,7 @@ export interface Transaction {
     order_code: number;
     user_id: string;
     package_id: string;
-    amount: number;
+    amount_vnd: number;
     diamonds_received: number;
     status: 'pending' | 'completed' | 'failed' | 'canceled';
     created_at: string;

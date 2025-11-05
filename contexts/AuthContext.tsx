@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode, useMemo, useRef } from 'react';
 import { supabase } from '../utils/supabaseClient';
 import { Session, User as SupabaseUser } from '@supabase/supabase-js';
 import { User, Stats } from '../types';
@@ -37,15 +37,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-    // Demo stats
     const [stats] = useState<Stats>({ users: 1250, visits: 8700, images: 25000 });
-    const [route, setRoute] = useState('home'); // initial route
+    const [route, setRoute] = useState('home');
+
+    // Ref to store previous user state for comparison
+    const previousUserRef = useRef<User | null>(null);
 
     const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
         setToast({ message, type });
         setTimeout(() => {
             setToast(null);
-        }, 3000);
+        }, 4000); // Increased duration
     }, []);
     
     const navigate = useCallback((path: string) => {
@@ -57,18 +59,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setUser(currentUser => currentUser ? { ...currentUser, diamonds: newAmount } : null);
     }, []);
 
-    // FIX: Moved `updateUserProfile` before the `useEffect` that uses it to resolve the "used before declaration" error.
     const updateUserProfile = useCallback((updates: Partial<User>) => {
         setUser(currentUser => {
             if (!currentUser) return null;
-            
             const updatedUser = { ...currentUser, ...updates };
-
-            // If XP was updated, also recalculate and update the level
             if (updates.xp !== undefined) {
                 updatedUser.level = calculateLevelFromXp(updates.xp);
             }
-
             return updatedUser;
         });
     }, []);
@@ -81,18 +78,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 .eq('id', supabaseUser.id)
                 .single();
 
-            if (error) {
-                // This can happen on first login if the DB trigger hasn't run yet.
-                if (error.code === 'PGRST116') {
-                    console.warn("User profile not found, it might be creating.");
-                    return null; 
-                }
-                throw error;
+            if (error && error.code === 'PGRST116') {
+                console.warn("User profile not found, it might be creating.");
+                return null; 
             }
+            if (error) throw error;
 
             if (data) {
                 const profile = data as User;
-                // Ensure level is always calculated and consistent to prevent NaN errors
                 if (typeof profile.xp === 'number') {
                     profile.level = calculateLevelFromXp(profile.xp);
                 }
@@ -108,7 +101,29 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }, [showToast]);
     
     useEffect(() => {
-        const checkSession = async () => {
+        // Store previous user state before it updates
+        previousUserRef.current = user;
+    }, [user]);
+
+    // Effect to handle real-time notifications
+    useEffect(() => {
+        const previousUser = previousUserRef.current;
+        if (user && previousUser) {
+            // Notify on diamond increase
+            if (user.diamonds > previousUser.diamonds) {
+                const diff = user.diamonds - previousUser.diamonds;
+                showToast(`Bạn đã nhận được ${diff} Kim cương!`, 'success');
+            }
+            // Notify on level up
+            if (user.level > previousUser.level) {
+                 showToast(`Chúc mừng! Bạn đã thăng cấp ${user.level}!`, 'success');
+            }
+        }
+    }, [user, showToast]);
+
+
+    useEffect(() => {
+        const initializeAuth = async () => {
             const { data: { session } } = await supabase.auth.getSession();
             setSession(session);
             if (session?.user) {
@@ -117,21 +132,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             setLoading(false);
         };
         
-        checkSession();
+        initializeAuth();
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
             setSession(session);
             if (session?.user) {
                 const createdAt = new Date(session.user.created_at).getTime();
-                
-                // Identify a new user by checking if their account was created within the last minute.
-                // This handles the first sign-in after registration.
                 const isNewUser = (Date.now() - createdAt) < 60000;
 
                 if (isNewUser) {
-                    // For new users, there's a flow to set their initial diamond count to 10
-                    // instead of the database default of 25.
-                    // A delay is added to ensure the database trigger for profile creation has completed.
                     setTimeout(async () => {
                         try {
                             await fetch('/.netlify/functions/set-initial-diamonds', {
@@ -139,27 +148,38 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                                 headers: { 'Authorization': `Bearer ${session.access_token}` }
                             });
                         } catch (e) {
-                            console.error("Failed to set initial diamonds; user will have the default amount.", e);
+                            console.error("Failed to set initial diamonds.", e);
                         } finally {
-                            // Fetch the user profile after attempting the update to get the final state.
                             await fetchUserProfile(session.user);
                         }
-                    }, 2000); // 2-second delay to be safe.
+                    }, 2000);
                 } else {
-                    // For existing users, fetch their profile after a short delay.
-                    setTimeout(() => fetchUserProfile(session.user), 500);
+                    // For existing users, just ensure profile is fresh on login
+                    await fetchUserProfile(session.user);
                 }
             } else {
                 setUser(null);
             }
-            // Only set loading to false on initial load, not every auth change
-            if(loading) setLoading(false);
         });
+        
+        // Real-time listener for user profile changes
+        const userChannel = supabase
+            .channel('public:users')
+            .on(
+                'postgres_changes',
+                { event: 'UPDATE', schema: 'public', table: 'users', filter: `id=eq.${user?.id}` },
+                (payload) => {
+                    console.log('Realtime user update received:', payload.new);
+                    updateUserProfile(payload.new as Partial<User>);
+                }
+            )
+            .subscribe();
 
         return () => {
             subscription?.unsubscribe();
+            supabase.removeChannel(userChannel);
         };
-    }, [fetchUserProfile, loading]);
+    }, [fetchUserProfile, updateUserProfile, user?.id]);
     
     const hasCheckedInToday = useMemo(() => {
         if (!user?.last_check_in_at) return false;
@@ -171,9 +191,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const login = useCallback(async () => {
         const { error } = await supabase.auth.signInWithOAuth({
             provider: 'google',
-            options: {
-                redirectTo: window.location.origin,
-            },
+            options: { redirectTo: window.location.origin },
         });
         if (error) {
             showToast('Đăng nhập thất bại: ' + error.message, 'error');
@@ -185,26 +203,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         await supabase.auth.signOut();
         setUser(null);
         setSession(null);
-        navigate('home'); // Go to home page after logout
+        navigate('home');
     }, [navigate]);
 
     const value = useMemo(() => ({
-        session,
-        user,
-        loading,
-        stats,
-        toast,
-        route,
-        hasCheckedInToday,
-        login,
-        logout,
-        updateUserDiamonds,
-        updateUserProfile,
-        showToast,
-        navigate,
+        session, user, loading, stats, toast, route, hasCheckedInToday,
+        login, logout, updateUserDiamonds, updateUserProfile, showToast, navigate,
     }), [
-        session, user, loading, stats, toast, route, 
-        hasCheckedInToday,
+        session, user, loading, stats, toast, route, hasCheckedInToday,
         login, logout, updateUserDiamonds, updateUserProfile, showToast, navigate
     ]);
 

@@ -1,9 +1,8 @@
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
-
-// Fix: The PayOS library is a CommonJS module. Using `require` is a robust way to import it
-// in a Node.js environment and resolves the "not constructable" type error.
-const PayOS = require("@payos/node");
+// Fix: Use `require` to import the CommonJS `@payos/node` module and access its `default` export,
+// which contains the class constructor. This resolves the "not constructable" error.
+const PayOS = require("@payos/node").default;
 
 const payos = new PayOS(
     process.env.PAYOS_CLIENT_ID!,
@@ -19,23 +18,18 @@ const handler: Handler = async (event: HandlerEvent) => {
     try {
         const webhookBody = JSON.parse(event.body || '{}');
 
-        // *** NEW LOGIC ***
-        // Only process webhooks that represent a successful payment.
-        // For all other webhooks (verification, failed, etc.), acknowledge them with 200 OK.
+        // Chỉ xử lý webhook có mã '00' (thanh toán thành công)
         if (webhookBody.code === '00') {
-            // This is a successful transaction, proceed with verification and processing.
             const verifiedData = payos.verifyPaymentWebhookData(webhookBody);
             
-            // This check is now an extra layer of security.
             if (verifiedData.desc !== 'Success') {
                 console.warn('Webhook received non-success description despite code 00:', verifiedData);
-                // Still return 200 to avoid PayOS retries for a failed payment.
                 return { statusCode: 200, body: JSON.stringify({ message: 'Acknowledged non-success event.' }) };
             }
 
             const { orderCode, status } = verifiedData.data;
 
-            // Find the transaction in your database
+            // Tìm giao dịch trong database
             const { data: transaction, error: transactionError } = await supabaseAdmin
                 .from('transactions')
                 .select('*, credit_packages(credits_amount, bonus_credits)')
@@ -47,15 +41,14 @@ const handler: Handler = async (event: HandlerEvent) => {
                 return { statusCode: 404, body: JSON.stringify({ error: 'Transaction not found.' }) };
             }
 
-            // Check if already completed to prevent double processing
+            // Chống xử lý trùng lặp
             if (transaction.status === 'completed') {
                 console.log(`Transaction ${orderCode} already completed.`);
                 return { statusCode: 200, body: JSON.stringify({ message: 'Already processed.' }) };
             }
 
-            // Update based on status
             if (status === 'PAID') {
-                // Get user's current diamonds
+                // Lấy số kim cương hiện tại của người dùng
                 const { data: user, error: userError } = await supabaseAdmin
                     .from('users')
                     .select('diamonds')
@@ -64,10 +57,11 @@ const handler: Handler = async (event: HandlerEvent) => {
                 
                 if (userError || !user) throw new Error(`User not found for transaction ${orderCode}`);
 
-                const creditsToAdd = transaction.credit_packages.credits_amount + transaction.credit_packages.bonus_credits;
+                // Tính toán số kim cương mới
+                const creditsToAdd = transaction.diamonds_received;
                 const newDiamondCount = user.diamonds + creditsToAdd;
 
-                // Use a database function to update user diamonds and transaction status atomically
+                // Gọi hàm RPC để cập nhật database một cách an toàn
                 const { error: updateError } = await supabaseAdmin.rpc('complete_transaction_and_add_credits', {
                     p_order_code: orderCode,
                     p_user_id: transaction.user_id,
@@ -77,8 +71,6 @@ const handler: Handler = async (event: HandlerEvent) => {
                 if (updateError) throw updateError;
             }
         } else {
-            // This is a verification ping, a failed transaction, or another event type.
-            // Acknowledge it so PayOS knows the webhook is working.
             console.log(`Received non-processing webhook event (code: ${webhookBody.code}). Acknowledging.`);
             return {
                 statusCode: 200,

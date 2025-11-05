@@ -1,111 +1,50 @@
-import { useState, useEffect } from 'react';
-import { useAuth } from './contexts/AuthContext.tsx';
-import HomePage from './pages/HomePage.tsx';
-import CreatorPage from './pages/CreatorPage.tsx';
-import AuthModal from './components/AuthModal.tsx';
-import TopUpModal from './components/TopUpModal.tsx';
-import InfoModal from './components/InfoModal.tsx';
+import HomePage from './pages/HomePage';
+import CreatorPage from './pages/CreatorPage';
+import GalleryPage from './pages/GalleryPage';
+import { useAuth } from './contexts/AuthContext';
+import BuyCreditsPage from './pages/BuyCreditsPage';
 
-type ModalType = 'auth' | 'topup' | 'info';
-export type InfoKey = 'terms' | 'policy' | 'contact';
+const AppLoadingScreen = () => (
+  <div className="fixed inset-0 bg-[#0B0B0F] flex items-center justify-center z-[9999]">
+    <div className="text-center">
+        <div className="relative w-24 h-24 mx-auto">
+            <div className="absolute inset-0 border-4 border-pink-500/30 rounded-full"></div>
+            <div className="absolute inset-0 border-4 border-t-pink-500 rounded-full animate-spin"></div>
+        </div>
+        <p className="mt-4 text-lg font-semibold text-gray-300 animate-pulse">Đang khởi tạo Audition AI...</p>
+    </div>
+  </div>
+);
 
 function App() {
-  const { user, isLoading } = useAuth();
-  const [currentPage, setCurrentPage] = useState<'home' | 'creator'>('home');
-  const [activeModal, setActiveModal] = useState<ModalType | null>(null);
-  const [infoContentKey, setInfoContentKey] = useState<InfoKey | null>(null);
-  
-  useEffect(() => {
-    if (user) {
-      setActiveModal(prev => (prev === 'auth' ? null : prev)); // Close auth modal on successful login
-    }
-  }, [user]);
+  const { user, toast, loading, route } = useAuth();
 
-  const handleOpenModal = (modal: ModalType) => setActiveModal(modal);
-  const handleCloseModal = () => setActiveModal(null);
-
-  const handleInfoLinkClick = (key: InfoKey) => {
-    setInfoContentKey(key);
-    setActiveModal('info');
-  };
-
-  const handleNavigation = (page: 'home' | 'creator') => {
-      window.scrollTo(0, 0);
-      setCurrentPage(page);
+  if (loading) {
+    return <AppLoadingScreen />;
   }
 
-  if (isLoading) {
-    return (
-      <div className="w-screen h-screen bg-[#0B0B0F] flex items-center justify-center">
-        <div className="relative w-24 h-24">
-          <div className="absolute inset-0 border-4 border-pink-500/30 rounded-full"></div>
-          <div className="absolute inset-0 border-4 border-t-pink-500 rounded-full animate-spin"></div>
-        </div>
-      </div>
-    );
+  const renderPage = () => {
+    if (route === 'gallery') {
+      return <GalleryPage />;
+    }
+    if (route === 'buy-credits') {
+      return <BuyCreditsPage />;
+    }
+    // For 'home' and any other route, use the default logic based on auth state
+    return user ? <CreatorPage /> : <HomePage />;
   }
-
-  const handleCtaClick = () => {
-    if (user) {
-        handleNavigation('creator');
-    } else {
-        handleOpenModal('auth');
-    }
-  };
-
-  const handleTopUpClick = () => {
-    if (user) {
-        handleNavigation('creator');
-        // A small delay to ensure page transition before modal opens
-        setTimeout(() => {
-            // Here you might want to navigate to a specific tab in the creator page
-            // and then open the top-up modal. For now, we'll just open it.
-             handleOpenModal('topup');
-        }, 100);
-    } else {
-        handleOpenModal('auth');
-    }
-  };
-
-  const onTopUpSuccess = (newDiamonds: number) => {
-      // In a real app, you would fetch the user profile again.
-      // For this demo, we can optimistically update it via context.
-      console.log(`Successfully topped up! New balance would be around ${newDiamonds}`);
-      handleCloseModal();
-  };
-
 
   return (
-    <>
-      {currentPage === 'home' ? (
-        <HomePage 
-          onCtaClick={handleCtaClick}
-          onTopUpClick={handleTopUpClick}
-          onInfoLinkClick={handleInfoLinkClick}
-          onNavigateToCreator={() => handleNavigation('creator')}
-        />
-      ) : (
-        <CreatorPage 
-          onNavigateHome={() => handleNavigation('home')}
-          onInfoLinkClick={handleInfoLinkClick}
-        />
-      )}
+    <div className="bg-[#0B0B0F] text-white selection:bg-pink-500 selection:text-white">
+      {renderPage()}
 
-      <AuthModal 
-        isOpen={activeModal === 'auth'} 
-        onClose={handleCloseModal} 
-      />
-      <TopUpModal 
-        isOpen={activeModal === 'topup'} 
-        onClose={handleCloseModal}
-        onTopUpSuccess={onTopUpSuccess}
-      />
-      <InfoModal
-        isOpen={activeModal === 'info'}
-        onClose={handleCloseModal}
-        contentKey={infoContentKey}
-      />
-    </>
+      {/* Toast Notification */}
+      {toast && (
+          <div className={`fixed bottom-5 right-5 p-4 rounded-lg shadow-lg text-white animate-fade-in-up z-50 ${toast.type === 'success' ? 'bg-gradient-to-r from-green-500 to-emerald-600' : 'bg-gradient-to-r from-red-500 to-rose-600'}`}>
+              {toast.message}
+          </div>
+      )}
+    </div>
   );
 }
 

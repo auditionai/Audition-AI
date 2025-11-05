@@ -1,36 +1,32 @@
 import React, { useState } from 'react';
-import CreatorHeader from '../components/CreatorHeader.tsx';
-import CreatorFooter from '../components/CreatorFooter.tsx';
-import AITool from '../components/AITool.tsx';
-import GalleryPage from './GalleryPage.tsx';
-import Leaderboard from '../components/Leaderboard.tsx';
-import Settings from '../components/Settings.tsx';
-import BuyCreditsPage from './BuyCreditsPage.tsx';
-import BottomNavBar from '../components/common/BottomNavBar.tsx';
-import { useAuth } from '../contexts/AuthContext.tsx';
-import { InfoKey } from '../App.tsx';
+import CreatorHeader from '../components/CreatorHeader';
+import CreatorFooter from '../components/CreatorFooter';
+import AITool from '../components/AITool';
+import { useAuth } from '../contexts/AuthContext';
+import Leaderboard from '../components/Leaderboard';
+import Settings from '../components/Settings';
+import InfoModal from '../components/InfoModal';
+import BottomNavBar from '../components/common/BottomNavBar';
 
-type CreatorView = 'tool' | 'gallery' | 'leaderboard' | 'buy' | 'settings';
+// Fix: Export the CreatorTab type so it can be imported in other components.
+export type CreatorTab = 'tool' | 'leaderboard' | 'settings';
 
-interface CreatorPageProps {
-  onNavigateHome: () => void;
-  onInfoLinkClick: (key: InfoKey) => void;
-}
+const CreatorPage: React.FC = () => {
+    // Fix: `updateUserDiamonds` is now correctly provided by the `useAuth` hook.
+    const { navigate } = useAuth();
+    const [activeTab, setActiveTab] = useState<CreatorTab>('tool');
+    const [infoModalKey, setInfoModalKey] = useState<'terms' | 'policy' | 'contact' | null>(null);
 
-const CreatorPage: React.FC<CreatorPageProps> = ({ onNavigateHome, onInfoLinkClick }) => {
-    const { user } = useAuth();
-    const [activeView, setActiveView] = useState<CreatorView>('tool');
+    const handleOpenInfoModal = (key: 'terms' | 'policy' | 'contact') => {
+        setInfoModalKey(key);
+    };
 
     const renderContent = () => {
-        switch (activeView) {
+        switch (activeTab) {
             case 'tool':
                 return <AITool />;
-            case 'gallery':
-                return <GalleryPage />;
             case 'leaderboard':
                 return <Leaderboard />;
-            case 'buy':
-                return <BuyCreditsPage onPackageSelect={() => {}} />;
             case 'settings':
                 return <Settings />;
             default:
@@ -39,19 +35,31 @@ const CreatorPage: React.FC<CreatorPageProps> = ({ onNavigateHome, onInfoLinkCli
     }
 
     return (
-        <div className="bg-[#0B0B0F] min-h-screen flex flex-col">
+        <div className="flex flex-col min-h-screen bg-[#0B0B0F]">
             <CreatorHeader 
-                user={user}
-                onLogoClick={onNavigateHome}
-                onTopUpClick={() => setActiveView('buy')}
-                activeView={activeView}
-                onViewChange={setActiveView}
+                onTopUpClick={() => navigate('buy-credits')}
+                activeTab={activeTab}
+                setActiveTab={setActiveTab}
             />
-            <main className="flex-grow">
-                {renderContent()}
+            <main className="flex-grow pt-20 relative pb-16 md:pb-0">
+                 <div className="absolute inset-0 z-0 aurora-background opacity-70"></div>
+                 <div className="relative z-10">
+                    {renderContent()}
+                </div>
             </main>
-            <CreatorFooter onInfoLinkClick={onInfoLinkClick} />
-             <BottomNavBar activeView={activeView} onViewChange={setActiveView} />
+            <CreatorFooter onInfoLinkClick={handleOpenInfoModal} />
+
+            <BottomNavBar
+                activeTab={activeTab}
+                onTabChange={setActiveTab}
+                onTopUpClick={() => navigate('buy-credits')}
+            />
+
+            <InfoModal
+                isOpen={!!infoModalKey}
+                onClose={() => setInfoModalKey(null)}
+                contentKey={infoModalKey}
+            />
         </div>
     );
 };

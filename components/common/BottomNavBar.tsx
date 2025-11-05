@@ -1,37 +1,52 @@
 import React from 'react';
-
-type CreatorView = 'tool' | 'gallery' | 'leaderboard' | 'buy' | 'settings';
+import { CreatorTab } from '../../pages/CreatorPage';
 
 interface BottomNavBarProps {
-  activeView: CreatorView;
-  onViewChange: (view: CreatorView) => void;
+  activeTab: CreatorTab;
+  onTabChange: (tab: CreatorTab) => void;
+  onTopUpClick: () => void;
 }
 
-const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeView, onViewChange }) => {
-  const navItems: { id: CreatorView; label: string; icon: string }[] = [
-    { id: 'tool', label: 'Studio', icon: 'ph-magic-wand' },
-    { id: 'gallery', label: 'Thư viện', icon: 'ph-images' },
-    { id: 'leaderboard', label: 'Xếp hạng', icon: 'ph-trophy' },
-    { id: 'buy', label: 'Nạp KC', icon: 'ph-diamonds-four' },
-    { id: 'settings', label: 'Cài đặt', icon: 'ph-user-circle' },
-  ];
+const NavButton = ({ icon, label, isActive, onClick }: { icon: string, label: string, isActive: boolean, onClick: () => void }) => (
+    <button onClick={onClick} className={`flex flex-col items-center justify-center w-1/4 h-full transition-colors duration-200 ${isActive ? 'text-pink-400' : 'text-gray-400 hover:text-white'}`}>
+        <i className={`ph-fill ${icon} text-2xl`}></i>
+        <span className="text-xs mt-1">{label}</span>
+    </button>
+);
 
-  const getNavClass = (view: CreatorView) => 
-    `flex flex-col items-center justify-center gap-1 w-full transition-colors duration-200 ${
-      activeView === view ? 'text-pink-400' : 'text-gray-500 hover:text-white'
-    }`;
-
+const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeTab, onTabChange, onTopUpClick }) => {
   return (
-    <nav className="fixed bottom-0 left-0 w-full bg-[#12121A]/80 backdrop-blur-lg border-t border-pink-500/10 p-2 md:hidden z-50">
-      <div className="flex justify-around items-center">
-        {navItems.map(item => (
-          <button key={item.id} onClick={() => onViewChange(item.id)} className={getNavClass(item.id)}>
-            <i className={`ph-fill ${item.icon} text-2xl`}></i>
-            <span className="text-xs font-semibold">{item.label}</span>
-          </button>
-        ))}
-      </div>
-    </nav>
+    <div className="fixed bottom-0 left-0 w-full h-16 bg-[#12121A]/80 backdrop-blur-lg border-t border-white/10 z-50 md:hidden">
+        <div className="flex justify-around items-center h-full">
+            <NavButton 
+                icon="ph-paint-brush-broad"
+                label="Tạo ảnh"
+                isActive={activeTab === 'tool'}
+                onClick={() => onTabChange('tool')}
+            />
+            <NavButton 
+                icon="ph-crown-simple"
+                label="Xếp hạng"
+                isActive={activeTab === 'leaderboard'}
+                onClick={() => onTabChange('leaderboard')}
+            />
+            <NavButton 
+                icon="ph-diamonds-four"
+                label="Nạp Kim cương"
+                // Fix: Corrected the `isActive` condition. The `activeTab` prop, of type `CreatorTab`,
+                // will never equal 'buy-credits', causing a type error. This button navigates to a
+                // separate page and is not a tab within the CreatorPage, so its active state should be false.
+                isActive={false}
+                onClick={onTopUpClick}
+            />
+            <NavButton 
+                icon="ph-user-circle"
+                label="Tài khoản"
+                isActive={activeTab === 'settings'}
+                onClick={() => onTabChange('settings')}
+            />
+        </div>
+    </div>
   );
 };
 

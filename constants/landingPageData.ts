@@ -1,6 +1,5 @@
 import React from 'react';
-// Fix: Add .ts extension to module import.
-import { Feature, HowItWorksStep, PricingPlan, FaqItem, GalleryImage } from '../types.ts';
+import { Feature, HowItWorksStep, PricingPlan, FaqItem, GalleryImage } from '../types';
 
 // Icons for features
 // Fix: Use React.createElement to avoid JSX syntax in a .ts file, which was causing parsing errors.

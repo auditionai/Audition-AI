@@ -1,46 +1,40 @@
 import React from 'react';
-import Modal from './common/Modal.tsx';
+import Modal from './common/Modal';
+import { DiamondIcon } from './common/DiamondIcon';
 
 interface ConfirmationModalProps {
   isOpen: boolean;
   onClose: () => void;
   onConfirm: () => void;
-  title: string;
-  message: string;
-  confirmText?: string;
-  cancelText?: string;
-  isConfirming?: boolean;
+  cost: number;
 }
 
-const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
-  isOpen,
-  onClose,
-  onConfirm,
-  title,
-  message,
-  confirmText = 'Xác nhận',
-  cancelText = 'Hủy',
-  isConfirming = false,
-}) => {
+const ConfirmationModal: React.FC<ConfirmationModalProps> = ({ isOpen, onClose, onConfirm, cost }) => {
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={title}>
-      <div className="py-4">
-        <p className="text-gray-300 text-center">{message}</p>
-        <div className="mt-8 flex justify-end gap-4">
+    <Modal isOpen={isOpen} onClose={onClose} title="Xác nhận thao tác">
+      <div className="text-center">
+        <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-pink-500/10 mb-4">
+          <DiamondIcon className="h-8 w-8 text-pink-400" />
+        </div>
+        <p className="text-lg text-gray-300 mb-2">
+          Thao tác này sẽ tốn
+        </p>
+        <p className="text-3xl font-bold mb-6 flex items-center justify-center gap-2">
+           {cost} <span className="text-pink-400">Kim cương</span>
+        </p>
+
+        <div className="flex gap-4">
           <button
             onClick={onClose}
-            disabled={isConfirming}
-            className="px-6 py-2 font-semibold text-gray-300 bg-white/10 rounded-lg hover:bg-white/20 transition-colors disabled:opacity-50"
+            className="flex-1 py-3 font-semibold bg-white/10 text-white rounded-lg hover:bg-white/20 transition"
           >
-            {cancelText}
+            Hủy
           </button>
           <button
             onClick={onConfirm}
-            disabled={isConfirming}
-            className="px-6 py-2 font-bold text-white bg-red-600/90 hover:bg-red-600 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+            className="flex-1 py-3 font-bold text-white bg-gradient-to-r from-pink-500 to-fuchsia-600 rounded-lg hover:opacity-90 transition"
           >
-            {isConfirming && <div className="w-4 h-4 border-2 border-white/50 border-t-white rounded-full animate-spin"></div>}
-            {isConfirming ? 'Đang xử lý...' : confirmText}
+            Xác nhận
           </button>
         </div>
       </div>

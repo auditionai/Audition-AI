@@ -1,6 +1,5 @@
 import React from 'react';
-// Fix: Add .ts extension to module import.
-import { User } from '../types.ts';
+import { User } from '../types';
 
 interface LandingHeaderProps {
   user: User | null;

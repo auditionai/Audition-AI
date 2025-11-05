@@ -1,8 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-// Fix: Add .tsx extension to module imports.
-import App from './App.tsx';
-import { AuthProvider } from './contexts/AuthContext.tsx';
+import App from './App';
+import { AuthProvider } from './contexts/AuthContext';
 import './utils/supabaseClient'; // Khởi tạo kết nối supabase
 import './index.css'; // Import Tailwind CSS
 

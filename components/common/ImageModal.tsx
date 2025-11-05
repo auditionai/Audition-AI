@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
-// Fix: Add .ts extension to module import.
-import { GalleryImage } from '../../types.ts';
+import { GalleryImage } from '../../types';
 // Fix: Import `useAuth` from `AuthContext` to get context functionality.
-import { useAuth } from '../../contexts/AuthContext.tsx';
-import { getRankForLevel } from '../../utils/rankUtils.ts';
+import { useAuth } from '../../contexts/AuthContext';
+import { getRankForLevel } from '../../utils/rankUtils';
 
 interface ImageModalProps {
   isOpen: boolean;

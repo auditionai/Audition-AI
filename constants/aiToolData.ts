@@ -1,5 +1,4 @@
-// Fix: Add .ts extension to module import.
-import { AIModel, StylePreset } from '../types.ts';
+import { AIModel, StylePreset } from '../types';
 
 export const DETAILED_AI_MODELS: AIModel[] = [
   {

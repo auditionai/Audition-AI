@@ -58,32 +58,58 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         updateUserProfile({ diamonds: newAmount });
     }
   };
-
+  
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        setLoading(true);
-        setSession(session);
+    const initializeAuth = async () => {
+      // 1. Fetch the initial session
+      const { data: { session: initialSession } } = await supabase.auth.getSession();
+      setSession(initialSession);
 
-        if (session?.user) {
-          // Fetch user profile from 'users' table
+      // 2. Fetch user profile if a session exists
+      if (initialSession?.user) {
+        const { data: userProfile, error } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', initialSession.user.id)
+          .single();
+
+        if (error && error.code !== 'PGRST116') {
+          console.error('Error fetching initial user profile:', error);
+        } else if (userProfile) {
+          const level = calculateLevelFromXp(userProfile.xp);
+          setUser({ ...userProfile, level });
+        }
+      }
+      
+      // 3. Mark initial loading as complete
+      setLoading(false);
+    };
+
+    initializeAuth();
+
+    // 4. Set up a listener for subsequent auth changes (login, logout)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (_event, newSession) => {
+        setSession(newSession);
+
+        if (newSession?.user) {
           const { data: userProfile, error } = await supabase
             .from('users')
             .select('*')
-            .eq('id', session.user.id)
+            .eq('id', newSession.user.id)
             .single();
-
-          if (error && error.code !== 'PGRST116') { // PGRST116: "exact one row" error, user might not be in our table yet.
-            console.error('Error fetching user profile:', error);
-            showToast('Không thể tải thông tin người dùng.', 'error');
+          
+          if (error && error.code !== 'PGRST116') {
+            console.error('Error fetching user profile on auth change:', error);
           } else if (userProfile) {
             const level = calculateLevelFromXp(userProfile.xp);
             setUser({ ...userProfile, level });
-            // Check if it's a new user (default diamonds is 25) to set the initial 10
+
+            // Check if it's a new user to set the initial diamonds
             if (userProfile.diamonds === 25) {
                 fetch('/.netlify/functions/set-initial-diamonds', {
                     method: 'POST',
-                    headers: { 'Authorization': `Bearer ${session.access_token}` },
+                    headers: { 'Authorization': `Bearer ${newSession.access_token}` },
                 }).then(res => res.json()).then(data => {
                     if (data.diamonds) {
                         updateUserDiamonds(data.diamonds);
@@ -94,7 +120,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         } else {
           setUser(null);
         }
-        setLoading(false);
       }
     );
 

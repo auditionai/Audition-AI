@@ -1,4 +1,4 @@
-import React, { createContext, useState, useEffect, useContext, ReactNode } from 'react';
+import React, { createContext, useState, useEffect, useContext, ReactNode, useCallback, useMemo } from 'react';
 import { supabase } from '../utils/supabaseClient.ts';
 import type { Session, User as SupabaseUser } from '@supabase/supabase-js';
 import { User } from '../types.ts';
@@ -21,6 +21,53 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isLoading, setIsLoading] = useState(true);
   const [toast, setToast] = useState<{ message: string; type: string } | null>(null);
 
+  const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000);
+  }, []);
+
+  const updateUserProfile = useCallback((updates: Partial<User>) => {
+    setUser(prevUser => (prevUser ? { ...prevUser, ...updates } : null));
+  }, []);
+
+  const fetchUserProfile = useCallback(async (supabaseUser: SupabaseUser): Promise<User | null> => {
+    try {
+        const { data, error } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', supabaseUser.id)
+            .single();
+        if (error) throw error;
+        if (data) {
+            setUser(data as User);
+            return data as User;
+        }
+        return null;
+    } catch (error) {
+        console.error('Error fetching user profile:', error);
+        return null;
+    }
+  }, []);
+
+  const handleDailyCheckIn = useCallback(async (token: string) => {
+    try {
+      const response = await fetch('/.netlify/functions/daily-check-in', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await response.json();
+      if (response.ok) {
+        showToast(data.message, 'success');
+        updateUserProfile({ diamonds: data.newDiamondCount, last_check_in: new Date().toISOString(), streak: data.streak });
+      } else if (response.status !== 429) { // 429 is "already checked in", don't show error
+        throw new Error(data.error || 'Lỗi điểm danh.');
+      }
+    } catch (error: any) {
+      console.error('Daily check-in failed:', error);
+      // Don't show toast for this as it's a background task
+    }
+  }, [showToast, updateUserProfile]);
+
   useEffect(() => {
     const getSessionAndProfile = async () => {
         const { data: { session: currentSession }, error: sessionError } = await supabase.auth.getSession();
@@ -31,42 +78,35 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
         setSession(currentSession);
         if (currentSession?.user) {
-            await fetchUserProfile(currentSession.user);
+            const profile = await fetchUserProfile(currentSession.user);
+            if (profile && currentSession.access_token) {
+              await handleDailyCheckIn(currentSession.access_token);
+            }
         }
         setIsLoading(false);
     };
 
     getSessionAndProfile();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      setSession(session);
-      if (session?.user) {
-        if (!user || user.id !== session.user.id) {
-           await fetchUserProfile(session.user);
-        }
-      } else {
-        setUser(null);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
+      // Only fetch profile if the user has actually changed
+      if (newSession?.user?.id !== session?.user?.id) {
+          if (newSession?.user) {
+            const profile = await fetchUserProfile(newSession.user);
+            if (profile && newSession.access_token) {
+              await handleDailyCheckIn(newSession.access_token);
+            }
+          } else {
+            setUser(null);
+          }
       }
+      setSession(newSession);
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [fetchUserProfile, handleDailyCheckIn, session]);
 
-  const fetchUserProfile = async (supabaseUser: SupabaseUser) => {
-    try {
-        const { data, error } = await supabase
-            .from('users')
-            .select('*')
-            .eq('id', supabaseUser.id)
-            .single();
-        if (error) throw error;
-        if (data) setUser(data as User);
-    } catch (error) {
-        console.error('Error fetching user profile:', error);
-    }
-  };
-
-  const login = async () => {
+  const login = useCallback(async () => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
@@ -78,9 +118,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       showToast('Đăng nhập thất bại. Vui lòng thử lại.', 'error');
       throw error;
     }
-  };
+  }, [showToast]);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     const { error } = await supabase.auth.signOut();
     if (error) {
         console.error('Error logging out:', error);
@@ -89,18 +129,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setUser(null);
         setSession(null);
     }
-  };
+  }, [showToast]);
   
-  const updateUserProfile = (updates: Partial<User>) => {
-    setUser(prevUser => prevUser ? { ...prevUser, ...updates } : null);
-  };
-
-  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 4000);
-  };
-
-  const value = {
+  const value = useMemo(() => ({
     session,
     user,
     isLoading,
@@ -108,7 +139,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     logout,
     showToast,
     updateUserProfile
-  };
+  }), [session, user, isLoading, login, logout, showToast, updateUserProfile]);
   
   const toastColors = {
     success: 'bg-green-500/80 border-green-400',

@@ -1,6 +1,12 @@
 import type { Handler } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
 
+// Hàm tính cấp bậc từ XP, đảm bảo logic đồng bộ với client
+const calculateLevelFromXp = (xp: number): number => {
+  if (typeof xp !== 'number' || xp < 0) return 1;
+  return Math.floor(xp / 100) + 1;
+};
+
 const handler: Handler = async () => {
     try {
         // Lấy top 10 người dùng có XP cao nhất
@@ -14,9 +20,6 @@ const handler: Handler = async () => {
 
         // Lấy số lượng ảnh đã tạo cho những người dùng này
         const userIds = users.map(u => u.id);
-        // Fix: The original query with `.groupBy()` is not supported as written, as the method cannot be chained after `.in()`.
-        // This is replaced with a query to fetch all relevant images and then count them in code.
-        // This approach is acceptable for a small number of users (top 10).
         const { data: images, error: imagesError } = await supabaseAdmin
             .from('generated_images')
             .select('user_id')
@@ -33,6 +36,8 @@ const handler: Handler = async () => {
         const leaderboard = users.map((user, index) => ({
             ...user,
             rank: index + 1,
+            // Sửa lỗi: Tính toán và thêm cấp bậc (level) vào dữ liệu trả về
+            level: calculateLevelFromXp(user.xp),
             creations_count: countMap.get(user.id) || 0,
         }));
 

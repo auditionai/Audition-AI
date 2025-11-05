@@ -25,7 +25,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     // 2. Method Handling
     switch (event.httpMethod) {
         case 'GET': {
-            // SỬA LỖI: Lấy các giao dịch có trạng thái 'awaiting_approval' để admin phê duyệt
+            // Lấy các giao dịch có trạng thái 'pending' để admin phê duyệt
             const { data, error } = await supabaseAdmin
                 .from('transactions')
                 .select(`
@@ -36,7 +36,7 @@ const handler: Handler = async (event: HandlerEvent) => {
                         photo_url
                     )
                 `)
-                .eq('status', 'awaiting_approval') // <-- THAY ĐỔI QUAN TRỌNG
+                .eq('status', 'pending') // <-- THAY ĐỔI
                 .order('created_at', { ascending: true });
 
             if (error) {
@@ -54,7 +54,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             }
 
             if (action === 'approve') {
-                // Hàm RPC đã được thiết kế để tìm 'awaiting_approval', nên không cần thay đổi ở đây
+                // Gọi RPC function (đã được cập nhật để xử lý 'pending' status)
                 const { error: rpcError } = await supabaseAdmin
                     .rpc('approve_and_credit_transaction', { transaction_id_param: transactionId });
 
@@ -65,12 +65,12 @@ const handler: Handler = async (event: HandlerEvent) => {
                 return { statusCode: 200, body: JSON.stringify({ message: 'Transaction approved successfully.' }) };
 
             } else { // action === 'reject'
-                // Sửa lỗi: Cập nhật trạng thái từ 'awaiting_approval' sang 'rejected'
+                // Cập nhật trạng thái từ 'pending' sang 'rejected'
                 const { error: updateError } = await supabaseAdmin
                     .from('transactions')
                     .update({ status: 'rejected', updated_at: new Date().toISOString() })
                     .eq('id', transactionId)
-                    .eq('status', 'awaiting_approval'); // <-- THAY ĐỔI QUAN TRỌNG
+                    .eq('status', 'pending'); // <-- THAY ĐỔI
                 
                 if (updateError) {
                     console.error("Error rejecting transaction:", updateError);

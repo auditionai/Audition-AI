@@ -135,7 +135,7 @@ export interface Transaction {
     package_id: string;
     amount_vnd: number;
     diamonds_received: number;
-    status: 'pending' | 'awaiting_approval' | 'completed' | 'failed' | 'canceled' | 'rejected';
+    status: 'pending' | 'completed' | 'failed' | 'canceled' | 'rejected';
     created_at: string;
     updated_at: string;
 }

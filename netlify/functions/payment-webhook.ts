@@ -49,26 +49,13 @@ const handler: Handler = async (event: HandlerEvent) => {
         const isFailure = status?.toUpperCase() === 'CANCELLED' || status?.toUpperCase() === 'FAILED';
 
         if (isSuccess) {
-            console.log(`[SUCCESS] Order ${numericOrderCode} is PAID. Updating status to 'awaiting_approval'.`);
-            
-            // Chuyển sang quy trình thủ công: chỉ cập nhật trạng thái để admin phê duyệt
-            const { error: updateError } = await supabaseAdmin
-                .from('transactions')
-                .update({ status: 'awaiting_approval', updated_at: new Date().toISOString() })
-                .eq('order_code', numericOrderCode)
-                .eq('status', 'pending'); // Chỉ cập nhật các giao dịch đang chờ
-            
-            if (updateError) {
-                console.error(`[DB_ERROR] Failed to update transaction ${numericOrderCode} to awaiting_approval:`, updateError.message);
-                // Trả về lỗi nhưng vẫn báo 200 cho PayOS để tránh retry
-                return { statusCode: 200, body: JSON.stringify({ message: 'Webhook received, but DB update failed.' }) };
-            }
-            
-            console.log(`[DB_SUCCESS] Transaction ${numericOrderCode} moved to admin approval queue.`);
+            // Với quy trình thủ công, chúng ta không cần làm gì ở đây.
+            // Giao dịch sẽ giữ nguyên trạng thái 'pending' để admin phê duyệt.
+            console.log(`[INFO] Order ${numericOrderCode} is PAID. Leaving status as 'pending' for admin approval.`);
 
         } else if (isFailure) {
             const dbStatus = status.toUpperCase() === 'CANCELLED' ? 'canceled' : 'failed';
-            // Chỉ cập nhật trạng thái, không cần logic phức tạp
+            // Cập nhật trạng thái cho các giao dịch thất bại hoặc bị hủy
             await supabaseAdmin
                .from('transactions')
                .update({ status: dbStatus, updated_at: new Date().toISOString() })

@@ -124,12 +124,26 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     useEffect(() => {
         const initializeAuth = async () => {
-            const { data: { session } } = await supabase.auth.getSession();
-            setSession(session);
-            if (session?.user) {
-                await fetchUserProfile(session.user);
+            try {
+                const { data: { session }, error } = await supabase.auth.getSession();
+                if (error) throw error;
+                
+                if (session?.user) {
+                    const profile = await fetchUserProfile(session.user);
+                    if (profile) {
+                        setSession(session);
+                    } else {
+                        throw new Error("Stale session detected. Clearing state.");
+                    }
+                }
+            } catch (error) {
+                console.error('Error during auth initialization, clearing session:', error);
+                await supabase.auth.signOut();
+                setSession(null);
+                setUser(null);
+            } finally {
+                setLoading(false);
             }
-            setLoading(false);
         };
         
         initializeAuth();
@@ -154,7 +168,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                         }
                     }, 2000);
                 } else {
-                    // For existing users, just ensure profile is fresh on login
                     await fetchUserProfile(session.user);
                 }
             } else {
@@ -162,7 +175,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             }
         });
         
-        // Real-time listener for user profile changes
         const userChannel = supabase
             .channel('public:users')
             .on(

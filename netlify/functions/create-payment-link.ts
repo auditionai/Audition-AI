@@ -76,24 +76,31 @@ const handler: Handler = async (event: HandlerEvent) => {
             throw new Error(`Không thể tạo bản ghi giao dịch: ${transactionError.message}`);
         }
 
-        // 3. Prepare data for PayOS using the safe, standardized description
+        // 3. Prepare data for PayOS, separating signed data from the full payload
         const description = `NAP AUAI ${pkg.credits_amount}KC`;
         const baseUrl = process.env.URL || 'http://localhost:8888';
-        const returnUrl = `${baseUrl}/buy-credits`; // Simpler return URL, status handled by webhook
+        const returnUrl = `${baseUrl}/buy-credits`;
         const cancelUrl = `${baseUrl}/buy-credits`;
 
-        const payOSData = {
+        // CORRECT APPROACH: This object contains ONLY the fields required for the signature.
+        const dataToSign = {
             orderCode,
             amount: pkg.price_vnd,
             description,
             cancelUrl,
             returnUrl,
+        };
+        
+        // Generate the signature from the specific data object.
+        const signature = createSignature(dataToSign, PAYOS_CHECKSUM_KEY);
+
+        // This is the final payload sent to PayOS, including the non-signed data and the signature.
+        const finalPayload = {
+            ...dataToSign,
             buyerName: userProfile.display_name,
             buyerEmail: user.email,
+            signature,
         };
-
-        const signature = createSignature(payOSData, PAYOS_CHECKSUM_KEY);
-        const finalPayload = { ...payOSData, signature };
 
         // 4. Call PayOS API to create payment link
         const payosResponse = await fetch('https://api-merchant.payos.vn/v2/payment-requests', {

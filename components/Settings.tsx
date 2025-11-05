@@ -163,6 +163,8 @@ const Settings: React.FC = () => {
     
     const fetchAdminData = useCallback(async () => {
         if (!session || !user?.is_admin) return;
+        // CRITICAL: Ensure all admin fetches request fresh data from the server,
+        // bypassing the browser cache to prevent showing stale lists (e.g., of transactions).
         const fetchOptions = {
             headers: { Authorization: `Bearer ${session.access_token}` },
             cache: 'no-cache' as RequestCache

@@ -39,12 +39,21 @@ const ApiKeyManagement = () => {
     const [newKeyName, setNewKeyName] = useState('');
     const [newKeyValue, setNewKeyValue] = useState('');
 
-    const getAuthHeader = () => ({ Authorization: `Bearer ${session?.access_token}` });
+    const getHeaders = (includeContentType = false) => {
+        const headers: Record<string, string> = {};
+        if (session?.access_token) {
+            headers['Authorization'] = `Bearer ${session.access_token}`;
+        }
+        if (includeContentType) {
+            headers['Content-Type'] = 'application/json';
+        }
+        return headers;
+    };
 
     const fetchKeys = async () => {
         setIsLoading(true);
         try {
-            const response = await fetch('/.netlify/functions/api-keys', { headers: getAuthHeader() });
+            const response = await fetch('/.netlify/functions/api-keys', { headers: getHeaders() });
             if (!response.ok) throw new Error('Không thể tải API keys.');
             const data = await response.json();
             setKeys(data);
@@ -68,7 +77,7 @@ const ApiKeyManagement = () => {
         try {
             const response = await fetch('/.netlify/functions/api-keys', {
                 method: 'POST',
-                headers: { ...getAuthHeader(), 'Content-Type': 'application/json' },
+                headers: getHeaders(true),
                 body: JSON.stringify({ name: newKeyName, key_value: newKeyValue }),
             });
             if (!response.ok) throw new Error('Thêm key thất bại.');
@@ -86,7 +95,7 @@ const ApiKeyManagement = () => {
         try {
             const response = await fetch('/.netlify/functions/api-keys', {
                 method: 'PUT',
-                headers: { ...getAuthHeader(), 'Content-Type': 'application/json' },
+                headers: getHeaders(true),
                 body: JSON.stringify({ id, status: currentStatus === 'active' ? 'inactive' : 'active' }),
             });
             if (!response.ok) throw new Error('Cập nhật thất bại.');
@@ -102,7 +111,7 @@ const ApiKeyManagement = () => {
              try {
                 const response = await fetch('/.netlify/functions/api-keys', {
                     method: 'DELETE',
-                    headers: { ...getAuthHeader(), 'Content-Type': 'application/json' },
+                    headers: getHeaders(true),
                     body: JSON.stringify({ id }),
                 });
                 if (!response.ok) throw new Error('Xóa key thất bại.');
@@ -239,8 +248,12 @@ const GallerySettings: React.FC = () => {
                 return;
             };
             try {
+                const headers: Record<string, string> = {};
+                if (session.access_token) {
+                    headers['Authorization'] = `Bearer ${session.access_token}`;
+                }
                 const response = await fetch('/.netlify/functions/user-gallery', {
-                    headers: { Authorization: `Bearer ${session.access_token}` },
+                    headers: headers,
                 });
                 if (!response.ok) throw new Error('Không thể tải ảnh.');
                 const data = await response.json();

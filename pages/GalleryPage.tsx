@@ -11,8 +11,8 @@ import AuthModal from '../components/AuthModal';
 import InfoModal from '../components/InfoModal';
 
 const GalleryPage: React.FC = () => {
-    // Fix: Use `useAuth` as the single source for context state and functions.
-    const { navigate, stats, user, login, updateUserDiamonds, showToast } = useAuth();
+    // Fix: Remove unused `login` variable.
+    const { navigate, stats, user, updateUserDiamonds, showToast } = useAuth();
     const [selectedImage, setSelectedImage] = useState<GalleryImage | null>(null);
     
     // Modal states for header/footer actions
@@ -27,7 +27,8 @@ const GalleryPage: React.FC = () => {
                 onAuthClick={() => setIsAuthModalOpen(true)}
                 onRegisterClick={() => setIsAuthModalOpen(true)}
                 onTopUpClick={() => setIsTopUpModalOpen(true)}
-                onScrollTo={(id) => navigate('home')} // Navigate home on logo/nav clicks
+                // Fix: Rename unused parameter `id` to `_id` to satisfy linter.
+                onScrollTo={(_id) => navigate('home')} // Navigate home on logo/nav clicks
             />
             <main className="pt-24 bg-[#0B0B0F]">
                 <section id="full-gallery" className="py-12 sm:py-16">

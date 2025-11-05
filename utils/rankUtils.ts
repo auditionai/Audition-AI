@@ -1,4 +1,3 @@
-import React from 'react';
 import { Rank } from '../types';
 import { RANKS } from '../constants/ranks';
 

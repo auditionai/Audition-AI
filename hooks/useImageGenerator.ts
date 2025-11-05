@@ -2,11 +2,6 @@ import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { AIModel, StylePreset } from '../types';
 
-const getAuthHeader = (session: any) => {
-    if (!session?.access_token) return {};
-    return { Authorization: `Bearer ${session.access_token}` };
-}
-
 const fileToBase64 = (file: File): Promise<string> => new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onloadend = () => resolve((reader.result as string)); // returns data:...,base64
@@ -26,12 +21,16 @@ export const useBackgroundRemover = () => {
         try {
             const imageDataUrl = await fileToBase64(imageFile);
 
+            const headers: Record<string, string> = {
+                'Content-Type': 'application/json',
+            };
+            if (session?.access_token) {
+                headers['Authorization'] = `Bearer ${session.access_token}`;
+            }
+
             const response = await fetch('/.netlify/functions/remove-background', {
                 method: 'POST',
-                headers: {
-                    ...getAuthHeader(session),
-                    'Content-Type': 'application/json',
-                },
+                headers: headers,
                 body: JSON.stringify({ image: imageDataUrl }),
             });
 
@@ -86,12 +85,16 @@ export const useImageGenerator = () => {
             const characterImage = characterImageFile ? await fileToBase64(characterImageFile) : null;
             const styleImage = styleImageFile ? await fileToBase64(styleImageFile) : null;
 
+            const headers: Record<string, string> = {
+                'Content-Type': 'application/json',
+            };
+            if (session?.access_token) {
+                headers['Authorization'] = `Bearer ${session.access_token}`;
+            }
+
             const response = await fetch('/.netlify/functions/generate-image', {
                 method: 'POST',
-                headers: {
-                    ...getAuthHeader(session),
-                    'Content-Type': 'application/json',
-                },
+                headers: headers,
                 body: JSON.stringify({
                     prompt,
                     characterImage,

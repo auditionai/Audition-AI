@@ -115,63 +115,77 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
     }, [user, showToast]);
 
-    // Decisive "Hard Reset" function
-    const hardReset = async () => {
-        console.warn("Forcing hard reset. Clearing Supabase localStorage and reloading page...");
-        await supabase.auth.signOut().catch(e => console.error("Sign out on reset failed:", e));
-        
-        Object.keys(localStorage).forEach(key => {
-            if (key.startsWith('sb-')) { // Aggressively clear all Supabase keys
-                localStorage.removeItem(key);
-            }
-        });
+    // Decisive "Hard Reset" function that does not depend on the Supabase client.
+    const hardReset = () => {
+        console.warn("Forcing hard reset: Bypassing Supabase client, clearing storage, and reloading page...");
+        try {
+            const clearStorage = (storage: Storage) => {
+                const keysToRemove: string[] = [];
+                for (let i = 0; i < storage.length; i++) {
+                    const key = storage.key(i);
+                    if (key && (key.startsWith('sb-') || key.toLowerCase().includes('supabase'))) {
+                        keysToRemove.push(key);
+                    }
+                }
+                keysToRemove.forEach(key => storage.removeItem(key));
+            };
 
-        window.location.reload();
+            clearStorage(localStorage);
+            clearStorage(sessionStorage);
+            
+            console.log("Cleared Supabase-related storage keys. Reloading page now.");
+            window.location.reload();
+        } catch (e) {
+            console.error("Hard reset failed during storage clear or reload:", e);
+            // Fallback if reload is blocked or fails.
+            setLoading(false); 
+            setUser(null);
+            setSession(null);
+        }
     };
 
     // Failsafe authentication flow with timeout and hard reset
     useEffect(() => {
         let isCancelled = false;
-
-        const authTimeout = setTimeout(() => {
-            if (!isCancelled) {
-                console.error("Authentication timed out after 6 seconds. Triggering hard reset.");
-                hardReset();
-            }
-        }, 6000); // 6-second aggressive timeout
+        let timeoutId: number | null = null;
 
         const initializeAuth = async () => {
+            timeoutId = window.setTimeout(() => {
+                if (!isCancelled) {
+                    console.error("A critical error or timeout occurred during auth initialization. Force signing out. Error: Authentication timed out after 8 seconds.");
+                    hardReset();
+                }
+            }, 8000);
+
             try {
                 const { data: { session: currentSession }, error: sessionError } = await supabase.auth.getSession();
                 
                 if (isCancelled) return;
+                
+                if (timeoutId) clearTimeout(timeoutId);
+
                 if (sessionError) throw sessionError;
 
                 if (currentSession) {
                     const profile = await fetchUserProfile(currentSession.user);
                     if (profile) {
-                        // Success path: session and profile are valid
                         setSession(currentSession);
                         setUser(profile);
                     } else {
-                        // Critical failure: session exists but profile is missing/invalid.
-                        throw new Error("User profile is missing for an active session. Data is corrupted.");
+                        throw new Error("Session is valid but user profile is missing. Data corruption detected.");
                     }
                 } else {
-                    // Normal logged-out state
                     setSession(null);
                     setUser(null);
                 }
-
-                // If we successfully reach this point, it means auth is stable.
-                clearTimeout(authTimeout);
+                
                 setLoading(false);
 
             } catch (error) {
                 if (isCancelled) return;
-                console.error("A critical error occurred during auth initialization. Triggering hard reset.", error);
-                clearTimeout(authTimeout);
-                await hardReset();
+                console.error("Caught error during auth initialization, triggering hard reset.", error);
+                if (timeoutId) clearTimeout(timeoutId);
+                hardReset();
             }
         };
 
@@ -179,7 +193,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
             async (_event, newSession) => {
-                if (isCancelled) return;
+                if (isCancelled || loading) return;
                 setSession(newSession);
                 if (newSession?.user) {
                     const profile = await fetchUserProfile(newSession.user);
@@ -192,7 +206,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
         return () => {
             isCancelled = true;
-            clearTimeout(authTimeout);
+            if (timeoutId) clearTimeout(timeoutId);
             subscription.unsubscribe();
         };
     }, [fetchUserProfile]);
@@ -200,7 +214,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     // Effect for real-time user profile updates
     useEffect(() => {
-        if (!user?.id) return;
+        if (!user?.id || loading) return;
 
         const userChannel = supabase
             .channel(`public:users:id=eq.${user.id}`)
@@ -217,7 +231,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return () => {
             supabase.removeChannel(userChannel);
         };
-    }, [user?.id, updateUserProfile]);
+    }, [user?.id, updateUserProfile, loading]);
 
     const hasCheckedInToday = useMemo(() => {
         if (!user?.last_check_in_at) return false;

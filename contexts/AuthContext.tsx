@@ -122,64 +122,48 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }, [user, showToast]);
 
 
-    // Main effect for handling authentication state
+    // Decisive Fix: Use onAuthStateChange as the single source of truth for auth state.
+    // This is more robust and prevents race conditions between getSession() and the listener.
     useEffect(() => {
-        const initializeAuth = async () => {
-            // 1. Get the initial session. This is more reliable for the first load.
-            const { data: { session: initialSession }, error: sessionError } = await supabase.auth.getSession();
+        setLoading(true);
 
-            if (sessionError) {
-                console.error("Error getting initial session:", sessionError);
-                setLoading(false);
-                return;
-            }
-            
-            setSession(initialSession);
-            if (initialSession?.user) {
-                await fetchUserProfile(initialSession.user);
-            }
-            setLoading(false); // Stop loading after the initial check is done.
-        };
-
-        initializeAuth();
-        
-        // 2. Set up a listener for subsequent auth changes (login, logout).
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
-            // The initial check already handled the first session, this handles changes.
             setSession(newSession);
+
             if (newSession?.user) {
-                 // Check if this is a new user sign-in event
-                 if (_event === 'SIGNED_IN') {
+                // Check if this is a new user sign-in event
+                if (_event === 'SIGNED_IN') {
                     const createdAt = new Date(newSession.user.created_at).getTime();
                     const isNewUser = (Date.now() - createdAt) < 60000; // Check if created within the last minute
 
                     if (isNewUser) {
-                        // Use a short delay to ensure the user profile is created by the trigger
-                        setTimeout(() => {
-                             fetch('/.netlify/functions/set-initial-diamonds', {
-                                method: 'POST',
-                                headers: { 'Authorization': `Bearer ${newSession.access_token}` }
-                            }).then(() => {
-                                // Re-fetch profile after setting diamonds to get the latest data
-                                fetchUserProfile(newSession.user);
-                            }).catch(e => console.error("Failed to set initial diamonds.", e));
-                        }, 2000); // 2-second delay
+                         // Wait for the backend to set initial diamonds before fetching the profile
+                        await fetch('/.netlify/functions/set-initial-diamonds', {
+                            method: 'POST',
+                            headers: { 'Authorization': `Bearer ${newSession.access_token}` }
+                        }).catch(e => console.error("Failed to set initial diamonds.", e));
+                        
+                        await fetchUserProfile(newSession.user);
                     } else {
-                         await fetchUserProfile(newSession.user);
+                        await fetchUserProfile(newSession.user);
                     }
-                 } else {
-                    // For other events like TOKEN_REFRESHED, just update the profile
+                } else {
+                    // For other events like INITIAL_SESSION or TOKEN_REFRESHED
                     await fetchUserProfile(newSession.user);
-                 }
+                }
             } else {
                 setUser(null);
             }
+
+            // Crucially, set loading to false AFTER the initial state has been determined and processed.
+            setLoading(false);
         });
 
         return () => {
             subscription?.unsubscribe();
         };
     }, [fetchUserProfile]);
+
 
     // Effect for handling user-specific real-time updates
     useEffect(() => {

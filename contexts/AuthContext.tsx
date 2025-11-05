@@ -1,163 +1,159 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
-import { User, Stats } from '../types';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { supabase } from '../utils/supabaseClient';
-import { Session } from '@supabase/supabase-js';
-import { calculateLevelFromXp } from '../utils/rankUtils';
+import { Session, User as SupabaseUser } from '@supabase/supabase-js';
+import { User, Stats } from '../types';
 
-interface AppContextType {
-  session: Session | null;
-  user: User | null;
-  loading: boolean;
-  logout: () => Promise<void>;
-  showToast: (message: string, type: 'success' | 'error') => void;
-  toast: { message: string, type: 'success' | 'error' } | null;
-  updateUserProfile: (updates: Partial<User>) => void;
-  login: () => Promise<void>;
-  updateUserDiamonds: (newDiamondCount: number) => void;
-  stats: Stats;
-  navigate: (path: string) => void;
+// Define the shape of the context
+interface AuthContextType {
+    session: Session | null;
+    user: User | null;
+    loading: boolean;
+    stats: Stats;
+    toast: { message: string; type: 'success' | 'error' } | null;
+    route: string; // for simple routing
+    login: () => Promise<void>;
+    logout: () => Promise<void>;
+    updateUserDiamonds: (newAmount: number) => void;
+    updateUserProfile: (updates: Partial<User>) => void;
+    showToast: (message: string, type: 'success' | 'error') => void;
+    navigate: (path: string) => void;
 }
 
-const AppContext = createContext<AppContextType | undefined>(undefined);
+// Create the context with a default value
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// Define the provider component
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [session, setSession] = useState<Session | null>(null);
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
-  const [stats] = useState<Stats>({
-      users: 1337,
-      visits: 4200,
-      images: 9001,
-  });
+    const [session, setSession] = useState<Session | null>(null);
+    const [user, setUser] = useState<User | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+    // Demo stats
+    const [stats] = useState<Stats>({ users: 1250, visits: 8700, images: 25000 });
+    const [route, setRoute] = useState('home'); // initial route
 
-  const showToast = useCallback((message: string, type: 'success' | 'error') => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 4000);
-  }, []);
+    const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+        setToast({ message, type });
+        setTimeout(() => {
+            setToast(null);
+        }, 3000);
+    };
+    
+    const navigate = (path: string) => {
+        setRoute(path);
+        window.scrollTo(0, 0);
+    };
 
-  useEffect(() => {
-    // Start with loading true
-    setLoading(true);
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      setSession(session);
-      if (session?.user) {
-        
-        const fetchUserProfile = async (userId: string) => {
-            return await supabase
+    const fetchUserProfile = useCallback(async (supabaseUser: SupabaseUser) => {
+        try {
+            const { data, error } = await supabase
                 .from('users')
                 .select('*')
-                .eq('id', userId)
+                .eq('id', supabaseUser.id)
                 .single();
+
+            if (error) {
+                // This can happen on first login if the DB trigger hasn't run yet.
+                if (error.code === 'PGRST116') {
+                    console.warn("User profile not found, it might be creating.");
+                    return; 
+                }
+                throw error;
+            }
+
+            if (data) {
+                setUser(data as User);
+            }
+        } catch (error) {
+            console.error('Error fetching user profile:', error);
+            showToast('Không thể tải thông tin người dùng.', 'error');
+        }
+    }, []);
+    
+    useEffect(() => {
+        const checkSession = async () => {
+            const { data: { session } } = await supabase.auth.getSession();
+            setSession(session);
+            if (session?.user) {
+                await fetchUserProfile(session.user);
+            }
+            setLoading(false);
         };
         
-        let { data, error } = await fetchUserProfile(session.user.id);
+        checkSession();
 
-        if (error && (_event === 'SIGNED_IN' || _event === 'USER_UPDATED')) {
-            console.log('Initial profile fetch failed, retrying after a short delay for trigger execution...');
-            await new Promise(resolve => setTimeout(resolve, 1500));
-            const retryResult = await fetchUserProfile(session.user.id);
-            data = retryResult.data;
-            error = retryResult.error;
-        }
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+            setSession(session);
+            if (session?.user) {
+                // A small delay might help if the DB trigger for user creation is slow
+                setTimeout(() => fetchUserProfile(session.user), 500);
+            } else {
+                setUser(null);
+            }
+            // Only set loading to false on initial load, not every auth change
+            if(loading) setLoading(false);
+        });
 
+        return () => {
+            subscription?.unsubscribe();
+        };
+    }, [fetchUserProfile, loading]);
+
+    const login = async () => {
+        const { error } = await supabase.auth.signInWithOAuth({
+            provider: 'google',
+            options: {
+                redirectTo: window.location.origin,
+            },
+        });
         if (error) {
-          console.error('Error fetching user profile, even after retry. Signing out to clear invalid session.', error);
-          supabase.auth.signOut();
-          setUser(null);
-        } else if (data) {
-          const level = calculateLevelFromXp(data.xp);
-          setUser({ ...data, level });
+            showToast('Đăng nhập thất bại: ' + error.message, 'error');
+            throw error;
         }
-      } else {
+    };
+
+    const logout = async () => {
+        await supabase.auth.signOut();
         setUser(null);
-      }
-      setLoading(false); // Finish loading once auth state is resolved
-    });
-    
-    // Check initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-        if (!session) {
-            setLoading(false); // No session, stop loading
+        setSession(null);
+        navigate('home'); // Go to home page after logout
+    };
+
+    const updateUserDiamonds = (newAmount: number) => {
+        if (user) {
+            setUser({ ...user, diamonds: newAmount });
         }
-        // If there is a session, onAuthStateChange will handle setting user and loading state
-    });
+    };
 
+    const updateUserProfile = (updates: Partial<User>) => {
+        if (user) {
+            setUser({ ...user, ...updates });
+        }
+    };
 
-    return () => subscription.unsubscribe();
-  }, []);
+    const value = {
+        session,
+        user,
+        loading,
+        stats,
+        toast,
+        route,
+        login,
+        logout,
+        updateUserDiamonds,
+        updateUserProfile,
+        showToast,
+        navigate,
+    };
 
-  const logout = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-        console.error("Error logging out:", error);
-        showToast(`Đăng xuất thất bại: ${error.message}`, 'error');
-    } else {
-        window.location.href = '/';
-    }
-  };
-  
-  const updateUserProfile = (updates: Partial<User>) => {
-      setUser(currentUser => {
-          if (!currentUser) return null;
-          const updatedUser = { ...currentUser, ...updates };
-          if(updates.xp !== undefined) {
-              updatedUser.level = calculateLevelFromXp(updatedUser.xp);
-          }
-          return updatedUser;
-      });
-  }
-
-  const login = async () => {
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: window.location.origin },
-    });
-    if (error) showToast(error.message, 'error');
-  };
-
-  const updateUserDiamonds = (newDiamondCount: number) => {
-    if (user) {
-        updateUserProfile({ diamonds: newDiamondCount });
-    }
-  };
-
-  const navigate = (path: string) => {
-    console.log(`Navigating to ${path}`);
-    if (path === 'home') {
-        window.location.pathname = '/';
-    } else if (path === 'gallery') {
-        console.log("Navigation to gallery page requested.");
-        showToast("Gallery page is for demo purposes.", "success");
-    }
-  };
-
-  const value: AppContextType = {
-    session,
-    user,
-    loading,
-    logout,
-    showToast,
-    toast,
-    updateUserProfile,
-    login,
-    updateUserDiamonds,
-    stats,
-    navigate
-  };
-
-  return (
-    <AppContext.Provider value={value}>
-      {children}
-    </AppContext.Provider>
-  );
+    return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
-export const useAuth = (): AppContextType => {
-  const context = useContext(AppContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
+// Custom hook to use the auth context
+export const useAuth = () => {
+    const context = useContext(AuthContext);
+    if (context === undefined) {
+        throw new Error('useAuth must be used within an AuthProvider');
+    }
+    return context;
 };

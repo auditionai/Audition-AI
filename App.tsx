@@ -1,5 +1,6 @@
 import HomePage from './pages/HomePage';
 import CreatorPage from './pages/CreatorPage';
+import GalleryPage from './pages/GalleryPage';
 import { useAuth } from './contexts/AuthContext';
 
 const AppLoadingScreen = () => (
@@ -15,15 +16,23 @@ const AppLoadingScreen = () => (
 );
 
 function App() {
-  const { user, toast, loading } = useAuth();
+  const { user, toast, loading, route } = useAuth();
 
   if (loading) {
     return <AppLoadingScreen />;
   }
 
+  const renderPage = () => {
+    if (route === 'gallery') {
+      return <GalleryPage />;
+    }
+    // For 'home' and any other route, use the default logic based on auth state
+    return user ? <CreatorPage /> : <HomePage />;
+  }
+
   return (
     <div className="bg-[#0B0B0F] text-white selection:bg-pink-500 selection:text-white">
-      {user ? <CreatorPage /> : <HomePage />}
+      {renderPage()}
 
       {/* Toast Notification */}
       {toast && (

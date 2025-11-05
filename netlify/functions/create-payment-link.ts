@@ -56,8 +56,16 @@ const handler: Handler = async (event: HandlerEvent) => {
                 amount: pkg.price_vnd,
                 status: 'pending'
             });
-
-        if (transactionError) throw transactionError;
+        
+        // NEW: Improved error handling for schema mismatch
+        if (transactionError) {
+             if (transactionError.message.includes("column") && transactionError.message.includes("does not exist")) {
+                 const specificError = `Lỗi Database: Cấu trúc bảng 'transactions' không đúng. Lỗi cụ thể: ${transactionError.message}. Vui lòng kiểm tra lại schema database.`;
+                 console.error(specificError);
+                 throw new Error(specificError);
+             }
+            throw transactionError;
+        }
 
         // 5. Create payment link with PayOS
         const paymentData = {

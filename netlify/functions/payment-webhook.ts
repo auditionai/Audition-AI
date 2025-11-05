@@ -11,14 +11,14 @@ const createSignature = (data: Record<string, any>, checksumKey: string): string
 };
 
 const handler: Handler = async (event: HandlerEvent) => {
-    console.log("--- [START] PayOS Webhook Received ---");
+    console.log("--- [START] PayOS Webhook Received (v2) ---");
 
     if (event.httpMethod !== 'POST') {
         return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
     }
     
     if (!PAYOS_CHECKSUM_KEY) {
-        console.error('[FATAL] PAYOS_CHECKSUM_KEY is not set in environment variables.');
+        console.error('[FATAL] PAYOS_CHECKSUM_KEY is not set.');
         return { statusCode: 500, body: JSON.stringify({ error: 'Webhook configuration error.' }) };
     }
     
@@ -28,7 +28,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         const webhookData = body.data;
 
         if (!webhookData || !signatureFromHeader) {
-            console.error("[VALIDATION_ERROR] Missing 'data' object or 'x-payos-signature' header.");
+            console.error("[VALIDATION_ERROR] Missing 'data' or 'signature' header.");
             return { statusCode: 400, body: JSON.stringify({ error: 'Missing webhook data or signature.' }) };
         }
         
@@ -49,74 +49,41 @@ const handler: Handler = async (event: HandlerEvent) => {
         const isFailure = status?.toUpperCase() === 'CANCELLED' || status?.toUpperCase() === 'FAILED';
 
         if (isSuccess) {
-            console.log(`[SUCCESS] Order ${numericOrderCode} is PAID. Processing transaction...`);
+            console.log(`[SUCCESS] Order ${numericOrderCode} is PAID. Calling database function to process...`);
             
-            // Tìm giao dịch đang chờ xử lý
-            const { data: transaction, error: findError } = await supabaseAdmin
-                .from('transactions')
-                .select('*')
-                .eq('order_code', numericOrderCode)
-                .eq('status', 'pending')
-                .single();
+            // Gọi hàm cơ sở dữ liệu để xử lý giao dịch một cách toàn vẹn
+            const { data: rpcData, error: rpcError } = await supabaseAdmin
+                .rpc('process_paid_transaction', { p_order_code: numericOrderCode });
 
-            if (findError) {
-                console.warn(`[DB_WARN] Transaction for order ${numericOrderCode} not found or already processed. Error:`, findError.message);
-                // Vẫn trả về 200 vì có thể webhook bị gửi trùng lặp
-                return { statusCode: 200, body: JSON.stringify({ message: 'Transaction already processed or not found.' }) };
-            }
-
-            // Tìm thông tin người dùng
-            const { data: userProfile, error: userError } = await supabaseAdmin
-                .from('users')
-                .select('diamonds, xp')
-                .eq('id', transaction.user_id)
-                .single();
-            
-            if (userError) {
-                console.error(`[DB_ERROR] User not found for transaction ${transaction.id}. Aborting.`);
-                return { statusCode: 500, body: JSON.stringify({ error: 'User associated with transaction not found.' }) };
+            if (rpcError) {
+                // Lỗi này có nghĩa là đã có sự cố bên trong hàm RPC
+                console.error(`[DB_RPC_ERROR] Error processing transaction for order ${numericOrderCode}:`, rpcError.message);
+                return { statusCode: 500, body: JSON.stringify({ error: `Database processing failed: ${rpcError.message}` }) };
             }
             
-            // Tính toán giá trị mới
-            const xpToAdd = Math.floor(transaction.amount_vnd / 1000);
-            const newTotalDiamonds = userProfile.diamonds + transaction.diamonds_received;
-            const newTotalXp = userProfile.xp + xpToAdd;
-
-            // Cập nhật song song user và transaction
-            const [userUpdateResult, transactionUpdateResult] = await Promise.all([
-                supabaseAdmin
-                    .from('users')
-                    .update({ diamonds: newTotalDiamonds, xp: newTotalXp })
-                    .eq('id', transaction.user_id),
-                supabaseAdmin
-                    .from('transactions')
-                    .update({ status: 'completed', updated_at: new Date().toISOString() })
-                    .eq('id', transaction.id)
-            ]);
-            
-            if (userUpdateResult.error || transactionUpdateResult.error) {
-                 console.error(`[DB_ERROR] Failed to finalize transaction ${transaction.id}. User Error: ${userUpdateResult.error?.message}, Transaction Error: ${transactionUpdateResult.error?.message}`);
-                 // Vẫn trả về 200, nhưng log lỗi để kiểm tra thủ công
-            } else {
-                 console.log(`[DB_SUCCESS] Successfully credited user ${transaction.user_id} and completed transaction ${transaction.id}.`);
-            }
+            // Hàm trả về một hàng với { success, message }
+            const result = rpcData[0];
+            console.log(`[DB_RPC_SUCCESS] Result for order ${numericOrderCode}: ${result.message}`);
 
         } else if (isFailure) {
             const dbStatus = status.toUpperCase() === 'CANCELLED' ? 'canceled' : 'failed';
+            // Chỉ cập nhật trạng thái, không cần logic phức tạp
             await supabaseAdmin
                .from('transactions')
                .update({ status: dbStatus, updated_at: new Date().toISOString() })
                .eq('order_code', numericOrderCode)
                .eq('status', 'pending');
+            console.log(`[INFO] Order ${numericOrderCode} marked as '${dbStatus}'.`);
         }
 
     } catch (error: any) {
-        console.error(`[FATAL] Unhandled error processing webhook:`, error.message);
+        console.error(`[FATAL] Unhandled error in webhook:`, error.message);
         return { statusCode: 500, body: JSON.stringify({ error: 'Internal server error.' }) };
     }
 
-    console.log("--- [END] Webhook Processed Successfully ---");
-    return { statusCode: 200, body: JSON.stringify({ message: 'Webhook received and processed.' }) };
+    console.log("--- [END] Webhook Processed Successfully (v2) ---");
+    // Luôn trả về 200 OK cho PayOS để tránh họ gửi lại yêu cầu
+    return { statusCode: 200, body: JSON.stringify({ message: 'Webhook received.' }) };
 };
 
 export { handler };

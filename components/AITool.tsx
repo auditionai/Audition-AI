@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { DETAILED_AI_MODELS, STYLE_PRESETS_NEW } from '../constants/aiToolData';
-import { useImageGenerator, useBackgroundRemover } from '../../hooks/useImageGenerator';
+import { useImageGenerator, useBackgroundRemover } from '../hooks/useImageGenerator';
 import ConfirmationModal from './ConfirmationModal';
 import SettingsBlock from './ai-tool/SettingsBlock';
 import ImageUploader from './ai-tool/ImageUploader';

@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { getRankForLevel } from '../utils/rankUtils';
-import { RANKS } from '../constants/ranks';
-import { Rank, ApiKey, User as AppUser, GalleryImage } from '../types';
+import { ApiKey, GalleryImage } from '../types';
 import XPProgressBar from './common/XPProgressBar';
 
 type SettingsTab = 'profile' | 'history' | 'gallery' | 'user_management' | 'rank_management' | 'api_management';

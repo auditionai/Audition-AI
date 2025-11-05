@@ -1,4 +1,3 @@
-import React from 'react';
 import HomePage from './pages/HomePage';
 import CreatorPage from './pages/CreatorPage';
 import { useAuth } from './contexts/AuthContext';

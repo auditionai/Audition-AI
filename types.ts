@@ -43,6 +43,11 @@ export interface User {
     is_admin?: boolean; // snake_case
 }
 
+export interface AdminManagedUser extends User {
+    created_at: string;
+}
+
+
 export interface Rank {
   levelThreshold: number;
   title: string;

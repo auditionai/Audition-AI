@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { ApiKey, GalleryImage } from '../types';
+import { ApiKey, GalleryImage, AdminManagedUser } from '../types';
 import { getRankForLevel } from '../utils/rankUtils';
 import XPProgressBar from './common/XPProgressBar';
 import ImageModal from './common/ImageModal';
+import Modal from './common/Modal';
 
 // Component for a single API Key in the admin panel
 const ApiKeyRow: React.FC<{ apiKey: ApiKey; onUpdate: (id: string, status: 'active' | 'inactive') => void; onDelete: (id: string) => void; }> = ({ apiKey, onUpdate, onDelete }) => (
@@ -26,18 +27,73 @@ const ApiKeyRow: React.FC<{ apiKey: ApiKey; onUpdate: (id: string, status: 'acti
     </div>
 );
 
+const EditUserModal: React.FC<{ user: AdminManagedUser; onClose: () => void; onSave: (userId: string, updates: any) => Promise<void>; }> = ({ user, onClose, onSave }) => {
+    const [diamonds, setDiamonds] = useState(user.diamonds);
+    const [xp, setXp] = useState(user.xp);
+    const [isAdmin, setIsAdmin] = useState(!!user.is_admin);
+    const [isSaving, setIsSaving] = useState(false);
+
+    const handleSave = async () => {
+        setIsSaving(true);
+        const updates = {
+            diamonds: Number(diamonds),
+            xp: Number(xp),
+            is_admin: isAdmin,
+        };
+        await onSave(user.id, updates);
+        setIsSaving(false);
+        onClose();
+    };
+
+    return (
+        <Modal isOpen={true} onClose={onClose} title={`Chỉnh sửa ${user.display_name}`}>
+            <div className="space-y-4">
+                <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-1">Kim cương</label>
+                    <input type="number" value={diamonds} onChange={(e) => setDiamonds(Number(e.target.value))} className="auth-input" />
+                </div>
+                <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-1">XP</label>
+                    <input type="number" value={xp} onChange={(e) => setXp(Number(e.target.value))} className="auth-input" />
+                </div>
+                <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium text-gray-300">Quyền Admin</label>
+                    <input type="checkbox" checked={isAdmin} onChange={(e) => setIsAdmin(e.target.checked)} className="w-5 h-5 rounded text-pink-500 bg-gray-700 border-gray-600 focus:ring-pink-600" />
+                </div>
+                <div className="flex gap-4 mt-6">
+                    <button onClick={onClose} className="flex-1 py-2 font-semibold bg-white/10 text-white rounded-lg hover:bg-white/20 transition">Hủy</button>
+                    <button onClick={handleSave} disabled={isSaving} className="flex-1 py-2 font-bold text-white bg-gradient-to-r from-pink-500 to-fuchsia-600 rounded-lg hover:opacity-90 transition disabled:opacity-50">
+                        {isSaving ? 'Đang lưu...' : 'Lưu thay đổi'}
+                    </button>
+                </div>
+            </div>
+        </Modal>
+    );
+};
+
 
 const Settings: React.FC = () => {
     const { user, logout, showToast, updateUserProfile, session } = useAuth();
     const [displayName, setDisplayName] = useState(user?.display_name || '');
     const [isEditingName, setIsEditingName] = useState(false);
     const [isUpdating, setIsUpdating] = useState(false);
+    
+    const [avatarFile, setAvatarFile] = useState<File | null>(null);
+    const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+    const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+
 
     // Admin state
     const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
     const [isKeysLoading, setIsKeysLoading] = useState(false);
     const [newKeyName, setNewKeyName] = useState('');
     const [newKeyValue, setNewKeyValue] = useState('');
+    const [isAddingKey, setIsAddingKey] = useState(false);
+    
+    // User management state
+    const [allUsers, setAllUsers] = useState<AdminManagedUser[]>([]);
+    const [isUsersLoading, setIsUsersLoading] = useState(false);
+    const [editingUser, setEditingUser] = useState<AdminManagedUser | null>(null);
 
     // Gallery state
     const [userImages, setUserImages] = useState<GalleryImage[]>([]);
@@ -46,80 +102,103 @@ const Settings: React.FC = () => {
 
     const rank = user ? getRankForLevel(user.level) : null;
     
-    // Fetch user-created images
-    const fetchUserImages = useCallback(async () => {
-        if (!session) return;
-        setIsImagesLoading(true);
-        try {
-            const response = await fetch('/.netlify/functions/user-gallery', {
-                headers: { Authorization: `Bearer ${session.access_token}` },
-            });
-            if (!response.ok) throw new Error('Không thể tải ảnh của bạn.');
-            const data = await response.json();
-            setUserImages(data);
-        } catch (error: any) {
-            showToast(error.message, 'error');
-        } finally {
-            setIsImagesLoading(false);
-        }
-    }, [session, showToast]);
-
-    // Fetch API Keys for admin
-    const fetchApiKeys = useCallback(async () => {
+    const fetchAdminData = useCallback(async () => {
         if (!session || !user?.is_admin) return;
+
+        // Fetch API Keys
         setIsKeysLoading(true);
         try {
-             const response = await fetch('/.netlify/functions/api-keys', {
-                headers: { Authorization: `Bearer ${session.access_token}` },
-            });
+             const response = await fetch('/.netlify/functions/api-keys', { headers: { Authorization: `Bearer ${session.access_token}` } });
             if (!response.ok) throw new Error('Không thể tải API keys.');
-            const data = await response.json();
-            setApiKeys(data);
-        } catch (error: any) {
-            showToast(error.message, 'error');
-        } finally {
-            setIsKeysLoading(false);
-        }
+            setApiKeys(await response.json());
+        } catch (error: any) { showToast(error.message, 'error'); } 
+        finally { setIsKeysLoading(false); }
+        
+        // Fetch All Users
+        setIsUsersLoading(true);
+        try {
+             const response = await fetch('/.netlify/functions/admin-users', { headers: { Authorization: `Bearer ${session.access_token}` } });
+            if (!response.ok) throw new Error('Không thể tải danh sách người dùng.');
+            setAllUsers(await response.json());
+        } catch (error: any) { showToast(error.message, 'error'); }
+        finally { setIsUsersLoading(false); }
+
     }, [session, showToast, user?.is_admin]);
 
     useEffect(() => {
+        const fetchUserImages = async () => {
+            if (!session) return;
+            setIsImagesLoading(true);
+            try {
+                const response = await fetch('/.netlify/functions/user-gallery', { headers: { Authorization: `Bearer ${session.access_token}` } });
+                if (!response.ok) throw new Error('Không thể tải ảnh của bạn.');
+                setUserImages(await response.json());
+            } catch (error: any) { showToast(error.message, 'error'); } 
+            finally { setIsImagesLoading(false); }
+        };
+
         fetchUserImages();
         if (user?.is_admin) {
-            fetchApiKeys();
+            fetchAdminData();
         }
-    }, [fetchUserImages, fetchApiKeys, user?.is_admin]);
+    }, [session, showToast, user?.is_admin, fetchAdminData]);
 
     const handleUpdateName = async () => {
         if (!user || !displayName.trim() || displayName.trim() === user.display_name) {
-            setIsEditingName(false);
-            return;
+            setIsEditingName(false); return;
         }
         setIsUpdating(true);
         try {
             const response = await fetch('/.netlify/functions/user-profile', {
                 method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${session?.access_token}`,
-                },
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
                 body: JSON.stringify({ display_name: displayName.trim() }),
             });
             const result = await response.json();
             if (!response.ok) throw new Error(result.error);
-            
             updateUserProfile({ display_name: result.display_name });
             showToast('Cập nhật tên thành công!', 'success');
             setIsEditingName(false);
-        } catch (error: any) {
-            showToast(error.message, 'error');
-        } finally {
-            setIsUpdating(false);
-        }
+        } catch (error: any) { showToast(error.message, 'error'); } 
+        finally { setIsUpdating(false); }
     };
     
+    const handleAvatarSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            setAvatarFile(file);
+            setAvatarPreview(URL.createObjectURL(file));
+        }
+    };
+
+    const handleAvatarUpload = async () => {
+        if (!avatarFile) return;
+        setIsUploadingAvatar(true);
+        try {
+            const reader = new FileReader();
+            reader.readAsDataURL(avatarFile);
+            reader.onloadend = async () => {
+                const base64Image = reader.result;
+                const response = await fetch('/.netlify/functions/upload-avatar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+                    body: JSON.stringify({ image: base64Image }),
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.error);
+                updateUserProfile({ photo_url: result.photo_url });
+                showToast('Cập nhật ảnh đại diện thành công!', 'success');
+                setAvatarFile(null);
+                setAvatarPreview(null);
+            };
+        } catch (error: any) { showToast(error.message, 'error'); } 
+        finally { setIsUploadingAvatar(false); }
+    };
+
     const handleAddApiKey = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!newKeyName.trim() || !newKeyValue.trim()) return;
+        setIsAddingKey(true);
         try {
             const response = await fetch('/.netlify/functions/api-keys', {
                 method: 'POST',
@@ -129,12 +208,10 @@ const Settings: React.FC = () => {
             const newKey = await response.json();
             if (!response.ok) throw new Error(newKey.error);
             setApiKeys([newKey, ...apiKeys]);
-            setNewKeyName('');
-            setNewKeyValue('');
+            setNewKeyName(''); setNewKeyValue('');
             showToast('Thêm API key thành công!', 'success');
-        } catch (error: any) {
-            showToast(error.message, 'error');
-        }
+        } catch (error: any) { showToast(error.message, 'error'); }
+        finally { setIsAddingKey(false); }
     };
 
     const handleUpdateApiKey = async (id: string, status: 'active' | 'inactive') => {
@@ -148,9 +225,7 @@ const Settings: React.FC = () => {
             if (!response.ok) throw new Error(updatedKey.error);
             setApiKeys(apiKeys.map(k => k.id === id ? updatedKey : k));
             showToast('Cập nhật key thành công!', 'success');
-        } catch (error: any) {
-            showToast(error.message, 'error');
-        }
+        } catch (error: any) { showToast(error.message, 'error'); }
     };
 
     const handleDeleteApiKey = async (id: string) => {
@@ -167,31 +242,50 @@ const Settings: React.FC = () => {
             }
             setApiKeys(apiKeys.filter(k => k.id !== id));
             showToast('Xóa key thành công!', 'success');
+        } catch (error: any) { showToast(error.message, 'error'); }
+    };
+    
+    const handleUpdateUser = async (userId: string, updates: Partial<AdminManagedUser>) => {
+        try {
+            const response = await fetch('/.netlify/functions/admin-users', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+                body: JSON.stringify({ userId, updates }),
+            });
+            const updatedUser = await response.json();
+            if (!response.ok) throw new Error(updatedUser.error);
+            setAllUsers(allUsers.map(u => u.id === userId ? { ...u, ...updatedUser } : u));
+            showToast('Cập nhật người dùng thành công!', 'success');
         } catch (error: any) {
             showToast(error.message, 'error');
         }
     };
-    
 
     if (!user || !rank) return null;
 
     return (
         <div className="container mx-auto px-4 py-8 animate-fade-in max-w-4xl">
              <ImageModal isOpen={!!selectedImage} onClose={() => setSelectedImage(null)} image={selectedImage} />
+             {editingUser && <EditUserModal user={editingUser} onClose={() => setEditingUser(null)} onSave={handleUpdateUser} />}
             <div className="text-center mb-12">
                 <h1 className="text-4xl font-bold mb-4 bg-gradient-to-r from-pink-400 to-fuchsia-500 text-transparent bg-clip-text">Cài đặt Tài khoản</h1>
                 <p className="text-lg text-gray-400">Quản lý thông tin cá nhân, xem lại tác phẩm và các cài đặt khác.</p>
             </div>
             
-            {/* User Profile Section */}
             <div className="bg-[#12121A]/80 border border-white/10 rounded-2xl shadow-lg p-6 mb-8">
                 <div className="flex flex-col sm:flex-row items-center gap-6">
-                    <img src={user.photo_url} alt={user.display_name} className="w-24 h-24 rounded-full border-4 border-pink-500/50" />
-                    <div className="flex-grow text-center sm:text-left">
+                    <div className="relative group w-24 h-24 flex-shrink-0">
+                        <img src={avatarPreview || user.photo_url} alt={user.display_name} className="w-24 h-24 rounded-full border-4 border-pink-500/50" />
+                        <label htmlFor="avatar-upload" className="absolute inset-0 bg-black/60 rounded-full flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                            <i className="ph-fill ph-pencil-simple text-2xl"></i>
+                            <input id="avatar-upload" type="file" accept="image/png, image/jpeg" className="hidden" onChange={handleAvatarSelect} />
+                        </label>
+                    </div>
+                    <div className="flex-grow text-center sm:text-left w-full">
                         {isEditingName ? (
                             <div className="flex items-center gap-2">
-                                <input type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)} className="bg-white/10 text-2xl font-bold px-3 py-1 rounded-md w-full" autoFocus />
-                                <button onClick={handleUpdateName} disabled={isUpdating} className="p-2 bg-green-500/20 text-green-300 rounded-md disabled:opacity-50"><i className="ph-fill ph-check"></i></button>
+                                <input type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)} className="auth-input text-2xl font-bold py-1 w-full" autoFocus />
+                                <button onClick={handleUpdateName} disabled={isUpdating} className="p-2 bg-green-500/20 text-green-300 rounded-md disabled:opacity-50"><i className={`ph-fill ${isUpdating ? 'ph-spinner animate-spin' : 'ph-check'}`}></i></button>
                                 <button onClick={() => { setIsEditingName(false); setDisplayName(user.display_name); }} className="p-2 bg-red-500/20 text-red-300 rounded-md"><i className="ph-fill ph-x"></i></button>
                             </div>
                         ) : (
@@ -206,12 +300,19 @@ const Settings: React.FC = () => {
                         </div>
                     </div>
                 </div>
+                {avatarPreview && (
+                    <div className="flex gap-4 mt-4 pt-4 border-t border-white/10">
+                        <button onClick={() => { setAvatarPreview(null); setAvatarFile(null); }} className="flex-1 py-2 font-semibold bg-white/10 text-white rounded-lg hover:bg-white/20 transition">Hủy</button>
+                        <button onClick={handleAvatarUpload} disabled={isUploadingAvatar} className="flex-1 py-2 font-bold text-white bg-gradient-to-r from-pink-500 to-fuchsia-600 rounded-lg hover:opacity-90 transition disabled:opacity-50">
+                            {isUploadingAvatar ? 'Đang tải lên...' : 'Lưu ảnh đại diện'}
+                        </button>
+                    </div>
+                )}
                 <div className="mt-6 border-t border-white/10 pt-6">
                     <XPProgressBar currentXp={user.xp} currentLevel={user.level} />
                 </div>
             </div>
 
-            {/* User Gallery Section */}
             <div className="bg-[#12121A]/80 border border-white/10 rounded-2xl shadow-lg p-6 mb-8">
                 <h3 className="text-2xl font-bold mb-4">Tác phẩm của bạn</h3>
                 {isImagesLoading ? <p>Đang tải...</p> : userImages.length > 0 ? (
@@ -228,34 +329,55 @@ const Settings: React.FC = () => {
                 ) : <p className="text-gray-400">Bạn chưa tạo ảnh nào. Hãy bắt đầu sáng tạo ngay!</p>}
             </div>
 
-            {/* Admin Panel */}
             {user.is_admin && (
-                 <div className="bg-[#12121A]/80 border border-yellow-500/20 rounded-2xl shadow-lg p-6 mb-8">
-                    <h3 className="text-2xl font-bold mb-4 text-yellow-400 flex items-center gap-2"><i className="ph-fill ph-crown-simple"></i>Admin Panel: Quản lý API Keys</h3>
-                     {isKeysLoading ? <p>Loading keys...</p> : (
-                         <div className="space-y-4">
-                            <form onSubmit={handleAddApiKey} className="grid grid-cols-12 gap-4">
-                                <input type="text" value={newKeyName} onChange={e => setNewKeyName(e.target.value)} placeholder="Tên gợi nhớ" className="col-span-3 bg-white/5 p-2 rounded-md" />
-                                <input type="text" value={newKeyValue} onChange={e => setNewKeyValue(e.target.value)} placeholder="Giá trị API Key" className="col-span-7 bg-white/5 p-2 rounded-md" />
-                                <button type="submit" className="col-span-2 bg-pink-600 hover:bg-pink-700 text-white font-bold p-2 rounded-md">Thêm Key</button>
-                            </form>
-                             <div className="space-y-2">
-                                {apiKeys.map(key => <ApiKeyRow key={key.id} apiKey={key} onUpdate={handleUpdateApiKey} onDelete={handleDeleteApiKey} />)}
+                <div className="space-y-8">
+                    <div className="bg-[#12121A]/80 border border-yellow-500/20 rounded-2xl shadow-lg p-6">
+                        <h3 className="text-2xl font-bold mb-4 text-yellow-400 flex items-center gap-2"><i className="ph-fill ph-key"></i>Admin: Quản lý API Keys</h3>
+                        {isKeysLoading ? <p>Đang tải keys...</p> : (
+                            <div className="space-y-4">
+                                <form onSubmit={handleAddApiKey} className="grid grid-cols-12 gap-4">
+                                    <input type="text" value={newKeyName} onChange={e => setNewKeyName(e.target.value)} placeholder="Tên gợi nhớ" className="col-span-12 sm:col-span-3 auth-input" />
+                                    <input type="text" value={newKeyValue} onChange={e => setNewKeyValue(e.target.value)} placeholder="Giá trị API Key" className="col-span-12 sm:col-span-7 auth-input" />
+                                    <button type="submit" disabled={isAddingKey} className="col-span-12 sm:col-span-2 bg-pink-600 hover:bg-pink-700 text-white font-bold p-2 rounded-md disabled:opacity-50">
+                                        {isAddingKey ? <i className="ph-fill ph-spinner animate-spin"></i> : 'Thêm'}
+                                    </button>
+                                </form>
+                                <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar pr-2">{apiKeys.map(key => <ApiKeyRow key={key.id} apiKey={key} onUpdate={handleUpdateApiKey} onDelete={handleDeleteApiKey} />)}</div>
                             </div>
-                         </div>
-                     )}
+                        )}
+                    </div>
+
+                    <div className="bg-[#12121A]/80 border border-cyan-500/20 rounded-2xl shadow-lg p-6">
+                        <h3 className="text-2xl font-bold mb-4 text-cyan-400 flex items-center gap-2"><i className="ph-fill ph-users"></i>Admin: Quản lý Người dùng</h3>
+                        {isUsersLoading ? <p>Đang tải danh sách người dùng...</p> : (
+                            <div className="max-h-96 overflow-y-auto custom-scrollbar pr-2">
+                                <div className="space-y-2">
+                                    {allUsers.map(u => (
+                                        <div key={u.id} className="flex items-center gap-4 p-2 bg-white/5 rounded-lg">
+                                            <img src={u.photo_url} alt={u.display_name} className="w-10 h-10 rounded-full" />
+                                            <div className="flex-grow">
+                                                <p className="font-semibold text-white">{u.display_name} {u.is_admin && <span className="text-xs text-yellow-400">(Admin)</span>}</p>
+                                                <p className="text-xs text-gray-400">{u.email}</p>
+                                            </div>
+                                            <div className="text-right text-xs">
+                                                <p className="text-pink-300 font-mono">♦ {u.diamonds}</p>
+                                                <p className="text-cyan-300 font-mono">{u.xp} XP</p>
+                                            </div>
+                                            <button onClick={() => setEditingUser(u)} className="p-2 text-gray-300 hover:text-white"><i className="ph-fill ph-pencil-simple"></i></button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
             )}
 
-
-            {/* Danger Zone */}
-            <div className="bg-[#12121A]/80 border border-red-500/20 rounded-2xl shadow-lg p-6">
+            <div className="bg-[#12121A]/80 border border-red-500/20 rounded-2xl shadow-lg p-6 mt-8">
                 <h3 className="text-2xl font-bold text-red-400 mb-4">Khu vực nguy hiểm</h3>
                 <div className="flex justify-between items-center">
                     <p>Đăng xuất khỏi tài khoản của bạn.</p>
-                    <button onClick={logout} className="px-6 py-2 font-bold bg-red-600/80 hover:bg-red-600 text-white rounded-lg transition-colors">
-                        Đăng xuất
-                    </button>
+                    <button onClick={logout} className="px-6 py-2 font-bold bg-red-600/80 hover:bg-red-600 text-white rounded-lg transition-colors">Đăng xuất</button>
                 </div>
             </div>
         </div>

@@ -6,8 +6,13 @@ const PAYOS_CHECKSUM_KEY = process.env.PAYOS_CHECKSUM_KEY;
 
 // PayOS signature verification for webhooks
 const verifySignature = (data: string, signature: string, checksumKey: string): boolean => {
-    const expectedSignature = crypto.createHmac('sha256', checksumKey).update(data).digest('hex');
-    return expectedSignature === signature;
+    try {
+        const expectedSignature = crypto.createHmac('sha256', checksumKey).update(data).digest('hex');
+        return expectedSignature === signature;
+    } catch (error) {
+        console.error("Error during signature verification:", error);
+        return false;
+    }
 };
 
 const handler: Handler = async (event: HandlerEvent) => {
@@ -36,15 +41,22 @@ const handler: Handler = async (event: HandlerEvent) => {
     try {
         const payload = JSON.parse(webhookBody);
         
+        // According to PayOS, only webhooks with code '00' are successful transactions.
         if (payload.code !== '00' || !payload.data) {
-            console.log("Received non-payment-success webhook from PayOS:", payload.desc);
-            return { statusCode: 200, body: JSON.stringify({ message: 'Webhook received but not a payment success event.' }) };
+            console.log("Received non-success webhook from PayOS:", payload.desc);
+            return { statusCode: 200, body: JSON.stringify({ message: 'Webhook received but not a success event.' }) };
         }
         
         const { orderCode, status } = payload.data;
         
         if (!orderCode) {
-            return { statusCode: 400, body: JSON.stringify({ error: 'Missing order code in webhook data.' }) };
+            return { statusCode: 400, body: JSON.stringify({ error: 'Missing order code.' }) };
+        }
+
+        // We only care about PAID status.
+        if (status !== 'PAID') {
+            console.log(`Received status "${status}" for order ${orderCode}. Ignoring.`);
+            return { statusCode: 200, body: JSON.stringify({ message: 'Status is not PAID.' }) };
         }
 
         // 2. Fetch the transaction from DB
@@ -56,59 +68,54 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         if (transactionError || !transaction) {
             console.error(`Transaction with order code ${orderCode} not found.`);
+            // Return 200 to prevent PayOS from retrying for a transaction we don't know about.
             return { statusCode: 200, body: JSON.stringify({ error: 'Transaction not found.' }) };
         }
 
+        // 3. Idempotency check: If already completed, do nothing.
         if (transaction.status === 'completed') {
             return { statusCode: 200, body: JSON.stringify({ message: 'Transaction already processed.' }) };
         }
         
-        let newStatus: 'completed' | 'failed' | 'canceled' | 'pending' = transaction.status as any;
-        let shouldUpdateUser = false;
-
-        if (status === 'PAID') {
-            newStatus = 'completed';
-            shouldUpdateUser = true;
-        } else if (status === 'CANCELLED') {
-            newStatus = 'canceled';
-        } else if (status === 'EXPIRED' || status === 'FAILED') {
-            newStatus = 'failed';
-        } else {
-             console.log(`Received unhandled payment status "${status}" for order ${orderCode}.`);
-             return { statusCode: 200, body: JSON.stringify({ message: 'Unhandled status.' }) };
+        // 4. Credit Diamonds and XP to the user
+        const { data: user, error: userFetchError } = await supabaseAdmin
+            .from('users')
+            .select('diamonds, xp')
+            .eq('id', transaction.user_id)
+            .single();
+        
+        if (userFetchError || !user) {
+            throw new Error(`User ${transaction.user_id} not found for transaction ${transaction.id}.`);
         }
         
-        // 4. Update transaction status
+        const newDiamonds = user.diamonds + transaction.diamonds_received;
+        // XP calculation: 100 VND = 1 XP
+        const xpGained = Math.floor(transaction.amount_vnd / 100);
+        const newXp = user.xp + xpGained;
+
+        const { error: userUpdateError } = await supabaseAdmin
+            .from('users')
+            .update({ diamonds: newDiamonds, xp: newXp })
+            .eq('id', transaction.user_id);
+
+        if (userUpdateError) {
+            // This is a critical failure. Log it for manual intervention.
+            console.error(`CRITICAL: Failed to credit diamonds/XP for user ${transaction.user_id} on order ${orderCode}. DB Error: ${userUpdateError.message}`);
+            // Don't mark transaction as completed if user update fails. Let it be retried or handled manually.
+            throw new Error('Failed to update user balance.');
+        }
+
+        // 5. Mark the transaction as completed
         const { error: updateTransactionError } = await supabaseAdmin
             .from('transactions')
-            .update({ status: newStatus, updated_at: new Date().toISOString() })
+            .update({ status: 'completed', updated_at: new Date().toISOString() })
             .eq('id', transaction.id);
         
         if (updateTransactionError) {
             throw new Error(`Failed to update transaction status for order ${orderCode}: ${updateTransactionError.message}`);
         }
 
-        // 5. If successful, update user's diamonds.
-        // Assumes a Supabase RPC function 'add_diamonds_to_user' exists for atomic updates.
-        // SQL: CREATE FUNCTION add_diamonds_to_user(user_id_input uuid, diamonds_to_add integer)
-        //      RETURNS void AS $$
-        //      UPDATE public.users
-        //      SET diamonds = diamonds + diamonds_to_add
-        //      WHERE id = user_id_input;
-        //      $$ LANGUAGE sql;
-        if (shouldUpdateUser) {
-            const { error: rpcError } = await supabaseAdmin.rpc('add_diamonds_to_user', {
-                user_id_input: transaction.user_id,
-                diamonds_to_add: transaction.diamonds_received
-            });
-
-            if (rpcError) {
-                // This is a critical error. The transaction is marked as complete, but user didn't get diamonds.
-                console.error(`CRITICAL: Failed to add diamonds for user ${transaction.user_id} on order ${orderCode}. Error: ${rpcError.message}`);
-            }
-        }
-
-        return { statusCode: 200, body: JSON.stringify({ success: true, message: `Order ${orderCode} status updated to ${newStatus}.` }) };
+        return { statusCode: 200, body: JSON.stringify({ success: true, message: `Order ${orderCode} processed successfully.` }) };
 
     } catch (error: any) {
         console.error('Webhook processing error:', error);

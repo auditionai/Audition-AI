@@ -21,7 +21,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     
     if (!PAYOS_CLIENT_ID || !PAYOS_API_KEY || !PAYOS_CHECKSUM_KEY) {
         console.error('PayOS environment variables are not set.');
-        return { statusCode: 500, body: JSON.stringify({ error: 'Payment gateway is not configured.' }) };
+        return { statusCode: 500, body: JSON.stringify({ error: 'Cổng thanh toán chưa được cấu hình.' }) };
     }
 
     const authHeader = event.headers['authorization'];
@@ -41,20 +41,24 @@ const handler: Handler = async (event: HandlerEvent) => {
     }
 
     try {
-        // 1. Fetch package details
-        const { data: pkg, error: pkgError } = await supabaseAdmin
-            .from('credit_packages')
-            .select('*')
-            .eq('id', packageId)
-            .eq('is_active', true)
-            .single();
+        // 1. Fetch user profile and package details simultaneously
+        const [
+            { data: userProfile, error: profileError },
+            { data: pkg, error: pkgError }
+        ] = await Promise.all([
+            supabaseAdmin.from('users').select('display_name').eq('id', user.id).single(),
+            supabaseAdmin.from('credit_packages').select('*').eq('id', packageId).eq('is_active', true).single()
+        ]);
 
+        if (profileError || !userProfile) {
+            return { statusCode: 404, body: JSON.stringify({ error: 'Không tìm thấy hồ sơ người dùng.' }) };
+        }
         if (pkgError || !pkg) {
-            return { statusCode: 404, body: JSON.stringify({ error: 'Package not found or inactive.' }) };
+            return { statusCode: 404, body: JSON.stringify({ error: 'Gói nạp không tồn tại hoặc đã bị vô hiệu hóa.' }) };
         }
 
         // 2. Create a new transaction record
-        const orderCode = Math.floor(Date.now() / 1000 + Math.random() * 1000000);
+        const orderCode = Date.now(); // Using timestamp is simpler and sufficient for uniqueness
         const totalDiamonds = pkg.credits_amount + pkg.bonus_credits;
 
         const { error: transactionError } = await supabaseAdmin
@@ -69,15 +73,14 @@ const handler: Handler = async (event: HandlerEvent) => {
             });
 
         if (transactionError) {
-            throw new Error(`Failed to create transaction record: ${transactionError.message}`);
+            throw new Error(`Không thể tạo bản ghi giao dịch: ${transactionError.message}`);
         }
 
-        // 3. Prepare data for PayOS
-        const description = `Thanh toan goi ${totalDiamonds} kim cuong cho Audition AI`;
-        // Using Netlify's URL variable if available
+        // 3. Prepare data for PayOS using the safe, standardized description
+        const description = `NAP AUAI ${pkg.credits_amount}KC`;
         const baseUrl = process.env.URL || 'http://localhost:8888';
-        const returnUrl = `${baseUrl}/buy-credits?status=PAID&orderCode=${orderCode}`;
-        const cancelUrl = `${baseUrl}/buy-credits?status=CANCELLED&orderCode=${orderCode}`;
+        const returnUrl = `${baseUrl}/buy-credits`; // Simpler return URL, status handled by webhook
+        const cancelUrl = `${baseUrl}/buy-credits`;
 
         const payOSData = {
             orderCode,
@@ -85,6 +88,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             description,
             cancelUrl,
             returnUrl,
+            buyerName: userProfile.display_name,
             buyerEmail: user.email,
         };
 
@@ -105,7 +109,8 @@ const handler: Handler = async (event: HandlerEvent) => {
         const payosResult = await payosResponse.json();
         
         if (payosResult.code !== '00' || !payosResult.data) {
-            throw new Error(payosResult.desc || 'Failed to create payment link from PayOS.');
+            // Forward the specific error from PayOS to the client
+            throw new Error(payosResult.desc || 'Không thể tạo liên kết thanh toán từ PayOS.');
         }
 
         // 5. Return the checkout URL
@@ -116,7 +121,8 @@ const handler: Handler = async (event: HandlerEvent) => {
 
     } catch (error: any) {
         console.error('Create payment link error:', error);
-        return { statusCode: 500, body: JSON.stringify({ error: error.message || 'Server error.' }) };
+        // Return the specific error message to be displayed in the toast
+        return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
     }
 };
 

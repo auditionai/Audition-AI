@@ -4,6 +4,7 @@ import CreatorFooter from '../components/CreatorFooter';
 import { useAuth } from '../contexts/AuthContext';
 import { CreditPackage } from '../types';
 import InfoModal from '../components/InfoModal';
+import CheckInModal from '../components/CheckInModal';
 
 const BuyCreditsPage: React.FC = () => {
     const { session, navigate, showToast } = useAuth();
@@ -11,6 +12,7 @@ const BuyCreditsPage: React.FC = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [isProcessingPayment, setIsProcessingPayment] = useState<string | null>(null); // Store package ID being processed
     const [infoModalKey, setInfoModalKey] = useState<'terms' | 'policy' | 'contact' | null>(null);
+    const [isCheckInModalOpen, setCheckInModalOpen] = useState(false);
 
     useEffect(() => {
         const fetchPackages = async () => {
@@ -74,7 +76,8 @@ const BuyCreditsPage: React.FC = () => {
 
     return (
         <div className="flex flex-col min-h-screen bg-[#0B0B0F]">
-            <CreatorHeader onTopUpClick={() => {}} activeTab={'tool'} setActiveTab={(tab) => navigate(tab)} />
+            {/* Fix: Add the required `onCheckInClick` prop. */}
+            <CreatorHeader onTopUpClick={() => {}} activeTab={'tool'} setActiveTab={(tab) => navigate(tab)} onCheckInClick={() => setCheckInModalOpen(true)} />
             <main className="flex-grow pt-24 pb-12 relative">
                 <div className="absolute inset-0 z-0 aurora-background opacity-70"></div>
                 <div className="container mx-auto px-4 relative z-10">
@@ -134,6 +137,10 @@ const BuyCreditsPage: React.FC = () => {
             </main>
             <CreatorFooter onInfoLinkClick={setInfoModalKey} />
             <InfoModal isOpen={!!infoModalKey} onClose={() => setInfoModalKey(null)} contentKey={infoModalKey} />
+            <CheckInModal 
+                isOpen={isCheckInModalOpen}
+                onClose={() => setCheckInModalOpen(false)}
+            />
         </div>
     );
 };

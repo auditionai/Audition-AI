@@ -8,10 +8,11 @@ interface CreatorHeaderProps {
   onTopUpClick: () => void;
   activeTab: CreatorTab;
   setActiveTab: (tab: CreatorTab) => void;
+  onCheckInClick: () => void;
 }
 
-const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, setActiveTab }) => {
-  const { user, logout } = useAuth();
+const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, setActiveTab, onCheckInClick }) => {
+  const { user, logout, hasCheckedInToday } = useAuth();
   const [isDropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -43,7 +44,7 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
             <div className="text-2xl font-bold cursor-pointer" onClick={() => handleNavClick('tool')}>
                <span className="bg-gradient-to-r from-[#FF3FA4] to-[#CA27FF] text-transparent bg-clip-text">Audition AI Studio</span>
             </div>
-             <nav className="hidden md:flex items-center">
+             <nav className="hidden md:flex items-center gap-2">
                 <button 
                   onClick={() => handleNavClick('leaderboard')} 
                   className={`flex items-center gap-2 px-3 md:px-4 py-2 rounded-full text-sm font-bold transition-all duration-300 shadow-lg
@@ -53,6 +54,19 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
                   }>
                     <i className="ph-fill ph-crown-simple text-base"></i>
                     <span className="hidden md:inline">Bảng xếp hạng</span>
+                </button>
+                <button 
+                  onClick={onCheckInClick}
+                  className="relative flex items-center gap-2 px-3 md:px-4 py-2 rounded-full text-sm font-bold transition-all duration-300 shadow-lg bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 hover:shadow-cyan-400/20"
+                >
+                    {!hasCheckedInToday && (
+                        <span className="absolute -top-0.5 -right-0.5 flex h-3 w-3">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-pink-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-3 w-3 bg-pink-500 border-2 border-[#0B0B0F]"></span>
+                        </span>
+                    )}
+                    <i className="ph-fill ph-calendar-check text-base"></i>
+                    <span className="hidden md:inline">Điểm danh</span>
                 </button>
             </nav>
           </div>

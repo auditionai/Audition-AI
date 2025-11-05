@@ -4,6 +4,13 @@ import { Session, User as SupabaseUser } from '@supabase/supabase-js';
 import { User, Stats } from '../types';
 import { calculateLevelFromXp } from '../utils/rankUtils';
 
+const getVNDateString = (date: Date) => {
+    // UTC+7
+    const vietnamTime = new Date(date.getTime() + 7 * 3600 * 1000);
+    return vietnamTime.toISOString().split('T')[0];
+};
+
+
 // Define the shape of the context
 interface AuthContextType {
     session: Session | null;
@@ -12,6 +19,7 @@ interface AuthContextType {
     stats: Stats;
     toast: { message: string; type: 'success' | 'error' } | null;
     route: string; // for simple routing
+    hasCheckedInToday: boolean;
     login: () => Promise<void>;
     logout: () => Promise<void>;
     updateUserDiamonds: (newAmount: number) => void;
@@ -32,7 +40,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     // Demo stats
     const [stats] = useState<Stats>({ users: 1250, visits: 8700, images: 25000 });
     const [route, setRoute] = useState('home'); // initial route
-    const [checkInAttempted, setCheckInAttempted] = useState(false);
 
     const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
         setToast({ message, type });
@@ -144,7 +151,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 }
             } else {
                 setUser(null);
-                setCheckInAttempted(false); // Reset check-in status on logout
             }
             // Only set loading to false on initial load, not every auth change
             if(loading) setLoading(false);
@@ -155,33 +161,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         };
     }, [fetchUserProfile, loading]);
     
-    // Effect for daily check-in
-    useEffect(() => {
-        const attemptCheckIn = async () => {
-            if (user && session && !checkInAttempted) {
-                setCheckInAttempted(true);
-                try {
-                    const response = await fetch('/.netlify/functions/daily-check-in', {
-                        method: 'POST',
-                        headers: { 'Authorization': `Bearer ${session.access_token}` }
-                    });
-                    if (!response.ok) return; // Fail silently
-                    const data = await response.json();
-                    if (data.newTotalDiamonds !== undefined) {
-                        showToast(data.message, 'success');
-                        updateUserProfile({
-                            diamonds: data.newTotalDiamonds,
-                            consecutive_check_in_days: data.consecutiveDays
-                        });
-                    }
-                } catch (error) {
-                    console.error('Daily check-in request failed:', error);
-                }
-            }
-        };
-        attemptCheckIn();
-    }, [user, session, checkInAttempted, showToast, updateUserProfile]);
-
+    const hasCheckedInToday = useMemo(() => {
+        if (!user?.last_check_in_at) return false;
+        const todayVnString = getVNDateString(new Date());
+        const lastCheckInVnString = getVNDateString(new Date(user.last_check_in_at));
+        return todayVnString === lastCheckInVnString;
+    }, [user?.last_check_in_at]);
 
     const login = useCallback(async () => {
         const { error } = await supabase.auth.signInWithOAuth({
@@ -210,6 +195,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         stats,
         toast,
         route,
+        hasCheckedInToday,
         login,
         logout,
         updateUserDiamonds,
@@ -218,6 +204,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         navigate,
     }), [
         session, user, loading, stats, toast, route, 
+        hasCheckedInToday,
         login, logout, updateUserDiamonds, updateUserProfile, showToast, navigate
     ]);
 

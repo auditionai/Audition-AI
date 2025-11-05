@@ -25,47 +25,28 @@ const handler: Handler = async (event: HandlerEvent) => {
     // 2. Method Handling
     switch (event.httpMethod) {
         case 'GET': {
-            // Step 1: Fetch all transactions awaiting approval.
-            const { data: transactions, error: transactionsError } = await supabaseAdmin
+            // Use a direct Supabase join to fetch transactions and related user data.
+            // This is the most efficient and reliable method.
+            // This assumes a foreign key relationship exists from transactions.user_id to users.id.
+            const { data, error } = await supabaseAdmin
                 .from('transactions')
-                .select('*')
+                .select(`
+                    *,
+                    users (
+                        display_name,
+                        email,
+                        photo_url
+                    )
+                `)
                 .eq('status', 'awaiting_approval')
                 .order('created_at', { ascending: true });
 
-            if (transactionsError) {
-                console.error("Error fetching transactions:", transactionsError);
-                return { statusCode: 500, body: JSON.stringify({ error: `Failed to fetch transactions: ${transactionsError.message}` }) };
+            if (error) {
+                console.error("Error fetching transactions with join:", error);
+                return { statusCode: 500, body: JSON.stringify({ error: `Failed to fetch transactions: ${error.message}` }) };
             }
 
-            // Step 2: If there are no transactions, return an empty array immediately.
-            if (!transactions || transactions.length === 0) {
-                return { statusCode: 200, body: JSON.stringify([]) };
-            }
-
-            // Step 3: Collect all unique user IDs from the transactions.
-            const userIds = [...new Set(transactions.map(t => t.user_id))];
-
-            // Step 4: Fetch all the user profiles corresponding to those IDs.
-            const { data: users, error: usersError } = await supabaseAdmin
-                .from('users')
-                .select('id, display_name, email, photo_url')
-                .in('id', userIds);
-
-            if (usersError) {
-                console.error("Error fetching users for transactions:", usersError);
-                return { statusCode: 500, body: JSON.stringify({ error: `Failed to fetch user data: ${usersError.message}` }) };
-            }
-
-            // Step 5: Create a map for quick look-up of user data by ID.
-            const userMap = new Map(users.map(u => [u.id, u]));
-
-            // Step 6: Combine the transaction data with the corresponding user data.
-            const combinedData = transactions.map(t => ({
-                ...t,
-                users: userMap.get(t.user_id) || null // Attach the 'users' object as expected by the frontend.
-            }));
-
-            return { statusCode: 200, body: JSON.stringify(combinedData) };
+            return { statusCode: 200, body: JSON.stringify(data || []) };
         }
 
         case 'PUT': {

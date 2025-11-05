@@ -7,7 +7,7 @@ interface CreatorFooterProps {
 const CreatorFooter: React.FC<CreatorFooterProps> = ({ onInfoLinkClick }) => {
   return (
     <footer className="bg-[#0B0B0F] border-t border-pink-500/10 text-white">
-      <div className="container mx-auto px-4 pt-6 pb-20 md:py-6">
+      <div className="container mx-auto px-4 py-6">
         <div className="flex flex-col sm:flex-row justify-between items-center text-center sm:text-left">
           <p className="text-gray-400 text-sm mb-4 sm:mb-0">
             &copy; {new Date().getFullYear()} AUDITION AI Studio.

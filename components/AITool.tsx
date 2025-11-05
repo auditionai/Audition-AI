@@ -318,40 +318,47 @@ const AITool: React.FC = () => {
 
     const BgRemoverTool = (
         <div className="bg-[#1a1a22]/80 rounded-2xl border border-white/10 shadow-lg p-4 md:p-6 h-full flex flex-col">
-            <div className="flex-grow flex flex-col gap-4">
-                <div className="flex-grow flex flex-col">
-                    <h3 className="font-semibold mb-3 text-lg">1. Tải ảnh lên</h3>
-                    <div className="p-4 bg-black/20 rounded-lg border border-white/10 flex-grow flex flex-col">
-                        <label className="relative w-full flex-grow min-h-[12rem] flex flex-col items-center justify-center text-center text-gray-400 rounded-lg border-2 border-dashed border-gray-600 hover:border-pink-500 cursor-pointer bg-black/20">
-                            <i className="ph-fill ph-upload-simple text-4xl"></i>
-                            <p className="font-semibold mt-2">Nhấn để chọn hoặc kéo thả</p>
-                            <p className="text-xs">Có thể chọn nhiều ảnh</p>
-                            <input type="file" multiple accept="image/*" onChange={handleBgRemovalImageUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"/>
-                        </label>
-                        {imagesForBgRemoval.length > 0 && (
-                            <div className="mt-4">
-                                <h4 className="text-sm font-semibold mb-2 text-gray-300">Sẵn sàng xử lý: {imagesForBgRemoval.length} ảnh</h4>
-                                <div className="flex items-center gap-2 overflow-x-auto pb-2">
-                                    {imagesForBgRemoval.map(img => (
-                                        <div key={img.id} className="relative flex-shrink-0 w-20 h-20 rounded-md">
-                                            <img src={img.url} className="w-full h-full object-cover rounded" alt="To process"/>
-                                            <button onClick={() => setImagesForBgRemoval(p => p.filter(i => i.id !== img.id))} className="absolute -top-1 -right-1 bg-red-600 text-white rounded-full p-0.5 z-10 text-xs"><i className="ph-fill ph-x"></i></button>
-                                        </div>
-                                    ))}
+            {/* Main container: column on mobile, row on desktop */}
+            <div className="flex-grow flex flex-col lg:flex-row gap-6">
+                
+                {/* Left Column: Upload + Process Button */}
+                <div className="lg:w-1/2 flex flex-col gap-4">
+                    <div className="flex-grow flex flex-col">
+                        <h3 className="font-semibold mb-3 text-lg">1. Tải ảnh lên</h3>
+                        <div className="p-4 bg-black/20 rounded-lg border border-white/10 flex-grow flex flex-col">
+                            <label className="relative w-full flex-grow min-h-[12rem] flex flex-col items-center justify-center text-center text-gray-400 rounded-lg border-2 border-dashed border-gray-600 hover:border-pink-500 cursor-pointer bg-black/20">
+                                <i className="ph-fill ph-upload-simple text-4xl"></i>
+                                <p className="font-semibold mt-2">Nhấn để chọn hoặc kéo thả</p>
+                                <p className="text-xs">Có thể chọn nhiều ảnh</p>
+                                <input type="file" multiple accept="image/*" onChange={handleBgRemovalImageUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"/>
+                            </label>
+                            {imagesForBgRemoval.length > 0 && (
+                                <div className="mt-4">
+                                    <h4 className="text-sm font-semibold mb-2 text-gray-300">Sẵn sàng xử lý: {imagesForBgRemoval.length} ảnh</h4>
+                                    <div className="flex items-center gap-2 overflow-x-auto pb-2">
+                                        {imagesForBgRemoval.map(img => (
+                                            <div key={img.id} className="relative flex-shrink-0 w-20 h-20 rounded-md">
+                                                <img src={img.url} className="w-full h-full object-cover rounded" alt="To process"/>
+                                                <button onClick={() => setImagesForBgRemoval(p => p.filter(i => i.id !== img.id))} className="absolute -top-1 -right-1 bg-red-600 text-white rounded-full p-0.5 z-10 text-xs"><i className="ph-fill ph-x"></i></button>
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
-                            </div>
-                        )}
+                            )}
+                        </div>
                     </div>
+                     <button onClick={handleProcessBackgrounds} disabled={isProcessing || imagesForBgRemoval.length === 0} className="w-full mt-auto py-3 font-bold text-lg text-white bg-gradient-to-r from-pink-500 to-fuchsia-600 rounded-full flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                        {isProcessing ? <div className="w-6 h-6 border-2 border-white/50 border-t-white rounded-full animate-spin"></div> : <>
+                            <DiamondIcon className="w-6 h-6"/>
+                            <span>Xử lý ({imagesForBgRemoval.length * COST_PER_REMOVAL} Kim cương)</span>
+                        </>}
+                    </button>
                 </div>
-                 <button onClick={handleProcessBackgrounds} disabled={isProcessing || imagesForBgRemoval.length === 0} className="w-full mt-2 py-3 font-bold text-lg text-white bg-gradient-to-r from-pink-500 to-fuchsia-600 rounded-full flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
-                    {isProcessing ? <div className="w-6 h-6 border-2 border-white/50 border-t-white rounded-full animate-spin"></div> : <>
-                        <DiamondIcon className="w-6 h-6"/>
-                        <span>Xử lý ({imagesForBgRemoval.length * COST_PER_REMOVAL} Kim cương)</span>
-                    </>}
-                </button>
-                <div className="flex flex-col flex-grow">
+
+                {/* Right Column: Results */}
+                <div className="lg:w-1/2 flex flex-col">
                     <h3 className="font-semibold mb-3 text-lg">2. Kết quả</h3>
-                    <div className="bg-black/20 rounded-lg border border-white/10 flex-grow p-4 min-h-[14rem]">
+                    <div className="bg-black/20 rounded-lg border border-white/10 flex-grow p-4 min-h-[14rem] h-full">
                         {processedImages.length === 0 && !isProcessing ? (
                             <div className="flex flex-col items-center justify-center h-full text-gray-500 text-center">
                                 <i className="ph-fill ph-image text-5xl"></i>
@@ -378,6 +385,7 @@ const AITool: React.FC = () => {
                         )}
                     </div>
                 </div>
+
             </div>
         </div>
     );

@@ -89,97 +89,89 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 if (typeof profile.xp === 'number') {
                     profile.level = calculateLevelFromXp(profile.xp);
                 }
-                setUser(profile);
                 return profile;
             }
             return null;
         } catch (error) {
             console.error('Error fetching user profile:', error);
-            showToast('Không thể tải thông tin người dùng.', 'error');
             return null;
         }
-    }, [showToast]);
+    }, []);
     
     useEffect(() => {
-        // Store previous user state before it updates
         previousUserRef.current = user;
     }, [user]);
 
-    // Effect to handle real-time notifications
     useEffect(() => {
         const previousUser = previousUserRef.current;
         if (user && previousUser) {
-            // Notify on diamond increase
             if (user.diamonds > previousUser.diamonds) {
                 const diff = user.diamonds - previousUser.diamonds;
                 showToast(`Bạn đã nhận được ${diff} Kim cương!`, 'success');
             }
-            // Notify on level up
             if (user.level > previousUser.level) {
                  showToast(`Chúc mừng! Bạn đã thăng cấp ${user.level}!`, 'success');
             }
         }
     }, [user, showToast]);
 
-
+    // Main authentication effect
     useEffect(() => {
-        const initializeAuth = async () => {
-            try {
-                const { data: { session }, error } = await supabase.auth.getSession();
-                if (error) throw error;
-                
-                if (session?.user) {
-                    const profile = await fetchUserProfile(session.user);
-                    if (profile) {
-                        setSession(session);
-                    } else {
-                        throw new Error("Stale session detected. Clearing state.");
-                    }
-                }
-            } catch (error) {
-                console.error('Error during auth initialization, clearing session:', error);
-                await supabase.auth.signOut();
-                setSession(null);
-                setUser(null);
-            } finally {
-                setLoading(false);
-            }
-        };
-        
-        initializeAuth();
-
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
             setSession(session);
             if (session?.user) {
-                const createdAt = new Date(session.user.created_at).getTime();
-                const isNewUser = (Date.now() - createdAt) < 60000;
+                try {
+                    let profile = await fetchUserProfile(session.user);
+                    // Retry logic for new users whose profile might not exist yet
+                    if (!profile) {
+                        await new Promise(resolve => setTimeout(resolve, 1500));
+                        profile = await fetchUserProfile(session.user);
+                    }
 
-                if (isNewUser) {
-                    setTimeout(async () => {
-                        try {
-                            await fetch('/.netlify/functions/set-initial-diamonds', {
+                    if (profile) {
+                        setUser(profile);
+                        // Logic for setting initial diamonds on first-time login
+                        const createdAt = new Date(session.user.created_at).getTime();
+                        const isNewUser = (Date.now() - createdAt) < 60000;
+                        if (isNewUser && profile.diamonds === 25) { // 25 is default from DB
+                            fetch('/.netlify/functions/set-initial-diamonds', {
                                 method: 'POST',
                                 headers: { 'Authorization': `Bearer ${session.access_token}` }
-                            });
-                        } catch (e) {
-                            console.error("Failed to set initial diamonds.", e);
-                        } finally {
-                            await fetchUserProfile(session.user);
+                            }).catch(e => console.error("Failed to set initial diamonds.", e));
                         }
-                    }, 2000);
-                } else {
-                    await fetchUserProfile(session.user);
+                    } else {
+                        // If profile still not found, sign out to clear bad session state.
+                        await supabase.auth.signOut();
+                        setUser(null);
+                    }
+                } catch (error) {
+                    console.error('Error in onAuthStateChange:', error);
+                    await supabase.auth.signOut();
+                    setUser(null);
+                } finally {
+                    setLoading(false);
                 }
             } else {
+                // No session, user is logged out.
                 setUser(null);
+                setLoading(false);
             }
         });
-        
+
+        return () => {
+            subscription?.unsubscribe();
+        };
+    }, [fetchUserProfile]);
+
+    // Effect for real-time user profile updates
+    useEffect(() => {
+        if (!user?.id) return;
+
         const userChannel = supabase
-            .channel('public:users')
+            .channel(`public:users:id=eq.${user.id}`)
             .on(
                 'postgres_changes',
-                { event: 'UPDATE', schema: 'public', table: 'users', filter: `id=eq.${user?.id}` },
+                { event: 'UPDATE', schema: 'public', table: 'users', filter: `id=eq.${user.id}` },
                 (payload) => {
                     console.log('Realtime user update received:', payload.new);
                     updateUserProfile(payload.new as Partial<User>);
@@ -188,11 +180,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             .subscribe();
 
         return () => {
-            subscription?.unsubscribe();
             supabase.removeChannel(userChannel);
         };
-    }, [fetchUserProfile, updateUserProfile, user?.id]);
-    
+    }, [user?.id, updateUserProfile]);
+
     const hasCheckedInToday = useMemo(() => {
         if (!user?.last_check_in_at) return false;
         const todayVnString = getVNDateString(new Date());

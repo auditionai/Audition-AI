@@ -1,11 +1,8 @@
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
-// Fix: Replace `require` with `import = require` to solve TypeScript compilation error.
-import PayOSModule = require("@payos/node");
-
-// The `@payos/node` library is a CommonJS module. To use it in TypeScript without `esModuleInterop`,
-// we use `import = require()`. The constructor is on the `default` property of the exported module.
-const PayOS = (PayOSModule as any).default;
+// Fix: Use a standard ES module import for PayOS to be compatible with the Netlify Functions build environment,
+// which targets ECMAScript modules and does not support `import = require`.
+import PayOS from "@payos/node";
 
 const payos = new PayOS(
     process.env.PAYOS_CLIENT_ID!,

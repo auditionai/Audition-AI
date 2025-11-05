@@ -50,7 +50,7 @@ const CheckInModal: React.FC<{ isOpen: boolean; onClose: () => void; }> = ({ isO
             updateUserProfile({
                 diamonds: data.newTotalDiamonds,
                 consecutive_check_in_days: data.consecutiveDays,
-                last_check_in_at: new Date().toISOString(),
+                last_check_in_ct: new Date().toISOString(),
             });
             setCheckIns(prev => new Set(prev).add(todayVnString)); // Update UI immediately
         } catch (error: any) {
@@ -66,7 +66,7 @@ const CheckInModal: React.FC<{ isOpen: boolean; onClose: () => void; }> = ({ isO
     const dayCells = Array.from({ length: daysInMonth }, (_, i) => i + 1);
     const weekdays = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
     
-    const hasCheckedInToday = checkIns.has(todayVnString) || (user?.last_check_in_at && getVNDateString(new Date(user.last_check_in_at)) === todayVnString);
+    const hasCheckedInToday = checkIns.has(todayVnString) || (user?.last_check_in_ct && getVNDateString(new Date(user.last_check_in_ct)) === todayVnString);
 
     const rewards = [
         { day: 7, prize: '20 Kim Cương', icon: 'ph-gift' },

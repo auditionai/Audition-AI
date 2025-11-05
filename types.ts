@@ -41,13 +41,13 @@ export interface User {
     xp: number;
     level: number;
     is_admin?: boolean; // snake_case
-    last_check_in_at?: string;
+    last_check_in_ct?: string;
     consecutive_check_in_days?: number;
 }
 
 export interface AdminManagedUser extends User {
     created_at: string;
-    last_check_in_at?: string;
+    last_check_in_ct?: string;
     consecutive_check_in_days?: number;
 }
 

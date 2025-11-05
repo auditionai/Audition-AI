@@ -104,39 +104,47 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         previousUserRef.current = user;
     }, [user]);
 
-    // Effect for initializing and listening to auth state changes. Solves hanging issues.
+    // DECISIVE FIX: Robust initialization and auth state listener.
     useEffect(() => {
         setLoading(true);
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-            setSession(session);
-            let userProfile: User | null = null;
-            if (session?.user) {
-                const createdAt = new Date(session.user.created_at).getTime();
-                const isNewUser = (Date.now() - createdAt) < 60000;
-                
-                if (isNewUser && _event === 'SIGNED_IN') {
-                    // Delay slightly to ensure user profile is created by trigger
-                     await new Promise(res => setTimeout(res, 1500));
-                     try {
-                        await fetch('/.netlify/functions/set-initial-diamonds', {
-                            method: 'POST',
-                            headers: { 'Authorization': `Bearer ${session.access_token}` }
-                        });
-                     } catch (e) {
-                        console.error("Failed to set initial diamonds.", e);
-                     }
+            try {
+                setSession(session);
+                let userProfile: User | null = null;
+                if (session?.user) {
+                    const createdAt = new Date(session.user.created_at).getTime();
+                    const isNewUser = (Date.now() - createdAt) < 60000;
+                    
+                    if (isNewUser && _event === 'SIGNED_IN') {
+                         await new Promise(res => setTimeout(res, 1500));
+                         try {
+                            await fetch('/.netlify/functions/set-initial-diamonds', {
+                                method: 'POST',
+                                headers: { 'Authorization': `Bearer ${session.access_token}` }
+                            });
+                         } catch (e) {
+                            console.error("Failed to set initial diamonds.", e);
+                         }
+                    }
+                    userProfile = await fetchUserProfile(session.user);
                 }
-                userProfile = await fetchUserProfile(session.user);
+                setUser(userProfile);
+            } catch (error) {
+                console.error("Critical error during auth state change processing:", error);
+                showToast('Đã xảy ra lỗi xác thực.', 'error');
+                setUser(null);
+                setSession(null);
+            } finally {
+                // This block is GUARANTEED to run, ensuring the loading screen always disappears.
+                setLoading(false);
             }
-            setUser(userProfile);
-            setLoading(false);
         });
     
         return () => {
             subscription.unsubscribe();
         };
-    }, [fetchUserProfile]);
+    }, [fetchUserProfile, showToast]);
 
 
     // Effect to handle real-time notifications and profile updates

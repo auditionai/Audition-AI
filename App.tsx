@@ -2,8 +2,24 @@ import HomePage from './pages/HomePage';
 import CreatorPage from './pages/CreatorPage';
 import { useAuth } from './contexts/AuthContext';
 
+const AppLoadingScreen = () => (
+  <div className="fixed inset-0 bg-[#0B0B0F] flex items-center justify-center z-[9999]">
+    <div className="text-center">
+        <div className="relative w-24 h-24 mx-auto">
+            <div className="absolute inset-0 border-4 border-pink-500/30 rounded-full"></div>
+            <div className="absolute inset-0 border-4 border-t-pink-500 rounded-full animate-spin"></div>
+        </div>
+        <p className="mt-4 text-lg font-semibold text-gray-300 animate-pulse">Đang khởi tạo Audition AI...</p>
+    </div>
+  </div>
+);
+
 function App() {
-  const { user, toast } = useAuth();
+  const { user, toast, loading } = useAuth();
+
+  if (loading) {
+    return <AppLoadingScreen />;
+  }
 
   return (
     <div className="bg-[#0B0B0F] text-white selection:bg-pink-500 selection:text-white">

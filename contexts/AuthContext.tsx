@@ -37,6 +37,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, []);
 
   useEffect(() => {
+    // Start with loading true
+    setLoading(true);
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setSession(session);
       if (session?.user) {
@@ -53,7 +56,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
         if (error && (_event === 'SIGNED_IN' || _event === 'USER_UPDATED')) {
             console.log('Initial profile fetch failed, retrying after a short delay for trigger execution...');
-            await new Promise(resolve => setTimeout(resolve, 1500)); // Increased delay slightly
+            await new Promise(resolve => setTimeout(resolve, 1500));
             const retryResult = await fetchUserProfile(session.user.id);
             data = retryResult.data;
             error = retryResult.error;
@@ -61,9 +64,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
         if (error) {
           console.error('Error fetching user profile, even after retry. Signing out to clear invalid session.', error);
-          // CRITICAL FIX: If the session is invalid (user profile not found),
-          // force a sign-out to clear the corrupted local storage token.
-          // This will re-trigger onAuthStateChange with a null session, breaking the hang loop.
           supabase.auth.signOut();
           setUser(null);
         } else if (data) {
@@ -73,13 +73,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       } else {
         setUser(null);
       }
-      setLoading(false);
+      setLoading(false); // Finish loading once auth state is resolved
+    });
+    
+    // Check initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+        if (!session) {
+            setLoading(false); // No session, stop loading
+        }
+        // If there is a session, onAuthStateChange will handle setting user and loading state
     });
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-        setSession(session);
-        setLoading(false);
-    });
 
     return () => subscription.unsubscribe();
   }, []);
@@ -90,8 +94,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         console.error("Error logging out:", error);
         showToast(`Đăng xuất thất bại: ${error.message}`, 'error');
     } else {
-        // TRIỆT ĐỂ: Buộc tải lại trang để "reset" hoàn toàn trạng thái ứng dụng.
-        // Điều này sẽ giải quyết mọi vấn đề treo trang do race condition.
         window.location.href = '/';
     }
   };
@@ -147,7 +149,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   return (
     <AppContext.Provider value={value}>
-      {!loading && children}
+      {children}
     </AppContext.Provider>
   );
 };

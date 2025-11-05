@@ -1,4 +1,3 @@
-
 import React from 'react';
 
 interface ImageUploaderProps {
@@ -6,8 +5,6 @@ interface ImageUploaderProps {
     image: { url: string } | null;
     onRemove: () => void;
     text: string;
-    // Fix: Add optional subtext prop to resolve type error in AITool.tsx
-    subtext?: string;
     processType?: 'style';
     disabled?: boolean;
 }
@@ -30,7 +27,7 @@ const StyleProcessOverlay: React.FC = () => {
 };
 
 
-const ImageUploader: React.FC<ImageUploaderProps> = ({ onUpload, image, onRemove, text, subtext, processType, disabled = false }) => (
+const ImageUploader: React.FC<ImageUploaderProps> = ({ onUpload, image, onRemove, text, processType, disabled = false }) => (
     <div className={`relative group w-full rounded-lg border-2 border-dashed border-gray-600 flex items-center justify-center bg-black/20 ${!disabled ? 'hover:border-pink-500' : ''} transition-colors p-1 flex-grow h-full ${disabled ? 'group-disabled' : ''}`}>
         {image && !disabled ? (
             <>
@@ -44,8 +41,7 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({ onUpload, image, onRemove
             <div className="text-center text-gray-400 p-4">
                 <i className="ph-fill ph-upload-simple text-4xl mb-2"></i>
                 <p className="font-semibold">{text}</p>
-                {/* Fix: Display subtext if provided, otherwise show default */}
-                <p className="text-xs">{subtext || 'PNG, JPG, GIF'}</p>
+                <p className="text-xs">PNG, JPG, GIF</p>
             </div>
         )}
         {disabled && (

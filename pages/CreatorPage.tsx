@@ -1,57 +1,27 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import CreatorHeader from '../components/CreatorHeader';
 import CreatorFooter from '../components/CreatorFooter';
 import AITool from '../components/AITool';
+import { useAuth } from '../contexts/AuthContext';
 import Leaderboard from '../components/Leaderboard';
 import Settings from '../components/Settings';
-import TopUpModal from '../components/TopUpModal';
-import { useAuth } from '../contexts/AuthContext';
 import InfoModal from '../components/InfoModal';
-import CheckInModal from '../components/CheckInModal';
 import BottomNavBar from '../components/common/BottomNavBar';
+import CheckInModal from '../components/CheckInModal'; // Import the new modal
 
+// Fix: Export the CreatorTab type so it can be imported in other components.
 export type CreatorTab = 'tool' | 'leaderboard' | 'settings';
 
 const CreatorPage: React.FC = () => {
-    const { navigate, user, updateUserProfile, showToast, session } = useAuth();
+    // Fix: `updateUserDiamonds` is now correctly provided by the `useAuth` hook.
+    const { navigate } = useAuth();
     const [activeTab, setActiveTab] = useState<CreatorTab>('tool');
-    const [isTopUpModalOpen, setTopUpModalOpen] = useState(false);
     const [infoModalKey, setInfoModalKey] = useState<'terms' | 'policy' | 'contact' | null>(null);
-    const [isCheckInModalOpen, setCheckInModalOpen] = useState(false);
-    
-    // Function to handle the check-in API call
-    const handleCheckIn = useCallback(async () => {
-        if (!session) {
-            showToast('Vui lòng đăng nhập để điểm danh.', 'error');
-            return;
-        }
-        try {
-            const response = await fetch('/.netlify/functions/daily-check-in', {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${session.access_token}` }
-            });
-            const data = await response.json();
-            if (!response.ok) {
-                // If already checked in, just show the modal without an error toast
-                if (data.checkedIn) {
-                   setCheckInModalOpen(true);
-                } else {
-                   throw new Error(data.error || 'Điểm danh thất bại.');
-                }
-            } else {
-                showToast(data.message, 'success');
-                updateUserProfile({
-                    diamonds: data.newTotalDiamonds,
-                    consecutive_check_in_days: data.consecutiveDays,
-                    last_check_in_at: new Date().toISOString(),
-                });
-                setCheckInModalOpen(true); // Open modal on successful check-in
-            }
-        } catch (error: any) {
-            showToast(error.message, 'error');
-        }
-    }, [session, showToast, updateUserProfile]);
+    const [isCheckInModalOpen, setCheckInModalOpen] = useState(false); // State for the new modal
 
+    const handleOpenInfoModal = (key: 'terms' | 'policy' | 'contact') => {
+        setInfoModalKey(key);
+    };
 
     const renderContent = () => {
         switch (activeTab) {
@@ -64,52 +34,43 @@ const CreatorPage: React.FC = () => {
             default:
                 return <AITool />;
         }
-    };
+    }
     
-    const handleTopUpClick = () => {
-        navigate('buy-credits');
-    };
+    // Define padding based on active tab for mobile view
+    const mainPaddingBottomClass = activeTab === 'tool' ? 'pb-32' : 'pb-20';
 
     return (
         <div className="flex flex-col min-h-screen bg-[#0B0B0F]">
             <CreatorHeader 
-                onTopUpClick={handleTopUpClick}
-                activeTab={activeTab} 
-                setActiveTab={setActiveTab} 
-                onCheckInClick={handleCheckIn}
+                onTopUpClick={() => navigate('buy-credits')}
+                activeTab={activeTab}
+                setActiveTab={setActiveTab}
+                onCheckInClick={() => setCheckInModalOpen(true)} // Add click handler
             />
-            <main className="flex-grow pt-24 pb-28 md:pb-12">
-                {renderContent()}
+            <main className={`flex-grow pt-20 relative md:pb-0 ${mainPaddingBottomClass}`}>
+                 <div className="absolute inset-0 z-0 aurora-background opacity-70"></div>
+                 <div className="relative z-10">
+                    {renderContent()}
+                    <CreatorFooter onInfoLinkClick={handleOpenInfoModal} />
+                </div>
             </main>
-            <CreatorFooter onInfoLinkClick={setInfoModalKey} />
-            
+
             <BottomNavBar
                 activeTab={activeTab}
                 onTabChange={setActiveTab}
-                onTopUpClick={handleTopUpClick}
-                onCheckInClick={handleCheckIn}
+                onTopUpClick={() => navigate('buy-credits')}
+                onCheckInClick={() => setCheckInModalOpen(true)}
             />
 
-            {/* Modals */}
-            <TopUpModal 
-                isOpen={isTopUpModalOpen} 
-                onClose={() => setTopUpModalOpen(false)}
-                onTopUpSuccess={(amount) => {
-                    if (user) {
-                        updateUserProfile({ diamonds: user.diamonds + amount });
-                    }
-                    setTopUpModalOpen(false);
-                    showToast(`Nạp thành công ${amount} kim cương!`, 'success');
-                }}
-            />
-            <InfoModal 
-                isOpen={!!infoModalKey} 
-                onClose={() => setInfoModalKey(null)} 
-                contentKey={infoModalKey} 
-            />
-            <CheckInModal
+            <CheckInModal 
                 isOpen={isCheckInModalOpen}
                 onClose={() => setCheckInModalOpen(false)}
+            />
+
+            <InfoModal
+                isOpen={!!infoModalKey}
+                onClose={() => setInfoModalKey(null)}
+                contentKey={infoModalKey}
             />
         </div>
     );

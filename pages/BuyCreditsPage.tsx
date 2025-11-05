@@ -79,12 +79,12 @@ const BuyCreditsPage: React.FC = () => {
                 <div className="absolute inset-0 z-0 aurora-background opacity-70"></div>
                 <div className="container mx-auto px-4 relative z-10">
                     <div className="max-w-4xl mx-auto text-center">
-                        <h1 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-pink-400 to-fuchsia-500 text-transparent bg-clip-text">Mua Credits</h1>
+                        <h1 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-pink-400 to-fuchsia-500 text-transparent bg-clip-text">Nạp Kim Cương</h1>
                         <p className="text-sm text-gray-400 max-w-2xl mx-auto">
-                            Lưu ý: Credits không thể quy đổi thành tư cách thành viên, cũng không được hoàn tiền, chuyển nhượng hay rút. Thời hạn sử dụng 2 năm kể từ khi quy đổi. 
-                            <a onClick={() => setInfoModalKey('terms')} className="text-cyan-400 underline cursor-pointer ml-1">Chính sách Credits</a>
+                            Lưu ý: Kim cương không thể quy đổi thành tư cách thành viên, cũng không được hoàn tiền, chuyển nhượng hay rút. Thời hạn sử dụng 2 năm kể từ khi quy đổi. 
+                            <a onClick={() => setInfoModalKey('terms')} className="text-cyan-400 underline cursor-pointer ml-1">Chính sách Kim cương</a>
                         </p>
-                        <p className="text-sm text-gray-400 mt-2">Mỗi ngày, credits miễn phí sẽ tự động được reset về 70 credits.</p>
+                        <p className="text-sm text-gray-400 mt-2">Mỗi ngày, kim cương miễn phí sẽ tự động được reset về 70 kim cương.</p>
                     </div>
 
                     {isLoading ? (
@@ -111,7 +111,7 @@ const BuyCreditsPage: React.FC = () => {
                                             <i className="ph-fill ph-diamonds-four text-3xl text-pink-400"></i>
                                             <p className="text-4xl font-extrabold text-white">{totalCredits.toLocaleString('vi-VN')}</p>
                                         </div>
-                                        <p className="text-gray-400 text-sm mb-4">cPIX</p>
+                                        <p className="text-gray-400 text-sm mb-4">Kim cương</p>
                                         {pkg.bonus_credits > 0 && (
                                             <p className="text-xs text-gray-500 mb-4">
                                                 Tổng: {pkg.credits_amount.toLocaleString('vi-VN')} + {pkg.bonus_credits.toLocaleString('vi-VN')} Thưởng

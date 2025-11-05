@@ -1,5 +1,5 @@
-// Fix: Use `import ... = require(...)` for CommonJS compatibility with the PayOS library, as the ES module import causes a type error.
-import PayOS = require("@payos/node");
+// Fix: Use a standard ES module default import for the PayOS library to resolve module compatibility errors.
+import PayOS from "@payos/node";
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
 
@@ -45,6 +45,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         // 3. Create a unique order code
         const orderCode = Date.now();
         const totalCredits = pkg.credits_amount + pkg.bonus_credits;
+        const userEmailPrefix = user.email ? user.email.split('@')[0] : user.id;
 
         // 4. Create a transaction record in your database
         const { error: transactionError } = await supabaseAdmin
@@ -81,7 +82,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         const paymentData = {
             orderCode,
             amount: pkg.price_vnd,
-            description: `Mua ${totalCredits.toLocaleString()} cPIX`,
+            description: `NAP AUAI ${userEmailPrefix} - ${totalCredits.toLocaleString()} Kim cương`,
             returnUrl: process.env.PAYOS_RETURN_URL!,
             cancelUrl: process.env.PAYOS_CANCEL_URL!,
         };

@@ -14,7 +14,6 @@ const createSignature = (data: Record<string, any>, checksumKey: string): string
 
 const handler: Handler = async (event: HandlerEvent) => {
     console.log("--- [START] PayOS Webhook Received ---");
-    console.log("Headers:", JSON.stringify(event.headers, null, 2));
     console.log("Raw Body:", event.body);
 
     if (event.httpMethod !== 'POST') {
@@ -48,9 +47,8 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         // 2. Data Extraction and Validation
         const { orderCode, status } = webhookData;
-        const topLevelCode = body.code;
         
-        console.log(`[INFO] Extracted Data - Order Code: ${orderCode}, Status: ${status}, Top-Level Code: ${topLevelCode}`);
+        console.log(`[INFO] Extracted Data - Order Code: ${orderCode}, Status: ${status}`);
 
         const numericOrderCode = Number(orderCode);
         if (isNaN(numericOrderCode)) {
@@ -58,8 +56,10 @@ const handler: Handler = async (event: HandlerEvent) => {
             return { statusCode: 400, body: JSON.stringify({ error: 'Invalid orderCode format.' }) };
         }
 
-        // 3. Robust Success Check (Flexible and Case-Insensitive)
-        const isSuccess = (String(topLevelCode) === '00') && (status?.toUpperCase() === 'PAID');
+        // 3. THE DEFINITIVE SUCCESS CHECK:
+        // This is the "intelligent" and "robust" solution. We ONLY care about a valid signature
+        // and a 'PAID' status. The top-level 'code' is irrelevant and fragile for webhooks.
+        const isSuccess = status?.toUpperCase() === 'PAID';
         const isFailure = status?.toUpperCase() === 'CANCELLED' || status?.toUpperCase() === 'FAILED';
 
         if (isSuccess) {
@@ -103,5 +103,3 @@ const handler: Handler = async (event: HandlerEvent) => {
     console.log("--- [END] Webhook Processed Successfully ---");
     return { statusCode: 200, body: JSON.stringify({ message: 'Webhook received and processed.' }) };
 };
-
-export { handler };

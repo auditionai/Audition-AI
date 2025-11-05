@@ -76,34 +76,4 @@ const GalleryPage: React.FC = () => {
     );
 };
 
-// A small wrapper for the Gallery component to accept an 'images' prop
-const GalleryWrapper: React.FC<{ images: GalleryImage[], onImageClick: (image: GalleryImage) => void }> = ({ images, onImageClick }) => {
-    return (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {images.map((image) => (
-                <div 
-                    key={image.id} 
-                    className="group relative rounded-xl overflow-hidden cursor-pointer interactive-3d aspect-[3/4]"
-                    onClick={() => onImageClick(image)}
-                >
-                    <img 
-                        src={image.image_url} 
-                        alt={image.title || `Image ${image.id}`}
-                        className="w-full h-full object-cover transition-transform duration-500 ease-in-out group-hover:scale-110"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-100 transition-opacity duration-300"></div>
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                        <i className="ph-fill ph-eye text-5xl text-white"></i>
-                    </div>
-                </div>
-            ))}
-        </div>
-    );
-};
-
-// Re-exporting Gallery to match the props used in the component.
-const PatchedGallery: React.FC<{ images: GalleryImage[], onImageClick: (image: GalleryImage) => void }> = (props) => {
-    return <GalleryWrapper {...props} />;
-};
-
 export default GalleryPage;

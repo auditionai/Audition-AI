@@ -1,5 +1,3 @@
-/// <reference types="vite/client" />
-
 // Fix: Manually define Vite's `import.meta.env` types as a workaround for a missing type definition file.
 // This resolves errors related to accessing environment variables in `utils/supabaseClient.ts`.
 interface ImportMetaEnv {

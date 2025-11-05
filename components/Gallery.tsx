@@ -5,6 +5,8 @@ import { GalleryImage } from '../types.ts';
 import { getRankForLevel } from '../utils/rankUtils.ts';
 
 interface GalleryProps {
+  // Fix: Add optional `images` prop to allow passing dynamic image data.
+  images?: GalleryImage[];
   onImageClick: (image: GalleryImage) => void;
   limit?: number;
   showSeeMore?: boolean;
@@ -12,11 +14,14 @@ interface GalleryProps {
   displayMode?: 'grid' | 'slider';
 }
 
-const Gallery: React.FC<GalleryProps> = ({ onImageClick, limit, showSeeMore = false, onSeeMoreClick, displayMode = 'grid' }) => {
-  const imagesToShow = limit ? GALLERY_IMAGES.slice(0, limit) : GALLERY_IMAGES;
+const Gallery: React.FC<GalleryProps> = ({ images, onImageClick, limit, showSeeMore = false, onSeeMoreClick, displayMode = 'grid' }) => {
+  // Fix: Use passed `images` prop if available, otherwise fall back to static data.
+  const sourceImages = images || GALLERY_IMAGES;
+  const imagesToShow = limit ? sourceImages.slice(0, limit) : sourceImages;
   
   if (displayMode === 'slider') {
-    const duplicatedImages = [...GALLERY_IMAGES, ...GALLERY_IMAGES];
+    // Fix: Use `sourceImages` for the slider as well.
+    const duplicatedImages = [...sourceImages, ...sourceImages];
     return (
       <div className="image-slider-container">
         <div className="image-slider-track">

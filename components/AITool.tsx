@@ -324,7 +324,7 @@ const AITool: React.FC = () => {
           {/* Left Column: Upload */}
           <div className="flex flex-col">
             <h3 className="font-semibold mb-3 text-lg">1. Tải ảnh lên</h3>
-            <div className="p-4 bg-black/20 rounded-lg border border-white/10 flex-grow flex flex-col lg:aspect-square">
+            <div className="p-4 bg-black/20 rounded-lg border border-white/10 flex-grow flex flex-col aspect-square">
               <label className="relative w-full flex-grow min-h-[12rem] flex flex-col items-center justify-center text-center text-gray-400 rounded-lg border-2 border-dashed border-gray-600 hover:border-pink-500 cursor-pointer bg-black/20">
                 <i className="ph-fill ph-upload-simple text-4xl"></i>
                 <p className="font-semibold mt-2">Nhấn để chọn hoặc kéo thả</p>
@@ -356,7 +356,7 @@ const AITool: React.FC = () => {
           {/* Right Column: Results */}
           <div className="flex flex-col">
             <h3 className="font-semibold mb-3 text-lg">2. Kết quả</h3>
-            <div className="bg-black/20 rounded-lg border border-white/10 flex-grow p-4 lg:aspect-square">
+            <div className="bg-black/20 rounded-lg border border-white/10 flex-grow p-4 aspect-square">
               {processedImages.length === 0 && !isProcessing ? (
                 <div className="flex flex-col items-center justify-center h-full text-gray-500 text-center">
                   <i className="ph-fill ph-image text-5xl"></i>
@@ -408,7 +408,7 @@ const AITool: React.FC = () => {
                 <div className="md:hidden fixed bottom-16 left-0 w-full p-3 z-30 mobile-ai-footer">
                    <button onClick={handleGenerateClick} disabled={isLoading} className="w-full py-3 font-bold text-lg text-white bg-gradient-to-r from-[#F72585] to-[#CA27FF] rounded-full flex items-center justify-center gap-2 disabled:opacity-60">
                        <i className="ph-fill ph-magic-wand"></i>
-                       {isLoading ? "Đang xử lý..." : `Tạo ảnh`}
+                       {isLoading ? "Đang xử lý..." : `Tạo ảnh (-${COST_PER_IMAGE} Kim cương)`}
                    </button>
                 </div>
             )}

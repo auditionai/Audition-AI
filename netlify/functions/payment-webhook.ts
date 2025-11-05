@@ -1,6 +1,7 @@
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
-import PayOS from "@payos/node";
+// Fix: Use `import = require()` for CommonJS modules like PayOS to ensure the class constructor is correctly imported.
+import PayOS = require("@payos/node");
 
 const payos = new PayOS(
     process.env.PAYOS_CLIENT_ID!,

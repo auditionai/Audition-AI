@@ -4,15 +4,13 @@ import CreatorFooter from '../components/CreatorFooter';
 import { useAuth } from '../contexts/AuthContext';
 import { CreditPackage } from '../types';
 import InfoModal from '../components/InfoModal';
-import Modal from '../components/common/Modal';
 
 const BuyCreditsPage: React.FC = () => {
-    const { user, session, navigate, showToast } = useAuth();
+    const { session, navigate, showToast } = useAuth();
     const [packages, setPackages] = useState<CreditPackage[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isProcessingPayment, setIsProcessingPayment] = useState<string | null>(null); // Store package ID being processed
     const [infoModalKey, setInfoModalKey] = useState<'terms' | 'policy' | 'contact' | null>(null);
-    const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
 
     useEffect(() => {
         const fetchPackages = async () => {

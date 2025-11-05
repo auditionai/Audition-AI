@@ -1,5 +1,5 @@
-// Fix: Use standard ES module import for PayOS.
-import PayOS from "@payos/node";
+// Fix: Use `require` for CommonJS compatibility with the PayOS library, as the ES module import causes a type error.
+const PayOS = require("@payos/node");
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
 
@@ -10,12 +10,12 @@ const payos = new PayOS(
 );
 
 const handler: Handler = async (event: HandlerEvent) => {
-    // Handle PayOS Webhook verification GET request
+    // Handle PayOS Webhook verification GET request as a fallback
     if (event.httpMethod === 'GET') {
         console.log("Received GET request for webhook verification from PayOS.");
         return {
             statusCode: 200,
-            body: 'OK', // A simple OK response is sufficient for verification
+            body: 'OK', 
         };
     }
     
@@ -25,11 +25,22 @@ const handler: Handler = async (event: HandlerEvent) => {
 
     try {
         const webhookBody = JSON.parse(event.body || '{}');
+
+        // **NEW:** Handle PayOS verification POST request.
+        // The test payload from PayOS might not contain the `data` field.
+        // We identify it as a verification ping and respond with success.
+        if (!webhookBody.data) {
+            console.log("Received a webhook payload without a 'data' field, assuming it's a verification request from PayOS.");
+            return {
+                statusCode: 200,
+                body: JSON.stringify({ message: "Webhook verification successful." }),
+            };
+        }
         
-        // 1. Verify webhook data
+        // 1. Verify webhook data for actual transactions
         const verifiedData = payos.verifyPaymentWebhookData(webhookBody);
 
-        if (verifiedData.code !== '00' || verifiedData.desc !== 'Success' || !verifiedData.data) {
+        if (verifiedData.code !== '00' || verifiedData.desc !== 'Success') {
              console.warn('Webhook received non-success data or failed verification:', verifiedData);
             return { statusCode: 400, body: JSON.stringify({ error: 'Webhook data invalid or payment not successful.' }) };
         }

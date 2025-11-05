@@ -264,6 +264,36 @@ const AITool: React.FC = () => {
                         </SettingsBlock>
                     </div>
                 </div>
+
+                {/* Mobile Result Panel (New Position) */}
+                <div className="block lg:hidden mt-6">
+                    <h3 className="text-lg font-semibold mb-3 text-gray-300">Kết quả</h3>
+                    <div 
+                        className="w-full aspect-square bg-black/30 rounded-lg flex items-center justify-center overflow-hidden border border-white/5 relative group"
+                    >
+                        {isLoading ? ( <GenerationProgress currentStep={generationStep} /> ) : 
+                         generatedImage ? ( 
+                            <>
+                                <img src={generatedImage} alt="Generated Art" className="w-full h-full object-contain animate-fade-in" /> 
+                                <div 
+                                    onClick={() => setPreviewModalOpen(true)}
+                                    className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer"
+                                >
+                                    <i className="ph-fill ph-eye text-4xl text-white"></i>
+                                </div>
+                                <a 
+                                    href={generatedImage} 
+                                    download="audition-ai-art.png" 
+                                    onClick={(e) => e.stopPropagation()} 
+                                    className="absolute top-2 right-2 bg-black/60 text-white rounded-full p-2 hover:bg-pink-600 transition-colors z-10"
+                                >
+                                    <i className="ph-fill ph-download-simple text-xl"></i>
+                                </a>
+                            </>
+                         ) : 
+                         ( <div className="text-center text-gray-500 p-4"><i className="ph-fill ph-image-square text-5xl"></i><p className="mt-2 text-sm">Hình ảnh của bạn sẽ xuất hiện ở đây</p></div> )}
+                    </div>
+                </div>
             </div>
 
             {/* Desktop Result Panel */}
@@ -370,21 +400,10 @@ const AITool: React.FC = () => {
             {/* Mobile Sticky Footer for Generator */}
             {activeTool === 'generate' && (
                 <div className="md:hidden fixed bottom-16 left-0 w-full p-3 z-30 mobile-ai-footer">
-                    <div className="flex items-center gap-3">
-                        <div 
-                            onClick={() => generatedImage && setPreviewModalOpen(true)}
-                            className={`w-[90px] h-[90px] flex-shrink-0 bg-black/30 rounded-lg flex items-center justify-center overflow-hidden border border-white/10 ${generatedImage ? 'cursor-pointer' : ''}`}
-                        >
-                            {isLoading ? <GenerationProgress currentStep={generationStep} /> : 
-                             generatedImage ? <img src={generatedImage} alt="Generated" className="w-full h-full object-contain"/> :
-                             <i className="ph-fill ph-image text-3xl text-gray-600"></i>
-                            }
-                        </div>
-                        <button onClick={handleGenerateClick} disabled={isLoading} className="flex-grow py-3 font-bold text-lg text-white bg-gradient-to-r from-[#F72585] to-[#CA27FF] rounded-full flex items-center justify-center gap-2 disabled:opacity-60">
-                           <i className="ph-fill ph-magic-wand"></i>
-                           {isLoading ? "Đang xử lý..." : `Tạo ảnh`}
-                       </button>
-                    </div>
+                   <button onClick={handleGenerateClick} disabled={isLoading} className="w-full py-3 font-bold text-lg text-white bg-gradient-to-r from-[#F72585] to-[#CA27FF] rounded-full flex items-center justify-center gap-2 disabled:opacity-60">
+                       <i className="ph-fill ph-magic-wand"></i>
+                       {isLoading ? "Đang xử lý..." : `Tạo ảnh`}
+                   </button>
                 </div>
             )}
             

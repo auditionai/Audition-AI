@@ -84,7 +84,7 @@ const BuyCreditsPage: React.FC = () => {
                             Lưu ý: Kim cương không thể quy đổi thành tư cách thành viên, cũng không được hoàn tiền, chuyển nhượng hay rút. Thời hạn sử dụng 2 năm kể từ khi quy đổi. 
                             <a onClick={() => setInfoModalKey('terms')} className="text-cyan-400 underline cursor-pointer ml-1">Chính sách Kim cương</a>
                         </p>
-                        <p className="text-sm text-gray-400 mt-2">Mỗi ngày, kim cương miễn phí sẽ tự động được reset về 70 kim cương.</p>
+                        <p className="text-sm text-gray-400 mt-2">Đừng quên điểm danh hàng ngày để nhận <span className="font-bold text-pink-400">Kim Cương miễn phí</span> và các phần thưởng hấp dẫn khác!</p>
                     </div>
 
                     {isLoading ? (

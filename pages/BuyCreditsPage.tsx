@@ -84,11 +84,34 @@ const BuyCreditsPage: React.FC = () => {
                 <div className="container mx-auto px-4 relative z-10">
                     <div className="max-w-4xl mx-auto text-center">
                         <h1 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-pink-400 to-fuchsia-500 text-transparent bg-clip-text">Nạp Kim Cương</h1>
-                        <p className="text-sm text-gray-400 max-w-2xl mx-auto">
-                            Lưu ý: Kim cương không thể quy đổi thành tư cách thành viên, cũng không được hoàn tiền, chuyển nhượng hay rút. Thời hạn sử dụng 2 năm kể từ khi quy đổi. 
-                            <a onClick={() => setInfoModalKey('terms')} className="text-cyan-400 underline cursor-pointer ml-1">Chính sách Kim cương</a>
-                        </p>
-                        <p className="text-sm text-gray-400 mt-2">Đừng quên điểm danh hàng ngày để nhận <span className="font-bold text-pink-400">Kim Cương miễn phí</span> và các phần thưởng hấp dẫn khác!</p>
+                        
+                        {/* Redesigned Info Section */}
+                        <div className="max-w-3xl mx-auto mt-6 bg-black/30 border border-white/10 rounded-2xl p-4 text-sm shadow-lg">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-y-3 md:gap-x-4">
+                                <div className="flex items-center justify-center gap-2.5 p-2 rounded-lg bg-white/5">
+                                    <i className="ph-fill ph-prohibit text-2xl text-red-400 neon-text-glow" style={{ color: '#f87171' }}></i>
+                                    <p className="text-gray-300">
+                                        <span className="font-bold text-white">Không</span> hoàn tiền &amp; chuyển nhượng.
+                                    </p>
+                                </div>
+                                
+                                <div className="flex items-center justify-center gap-2.5 p-2 rounded-lg bg-white/5">
+                                    <i className="ph-fill ph-calendar-x text-2xl text-yellow-400 neon-text-glow" style={{ color: '#facc15' }}></i>
+                                    <p className="text-gray-300">
+                                        Hạn sử dụng: <span className="font-bold text-white">2 năm</span>
+                                    </p>
+                                </div>
+                                
+                                <div className="flex items-center justify-center gap-2.5 p-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors">
+                                    <i className="ph-fill ph-book-open text-2xl text-cyan-400 neon-text-glow" style={{ color: '#22d3ee' }}></i>
+                                    <a onClick={() => setInfoModalKey('terms')} className="text-cyan-400 font-semibold hover:text-cyan-300 cursor-pointer">
+                                        Xem Chính Sách
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+
+                        <p className="text-sm text-gray-400 mt-4">Đừng quên điểm danh hàng ngày để nhận <span className="font-bold text-pink-400">Kim Cương miễn phí</span> và các phần thưởng hấp dẫn khác!</p>
                     </div>
 
                     {isLoading ? (

@@ -9,7 +9,7 @@ interface AuthModalProps {
 
 const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
     const [isLoading, setIsLoading] = useState(false);
-    const { login, loginAsAdmin } = useAuth();
+    const { login } = useAuth();
 
     const handleGoogleLogin = async () => {
         setIsLoading(true);
@@ -19,11 +19,6 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
         } catch {
             setIsLoading(false); // Only stop loading on error
         }
-    }
-
-    const handleAdminLogin = () => {
-        loginAsAdmin();
-        onClose();
     }
     
     // Reset loading state when modal is closed
@@ -57,12 +52,6 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                     </>
                 )}
             </button>
-            
-            <div className="text-center mt-4 pt-4 border-t border-white/10">
-                <button onClick={handleAdminLogin} disabled={isLoading} className="text-xs text-yellow-400 hover:underline">
-                    Đăng nhập với tư cách Quản trị viên (Demo)
-                </button>
-            </div>
             
             <p className="text-xs text-gray-500 mt-6 text-center">
                 Bằng việc tiếp tục, bạn đồng ý với <a onClick={() => {}} className="underline hover:text-pink-400 cursor-pointer">Điều khoản dịch vụ</a> và <a onClick={() => {}} className="underline hover:text-pink-400 cursor-pointer">Chính sách bảo mật</a>.

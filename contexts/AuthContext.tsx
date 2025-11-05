@@ -13,7 +13,6 @@ interface AppContextType {
   toast: { message: string, type: 'success' | 'error' } | null;
   updateUserProfile: (updates: Partial<User>) => void;
   login: () => Promise<void>;
-  loginAsAdmin: () => void;
   updateUserDiamonds: (newDiamondCount: number) => void;
   stats: Stats;
   navigate: (path: string) => void;
@@ -106,22 +105,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (error) showToast(error.message, 'error');
   };
 
-  const loginAsAdmin = () => {
-    const adminUser: User = {
-        id: '00000000-0000-0000-0000-000000000000',
-        display_name: 'Admin',
-        email: 'admin@auditionai.io.vn',
-        photo_url: 'https://i.pravatar.cc/150?u=admin',
-        diamonds: 9999,
-        xp: 100000,
-        level: 100,
-        is_admin: true,
-    };
-    setUser(adminUser);
-    setSession({} as Session);
-    showToast('Đăng nhập với tư cách Quản trị viên thành công!', 'success');
-  };
-
   const updateUserDiamonds = (newDiamondCount: number) => {
     if (user) {
         updateUserProfile({ diamonds: newDiamondCount });
@@ -147,7 +130,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     toast,
     updateUserProfile,
     login,
-    loginAsAdmin,
     updateUserDiamonds,
     stats,
     navigate

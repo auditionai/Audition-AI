@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User, Stats } from '../types';
 import { supabase } from '../utils/supabaseClient';
-import { Session } from '@supabase/supabase-js';
+import { Session, SignUpWithPasswordCredentials } from '@supabase/supabase-js';
 import { calculateLevelFromXp } from '../utils/rankUtils';
 
 interface AppContextType {
@@ -12,6 +12,11 @@ interface AppContextType {
   showToast: (message: string, type: 'success' | 'error') => void;
   toast: { message: string, type: 'success' | 'error' } | null;
   updateUserProfile: (updates: Partial<User>) => void;
+  // Functions for manual auth
+  signUp: (credentials: SignUpWithPasswordCredentials & { options: { data: { display_name: string } } }) => Promise<void>;
+  signIn: (credentials: SignUpWithPasswordCredentials) => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
+  // Functions for OAuth and Admin demo
   login: () => Promise<void>;
   loginAsAdmin: () => void;
   updateUserDiamonds: (newDiamondCount: number) => void;
@@ -47,13 +52,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         
         let { data, error } = await fetchUserProfile(session.user.id);
 
-        // **FIX: Handle Race Condition on New User Signup**
-        // If the profile is not found immediately after signing in,
-        // it might be because the database trigger to create the profile hasn't finished yet.
-        // We wait for a short period and try fetching again.
-        if (error && _event === 'SIGNED_IN') {
+        if (error && (_event === 'SIGNED_IN' || _event === 'USER_UPDATED')) {
             console.log('Initial profile fetch failed, retrying after a short delay for trigger execution...');
-            await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+            await new Promise(resolve => setTimeout(resolve, 1500)); // Increased delay slightly
             const retryResult = await fetchUserProfile(session.user.id);
             data = retryResult.data;
             error = retryResult.error;
@@ -72,7 +73,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setLoading(false);
     });
 
-    // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
         setSession(session);
         setLoading(false);
@@ -96,7 +96,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setUser(currentUser => {
           if (!currentUser) return null;
           const updatedUser = { ...currentUser, ...updates };
-          // Recalculate level if XP changes
           if(updates.xp !== undefined) {
               updatedUser.level = calculateLevelFromXp(updatedUser.xp);
           }
@@ -104,6 +103,25 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       });
   }
 
+  // --- Real Auth Functions ---
+  const signUp = async (credentials: SignUpWithPasswordCredentials & { options: { data: { display_name: string } } }) => {
+      const { error } = await supabase.auth.signUp(credentials);
+      if (error) throw error;
+  };
+
+  const signIn = async (credentials: SignUpWithPasswordCredentials) => {
+      const { error } = await supabase.auth.signInWithPassword(credentials);
+      if (error) throw error;
+  };
+
+  const resetPassword = async (email: string) => {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}/reset-password`, // A future page for handling this
+      });
+      if (error) throw error;
+  };
+
+  // --- OAuth & Demo Functions ---
   const login = async () => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
@@ -114,7 +132,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const loginAsAdmin = () => {
     const adminUser: User = {
-        id: '00000000-0000-0000-0000-000000000000', // Dummy UUID
+        id: '00000000-0000-0000-0000-000000000000',
         display_name: 'Admin',
         email: 'admin@auditionai.io.vn',
         photo_url: 'https://i.pravatar.cc/150?u=admin',
@@ -124,7 +142,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         is_admin: true,
     };
     setUser(adminUser);
-    setSession({} as Session); // Dummy session for demo purposes
+    setSession({} as Session);
   };
 
   const updateUserDiamonds = (newDiamondCount: number) => {
@@ -138,14 +156,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (path === 'home') {
         window.location.pathname = '/';
     } else if (path === 'gallery') {
-        // This is a placeholder. In a real multi-page app, you'd use a router.
-        // For now, we'll just log it. A full gallery page doesn't exist yet.
         console.log("Navigation to gallery page requested.");
         showToast("Gallery page is for demo purposes.", "success");
     }
   };
 
-  const value = {
+  const value: AppContextType = {
     session,
     user,
     loading,
@@ -153,6 +169,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     showToast,
     toast,
     updateUserProfile,
+    signUp,
+    signIn,
+    resetPassword,
     login,
     loginAsAdmin,
     updateUserDiamonds,

@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import Modal from './common/Modal';
-// Fix: Import `useAuth` from `AuthContext` instead of the non-existent `useAppContext`.
 import { useAuth } from '../contexts/AuthContext';
 
 interface AuthModalProps {
@@ -13,8 +12,7 @@ type AuthMode = 'login' | 'register' | 'forgot-password';
 const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
     const [mode, setMode] = useState<AuthMode>('login');
     const [isLoading, setIsLoading] = useState(false);
-    // Fix: `login` and `loginAsAdmin` are now correctly sourced from the auth context.
-    const { login, loginAsAdmin, showToast } = useAuth();
+    const { login, loginAsAdmin, signUp, signIn, resetPassword, showToast } = useAuth();
 
     // Form states
     const [email, setEmail] = useState('');
@@ -26,14 +24,9 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
         setIsLoading(true);
         try {
             await login();
-            // Closing the modal is handled by the auth state change listener in a real scenario
-            // but we can add a fallback timeout for the demo.
-            setTimeout(() => {
-                setIsLoading(false);
-                onClose();
-            }, 2500);
+            // Auth state change will handle closing the modal on success
         } catch {
-            setIsLoading(false);
+            setIsLoading(false); // Only stop loading on error
         }
     }
 
@@ -47,37 +40,41 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
         }, 1000);
     }
 
-    const handleFormSubmit = (e: React.FormEvent) => {
+    const handleFormSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
 
-        switch (mode) {
-            case 'login':
-                // Note: Email/password login is not implemented in Supabase, using Google login as a placeholder.
-                setTimeout(() => {
-                    showToast('Tính năng này đang được phát triển. Vui lòng sử dụng đăng nhập Google.', 'error');
-                    setIsLoading(false);
-                }, 1500);
-                break;
-            case 'register':
-                if (password !== confirmPassword) {
-                    showToast('Mật khẩu không khớp!', 'error');
-                    setIsLoading(false);
-                    return;
-                }
-                setTimeout(() => {
-                    showToast('Đăng ký thành công! Vui lòng đăng nhập.', 'success');
-                    setIsLoading(false);
-                    setMode('login');
-                }, 2000);
-                break;
-            case 'forgot-password':
-                setTimeout(() => {
+        try {
+            switch (mode) {
+                case 'login':
+                    await signIn({ email, password });
+                    onClose(); // Close modal on successful sign-in
+                    showToast('Đăng nhập thành công!', 'success');
+                    break;
+                case 'register':
+                    if (password !== confirmPassword) {
+                        throw new Error('Mật khẩu không khớp!');
+                    }
+                    await signUp({ 
+                        email, 
+                        password, 
+                        options: { 
+                            data: { display_name: displayName } 
+                        } 
+                    });
+                    showToast('Đăng ký thành công! Vui lòng kiểm tra email để xác thực tài khoản.', 'success');
+                    setMode('login'); // Switch to login view
+                    break;
+                case 'forgot-password':
+                    await resetPassword(email);
                     showToast('Link đặt lại mật khẩu đã được gửi tới email của bạn.', 'success');
-                    setIsLoading(false);
                     setMode('login');
-                }, 2000);
-                break;
+                    break;
+            }
+        } catch (error: any) {
+            showToast(error.message, 'error');
+        } finally {
+            setIsLoading(false);
         }
     };
     
@@ -115,7 +112,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                 />
             )}
 
-            {mode !== 'login' || (
+            {mode === 'login' && (
                  <p className="text-center text-sm text-gray-400">
                     Đăng nhập để lưu trữ kim cương và lịch sử tạo ảnh của bạn.
                 </p>
@@ -174,7 +171,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
             </button>
         </form>
         
-        {mode === 'login' && (
+        {mode !== 'forgot-password' && (
             <>
                 <div className="relative my-6">
                     <div className="absolute inset-0 flex items-center">

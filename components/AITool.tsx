@@ -324,7 +324,7 @@ const AITool: React.FC = () => {
           {/* Left Column: Upload */}
           <div className="flex flex-col">
             <h3 className="font-semibold mb-3 text-lg">1. Tải ảnh lên</h3>
-            <div className="p-4 bg-black/20 rounded-lg border border-white/10 flex-grow flex flex-col">
+            <div className="p-4 bg-black/20 rounded-lg border border-white/10 flex-grow flex flex-col lg:aspect-square">
               <label className="relative w-full flex-grow min-h-[12rem] flex flex-col items-center justify-center text-center text-gray-400 rounded-lg border-2 border-dashed border-gray-600 hover:border-pink-500 cursor-pointer bg-black/20">
                 <i className="ph-fill ph-upload-simple text-4xl"></i>
                 <p className="font-semibold mt-2">Nhấn để chọn hoặc kéo thả</p>
@@ -347,7 +347,7 @@ const AITool: React.FC = () => {
                <button onClick={handleProcessBackgrounds} disabled={isProcessing || imagesForBgRemoval.length === 0} className="w-full mt-4 py-3 font-bold text-lg text-white bg-gradient-to-r from-pink-500 to-fuchsia-600 rounded-full flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
                 {isProcessing ? <div className="w-6 h-6 border-2 border-white/50 border-t-white rounded-full animate-spin"></div> : <>
                     <DiamondIcon className="w-6 h-6" />
-                    <span>Xử lý ({imagesForBgRemoval.length * COST_PER_REMOVAL} Kim cương)</span>
+                    <span>Tách nền (-{COST_PER_REMOVAL} Kim cương)</span>
                 </>}
               </button>
             </div>
@@ -356,7 +356,7 @@ const AITool: React.FC = () => {
           {/* Right Column: Results */}
           <div className="flex flex-col">
             <h3 className="font-semibold mb-3 text-lg">2. Kết quả</h3>
-            <div className="bg-black/20 rounded-lg border border-white/10 flex-grow p-4 min-h-[14rem] h-full">
+            <div className="bg-black/20 rounded-lg border border-white/10 flex-grow p-4 lg:aspect-square">
               {processedImages.length === 0 && !isProcessing ? (
                 <div className="flex flex-col items-center justify-center h-full text-gray-500 text-center">
                   <i className="ph-fill ph-image text-5xl"></i>

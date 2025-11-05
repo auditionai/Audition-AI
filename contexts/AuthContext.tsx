@@ -46,6 +46,26 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         window.scrollTo(0, 0);
     }, []);
 
+    const updateUserDiamonds = useCallback((newAmount: number) => {
+        setUser(currentUser => currentUser ? { ...currentUser, diamonds: newAmount } : null);
+    }, []);
+
+    // FIX: Moved `updateUserProfile` before the `useEffect` that uses it to resolve the "used before declaration" error.
+    const updateUserProfile = useCallback((updates: Partial<User>) => {
+        setUser(currentUser => {
+            if (!currentUser) return null;
+            
+            const updatedUser = { ...currentUser, ...updates };
+
+            // If XP was updated, also recalculate and update the level
+            if (updates.xp !== undefined) {
+                updatedUser.level = calculateLevelFromXp(updates.xp);
+            }
+
+            return updatedUser;
+        });
+    }, []);
+
     const fetchUserProfile = useCallback(async (supabaseUser: SupabaseUser) => {
         try {
             const { data, error } = await supabase
@@ -95,8 +115,33 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
             setSession(session);
             if (session?.user) {
-                // A small delay might help if the DB trigger for user creation is slow
-                setTimeout(() => fetchUserProfile(session.user), 500);
+                const createdAt = new Date(session.user.created_at).getTime();
+                
+                // Identify a new user by checking if their account was created within the last minute.
+                // This handles the first sign-in after registration.
+                const isNewUser = (Date.now() - createdAt) < 60000;
+
+                if (isNewUser) {
+                    // For new users, there's a flow to set their initial diamond count to 10
+                    // instead of the database default of 25.
+                    // A delay is added to ensure the database trigger for profile creation has completed.
+                    setTimeout(async () => {
+                        try {
+                            await fetch('/.netlify/functions/set-initial-diamonds', {
+                                method: 'POST',
+                                headers: { 'Authorization': `Bearer ${session.access_token}` }
+                            });
+                        } catch (e) {
+                            console.error("Failed to set initial diamonds; user will have the default amount.", e);
+                        } finally {
+                            // Fetch the user profile after attempting the update to get the final state.
+                            await fetchUserProfile(session.user);
+                        }
+                    }, 2000); // 2-second delay to be safe.
+                } else {
+                    // For existing users, fetch their profile after a short delay.
+                    setTimeout(() => fetchUserProfile(session.user), 500);
+                }
             } else {
                 setUser(null);
                 setCheckInAttempted(false); // Reset check-in status on logout
@@ -135,7 +180,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             }
         };
         attemptCheckIn();
-    }, [user, session, checkInAttempted, showToast]);
+    }, [user, session, checkInAttempted, showToast, updateUserProfile]);
 
 
     const login = useCallback(async () => {
@@ -157,25 +202,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setSession(null);
         navigate('home'); // Go to home page after logout
     }, [navigate]);
-
-    const updateUserDiamonds = useCallback((newAmount: number) => {
-        setUser(currentUser => currentUser ? { ...currentUser, diamonds: newAmount } : null);
-    }, []);
-
-    const updateUserProfile = useCallback((updates: Partial<User>) => {
-        setUser(currentUser => {
-            if (!currentUser) return null;
-            
-            const updatedUser = { ...currentUser, ...updates };
-
-            // If XP was updated, also recalculate and update the level
-            if (updates.xp !== undefined) {
-                updatedUser.level = calculateLevelFromXp(updates.xp);
-            }
-
-            return updatedUser;
-        });
-    }, []);
 
     const value = useMemo(() => ({
         session,

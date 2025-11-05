@@ -1,7 +1,9 @@
-// Fix: Use ES module default import syntax for PayOS to resolve module compatibility errors.
-import PayOS from "@payos/node";
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
+
+// Fix: The PayOS library is a CommonJS module. Using `require` is a robust way to import it 
+// in a Node.js environment and resolves the "not constructable" type error.
+const PayOS = require("@payos/node");
 
 const payos = new PayOS(
     process.env.PAYOS_CLIENT_ID!,

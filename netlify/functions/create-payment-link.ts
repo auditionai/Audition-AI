@@ -1,10 +1,10 @@
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
-// Fix: Use a standard ES module import for PayOS to be compatible with the Netlify Functions build environment,
-// which targets ECMAScript modules and does not support `import = require`.
-import PayOS from "@payos/node";
+// FIX: The default ES module import for PayOS (a CJS module) is not working correctly.
+// This uses a namespace import to correctly reference the constructor in an ESM environment.
+import * as PayOS from "@payos/node";
 
-const payos = new PayOS(
+const payos = new (PayOS as any)(
     process.env.PAYOS_CLIENT_ID!,
     process.env.PAYOS_API_KEY!,
     process.env.PAYOS_CHECKSUM_KEY!

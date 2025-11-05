@@ -115,53 +115,62 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
     }, [user, showToast]);
 
-    // Main authentication effect
+    // New, more robust authentication flow
     useEffect(() => {
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-            setSession(session);
-            if (session?.user) {
-                try {
-                    let profile = await fetchUserProfile(session.user);
-                    // Retry logic for new users whose profile might not exist yet
-                    if (!profile) {
-                        await new Promise(resolve => setTimeout(resolve, 1500));
-                        profile = await fetchUserProfile(session.user);
-                    }
+        const initializeAuth = async () => {
+            try {
+                const { data: { session: currentSession }, error: sessionError } = await supabase.auth.getSession();
 
+                if (sessionError) {
+                    console.error("Error fetching session, signing out:", sessionError);
+                    await supabase.auth.signOut();
+                    return;
+                }
+
+                if (currentSession) {
+                    const profile = await fetchUserProfile(currentSession.user);
                     if (profile) {
+                        setSession(currentSession);
                         setUser(profile);
-                        // Logic for setting initial diamonds on first-time login
-                        const createdAt = new Date(session.user.created_at).getTime();
-                        const isNewUser = (Date.now() - createdAt) < 60000;
-                        if (isNewUser && profile.diamonds === 25) { // 25 is default from DB
-                            fetch('/.netlify/functions/set-initial-diamonds', {
-                                method: 'POST',
-                                headers: { 'Authorization': `Bearer ${session.access_token}` }
-                            }).catch(e => console.error("Failed to set initial diamonds.", e));
-                        }
                     } else {
-                        // If profile still not found, sign out to clear bad session state.
+                        console.warn("Session found but user profile is invalid. Forcing sign out.");
                         await supabase.auth.signOut();
+                        setSession(null);
                         setUser(null);
                     }
-                } catch (error) {
-                    console.error('Error in onAuthStateChange:', error);
-                    await supabase.auth.signOut();
+                } else {
+                    setSession(null);
                     setUser(null);
-                } finally {
-                    setLoading(false);
                 }
-            } else {
-                // No session, user is logged out.
+            } catch (e) {
+                console.error("A critical error occurred during auth initialization, signing out:", e);
+                await supabase.auth.signOut();
+                setSession(null);
                 setUser(null);
+            } finally {
                 setLoading(false);
             }
-        });
+        };
+
+        initializeAuth();
+
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(
+            async (_event, newSession) => {
+                setSession(newSession);
+                if (newSession?.user) {
+                    const profile = await fetchUserProfile(newSession.user);
+                    setUser(profile); // Will be null if fetch fails
+                } else {
+                    setUser(null);
+                }
+            }
+        );
 
         return () => {
-            subscription?.unsubscribe();
+            subscription.unsubscribe();
         };
     }, [fetchUserProfile]);
+
 
     // Effect for real-time user profile updates
     useEffect(() => {

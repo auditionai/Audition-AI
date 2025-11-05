@@ -1,0 +1,16 @@
+# Cấu hình build cho Netlify
+[build]
+  # Lệnh để build ứng dụng (sử dụng script 'build' trong package.json)
+  command = "npm run build"
+  # Thư mục chứa kết quả sau khi build
+  publish = "dist"
+
+# Cấu hình chuyển hướng (redirects)
+[[redirects]]
+  # Áp dụng cho TẤT CẢ các đường dẫn (ví dụ: /buy-credits, /gallery, /abc)
+  from = "/*"
+  # Luôn luôn trả về tệp index.html chính của ứng dụng
+  to = "/index.html"
+  # Status 200 có nghĩa là "viết lại" URL, không phải là "chuyển hướng"
+  # Điều này giữ nguyên URL trên trình duyệt để React có thể đọc và hiển thị đúng trang
+  status = 200

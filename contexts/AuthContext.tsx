@@ -10,6 +10,16 @@ const getVNDateString = (date: Date) => {
     return vietnamTime.toISOString().split('T')[0];
 };
 
+// Helper function to parse the route from the URL pathname.
+const getRouteFromPath = (path: string): string => {
+    const pathSegment = path.split('/').filter(Boolean)[0];
+    if (pathSegment === 'buy-credits' || pathSegment === 'gallery') {
+        return pathSegment;
+    }
+    // 'home' will be the default route for '/' or any unrecognized path.
+    return 'home';
+};
+
 
 // Define the shape of the context
 interface AuthContextType {
@@ -38,7 +48,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const [loading, setLoading] = useState(true);
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
     const [stats] = useState<Stats>({ users: 1250, visits: 8700, images: 25000 });
-    const [route, setRoute] = useState('home');
+    // Initialize route state from the current URL path.
+    const [route, setRoute] = useState(() => getRouteFromPath(window.location.pathname));
 
     // Ref to store previous user state for comparison
     const previousUserRef = useRef<User | null>(null);
@@ -50,9 +61,26 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }, 4000); // Increased duration
     }, []);
     
+    // Update the navigate function to also manipulate browser history.
     const navigate = useCallback((path: string) => {
+        const targetPath = path === 'home' ? '/' : `/${path}`;
+        if (window.location.pathname !== targetPath) {
+            window.history.pushState({}, '', targetPath);
+        }
         setRoute(path);
         window.scrollTo(0, 0);
+    }, []);
+
+    // Add an effect to handle browser back/forward button clicks.
+    useEffect(() => {
+        const handlePopState = () => {
+            setRoute(getRouteFromPath(window.location.pathname));
+        };
+
+        window.addEventListener('popstate', handlePopState);
+        return () => {
+            window.removeEventListener('popstate', handlePopState);
+        };
     }, []);
 
     const updateUserDiamonds = useCallback((newAmount: number) => {
@@ -209,7 +237,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             if (timeoutId) clearTimeout(timeoutId);
             subscription.unsubscribe();
         };
-    }, [fetchUserProfile]);
+    }, [fetchUserProfile, loading]);
 
 
     // Effect for real-time user profile updates

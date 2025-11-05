@@ -1,7 +1,7 @@
+// Fix: Use standard ES module import for PayOS.
+import PayOS from "@payos/node";
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
-// Fix: Use `import = require()` for CommonJS modules like PayOS to ensure the class constructor is correctly imported.
-import PayOS = require("@payos/node");
 
 const payos = new PayOS(
     process.env.PAYOS_CLIENT_ID!,
@@ -67,13 +67,19 @@ const handler: Handler = async (event: HandlerEvent) => {
             returnUrl: process.env.PAYOS_RETURN_URL!,
             cancelUrl: process.env.PAYOS_CANCEL_URL!,
         };
+        
+        try {
+            const paymentLink = await payos.createPaymentLink(paymentData);
+            return {
+                statusCode: 200,
+                body: JSON.stringify({ checkoutUrl: paymentLink.checkoutUrl }),
+            };
+        } catch (payosError: any) {
+            console.error("PayOS API Error:", payosError);
+            // This will catch errors like invalid credentials
+            throw new Error(`Lỗi kết nối đến cổng thanh toán: ${payosError.message}. Vui lòng kiểm tra lại cấu hình PayOS.`);
+        }
 
-        const paymentLink = await payos.createPaymentLink(paymentData);
-
-        return {
-            statusCode: 200,
-            body: JSON.stringify({ checkoutUrl: paymentLink.checkoutUrl }),
-        };
 
     } catch (error: any) {
         console.error("Payment link creation failed:", error);

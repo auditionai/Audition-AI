@@ -1,7 +1,7 @@
+// Fix: Use standard ES module import for PayOS.
+import PayOS from "@payos/node";
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
-// Fix: Use `import = require()` for CommonJS modules like PayOS to ensure the class constructor is correctly imported.
-import PayOS = require("@payos/node");
 
 const payos = new PayOS(
     process.env.PAYOS_CLIENT_ID!,
@@ -10,6 +10,15 @@ const payos = new PayOS(
 );
 
 const handler: Handler = async (event: HandlerEvent) => {
+    // Handle PayOS Webhook verification GET request
+    if (event.httpMethod === 'GET') {
+        console.log("Received GET request for webhook verification from PayOS.");
+        return {
+            statusCode: 200,
+            body: 'OK', // A simple OK response is sufficient for verification
+        };
+    }
+    
     if (event.httpMethod !== 'POST') {
         return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
     }

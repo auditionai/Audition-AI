@@ -27,8 +27,8 @@ export const useBackgroundRemover = () => {
                 headers['Authorization'] = `Bearer ${session.access_token}`;
             }
 
-            console.log('[DEBUG] Step 3: Sending request to Netlify function `/process-background`...');
-            const response = await fetch('/.netlify/functions/process-background', {
+            console.log('[DEBUG] Step 3: Sending request to Netlify function `/image-processor`...');
+            const response = await fetch('/.netlify/functions/image-processor', {
                 method: 'POST',
                 headers: headers,
                 body: JSON.stringify({ image: imageDataUrl }),

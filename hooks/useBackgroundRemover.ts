@@ -16,69 +16,35 @@ export const useBackgroundRemover = () => {
 
     const removeBackground = async (imageFile: File): Promise<string | null> => {
         setProcessing(true);
-        console.log(`[DEBUG] Step 1: Initiating background removal for file: "${imageFile.name}"`);
-
-        let imageDataUrl: string;
+        
         try {
-            imageDataUrl = await fileToBase64(imageFile);
-            console.log("[DEBUG] Step 2: Successfully converted file to base64 Data URL.");
-        } catch (error) {
-            console.error("[DEBUG] Step 2 FAILED: Could not convert file to base64.", error);
-            showToast("Lỗi đọc file ảnh. Vui lòng kiểm tra console.", "error");
-            setProcessing(false);
-            return null;
-        }
+            const imageDataUrl = await fileToBase64(imageFile);
 
-        let response: Response;
-        try {
             const headers: Record<string, string> = { 'Content-Type': 'application/json' };
             if (session?.access_token) {
                 headers['Authorization'] = `Bearer ${session.access_token}`;
             }
 
-            console.log("[DEBUG] Step 3: Sending request to Netlify function '/.netlify/functions/remove-background'...");
-            response = await fetch('/.netlify/functions/remove-background', {
+            const response = await fetch('/.netlify/functions/process-background', {
                 method: 'POST',
                 headers: headers,
                 body: JSON.stringify({ image: imageDataUrl }),
             });
 
-            console.log(`[DEBUG] Step 4: Received response from server with status: ${response.status} ${response.statusText}`);
+            const result = await response.json();
 
             if (!response.ok) {
-                const errorText = await response.text();
-                console.error(`[DEBUG] Step 4 FAILED: Server responded with non-OK status.`, {
-                    status: response.status,
-                    body: errorText,
-                });
-                
-                let userMessage = `Lỗi máy chủ (${response.status}). Vui lòng kiểm tra console.`;
-                if (response.status === 402) userMessage = "Không đủ kim cương.";
-                if (response.status === 503) userMessage = "Hết tài nguyên AI, vui lòng thử lại sau.";
-                
-                throw new Error(userMessage);
+                throw new Error(result.error || `Lỗi máy chủ (${response.status})`);
             }
-
-            console.log("[DEBUG] Step 5: Attempting to parse JSON from response...");
-            const result = await response.json();
-            console.log("[DEBUG] Step 5 SUCCESS: Successfully parsed JSON response.", result);
 
             updateUserProfile({ diamonds: result.newDiamondCount });
             showToast(`Tách nền thành công!`, 'success');
             
-            console.log("[DEBUG] Step 6: Process complete. Returning image URL.");
             return result.imageUrl;
 
         } catch (error: any) {
-            // This will catch:
-            // 1. Network errors (fetch fails completely)
-            // 2. Non-OK responses (manually thrown in the 'if' block)
-            // 3. JSON parsing errors if the body of a 200 OK response is invalid
-            if (error.name === 'SyntaxError') {
-                 console.error("[DEBUG] Step 5 FAILED: Failed to parse JSON from a 200 OK response. This indicates a server-side issue where the function succeeded but returned an invalid body.");
-            }
-            console.error("[DEBUG] AN ERROR OCCURRED in the background removal pipeline:", error);
-            showToast(error.message || 'Có lỗi xảy ra. Vui lòng kiểm tra console để biết chi tiết.', 'error');
+            console.error("Background Removal Error:", error);
+            showToast(error.message || 'Có lỗi xảy ra khi tách nền.', 'error');
             return null;
         } finally {
             setProcessing(false);

@@ -38,10 +38,10 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
   return (
     <header className="fixed top-0 left-0 w-full z-40 bg-[#0B0B0F]/80 backdrop-blur-lg border-b border-pink-500/10">
       <div className="container mx-auto px-4">
-        <div className="flex justify-between items-center py-3 md:h-20">
+        <div className="flex justify-center md:justify-between items-center py-3 md:h-20">
           
-          {/* Left: Logo & Mobile Diamonds */}
-          <div className="flex flex-col">
+          {/* Left on Desktop, Center on Mobile: Logo & Mobile Diamonds */}
+          <div className="flex flex-col items-center md:items-start">
             <div className="text-2xl font-bold cursor-pointer" onClick={() => handleNavClick('tool')}>
               <span className="bg-gradient-to-r from-[#FF3FA4] to-[#CA27FF] text-transparent bg-clip-text">Audition AI Studio</span>
             </div>
@@ -49,11 +49,11 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
             <div className="md:hidden mt-2">
                 <button
                   onClick={onTopUpClick}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-full cursor-pointer transition-transform active:scale-95 bg-gradient-to-r from-[#F72585] to-[#CA27FF] text-white shadow-lg shadow-[#F72585]/40"
+                  className="flex items-center gap-2 px-4 py-2 rounded-full cursor-pointer transition-transform active:scale-95 bg-gradient-to-r from-[#F72585] to-[#CA27FF] text-white shadow-lg shadow-[#F72585]/40"
                   style={{ animation: 'button-neon-glow 4s infinite alternate' }}
                 >
                   <i className="ph-fill ph-diamonds-four text-lg"></i>
-                  <span className="font-bold text-sm">{user.diamonds}</span>
+                  <span className="font-bold text-sm">{user.diamonds} Kim cương</span>
                 </button>
             </div>
           </div>
@@ -154,9 +154,6 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
               )}
             </div>
           </div>
-
-          {/* This space is intentionally left blank on mobile to allow justify-between to work */}
-          <div className="md:hidden"></div>
         </div>
       </div>
     </header>

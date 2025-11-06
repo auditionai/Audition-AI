@@ -7,11 +7,11 @@ import XPProgressBar from './common/XPProgressBar';
 interface CreatorHeaderProps {
   onTopUpClick: () => void;
   activeTab: CreatorTab;
-  setActiveTab: (tab: CreatorTab) => void;
+  onNavigate: (tab: CreatorTab) => void;
   onCheckInClick: () => void;
 }
 
-const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, setActiveTab, onCheckInClick }) => {
+const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, onNavigate, onCheckInClick }) => {
   const { user, logout, hasCheckedInToday } = useAuth();
   const [isDropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -31,7 +31,7 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
   const rank = getRankForLevel(user.level);
 
   const handleNavClick = (tab: CreatorTab) => {
-    setActiveTab(tab);
+    onNavigate(tab);
     setDropdownOpen(false);
   }
 

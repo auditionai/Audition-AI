@@ -12,9 +12,12 @@ import MyCreationsPage from './MyCreationsPage'; // Import the new page
 
 export type CreatorTab = 'tool' | 'leaderboard' | 'settings' | 'my-creations';
 
-const CreatorPage: React.FC = () => {
+interface CreatorPageProps {
+    activeTab: CreatorTab;
+}
+
+const CreatorPage: React.FC<CreatorPageProps> = ({ activeTab }) => {
     const { navigate } = useAuth();
-    const [activeTab, setActiveTab] = useState<CreatorTab>('tool');
     const [infoModalKey, setInfoModalKey] = useState<'terms' | 'policy' | 'contact' | null>(null);
     const [isCheckInModalOpen, setCheckInModalOpen] = useState(false); // State for the new modal
 
@@ -42,7 +45,7 @@ const CreatorPage: React.FC = () => {
             <CreatorHeader 
                 onTopUpClick={() => navigate('buy-credits')}
                 activeTab={activeTab}
-                setActiveTab={setActiveTab}
+                onNavigate={navigate}
                 onCheckInClick={() => setCheckInModalOpen(true)} // Add click handler
             />
             <main className="flex-grow pt-20 relative">
@@ -56,7 +59,7 @@ const CreatorPage: React.FC = () => {
 
             <BottomNavBar
                 activeTab={activeTab}
-                onTabChange={setActiveTab}
+                onTabChange={navigate}
                 onTopUpClick={() => navigate('buy-credits')}
                 onCheckInClick={() => setCheckInModalOpen(true)}
             />

@@ -1,5 +1,5 @@
 import HomePage from './pages/HomePage';
-import CreatorPage from './pages/CreatorPage';
+import CreatorPage, { CreatorTab } from './pages/CreatorPage';
 import GalleryPage from './pages/GalleryPage';
 import { useAuth } from './contexts/AuthContext';
 import BuyCreditsPage from './pages/BuyCreditsPage';
@@ -25,14 +25,28 @@ function App() {
   }
 
   const renderPage = () => {
-    if (route === 'gallery') {
-      return <GalleryPage />;
+    const creatorTabs: CreatorTab[] = ['tool', 'leaderboard', 'my-creations', 'settings'];
+
+    if (user) {
+        if (creatorTabs.includes(route as CreatorTab)) {
+            return <CreatorPage activeTab={route as CreatorTab} />;
+        }
+        if (route === 'gallery') {
+            return <GalleryPage />;
+        }
+        if (route === 'buy-credits') {
+            return <BuyCreditsPage />;
+        }
+        // If logged in and route is 'home' or invalid, default to 'tool'
+        return <CreatorPage activeTab="tool" />;
+    } else {
+        // Logged out users
+        if (route === 'gallery') {
+            return <GalleryPage />;
+        }
+        // For any other route (including 'home' or protected routes like 'settings'), show HomePage
+        return <HomePage />;
     }
-    if (route === 'buy-credits') {
-      return <BuyCreditsPage />;
-    }
-    // For 'home' and any other route, use the default logic based on auth state
-    return user ? <CreatorPage /> : <HomePage />;
   }
 
   return (

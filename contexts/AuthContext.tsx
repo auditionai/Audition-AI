@@ -13,7 +13,8 @@ const getVNDateString = (date: Date) => {
 // Helper function to parse the route from the URL pathname.
 const getRouteFromPath = (path: string): string => {
     const pathSegment = path.split('/').filter(Boolean)[0];
-    if (pathSegment === 'buy-credits' || pathSegment === 'gallery') {
+    const creatorTabs = ['tool', 'leaderboard', 'my-creations', 'settings'];
+    if (pathSegment === 'buy-credits' || pathSegment === 'gallery' || creatorTabs.includes(pathSegment)) {
         return pathSegment;
     }
     // 'home' will be the default route for '/' or any unrecognized path.
@@ -206,6 +207,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                     if (profile) {
                         setSession(currentSession);
                         setUser(profile);
+                         // If user is logged in and lands on 'home', redirect to 'tool'
+                        if (getRouteFromPath(window.location.pathname) === 'home') {
+                            navigate('tool');
+                        }
                     } else {
                         throw new Error("Session is valid but user profile is missing. Data corruption detected.");
                     }
@@ -229,12 +234,23 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
             async (_event, newSession) => {
                 if (isCancelled || loading) return;
+
+                const previousSession = session;
                 setSession(newSession);
+
                 if (newSession?.user) {
                     const profile = await fetchUserProfile(newSession.user);
                     setUser(profile);
+                    // If this is a new login (no previous session), redirect to tool
+                    if (!previousSession) {
+                         navigate('tool');
+                    }
                 } else {
                     setUser(null);
+                    // If user logs out, redirect to home
+                    if(previousSession) {
+                        navigate('home');
+                    }
                 }
             }
         );
@@ -244,7 +260,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             if (timeoutId) clearTimeout(timeoutId);
             subscription.unsubscribe();
         };
-    }, [fetchUserProfile, loading]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [fetchUserProfile]);
 
     useEffect(() => {
         if (!user?.id || loading) return;
@@ -286,10 +303,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const logout = useCallback(async () => {
         await supabase.auth.signOut();
-        setUser(null);
-        setSession(null);
-        navigate('home');
-    }, [navigate]);
+        // The onAuthStateChange listener will handle setting user/session to null and navigating
+    }, []);
 
     const value = useMemo(() => ({
         session, user, loading, stats, toast, route, hasCheckedInToday, reward,

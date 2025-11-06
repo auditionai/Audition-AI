@@ -1,6 +1,11 @@
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
 
+const calculateLevelFromXp = (xp: number): number => {
+    if (typeof xp !== 'number' || xp < 0) return 1;
+    return Math.floor(xp / 100) + 1;
+};
+
 const handler: Handler = async (event: HandlerEvent) => {
     if (event.httpMethod !== 'GET') {
         return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
@@ -23,17 +28,52 @@ const handler: Handler = async (event: HandlerEvent) => {
 
     const { data, error } = await supabaseAdmin
         .from('generated_images')
-        .select('*')
+        .select(`
+            id,
+            user_id,
+            prompt,
+            image_url,
+            model_used,
+            created_at,
+            creator:users (
+                display_name,
+                photo_url,
+                xp
+            )
+        `)
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
     if (error) {
         return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
     }
+    
+    // Post-process to add the level, which is calculated from XP
+    const processedData = data.map(image => {
+        // The creator object might be null if the user was deleted, handle this gracefully
+        if (!image.creator) {
+            return {
+                ...image,
+                creator: {
+                    display_name: 'Người dùng vô danh',
+                    photo_url: 'https://i.pravatar.cc/150', // placeholder
+                    level: 1,
+                    xp: 0,
+                }
+            }
+        }
+        return {
+            ...image,
+            creator: {
+                ...image.creator,
+                level: calculateLevelFromXp(image.creator.xp || 0)
+            }
+        }
+    });
 
     return {
         statusCode: 200,
-        body: JSON.stringify(data),
+        body: JSON.stringify(processedData),
     };
 };
 

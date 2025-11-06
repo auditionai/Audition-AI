@@ -50,10 +50,17 @@ const MyCreationsPage: React.FC = () => {
                 ) : userImages.length > 0 ? (
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
                         {userImages.map(img => (
-                            <div key={img.id} className="group relative aspect-square rounded-lg overflow-hidden cursor-pointer interactive-3d" onClick={() => setSelectedImage(img)}>
+                            <div key={img.id} className="group relative aspect-square rounded-lg overflow-hidden cursor-pointer interactive-3d">
                                 <img src={img.image_url} alt={img.prompt} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110" />
-                                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                    <i className="ph-fill ph-eye text-3xl text-white"></i>
+                                <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-6">
+                                    <button onClick={() => setSelectedImage(img)} className="flex flex-col items-center text-white hover:text-pink-400 transition-colors p-2">
+                                        <i className="ph-fill ph-eye text-3xl"></i>
+                                        <span className="text-xs font-semibold mt-1">Xem</span>
+                                    </button>
+                                    <a href={img.image_url} download={`audition-ai-${img.id}.png`} className="flex flex-col items-center text-white hover:text-green-400 transition-colors p-2">
+                                        <i className="ph-fill ph-download-simple text-3xl"></i>
+                                        <span className="text-xs font-semibold mt-1">Tải</span>
+                                    </a>
                                 </div>
                             </div>
                         ))}

@@ -27,7 +27,7 @@ const ImageModal: React.FC<ImageModalProps> = ({ isOpen, onClose, image }) => {
     }, 2000);
   };
   
-  const rank = getRankForLevel(image.creator.level);
+  const rank = image.creator ? getRankForLevel(image.creator.level) : getRankForLevel(1);
 
   return (
     <div 
@@ -41,7 +41,6 @@ const ImageModal: React.FC<ImageModalProps> = ({ isOpen, onClose, image }) => {
         {/* Image Display */}
         <div className="flex-grow flex items-center justify-center bg-black/50 rounded-lg overflow-hidden">
             <img 
-                // Fix: Use `image_url` and `title` from the updated type.
                 src={image.image_url} 
                 alt={image.title || 'Gallery Image'}
                 className="max-w-full max-h-[90vh] object-contain animate-fade-in-up"
@@ -54,15 +53,16 @@ const ImageModal: React.FC<ImageModalProps> = ({ isOpen, onClose, image }) => {
             className="w-full lg:w-80 flex-shrink-0 bg-[#12121A]/80 border border-pink-500/20 rounded-lg p-4 flex flex-col text-white animate-fade-in-up"
             style={{ animationDelay: '200ms'}}
         >
-             <h3 className="text-xl font-bold text-white mb-3 pb-3 border-b border-white/10">{image.title}</h3>
-            <div className="flex items-center gap-3">
-                {/* Fix: Use `photo_url` and `display_name`. */}
-                <img src={image.creator.photo_url} alt={image.creator.display_name} className="w-12 h-12 rounded-full" />
-                <div>
-                    <p className={`font-bold ${rank.color} neon-text-glow`}>{image.creator.display_name}</p>
-                    <p className={`text-xs font-semibold flex items-center gap-1.5 ${rank.color}`}>{rank.icon} {rank.title}</p>
+             {image.title && <h3 className="text-xl font-bold text-white mb-3 pb-3 border-b border-white/10">{image.title}</h3>}
+            {image.creator && (
+                <div className="flex items-center gap-3">
+                    <img src={image.creator.photo_url} alt={image.creator.display_name} className="w-12 h-12 rounded-full" />
+                    <div>
+                        <p className={`font-bold ${rank.color} neon-text-glow`}>{image.creator.display_name}</p>
+                        <p className={`text-xs font-semibold flex items-center gap-1.5 ${rank.color}`}>{rank.icon} {rank.title}</p>
+                    </div>
                 </div>
-            </div>
+            )}
             <div className="mt-4 flex-grow overflow-y-auto custom-scrollbar flex flex-col">
                 <h4 className="font-semibold text-pink-400 mb-2 flex items-center gap-2">
                     <i className="ph-fill ph-quotes"></i>
@@ -71,13 +71,23 @@ const ImageModal: React.FC<ImageModalProps> = ({ isOpen, onClose, image }) => {
                 <p className="text-sm text-gray-300 italic bg-white/5 p-3 rounded-md flex-grow">
                     "{image.prompt}"
                 </p>
-                <button
-                    onClick={handleCopyPrompt}
-                    className={`w-full mt-3 px-4 py-2 text-sm font-semibold rounded-lg flex items-center justify-center gap-2 transition-all duration-300 ${isCopied ? 'bg-green-500/20 text-green-300' : 'bg-pink-500/20 text-pink-300 hover:bg-pink-500/30'}`}
-                >
-                    <i className={`ph-fill ${isCopied ? 'ph-check-circle' : 'ph-copy'}`}></i>
-                    {isCopied ? 'Đã sao chép!' : 'Sao chép Prompt'}
-                </button>
+                <div className="mt-auto pt-3">
+                    <button
+                        onClick={handleCopyPrompt}
+                        className={`w-full px-4 py-2 text-sm font-semibold rounded-lg flex items-center justify-center gap-2 transition-all duration-300 ${isCopied ? 'bg-green-500/20 text-green-300' : 'bg-pink-500/20 text-pink-300 hover:bg-pink-500/30'}`}
+                    >
+                        <i className={`ph-fill ${isCopied ? 'ph-check-circle' : 'ph-copy'}`}></i>
+                        {isCopied ? 'Đã sao chép!' : 'Sao chép Prompt'}
+                    </button>
+                    <a 
+                        href={image.image_url} 
+                        download={`audition-ai-${image.id}.png`}
+                        className="w-full mt-2 px-4 py-2 text-sm font-semibold rounded-lg flex items-center justify-center gap-2 transition-all duration-300 bg-green-500/20 text-green-300 hover:bg-green-500/30"
+                    >
+                        <i className="ph-fill ph-download-simple"></i>
+                        <span>Tải xuống</span>
+                    </a>
+                </div>
             </div>
         </div>
       </div>

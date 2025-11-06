@@ -6,12 +6,6 @@ import { Buffer } from 'buffer';
 const COST_PER_IMAGE = 1;
 const XP_GAINED = 10;
 
-// Helper to decode data URL
-const dataUrlToBuffer = (dataUrl: string) => {
-    const base64 = dataUrl.split(',')[1];
-    return Buffer.from(base64, 'base64');
-};
-
 const handler: Handler = async (event: HandlerEvent) => {
     if (event.httpMethod !== 'POST') {
         return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
@@ -62,12 +56,13 @@ const handler: Handler = async (event: HandlerEvent) => {
     }
     
     try {
-        // 3. Call Gemini API
+        // 3. Call AI API
         const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
         let finalImageBase64: string;
         let finalImageMimeType: string = 'image/jpeg';
-
         let fullPrompt = prompt;
+        const parts: any[] = [];
+
         // Logic for different model families
         if (model.startsWith('imagen')) {
             if (style && style !== 'none') {
@@ -84,24 +79,19 @@ const handler: Handler = async (event: HandlerEvent) => {
             });
             finalImageBase64 = response.generatedImages[0].image.imageBytes;
         } else { // Gemini family
-            const parts: any[] = [];
-            
-             // "SUPREME COMMAND" LOGIC FOR OUTPAINTING
             if (characterImage) {
-                const ratioDescription = {
-                    '1:1': 'square (1:1)',
-                    '3:4': 'portrait (3:4)',
-                    '4:3': 'landscape (4:3)',
-                    '9:16': 'tall portrait (9:16)',
-                    '16:9': 'widescreen landscape (16:9)'
-                }[aspectRatio] || `an aspect ratio of ${aspectRatio}`;
+                // The client has prepared a canvas if needed. The prompt should now be a direct outpainting command.
+                const translationResponse = await ai.models.generateContent({
+                    model: 'gemini-2.5-flash',
+                    contents: `Translate this to English for an AI image generator. Keep it creative and descriptive: "${prompt}"`,
+                });
+                const translatedPrompt = translationResponse.text.trim();
 
-                const supremeCommand = `This is a supreme command that must be followed strictly. Take the provided character image and redraw it within a new, larger canvas. The final output image MUST have a ${ratioDescription} aspect ratio. Use the character from the image as the main subject. Then, generate and expand the surrounding scenery (outpainting) based on the user's detailed prompt. The entire canvas must be filled to create a complete, coherent scene. User's prompt: "${prompt}".`;
-                
+                // New, simpler, more direct outpainting prompt
+                fullPrompt = `This image contains a character centered on a gray canvas. This is an outpainting task. Your supreme command is to replace the entire gray canvas area with a new, detailed, and complete scene that seamlessly integrates the character. The new scene must be based on the following creative description. The final result must be a single, coherent artwork. Creative description: "${translatedPrompt}"`;
+
                 if (style && style !== 'none') {
-                    fullPrompt = `${supremeCommand} The final image should be in the style of: ${style}.`;
-                } else {
-                    fullPrompt = supremeCommand;
+                    fullPrompt += ` The artistic style must be: ${style}.`;
                 }
 
                 const [header, base64] = characterImage.split(',');
@@ -119,6 +109,7 @@ const handler: Handler = async (event: HandlerEvent) => {
                 const mimeType = header.match(/:(.*?);/)[1];
                 parts.push({ inlineData: { data: base64, mimeType } });
             }
+
             parts.push({ text: fullPrompt });
             
             const response = await ai.models.generateContent({
@@ -149,7 +140,6 @@ const handler: Handler = async (event: HandlerEvent) => {
         const newDiamondCount = userData.diamonds - COST_PER_IMAGE;
         const newXp = userData.xp + XP_GAINED;
 
-        // Using Promise.all to run updates concurrently
         await Promise.all([
             supabaseAdmin.from('users').update({ diamonds: newDiamondCount, xp: newXp }).eq('id', user.id),
             supabaseAdmin.from('generated_images').insert({ user_id: user.id, prompt: prompt, image_url: publicUrl, model_used: model }),

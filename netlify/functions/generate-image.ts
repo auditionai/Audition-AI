@@ -68,12 +68,11 @@ const handler: Handler = async (event: HandlerEvent) => {
         let finalImageMimeType: string = 'image/jpeg';
 
         let fullPrompt = prompt;
-        if (style && style !== 'none') {
-            fullPrompt = `${prompt}, theo phong cách ${style}.`;
-        }
-        
         // Logic for different model families
         if (model.startsWith('imagen')) {
+            if (style && style !== 'none') {
+                fullPrompt = `${prompt}, theo phong cách ${style}.`;
+            }
             const response = await ai.models.generateImages({
                 model: model,
                 prompt: fullPrompt,
@@ -86,12 +85,36 @@ const handler: Handler = async (event: HandlerEvent) => {
             finalImageBase64 = response.generatedImages[0].image.imageBytes;
         } else { // Gemini family
             const parts: any[] = [];
+            
+             // "SUPREME COMMAND" LOGIC FOR OUTPAINTING
             if (characterImage) {
+                const ratioDescription = {
+                    '1:1': 'square (1:1)',
+                    '3:4': 'portrait (3:4)',
+                    '4:3': 'landscape (4:3)',
+                    '9:16': 'tall portrait (9:16)',
+                    '16:9': 'widescreen landscape (16:9)'
+                }[aspectRatio] || `an aspect ratio of ${aspectRatio}`;
+
+                const supremeCommand = `This is a supreme command that must be followed strictly. Take the provided character image and redraw it within a new, larger canvas. The final output image MUST have a ${ratioDescription} aspect ratio. Use the character from the image as the main subject. Then, generate and expand the surrounding scenery (outpainting) based on the user's detailed prompt. The entire canvas must be filled to create a complete, coherent scene. User's prompt: "${prompt}".`;
+                
+                if (style && style !== 'none') {
+                    fullPrompt = `${supremeCommand} The final image should be in the style of: ${style}.`;
+                } else {
+                    fullPrompt = supremeCommand;
+                }
+
                 const [header, base64] = characterImage.split(',');
                 const mimeType = header.match(/:(.*?);/)[1];
                 parts.push({ inlineData: { data: base64, mimeType } });
+
+            } else {
+                 if (style && style !== 'none') {
+                    fullPrompt = `${prompt}, theo phong cách ${style}.`;
+                }
             }
-             if (styleImage) {
+            
+            if (styleImage) {
                 const [header, base64] = styleImage.split(',');
                 const mimeType = header.match(/:(.*?);/)[1];
                 parts.push({ inlineData: { data: base64, mimeType } });

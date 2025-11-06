@@ -300,11 +300,11 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                                 <div>
                                         <label className="text-sm font-medium text-gray-400 mb-2 block">Tỷ lệ khung hình</label>
                                         <div className="grid grid-cols-5 gap-2">
-                                        <AspectRatioButton value="1:1" icon={<div className="w-6 h-6 bg-gray-500 rounded-sm"/>} currentValue={aspectRatio} onClick={setAspectRatio} disabled={!!selectedCharacterId} />
-                                        <AspectRatioButton value="3:4" icon={<div className="w-5 h-7 bg-gray-500 rounded-sm"/>} currentValue={aspectRatio} onClick={setAspectRatio} disabled={!!selectedCharacterId} />
-                                        <AspectRatioButton value="4:3" icon={<div className="w-7 h-5 bg-gray-500 rounded-sm"/>} currentValue={aspectRatio} onClick={setAspectRatio} disabled={!!selectedCharacterId} />
-                                        <AspectRatioButton value="9:16" icon={<div className="w-4 h-8 bg-gray-500 rounded-sm"/>} currentValue={aspectRatio} onClick={setAspectRatio} disabled={!!selectedCharacterId} />
-                                        <AspectRatioButton value="16:9" icon={<div className="w-8 h-4 bg-gray-500 rounded-sm"/>} currentValue={aspectRatio} onClick={setAspectRatio} disabled={!!selectedCharacterId} />
+                                        <AspectRatioButton value="1:1" icon={<div className="w-6 h-6 bg-gray-500 rounded-sm"/>} currentValue={aspectRatio} onClick={setAspectRatio} />
+                                        <AspectRatioButton value="3:4" icon={<div className="w-5 h-7 bg-gray-500 rounded-sm"/>} currentValue={aspectRatio} onClick={setAspectRatio} />
+                                        <AspectRatioButton value="4:3" icon={<div className="w-7 h-5 bg-gray-500 rounded-sm"/>} currentValue={aspectRatio} onClick={setAspectRatio} />
+                                        <AspectRatioButton value="9:16" icon={<div className="w-4 h-8 bg-gray-500 rounded-sm"/>} currentValue={aspectRatio} onClick={setAspectRatio} />
+                                        <AspectRatioButton value="16:9" icon={<div className="w-8 h-4 bg-gray-500 rounded-sm"/>} currentValue={aspectRatio} onClick={setAspectRatio} />
                                         </div>
                                 </div>
                                 <div className="pt-2 border-t border-white/10 mt-2">

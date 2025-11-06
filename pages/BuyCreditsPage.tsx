@@ -78,7 +78,7 @@ const BuyCreditsPage: React.FC = () => {
 
     return (
         <div className="flex flex-col min-h-screen bg-[#0B0B0F] pb-16 md:pb-0">
-            <CreatorHeader onTopUpClick={() => {}} activeTab={'tool'} setActiveTab={(tab) => navigate(tab)} onCheckInClick={() => setCheckInModalOpen(true)} />
+            <CreatorHeader onTopUpClick={() => {}} activeTab={'tool'} onNavigate={navigate} onCheckInClick={() => setCheckInModalOpen(true)} />
             <main className="flex-grow pt-24 relative">
                 <div className="absolute inset-0 z-0 aurora-background opacity-70"></div>
                 <div className="container mx-auto px-4 relative z-10">

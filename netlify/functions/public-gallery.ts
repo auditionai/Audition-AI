@@ -33,7 +33,10 @@ const handler: Handler = async () => {
         }
         
         const processedData = data.map(image => {
-            if (!image.creator) {
+            // Fix: Supabase might return an array for a joined table. Safely handle both object and array cases.
+            const creatorData = Array.isArray(image.creator) ? image.creator[0] : image.creator;
+
+            if (!creatorData) {
                 return {
                     ...image,
                     creator: {
@@ -47,8 +50,9 @@ const handler: Handler = async () => {
             return {
                 ...image,
                 creator: {
-                    ...image.creator,
-                    level: calculateLevelFromXp(image.creator.xp || 0)
+                    // Spread the actual creator object, not a potential array
+                    ...creatorData,
+                    level: calculateLevelFromXp(creatorData.xp || 0)
                 }
             }
         });

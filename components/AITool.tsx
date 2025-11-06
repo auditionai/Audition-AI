@@ -12,6 +12,53 @@ import GenerationProgress from './ai-tool/GenerationProgress';
 import ToggleSwitch from './ai-tool/ToggleSwitch';
 import { DiamondIcon } from './common/DiamondIcon';
 
+// Helper function to resize an image file before uploading
+const resizeImage = (file: File, maxSize: number): Promise<{ file: File; dataUrl: string }> => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            if (!event.target?.result) return reject(new Error('FileReader did not return a result.'));
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                let { width, height } = img;
+
+                if (width > height) {
+                    if (width > maxSize) {
+                        height *= maxSize / width;
+                        width = maxSize;
+                    }
+                } else {
+                    if (height > maxSize) {
+                        width *= maxSize / height;
+                        height = maxSize;
+                    }
+                }
+
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) return reject(new Error('Could not get canvas context'));
+                
+                ctx.drawImage(img, 0, 0, width, height);
+
+                const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+                
+                canvas.toBlob((blob) => {
+                    if (!blob) return reject(new Error('Canvas to Blob conversion failed'));
+                    const resizedFile = new File([blob], file.name, { type: 'image/jpeg' });
+                    resolve({ file: resizedFile, dataUrl });
+                }, 'image/jpeg', 0.9);
+            };
+            img.onerror = reject;
+            img.src = event.target.result as string;
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+};
+
+
 const AITool: React.FC = () => {
     const { user, showToast } = useAuth();
     const { isLoading, generatedImage, generateImage, COST_PER_IMAGE } = useImageGenerator();
@@ -80,42 +127,51 @@ const AITool: React.FC = () => {
     const handleCharacterImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                const newImage = { id: crypto.randomUUID(), url: event.target?.result as string, file };
+            resizeImage(file, 1024).then(({ file: resizedFile, dataUrl: resizedDataUrl }) => {
+                const newImage = { id: crypto.randomUUID(), url: resizedDataUrl, file: resizedFile };
                 const newImages = [...characterImages, newImage];
                 setCharacterImages(newImages);
                 if (!selectedCharacterId) {
                     setSelectedCharacterId(newImage.id);
                 }
-            };
-            reader.readAsDataURL(file);
+            }).catch(err => {
+                console.error("Error resizing character image:", err);
+                showToast("Lỗi khi xử lý ảnh nhân vật.", "error");
+            });
         }
+        e.target.value = '';
     };
 
     const handleStyleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                if (event.target?.result) {
-                    setStyleImage({ url: event.target.result as string, file });
-                }
-            };
-            reader.readAsDataURL(file);
+             resizeImage(file, 1024).then(({ file: resizedFile, dataUrl: resizedDataUrl }) => {
+                setStyleImage({ url: resizedDataUrl, file: resizedFile });
+            }).catch(err => {
+                console.error("Error resizing style image:", err);
+                showToast("Lỗi khi xử lý ảnh mẫu.", "error");
+            });
         }
+        e.target.value = '';
     };
 
     const handleBgRemovalImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = Array.from(e.target.files ?? []);
-        files.forEach((file: File) => {
-             const reader = new FileReader();
-             reader.onload = (event) => {
-                 const newImage = { id: crypto.randomUUID(), url: event.target?.result as string, file };
-                 setImagesForBgRemoval(prev => [...prev, newImage]);
-             };
-             reader.readAsDataURL(file);
+        files.forEach(async (file: File) => {
+            if (file.size > 10 * 1024 * 1024) { // 10MB limit
+                showToast('Ảnh quá lớn. Vui lòng chọn ảnh dưới 10MB.', 'error');
+                return;
+            }
+            try {
+                const { file: resizedFile, dataUrl: resizedDataUrl } = await resizeImage(file, 1024);
+                const newImage = { id: crypto.randomUUID(), url: resizedDataUrl, file: resizedFile };
+                setImagesForBgRemoval(prev => [...prev, newImage]);
+            } catch (error) {
+                console.error("Error resizing image:", error);
+                showToast("Lỗi khi xử lý ảnh. Vui lòng thử ảnh khác.", "error");
+            }
         });
+        e.target.value = '';
     };
     
     const handleRemoveCharacterImage = (idToRemove: string) => {
@@ -159,7 +215,17 @@ const AITool: React.FC = () => {
         for (const image of imagesToProcessNow) {
             const processedUrl = await removeBackground(image.file);
             if (processedUrl) {
-                setProcessedImages(prev => [...prev, { id: image.id, originalUrl: image.url, processedUrl, file: image.file }]);
+                // To create a file object for the processed image, we need to fetch it first.
+                // This allows it to be passed correctly to the generator tool.
+                try {
+                    const response = await fetch(processedUrl);
+                    const blob = await response.blob();
+                    const processedFile = new File([blob], `processed_${image.file.name}`, { type: blob.type });
+                    setProcessedImages(prev => [...prev, { id: image.id, originalUrl: image.url, processedUrl, file: processedFile }]);
+                } catch(err) {
+                     console.error("Failed to fetch processed image to create File object:", err);
+                     showToast("Lỗi khi tải ảnh đã xử lý.", "error");
+                }
             }
         }
     };

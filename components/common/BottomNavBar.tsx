@@ -32,16 +32,16 @@ const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeTab, onTabChange, onT
                 onClick={() => onTabChange('tool')}
             />
             <NavButton 
+                icon="ph-images"
+                label="Tác phẩm"
+                isActive={activeTab === 'my-creations'}
+                onClick={() => onTabChange('my-creations')}
+            />
+            <NavButton 
                 icon="ph-crown-simple"
                 label="Xếp hạng"
                 isActive={activeTab === 'leaderboard'}
                 onClick={() => onTabChange('leaderboard')}
-            />
-             <NavButton 
-                icon="ph-calendar-check"
-                label="Điểm danh"
-                isActive={false}
-                onClick={onCheckInClick}
             />
             <NavButton 
                 icon="ph-diamonds-four"

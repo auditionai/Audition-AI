@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { ApiKey, GalleryImage, AdminManagedUser, CreditPackage, AdminTransaction } from '../types';
+import { ApiKey, AdminManagedUser, CreditPackage, AdminTransaction } from '../types';
 import { getRankForLevel } from '../utils/rankUtils';
 import XPProgressBar from './common/XPProgressBar';
-import ImageModal from './common/ImageModal';
 import Modal from './common/Modal';
 import { RANKS } from '../constants/ranks';
 
@@ -154,11 +153,6 @@ const Settings: React.FC = () => {
     const [isTransactionsLoading, setIsTransactionsLoading] = useState(false);
     const [processingTransactionId, setProcessingTransactionId] = useState<string | null>(null);
 
-    // Gallery state
-    const [userImages, setUserImages] = useState<GalleryImage[]>([]);
-    const [isImagesLoading, setIsImagesLoading] = useState(false);
-    const [selectedImage, setSelectedImage] = useState<GalleryImage | null>(null);
-
     const rank = user ? getRankForLevel(user.level) : null;
     
     const fetchAdminData = useCallback(async () => {
@@ -209,25 +203,10 @@ const Settings: React.FC = () => {
     }, [session, showToast, user?.is_admin]);
 
     useEffect(() => {
-        const fetchUserImages = async () => {
-            if (!session) return;
-            setIsImagesLoading(true);
-            try {
-                const response = await fetch('/.netlify/functions/user-gallery', { 
-                    headers: { Authorization: `Bearer ${session.access_token}` },
-                    cache: 'no-cache'
-                });
-                if (!response.ok) throw new Error('Không thể tải ảnh của bạn.');
-                setUserImages(await response.json());
-            } catch (error: any) { showToast(error.message, 'error'); } 
-            finally { setIsImagesLoading(false); }
-        };
-
-        fetchUserImages();
         if (user?.is_admin) {
             fetchAdminData();
         }
-    }, [session, showToast, user?.is_admin, fetchAdminData]);
+    }, [user?.is_admin, fetchAdminData]);
 
     const handleUpdateName = async () => {
         if (!user || !displayName.trim() || displayName.trim() === user.display_name) {
@@ -402,13 +381,12 @@ const Settings: React.FC = () => {
 
     return (
         <div className="container mx-auto px-4 py-8 animate-fade-in max-w-4xl">
-             <ImageModal isOpen={!!selectedImage} onClose={() => setSelectedImage(null)} image={selectedImage} />
              {editingUser && <EditUserModal user={editingUser} onClose={() => setEditingUser(null)} onSave={handleUpdateUser} />}
              {editingPackage && <EditPackageModal pkg={editingPackage} onClose={() => setEditingPackage(null)} onSave={handlePackageUpdate} />}
 
             <div className="text-center mb-12">
                 <h1 className="text-4xl font-bold mb-4 bg-gradient-to-r from-pink-400 to-fuchsia-500 text-transparent bg-clip-text">Cài đặt Tài khoản</h1>
-                <p className="text-lg text-gray-400">Quản lý thông tin cá nhân, xem lại tác phẩm và các cài đặt khác.</p>
+                <p className="text-lg text-gray-400">Quản lý thông tin cá nhân và các cài đặt khác.</p>
             </div>
             
             <div className="bg-[#12121A]/80 border border-white/10 rounded-2xl shadow-lg p-6 mb-8">
@@ -451,25 +429,6 @@ const Settings: React.FC = () => {
                     <XPProgressBar currentXp={user.xp} currentLevel={user.level} />
                 </div>
             </div>
-            
-            <div className="mb-8">
-                <h3 className="text-2xl font-bold mb-4 text-center">Tác phẩm của bạn</h3>
-                <div className="bg-[#12121A]/80 border border-white/10 rounded-2xl shadow-lg p-6">
-                    {isImagesLoading ? <p className="text-center text-gray-400">Đang tải tác phẩm...</p> : userImages.length > 0 ? (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                            {userImages.map(img => (
-                                <div key={img.id} className="group relative aspect-square rounded-lg overflow-hidden cursor-pointer" onClick={() => setSelectedImage(img)}>
-                                    <img src={img.image_url} alt={img.prompt} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110" />
-                                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                        <i className="ph-fill ph-eye text-3xl text-white"></i>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    ) : <p className="text-center text-gray-400 py-8">Bạn chưa tạo ảnh nào. Hãy bắt đầu sáng tạo ngay!</p>}
-                </div>
-            </div>
-
 
             {user.is_admin && (
                 <div className="space-y-8">

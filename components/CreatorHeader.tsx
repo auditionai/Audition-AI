@@ -55,6 +55,16 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
             </div>
              <nav className="hidden md:flex items-center gap-2">
                 <button 
+                  onClick={() => handleNavClick('my-creations')} 
+                  className={`flex items-center gap-2 px-3 md:px-4 py-2 rounded-full text-sm font-bold transition-all duration-300 shadow-lg
+                    ${activeTab === 'my-creations' 
+                      ? 'bg-blue-400 text-black shadow-blue-400/30' 
+                      : 'bg-blue-400/20 text-blue-300 hover:bg-blue-400/30 hover:shadow-blue-400/20'}`
+                  }>
+                    <i className="ph-fill ph-images text-base"></i>
+                    <span className="hidden md:inline">Tác phẩm</span>
+                </button>
+                <button 
                   onClick={() => handleNavClick('leaderboard')} 
                   className={`flex items-center gap-2 px-3 md:px-4 py-2 rounded-full text-sm font-bold transition-all duration-300 shadow-lg
                     ${activeTab === 'leaderboard' 
@@ -96,13 +106,11 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
             
             <div className="relative flex items-center gap-3" ref={dropdownRef}>
                 <div className="hidden sm:flex items-center gap-2 text-right">
-                    {/* Fix: Use `display_name` instead of `displayName`. */}
                     <span className="font-semibold text-white">{user.display_name}</span>
                     <span className="text-xs text-gray-400">{rank.title}</span>
                 </div>
                 <button onClick={() => setDropdownOpen(!isDropdownOpen)} className="flex items-center gap-3 cursor-pointer">
                   <div className="relative">
-                     {/* Fix: Use `photo_url` and `display_name`. */}
                      <img src={user.photo_url} alt={user.display_name} className="w-11 h-11 rounded-full border-2 border-transparent group-hover:border-pink-500 transition-all" />
                       <div className={`absolute inset-0 rounded-full border-2 border-pink-500 transition-all duration-300 shadow-[0_0_12px_rgba(247,37,133,0.7)] ${isDropdownOpen ? 'opacity-100' : 'opacity-0'}`}></div>
                   </div>
@@ -114,7 +122,6 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
                         <div className="flex items-center gap-3">
                            <span className="text-2xl">{rank.icon}</span>
                            <div>
-                               {/* Fix: Use `display_name`. */}
                                <p className="font-semibold text-sm text-white">{user.display_name}</p>
                                <p className="text-xs text-gray-400 truncate">{rank.title} - Cấp {user.level}</p>
                            </div>

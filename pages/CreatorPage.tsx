@@ -8,12 +8,11 @@ import Settings from '../components/Settings';
 import InfoModal from '../components/InfoModal';
 import BottomNavBar from '../components/common/BottomNavBar';
 import CheckInModal from '../components/CheckInModal'; // Import the new modal
+import MyCreationsPage from './MyCreationsPage'; // Import the new page
 
-// Fix: Export the CreatorTab type so it can be imported in other components.
-export type CreatorTab = 'tool' | 'leaderboard' | 'settings';
+export type CreatorTab = 'tool' | 'leaderboard' | 'settings' | 'my-creations';
 
 const CreatorPage: React.FC = () => {
-    // Fix: `updateUserDiamonds` is now correctly provided by the `useAuth` hook.
     const { navigate } = useAuth();
     const [activeTab, setActiveTab] = useState<CreatorTab>('tool');
     const [infoModalKey, setInfoModalKey] = useState<'terms' | 'policy' | 'contact' | null>(null);
@@ -29,6 +28,8 @@ const CreatorPage: React.FC = () => {
                 return <AITool />;
             case 'leaderboard':
                 return <Leaderboard />;
+            case 'my-creations':
+                return <MyCreationsPage />;
             case 'settings':
                 return <Settings />;
             default:

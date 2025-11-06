@@ -177,6 +177,41 @@ const AITool: React.FC = () => {
         setInstructionModalOpen(true);
     };
 
+    const ResultPanel = ({ isMobile = false }) => (
+      <div className={`${isMobile ? 'block lg:hidden mt-6' : 'hidden lg:block lg:sticky top-24 h-[calc(100vh-7rem)] bg-black/20 p-4 rounded-2xl border border-white/5'}`}>
+          {isMobile && <h3 className="text-lg font-semibold mb-3 text-gray-300">Kết quả</h3>}
+          <div className="w-full h-full flex flex-col items-center justify-between">
+              <div className="w-full flex-grow aspect-square bg-black/30 rounded-lg flex items-center justify-center overflow-hidden my-2 border border-white/5 relative group">
+                  {isLoading ? ( <GenerationProgress currentStep={generationStep} /> ) : 
+                   generatedImage ? ( 
+                      <>
+                          <img src={generatedImage} alt="Generated Art" className="w-full h-full object-contain animate-fade-in" />
+                          <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
+                              <button onClick={() => setPreviewModalOpen(true)} className="flex flex-col items-center text-white hover:text-pink-400 transition-colors">
+                                  <i className="ph-fill ph-eye text-4xl"></i>
+                                  <span className="text-xs font-semibold">Phóng to</span>
+                              </button>
+                              <a href={generatedImage} download="audition-ai-art.png" onClick={(e) => e.stopPropagation()} className="flex flex-col items-center text-white hover:text-green-400 transition-colors">
+                                  <i className="ph-fill ph-download-simple text-4xl"></i>
+                                  <span className="text-xs font-semibold">Tải xuống</span>
+                              </a>
+                          </div>
+                      </>
+                   ) : 
+                   ( <div className="text-center text-gray-500 p-4"><i className="ph-fill ph-image-square text-5xl"></i><p className="mt-2 text-sm">Hình ảnh của bạn sẽ xuất hiện ở đây</p></div> )}
+              </div>
+              {!isMobile && (
+                  <div className="w-full">
+                      <button onClick={handleGenerateClick} disabled={isLoading} className="w-full mt-2 py-3.5 font-bold text-lg text-white bg-gradient-to-r from-[#F72585] to-[#CA27FF] rounded-full hover:scale-105 transform transition-transform duration-300 shadow-lg shadow-[#F72585]/30 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed disabled:scale-100">
+                         <i className="ph-fill ph-magic-wand"></i>
+                         {isLoading ? "Đang xử lý..." : `Tạo ảnh (-${COST_PER_IMAGE} kim cương)`}
+                     </button>
+                  </div>
+              )}
+          </div>
+      </div>
+  );
+
     const AiGeneratorTool = (
         <div className="lg:grid lg:grid-cols-2 gap-6 space-y-6 lg:space-y-0">
             {/* Controls */}
@@ -265,54 +300,12 @@ const AITool: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Mobile Result Panel (New Position) */}
-                <div className="block lg:hidden mt-6">
-                    <h3 className="text-lg font-semibold mb-3 text-gray-300">Kết quả</h3>
-                    <div 
-                        className="w-full aspect-square bg-black/30 rounded-lg flex items-center justify-center overflow-hidden border border-white/5 relative group"
-                    >
-                        {isLoading ? ( <GenerationProgress currentStep={generationStep} /> ) : 
-                         generatedImage ? ( 
-                            <>
-                                <img src={generatedImage} alt="Generated Art" className="w-full h-full object-contain animate-fade-in" /> 
-                                <div 
-                                    onClick={() => setPreviewModalOpen(true)}
-                                    className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer"
-                                >
-                                    <i className="ph-fill ph-eye text-4xl text-white"></i>
-                                </div>
-                                <a 
-                                    href={generatedImage} 
-                                    download="audition-ai-art.png" 
-                                    onClick={(e) => e.stopPropagation()} 
-                                    className="absolute top-2 right-2 bg-black/60 text-white rounded-full p-2 hover:bg-pink-600 transition-colors z-10"
-                                >
-                                    <i className="ph-fill ph-download-simple text-xl"></i>
-                                </a>
-                            </>
-                         ) : 
-                         ( <div className="text-center text-gray-500 p-4"><i className="ph-fill ph-image-square text-5xl"></i><p className="mt-2 text-sm">Hình ảnh của bạn sẽ xuất hiện ở đây</p></div> )}
-                    </div>
-                </div>
+                {/* Mobile Result Panel */}
+                <ResultPanel isMobile={true} />
             </div>
 
             {/* Desktop Result Panel */}
-            <div className="hidden lg:block lg:sticky top-24 h-[calc(100vh-7rem)] bg-black/20 p-4 rounded-2xl border border-white/5">
-                 <div className="w-full h-full flex flex-col items-center justify-between">
-                     <div className="w-full flex-grow aspect-square bg-black/30 rounded-lg flex items-center justify-center overflow-hidden my-2 border border-white/5 relative">
-                        {isLoading ? ( <GenerationProgress currentStep={generationStep} /> ) : 
-                         generatedImage ? ( <img src={generatedImage} alt="Generated Art" className="w-full h-full object-contain animate-fade-in" /> ) : 
-                         ( <div className="text-center text-gray-500 p-4"><i className="ph-fill ph-image-square text-5xl"></i><p className="mt-2 text-sm">Hình ảnh của bạn sẽ xuất hiện ở đây</p></div> )}
-                        {generatedImage && !isLoading && ( <a href={generatedImage} download="audition-ai-art.png" className="absolute top-2 right-2 bg-black/60 text-white rounded-full p-2 hover:bg-pink-600 transition-colors z-10"><i className="ph-fill ph-download-simple text-xl"></i></a> )}
-                     </div>
-                     <div className="w-full">
-                         <button onClick={handleGenerateClick} disabled={isLoading} className="w-full mt-2 py-3.5 font-bold text-lg text-white bg-gradient-to-r from-[#F72585] to-[#CA27FF] rounded-full hover:scale-105 transform transition-transform duration-300 shadow-lg shadow-[#F72585]/30 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed disabled:scale-100">
-                            <i className="ph-fill ph-magic-wand"></i>
-                            {isLoading ? "Đang xử lý..." : `Tạo ảnh (-${COST_PER_IMAGE} kim cương)`}
-                        </button>
-                     </div>
-                 </div>
-            </div>
+            <ResultPanel isMobile={false} />
         </div>
     );
 
@@ -417,13 +410,22 @@ const AITool: React.FC = () => {
             <ModelSelectionModal isOpen={isModelModalOpen} onClose={() => setModelModalOpen(false)} selectedModelId={selectedModelId} onSelectModel={setSelectedModelId} characterImage={characterImages.length > 0}/>
             <InstructionModal isOpen={isInstructionModalOpen} onClose={() => setInstructionModalOpen(false)} instructionKey={instructionKey}/>
 
-            {/* Simplified modal for mobile preview */}
+            {/* Preview Modal for generated images */}
             {isPreviewModalOpen && generatedImage && (
                 <div 
-                  className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+                  className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in"
                   onClick={() => setPreviewModalOpen(false)}
                 >
-                    <img src={generatedImage} alt="Generated Preview" className="max-w-full max-h-full rounded-lg" />
+                    <img src={generatedImage} alt="Generated Preview" className="max-w-full max-h-full rounded-lg shadow-2xl shadow-pink-500/20" />
+                     <a 
+                        href={generatedImage} 
+                        download="audition-ai-art.png" 
+                        onClick={(e) => e.stopPropagation()} 
+                        className="absolute bottom-6 bg-green-500 text-white rounded-full py-3 px-6 hover:bg-green-600 transition-colors z-10 font-bold flex items-center gap-2 text-lg"
+                    >
+                        <i className="ph-fill ph-download-simple"></i>
+                        Tải xuống
+                    </a>
                 </div>
             )}
         </div>

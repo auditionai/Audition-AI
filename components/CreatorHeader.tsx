@@ -38,26 +38,28 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
   return (
     <header className="fixed top-0 left-0 w-full z-40 bg-[#0B0B0F]/80 backdrop-blur-lg border-b border-pink-500/10">
       <div className="container mx-auto px-4">
-        <div className="flex justify-center md:justify-between items-center h-20">
+        <div className="flex justify-between items-center py-3 md:h-20">
           
-          {/* Left: Logo */}
-          <div className="flex items-center">
-            <div className="flex flex-col items-center">
-              <div className="text-2xl font-bold cursor-pointer" onClick={() => handleNavClick('tool')}>
-                <span className="bg-gradient-to-r from-[#FF3FA4] to-[#CA27FF] text-transparent bg-clip-text">Audition AI Studio</span>
-              </div>
-              <button
-                onClick={onTopUpClick}
-                className="md:hidden flex items-center gap-1.5 -mt-1 bg-black/50 px-3 py-1 rounded-full text-xs cursor-pointer active:scale-95 transition-transform border border-white/10"
-              >
-                  <i className="ph-fill ph-diamonds-four text-pink-400"></i>
-                  <span className="font-bold text-white">{user.diamonds}</span>
-              </button>
+          {/* Left: Logo & Mobile Diamonds */}
+          <div className="flex flex-col">
+            <div className="text-2xl font-bold cursor-pointer" onClick={() => handleNavClick('tool')}>
+              <span className="bg-gradient-to-r from-[#FF3FA4] to-[#CA27FF] text-transparent bg-clip-text">Audition AI Studio</span>
+            </div>
+            {/* Mobile Diamond Button */}
+            <div className="md:hidden mt-2">
+                <button
+                  onClick={onTopUpClick}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-full cursor-pointer transition-transform active:scale-95 bg-gradient-to-r from-[#F72585] to-[#CA27FF] text-white shadow-lg shadow-[#F72585]/40"
+                  style={{ animation: 'button-neon-glow 4s infinite alternate' }}
+                >
+                  <i className="ph-fill ph-diamonds-four text-lg"></i>
+                  <span className="font-bold text-sm">{user.diamonds}</span>
+                </button>
             </div>
           </div>
           
           {/* Center: Navigation */}
-           <nav className="hidden md:flex items-center gap-2">
+           <nav className="hidden md:flex items-center gap-2 absolute left-1/2 -translate-x-1/2">
                 <button 
                   onClick={() => handleNavClick('leaderboard')} 
                   className={`flex items-center gap-2 px-3 md:px-4 py-2 rounded-full text-sm font-bold transition-all duration-300 shadow-lg
@@ -93,21 +95,22 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
                 </button>
             </nav>
           
-          {/* Right: Profile area */}
+          {/* Right: Profile area & Desktop Diamonds */}
           <div className="hidden md:flex items-center gap-4">
+            {/* Desktop Diamond Button - RESTORED TO RIGHT SIDE */}
             <button
               onClick={onTopUpClick}
-              className="relative flex items-center p-1.5 font-bold text-white bg-black/50 rounded-full transition-all duration-300 hover:-translate-y-0.5 group"
+              className="group relative flex items-center p-1 font-bold text-white bg-black/50 rounded-full transition-all duration-300 hover:-translate-y-0.5"
               style={{ animation: 'button-neon-glow 4s infinite alternate' }}
             >
-              <div className="absolute -inset-px bg-gradient-to-r from-[#F72585] to-[#CA27FF] rounded-full opacity-50 group-hover:opacity-80 transition-opacity duration-300 blur"></div>
-              <div className="relative flex items-center gap-2 bg-black/80 px-4 py-1.5 rounded-full">
-                  <i className="ph-fill ph-diamonds-four text-xl text-pink-400 neon-text-glow"></i>
-                  <span className="text-base">{user.diamonds}</span>
+              <div className="absolute -inset-px bg-gradient-to-r from-[#F72585] to-[#CA27FF] rounded-full opacity-50 group-hover:opacity-80 transition-opacity duration-300 blur-sm"></div>
+              <div className="relative flex items-center gap-2 bg-black/80 px-3 py-1 rounded-full">
+                  <i className="ph-fill ph-diamonds-four text-lg text-pink-400 neon-text-glow"></i>
+                  <span className="text-sm">{user.diamonds}</span>
+                  <span className="pl-2 text-xs font-semibold tracking-wider text-gray-400 group-hover:text-white transition-colors border-l border-white/20">NẠP</span>
               </div>
-              <span className="relative pr-4 pl-2 text-sm tracking-widest text-gray-300 group-hover:text-white transition-colors">NẠP</span>
             </button>
-            
+
             <div className="relative flex items-center gap-3" ref={dropdownRef}>
                 <div className="hidden sm:flex items-center gap-2 text-right">
                     <span className="font-semibold text-white">{user.display_name}</span>
@@ -151,6 +154,9 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
               )}
             </div>
           </div>
+
+          {/* This space is intentionally left blank on mobile to allow justify-between to work */}
+          <div className="md:hidden"></div>
         </div>
       </div>
     </header>

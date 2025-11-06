@@ -1,10 +1,9 @@
 import type { Handler, HandlerEvent } from "@netlify/functions";
-import { GoogleGenAI, Modality, Part } from "@google/genai";
+import { GoogleGenAI, Modality } from "@google/genai";
 import { supabaseAdmin } from './utils/supabaseClient';
 import { Buffer } from 'buffer';
 
 const COST_PER_IMAGE = 1;
-const XP_PER_IMAGE = 25;
 
 const handler: Handler = async (event: HandlerEvent) => {
     try {
@@ -12,155 +11,97 @@ const handler: Handler = async (event: HandlerEvent) => {
             return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
         }
 
-        // 1. Authenticate user
         const authHeader = event.headers['authorization'];
-        if (!authHeader) {
-            return { statusCode: 401, body: JSON.stringify({ error: 'Authorization header is required.' }) };
-        }
+        if (!authHeader) return { statusCode: 401, body: JSON.stringify({ error: 'Authorization header is required.' }) };
         const token = authHeader.split(' ')[1];
-        if (!token) {
-            return { statusCode: 401, body: JSON.stringify({ error: 'Bearer token is missing.' }) };
-        }
-
+        if (!token) return { statusCode: 401, body: JSON.stringify({ error: 'Bearer token is missing.' }) };
+        
         const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
-        if (authError || !user) {
-            return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized: Invalid token.' }) };
-        }
+        if (authError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized: Invalid token.' }) };
 
-        // 2. Parse body and check user balance
-        const {
-            prompt, characterImage, styleImage, model, style, aspectRatio, isOutpainting
-        } = JSON.parse(event.body || '{}');
+        const { prompt, characterImage, styleImage, model, style, aspectRatio, isOutpainting } = JSON.parse(event.body || '{}');
 
-        if (!prompt || !model) {
-            return { statusCode: 400, body: JSON.stringify({ error: 'Prompt and model are required.' }) };
-        }
+        const { data: userData, error: userError } = await supabaseAdmin.from('users').select('diamonds, xp').eq('id', user.id).single();
+        if (userError || !userData) return { statusCode: 404, body: JSON.stringify({ error: 'User not found.' }) };
+        if (userData.diamonds < COST_PER_IMAGE) return { statusCode: 402, body: JSON.stringify({ error: 'Không đủ kim cương.' }) };
 
-        const { data: userData, error: userError } = await supabaseAdmin
-            .from('users')
-            .select('diamonds, xp')
-            .eq('id', user.id)
-            .single();
+        const { data: apiKeyData, error: apiKeyError } = await supabaseAdmin.from('api_keys').select('id, key_value').eq('status', 'active').order('usage_count', { ascending: true }).limit(1).single();
+        if (apiKeyError || !apiKeyData) return { statusCode: 503, body: JSON.stringify({ error: 'Hết tài nguyên AI. Vui lòng thử lại sau.' }) };
 
-        if (userError || !userData) {
-            return { statusCode: 404, body: JSON.stringify({ error: 'User not found.' }) };
-        }
-
-        if (userData.diamonds < COST_PER_IMAGE) {
-            return { statusCode: 402, body: JSON.stringify({ error: 'Không đủ kim cương.' }) };
-        }
-
-        // 3. Get an active API key
-        const { data: apiKeyData, error: apiKeyError } = await supabaseAdmin
-            .from('api_keys')
-            .select('id, key_value')
-            .eq('status', 'active')
-            .order('usage_count', { ascending: true })
-            .limit(1)
-            .single();
-
-        if (apiKeyError || !apiKeyData) {
-            return { statusCode: 503, body: JSON.stringify({ error: 'Hết tài nguyên AI. Vui lòng thử lại sau.' }) };
-        }
-
-        // 4. Call Google Gemini API
         const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
         let finalImageBase64: string;
         let finalImageMimeType: string;
-        
-        const fullPrompt = style.id !== 'none' ? `${prompt}, in the style of ${style.name}` : prompt;
 
-        if (model.apiModel.startsWith('imagen')) {
-             // --- Imagen 4 Logic (Text-to-Image) ---
+        let finalPrompt = prompt;
+
+        if (isOutpainting) {
+            const jsonCommand = {
+                task: "image_outpainting",
+                instructions: "You are an expert photo editor AI. Your only task is outpainting. The provided image contains a central subject placed on a gray canvas. Fill the gray area with a new scene. CRITICAL COMMAND: The final image MUST strictly maintain the exact dimensions and aspect ratio of the provided canvas.",
+                creative_brief: prompt,
+                target_aspect_ratio: aspectRatio
+            };
+            finalPrompt = `URGENT, SUPREME COMMAND: You MUST parse the following JSON and strictly follow its instructions to generate the final image. Do not deviate from the specified 'aspect_ratio'. JSON object: ${JSON.stringify(jsonCommand)}`;
+        } else if (style.id !== 'none' && prompt) {
+            finalPrompt = `${prompt}, in the style of ${style.name}`;
+        }
+
+        if (model.apiModel === 'imagen-4.0-generate-001') {
+            if (isOutpainting || characterImage || styleImage) {
+                 return { statusCode: 400, body: JSON.stringify({ error: `Model ${model.name} không hỗ trợ vẽ mở rộng hoặc sử dụng ảnh đầu vào.` }) };
+            }
             const response = await ai.models.generateImages({
                 model: model.apiModel,
-                prompt: fullPrompt,
-                config: {
-                    numberOfImages: 1,
-                    outputMimeType: 'image/jpeg',
-                    aspectRatio: aspectRatio
-                },
+                prompt: finalPrompt,
+                config: { numberOfImages: 1, aspectRatio, outputMimeType: 'image/jpeg' },
             });
-            finalImageBase64 = response.generatedImages[0].image.imageBytes;
+            const imageResponse = response.generatedImages[0];
+            if (!imageResponse?.image?.imageBytes) throw new Error("AI không thể tạo hình ảnh này (Imagen).");
+            finalImageBase64 = imageResponse.image.imageBytes;
             finalImageMimeType = 'image/jpeg';
-
-        } else if (model.apiModel.startsWith('gemini')) {
-            // --- Gemini Flash Logic (Text-to-Image / Image-to-Image) ---
-            const parts: Part[] = [];
-            if (characterImage) {
-                parts.push({ inlineData: characterImage });
-            }
-            if (styleImage) {
-                parts.push({ inlineData: styleImage });
-            }
-            
-            const textPrompt = isOutpainting 
-                ? `${fullPrompt} (outpainting the gray background area to match the central subject)` 
-                : fullPrompt;
-            parts.push({ text: textPrompt });
+        } else {
+            const parts: any[] = [];
+            if (characterImage) parts.push({ inlineData: characterImage });
+            if (styleImage) parts.push({ inlineData: styleImage });
+            if (finalPrompt) parts.push({ text: finalPrompt });
 
             const response = await ai.models.generateContent({
                 model: model.apiModel,
                 contents: { parts: parts },
                 config: { responseModalities: [Modality.IMAGE] },
             });
-
             const imagePartResponse = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-            if (!imagePartResponse?.inlineData) {
-                throw new Error("AI did not return a valid image.");
-            }
+            if (!imagePartResponse?.inlineData) throw new Error("AI không thể tạo hình ảnh này (Gemini).");
             finalImageBase64 = imagePartResponse.inlineData.data;
             finalImageMimeType = imagePartResponse.inlineData.mimeType.includes('png') ? 'image/png' : 'image/jpeg';
-        } else {
-            return { statusCode: 400, body: JSON.stringify({ error: 'Unsupported AI model.' }) };
         }
 
-        // 5. Upload result to storage
+        const finalFileExtension = finalImageMimeType.split('/')[1] || 'png';
         const imageBuffer = Buffer.from(finalImageBase64, 'base64');
-        const fileExtension = finalImageMimeType.split('/')[1] || 'png';
-        const fileName = `${user.id}/${Date.now()}.${fileExtension}`;
+        const fileName = `${user.id}/${Date.now()}.${finalFileExtension}`;
 
-        const { error: uploadError } = await supabaseAdmin.storage
-            .from('generated_images')
-            .upload(fileName, imageBuffer, { contentType: finalImageMimeType });
+        const { error: uploadError } = await supabaseAdmin.storage.from('generated_images').upload(fileName, imageBuffer, { contentType: finalImageMimeType });
         if (uploadError) throw uploadError;
 
-        const { data: { publicUrl } } = supabaseAdmin.storage
-            .from('generated_images')
-            .getPublicUrl(fileName);
+        const { data: { publicUrl } } = supabaseAdmin.storage.from('generated_images').getPublicUrl(fileName);
 
-        // 6. Update user stats and log the generation
         const newDiamondCount = userData.diamonds - COST_PER_IMAGE;
-        const newXp = userData.xp + XP_PER_IMAGE;
+        const newXp = userData.xp + 10;
         
         await Promise.all([
             supabaseAdmin.from('users').update({ diamonds: newDiamondCount, xp: newXp }).eq('id', user.id),
-            supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id }),
-            supabaseAdmin.from('generated_images').insert({
-                user_id: user.id,
-                prompt: prompt,
-                image_url: publicUrl,
-                model_used: model.name,
-                style_used: style.name
-            })
+            supabaseAdmin.from('generated_images').insert({ user_id: user.id, prompt: prompt, image_url: publicUrl, model_used: model.name }),
+            supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id })
         ]);
-
-        // 7. Return success response
+        
         return {
             statusCode: 200,
-            body: JSON.stringify({
-                imageUrl: publicUrl,
-                newDiamondCount: newDiamondCount,
-                newXp: newXp
-            }),
+            body: JSON.stringify({ imageUrl: publicUrl, newDiamondCount, newXp }),
         };
 
     } catch (error: any) {
-        console.error("Generate Image Function Error:", error);
-        return { 
-            statusCode: 500, 
-            body: JSON.stringify({ error: error.message || 'An unknown server error occurred.' }) 
-        };
+        console.error("Image Generation Function Error:", error);
+        return { statusCode: 500, body: JSON.stringify({ error: `Lỗi khi tạo ảnh: ${error.message || 'Unknown server error.'}` }) };
     }
 };
 

@@ -19,7 +19,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             return { statusCode: 401, body: JSON.stringify({ error: 'Invalid token.' }) };
         }
 
-        // 2. Fetch ONLY the user's generated images. This is the most critical data.
+        // 2. Fetch all images created by this user, NOW including the is_public status.
         const { data: images, error: imagesError } = await supabaseAdmin
             .from('generated_images')
             .select('id, user_id, prompt, image_url, model_used, created_at, is_public')
@@ -27,11 +27,12 @@ const handler: Handler = async (event: HandlerEvent) => {
             .order('created_at', { ascending: false });
 
         if (imagesError) {
-            throw new Error(`Database error fetching images: ${imagesError.message}`);
+            // This error might be triggered if the column wasn't added correctly.
+            throw new Error(`Database query failed: ${imagesError.message}`);
         }
         
         // 3. Create a creator object using GUARANTEED available data from the auth token.
-        // This avoids querying the 'users' table, which was the source of the 500 errors.
+        // This avoids querying the 'users' table, which was the source of previous 500 errors.
         const creatorInfo = {
             display_name: user.user_metadata?.full_name || 'Bạn',
             photo_url: user.user_metadata?.avatar_url || 'https://i.pravatar.cc/150',
@@ -50,7 +51,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         };
 
     } catch (error: any) {
-        console.error("Fatal error in user-gallery function:", error);
+        console.error("Error in user-gallery function:", error);
         return { statusCode: 500, body: JSON.stringify({ error: error.message || 'An unknown server error occurred.' }) };
     }
 };

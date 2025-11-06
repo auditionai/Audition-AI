@@ -63,15 +63,16 @@ const handler: Handler = async (event: HandlerEvent) => {
         const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
         const model = 'gemini-2.5-flash-image'; 
 
+        const parts: any[] = [];
+
         const [header, base64] = imageDataUrl.split(',');
         const mimeType = header.match(/:(.*?);/)[1];
-        const imagePart = { inlineData: { data: base64, mimeType } };
-        // Updated prompt as per user request
-        const textPart = { text: "isolate the main subject with a solid black background" };
+        parts.push({ inlineData: { data: base64, mimeType } });
+        parts.push({ text: "isolate the main subject with a solid black background" });
 
         const response = await ai.models.generateContent({
             model,
-            contents: { parts: [imagePart, textPart] },
+            contents: { parts: parts },
             config: { responseModalities: [Modality.IMAGE] },
         });
 
@@ -82,10 +83,11 @@ const handler: Handler = async (event: HandlerEvent) => {
         
         const finalImageBase64 = imagePartResponse.inlineData.data;
         const finalImageMimeType = imagePartResponse.inlineData.mimeType.includes('png') ? 'image/png' : 'image/jpeg';
+        const finalFileExtension = finalImageMimeType.split('/')[1] || 'png';
 
         // 4. Upload result to the 'temp_images' Supabase Storage bucket
         const imageBuffer = Buffer.from(finalImageBase64, 'base64');
-        const fileName = `${user.id}/bg_removed_${Date.now()}.png`;
+        const fileName = `${user.id}/bg_removed_${Date.now()}.${finalFileExtension}`;
         const { error: uploadError } = await supabaseAdmin.storage
             .from('temp_images')
             .upload(fileName, imageBuffer, { contentType: finalImageMimeType });

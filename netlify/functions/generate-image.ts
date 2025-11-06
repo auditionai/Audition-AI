@@ -4,6 +4,7 @@ import { supabaseAdmin } from './utils/supabaseClient';
 import { Buffer } from 'buffer';
 
 const COST_PER_IMAGE = 1;
+const XP_PER_IMAGE = 10;
 
 const handler: Handler = async (event: HandlerEvent) => {
     try {
@@ -48,7 +49,6 @@ const handler: Handler = async (event: HandlerEvent) => {
             };
             finalPrompt = `URGENT, SUPREME COMMAND: You MUST parse the following JSON and strictly follow its instructions to generate the final image. Do not deviate from the specified 'aspect_ratio'. JSON object: ${JSON.stringify(jsonCommand)}`;
         } else if (characterImage) {
-            // New "Face Lock" instruction
             finalPrompt = `CRITICAL COMMAND: You are an expert AI photo generator. Your most important task is to preserve the exact facial identity from the provided input image with the highest possible fidelity. This includes all facial features (eyes, nose, mouth), hairstyle, makeup, and any accessories on the face (like glasses or piercings). Do NOT alter the person's identity or "AI-ify" the face unless the source image is too blurry to extract details. Apply the following creative brief ONLY to the clothing, background, and pose: "${creativeBrief}"`;
         }
 
@@ -93,12 +93,18 @@ const handler: Handler = async (event: HandlerEvent) => {
         const { data: { publicUrl } } = supabaseAdmin.storage.from('generated_images').getPublicUrl(fileName);
 
         const newDiamondCount = userData.diamonds - COST_PER_IMAGE;
-        const newXp = userData.xp + 10;
+        const newXp = userData.xp + XP_PER_IMAGE;
         
         await Promise.all([
             supabaseAdmin.from('users').update({ diamonds: newDiamondCount, xp: newXp }).eq('id', user.id),
             supabaseAdmin.from('generated_images').insert({ user_id: user.id, prompt: prompt, image_url: publicUrl, model_used: model.name }),
-            supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id })
+            supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id }),
+            supabaseAdmin.from('diamond_transactions_log').insert({
+                user_id: user.id,
+                amount: -COST_PER_IMAGE,
+                transaction_type: 'IMAGE_GENERATION',
+                description: `Tạo ảnh: ${model.name}`
+            })
         ]);
         
         return {

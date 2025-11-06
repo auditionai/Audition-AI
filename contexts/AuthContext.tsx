@@ -140,7 +140,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             const diamondDiff = user.diamonds - previousUser.diamonds;
             const xpDiff = user.xp - previousUser.xp;
 
-            // Only trigger reward if there's a positive change from a transaction
             if (diamondDiff > 0 || xpDiff > 0) {
                  setReward({ 
                     diamonds: diamondDiff > 0 ? diamondDiff : 0, 
@@ -153,6 +152,30 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             }
         }
     }, [user, showToast]);
+    
+     // New Effect for periodic XP gain
+    useEffect(() => {
+        let xpInterval: NodeJS.Timeout | null = null;
+        if (session) {
+            xpInterval = setInterval(async () => {
+                try {
+                    await fetch('/.netlify/functions/increment-xp', {
+                        method: 'POST',
+                        headers: { Authorization: `Bearer ${session.access_token}` },
+                    });
+                    // Real-time listener will update the user object automatically
+                } catch (error) {
+                    console.error('Failed to increment XP:', error);
+                }
+            }, 60000); // 60 seconds
+        }
+        return () => {
+            if (xpInterval) {
+                clearInterval(xpInterval);
+            }
+        };
+    }, [session]);
+
 
     const hardReset = () => {
         console.warn("Forcing hard reset: Bypassing Supabase client, clearing storage, and reloading page...");
@@ -207,7 +230,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                     if (profile) {
                         setSession(currentSession);
                         setUser(profile);
-                         // If user is logged in and lands on 'home', redirect to 'tool'
                         if (getRouteFromPath(window.location.pathname) === 'home') {
                             navigate('tool');
                         }
@@ -241,13 +263,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 if (newSession?.user) {
                     const profile = await fetchUserProfile(newSession.user);
                     setUser(profile);
-                    // If this is a new login (no previous session), redirect to tool
                     if (!previousSession) {
                          navigate('tool');
                     }
                 } else {
                     setUser(null);
-                    // If user logs out, redirect to home
                     if(previousSession) {
                         navigate('home');
                     }
@@ -303,7 +323,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const logout = useCallback(async () => {
         await supabase.auth.signOut();
-        // The onAuthStateChange listener will handle setting user/session to null and navigating
     }, []);
 
     const value = useMemo(() => ({

@@ -98,7 +98,13 @@ const handler: Handler = async (event: HandlerEvent) => {
         const newDiamondCount = userData.diamonds - COST_PER_REMOVAL;
         await Promise.all([
             supabaseAdmin.from('users').update({ diamonds: newDiamondCount }).eq('id', user.id),
-            supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id })
+            supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id }),
+            supabaseAdmin.from('diamond_transactions_log').insert({
+                user_id: user.id,
+                amount: -COST_PER_REMOVAL,
+                transaction_type: 'BG_REMOVAL',
+                description: 'Tách nền ảnh'
+            })
         ]);
 
         return {

@@ -149,3 +149,14 @@ export interface AdminTransaction extends Transaction {
         photo_url: string;
     }
 }
+
+
+// For user transaction history
+export interface TransactionLogEntry {
+    id: string;
+    user_id: string;
+    amount: number; // Can be positive or negative
+    transaction_type: string;
+    description: string;
+    created_at: string;
+}

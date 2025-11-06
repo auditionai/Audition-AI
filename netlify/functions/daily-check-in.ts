@@ -22,7 +22,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     try {
         const { data: userProfile, error: profileError } = await supabaseAdmin
             .from('users')
-            .select('diamonds, last_check_in_at, consecutive_check_in_days')
+            .select('diamonds, xp, last_check_in_at, consecutive_check_in_days')
             .eq('id', user.id)
             .single();
 
@@ -50,27 +50,30 @@ const handler: Handler = async (event: HandlerEvent) => {
             newConsecutiveDays = (userProfile.consecutive_check_in_days || 0) + 1;
         }
 
-        let reward = 10;
-        let message = 'Điểm danh thành công! Bạn nhận được 10 Kim cương.';
+        let diamondReward = 10;
+        const xpReward = 50;
+        let message = `Điểm danh thành công! Bạn nhận được ${diamondReward} Kim cương và ${xpReward} XP.`;
 
         if (newConsecutiveDays === 30) {
-            reward += 100;
-            message = `Điểm danh thành công chuỗi 30 ngày! Bạn nhận được 10 Kim cương + 100 Kim cương thưởng!`;
+            diamondReward += 100;
+            message = `Điểm danh thành công chuỗi 30 ngày! Bạn nhận thưởng lớn: ${diamondReward} Kim cương và ${xpReward} XP!`;
         } else if (newConsecutiveDays === 14) {
-            reward += 50;
-            message = `Điểm danh thành công chuỗi 14 ngày! Bạn nhận được 10 Kim cương + 50 Kim cương thưởng!`;
+            diamondReward += 50;
+            message = `Điểm danh thành công chuỗi 14 ngày! Bạn nhận được ${diamondReward} Kim cương và ${xpReward} XP!`;
         } else if (newConsecutiveDays === 7) {
-            reward += 20;
-            message = `Điểm danh thành công chuỗi 7 ngày! Bạn nhận được 10 Kim cương + 20 Kim cương thưởng!`;
+            diamondReward += 20;
+            message = `Điểm danh thành công chuỗi 7 ngày! Bạn nhận được ${diamondReward} Kim cương và ${xpReward} XP!`;
         }
 
-        const newTotalDiamonds = userProfile.diamonds + reward;
+        const newTotalDiamonds = userProfile.diamonds + diamondReward;
+        const newTotalXp = userProfile.xp + xpReward;
 
         // Perform updates
         const { error: userUpdateError } = await supabaseAdmin
             .from('users')
             .update({
                 diamonds: newTotalDiamonds,
+                xp: newTotalXp,
                 last_check_in_at: now.toISOString(),
                 consecutive_check_in_days: newConsecutiveDays,
             })
@@ -78,24 +81,22 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         if (userUpdateError) throw userUpdateError;
 
-        const { error: checkInInsertError } = await supabaseAdmin
-            .from('daily_check_ins')
-            .insert({
+        await Promise.all([
+             supabaseAdmin.from('daily_check_ins').insert({ user_id: user.id, check_in_date: todayVnString }),
+             supabaseAdmin.from('diamond_transactions_log').insert({
                 user_id: user.id,
-                check_in_date: todayVnString,
-            });
-
-        // This might fail if there's a unique constraint, but it's okay because the user table is already updated.
-        // The check at the start prevents double rewards. We can ignore this error if it's a duplicate key violation.
-        if (checkInInsertError && checkInInsertError.code !== '23505') { // 23505 is unique_violation
-             throw checkInInsertError;
-        }
+                amount: diamondReward,
+                transaction_type: 'DAILY_CHECK_IN',
+                description: `Điểm danh ngày thứ ${newConsecutiveDays}`
+             })
+        ]);
 
         return {
             statusCode: 200,
             body: JSON.stringify({
                 message,
                 newTotalDiamonds,
+                newTotalXp,
                 consecutiveDays: newConsecutiveDays,
                 checkedIn: true
             }),

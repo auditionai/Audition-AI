@@ -52,14 +52,20 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         const newDiamondCount = userData.diamonds - COST_PER_SHARE;
 
-        // Perform updates in parallel
-        const [userUpdateResult, imageUpdateResult] = await Promise.all([
+        const [userUpdateResult, imageUpdateResult, logResult] = await Promise.all([
             supabaseAdmin.from('users').update({ diamonds: newDiamondCount }).eq('id', user.id),
-            supabaseAdmin.from('generated_images').update({ is_public: true }).eq('id', imageId)
+            supabaseAdmin.from('generated_images').update({ is_public: true }).eq('id', imageId),
+            supabaseAdmin.from('diamond_transactions_log').insert({
+                user_id: user.id,
+                amount: -COST_PER_SHARE,
+                transaction_type: 'SHARE_IMAGE',
+                description: 'Chia sẻ tác phẩm ra thư viện'
+            })
         ]);
 
         if (userUpdateResult.error) throw userUpdateResult.error;
         if (imageUpdateResult.error) throw imageUpdateResult.error;
+        if (logResult.error) throw logResult.error;
         
         return {
             statusCode: 200,

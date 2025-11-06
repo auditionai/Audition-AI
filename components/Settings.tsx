@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { ApiKey, AdminManagedUser, CreditPackage, AdminTransaction } from '../types';
+import { ApiKey, AdminManagedUser, CreditPackage, AdminTransaction, TransactionLogEntry } from '../types';
 import { getRankForLevel } from '../utils/rankUtils';
 import XPProgressBar from './common/XPProgressBar';
 import Modal from './common/Modal';
@@ -128,6 +128,11 @@ const Settings: React.FC = () => {
     const [avatarFile, setAvatarFile] = useState<File | null>(null);
     const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
     const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+    
+    // Transaction history state
+    const [history, setHistory] = useState<TransactionLogEntry[]>([]);
+    const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+    const [historyFilter, setHistoryFilter] = useState<'all' | 'earned' | 'spent'>('all');
 
 
     // Admin state
@@ -157,14 +162,11 @@ const Settings: React.FC = () => {
     
     const fetchAdminData = useCallback(async () => {
         if (!session || !user?.is_admin) return;
-        // CRITICAL: Ensure all admin fetches request fresh data from the server,
-        // bypassing the browser cache to prevent showing stale lists (e.g., of transactions).
         const fetchOptions = {
             headers: { Authorization: `Bearer ${session.access_token}` },
             cache: 'no-cache' as RequestCache
         };
 
-        // Fetch API Keys
         setIsKeysLoading(true);
         try {
              const response = await fetch('/.netlify/functions/api-keys', fetchOptions);
@@ -173,7 +175,6 @@ const Settings: React.FC = () => {
         } catch (error: any) { showToast(error.message, 'error'); } 
         finally { setIsKeysLoading(false); }
         
-        // Fetch All Users
         setIsUsersLoading(true);
         try {
              const response = await fetch('/.netlify/functions/admin-users', fetchOptions);
@@ -182,7 +183,6 @@ const Settings: React.FC = () => {
         } catch (error: any) { showToast(error.message, 'error'); }
         finally { setIsUsersLoading(false); }
         
-        // Fetch Credit Packages
         setIsPackagesLoading(true);
         try {
             const res = await fetch('/.netlify/functions/credit-packages?include_inactive=true', fetchOptions);
@@ -191,7 +191,6 @@ const Settings: React.FC = () => {
         } catch (error: any) { showToast(error.message, 'error'); }
         finally { setIsPackagesLoading(false); }
 
-        // Fetch Pending Transactions
         setIsTransactionsLoading(true);
         try {
             const res = await fetch('/.netlify/functions/admin-transactions', fetchOptions);
@@ -201,12 +200,27 @@ const Settings: React.FC = () => {
         finally { setIsTransactionsLoading(false); }
 
     }, [session, showToast, user?.is_admin]);
+    
+    const fetchTransactionHistory = useCallback(async () => {
+        if (!session) return;
+        setIsHistoryLoading(true);
+        try {
+            const res = await fetch('/.netlify/functions/transaction-history', {
+                headers: { Authorization: `Bearer ${session.access_token}` },
+                cache: 'no-cache'
+            });
+            if (!res.ok) throw new Error('Không thể tải lịch sử giao dịch.');
+            setHistory(await res.json());
+        } catch (e: any) { showToast(e.message, 'error'); }
+        finally { setIsHistoryLoading(false); }
+    }, [session, showToast]);
 
     useEffect(() => {
+        fetchTransactionHistory();
         if (user?.is_admin) {
             fetchAdminData();
         }
-    }, [user?.is_admin, fetchAdminData]);
+    }, [user?.is_admin, fetchAdminData, fetchTransactionHistory]);
 
     const handleUpdateName = async () => {
         if (!user || !displayName.trim() || displayName.trim() === user.display_name) {
@@ -376,6 +390,11 @@ const Settings: React.FC = () => {
         }
     };
 
+    const filteredHistory = history.filter(item => {
+        if (historyFilter === 'earned') return item.amount > 0;
+        if (historyFilter === 'spent') return item.amount < 0;
+        return true;
+    });
 
     if (!user || !rank) return null;
 
@@ -389,39 +408,46 @@ const Settings: React.FC = () => {
                 <p className="text-lg text-gray-400">Quản lý thông tin cá nhân và các cài đặt khác.</p>
             </div>
             
-            <div className="bg-[#12121A]/80 border border-white/10 rounded-2xl shadow-lg p-6 mb-8">
-                <div className="flex flex-col sm:flex-row items-center gap-6">
-                    <div className="relative group w-24 h-24 flex-shrink-0">
-                        <img src={avatarPreview || user.photo_url} alt={user.display_name} className="w-24 h-24 rounded-full border-4 border-pink-500/50" />
-                        <label htmlFor="avatar-upload" className="absolute inset-0 bg-black/60 rounded-full flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
-                            <i className="ph-fill ph-pencil-simple text-2xl"></i>
-                            <input id="avatar-upload" type="file" accept="image/png, image/jpeg" className="hidden" onChange={handleAvatarSelect} />
-                        </label>
-                    </div>
-                    <div className="flex-grow text-center sm:text-left w-full">
-                        {isEditingName ? (
-                            <div className="flex items-center gap-2">
-                                <input type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)} className="auth-input text-2xl font-bold py-1 w-full" autoFocus />
-                                <button onClick={handleUpdateName} disabled={isUpdating} className="p-2 bg-green-500/20 text-green-300 rounded-md disabled:opacity-50"><i className={`ph-fill ${isUpdating ? 'ph-spinner animate-spin' : 'ph-check'}`}></i></button>
-                                <button onClick={() => { setIsEditingName(false); setDisplayName(user.display_name); }} className="p-2 bg-red-500/20 text-red-300 rounded-md"><i className="ph-fill ph-x"></i></button>
-                            </div>
-                        ) : (
-                            <div className="flex items-center gap-3 justify-center sm:justify-start">
-                                <h2 className="text-2xl font-bold">{user.display_name}</h2>
-                                <button onClick={() => setIsEditingName(true)} className="text-gray-400 hover:text-white"><i className="ph-fill ph-pencil-simple"></i></button>
-                            </div>
-                        )}
-                        <p className="text-gray-400">{user.email}</p>
-                        <div className={`mt-2 font-semibold text-lg flex items-center justify-center sm:justify-start gap-2 ${rank.color}`}>
-                            {rank.icon} {rank.title} - Cấp {user.level}
-                        </div>
-                    </div>
+             {/* Redesigned Profile Section */}
+            <div className="bg-[#12121A]/80 border border-white/10 rounded-2xl shadow-lg p-6 mb-8 text-center">
+                <div className="relative inline-block group w-28 h-28">
+                    <img src={avatarPreview || user.photo_url} alt={user.display_name} className="w-28 h-28 rounded-full border-4 border-pink-500/50" />
                 </div>
-                {avatarPreview && (
-                    <div className="flex gap-4 mt-4 pt-4 border-t border-white/10">
+                
+                {isEditingName ? (
+                    <div className="flex items-center gap-2 max-w-sm mx-auto mt-4">
+                        <input type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)} className="auth-input text-2xl font-bold py-1 w-full text-center" autoFocus />
+                    </div>
+                ) : (
+                     <h2 className="text-3xl font-bold mt-4">{user.display_name}</h2>
+                )}
+                
+                <p className="text-gray-400">{user.email}</p>
+                <div className={`mt-2 font-semibold text-lg flex items-center justify-center gap-2 ${rank.color}`}>
+                    {rank.icon} {rank.title} - Cấp {user.level}
+                </div>
+
+                <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
+                    <label htmlFor="avatar-upload" className="flex-1 cursor-pointer px-4 py-2 text-sm font-semibold bg-white/10 text-white rounded-lg hover:bg-white/20 transition flex items-center justify-center gap-2">
+                        <i className="ph-fill ph-camera"></i> Đổi Ảnh Đại Diện
+                        <input id="avatar-upload" type="file" accept="image/png, image/jpeg" className="hidden" onChange={handleAvatarSelect} />
+                    </label>
+                    {isEditingName ? (
+                        <div className="flex-1 flex gap-2">
+                             <button onClick={() => { setIsEditingName(false); setDisplayName(user.display_name); }} className="flex-1 px-4 py-2 text-sm font-semibold bg-red-500/20 text-red-300 rounded-lg"><i className="ph-fill ph-x"></i> Hủy</button>
+                            <button onClick={handleUpdateName} disabled={isUpdating} className="flex-1 px-4 py-2 text-sm font-semibold bg-green-500/20 text-green-300 rounded-lg disabled:opacity-50"><i className={`ph-fill ${isUpdating ? 'ph-spinner animate-spin' : 'ph-check'}`}></i> Lưu</button>
+                        </div>
+                    ) : (
+                         <button onClick={() => setIsEditingName(true)} className="flex-1 px-4 py-2 text-sm font-semibold bg-white/10 text-white rounded-lg hover:bg-white/20 transition flex items-center justify-center gap-2">
+                            <i className="ph-fill ph-pencil-simple"></i> Sửa Tên Hiển Thị
+                        </button>
+                    )}
+                </div>
+                 {avatarPreview && (
+                    <div className="flex gap-4 mt-4 pt-4 border-t border-white/10 max-w-sm mx-auto">
                         <button onClick={() => { setAvatarPreview(null); setAvatarFile(null); }} className="flex-1 py-2 font-semibold bg-white/10 text-white rounded-lg hover:bg-white/20 transition">Hủy</button>
                         <button onClick={handleAvatarUpload} disabled={isUploadingAvatar} className="flex-1 py-2 font-bold text-white bg-gradient-to-r from-pink-500 to-fuchsia-600 rounded-lg hover:opacity-90 transition disabled:opacity-50">
-                            {isUploadingAvatar ? 'Đang tải lên...' : 'Lưu ảnh đại diện'}
+                            {isUploadingAvatar ? 'Đang tải lên...' : 'Lưu ảnh'}
                         </button>
                     </div>
                 )}
@@ -430,10 +456,51 @@ const Settings: React.FC = () => {
                 </div>
             </div>
 
+            {/* How to Earn XP Section */}
+            <div className="bg-[#12121A]/80 border border-cyan-500/20 rounded-2xl shadow-lg p-6 mb-8 relative overflow-hidden">
+                 <div className="glowing-border glowing-border-active" style={{'--glow-color1': '#22d3ee', '--glow-color2': '#0e7490'} as React.CSSProperties}></div>
+                 <h3 className="text-2xl font-bold mb-4 text-cyan-300 flex items-center gap-3"><i className="ph-fill ph-rocket-launch"></i><span className="neon-text-flow" style={{animationDuration: '5s'}}>Bí Kíp Thăng Cấp: Cách Kiếm XP</span></h3>
+                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+                    <div className="bg-white/5 p-4 rounded-lg text-center"><p className="font-bold text-lg text-white">Tạo Ảnh</p><p className="font-semibold text-cyan-400">+10 XP</p><p className="text-xs text-gray-400">mỗi tác phẩm</p></div>
+                    <div className="bg-white/5 p-4 rounded-lg text-center"><p className="font-bold text-lg text-white">Điểm Danh</p><p className="font-semibold text-cyan-400">+50 XP</p><p className="text-xs text-gray-400">mỗi ngày</p></div>
+                    <div className="bg-white/5 p-4 rounded-lg text-center"><p className="font-bold text-lg text-white">Hoạt Động</p><p className="font-semibold text-cyan-400">+1 XP</p><p className="text-xs text-gray-400">mỗi phút</p></div>
+                    <div className="bg-white/5 p-4 rounded-lg text-center"><p className="font-bold text-lg text-white">Nạp Kim Cương</p><p className="font-semibold text-cyan-400">+XP</p><p className="text-xs text-gray-400">1.000đ = 1 XP</p></div>
+                 </div>
+            </div>
+            
+            {/* Transaction History Section */}
+            <div className="bg-[#12121A]/80 border border-purple-500/20 rounded-2xl shadow-lg p-6 mb-8">
+                <h3 className="text-2xl font-bold mb-4 text-purple-400 flex items-center gap-2"><i className="ph-fill ph-list-dashes"></i>Lịch sử Giao dịch</h3>
+                <div className="flex items-center gap-2 mb-4 p-1 bg-black/30 rounded-full w-full max-w-md">
+                    <button onClick={() => setHistoryFilter('all')} className={`w-1/3 py-1.5 rounded-full font-semibold text-sm transition ${historyFilter === 'all' ? 'bg-purple-600' : 'text-gray-300'}`}>Tất cả</button>
+                    <button onClick={() => setHistoryFilter('earned')} className={`w-1/3 py-1.5 rounded-full font-semibold text-sm transition ${historyFilter === 'earned' ? 'bg-green-600' : 'text-gray-300'}`}>Kim cương Nhận</button>
+                    <button onClick={() => setHistoryFilter('spent')} className={`w-1/3 py-1.5 rounded-full font-semibold text-sm transition ${historyFilter === 'spent' ? 'bg-red-600' : 'text-gray-300'}`}>Kim cương Tiêu</button>
+                </div>
+                {isHistoryLoading ? <p>Đang tải lịch sử...</p> : (
+                    <div className="space-y-2 max-h-80 overflow-y-auto custom-scrollbar pr-2">
+                        {filteredHistory.length > 0 ? filteredHistory.map(log => (
+                            <div key={log.id} className="grid grid-cols-12 gap-2 items-center p-3 bg-white/5 rounded-lg text-sm">
+                                <div className="col-span-2">
+                                    <span className={`flex items-center justify-center w-8 h-8 rounded-full ${log.amount > 0 ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'}`}>
+                                        <i className={`ph-fill ${log.amount > 0 ? 'ph-arrow-down' : 'ph-arrow-up'}`}></i>
+                                    </span>
+                                </div>
+                                <div className="col-span-6">
+                                    <p className="font-semibold text-white">{log.description}</p>
+                                    <p className="text-xs text-gray-400">{new Date(log.created_at).toLocaleString('vi-VN')}</p>
+                                </div>
+                                <div className={`col-span-4 text-right font-bold text-lg ${log.amount > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                    {log.amount > 0 ? '+' : ''}{log.amount.toLocaleString()} 💎
+                                </div>
+                            </div>
+                        )) : <p className="text-center text-gray-500 py-8">Chưa có giao dịch nào.</p>}
+                    </div>
+                )}
+            </div>
+
             {user.is_admin && (
-                <div className="space-y-8">
-                     {/* Quản lý Giao dịch */}
-                    <div className="bg-[#12121A]/80 border border-blue-500/20 rounded-2xl shadow-lg p-6">
+                 <div className="space-y-8 mt-8 pt-8 border-t-2 border-dashed border-yellow-500/20">
+                     <div className="bg-[#12121A]/80 border border-blue-500/20 rounded-2xl shadow-lg p-6">
                         <h3 className="text-2xl font-bold mb-4 text-blue-400 flex items-center gap-2"><i className="ph-fill ph-check-square-offset"></i>Admin: Phê Duyệt Giao Dịch</h3>
                         {isTransactionsLoading ? <p>Đang tải giao dịch...</p> : (
                             <div className="max-h-96 overflow-y-auto custom-scrollbar pr-2">
@@ -469,19 +536,16 @@ const Settings: React.FC = () => {
                         )}
                     </div>
                     
-                    {/* Quản lý Gói Nạp */}
                     <div className="bg-[#12121A]/80 border border-green-500/20 rounded-2xl shadow-lg p-6">
                         <h3 className="text-2xl font-bold mb-4 text-green-400 flex items-center gap-2"><i className="ph-fill ph-package"></i>Admin: Quản lý Gói Nạp</h3>
                         {isPackagesLoading ? <p>Đang tải các gói...</p> : (
                             <div className="space-y-4">
-                                {/* Form thêm gói mới */}
                                 <form onSubmit={handleAddPackage} className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-black/20 rounded-lg">
                                     <input type="number" placeholder="KC" value={newPackage.credits_amount || ''} onChange={e => setNewPackage({...newPackage, credits_amount: Number(e.target.value)})} className="auth-input" />
                                     <input type="number" placeholder="KC Thưởng" value={newPackage.bonus_credits || ''} onChange={e => setNewPackage({...newPackage, bonus_credits: Number(e.target.value)})} className="auth-input" />
                                     <input type="number" placeholder="Giá (VND)" value={newPackage.price_vnd || ''} onChange={e => setNewPackage({...newPackage, price_vnd: Number(e.target.value)})} className="auth-input" />
                                     <button type="submit" className="bg-green-600 hover:bg-green-700 text-white font-bold p-2 rounded-md">Thêm Gói</button>
                                 </form>
-                                {/* Danh sách các gói */}
                                 <div className="space-y-2 max-h-72 overflow-y-auto custom-scrollbar pr-2">
                                     {packages.map(pkg => (
                                         <div key={pkg.id} className="grid grid-cols-12 gap-4 items-center p-3 bg-white/5 rounded-lg text-sm">

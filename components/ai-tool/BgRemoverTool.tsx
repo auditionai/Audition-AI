@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useBackgroundRemover } from '../../hooks/useBackgroundRemover';
 import { DiamondIcon } from '../common/DiamondIcon';
+import ConfirmationModal from '../ConfirmationModal';
 
 // Helper function to resize an image file before uploading
 const resizeImage = (file: File, maxSize: number): Promise<{ file: File; dataUrl: string }> => {
@@ -59,6 +60,7 @@ const BgRemoverTool: React.FC<BgRemoverToolProps> = ({ onMoveToGenerator }) => {
 
     const [imagesForBgRemoval, setImagesForBgRemoval] = useState<Array<{id: string, url: string, file: File}>>([]);
     const [processedImages, setProcessedImages] = useState<Array<{id: string, originalUrl: string, processedUrl: string, file: File}>>([]);
+    const [isConfirmOpen, setConfirmOpen] = useState(false);
 
     const handleBgRemovalImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = Array.from(e.target.files ?? []);
@@ -74,7 +76,7 @@ const BgRemoverTool: React.FC<BgRemoverToolProps> = ({ onMoveToGenerator }) => {
         e.target.value = '';
     };
 
-    const handleProcessBackgrounds = async () => {
+    const handleProcessClick = () => {
         if (imagesForBgRemoval.length === 0) {
             showToast('Vui lòng tải lên ảnh để xử lý.', 'error');
             return;
@@ -84,8 +86,14 @@ const BgRemoverTool: React.FC<BgRemoverToolProps> = ({ onMoveToGenerator }) => {
             showToast(`Bạn cần ${totalCost} kim cương, nhưng chỉ có ${user.diamonds}. Vui lòng nạp thêm.`, 'error');
             return;
         }
+        setConfirmOpen(true);
+    };
+    
+    const handleConfirmProcess = async () => {
+        setConfirmOpen(false);
         const imagesToProcessNow = [...imagesForBgRemoval];
         setImagesForBgRemoval([]);
+
         for (const image of imagesToProcessNow) {
             const processedUrl = await removeBackground(image.file);
             if (processedUrl) {
@@ -107,8 +115,17 @@ const BgRemoverTool: React.FC<BgRemoverToolProps> = ({ onMoveToGenerator }) => {
         showToast('Đã chuyển ảnh sang trình tạo AI!', 'success');
     };
 
+    const totalCost = imagesForBgRemoval.length * COST_PER_REMOVAL;
+
     return (
         <div className="h-full flex flex-col">
+             <ConfirmationModal
+                isOpen={isConfirmOpen}
+                onClose={() => setConfirmOpen(false)}
+                onConfirm={handleConfirmProcess}
+                cost={totalCost}
+                isLoading={isProcessing}
+            />
             <div className="flex-grow flex flex-col lg:grid lg:grid-cols-2 gap-6">
             
                 {/* Left Column: Upload */}
@@ -134,10 +151,10 @@ const BgRemoverTool: React.FC<BgRemoverToolProps> = ({ onMoveToGenerator }) => {
                             </div>
                             </div>
                         )}
-                        <button onClick={handleProcessBackgrounds} disabled={isProcessing || imagesForBgRemoval.length === 0} className="w-full mt-4 py-3 font-bold text-lg text-white bg-gradient-to-r from-pink-500 to-fuchsia-600 rounded-full flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                        <button onClick={handleProcessClick} disabled={isProcessing || imagesForBgRemoval.length === 0} className="w-full mt-4 py-3 font-bold text-lg text-white bg-gradient-to-r from-pink-500 to-fuchsia-600 rounded-full flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
                             {isProcessing ? <div className="w-6 h-6 border-2 border-white/50 border-t-white rounded-full animate-spin"></div> : <>
                                 <DiamondIcon className="w-6 h-6" />
-                                <span>Tách nền (-{COST_PER_REMOVAL} Kim cương)</span>
+                                <span>Tách nền ({imagesForBgRemoval.length} ảnh)</span>
                             </>}
                         </button>
                     </div>

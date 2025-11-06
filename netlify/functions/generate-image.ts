@@ -32,19 +32,26 @@ const handler: Handler = async (event: HandlerEvent) => {
         let finalImageBase64: string;
         let finalImageMimeType: string;
 
-        let finalPrompt = prompt;
+        let creativeBrief = prompt;
+        if (style.id !== 'none' && creativeBrief) {
+            creativeBrief = `${prompt}, in the style of ${style.name}`;
+        }
+
+        let finalPrompt = creativeBrief;
 
         if (isOutpainting) {
             const jsonCommand = {
                 task: "image_outpainting",
                 instructions: "You are an expert photo editor AI. Your only task is outpainting. The provided image contains a central subject placed on a gray canvas. Fill the gray area with a new scene. CRITICAL COMMAND: The final image MUST strictly maintain the exact dimensions and aspect ratio of the provided canvas.",
-                creative_brief: prompt,
+                creative_brief: creativeBrief,
                 target_aspect_ratio: aspectRatio
             };
             finalPrompt = `URGENT, SUPREME COMMAND: You MUST parse the following JSON and strictly follow its instructions to generate the final image. Do not deviate from the specified 'aspect_ratio'. JSON object: ${JSON.stringify(jsonCommand)}`;
-        } else if (style.id !== 'none' && prompt) {
-            finalPrompt = `${prompt}, in the style of ${style.name}`;
+        } else if (characterImage) {
+            // New "Face Lock" instruction
+            finalPrompt = `CRITICAL COMMAND: You are an expert AI photo generator. Your most important task is to preserve the exact facial identity from the provided input image with the highest possible fidelity. This includes all facial features (eyes, nose, mouth), hairstyle, makeup, and any accessories on the face (like glasses or piercings). Do NOT alter the person's identity or "AI-ify" the face unless the source image is too blurry to extract details. Apply the following creative brief ONLY to the clothing, background, and pose: "${creativeBrief}"`;
         }
+
 
         if (model.apiModel === 'imagen-4.0-generate-001') {
             if (isOutpainting || characterImage || styleImage) {

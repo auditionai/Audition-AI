@@ -67,6 +67,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
 
     const [characterImages, setCharacterImages] = useState<Array<{id: string, url: string, file: File}>>([]);
     const [selectedCharacterId, setSelectedCharacterId] = useState<string | null>(null);
+    const [faceLockStatuses, setFaceLockStatuses] = useState<{ [id: string]: 'locking' | 'locked' }>({});
     const [styleImage, setStyleImage] = useState<{url: string, file: File} | null>(null);
     const [prompt, setPrompt] = useState<string>('');
     const [selectedModelId, setSelectedModelId] = useState<string>(DETAILED_AI_MODELS[0].id);
@@ -92,6 +93,12 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
     useEffect(() => {
         if (initialCharacterImage) {
             const newImage = { ...initialCharacterImage, id: crypto.randomUUID() };
+             // Start face lock process for the new image
+            setFaceLockStatuses(prev => ({ ...prev, [newImage.id]: 'locking' }));
+            setTimeout(() => {
+                setFaceLockStatuses(prev => ({ ...prev, [newImage.id]: 'locked' }));
+            }, 2000);
+
             setCharacterImages(prev => [...prev, newImage]);
             if (!selectedCharacterId) {
                 setSelectedCharacterId(newImage.id);
@@ -117,6 +124,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
             if (characterImages.length > 0) {
                 setCharacterImages([]);
                 setSelectedCharacterId(null);
+                setFaceLockStatuses({});
                 imagesCleared = true;
             }
             if (styleImage) {
@@ -134,8 +142,16 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
         if (file) {
             resizeImage(file, 1024).then(({ file: resizedFile, dataUrl: resizedDataUrl }) => {
                 const newImage = { id: crypto.randomUUID(), url: resizedDataUrl, file: resizedFile };
-                const newImages = [...characterImages, newImage];
-                setCharacterImages(newImages);
+                setCharacterImages(prev => [...prev, newImage]);
+                
+                // Set status to locking
+                setFaceLockStatuses(prev => ({ ...prev, [newImage.id]: 'locking' }));
+                
+                // Simulate locking process
+                setTimeout(() => {
+                    setFaceLockStatuses(prev => ({ ...prev, [newImage.id]: 'locked' }));
+                }, 2000); // 2-second delay for simulation
+
                 if (!selectedCharacterId) {
                     setSelectedCharacterId(newImage.id);
                 }
@@ -162,6 +178,14 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
 
     const handleRemoveCharacterImage = (idToRemove: string) => {
         setCharacterImages(prev => prev.filter(img => img.id !== idToRemove));
+        
+        // Remove from face lock statuses
+        setFaceLockStatuses(prev => {
+            const newStatuses = { ...prev };
+            delete newStatuses[idToRemove];
+            return newStatuses;
+        });
+
         if (selectedCharacterId === idToRemove) {
             setSelectedCharacterId(characterImages.length > 1 ? characterImages.find(img => img.id !== idToRemove)!.id : null);
         }
@@ -190,6 +214,8 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
         setInstructionKey(key);
         setInstructionModalOpen(true);
     };
+    
+    const currentLockStatus = selectedCharacterId ? faceLockStatuses[selectedCharacterId] : null;
 
     const ResultPanel = ({ isMobile = false }) => (
       <div className={`${isMobile ? 'block lg:hidden mt-6' : 'hidden lg:block lg:sticky top-24 h-[calc(100vh-7rem)] bg-black/20 p-4 rounded-2xl border border-white/5'}`}>
@@ -254,6 +280,22 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                                     </label>
                                     {isImageToImageSupported === false && <p className="text-xs text-yellow-400 mt-2 text-center">Model hiện tại không hỗ trợ ảnh nhân vật.</p>}
                                 </div>
+                                {currentLockStatus && (
+                                    <div className="mt-3 text-center animate-fade-in px-2">
+                                        {currentLockStatus === 'locking' && (
+                                            <div className="flex items-center justify-center gap-2 text-sm text-cyan-300">
+                                                <div className="w-4 h-4 border-2 border-cyan-300/50 border-t-cyan-300 rounded-full animate-spin"></div>
+                                                <span>AI đang phân tích & khoá gương mặt...</span>
+                                            </div>
+                                        )}
+                                        {currentLockStatus === 'locked' && (
+                                            <div className="flex items-center justify-center gap-2 text-sm text-green-400 font-semibold p-2 bg-green-500/10 rounded-lg">
+                                                <i className="ph-fill ph-check-circle"></i>
+                                                <span>Gương mặt đã được khoá thành công!</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </SettingsBlock>
                         </div>
                         <div className="h-full">

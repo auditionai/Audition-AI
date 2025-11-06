@@ -1,29 +1,22 @@
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
 
-// Helper function to calculate level from XP, consistent with client-side logic
-const calculateLevelFromXp = (xp: number): number => {
-    if (typeof xp !== 'number' || xp < 0) return 1;
-    return Math.floor(xp / 100) + 1;
-};
-
 const handler: Handler = async (event: HandlerEvent) => {
     try {
-        // 1. Authenticate the user
         if (event.httpMethod !== 'GET') {
             return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
         }
+
         const authHeader = event.headers['authorization'];
-        if (!authHeader) {
-            return { statusCode: 401, body: JSON.stringify({ error: 'Authorization header is required.' }) };
-        }
-        const token = authHeader.split(' ')[1];
+        const token = authHeader?.split(' ')[1];
         if (!token) {
-            return { statusCode: 401, body: JSON.stringify({ error: 'Bearer token is missing.' }) };
+            return { statusCode: 401, body: JSON.stringify({ error: 'Token is missing.' }) };
         }
+
+        // 1. Authenticate the user
         const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
         if (authError || !user) {
-            return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized: Invalid token.' }) };
+            return { statusCode: 401, body: JSON.stringify({ error: 'Invalid token.' }) };
         }
 
         // 2. Fetch the user's generated images
@@ -34,60 +27,57 @@ const handler: Handler = async (event: HandlerEvent) => {
             .order('created_at', { ascending: false });
 
         if (imagesError) {
-            console.error("Error fetching user images:", imagesError);
+            console.error("Error fetching user images:", imagesError.message);
             throw new Error(`Database query for images failed: ${imagesError.message}`);
         }
 
         if (!images || images.length === 0) {
             return { statusCode: 200, body: JSON.stringify([]) };
         }
-
-        // 3. Fetch the user's profile from the public `users` table
-        const { data: creatorProfile, error: creatorError } = await supabaseAdmin
+        
+        // 3. Create the most robust creator info possible.
+        // Try to fetch the detailed profile first, but have a strong fallback.
+        const { data: userProfile, error: profileError } = await supabaseAdmin
             .from('users')
-            .select('display_name, photo_url, xp')
+            .select('xp, display_name, photo_url')
             .eq('id', user.id)
             .single();
 
-        if (creatorError) {
-            // Log the database error for debugging but don't stop execution.
-            console.error('Could not fetch creator profile for gallery. DB Error:', creatorError.message);
-        }
-        
-        // 4. Robustly handle cases where the profile is missing (either due to error or data inconsistency)
-        if (!creatorProfile) {
-            console.warn(`User profile not found for ID ${user.id}. Creating fallback data to prevent a 500 error.`);
-            // Create a fallback creator object to ensure the frontend still receives valid data.
-            const fallbackCreator = {
-                display_name: 'Bạn',
-                photo_url: user.user_metadata?.avatar_url || 'https://i.pravatar.cc/150', // Use auth avatar if available
-                level: 1, // Default level
+        let creatorInfo;
+        // If the profile query fails for any reason (e.g., missing profile, network issue),
+        // we create a fallback using the guaranteed auth data. This prevents a 500 error.
+        if (profileError || !userProfile) {
+            console.warn(`Could not fetch profile for user ${user.id}, using fallback. Error: ${profileError?.message}`);
+            creatorInfo = {
+                display_name: user.user_metadata?.full_name || 'Bạn',
+                photo_url: user.user_metadata?.avatar_url || 'https://i.pravatar.cc/150',
+                level: 1, // Default level as we can't get XP
             };
-            const fallbackData = images.map(image => ({
-                ...image,
-                creator: fallbackCreator,
-            }));
-            return { statusCode: 200, body: JSON.stringify(fallbackData) };
+        } else {
+            // If profile is found, use its data to calculate the correct level.
+             const calculateLevelFromXp = (xp: number): number => {
+                if (typeof xp !== 'number' || xp < 0) return 1;
+                return Math.floor(xp / 100) + 1;
+            };
+            creatorInfo = {
+                display_name: userProfile.display_name,
+                photo_url: userProfile.photo_url,
+                level: calculateLevelFromXp(userProfile.xp || 0),
+            };
         }
         
-        // 5. If profile exists, combine the data
-        const creatorInfo = {
-            display_name: creatorProfile.display_name,
-            photo_url: creatorProfile.photo_url,
-            level: calculateLevelFromXp(creatorProfile.xp || 0)
-        };
-
+        // 4. Combine images with the creator info.
         const processedData = images.map(image => ({
             ...image,
-            creator: creatorInfo
+            creator: creatorInfo,
         }));
 
         return {
             statusCode: 200,
             body: JSON.stringify(processedData),
         };
+
     } catch (error: any) {
-        // Catch-all for any other unexpected errors
         console.error("Fatal error in user-gallery function:", error);
         return { statusCode: 500, body: JSON.stringify({ error: error.message || 'An unknown server error occurred.' }) };
     }

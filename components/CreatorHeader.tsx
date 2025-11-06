@@ -40,7 +40,8 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
       <div className="container mx-auto px-4">
         <div className="flex justify-center md:justify-between items-center h-20">
           
-          <div className="flex items-center gap-4 md:gap-8">
+          {/* Left: Logo */}
+          <div className="flex items-center">
             <div className="flex flex-col items-center">
               <div className="text-2xl font-bold cursor-pointer" onClick={() => handleNavClick('tool')}>
                 <span className="bg-gradient-to-r from-[#FF3FA4] to-[#CA27FF] text-transparent bg-clip-text">Audition AI Studio</span>
@@ -53,17 +54,10 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
                   <span className="font-bold text-white">{user.diamonds}</span>
               </button>
             </div>
-             <nav className="hidden md:flex items-center gap-2">
-                <button 
-                  onClick={() => handleNavClick('my-creations')} 
-                  className={`flex items-center gap-2 px-3 md:px-4 py-2 rounded-full text-sm font-bold transition-all duration-300 shadow-lg
-                    ${activeTab === 'my-creations' 
-                      ? 'bg-blue-400 text-black shadow-blue-400/30' 
-                      : 'bg-blue-400/20 text-blue-300 hover:bg-blue-400/30 hover:shadow-blue-400/20'}`
-                  }>
-                    <i className="ph-fill ph-images text-base"></i>
-                    <span className="hidden md:inline">Tác phẩm</span>
-                </button>
+          </div>
+          
+          {/* Center: Navigation */}
+           <nav className="hidden md:flex items-center gap-2">
                 <button 
                   onClick={() => handleNavClick('leaderboard')} 
                   className={`flex items-center gap-2 px-3 md:px-4 py-2 rounded-full text-sm font-bold transition-all duration-300 shadow-lg
@@ -87,9 +81,19 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
                     <i className="ph-fill ph-calendar-check text-base"></i>
                     <span className="hidden md:inline">Điểm danh</span>
                 </button>
+                <button 
+                  onClick={() => handleNavClick('my-creations')} 
+                  className={`flex items-center gap-2 px-3 md:px-4 py-2 rounded-full text-sm font-bold transition-all duration-300 shadow-lg
+                    ${activeTab === 'my-creations' 
+                      ? 'bg-blue-400 text-black shadow-blue-400/30' 
+                      : 'bg-blue-400/20 text-blue-300 hover:bg-blue-400/30 hover:shadow-blue-400/20'}`
+                  }>
+                    <i className="ph-fill ph-images text-base"></i>
+                    <span className="hidden md:inline">Tác phẩm</span>
+                </button>
             </nav>
-          </div>
           
+          {/* Right: Profile area */}
           <div className="hidden md:flex items-center gap-4">
             <button
               onClick={onTopUpClick}

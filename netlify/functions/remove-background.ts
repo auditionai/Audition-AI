@@ -57,7 +57,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     try {
         // 3. Call Gemini API to remove background
         const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
-        const model = 'gemini-2.5-flash-image'; // Use a model that supports image editing
+        const model = 'gemini-2.5-flash-image'; 
 
         const [header, base64] = imageDataUrl.split(',');
         const mimeType = header.match(/:(.*?);/)[1];
@@ -76,10 +76,20 @@ const handler: Handler = async (event: HandlerEvent) => {
         }
         
         const finalImageBase64 = imagePartResponse.inlineData.data;
-        const finalImageMimeType = imagePartResponse.inlineData.mimeType;
-        const finalImageUrl = `data:${finalImageMimeType};base64,${finalImageBase64}`;
+        const finalImageMimeType = imagePartResponse.inlineData.mimeType.includes('png') ? 'image/png' : 'image/jpeg';
 
-        // 4. Update database
+        // 4. Upload result to Supabase Storage
+        const imageBuffer = Buffer.from(finalImageBase64, 'base64');
+        const fileName = `${user.id}/bg_removed_${Date.now()}.png`;
+        const { error: uploadError } = await supabaseAdmin.storage
+            .from('generated_images')
+            .upload(fileName, imageBuffer, { contentType: finalImageMimeType });
+            
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = supabaseAdmin.storage.from('generated_images').getPublicUrl(fileName);
+
+        // 5. Update user diamonds and API key usage
         const newDiamondCount = userData.diamonds - COST_PER_REMOVAL;
         await Promise.all([
             supabaseAdmin.from('users').update({ diamonds: newDiamondCount }).eq('id', user.id),
@@ -89,7 +99,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         return {
             statusCode: 200,
             body: JSON.stringify({
-                imageUrl: finalImageUrl,
+                imageUrl: publicUrl,
                 newDiamondCount,
             }),
         };

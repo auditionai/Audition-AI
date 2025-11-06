@@ -30,7 +30,6 @@ const handler: Handler = async (event: HandlerEvent) => {
         return { statusCode: 400, body: JSON.stringify({ error: 'Image data is required.' }) };
     }
 
-
     // 1. Validate user and balance
     const { data: userData, error: userError } = await supabaseAdmin
         .from('users')
@@ -64,7 +63,6 @@ const handler: Handler = async (event: HandlerEvent) => {
         const model = 'gemini-2.5-flash-image'; 
 
         const parts: any[] = [];
-
         const [header, base64] = imageDataUrl.split(',');
         const mimeType = header.match(/:(.*?);/)[1];
         parts.push({ inlineData: { data: base64, mimeType } });

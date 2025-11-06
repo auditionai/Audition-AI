@@ -32,7 +32,9 @@ export const useBackgroundRemover = () => {
             });
 
             if (!response.ok) {
+                // Read the actual error message from the server's plain text response
                 const errorText = await response.text();
+                // Throwing an error here will be caught by the catch block below
                 throw new Error(errorText || `Lỗi từ máy chủ: ${response.status}`);
             }
 
@@ -47,7 +49,17 @@ export const useBackgroundRemover = () => {
             // Log the raw error for better debugging
             console.error("Background Removal Error:", error);
             // Show a user-friendly message, which might be the raw text from the server
-            showToast(error.message || 'Có lỗi xảy ra khi tách nền.', 'error');
+            // Try to parse the error if it's a JSON string, otherwise show as is.
+            let errorMessage = 'Có lỗi xảy ra khi tách nền.';
+            try {
+                const parsedError = JSON.parse(error.message);
+                if (parsedError.error) {
+                    errorMessage = parsedError.error;
+                }
+            } catch (e) {
+                errorMessage = error.message;
+            }
+            showToast(errorMessage, 'error');
             return null;
         } finally {
             setProcessing(false);

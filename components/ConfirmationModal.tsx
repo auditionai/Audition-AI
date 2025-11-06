@@ -7,9 +7,10 @@ interface ConfirmationModalProps {
   onClose: () => void;
   onConfirm: () => void;
   cost: number;
+  isLoading?: boolean;
 }
 
-const ConfirmationModal: React.FC<ConfirmationModalProps> = ({ isOpen, onClose, onConfirm, cost }) => {
+const ConfirmationModal: React.FC<ConfirmationModalProps> = ({ isOpen, onClose, onConfirm, cost, isLoading = false }) => {
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Xác nhận thao tác">
       <div className="text-center">
@@ -26,15 +27,17 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({ isOpen, onClose, 
         <div className="flex gap-4">
           <button
             onClick={onClose}
-            className="flex-1 py-3 font-semibold bg-white/10 text-white rounded-lg hover:bg-white/20 transition"
+            disabled={isLoading}
+            className="flex-1 py-3 font-semibold bg-white/10 text-white rounded-lg hover:bg-white/20 transition disabled:opacity-50"
           >
             Hủy
           </button>
           <button
             onClick={onConfirm}
-            className="flex-1 py-3 font-bold text-white bg-gradient-to-r from-pink-500 to-fuchsia-600 rounded-lg hover:opacity-90 transition"
+            disabled={isLoading}
+            className="flex-1 py-3 font-bold text-white bg-gradient-to-r from-pink-500 to-fuchsia-600 rounded-lg hover:opacity-90 transition disabled:opacity-50 disabled:cursor-wait"
           >
-            Xác nhận
+            {isLoading ? 'Đang xử lý...' : 'Xác nhận'}
           </button>
         </div>
       </div>

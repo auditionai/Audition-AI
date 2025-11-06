@@ -48,10 +48,9 @@ const MyCreationsPage: React.FC = () => {
     };
     
     const handleConfirmShare = async () => {
-        if (!imageToShare || !session) return;
+        if (!imageToShare || !session || isSharing) return;
         
         setIsSharing(true);
-        setShareConfirmOpen(false);
 
         try {
             const response = await fetch('/.netlify/functions/share-image', {
@@ -73,13 +72,16 @@ const MyCreationsPage: React.FC = () => {
             setUserImages(prevImages => prevImages.map(img => 
                 img.id === imageToShare.id ? { ...img, is_public: true } : img
             ));
+            
+            setShareConfirmOpen(false);
+            setSelectedImage(null); // Close main image modal as well on success
 
         } catch (error: any) {
             showToast(error.message, 'error');
+            setShareConfirmOpen(false); // Close confirmation on error too
         } finally {
             setIsSharing(false);
             setImageToShare(null);
-            setSelectedImage(null);
         }
     };
 
@@ -95,9 +97,10 @@ const MyCreationsPage: React.FC = () => {
             />
             <ConfirmationModal
                 isOpen={isShareConfirmOpen}
-                onClose={() => setShareConfirmOpen(false)}
+                onClose={() => !isSharing && setShareConfirmOpen(false)}
                 onConfirm={handleConfirmShare}
                 cost={COST_PER_SHARE}
+                isLoading={isSharing}
             />
             
             <div className="text-center mb-12">

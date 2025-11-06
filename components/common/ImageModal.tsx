@@ -35,90 +35,95 @@ const ImageModal: React.FC<ImageModalProps> = ({ isOpen, onClose, image, showInf
       onClick={onClose}
     >
       <div 
-        className="relative w-full max-w-4xl max-h-[90vh] flex flex-col lg:flex-row gap-4"
+        className="relative w-full max-w-4xl max-h-[90vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Image Display */}
-        <div className="relative flex-grow flex items-center justify-center bg-black/50 rounded-lg overflow-hidden">
-            <img 
-                src={image.image_url} 
-                alt={image.title || 'Gallery Image'}
-                className="max-w-full max-h-[90vh] object-contain animate-fade-in-up"
-                style={{ animationDelay: '100ms'}}
-            />
-            {!showInfoPanel && (
-                 <div className="absolute bottom-6 flex items-center gap-4 animate-fade-in">
-                    {onShare && !image.is_public && (
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                onShare(image);
-                            }}
-                            className="bg-pink-500 text-white rounded-full py-3 px-6 hover:bg-pink-600 transition-colors z-10 font-bold flex items-center gap-2 text-lg"
-                        >
-                            <i className="ph-fill ph-share-network"></i>
-                            Chia sẻ
-                        </button>
+        {/* Main Content: Image and/or Info Panel */}
+        <div className="flex flex-col lg:flex-row gap-4 overflow-y-auto custom-scrollbar">
+            {/* Image Display */}
+            <div className="relative flex-grow flex items-center justify-center bg-black/50 rounded-lg overflow-hidden min-h-[300px]">
+                <img 
+                    src={image.image_url} 
+                    alt={image.title || 'Gallery Image'}
+                    className="max-w-full max-h-[90vh] object-contain animate-fade-in-up"
+                    style={{ animationDelay: '100ms'}}
+                />
+            </div>
+
+            {/* Info Panel */}
+            {showInfoPanel && (
+                <div 
+                    className="w-full lg:w-80 flex-shrink-0 bg-[#12121A]/80 border border-pink-500/20 rounded-lg p-4 flex flex-col text-white animate-fade-in-up"
+                    style={{ animationDelay: '200ms'}}
+                >
+                    {image.title && <h3 className="text-xl font-bold text-white mb-3 pb-3 border-b border-white/10">{image.title}</h3>}
+                    {image.creator && (
+                        <div className="flex items-center gap-3">
+                            <img src={image.creator.photo_url} alt={image.creator.display_name} className="w-12 h-12 rounded-full" />
+                            <div>
+                                <p className={`font-bold ${rank.color} neon-text-glow`}>{image.creator.display_name}</p>
+                                <p className={`text-xs font-semibold flex items-center gap-1.5 ${rank.color}`}>{rank.icon} {rank.title}</p>
+                            </div>
+                        </div>
                     )}
-                    <a 
-                        href={image.image_url} 
-                        download={`audition-ai-${image.id}.png`}
-                        onClick={(e) => e.stopPropagation()}
-                        className="bg-green-500 text-white rounded-full py-3 px-6 hover:bg-green-600 transition-colors z-10 font-bold flex items-center gap-2 text-lg"
-                    >
-                        <i className="ph-fill ph-download-simple"></i>
-                        Tải xuống
-                    </a>
+                    <div className="mt-4 flex-grow overflow-y-auto custom-scrollbar flex flex-col">
+                        <h4 className="font-semibold text-pink-400 mb-2 flex items-center gap-2">
+                            <i className="ph-fill ph-quotes"></i>
+                            Câu lệnh (Prompt)
+                        </h4>
+                        <p className="text-sm text-gray-300 italic bg-white/5 p-3 rounded-md flex-grow">
+                            "{image.prompt}"
+                        </p>
+                        <div className="mt-auto pt-3">
+                            <button
+                                onClick={handleCopyPrompt}
+                                className={`w-full px-4 py-2 text-sm font-semibold rounded-lg flex items-center justify-center gap-2 transition-all duration-300 ${isCopied ? 'bg-green-500/20 text-green-300' : 'bg-pink-500/20 text-pink-300 hover:bg-pink-500/30'}`}
+                            >
+                                <i className={`ph-fill ${isCopied ? 'ph-check-circle' : 'ph-copy'}`}></i>
+                                {isCopied ? 'Đã sao chép!' : 'Sao chép Prompt'}
+                            </button>
+                            <a 
+                                href={image.image_url} 
+                                download={`audition-ai-${image.id}.png`}
+                                className="w-full mt-2 px-4 py-2 text-sm font-semibold rounded-lg flex items-center justify-center gap-2 transition-all duration-300 bg-green-500/20 text-green-300 hover:bg-green-500/30"
+                            >
+                                <i className="ph-fill ph-download-simple"></i>
+                                <span>Tải xuống</span>
+                            </a>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>
 
-        {/* Info Panel */}
-        {showInfoPanel && (
-            <div 
-                className="w-full lg:w-80 flex-shrink-0 bg-[#12121A]/80 border border-pink-500/20 rounded-lg p-4 flex flex-col text-white animate-fade-in-up"
-                style={{ animationDelay: '200ms'}}
-            >
-                {image.title && <h3 className="text-xl font-bold text-white mb-3 pb-3 border-b border-white/10">{image.title}</h3>}
-                {image.creator && (
-                    <div className="flex items-center gap-3">
-                        <img src={image.creator.photo_url} alt={image.creator.display_name} className="w-12 h-12 rounded-full" />
-                        <div>
-                            <p className={`font-bold ${rank.color} neon-text-glow`}>{image.creator.display_name}</p>
-                            <p className={`text-xs font-semibold flex items-center gap-1.5 ${rank.color}`}>{rank.icon} {rank.title}</p>
-                        </div>
-                    </div>
+        {/* Action Bar for "My Creations" view */}
+        {!showInfoPanel && (
+            <div className="w-full mt-4 flex items-center justify-center gap-4 animate-fade-in">
+                {onShare && !image.is_public && (
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onShare(image);
+                        }}
+                        className="bg-pink-500 text-white rounded-full py-3 px-6 hover:bg-pink-600 transition-colors z-10 font-bold flex items-center gap-2 text-lg"
+                    >
+                        <i className="ph-fill ph-share-network"></i>
+                        Chia sẻ
+                    </button>
                 )}
-                <div className="mt-4 flex-grow overflow-y-auto custom-scrollbar flex flex-col">
-                    <h4 className="font-semibold text-pink-400 mb-2 flex items-center gap-2">
-                        <i className="ph-fill ph-quotes"></i>
-                        Câu lệnh (Prompt)
-                    </h4>
-                    <p className="text-sm text-gray-300 italic bg-white/5 p-3 rounded-md flex-grow">
-                        "{image.prompt}"
-                    </p>
-                    <div className="mt-auto pt-3">
-                        <button
-                            onClick={handleCopyPrompt}
-                            className={`w-full px-4 py-2 text-sm font-semibold rounded-lg flex items-center justify-center gap-2 transition-all duration-300 ${isCopied ? 'bg-green-500/20 text-green-300' : 'bg-pink-500/20 text-pink-300 hover:bg-pink-500/30'}`}
-                        >
-                            <i className={`ph-fill ${isCopied ? 'ph-check-circle' : 'ph-copy'}`}></i>
-                            {isCopied ? 'Đã sao chép!' : 'Sao chép Prompt'}
-                        </button>
-                        <a 
-                            href={image.image_url} 
-                            download={`audition-ai-${image.id}.png`}
-                            className="w-full mt-2 px-4 py-2 text-sm font-semibold rounded-lg flex items-center justify-center gap-2 transition-all duration-300 bg-green-500/20 text-green-300 hover:bg-green-500/30"
-                        >
-                            <i className="ph-fill ph-download-simple"></i>
-                            <span>Tải xuống</span>
-                        </a>
-                    </div>
-                </div>
+                <a 
+                    href={image.image_url} 
+                    download={`audition-ai-${image.id}.png`}
+                    onClick={(e) => e.stopPropagation()}
+                    className="bg-green-500 text-white rounded-full py-3 px-6 hover:bg-green-600 transition-colors z-10 font-bold flex items-center gap-2 text-lg"
+                >
+                    <i className="ph-fill ph-download-simple"></i>
+                    Tải xuống
+                </a>
             </div>
         )}
-      </div>
 
+      </div>
        <button onClick={onClose} className="absolute top-4 right-4 text-white text-3xl hover:text-pink-400 transition-colors z-10">
             <i className="ph-fill ph-x-circle"></i>
         </button>

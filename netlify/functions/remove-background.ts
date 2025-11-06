@@ -26,6 +26,10 @@ const handler: Handler = async (event: HandlerEvent) => {
     }
 
     const { image: imageDataUrl } = JSON.parse(event.body || '{}');
+    if (!imageDataUrl) {
+        return { statusCode: 400, body: JSON.stringify({ error: 'Image data is required.' }) };
+    }
+
 
     // 1. Validate user and balance
     const { data: userData, error: userError } = await supabaseAdmin
@@ -62,7 +66,8 @@ const handler: Handler = async (event: HandlerEvent) => {
         const [header, base64] = imageDataUrl.split(',');
         const mimeType = header.match(/:(.*?);/)[1];
         const imagePart = { inlineData: { data: base64, mimeType } };
-        const textPart = { text: "isolate the main subject with a transparent background" };
+        // Updated prompt as per user request
+        const textPart = { text: "isolate the main subject with a solid black background" };
 
         const response = await ai.models.generateContent({
             model,
@@ -78,11 +83,11 @@ const handler: Handler = async (event: HandlerEvent) => {
         const finalImageBase64 = imagePartResponse.inlineData.data;
         const finalImageMimeType = imagePartResponse.inlineData.mimeType.includes('png') ? 'image/png' : 'image/jpeg';
 
-        // 4. Upload result to the NEW 'temp_images' Supabase Storage bucket
+        // 4. Upload result to the 'temp_images' Supabase Storage bucket
         const imageBuffer = Buffer.from(finalImageBase64, 'base64');
         const fileName = `${user.id}/bg_removed_${Date.now()}.png`;
         const { error: uploadError } = await supabaseAdmin.storage
-            .from('temp_images') // Use the new temporary bucket
+            .from('temp_images')
             .upload(fileName, imageBuffer, { contentType: finalImageMimeType });
             
         if (uploadError) throw uploadError;

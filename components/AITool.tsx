@@ -158,25 +158,14 @@ const AITool: React.FC = () => {
     const handleBgRemovalImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = Array.from(e.target.files ?? []);
         files.forEach((file: File) => {
-            if (file.size > 15 * 1024 * 1024) { // 15MB limit
-                showToast('Ảnh quá lớn. Vui lòng chọn ảnh dưới 15MB.', 'error');
-                return;
-            }
-            // Don't resize. Read for preview, pass original file.
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                const dataUrl = event.target?.result as string;
-                if (dataUrl) {
-                    const newImage = { id: crypto.randomUUID(), url: dataUrl, file: file };
-                    setImagesForBgRemoval(prev => [...prev, newImage]);
-                } else {
-                    showToast("Không thể đọc được file ảnh.", "error");
-                }
-            };
-            reader.onerror = () => {
-                 showToast("Lỗi khi đọc file ảnh.", "error");
-            };
-            reader.readAsDataURL(file);
+            // Re-introduce client-side resizing as a robust way to prevent payload issues
+            resizeImage(file, 1024).then(({ file: resizedFile, dataUrl: resizedDataUrl }) => {
+                const newImage = { id: crypto.randomUUID(), url: resizedDataUrl, file: resizedFile };
+                setImagesForBgRemoval(prev => [...prev, newImage]);
+            }).catch(err => {
+                console.error("Error resizing image for BG removal:", err);
+                showToast("Lỗi khi xử lý ảnh.", "error");
+            });
         });
         e.target.value = '';
     };
@@ -220,10 +209,9 @@ const AITool: React.FC = () => {
         const imagesToProcessNow = [...imagesForBgRemoval];
         setImagesForBgRemoval([]);
         for (const image of imagesToProcessNow) {
-            const processedUrl = await removeBackground(image.file);
+            // Pass the dataURL directly, simplifying the hook and aligning with the generate function
+            const processedUrl = await removeBackground(image.url);
             if (processedUrl) {
-                // To create a file object for the processed image, we need to fetch it first.
-                // This allows it to be passed correctly to the generator tool.
                 try {
                     const response = await fetch(processedUrl);
                     const blob = await response.blob();

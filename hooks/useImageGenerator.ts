@@ -15,10 +15,13 @@ export const useBackgroundRemover = () => {
 
     const COST_PER_REMOVAL = 1;
 
-    // The function now accepts a dataURL directly, simplifying the flow.
-    const removeBackground = async (imageDataUrl: string): Promise<string | null> => {
+    // The function now accepts a File object, just like generateImage.
+    const removeBackground = async (imageFile: File): Promise<string | null> => {
         setProcessing(true);
         try {
+            // Internal conversion to base64, mirroring the generateImage hook.
+            const imageDataUrl = await fileToBase64(imageFile);
+
             const headers: Record<string, string> = {
                 'Content-Type': 'application/json',
             };

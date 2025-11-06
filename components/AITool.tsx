@@ -209,8 +209,8 @@ const AITool: React.FC = () => {
         const imagesToProcessNow = [...imagesForBgRemoval];
         setImagesForBgRemoval([]);
         for (const image of imagesToProcessNow) {
-            // Pass the dataURL directly, simplifying the hook and aligning with the generate function
-            const processedUrl = await removeBackground(image.url);
+            // Align with generateImage flow: pass the File object directly to the hook.
+            const processedUrl = await removeBackground(image.file);
             if (processedUrl) {
                 try {
                     const response = await fetch(processedUrl);

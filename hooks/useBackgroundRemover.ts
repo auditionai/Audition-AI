@@ -31,11 +31,12 @@ export const useBackgroundRemover = () => {
                 body: JSON.stringify({ image: imageDataUrl }),
             });
 
-            const result = await response.json();
-
             if (!response.ok) {
-                throw new Error(result.error || `Lỗi máy chủ (${response.status})`);
+                const errorText = await response.text();
+                throw new Error(errorText || `Lỗi từ máy chủ: ${response.status}`);
             }
+
+            const result = await response.json();
 
             updateUserProfile({ diamonds: result.newDiamondCount });
             showToast(`Tách nền thành công!`, 'success');
@@ -43,7 +44,9 @@ export const useBackgroundRemover = () => {
             return result.imageUrl;
 
         } catch (error: any) {
+            // Log the raw error for better debugging
             console.error("Background Removal Error:", error);
+            // Show a user-friendly message, which might be the raw text from the server
             showToast(error.message || 'Có lỗi xảy ra khi tách nền.', 'error');
             return null;
         } finally {

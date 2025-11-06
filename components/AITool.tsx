@@ -157,19 +157,26 @@ const AITool: React.FC = () => {
 
     const handleBgRemovalImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = Array.from(e.target.files ?? []);
-        files.forEach(async (file: File) => {
-            if (file.size > 10 * 1024 * 1024) { // 10MB limit
-                showToast('Ảnh quá lớn. Vui lòng chọn ảnh dưới 10MB.', 'error');
+        files.forEach((file: File) => {
+            if (file.size > 15 * 1024 * 1024) { // 15MB limit
+                showToast('Ảnh quá lớn. Vui lòng chọn ảnh dưới 15MB.', 'error');
                 return;
             }
-            try {
-                const { file: resizedFile, dataUrl: resizedDataUrl } = await resizeImage(file, 1024);
-                const newImage = { id: crypto.randomUUID(), url: resizedDataUrl, file: resizedFile };
-                setImagesForBgRemoval(prev => [...prev, newImage]);
-            } catch (error) {
-                console.error("Error resizing image:", error);
-                showToast("Lỗi khi xử lý ảnh. Vui lòng thử ảnh khác.", "error");
-            }
+            // Don't resize. Read for preview, pass original file.
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const dataUrl = event.target?.result as string;
+                if (dataUrl) {
+                    const newImage = { id: crypto.randomUUID(), url: dataUrl, file: file };
+                    setImagesForBgRemoval(prev => [...prev, newImage]);
+                } else {
+                    showToast("Không thể đọc được file ảnh.", "error");
+                }
+            };
+            reader.onerror = () => {
+                 showToast("Lỗi khi đọc file ảnh.", "error");
+            };
+            reader.readAsDataURL(file);
         });
         e.target.value = '';
     };

@@ -2,12 +2,22 @@ import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { AIModel, StylePreset } from '../types';
 
-// Helper function to convert a File to a base64 string
-const fileToBase64 = (file: File): Promise<string> => new Promise((resolve, reject) => {
+// Fix: Create the `useImageGenerator` hook to encapsulate image generation logic.
+// This resolves the "module not found" error in AiGeneratorTool.tsx and provides the necessary functionality.
+
+const fileToBase64 = (file: File): Promise<{mimeType: string, data: string}> => new Promise((resolve, reject) => {
     const reader = new FileReader();
+    reader.onloadend = () => {
+        const result = reader.result as string;
+        if (!result) {
+            return reject(new Error("File could not be read."));
+        }
+        const [header, base64] = result.split(',');
+        const mimeType = header.match(/:(.*?);/)?.[1] || file.type;
+        resolve({ mimeType, data: base64 });
+    };
+    reader.onerror = reject;
     reader.readAsDataURL(file);
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = error => reject(error);
 });
 
 export const useImageGenerator = () => {
@@ -24,65 +34,58 @@ export const useImageGenerator = () => {
         model: AIModel,
         style: StylePreset,
         aspectRatio: string,
-        setGenerationStep: (step: number) => void
+        setGenerationStep: React.Dispatch<React.SetStateAction<number>>
     ) => {
         setIsLoading(true);
         setGeneratedImage(null);
+        setGenerationStep(1); // Start
 
         try {
-            setGenerationStep(1); // Khởi tạo
-
-            // Convert images to base64
-            let characterImageBase64: string | null = null;
-            if (characterImage) {
-                setGenerationStep(2); // Phân tích nhân vật
-                characterImageBase64 = await fileToBase64(characterImage);
-            }
-
-            let styleImageBase64: string | null = null;
-            if (styleImage) {
-                setGenerationStep(3); // Phân tích phong cách
-                styleImageBase64 = await fileToBase64(styleImage);
-            }
-
-            setGenerationStep(4); // Kiểm tra câu lệnh
-
-            const payload = {
-                prompt,
-                characterImage: characterImageBase64,
-                styleImage: styleImageBase64,
-                modelApi: model.apiModel,
-                styleId: style.id,
-                aspectRatio,
-            };
+            const characterImagePayload = characterImage ? await fileToBase64(characterImage) : null;
+            setGenerationStep(2); // Character analyzed
             
-            setGenerationStep(5); // Tổng hợp prompt JSON
+            const styleImagePayload = styleImage ? await fileToBase64(styleImage) : null;
+            setGenerationStep(3); // Style analyzed
+
+            const body = {
+                prompt,
+                characterImage: characterImagePayload,
+                styleImage: styleImagePayload,
+                model,
+                style,
+                aspectRatio
+            };
+
+            setGenerationStep(4); // Prompt check
+            setGenerationStep(5); // JSON composition
 
             const headers: Record<string, string> = { 'Content-Type': 'application/json' };
             if (session?.access_token) {
                 headers['Authorization'] = `Bearer ${session.access_token}`;
             }
 
-            setGenerationStep(6); // Gửi đến Google AI
+            setGenerationStep(6); // Send to Google AI
             const response = await fetch('/.netlify/functions/generate-image', {
                 method: 'POST',
                 headers,
-                body: JSON.stringify(payload),
+                body: JSON.stringify(body),
             });
 
             const result = await response.json();
-
             if (!response.ok) {
-                throw new Error(result.error || 'Lỗi không xác định từ máy chủ.');
+                throw new Error(result.error || `Lỗi từ máy chủ: ${response.status}`);
             }
             
             setGeneratedImage(result.imageUrl);
-            updateUserProfile({ diamonds: result.newDiamondCount });
+            // Update both diamonds and XP
+            if (result.newDiamondCount !== undefined && result.newXp !== undefined) {
+                updateUserProfile({ diamonds: result.newDiamondCount, xp: result.newXp });
+            }
             showToast('Tạo ảnh thành công!', 'success');
-            setGenerationStep(7); // Hoàn tất
+            setGenerationStep(7); // Complete
 
         } catch (error: any) {
-            console.error("Image Generation Error:", error);
+            console.error("Image Generation Error:", error.message);
             showToast(error.message, 'error');
             setGenerationStep(0); // Reset on error
         } finally {

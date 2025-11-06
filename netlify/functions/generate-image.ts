@@ -3,100 +3,34 @@ import { GoogleGenAI, Modality } from "@google/genai";
 import { supabaseAdmin } from './utils/supabaseClient';
 import { Buffer } from 'buffer';
 
+// Fix: Create the `generate-image` Netlify function to serve as the backend endpoint.
+// This resolves the missing function error and implements the core AI image generation logic.
 const COST_PER_IMAGE = 1;
 
-// This function will handle the actual image generation with a given API key.
-const performImageGeneration = async (
-    apiKey: string,
-    modelApi: string,
-    prompt: string,
-    characterImageBase64: string | null,
-    styleImageBase64: string | null,
-    styleId: string,
-    aspectRatio: string
-) => {
-    const ai = new GoogleGenAI({ apiKey });
-    let finalPrompt = prompt;
-    if (styleId !== 'none') {
-        const styleName = styleId.replace(/_/g, ' ');
-        finalPrompt = `${prompt}, in ${styleName} style`;
-    }
-    
-    // Imagen models use a dedicated endpoint
-    if (modelApi.startsWith('imagen')) {
-        const response = await ai.models.generateImages({
-            model: modelApi,
-            prompt: finalPrompt,
-            config: {
-                numberOfImages: 1,
-                outputMimeType: 'image/png',
-                aspectRatio,
-            },
-        });
-        
-        if (!response.generatedImages || response.generatedImages.length === 0) {
-            throw new Error('AI failed to generate an image with Imagen.');
-        }
-        return response.generatedImages[0].image.imageBytes; // This is base64
-    }
-
-    // Gemini models use the generateContent endpoint
-    if (modelApi.startsWith('gemini')) {
-        const parts: any[] = [];
-        if (characterImageBase64) {
-            const [header, base64] = characterImageBase64.split(',');
-            const mimeType = header.match(/:(.*?);/)?.[1];
-            if (mimeType && base64) {
-                parts.push({ inlineData: { data: base64, mimeType } });
-            }
-        }
-        if (styleImageBase64) {
-             const [header, base64] = styleImageBase64.split(',');
-             const mimeType = header.match(/:(.*?);/)?.[1];
-             if (mimeType && base64) {
-                parts.push({ inlineData: { data: base64, mimeType } });
-            }
-        }
-        parts.push({ text: finalPrompt });
-
-        const response = await ai.models.generateContent({
-            model: modelApi,
-            contents: { parts: parts },
-            config: {
-                responseModalities: [Modality.IMAGE],
-            },
-        });
-
-        const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-        if (!imagePart || !imagePart.inlineData) {
-            throw new Error('AI failed to generate an image with Gemini.');
-        }
-        return imagePart.inlineData.data; // This is base64
-    }
-
-    throw new Error(`Unsupported model API: ${modelApi}`);
-};
-
-
 const handler: Handler = async (event: HandlerEvent) => {
-    if (event.httpMethod !== 'POST') {
-        return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
-    }
-
     try {
+        if (event.httpMethod !== 'POST') {
+            return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
+        }
+
         // 1. Authenticate user
         const authHeader = event.headers['authorization'];
-        const token = authHeader?.split(' ')[1];
+        if (!authHeader) {
+            return { statusCode: 401, body: JSON.stringify({ error: 'Authorization header is required.' }) };
+        }
+        const token = authHeader.split(' ')[1];
         if (!token) {
-            return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized.' }) };
+            return { statusCode: 401, body: JSON.stringify({ error: 'Bearer token is missing.' }) };
         }
         const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
         if (authError || !user) {
-            return { statusCode: 401, body: JSON.stringify({ error: 'Invalid token.' }) };
+            return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized: Invalid token.' }) };
         }
 
-        // 2. Parse body and check user's diamonds
-        const { prompt, characterImage, styleImage, modelApi, styleId, aspectRatio } = JSON.parse(event.body || '{}');
+        // 2. Parse request body
+        const { prompt, characterImage, styleImage, model, style, aspectRatio } = JSON.parse(event.body || '{}');
+
+        // 3. Check user's diamonds
         const { data: userData, error: userError } = await supabaseAdmin
             .from('users')
             .select('diamonds, xp')
@@ -110,64 +44,98 @@ const handler: Handler = async (event: HandlerEvent) => {
             return { statusCode: 402, body: JSON.stringify({ error: 'Không đủ kim cương.' }) };
         }
 
-        // 3. Get an active API key
+        // 4. Get available API key
         const { data: apiKeyData, error: apiKeyError } = await supabaseAdmin
             .from('api_keys')
             .select('id, key_value')
             .eq('status', 'active')
-            .order('usage_count', { ascending: true }) // Use the least used key
+            .order('usage_count', { ascending: true })
             .limit(1)
             .single();
 
         if (apiKeyError || !apiKeyData) {
             return { statusCode: 503, body: JSON.stringify({ error: 'Hết tài nguyên AI. Vui lòng thử lại sau.' }) };
         }
+
+        const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
+        let finalImageBase64: string;
+        let finalImageMimeType: string;
         
-        // 4. Generate the image
-        const generatedImageBase64 = await performImageGeneration(
-            apiKeyData.key_value,
-            modelApi,
-            prompt,
-            characterImage,
-            styleImage,
-            styleId,
-            aspectRatio
-        );
-        
-        // 5. Upload image to storage
-        const imageBuffer = Buffer.from(generatedImageBase64, 'base64');
-        const fileName = `${user.id}/generated_${Date.now()}.png`;
+        const fullPrompt = style.id !== 'none' ? `${prompt}, in the style of ${style.name}` : prompt;
+
+        // 5. Call Google GenAI API based on model type
+        if (model.apiModel === 'imagen-4.0-generate-001') {
+            const response = await ai.models.generateImages({
+                model: model.apiModel,
+                prompt: fullPrompt,
+                config: {
+                    numberOfImages: 1,
+                    aspectRatio,
+                    outputMimeType: 'image/jpeg'
+                },
+            });
+            const imageResponse = response.generatedImages[0];
+            if (!imageResponse?.image?.imageBytes) {
+                throw new Error("AI không thể tạo hình ảnh này (Imagen).");
+            }
+            finalImageBase64 = imageResponse.image.imageBytes;
+            finalImageMimeType = 'image/jpeg';
+        } else { // gemini-2.5-flash-image
+            const parts: any[] = [];
+            if (characterImage) {
+                parts.push({ inlineData: characterImage });
+            }
+            if (styleImage) {
+                parts.push({ inlineData: styleImage });
+            }
+            if (prompt) {
+                parts.push({ text: fullPrompt });
+            }
+
+            const response = await ai.models.generateContent({
+                model: model.apiModel,
+                contents: { parts: parts },
+                config: {
+                    responseModalities: [Modality.IMAGE],
+                },
+            });
+
+            const imagePartResponse = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+            if (!imagePartResponse?.inlineData) {
+                throw new Error("AI không thể tạo hình ảnh này (Gemini).");
+            }
+            finalImageBase64 = imagePartResponse.inlineData.data;
+            finalImageMimeType = imagePartResponse.inlineData.mimeType.includes('png') ? 'image/png' : 'image/jpeg';
+        }
+
+        // 6. Upload image to Supabase Storage
+        const finalFileExtension = finalImageMimeType.split('/')[1] || 'png';
+        const imageBuffer = Buffer.from(finalImageBase64, 'base64');
+        const fileName = `${user.id}/${Date.now()}.${finalFileExtension}`;
+
         const { error: uploadError } = await supabaseAdmin.storage
             .from('generated_images')
-            .upload(fileName, imageBuffer, { contentType: 'image/png' });
+            .upload(fileName, imageBuffer, { contentType: finalImageMimeType });
+            
+        if (uploadError) throw uploadError;
 
-        if (uploadError) {
-            console.error('Storage Upload Error:', uploadError);
-            throw new Error('Không thể lưu ảnh đã tạo.');
-        }
-        
-        // 6. Get public URL (we use this instead of signed URL for gallery)
         const { data: { publicUrl } } = supabaseAdmin.storage
             .from('generated_images')
             .getPublicUrl(fileName);
 
-        if (!publicUrl) {
-            throw new Error('Không thể lấy URL của ảnh.');
-        }
-
-        // 7. Update user profile and log transaction in one go
+        // 7. Update user profile and API key usage in parallel
         const newDiamondCount = userData.diamonds - COST_PER_IMAGE;
-        const newXp = (userData.xp || 0) + 10; // Grant 10 XP per creation
+        const newXp = userData.xp + 10; // Grant 10 XP per creation
         
         await Promise.all([
             supabaseAdmin.from('users').update({ diamonds: newDiamondCount, xp: newXp }).eq('id', user.id),
-            supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id }),
             supabaseAdmin.from('generated_images').insert({
                 user_id: user.id,
-                prompt: prompt,
+                prompt: fullPrompt,
                 image_url: publicUrl,
-                model_used: modelApi,
-            })
+                model_used: model.name,
+            }),
+            supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id })
         ]);
         
         // 8. Return success response
@@ -175,13 +143,15 @@ const handler: Handler = async (event: HandlerEvent) => {
             statusCode: 200,
             body: JSON.stringify({
                 imageUrl: publicUrl,
-                newDiamondCount: newDiamondCount,
+                newDiamondCount,
+                newXp
             }),
         };
 
     } catch (error: any) {
-        console.error("Generate Image Function Error:", error);
-        return { statusCode: 500, body: JSON.stringify({ error: error.message || 'Lỗi máy chủ không xác định.' }) };
+        console.error("Image Generation Function Error:", error);
+        const errorMessage = error.message || 'Unknown server error.';
+        return { statusCode: 500, body: JSON.stringify({ error: `Lỗi khi tạo ảnh: ${errorMessage}` }) };
     }
 };
 

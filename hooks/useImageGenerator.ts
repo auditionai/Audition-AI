@@ -1,9 +1,6 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { AIModel, StylePreset } from '../types';
-
-// Fix: Create the `useImageGenerator` hook to encapsulate image generation logic.
-// This resolves the "module not found" error in AiGeneratorTool.tsx and provides the necessary functionality.
 
 const fileToBase64 = (file: File): Promise<{mimeType: string, data: string}> => new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -20,6 +17,59 @@ const fileToBase64 = (file: File): Promise<{mimeType: string, data: string}> => 
     reader.readAsDataURL(file);
 });
 
+const createCanvasImage = async (imageFile: File, targetAspectRatio: string): Promise<{ file: File; isComposite: boolean }> => {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+            const [targetW, targetH] = targetAspectRatio.split(':').map(Number);
+            const targetRatio = targetW / targetH;
+            const imgRatio = img.width / img.height;
+
+            // If ratios are very close, no need to create a canvas, just return original file
+            if (Math.abs(targetRatio - imgRatio) < 0.05) {
+                return resolve({ file: imageFile, isComposite: false });
+            }
+
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return reject(new Error('Could not get canvas context.'));
+
+            // Create canvas with target ratio, scaled down for performance
+            const CANVAS_MAX_DIM = 1024;
+            let canvasWidth, canvasHeight;
+            if (targetRatio > 1) { // Landscape
+                canvasWidth = CANVAS_MAX_DIM;
+                canvasHeight = Math.round(CANVAS_MAX_DIM / targetRatio);
+            } else { // Portrait or Square
+                canvasHeight = CANVAS_MAX_DIM;
+                canvasWidth = Math.round(CANVAS_MAX_DIM * targetRatio);
+            }
+
+            canvas.width = canvasWidth;
+            canvas.height = canvasHeight;
+            ctx.fillStyle = '#808080'; // Gray background
+            ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+            
+            // Calculate position to draw the source image centered on the canvas, fitting inside
+            const scale = Math.min(canvasWidth / img.width, canvasHeight / img.height);
+            const scaledWidth = img.width * scale;
+            const scaledHeight = img.height * scale;
+            const dx = (canvasWidth - scaledWidth) / 2;
+            const dy = (canvasHeight - scaledHeight) / 2;
+
+            ctx.drawImage(img, dx, dy, scaledWidth, scaledHeight);
+
+            canvas.toBlob((blob) => {
+                if (!blob) return reject(new Error('Canvas to Blob conversion failed.'));
+                const newFile = new File([blob], `composite_${imageFile.name}`, { type: 'image/jpeg' });
+                resolve({ file: newFile, isComposite: true });
+            }, 'image/jpeg', 0.95);
+        };
+        img.onerror = reject;
+        img.src = URL.createObjectURL(imageFile);
+    });
+};
+
 export const useImageGenerator = () => {
     const { session, showToast, updateUserProfile } = useAuth();
     const [isLoading, setIsLoading] = useState(false);
@@ -27,7 +77,7 @@ export const useImageGenerator = () => {
 
     const COST_PER_IMAGE = 1;
 
-    const generateImage = async (
+    const generateImage = useCallback(async (
         prompt: string,
         characterImage: File | null,
         styleImage: File | null,
@@ -41,11 +91,22 @@ export const useImageGenerator = () => {
         setGenerationStep(1); // Start
 
         try {
-            const characterImagePayload = characterImage ? await fileToBase64(characterImage) : null;
-            setGenerationStep(2); // Character analyzed
+            let finalCharacterImageFile = characterImage;
+            let isOutpainting = false;
+            
+            if (characterImage) {
+                setGenerationStep(1); // Preparing Canvas
+                const { file: processedFile, isComposite } = await createCanvasImage(characterImage, aspectRatio);
+                finalCharacterImageFile = processedFile;
+                isOutpainting = isComposite;
+                setGenerationStep(2); // Canvas Ready
+            }
+
+            const characterImagePayload = finalCharacterImageFile ? await fileToBase64(finalCharacterImageFile) : null;
+            // Step is already 2 from above, or we skip if no image
             
             const styleImagePayload = styleImage ? await fileToBase64(styleImage) : null;
-            setGenerationStep(3); // Style analyzed
+            if(styleImage) setGenerationStep(3); // Style analyzed
 
             const body = {
                 prompt,
@@ -53,7 +114,8 @@ export const useImageGenerator = () => {
                 styleImage: styleImagePayload,
                 model,
                 style,
-                aspectRatio
+                aspectRatio,
+                isOutpainting
             };
 
             setGenerationStep(4); // Prompt check
@@ -70,14 +132,21 @@ export const useImageGenerator = () => {
                 headers,
                 body: JSON.stringify(body),
             });
+            
+            if (!response.ok) {
+                 const errorBody = await response.text();
+                 try {
+                     const parsedError = JSON.parse(errorBody);
+                     throw new Error(parsedError.error || `Lỗi từ máy chủ: ${response.status}`);
+                 } catch (e) {
+                     // If parsing fails, the body was likely not JSON (e.g., HTML from a gateway timeout)
+                     throw new Error(errorBody || `Lỗi từ máy chủ: ${response.status}`);
+                 }
+            }
 
             const result = await response.json();
-            if (!response.ok) {
-                throw new Error(result.error || `Lỗi từ máy chủ: ${response.status}`);
-            }
             
             setGeneratedImage(result.imageUrl);
-            // Update both diamonds and XP
             if (result.newDiamondCount !== undefined && result.newXp !== undefined) {
                 updateUserProfile({ diamonds: result.newDiamondCount, xp: result.newXp });
             }
@@ -85,13 +154,13 @@ export const useImageGenerator = () => {
             setGenerationStep(7); // Complete
 
         } catch (error: any) {
-            console.error("Image Generation Error:", error.message);
+            console.error("Image Generation Error:", error);
             showToast(error.message, 'error');
             setGenerationStep(0); // Reset on error
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [session, showToast, updateUserProfile]);
 
     return { isLoading, generatedImage, generateImage, COST_PER_IMAGE };
 };

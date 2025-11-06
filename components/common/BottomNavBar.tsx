@@ -1,5 +1,6 @@
 import React from 'react';
 import { CreatorTab } from '../../pages/CreatorPage';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface BottomNavBarProps {
   activeTab: CreatorTab | 'buy-credits';
@@ -9,7 +10,7 @@ interface BottomNavBarProps {
 }
 
 const NavButton = ({ icon, label, isActive, onClick, hasNotification = false }: { icon: string, label: string, isActive: boolean, onClick: () => void, hasNotification?: boolean }) => (
-    <button onClick={onClick} className={`relative flex flex-col items-center justify-center w-1/5 h-full transition-colors duration-200 ${isActive ? 'text-pink-400' : 'text-gray-400 hover:text-white'}`}>
+    <button onClick={onClick} className={`relative flex flex-col items-center justify-center flex-1 h-full transition-colors duration-200 ${isActive ? 'text-pink-400' : 'text-gray-400 hover:text-white'}`}>
         {hasNotification && (
             <span className="absolute top-2 right-4 flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-pink-400 opacity-75"></span>
@@ -22,6 +23,7 @@ const NavButton = ({ icon, label, isActive, onClick, hasNotification = false }: 
 );
 
 const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeTab, onTabChange, onTopUpClick, onCheckInClick }) => {
+  const { hasCheckedInToday } = useAuth();
   return (
     <div className="fixed bottom-0 left-0 w-full h-16 bg-[#12121A]/80 backdrop-blur-lg border-t border-white/10 z-50 md:hidden">
         <div className="flex justify-around items-center h-full">
@@ -42,6 +44,14 @@ const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeTab, onTabChange, onT
                 label="Xếp hạng"
                 isActive={activeTab === 'leaderboard'}
                 onClick={() => onTabChange('leaderboard')}
+            />
+            {/* Fix: Add Daily Check-in button, which was missing for mobile users */}
+            <NavButton 
+                icon="ph-calendar-check"
+                label="Điểm danh"
+                isActive={false} // This is a modal action, not a tab.
+                onClick={onCheckInClick}
+                hasNotification={!hasCheckedInToday}
             />
             <NavButton 
                 icon="ph-diamonds-four"

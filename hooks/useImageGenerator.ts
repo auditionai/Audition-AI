@@ -9,51 +9,6 @@ const fileToBase64 = (file: File): Promise<string> => new Promise((resolve, reje
     reader.readAsDataURL(file);
 });
 
-export const useBackgroundRemover = () => {
-    const { session, showToast, updateUserProfile } = useAuth();
-    const [isProcessing, setProcessing] = useState(false);
-
-    const COST_PER_REMOVAL = 1;
-
-    // The function now accepts a File object, just like generateImage.
-    const removeBackground = async (imageFile: File): Promise<string | null> => {
-        setProcessing(true);
-        try {
-            // Internal conversion to base64, mirroring the generateImage hook.
-            const imageDataUrl = await fileToBase64(imageFile);
-
-            const headers: Record<string, string> = {
-                'Content-Type': 'application/json',
-            };
-            if (session?.access_token) {
-                headers['Authorization'] = `Bearer ${session.access_token}`;
-            }
-
-            const response = await fetch('/.netlify/functions/remove-background', {
-                method: 'POST',
-                headers: headers,
-                body: JSON.stringify({ image: imageDataUrl }),
-            });
-
-            const result = await response.json();
-
-            if (!response.ok) {
-                throw new Error(result.error || 'Lỗi không xác định');
-            }
-            
-            updateUserProfile({ diamonds: result.newDiamondCount });
-            showToast(`Tách nền thành công!`, 'success');
-            return result.imageUrl;
-        } catch (error: any) {
-            showToast(error.message, 'error');
-            return null;
-        } finally {
-            setProcessing(false);
-        }
-    };
-
-    return { isProcessing, removeBackground, COST_PER_REMOVAL };
-};
 
 export const useImageGenerator = () => {
     const { session, showToast, updateUserProfile } = useAuth();

@@ -62,7 +62,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         const [header, base64] = imageDataUrl.split(',');
         const mimeType = header.match(/:(.*?);/)[1];
         const imagePart = { inlineData: { data: base64, mimeType } };
-        const textPart = { text: "remove the background from this image. make the background transparent." };
+        const textPart = { text: "isolate the main subject with a transparent background" };
 
         const response = await ai.models.generateContent({
             model,

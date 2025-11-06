@@ -7,10 +7,11 @@ interface ImageModalProps {
   isOpen: boolean;
   onClose: () => void;
   image: GalleryImage | null;
-  showInfoPanel?: boolean; // New prop to control info panel visibility
+  showInfoPanel?: boolean;
+  onShare?: (image: GalleryImage) => void;
 }
 
-const ImageModal: React.FC<ImageModalProps> = ({ isOpen, onClose, image, showInfoPanel = true }) => {
+const ImageModal: React.FC<ImageModalProps> = ({ isOpen, onClose, image, showInfoPanel = true, onShare }) => {
   const { showToast } = useAuth();
   const [isCopied, setIsCopied] = useState(false);
 
@@ -46,15 +47,29 @@ const ImageModal: React.FC<ImageModalProps> = ({ isOpen, onClose, image, showInf
                 style={{ animationDelay: '100ms'}}
             />
             {!showInfoPanel && (
-                <a 
-                    href={image.image_url} 
-                    download={`audition-ai-${image.id}.png`}
-                    onClick={(e) => e.stopPropagation()}
-                    className="absolute bottom-6 bg-green-500 text-white rounded-full py-3 px-6 hover:bg-green-600 transition-colors z-10 font-bold flex items-center gap-2 text-lg animate-fade-in"
-                >
-                    <i className="ph-fill ph-download-simple"></i>
-                    Tải xuống
-                </a>
+                 <div className="absolute bottom-6 flex items-center gap-4 animate-fade-in">
+                    {onShare && !image.is_public && (
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onShare(image);
+                            }}
+                            className="bg-pink-500 text-white rounded-full py-3 px-6 hover:bg-pink-600 transition-colors z-10 font-bold flex items-center gap-2 text-lg"
+                        >
+                            <i className="ph-fill ph-share-network"></i>
+                            Chia sẻ
+                        </button>
+                    )}
+                    <a 
+                        href={image.image_url} 
+                        download={`audition-ai-${image.id}.png`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="bg-green-500 text-white rounded-full py-3 px-6 hover:bg-green-600 transition-colors z-10 font-bold flex items-center gap-2 text-lg"
+                    >
+                        <i className="ph-fill ph-download-simple"></i>
+                        Tải xuống
+                    </a>
+                </div>
             )}
         </div>
 

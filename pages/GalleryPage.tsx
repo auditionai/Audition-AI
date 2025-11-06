@@ -1,8 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import LandingHeader from '../components/Header';
 import Footer from '../components/Footer';
 import Gallery from '../components/Gallery';
-// Fix: Import `useAuth` from `AuthContext` to get all context functionality.
 import { useAuth } from '../contexts/AuthContext';
 import { GalleryImage } from '../types';
 import ImageModal from '../components/common/ImageModal';
@@ -11,21 +10,37 @@ import AuthModal from '../components/AuthModal';
 import InfoModal from '../components/InfoModal';
 
 const GalleryPage: React.FC = () => {
-    // Fix: Remove unused `login` variable.
     const { navigate, stats, user, updateUserDiamonds, showToast } = useAuth();
     const [selectedImage, setSelectedImage] = useState<GalleryImage | null>(null);
+    const [publicGalleryImages, setPublicGalleryImages] = useState<GalleryImage[]>([]);
+    const [isGalleryLoading, setIsGalleryLoading] = useState(true);
     
     // Modal states for header/footer actions
     const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
     const [isTopUpModalOpen, setIsTopUpModalOpen] = useState(false);
     const [infoModalKey, setInfoModalKey] = useState<'terms' | 'policy' | 'contact' | null>(null);
 
+     useEffect(() => {
+        const fetchPublicGallery = async () => {
+            try {
+                const response = await fetch('/.netlify/functions/public-gallery');
+                if (!response.ok) throw new Error('Không thể tải thư viện cộng đồng.');
+                const data = await response.json();
+                setPublicGalleryImages(data);
+            } catch (error: any) {
+                showToast(error.message, 'error');
+            } finally {
+                setIsGalleryLoading(false);
+            }
+        };
+        fetchPublicGallery();
+    }, [showToast]);
+
     return (
         <>
             <LandingHeader
                 user={user}
-                onTopUpClick={() => setIsTopUpModalOpen(true)}
-                // Fix: Rename unused parameter `id` to `_id` to satisfy linter.
+                onTopUpClick={() => user ? setIsTopUpModalOpen(true) : setIsAuthModalOpen(true)}
                 onScrollTo={(_id) => navigate('home')} // Navigate home on logo/nav clicks
             />
             <main className="pt-24 bg-[#0B0B0F]">
@@ -41,7 +56,11 @@ const GalleryPage: React.FC = () => {
                     </div>
                     <div className="animate-fade-in-up">
                          <div className="container mx-auto px-4">
-                            <Gallery onImageClick={setSelectedImage} />
+                            {isGalleryLoading ? (
+                                <div className="text-center p-12">Đang tải thư viện...</div>
+                            ) : (
+                                <Gallery images={publicGalleryImages} onImageClick={setSelectedImage} />
+                            )}
                         </div>
                     </div>
                     </div>

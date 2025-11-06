@@ -1,9 +1,9 @@
 import React from 'react';
-import { GALLERY_IMAGES } from '../constants/landingPageData';
 import { GalleryImage } from '../types';
 import { getRankForLevel } from '../utils/rankUtils';
 
 interface GalleryProps {
+  images: GalleryImage[];
   onImageClick: (image: GalleryImage) => void;
   limit?: number;
   showSeeMore?: boolean;
@@ -11,11 +11,11 @@ interface GalleryProps {
   displayMode?: 'grid' | 'slider';
 }
 
-const Gallery: React.FC<GalleryProps> = ({ onImageClick, limit, showSeeMore = false, onSeeMoreClick, displayMode = 'grid' }) => {
-  const imagesToShow = limit ? GALLERY_IMAGES.slice(0, limit) : GALLERY_IMAGES;
+const Gallery: React.FC<GalleryProps> = ({ images, onImageClick, limit, showSeeMore = false, onSeeMoreClick, displayMode = 'grid' }) => {
+  const imagesToShow = limit ? images.slice(0, limit) : images;
   
   if (displayMode === 'slider') {
-    const duplicatedImages = [...GALLERY_IMAGES, ...GALLERY_IMAGES];
+    const duplicatedImages = [...images, ...images];
     return (
       <div className="image-slider-container">
         <div className="image-slider-track">
@@ -28,9 +28,7 @@ const Gallery: React.FC<GalleryProps> = ({ onImageClick, limit, showSeeMore = fa
                 onClick={() => onImageClick(image)}
               >
                 <img 
-                  // Fix: Use `image_url` instead of `src`.
                   src={image.image_url} 
-                  // Fix: Use `display_name` instead of `name`.
                   alt={`Tác phẩm của ${image.creator.display_name}`}
                   className="w-full h-full object-cover transition-transform duration-500 ease-in-out group-hover:scale-110"
                 />
@@ -40,10 +38,8 @@ const Gallery: React.FC<GalleryProps> = ({ onImageClick, limit, showSeeMore = fa
                   </div>
                   <div className="absolute bottom-0 left-0 p-4 w-full opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-4 group-hover:translate-y-0">
                     <div className="flex items-center gap-2">
-                        {/* Fix: Use `photo_url` and `display_name`. */}
                         <img src={image.creator.photo_url} alt={image.creator.display_name} className="w-8 h-8 rounded-full border-2 border-white/80 flex-shrink-0" />
                         <div className="truncate">
-                          {/* Fix: Use `display_name`. */}
                           <p className={`font-bold text-sm drop-shadow-lg truncate ${rank.color} neon-text-glow`}>{image.creator.display_name}</p>
                           <p className={`text-gray-300 text-xs drop-shadow flex items-center gap-1 ${rank.color}`}>{rank.icon} {rank.title}</p>
                         </div>
@@ -70,9 +66,7 @@ const Gallery: React.FC<GalleryProps> = ({ onImageClick, limit, showSeeMore = fa
               onClick={() => onImageClick(image)}
             >
               <img 
-                // Fix: Use `image_url` instead of `src`.
                 src={image.image_url} 
-                // Fix: Use `display_name` instead of `name`.
                 alt={`Tác phẩm của ${image.creator.display_name}`}
                 className="w-full h-full object-cover transition-transform duration-500 ease-in-out group-hover:scale-110"
               />
@@ -82,10 +76,8 @@ const Gallery: React.FC<GalleryProps> = ({ onImageClick, limit, showSeeMore = fa
                 </div>
                 <div className="absolute bottom-0 left-0 p-4 w-full opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-4 group-hover:translate-y-0">
                   <div className="flex items-center gap-2">
-                      {/* Fix: Use `photo_url` and `display_name`. */}
                       <img src={image.creator.photo_url} alt={image.creator.display_name} className="w-8 h-8 rounded-full border-2 border-white/80 flex-shrink-0" />
                       <div className="truncate">
-                        {/* Fix: Use `display_name`. */}
                         <p className={`font-bold text-sm drop-shadow-lg truncate ${rank.color} neon-text-glow`}>{image.creator.display_name}</p>
                         <p className={`text-gray-300 text-xs drop-shadow flex items-center gap-1 ${rank.color}`}>{rank.icon} {rank.title}</p>
                       </div>

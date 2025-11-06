@@ -2,12 +2,18 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { GalleryImage } from '../types';
 import ImageModal from '../components/common/ImageModal';
+import ConfirmationModal from '../components/ConfirmationModal';
 
 const MyCreationsPage: React.FC = () => {
-    const { session, showToast } = useAuth();
+    const { session, showToast, updateUserProfile, user } = useAuth();
     const [userImages, setUserImages] = useState<GalleryImage[]>([]);
     const [isImagesLoading, setIsImagesLoading] = useState(true);
     const [selectedImage, setSelectedImage] = useState<GalleryImage | null>(null);
+    const [imageToShare, setImageToShare] = useState<GalleryImage | null>(null);
+    const [isShareConfirmOpen, setShareConfirmOpen] = useState(false);
+    const [isSharing, setIsSharing] = useState(false);
+
+    const COST_PER_SHARE = 1;
 
     useEffect(() => {
         const fetchUserImages = async () => {
@@ -32,9 +38,67 @@ const MyCreationsPage: React.FC = () => {
         fetchUserImages();
     }, [session, showToast]);
 
+    const handleShareClick = (image: GalleryImage) => {
+        if (user && user.diamonds < COST_PER_SHARE) {
+            showToast('Bạn không đủ kim cương để chia sẻ.', 'error');
+            return;
+        }
+        setImageToShare(image);
+        setShareConfirmOpen(true);
+    };
+    
+    const handleConfirmShare = async () => {
+        if (!imageToShare || !session) return;
+        
+        setIsSharing(true);
+        setShareConfirmOpen(false);
+
+        try {
+            const response = await fetch('/.netlify/functions/share-image', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${session.access_token}`
+                },
+                body: JSON.stringify({ imageId: imageToShare.id }),
+            });
+
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.error || 'Chia sẻ ảnh thất bại.');
+
+            updateUserProfile({ diamonds: result.newDiamondCount });
+            showToast('Chia sẻ tác phẩm thành công!', 'success');
+            
+            // Mark the image as shared in the local state to hide the share button
+            setUserImages(prevImages => prevImages.map(img => 
+                img.id === imageToShare.id ? { ...img, is_public: true } : img
+            ));
+
+        } catch (error: any) {
+            showToast(error.message, 'error');
+        } finally {
+            setIsSharing(false);
+            setImageToShare(null);
+            setSelectedImage(null);
+        }
+    };
+
+
     return (
         <div className="container mx-auto px-4 py-8 animate-fade-in">
-            <ImageModal isOpen={!!selectedImage} onClose={() => setSelectedImage(null)} image={selectedImage} showInfoPanel={false} />
+            <ImageModal 
+                isOpen={!!selectedImage} 
+                onClose={() => setSelectedImage(null)} 
+                image={selectedImage} 
+                showInfoPanel={false}
+                onShare={handleShareClick}
+            />
+            <ConfirmationModal
+                isOpen={isShareConfirmOpen}
+                onClose={() => setShareConfirmOpen(false)}
+                onConfirm={handleConfirmShare}
+                cost={COST_PER_SHARE}
+            />
             
             <div className="text-center mb-12">
                 <h1 className="text-4xl font-bold mb-4 bg-gradient-to-r from-pink-400 to-fuchsia-500 text-transparent bg-clip-text">Bộ Sưu Tập Của Bạn</h1>

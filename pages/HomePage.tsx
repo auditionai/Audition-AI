@@ -9,7 +9,6 @@ import FAQ from '../components/FAQ';
 import Footer from '../components/Footer';
 import AuthModal from '../components/AuthModal';
 import AnimatedSection from '../components/common/AnimatedSection';
-// Fix: Import `useAuth` from `AuthContext` to get all context functionality.
 import { useAuth } from '../contexts/AuthContext';
 import InfoModal from '../components/InfoModal';
 import DynamicBackground from '../components/common/DynamicBackground';
@@ -17,12 +16,29 @@ import { GalleryImage } from '../types';
 import ImageModal from '../components/common/ImageModal';
 
 const HomePage: React.FC = () => {
-    // Fix: Use `useAuth` as the single source for context state and functions.
     const { user, login, stats, showToast, navigate } = useAuth();
     const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
     const [infoModalKey, setInfoModalKey] = useState<'terms' | 'policy' | 'contact' | null>(null);
     const [activeSection, setActiveSection] = useState('hero');
     const [selectedImage, setSelectedImage] = useState<GalleryImage | null>(null);
+    const [publicGalleryImages, setPublicGalleryImages] = useState<GalleryImage[]>([]);
+    const [isGalleryLoading, setIsGalleryLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchPublicGallery = async () => {
+            try {
+                const response = await fetch('/.netlify/functions/public-gallery');
+                if (!response.ok) throw new Error('Không thể tải thư viện cộng đồng.');
+                const data = await response.json();
+                setPublicGalleryImages(data);
+            } catch (error: any) {
+                showToast(error.message, 'error');
+            } finally {
+                setIsGalleryLoading(false);
+            }
+        };
+        fetchPublicGallery();
+    }, [showToast]);
 
     useEffect(() => {
         const sections = document.querySelectorAll('section[id]');
@@ -34,7 +50,7 @@ const HomePage: React.FC = () => {
                     }
                 });
             },
-            { rootMargin: '-50% 0px -50% 0px' } // Trigger when the section is in the middle of the viewport
+            { rootMargin: '-50% 0px -50% 0px' }
         );
 
         sections.forEach((section) => observer.observe(section));
@@ -99,10 +115,15 @@ const HomePage: React.FC = () => {
                                 Khám phá những tác phẩm độc đáo được tạo ra bởi cộng đồng Audition AI.
                             </p>
                         </div>
-                        <Gallery 
-                          displayMode="slider"
-                          onImageClick={setSelectedImage}
-                        />
+                        {isGalleryLoading ? (
+                             <div className="text-center p-12">Đang tải thư viện...</div>
+                        ) : (
+                            <Gallery 
+                              images={publicGalleryImages}
+                              displayMode="slider"
+                              onImageClick={setSelectedImage}
+                            />
+                        )}
                          <div className="mt-12 text-center">
                             <button
                                 onClick={() => navigate('gallery')}

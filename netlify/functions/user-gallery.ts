@@ -35,6 +35,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             image_url,
             model_used,
             created_at,
+            is_public,
             creator:users (
                 display_name,
                 photo_url,

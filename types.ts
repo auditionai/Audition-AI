@@ -84,6 +84,7 @@ export interface GalleryImage {
   image_url: string;
   model_used: string;
   created_at: string;
+  is_public?: boolean;
   // Fix: Add optional `title` for demo data compatibility.
   title?: string;
   creator: { // Dữ liệu này sẽ được JOIN từ bảng users

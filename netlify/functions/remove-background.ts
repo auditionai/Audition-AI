@@ -78,16 +78,16 @@ const handler: Handler = async (event: HandlerEvent) => {
         const finalImageBase64 = imagePartResponse.inlineData.data;
         const finalImageMimeType = imagePartResponse.inlineData.mimeType.includes('png') ? 'image/png' : 'image/jpeg';
 
-        // 4. Upload result to Supabase Storage
+        // 4. Upload result to the NEW 'temp_images' Supabase Storage bucket
         const imageBuffer = Buffer.from(finalImageBase64, 'base64');
         const fileName = `${user.id}/bg_removed_${Date.now()}.png`;
         const { error: uploadError } = await supabaseAdmin.storage
-            .from('generated_images')
+            .from('temp_images') // Use the new temporary bucket
             .upload(fileName, imageBuffer, { contentType: finalImageMimeType });
             
         if (uploadError) throw uploadError;
 
-        const { data: { publicUrl } } = supabaseAdmin.storage.from('generated_images').getPublicUrl(fileName);
+        const { data: { publicUrl } } = supabaseAdmin.storage.from('temp_images').getPublicUrl(fileName);
 
         // 5. Update user diamonds and API key usage
         const newDiamondCount = userData.diamonds - COST_PER_REMOVAL;

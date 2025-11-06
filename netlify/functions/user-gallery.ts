@@ -27,55 +27,50 @@ const handler: Handler = async (event: HandlerEvent) => {
             return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized: Invalid token.' }) };
         }
 
-        const { data, error } = await supabaseAdmin
+        // Step 1: Fetch images for the user without the join
+        const { data: images, error: imagesError } = await supabaseAdmin
             .from('generated_images')
-            .select(`
-                id,
-                user_id,
-                prompt,
-                image_url,
-                model_used,
-                created_at,
-                is_public,
-                users (
-                    display_name,
-                    photo_url,
-                    xp
-                )
-            `)
+            .select('id, user_id, prompt, image_url, model_used, created_at, is_public')
             .eq('user_id', user.id)
             .order('created_at', { ascending: false });
 
-        if (error) {
-            throw error;
+        if (imagesError) {
+            throw imagesError;
         }
 
-        if (!data) {
+        if (!images || images.length === 0) {
             return { statusCode: 200, body: JSON.stringify([]) };
         }
+
+        // Step 2: Fetch the user's profile info once
+        const { data: creatorProfile, error: creatorError } = await supabaseAdmin
+            .from('users')
+            .select('display_name, photo_url, xp')
+            .eq('id', user.id)
+            .single();
+
+        if (creatorError) {
+            console.error('Could not fetch creator profile for gallery:', creatorError);
+            // Even if profile fails, we can return images with a default creator
+            const fallbackData = images.map(image => ({
+                ...image,
+                creator: { display_name: 'Bạn', photo_url: '', level: 1 }
+            }));
+            return { statusCode: 200, body: JSON.stringify(fallbackData) };
+        }
         
-        // Post-process to remap the 'users' object to 'creator' as expected by the frontend
-        const processedData = data.map(image => {
-            const { users: creatorData, ...restOfImage } = image;
-            
-            if (!creatorData) {
-                return {
-                    ...restOfImage,
-                    creator: {
-                        display_name: 'Người dùng vô danh',
-                        photo_url: 'https://i.pravatar.cc/150', // placeholder
-                        level: 1,
-                    }
-                };
-            }
-            return {
-                ...restOfImage,
-                creator: {
-                    ...creatorData,
-                    level: calculateLevelFromXp(creatorData.xp || 0)
-                }
-            };
-        });
+        // Step 3: Combine the data
+        const creatorInfo = {
+            display_name: creatorProfile.display_name,
+            photo_url: creatorProfile.photo_url,
+            level: calculateLevelFromXp(creatorProfile.xp || 0)
+        };
+
+        const processedData = images.map(image => ({
+            ...image,
+            creator: creatorInfo
+        }));
+
 
         return {
             statusCode: 200,

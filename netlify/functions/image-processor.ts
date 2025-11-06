@@ -86,8 +86,14 @@ const handler: Handler = async (event: HandlerEvent) => {
             .upload(fileName, imageBuffer, { contentType: finalImageMimeType });
             
         if (uploadError) throw uploadError;
+        
+        const { data: signedUrlData, error: signedUrlError } = await supabaseAdmin.storage
+            .from('temp_images')
+            .createSignedUrl(fileName, 120); // Create a URL valid for 2 minutes
 
-        const { data: { publicUrl } } = supabaseAdmin.storage.from('temp_images').getPublicUrl(fileName);
+        if (signedUrlError) {
+            throw signedUrlError;
+        }
 
         const newDiamondCount = userData.diamonds - COST_PER_REMOVAL;
         await Promise.all([
@@ -98,7 +104,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         return {
             statusCode: 200,
             body: JSON.stringify({
-                imageUrl: publicUrl,
+                imageUrl: signedUrlData.signedUrl,
                 newDiamondCount,
             }),
         };

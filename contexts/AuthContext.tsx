@@ -55,6 +55,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const [reward, setReward] = useState<{ diamonds: number; xp: number } | null>(null);
 
     const previousUserRef = useRef<User | null>(null);
+    const initStarted = useRef(false); // The safety lock flag
     
     // Get the Supabase client safely. It will be null if env vars are missing.
     const supabase = getSupabaseClient();
@@ -179,9 +180,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
 
     useEffect(() => {
-        // **DEFINITIVE FREEZE FIX**
-        // If the Supabase client failed to initialize (e.g., missing .env vars),
-        // we handle it here instead of letting the app crash.
+        // **DEFINITIVE FREEZE FIX: THE SAFETY LOCK**
+        // This guard prevents the initialization logic from running more than once,
+        // which is a critical defense against React 19's StrictMode behavior that can
+        // cause a fatal race condition by double-invoking effects.
+        if (initStarted.current) {
+            return;
+        }
+        initStarted.current = true;
+        
         if (!supabase) {
             showToast("Ứng dụng gặp lỗi cấu hình nghiêm trọng.", "error");
             setLoading(false); // This ensures the loading screen doesn't get stuck

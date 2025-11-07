@@ -124,6 +124,8 @@ const handler: Handler = async (event: HandlerEvent) => {
             body: JSON.stringify({
                 imageUrl: publicUrl,
                 newDiamondCount,
+                imageBase64: finalImageBase64,
+                mimeType: finalImageMimeType,
             }),
         };
 

@@ -14,7 +14,7 @@ export const useBackgroundRemover = () => {
 
     const COST_PER_REMOVAL = 1;
 
-    const removeBackground = async (imageFile: File): Promise<string | null> => {
+    const removeBackground = async (imageFile: File): Promise<{ processedUrl: string; imageBase64: string; mimeType: string; } | null> => {
         setProcessing(true);
         
         try {
@@ -47,7 +47,11 @@ export const useBackgroundRemover = () => {
             updateUserProfile({ diamonds: result.newDiamondCount });
             showToast(`Tách nền thành công!`, 'success');
             
-            return result.imageUrl;
+            return {
+                processedUrl: result.imageUrl,
+                imageBase64: result.imageBase64,
+                mimeType: result.mimeType
+            };
 
         } catch (error: any) {
             console.error("Background Removal Error:", error.message);

@@ -4,6 +4,19 @@ import { useBackgroundRemover } from '../../hooks/useBackgroundRemover';
 import { DiamondIcon } from '../common/DiamondIcon';
 import ConfirmationModal from '../ConfirmationModal';
 
+// Helper function to convert a base64 string back to a File object
+const base64ToFile = (base64: string, filename: string, mimeType: string): File => {
+    const byteCharacters = atob(base64);
+    const byteNumbers = new Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNumbers);
+    const blob = new Blob([byteArray], { type: mimeType });
+    return new File([blob], filename, { type: mimeType });
+};
+
+
 // Helper function to resize an image file before uploading
 const resizeImage = (file: File, maxSize: number): Promise<{ file: File; dataUrl: string }> => {
     return new Promise((resolve, reject) => {
@@ -93,19 +106,14 @@ const BgRemoverTool: React.FC<BgRemoverToolProps> = ({ onMoveToGenerator }) => {
         setConfirmOpen(false);
         const imagesToProcessNow = [...imagesForBgRemoval];
         setImagesForBgRemoval([]);
-
+    
         for (const image of imagesToProcessNow) {
-            const processedUrl = await removeBackground(image.file);
-            if (processedUrl) {
-                try {
-                    const response = await fetch(processedUrl);
-                    const blob = await response.blob();
-                    const processedFile = new File([blob], `processed_${image.file.name}`, { type: blob.type });
-                    setProcessedImages(prev => [...prev, { id: image.id, originalUrl: image.url, processedUrl, file: processedFile }]);
-                } catch(err) {
-                     console.error("Failed to fetch processed image to create File object:", err);
-                     showToast("Lỗi khi tải ảnh đã xử lý.", "error");
-                }
+            const result = await removeBackground(image.file);
+            if (result) {
+                const { processedUrl, imageBase64, mimeType } = result;
+                // Directly convert base64 to a File object, bypassing the CORS-inducing fetch call.
+                const processedFile = base64ToFile(imageBase64, `processed_${image.file.name}`, mimeType);
+                setProcessedImages(prev => [...prev, { id: image.id, originalUrl: image.url, processedUrl, file: processedFile }]);
             }
         }
     };

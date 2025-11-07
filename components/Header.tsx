@@ -4,7 +4,7 @@ import { User } from '../types';
 interface LandingHeaderProps {
   user: User | null;
   onTopUpClick: () => void;
-  onScrollTo: (id: string) => void;
+  onScrollTo: (id: 'hero' | 'features' | 'how-it-works' | 'pricing' | 'faq' | 'gallery') => void;
 }
 
 const LandingHeader: React.FC<LandingHeaderProps> = ({ user, onTopUpClick, onScrollTo }) => {

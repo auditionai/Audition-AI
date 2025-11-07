@@ -175,17 +175,27 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     useEffect(() => {
         const initializeSession = async () => {
-            const { data: { session: currentSession } } = await supabase.auth.getSession();
-            setSession(currentSession);
-            
-            if (currentSession) {
-                const profile = await fetchUserProfile(currentSession.user);
-                setUser(profile);
-                if (getRouteFromPath(window.location.pathname) === 'home') {
-                    navigate('tool');
+            try {
+                const { data: { session: currentSession } } = await supabase.auth.getSession();
+                setSession(currentSession);
+                
+                if (currentSession) {
+                    const profile = await fetchUserProfile(currentSession.user);
+                    setUser(profile);
+                    if (getRouteFromPath(window.location.pathname) === 'home') {
+                        navigate('tool');
+                    }
                 }
+            } catch (error) {
+                console.error("Error during session initialization, possibly from corrupted storage.", error);
+                showToast("Đã xảy ra lỗi khi tải phiên làm việc. Đang thử đặt lại.", "error");
+                await supabase.auth.signOut(); // Attempt to clear the corrupted session
+                setSession(null);
+                setUser(null);
+            } finally {
+                // This is critical - it ensures the app never gets stuck on the loading screen.
+                setLoading(false);
             }
-            setLoading(false);
         };
 
         initializeSession();
@@ -213,8 +223,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return () => {
             subscription.unsubscribe();
         };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [fetchUserProfile, navigate, showToast]);
 
     useEffect(() => {
         if (!user?.id || loading) return;

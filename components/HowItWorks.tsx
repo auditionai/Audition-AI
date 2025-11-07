@@ -3,7 +3,7 @@ import { HOW_IT_WORKS } from '../constants/landingPageData';
 
 const HowItWorks: React.FC = () => {
   return (
-    <section id="how-it-works" className="py-20 sm:py-32 bg-gradient-to-b from-[#0B0B0F] to-[#12121A] text-white w-full">
+    <section id="how-it-works" className="py-16 sm:py-24 bg-gradient-to-b from-[#0B0B0F] to-[#12121A] text-white w-full">
       <div className="container mx-auto px-4">
         <div className="text-center max-w-3xl mx-auto mb-16">
           <h2 className="text-3xl md:text-4xl font-bold mb-4">

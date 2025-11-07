@@ -1,3 +1,13 @@
+# This command tells Netlify how to build your site.
+# It's taken directly from your package.json "build" script.
+[build]
+  command = "npm run build"
+  # Vite's default output directory is "dist". This tells Netlify where to find the built files.
+  publish = "dist"
+
+# This is the "smart" redirect rule.
+# It will only apply to paths that DON'T match a file in the "dist" directory.
+# This fixes the 404 for paths like /buy-credits while allowing assets like .js and .css files to load correctly.
 [[redirects]]
   from = "/*"
   to = "/index.html"

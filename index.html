@@ -284,9 +284,11 @@
 
     </style>
 <script>
-  // Pre-flight check for corrupted Supabase session in localStorage.
-  // This script runs BEFORE React, preventing the app from crashing on load.
+  // ** THE DEFINITIVE FIX: PRE-FLIGHT SANITIZATION **
+  // This script runs BEFORE React, preventing the app from crashing on load
+  // due to corrupted session data in localStorage, which can freeze the browser's JS engine.
   try {
+    // Supabase stores its session in a key that looks like 'sb-xxxx-auth-token'
     const supabaseAuthTokenKey = Object.keys(localStorage).find(
       (key) => key.startsWith('sb-') && key.endsWith('-auth-token')
     );
@@ -294,16 +296,18 @@
     if (supabaseAuthTokenKey) {
       const sessionData = localStorage.getItem(supabaseAuthTokenKey);
       if (sessionData) {
-        // The critical step: attempt to parse. If this fails, the catch block will run.
+        // The critical step: attempt to parse the session data.
+        // If this fails, the data is malformed, and the catch block will run.
         JSON.parse(sessionData);
       }
     }
   } catch (error) {
-    // If parsing fails, the data is corrupted. Clear EVERYTHING to ensure a clean start.
+    // If parsing fails, the data is corrupted. We must take decisive action.
     // This mimics the user's manual "clear cache" action and is the most robust fix.
     console.error(
       '!!! CRITICAL: Corrupted session data detected. Clearing localStorage to prevent app freeze.'
     );
+    // WIPE THE SLATE CLEAN.
     localStorage.clear();
   }
 </script>

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode, useMemo, useRef } from 'react';
-import { supabase } from '../utils/supabaseClient';
+import { getSupabaseClient } from '../utils/supabaseClient';
 import { Session, User as SupabaseUser } from '@supabase/supabase-js';
 import { User, Stats } from '../types';
 import { calculateLevelFromXp } from '../utils/rankUtils';
@@ -55,7 +55,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const [reward, setReward] = useState<{ diamonds: number; xp: number } | null>(null);
 
     const previousUserRef = useRef<User | null>(null);
-    const initStarted = useRef(false); // Safety lock to prevent re-initialization
+    const initStarted = useRef(false); // ** THE SAFETY LOCK **
 
     const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
         setToast({ message, type });
@@ -104,6 +104,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }, []);
 
     const fetchUserProfile = useCallback(async (supabaseUser: SupabaseUser) => {
+        const supabase = getSupabaseClient();
+        if (!supabase) return null;
         try {
             const { data, error } = await supabase
                 .from('users')
@@ -121,7 +123,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             return null;
         } catch (error) {
             console.error('Error fetching user profile:', error);
-            // Return null but don't throw, allowing the app to proceed with a logged-in state.
             return null;
         }
     }, []);
@@ -149,9 +150,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
     }, [user, showToast]);
     
-     // New Effect for periodic XP gain
     useEffect(() => {
-        // Fix: Use ReturnType<typeof setInterval> for browser compatibility instead of NodeJS.Timeout.
         let xpInterval: ReturnType<typeof setInterval> | null = null;
         if (session) {
             xpInterval = setInterval(async () => {
@@ -160,11 +159,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                         method: 'POST',
                         headers: { Authorization: `Bearer ${session.access_token}` },
                     });
-                    // Real-time listener will update the user object automatically
                 } catch (error) {
                     console.error('Failed to increment XP:', error);
                 }
-            }, 60000); // 60 seconds
+            }, 60000);
         }
         return () => {
             if (xpInterval) {
@@ -173,15 +171,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         };
     }, [session]);
 
-
     useEffect(() => {
-        // *** THE DEFINITIVE FIX: SAFETY LOCK ***
-        // This check ensures the entire initialization logic runs EXACTLY ONCE.
-        // It prevents race conditions caused by React's StrictMode or fast reloads.
         if (initStarted.current) {
             return;
         }
         initStarted.current = true;
+
+        const supabase = getSupabaseClient();
+        if (!supabase) {
+            showToast("Lỗi cấu hình nghiêm trọng. Không thể kết nối.", "error");
+            setLoading(false);
+            return;
+        }
 
         const initializeSession = async () => {
             try {
@@ -211,13 +212,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 if (newSession?.user) {
                     const profile = await fetchUserProfile(newSession.user);
                     setUser(profile);
-                    // Navigate to tool on fresh login
                     if (_event === 'SIGNED_IN') {
                         navigate('tool');
                     }
                 } else {
                     setUser(null);
-                    // Navigate to home on sign out
                     if (_event === 'SIGNED_OUT') {
                         navigate('home');
                     }
@@ -233,6 +232,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     useEffect(() => {
         if (!user?.id || loading) return;
+
+        const supabase = getSupabaseClient();
+        if (!supabase) return;
 
         const userChannel = supabase
             .channel(`public:users:id=eq.${user.id}`)
@@ -259,6 +261,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }, [user?.last_check_in_at]);
 
     const login = useCallback(async () => {
+        const supabase = getSupabaseClient();
+        if (!supabase) {
+            showToast("Lỗi cấu hình, không thể đăng nhập.", "error");
+            return;
+        }
         const { error } = await supabase.auth.signInWithOAuth({
             provider: 'google',
             options: { redirectTo: window.location.origin },
@@ -270,6 +277,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }, [showToast]);
 
     const logout = useCallback(async () => {
+        const supabase = getSupabaseClient();
+        if (!supabase) return;
         await supabase.auth.signOut();
     }, []);
 

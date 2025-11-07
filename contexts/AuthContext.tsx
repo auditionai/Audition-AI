@@ -96,7 +96,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             if (!currentUser) return null;
             const updatedUser = { ...currentUser, ...updates };
             if (updates.xp !== undefined) {
-                updatedUser.level = calculateLevelFromXp(updates.xp);
+                updatedUser.level = calculateLevelFromXp(updates.xp ?? 0);
             }
             return updatedUser;
         });
@@ -120,7 +120,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             return null;
         } catch (error) {
             console.error('Error fetching user profile:', error);
-            // Return null but don't throw, allowing the app to proceed with a logged-in state.
             return null;
         }
     }, []);
@@ -158,7 +157,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                         method: 'POST',
                         headers: { Authorization: `Bearer ${session.access_token}` },
                     });
-                    // Real-time listener will update the user object automatically
                 } catch (error) {
                     console.error('Failed to increment XP:', error);
                 }
@@ -171,17 +169,28 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         };
     }, [session]);
 
-
+    // Main effect for session initialization and state changes
     useEffect(() => {
+        // --- CRITICAL FIX: Make initialization robust ---
         const initializeSession = async () => {
-            const { data: { session: currentSession } } = await supabase.auth.getSession();
-            setSession(currentSession);
-            
-            if (currentSession) {
-                const profile = await fetchUserProfile(currentSession.user);
-                setUser(profile);
+            try {
+                const { data: { session: currentSession } } = await supabase.auth.getSession();
+                setSession(currentSession);
+                
+                if (currentSession) {
+                    const profile = await fetchUserProfile(currentSession.user);
+                    setUser(profile);
+                }
+            } catch (e) {
+                console.error("Critical error during session initialization:", e);
+                // Clear state on critical error to be safe
+                setSession(null);
+                setUser(null);
+            } finally {
+                // This GUARANTEES the loading screen will disappear,
+                // even if fetching the profile fails.
+                setLoading(false);
             }
-            setLoading(false);
         };
 
         initializeSession();
@@ -192,14 +201,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 if (newSession?.user) {
                     const profile = await fetchUserProfile(newSession.user);
                     setUser(profile);
-                    // Navigate to tool on fresh login, ONLY if user is on homepage
-                    // This prevents overriding deep links like payment callbacks
                     if (_event === 'SIGNED_IN' && getRouteFromPath(window.location.pathname) === 'home') {
                         navigate('tool');
                     }
                 } else {
                     setUser(null);
-                    // Navigate to home on sign out
                     if (_event === 'SIGNED_OUT') {
                         navigate('home');
                     }
@@ -210,9 +216,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return () => {
             subscription.unsubscribe();
         };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [fetchUserProfile, navigate]); // Added dependencies for correctness
 
+    // Realtime listener for user profile updates
     useEffect(() => {
         if (!user?.id || loading) return;
 

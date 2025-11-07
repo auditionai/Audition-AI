@@ -104,30 +104,23 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const fetchUserProfile = useCallback(async (supabaseUser: SupabaseUser) => {
         try {
-            // FIX: Explicitly list columns instead of using '*' to avoid potential RLS issues
-            // that could cause the entire query to fail and trigger a logout on refresh.
             const { data, error } = await supabase
                 .from('users')
                 .select('id, display_name, email, photo_url, diamonds, xp, is_admin, last_check_in_at, consecutive_check_in_days')
                 .eq('id', supabaseUser.id)
                 .single();
 
-            if (error && error.code === 'PGRST116') {
-                console.warn("User profile not found, it might be creating.");
-                return null; 
-            }
-            if (error) throw error;
+            if (error && error.code !== 'PGRST116') throw error;
 
             if (data) {
                 const profile = data as User;
-                if (typeof profile.xp === 'number') {
-                    profile.level = calculateLevelFromXp(profile.xp);
-                }
+                profile.level = calculateLevelFromXp(profile.xp ?? 0);
                 return profile;
             }
             return null;
         } catch (error) {
             console.error('Error fetching user profile:', error);
+            // Return null but don't throw, allowing the app to proceed with a logged-in state.
             return null;
         }
     }, []);
@@ -180,68 +173,36 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
 
     useEffect(() => {
-        let isCancelled = false;
-
-        const initializeAuth = async () => {
-            try {
-                const { data: { session: currentSession }, error: sessionError } = await supabase.auth.getSession();
-                
-                if (isCancelled) return;
-                if (sessionError) throw sessionError;
-
-                if (currentSession) {
-                    const profile = await fetchUserProfile(currentSession.user);
-                    if (profile) {
-                        setSession(currentSession);
-                        setUser(profile);
-                        if (getRouteFromPath(window.location.pathname) === 'home') {
-                            navigate('tool');
-                        }
-                    } else {
-                        // FIX: Instead of throwing a destructive error, log out gracefully.
-                        // This handles cases where a session exists but the profile is missing or fails to load,
-                        // preventing the app from getting stuck in a broken state on refresh.
-                        console.error("Session is valid but user profile is missing. Logging out gracefully.");
-                        await supabase.auth.signOut();
-                        setSession(null);
-                        setUser(null);
-                        navigate('home');
-                    }
-                } else {
-                    setSession(null);
-                    setUser(null);
-                }
-            } catch (error) {
-                if (isCancelled) return;
-                console.error("Critical error during auth initialization, signing out.", error);
-                await supabase.auth.signOut();
-                setSession(null);
-                setUser(null);
-            } finally {
-                if (!isCancelled) {
-                    setLoading(false);
+        const initializeSession = async () => {
+            const { data: { session: currentSession } } = await supabase.auth.getSession();
+            setSession(currentSession);
+            
+            if (currentSession) {
+                const profile = await fetchUserProfile(currentSession.user);
+                setUser(profile);
+                if (getRouteFromPath(window.location.pathname) === 'home') {
+                    navigate('tool');
                 }
             }
+            setLoading(false);
         };
 
-        initializeAuth();
+        initializeSession();
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
             async (_event, newSession) => {
-                if (isCancelled || loading) return;
-
-                const previousSession = session;
                 setSession(newSession);
-
                 if (newSession?.user) {
                     const profile = await fetchUserProfile(newSession.user);
                     setUser(profile);
-                    if (!previousSession) {
-                         navigate('tool');
+                    // Navigate to tool on fresh login
+                    if (_event === 'SIGNED_IN') {
+                        navigate('tool');
                     }
                 } else {
                     setUser(null);
-                    if(previousSession) {
+                    // Navigate to home on sign out
+                    if (_event === 'SIGNED_OUT') {
                         navigate('home');
                     }
                 }
@@ -249,7 +210,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         );
 
         return () => {
-            isCancelled = true;
             subscription.unsubscribe();
         };
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -90,6 +90,7 @@ const EditUserModal: React.FC<{ user: AdminManagedUser; onClose: () => void; onS
 
 
 const EditPackageModal: React.FC<{ pkg: CreditPackage; onClose: () => void; onSave: (id: string, updates: Partial<CreditPackage>) => void; }> = ({ pkg, onClose, onSave }) => {
+    const [name, setName] = useState(pkg.name);
     const [creditsAmount, setCreditsAmount] = useState(pkg.credits_amount);
     const [bonusCredits, setBonusCredits] = useState(pkg.bonus_credits);
     const [priceVnd, setPriceVnd] = useState(pkg.price_vnd);
@@ -98,6 +99,7 @@ const EditPackageModal: React.FC<{ pkg: CreditPackage; onClose: () => void; onSa
 
     const handleSave = () => {
         onSave(pkg.id, {
+            name: name,
             credits_amount: creditsAmount,
             bonus_credits: bonusCredits,
             price_vnd: priceVnd,
@@ -110,6 +112,7 @@ const EditPackageModal: React.FC<{ pkg: CreditPackage; onClose: () => void; onSa
     return (
         <Modal isOpen={true} onClose={onClose} title="Chỉnh sửa Gói Nạp">
             <div className="space-y-4">
+                <div><label className="block text-sm font-medium text-gray-400 mb-1">Tên Gói</label><input type="text" value={name} onChange={(e) => setName(e.target.value)} className="auth-input" /></div>
                 <div><label className="block text-sm font-medium text-gray-400 mb-1">Kim cương</label><input type="number" value={creditsAmount} onChange={(e) => setCreditsAmount(Number(e.target.value))} className="auth-input" /></div>
                 <div><label className="block text-sm font-medium text-gray-400 mb-1">Kim cương Thưởng</label><input type="number" value={bonusCredits} onChange={(e) => setBonusCredits(Number(e.target.value))} className="auth-input" /></div>
                 <div><label className="block text-sm font-medium text-gray-400 mb-1">Giá (VNĐ)</label><input type="number" value={priceVnd} onChange={(e) => setPriceVnd(Number(e.target.value))} className="auth-input" /></div>
@@ -154,7 +157,7 @@ const Settings: React.FC = () => {
     const [packages, setPackages] = useState<CreditPackage[]>([]);
     const [isPackagesLoading, setIsPackagesLoading] = useState(false);
     const [editingPackage, setEditingPackage] = useState<CreditPackage | null>(null);
-    const [newPackage, setNewPackage] = useState({ credits_amount: 0, bonus_credits: 0, price_vnd: 0, tag: '' });
+    const [newPackage, setNewPackage] = useState({ name: '', credits_amount: 0, bonus_credits: 0, price_vnd: 0, tag: '' });
 
     // Transaction management state
     const [pendingTransactions, setPendingTransactions] = useState<AdminTransaction[]>([]);
@@ -368,7 +371,7 @@ const Settings: React.FC = () => {
             const addedPkg = await res.json();
             if (!res.ok) throw new Error(addedPkg.error);
             setPackages([...packages, addedPkg]);
-            setNewPackage({ credits_amount: 0, bonus_credits: 0, price_vnd: 0, tag: '' });
+            setNewPackage({ name: '', credits_amount: 0, bonus_credits: 0, price_vnd: 0, tag: '' });
             showToast('Thêm gói mới thành công!', 'success');
         } catch (e: any) { showToast(e.message, 'error'); }
     };
@@ -550,19 +553,20 @@ const Settings: React.FC = () => {
                         <h3 className="text-2xl font-bold mb-4 text-green-400 flex items-center gap-2"><i className="ph-fill ph-package"></i>Admin: Quản lý Gói Nạp</h3>
                         {isPackagesLoading ? <p>Đang tải các gói...</p> : (
                             <div className="space-y-4">
-                                <form onSubmit={handleAddPackage} className="grid grid-cols-1 md:grid-cols-5 gap-4 p-4 bg-black/20 rounded-lg">
+                                <form onSubmit={handleAddPackage} className="grid grid-cols-1 md:grid-cols-6 gap-4 p-4 bg-black/20 rounded-lg">
+                                    <input type="text" placeholder="Tên Gói" value={newPackage.name || ''} onChange={e => setNewPackage({...newPackage, name: e.target.value})} className="auth-input md:col-span-2" />
                                     <input type="number" placeholder="KC" value={newPackage.credits_amount || ''} onChange={e => setNewPackage({...newPackage, credits_amount: Number(e.target.value)})} className="auth-input" />
                                     <input type="number" placeholder="KC Thưởng" value={newPackage.bonus_credits || ''} onChange={e => setNewPackage({...newPackage, bonus_credits: Number(e.target.value)})} className="auth-input" />
                                     <input type="number" placeholder="Giá (VND)" value={newPackage.price_vnd || ''} onChange={e => setNewPackage({...newPackage, price_vnd: Number(e.target.value)})} className="auth-input" />
-                                    <input type="text" placeholder="Nhãn dán (VD: Best Seller)" value={newPackage.tag || ''} onChange={e => setNewPackage({...newPackage, tag: e.target.value})} className="auth-input" />
-                                    <button type="submit" className="bg-green-600 hover:bg-green-700 text-white font-bold p-2 rounded-md">Thêm Gói</button>
+                                    <button type="submit" className="bg-green-600 hover:bg-green-700 text-white font-bold p-2 rounded-md">Thêm</button>
                                 </form>
                                 <div className="space-y-2 max-h-72 overflow-y-auto custom-scrollbar pr-2">
                                     {packages.map(pkg => (
                                         <div key={pkg.id} className="grid grid-cols-12 gap-4 items-center p-3 bg-white/5 rounded-lg text-sm">
-                                            <div className="col-span-5 font-semibold">💎 {pkg.credits_amount.toLocaleString()} (+{pkg.bonus_credits.toLocaleString()})</div>
-                                            <div className="col-span-3 text-green-400 font-bold">{pkg.price_vnd.toLocaleString()}đ</div>
-                                            <div className="col-span-4 flex items-center justify-end gap-2">
+                                            <div className="col-span-4 font-semibold truncate">{pkg.name}</div>
+                                            <div className="col-span-3 font-semibold">💎 {pkg.credits_amount.toLocaleString()} (+{pkg.bonus_credits.toLocaleString()})</div>
+                                            <div className="col-span-2 text-green-400 font-bold">{pkg.price_vnd.toLocaleString()}đ</div>
+                                            <div className="col-span-3 flex items-center justify-end gap-2">
                                                 {pkg.tag && <span className="text-xs font-bold bg-yellow-500 text-black px-2 py-0.5 rounded-full">{pkg.tag}</span>}
                                                 <button onClick={() => handlePackageUpdate(pkg.id, { is_active: !pkg.is_active })} className={`px-3 py-1 text-xs font-semibold rounded-full ${pkg.is_active ? 'bg-green-500/20 text-green-300' : 'bg-gray-500/20 text-gray-400'}`}>{pkg.is_active ? 'Active' : 'Inactive'}</button>
                                                 <button onClick={() => setEditingPackage(pkg)} className="text-gray-400 hover:text-white"><i className="ph-fill ph-pencil-simple"></i></button>

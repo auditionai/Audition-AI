@@ -119,6 +119,7 @@ export interface LeaderboardUser {
 // Dành cho các gói nạp kim cương
 export interface CreditPackage {
     id: string;
+    name: string;
     credits_amount: number;
     bonus_credits: number;
     price_vnd: number;

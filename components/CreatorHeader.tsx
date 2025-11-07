@@ -138,16 +138,16 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
                         </div>
                      </div>
                      <div className="py-1 mt-1">
-                        <a onClick={() => handleNavClick('settings')} className={`flex items-center gap-3 px-2 py-2 text-sm rounded-md cursor-pointer ${activeTab === 'settings' ? 'bg-pink-500/20 text-white' : 'text-gray-300 hover:bg-white/10'}`}>
+                        <button onClick={() => handleNavClick('settings')} className={`flex items-center gap-3 w-full text-left px-2 py-2 text-sm rounded-md cursor-pointer ${activeTab === 'settings' ? 'bg-pink-500/20 text-white' : 'text-gray-300 hover:bg-white/10'}`}>
                             <i className="ph-fill ph-gear"></i>
                             Cài đặt tài khoản
-                        </a>
+                        </button>
                      </div>
                      <div className="py-1 border-t border-white/10 mt-1">
-                        <a onClick={logout} className="flex items-center gap-3 w-full text-left px-2 py-2 text-sm text-gray-300 rounded-md hover:bg-red-500/20 hover:text-red-400 transition-colors cursor-pointer">
+                        <button onClick={logout} className="flex items-center gap-3 w-full text-left px-2 py-2 text-sm text-gray-300 rounded-md hover:bg-red-500/20 hover:text-red-400 transition-colors cursor-pointer">
                           <i className="ph-fill ph-sign-out"></i>
                           Đăng xuất
-                        </a>
+                        </button>
                      </div>
                   </div>
                 </div>

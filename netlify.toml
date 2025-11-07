@@ -1,14 +1,54 @@
-# This command tells Netlify how to build your site.
-# It's taken directly from your package.json "build" script.
+# =============================================================================
+# Build Settings (Phần Cài đặt Xây dựng)
+# =============================================================================
+# Đây là phần quan trọng nhất. Nó ra lệnh cho Netlify cách xây dựng ứng dụng của bạn
+# và nơi để tìm các tệp đã được xây dựng xong. Nếu không có phần này, các quy tắc
+# chuyển hướng sẽ không hoạt động chính xác và gây ra lỗi treo.
 [build]
+  # Lệnh này được lấy từ tệp package.json của bạn (npm run build).
   command = "npm run build"
-  # Vite's default output directory is "dist". This tells Netlify where to find the built files.
+  
+  # Thư mục mà Vite (công cụ xây dựng) đặt các tệp tĩnh sau khi chạy lệnh build.
   publish = "dist"
 
-# This is the "smart" redirect rule.
-# It will only apply to paths that DON'T match a file in the "dist" directory.
-# This fixes the 404 for paths like /buy-credits while allowing assets like .js and .css files to load correctly.
+
+# =============================================================================
+# Redirect Rule for Single Page Application (Quy tắc Chuyển hướng cho SPA)
+# =============================================================================
+# Đây là quy tắc chuyển hướng "thông minh" và là tiêu chuẩn của ngành để xử lý
+# định tuyến cho các ứng dụng React/Vite trên Netlify.
 [[redirects]]
+  # Quy tắc "/*" sẽ bắt TẤT CẢ các đường dẫn không tương ứng với một tệp tin
+  # có sẵn trong thư mục 'publish' (ví dụ: /tool, /settings, /buy-credits?status=PAID).
   from = "/*"
+  
+  # Tất cả các đường dẫn không khớp sẽ được trả về tệp index.html chính.
+  # Sau đó, bộ định tuyến của React sẽ tiếp quản và hiển thị đúng trang.
   to = "/index.html"
+  
+  # Status 200 báo cho trình duyệt biết rằng trang đã được tìm thấy thành công.
   status = 200
+
+
+# =============================================================================
+# Headers for Performance and Security (Tiêu đề cho Hiệu năng và Bảo mật)
+# =============================================================================
+# Phần này thêm các tiêu đề HTTP quan trọng vào phản hồi của trang web,
+# giúp cải thiện tốc độ tải trang (qua caching) và tăng cường bảo mật.
+
+# Quy tắc cho việc lưu cache các tệp tĩnh (JS, CSS, ảnh, font...)
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    # Yêu cầu trình duyệt lưu các tệp này trong 1 năm.
+    # Tên tệp chứa mã hash sẽ đảm bảo rằng phiên bản mới của ứng dụng sẽ tải tệp mới.
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# Quy tắc thêm các tiêu đề bảo mật cho tất cả các trang
+[[headers]]
+  for = "/*"
+  [headers.values]
+    # Chống lại các cuộc tấn công clickjacking bằng cách ngăn trang web bị nhúng vào iframe.
+    X-Frame-Options = "DENY"
+    # Ngăn trình duyệt tự động đoán sai loại nội dung của tệp.
+    X-Content-Type-Options = "nosniff"

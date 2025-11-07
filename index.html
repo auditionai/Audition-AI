@@ -283,6 +283,30 @@
       }
 
     </style>
+<script>
+  // Pre-flight check for corrupted Supabase session in localStorage.
+  // This script runs BEFORE React, preventing the app from crashing on load.
+  try {
+    const supabaseAuthTokenKey = Object.keys(localStorage).find(
+      (key) => key.startsWith('sb-') && key.endsWith('-auth-token')
+    );
+
+    if (supabaseAuthTokenKey) {
+      const sessionData = localStorage.getItem(supabaseAuthTokenKey);
+      if (sessionData) {
+        // The critical step: attempt to parse. If this fails, the catch block will run.
+        JSON.parse(sessionData);
+      }
+    }
+  } catch (error) {
+    // If parsing fails, the data is corrupted. Clear EVERYTHING to ensure a clean start.
+    // This mimics the user's manual "clear cache" action and is the most robust fix.
+    console.error(
+      '!!! CRITICAL: Corrupted session data detected. Clearing localStorage to prevent app freeze.'
+    );
+    localStorage.clear();
+  }
+</script>
 <script type="importmap">
 {
   "imports": {
@@ -301,7 +325,6 @@
   }
 }
 </script>
-<link rel="stylesheet" href="/index.css">
 </head>
   <body>
     <div id="root"></div>

@@ -55,6 +55,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const [reward, setReward] = useState<{ diamonds: number; xp: number } | null>(null);
 
     const previousUserRef = useRef<User | null>(null);
+    const initStarted = useRef(false); // Safety lock to prevent re-initialization
 
     const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
         setToast({ message, type });
@@ -150,7 +151,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     
      // New Effect for periodic XP gain
     useEffect(() => {
-        let xpInterval: NodeJS.Timeout | null = null;
+        // Fix: Use ReturnType<typeof setInterval> for browser compatibility instead of NodeJS.Timeout.
+        let xpInterval: ReturnType<typeof setInterval> | null = null;
         if (session) {
             xpInterval = setInterval(async () => {
                 try {
@@ -173,18 +175,32 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
 
     useEffect(() => {
+        // *** THE DEFINITIVE FIX: SAFETY LOCK ***
+        // This check ensures the entire initialization logic runs EXACTLY ONCE.
+        // It prevents race conditions caused by React's StrictMode or fast reloads.
+        if (initStarted.current) {
+            return;
+        }
+        initStarted.current = true;
+
         const initializeSession = async () => {
-            const { data: { session: currentSession } } = await supabase.auth.getSession();
-            setSession(currentSession);
-            
-            if (currentSession) {
-                const profile = await fetchUserProfile(currentSession.user);
-                setUser(profile);
-                if (getRouteFromPath(window.location.pathname) === 'home') {
-                    navigate('tool');
+            try {
+                const { data: { session: currentSession } } = await supabase.auth.getSession();
+                setSession(currentSession);
+                
+                if (currentSession) {
+                    const profile = await fetchUserProfile(currentSession.user);
+                    setUser(profile);
+                    if (getRouteFromPath(window.location.pathname) === 'home') {
+                        navigate('tool');
+                    }
                 }
+            } catch (error) {
+                 console.error("Critical initialization error:", error);
+                 showToast("Lỗi nghiêm trọng khi khởi tạo ứng dụng.", "error");
+            } finally {
+                setLoading(false);
             }
-            setLoading(false);
         };
 
         initializeSession();

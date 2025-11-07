@@ -128,6 +128,7 @@ export interface CreditPackage {
     display_order: number;
     created_at: string;
     tag?: string | null;
+    is_featured: boolean;
 }
 
 // Dành cho lịch sử giao dịch

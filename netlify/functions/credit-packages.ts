@@ -4,11 +4,20 @@ import { supabaseAdmin } from './utils/supabaseClient';
 const handler: Handler = async (event: HandlerEvent) => {
     // PUBLIC: GET request to fetch active packages
     if (event.httpMethod === 'GET' && !event.headers['authorization']) {
-        const { data, error } = await supabaseAdmin
+        const { featured } = event.queryStringParameters || {};
+        
+        let query = supabaseAdmin
             .from('credit_packages')
             .select('*')
             .eq('is_active', true)
             .order('display_order', { ascending: true });
+
+        // If the 'featured' query param is present, only get featured packages
+        if (featured === 'true') {
+            query = query.eq('is_featured', true);
+        }
+
+        const { data, error } = await query;
 
         if (error) return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
         return { statusCode: 200, body: JSON.stringify(data) };

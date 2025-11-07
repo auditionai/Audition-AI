@@ -35,7 +35,7 @@ const HomePage: React.FC = () => {
         try {
             const [galleryRes, packagesRes] = await Promise.all([
                 fetch('/.netlify/functions/public-gallery'),
-                fetch('/.netlify/functions/credit-packages')
+                fetch('/.netlify/functions/credit-packages?featured=true') // Fetch only featured packages
             ]);
             
             if (!galleryRes.ok) throw new Error('Không thể tải thư viện cộng đồng.');

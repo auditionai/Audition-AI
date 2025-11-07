@@ -96,6 +96,7 @@ const EditPackageModal: React.FC<{ pkg: CreditPackage; onClose: () => void; onSa
     const [priceVnd, setPriceVnd] = useState(pkg.price_vnd);
     const [isFlashSale, setIsFlashSale] = useState(pkg.is_flash_sale);
     const [tag, setTag] = useState(pkg.tag || '');
+    const [isFeatured, setIsFeatured] = useState(pkg.is_featured);
 
     const handleSave = () => {
         onSave(pkg.id, {
@@ -105,6 +106,7 @@ const EditPackageModal: React.FC<{ pkg: CreditPackage; onClose: () => void; onSa
             price_vnd: priceVnd,
             is_flash_sale: isFlashSale,
             tag: tag,
+            is_featured: isFeatured,
         });
         onClose();
     };
@@ -118,6 +120,7 @@ const EditPackageModal: React.FC<{ pkg: CreditPackage; onClose: () => void; onSa
                 <div><label className="block text-sm font-medium text-gray-400 mb-1">Giá (VNĐ)</label><input type="number" value={priceVnd} onChange={(e) => setPriceVnd(Number(e.target.value))} className="auth-input" /></div>
                 <div><label className="block text-sm font-medium text-gray-400 mb-1">Nhãn dán (VD: Best Seller)</label><input type="text" value={tag} onChange={(e) => setTag(e.target.value)} className="auth-input" placeholder="Để trống nếu không có nhãn" /></div>
                 <div className="flex items-center justify-between pt-2"><label className="text-sm font-medium text-gray-300">Flash Sale</label><input type="checkbox" checked={isFlashSale} onChange={(e) => setIsFlashSale(e.target.checked)} className="w-5 h-5 rounded text-pink-500 bg-gray-700 border-gray-600 focus:ring-pink-600" /></div>
+                <div className="flex items-center justify-between pt-2"><label className="text-sm font-medium text-gray-300">Nổi bật (hiện ở trang chủ)</label><input type="checkbox" checked={isFeatured} onChange={(e) => setIsFeatured(e.target.checked)} className="w-5 h-5 rounded text-pink-500 bg-gray-700 border-gray-600 focus:ring-pink-600" /></div>
                 <div className="flex gap-4 mt-6"><button onClick={onClose} className="flex-1 py-2 font-semibold bg-white/10 text-white rounded-lg hover:bg-white/20 transition">Hủy</button><button onClick={handleSave} className="flex-1 py-2 font-bold text-white bg-gradient-to-r from-pink-500 to-fuchsia-600 rounded-lg hover:opacity-90 transition">Lưu</button></div>
             </div>
         </Modal>
@@ -157,7 +160,7 @@ const Settings: React.FC = () => {
     const [packages, setPackages] = useState<CreditPackage[]>([]);
     const [isPackagesLoading, setIsPackagesLoading] = useState(false);
     const [editingPackage, setEditingPackage] = useState<CreditPackage | null>(null);
-    const [newPackage, setNewPackage] = useState({ name: '', credits_amount: 0, bonus_credits: 0, price_vnd: 0, tag: '' });
+    const [newPackage, setNewPackage] = useState({ name: '', credits_amount: 0, bonus_credits: 0, price_vnd: 0, tag: '', is_featured: false });
 
     // Transaction management state
     const [pendingTransactions, setPendingTransactions] = useState<AdminTransaction[]>([]);
@@ -371,7 +374,7 @@ const Settings: React.FC = () => {
             const addedPkg = await res.json();
             if (!res.ok) throw new Error(addedPkg.error);
             setPackages([...packages, addedPkg]);
-            setNewPackage({ name: '', credits_amount: 0, bonus_credits: 0, price_vnd: 0, tag: '' });
+            setNewPackage({ name: '', credits_amount: 0, bonus_credits: 0, price_vnd: 0, tag: '', is_featured: false });
             showToast('Thêm gói mới thành công!', 'success');
         } catch (e: any) { showToast(e.message, 'error'); }
     };
@@ -553,20 +556,27 @@ const Settings: React.FC = () => {
                         <h3 className="text-2xl font-bold mb-4 text-green-400 flex items-center gap-2"><i className="ph-fill ph-package"></i>Admin: Quản lý Gói Nạp</h3>
                         {isPackagesLoading ? <p>Đang tải các gói...</p> : (
                             <div className="space-y-4">
-                                <form onSubmit={handleAddPackage} className="grid grid-cols-1 md:grid-cols-6 gap-4 p-4 bg-black/20 rounded-lg">
-                                    <input type="text" placeholder="Tên Gói" value={newPackage.name || ''} onChange={e => setNewPackage({...newPackage, name: e.target.value})} className="auth-input md:col-span-2" />
-                                    <input type="number" placeholder="KC" value={newPackage.credits_amount || ''} onChange={e => setNewPackage({...newPackage, credits_amount: Number(e.target.value)})} className="auth-input" />
-                                    <input type="number" placeholder="KC Thưởng" value={newPackage.bonus_credits || ''} onChange={e => setNewPackage({...newPackage, bonus_credits: Number(e.target.value)})} className="auth-input" />
-                                    <input type="number" placeholder="Giá (VND)" value={newPackage.price_vnd || ''} onChange={e => setNewPackage({...newPackage, price_vnd: Number(e.target.value)})} className="auth-input" />
-                                    <button type="submit" className="bg-green-600 hover:bg-green-700 text-white font-bold p-2 rounded-md">Thêm</button>
+                                <form onSubmit={handleAddPackage} className="grid grid-cols-1 md:grid-cols-12 gap-4 p-4 bg-black/20 rounded-lg">
+                                    <input type="text" placeholder="Tên Gói" value={newPackage.name || ''} onChange={e => setNewPackage({...newPackage, name: e.target.value})} className="auth-input md:col-span-3" />
+                                    <input type="number" placeholder="KC" value={newPackage.credits_amount || ''} onChange={e => setNewPackage({...newPackage, credits_amount: Number(e.target.value)})} className="auth-input md:col-span-2" />
+                                    <input type="number" placeholder="KC Thưởng" value={newPackage.bonus_credits || ''} onChange={e => setNewPackage({...newPackage, bonus_credits: Number(e.target.value)})} className="auth-input md:col-span-2" />
+                                    <input type="number" placeholder="Giá (VND)" value={newPackage.price_vnd || ''} onChange={e => setNewPackage({...newPackage, price_vnd: Number(e.target.value)})} className="auth-input md:col-span-2" />
+                                    <div className="flex items-center justify-center text-xs md:col-span-2 gap-2">
+                                        <input type="checkbox" id="new-featured" checked={newPackage.is_featured} onChange={e => setNewPackage({...newPackage, is_featured: e.target.checked})} className="w-4 h-4 text-pink-500 bg-gray-700 border-gray-600 rounded focus:ring-pink-600"/>
+                                        <label htmlFor="new-featured" className="text-gray-300 font-semibold">Nổi bật</label>
+                                        <button type="submit" className="flex-grow bg-green-600 hover:bg-green-700 text-white font-bold p-2 rounded-md ml-4">Thêm</button>
+                                    </div>
                                 </form>
                                 <div className="space-y-2 max-h-72 overflow-y-auto custom-scrollbar pr-2">
                                     {packages.map(pkg => (
                                         <div key={pkg.id} className="grid grid-cols-12 gap-4 items-center p-3 bg-white/5 rounded-lg text-sm">
-                                            <div className="col-span-4 font-semibold truncate">{pkg.name}</div>
+                                            <div className="col-span-3 font-semibold truncate flex items-center gap-2">
+                                                {pkg.is_featured && <i className="ph-fill ph-star text-yellow-400" title="Gói nổi bật"></i>}
+                                                {pkg.name}
+                                            </div>
                                             <div className="col-span-3 font-semibold">💎 {pkg.credits_amount.toLocaleString()} (+{pkg.bonus_credits.toLocaleString()})</div>
                                             <div className="col-span-2 text-green-400 font-bold">{pkg.price_vnd.toLocaleString()}đ</div>
-                                            <div className="col-span-3 flex items-center justify-end gap-2">
+                                            <div className="col-span-4 flex items-center justify-end gap-2">
                                                 {pkg.tag && <span className="text-xs font-bold bg-yellow-500 text-black px-2 py-0.5 rounded-full">{pkg.tag}</span>}
                                                 <button onClick={() => handlePackageUpdate(pkg.id, { is_active: !pkg.is_active })} className={`px-3 py-1 text-xs font-semibold rounded-full ${pkg.is_active ? 'bg-green-500/20 text-green-300' : 'bg-gray-500/20 text-gray-400'}`}>{pkg.is_active ? 'Active' : 'Inactive'}</button>
                                                 <button onClick={() => setEditingPackage(pkg)} className="text-gray-400 hover:text-white"><i className="ph-fill ph-pencil-simple"></i></button>

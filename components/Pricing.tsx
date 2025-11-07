@@ -48,8 +48,8 @@ const PricingCard: React.FC<{ pkg: CreditPackage; onCtaClick: () => void }> = ({
 };
 
 const Pricing: React.FC<PricingProps> = ({ onCtaClick, packages, isLoading }) => {
-  // We only want to show a few featured packages on the homepage
-  const featuredPackages = packages.slice(0, 3);
+  // Now displays all packages passed in (which are the featured ones)
+  const featuredPackages = packages;
 
   return (
     <section id="pricing" className="py-20 sm:py-32 bg-gradient-to-b from-[#12121A] to-[#0B0B0F] text-white w-full">

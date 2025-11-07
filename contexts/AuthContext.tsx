@@ -171,7 +171,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     // Main effect for session initialization and state changes
     useEffect(() => {
-        // --- CRITICAL FIX: Make initialization robust ---
+        // --- SAFETY FUSE: Hard reset if initialization takes too long ---
+        const initializationTimeout = setTimeout(() => {
+            console.error("App initialization timed out after 7 seconds. This is a critical failure. Forcing a hard reset by logging out and redirecting to the homepage.");
+            supabase.auth.signOut();
+            window.location.href = '/';
+        }, 7000);
+
         const initializeSession = async () => {
             try {
                 const { data: { session: currentSession } } = await supabase.auth.getSession();
@@ -183,12 +189,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 }
             } catch (e) {
                 console.error("Critical error during session initialization:", e);
-                // Clear state on critical error to be safe
                 setSession(null);
                 setUser(null);
             } finally {
-                // This GUARANTEES the loading screen will disappear,
-                // even if fetching the profile fails.
+                // This is CRUCIAL. If initialization succeeds or fails gracefully,
+                // we cancel the safety fuse to prevent the hard reset.
+                clearTimeout(initializationTimeout);
                 setLoading(false);
             }
         };
@@ -216,7 +222,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return () => {
             subscription.unsubscribe();
         };
-    }, [fetchUserProfile, navigate]); // Added dependencies for correctness
+    }, [fetchUserProfile, navigate]);
 
     // Realtime listener for user profile updates
     useEffect(() => {

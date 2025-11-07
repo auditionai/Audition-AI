@@ -127,15 +127,15 @@ const BuyCreditsPage: React.FC = () => {
                                 const totalCredits = pkg.credits_amount + pkg.bonus_credits;
                                 return (
                                 <div key={pkg.id} className="relative bg-[#12121A]/80 border border-pink-500/20 rounded-2xl shadow-lg p-6 flex flex-col text-center interactive-3d group">
-                                    <div className="glowing-border"></div>
-                                    {pkg.is_flash_sale && (
+                                    {pkg.tag && (
                                         <div 
-                                            className="absolute top-4 right-4 bg-gradient-to-r from-pink-500 to-fuchsia-600 text-white text-xs font-bold px-3 py-1 rounded-full"
+                                            className="absolute top-0 -translate-y-1/2 left-1/2 -translate-x-1/2 bg-gradient-to-r from-yellow-400 to-amber-500 text-black text-xs font-bold px-3 py-1 rounded-full uppercase shadow-lg shadow-yellow-500/30"
                                             style={{ animation: 'subtle-pulse 2s infinite' }}
                                         >
-                                            Flash Sale
+                                            {pkg.tag}
                                         </div>
                                     )}
+                                    <div className="glowing-border"></div>
                                     <div className="flex-grow">
                                         <div className="flex items-center justify-center gap-2 mb-2">
                                             <i className="ph-fill ph-diamonds-four text-3xl text-pink-400"></i>

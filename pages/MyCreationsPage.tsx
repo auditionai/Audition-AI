@@ -120,6 +120,9 @@ const MyCreationsPage: React.FC = () => {
             <div className="text-center max-w-2xl mx-auto mb-12">
                 <h1 className="text-4xl font-bold mb-4 bg-gradient-to-r from-blue-400 via-cyan-400 to-blue-500 text-transparent bg-clip-text">Tác Phẩm Của Tôi</h1>
                 <p className="text-lg text-gray-400">Quản lý tất cả các hình ảnh bạn đã tạo bằng Audition AI.</p>
+                <p className="mt-4 text-cyan-300 bg-cyan-500/10 p-3 rounded-lg border border-cyan-500/20 text-sm">
+                    ✨ Nhấn vào một tác phẩm và chọn nút <span className="font-bold">Chia sẻ</span> để đưa tác phẩm đẹp nhất của bạn ra Thư viện Cộng đồng! (Chi phí: 1 💎)
+                </p>
             </div>
 
             {images.length === 0 ? (

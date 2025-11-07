@@ -180,9 +180,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             if (currentSession) {
                 const profile = await fetchUserProfile(currentSession.user);
                 setUser(profile);
-                if (getRouteFromPath(window.location.pathname) === 'home') {
-                    navigate('tool');
-                }
             }
             setLoading(false);
         };
@@ -195,8 +192,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 if (newSession?.user) {
                     const profile = await fetchUserProfile(newSession.user);
                     setUser(profile);
-                    // Navigate to tool on fresh login
-                    if (_event === 'SIGNED_IN') {
+                    // Navigate to tool on fresh login, ONLY if user is on homepage
+                    // This prevents overriding deep links like payment callbacks
+                    if (_event === 'SIGNED_IN' && getRouteFromPath(window.location.pathname) === 'home') {
                         navigate('tool');
                     }
                 } else {

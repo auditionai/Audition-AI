@@ -38,7 +38,8 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
   // FIX: Create a dedicated handler for logout to ensure dropdown closes first.
   // This prevents potential race conditions where the component unmounts before
   // the click event is fully processed.
-  const handleLogout = () => {
+  const handleLogout = (e: React.MouseEvent) => {
+    e.preventDefault();
     setDropdownOpen(false);
     logout();
   };

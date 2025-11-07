@@ -389,6 +389,13 @@ const Settings: React.FC = () => {
             setProcessingTransactionId(null);
         }
     };
+    
+    // FIX: Add a dedicated handler for the logout button to improve reliability.
+    // This prevents the default browser action and ensures the logout function is called.
+    const handleLogoutClick = (e: React.MouseEvent) => {
+        e.preventDefault();
+        logout();
+    };
 
     const filteredHistory = history.filter(item => {
         if (historyFilter === 'earned') return item.amount > 0;
@@ -652,7 +659,7 @@ const Settings: React.FC = () => {
                 <h3 className="text-2xl font-bold text-red-400 mb-4">Khu vực nguy hiểm</h3>
                 <div className="flex justify-between items-center">
                     <p>Đăng xuất khỏi tài khoản của bạn.</p>
-                    <button onClick={logout} className="px-6 py-2 font-bold bg-red-600/80 hover:bg-red-600 text-white rounded-lg transition-colors">Đăng xuất</button>
+                    <button onClick={handleLogoutClick} className="px-6 py-2 font-bold bg-red-600/80 hover:bg-red-600 text-white rounded-lg transition-colors">Đăng xuất</button>
                 </div>
             </div>
         </div>

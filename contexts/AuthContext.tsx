@@ -104,9 +104,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const fetchUserProfile = useCallback(async (supabaseUser: SupabaseUser) => {
         try {
+            // FIX: Explicitly list columns instead of using '*' to avoid potential RLS issues
+            // that could cause the entire query to fail and trigger a logout on refresh.
             const { data, error } = await supabase
                 .from('users')
-                .select('*')
+                .select('id, display_name, email, photo_url, diamonds, xp, is_admin, last_check_in_at, consecutive_check_in_days')
                 .eq('id', supabaseUser.id)
                 .single();
 

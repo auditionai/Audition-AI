@@ -1,8 +1,20 @@
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
 import { Buffer } from 'buffer';
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 
 const handler: Handler = async (event: HandlerEvent) => {
+    // Fix: Moved S3Client initialization inside the handler to prevent potential scope/caching issues in serverless environments.
+    // Cấu hình S3 client để kết nối với Cloudflare R2
+    const s3Client = new S3Client({
+        region: "auto",
+        endpoint: process.env.R2_ENDPOINT!,
+        credentials: {
+            accessKeyId: process.env.R2_ACCESS_KEY_ID!,
+            secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
+        },
+    });
+
     // 1. Auth check
     const authHeader = event.headers['authorization'];
     if (!authHeader) {
@@ -30,30 +42,25 @@ const handler: Handler = async (event: HandlerEvent) => {
     }
 
     try {
-        // 3. Process image and upload to storage
+        // 3. Process image and upload to R2
         const [header, base64] = imageDataUrl.split(',');
         const mimeType = header.match(/:(.*?);/)?.[1] || 'image/png';
         const imageBuffer = Buffer.from(base64, 'base64');
         const fileExtension = mimeType.split('/')[1] || 'png';
-        // Use a user-specific path for RLS compliance
         const fileName = `${user.id}/avatar.${fileExtension}`;
 
-        const { error: uploadError } = await supabaseAdmin.storage
-            .from('avatars')
-            .upload(fileName, imageBuffer, { 
-                contentType: mimeType,
-                upsert: true 
-            });
-            
-        if (uploadError) throw uploadError;
+        const putCommand = new PutObjectCommand({
+            Bucket: process.env.R2_BUCKET_NAME!,
+            Key: fileName,
+            Body: imageBuffer,
+            ContentType: mimeType,
+        });
+
+        await s3Client.send(putCommand);
 
         // 4. Get public URL and update user profile
-        const { data: { publicUrl } } = supabaseAdmin.storage
-            .from('avatars')
-            .getPublicUrl(fileName);
-
         // Add timestamp to bust cache
-        const finalUrl = `${publicUrl}?t=${Date.now()}`;
+        const finalUrl = `${process.env.R2_PUBLIC_URL}/${fileName}?t=${Date.now()}`;
 
         const { data: updatedUser, error: updateError } = await supabaseAdmin
             .from('users')

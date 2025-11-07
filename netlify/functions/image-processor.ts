@@ -2,10 +2,22 @@ import type { Handler, HandlerEvent } from "@netlify/functions";
 import { GoogleGenAI, Modality } from "@google/genai";
 import { supabaseAdmin } from './utils/supabaseClient';
 import { Buffer } from 'buffer';
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 
 const COST_PER_REMOVAL = 1;
 
 const handler: Handler = async (event: HandlerEvent) => {
+    // Fix: Moved S3Client initialization inside the handler to prevent potential scope/caching issues in serverless environments.
+    // Cấu hình S3 client để kết nối với Cloudflare R2
+    const s3Client = new S3Client({
+        region: "auto",
+        endpoint: process.env.R2_ENDPOINT!,
+        credentials: {
+            accessKeyId: process.env.R2_ACCESS_KEY_ID!,
+            secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
+        },
+    });
+
     try {
         if (event.httpMethod !== 'POST') {
             return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
@@ -77,23 +89,23 @@ const handler: Handler = async (event: HandlerEvent) => {
         
         const finalImageBase64 = imagePartResponse.inlineData.data;
         const finalImageMimeType = imagePartResponse.inlineData.mimeType.includes('png') ? 'image/png' : 'image/jpeg';
-        const finalFileExtension = finalImageMimeType.split('/')[1] || 'png';
 
+        // --- START OF R2 UPLOAD LOGIC ---
         const imageBuffer = Buffer.from(finalImageBase64, 'base64');
-        const fileName = `${user.id}/bg_removed_${Date.now()}.${finalFileExtension}`;
-        const { error: uploadError } = await supabaseAdmin.storage
-            .from('temp_images')
-            .upload(fileName, imageBuffer, { contentType: finalImageMimeType });
-            
-        if (uploadError) throw uploadError;
-        
-        const { data: signedUrlData, error: signedUrlError } = await supabaseAdmin.storage
-            .from('temp_images')
-            .createSignedUrl(fileName, 120); // Create a URL valid for 2 minutes
+        const finalFileExtension = finalImageMimeType.split('/')[1] || 'png';
+        const fileName = `${user.id}/bg_removed/${Date.now()}.${finalFileExtension}`;
 
-        if (signedUrlError) {
-            throw signedUrlError;
-        }
+        const putCommand = new PutObjectCommand({
+            Bucket: process.env.R2_BUCKET_NAME!,
+            Key: fileName,
+            Body: imageBuffer,
+            ContentType: finalImageMimeType,
+        });
+
+        await s3Client.send(putCommand);
+
+        const publicUrl = `${process.env.R2_PUBLIC_URL}/${fileName}`;
+        // --- END OF R2 UPLOAD LOGIC ---
 
         const newDiamondCount = userData.diamonds - COST_PER_REMOVAL;
         await Promise.all([
@@ -110,7 +122,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         return {
             statusCode: 200,
             body: JSON.stringify({
-                imageUrl: signedUrlData.signedUrl,
+                imageUrl: publicUrl,
                 newDiamondCount,
             }),
         };

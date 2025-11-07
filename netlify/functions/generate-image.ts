@@ -2,11 +2,23 @@ import type { Handler, HandlerEvent } from "@netlify/functions";
 import { GoogleGenAI, Modality } from "@google/genai";
 import { supabaseAdmin } from './utils/supabaseClient';
 import { Buffer } from 'buffer';
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 
 const COST_PER_IMAGE = 1;
 const XP_PER_IMAGE = 10;
 
 const handler: Handler = async (event: HandlerEvent) => {
+    // Fix: Moved S3Client initialization inside the handler to prevent potential scope/caching issues in serverless environments.
+    // Cấu hình S3 client để kết nối với Cloudflare R2
+    const s3Client = new S3Client({
+        region: "auto",
+        endpoint: process.env.R2_ENDPOINT!,
+        credentials: {
+            accessKeyId: process.env.R2_ACCESS_KEY_ID!,
+            secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
+        },
+    });
+
     try {
         if (event.httpMethod !== 'POST') {
             return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
@@ -52,7 +64,6 @@ const handler: Handler = async (event: HandlerEvent) => {
             finalPrompt = `CRITICAL COMMAND: You are an expert AI photo generator. Your most important task is to preserve the exact facial identity from the provided input image with the highest possible fidelity. This includes all facial features (eyes, nose, mouth), hairstyle, makeup, and any accessories on the face (like glasses or piercings). Do NOT alter the person's identity or "AI-ify" the face unless the source image is too blurry to extract details. Apply the following creative brief ONLY to the clothing, background, and pose: "${creativeBrief}"`;
         }
 
-
         if (model.apiModel === 'imagen-4.0-generate-001') {
             if (isOutpainting || characterImage || styleImage) {
                  return { statusCode: 400, body: JSON.stringify({ error: `Model ${model.name} không hỗ trợ vẽ mở rộng hoặc sử dụng ảnh đầu vào.` }) };
@@ -83,14 +94,22 @@ const handler: Handler = async (event: HandlerEvent) => {
             finalImageMimeType = imagePartResponse.inlineData.mimeType.includes('png') ? 'image/png' : 'image/jpeg';
         }
 
-        const finalFileExtension = finalImageMimeType.split('/')[1] || 'png';
+        // --- START OF R2 UPLOAD LOGIC ---
         const imageBuffer = Buffer.from(finalImageBase64, 'base64');
+        const finalFileExtension = finalImageMimeType.split('/')[1] || 'png';
         const fileName = `${user.id}/${Date.now()}.${finalFileExtension}`;
 
-        const { error: uploadError } = await supabaseAdmin.storage.from('generated_images').upload(fileName, imageBuffer, { contentType: finalImageMimeType });
-        if (uploadError) throw uploadError;
+        const putCommand = new PutObjectCommand({
+            Bucket: process.env.R2_BUCKET_NAME!,
+            Key: fileName,
+            Body: imageBuffer,
+            ContentType: finalImageMimeType,
+        });
+        
+        await s3Client.send(putCommand);
 
-        const { data: { publicUrl } } = supabaseAdmin.storage.from('generated_images').getPublicUrl(fileName);
+        const publicUrl = `${process.env.R2_PUBLIC_URL}/${fileName}`;
+        // --- END OF R2 UPLOAD LOGIC ---
 
         const newDiamondCount = userData.diamonds - COST_PER_IMAGE;
         const newXp = userData.xp + XP_PER_IMAGE;

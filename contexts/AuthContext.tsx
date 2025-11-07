@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode, useMemo, useRef } from 'react';
-import { supabase } from '../utils/supabaseClient';
+import { getSupabaseClient } from '../utils/supabaseClient';
 import { Session, User as SupabaseUser } from '@supabase/supabase-js';
 import { User, Stats } from '../types';
 import { calculateLevelFromXp } from '../utils/rankUtils';
@@ -55,6 +55,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const [reward, setReward] = useState<{ diamonds: number; xp: number } | null>(null);
 
     const previousUserRef = useRef<User | null>(null);
+    
+    // Get the Supabase client safely. It will be null if env vars are missing.
+    const supabase = getSupabaseClient();
 
     const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
         setToast({ message, type });
@@ -103,6 +106,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }, []);
 
     const fetchUserProfile = useCallback(async (supabaseUser: SupabaseUser) => {
+        if (!supabase) return null; // Guard against missing client
         try {
             const { data, error } = await supabase
                 .from('users')
@@ -123,7 +127,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             // Return null but don't throw, allowing the app to proceed with a logged-in state.
             return null;
         }
-    }, []);
+    }, [supabase]);
     
     useEffect(() => {
         previousUserRef.current = user;
@@ -150,41 +154,61 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     
      // New Effect for periodic XP gain
     useEffect(() => {
-        let xpInterval: NodeJS.Timeout | null = null;
-        if (session) {
-            xpInterval = setInterval(async () => {
-                try {
-                    await fetch('/.netlify/functions/increment-xp', {
-                        method: 'POST',
-                        headers: { Authorization: `Bearer ${session.access_token}` },
-                    });
-                    // Real-time listener will update the user object automatically
-                } catch (error) {
-                    console.error('Failed to increment XP:', error);
-                }
-            }, 60000); // 60 seconds
-        }
+        if (!supabase || !session) return;
+        
+        let xpInterval: ReturnType<typeof setInterval> | null = null;
+        
+        xpInterval = setInterval(async () => {
+            try {
+                await fetch('/.netlify/functions/increment-xp', {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${session.access_token}` },
+                });
+                // Real-time listener will update the user object automatically
+            } catch (error) {
+                console.error('Failed to increment XP:', error);
+            }
+        }, 60000); // 60 seconds
+        
         return () => {
             if (xpInterval) {
                 clearInterval(xpInterval);
             }
         };
-    }, [session]);
+    }, [session, supabase]);
 
 
     useEffect(() => {
+        // **DEFINITIVE FREEZE FIX**
+        // If the Supabase client failed to initialize (e.g., missing .env vars),
+        // we handle it here instead of letting the app crash.
+        if (!supabase) {
+            showToast("Ứng dụng gặp lỗi cấu hình nghiêm trọng.", "error");
+            setLoading(false); // This ensures the loading screen doesn't get stuck
+            return;
+        }
+
         const initializeSession = async () => {
-            const { data: { session: currentSession } } = await supabase.auth.getSession();
-            setSession(currentSession);
-            
-            if (currentSession) {
-                const profile = await fetchUserProfile(currentSession.user);
-                setUser(profile);
-                if (getRouteFromPath(window.location.pathname) === 'home') {
-                    navigate('tool');
+            try {
+                const { data: { session: currentSession } } = await supabase.auth.getSession();
+                setSession(currentSession);
+                
+                if (currentSession) {
+                    const profile = await fetchUserProfile(currentSession.user);
+                    setUser(profile);
+                    if (getRouteFromPath(window.location.pathname) === 'home') {
+                        navigate('tool');
+                    }
                 }
+            } catch (error) {
+                console.error("Error during session initialization:", error);
+                showToast("Đã xảy ra lỗi khi tải phiên làm việc.", "error");
+                await supabase.auth.signOut();
+                setSession(null);
+                setUser(null);
+            } finally {
+                setLoading(false);
             }
-            setLoading(false);
         };
 
         initializeSession();
@@ -195,13 +219,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 if (newSession?.user) {
                     const profile = await fetchUserProfile(newSession.user);
                     setUser(profile);
-                    // Navigate to tool on fresh login
                     if (_event === 'SIGNED_IN') {
                         navigate('tool');
                     }
                 } else {
                     setUser(null);
-                    // Navigate to home on sign out
                     if (_event === 'SIGNED_OUT') {
                         navigate('home');
                     }
@@ -212,11 +234,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return () => {
             subscription.unsubscribe();
         };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [fetchUserProfile, navigate, showToast, supabase]);
 
     useEffect(() => {
-        if (!user?.id || loading) return;
+        if (!user?.id || loading || !supabase) return;
 
         const userChannel = supabase
             .channel(`public:users:id=eq.${user.id}`)
@@ -233,7 +254,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return () => {
             supabase.removeChannel(userChannel);
         };
-    }, [user?.id, updateUserProfile, loading]);
+    }, [user?.id, updateUserProfile, loading, supabase]);
 
     const hasCheckedInToday = useMemo(() => {
         if (!user?.last_check_in_at) return false;
@@ -243,6 +264,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }, [user?.last_check_in_at]);
 
     const login = useCallback(async () => {
+        if (!supabase) {
+            showToast("Lỗi kết nối, không thể đăng nhập.", "error");
+            return;
+        }
         const { error } = await supabase.auth.signInWithOAuth({
             provider: 'google',
             options: { redirectTo: window.location.origin },
@@ -251,11 +276,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             showToast('Đăng nhập thất bại: ' + error.message, 'error');
             throw error;
         }
-    }, [showToast]);
+    }, [showToast, supabase]);
 
     const logout = useCallback(async () => {
+        if (!supabase) return;
         await supabase.auth.signOut();
-    }, []);
+    }, [supabase]);
 
     const value = useMemo(() => ({
         session, user, loading, stats, toast, route, hasCheckedInToday, reward,

@@ -9,37 +9,58 @@ const calculateLevelFromXp = (xp: number): number => {
 
 const handler: Handler = async () => {
     try {
-        // Lấy top 10 người dùng có XP cao nhất
-        const { data: users, error: usersError } = await supabaseAdmin
-            .from('users')
-            .select('id, display_name, photo_url, xp')
-            .order('xp', { ascending: false })
-            .limit(10);
-
-        if (usersError) throw usersError;
-
-        // Lấy số lượng ảnh đã tạo cho những người dùng này
-        const userIds = users.map(u => u.id);
+        // 1. Get all image records to count creations per user.
+        // For performance on very large tables, an RPC function would be better,
+        // but this approach works well without database modifications.
         const { data: images, error: imagesError } = await supabaseAdmin
             .from('generated_images')
-            .select('user_id')
-            .in('user_id', userIds);
+            .select('user_id');
 
         if (imagesError) throw imagesError;
 
-        // Map số lượng ảnh vào cho từng người dùng
+        // 2. Count creations for each user in memory.
         const countMap = (images || []).reduce((acc, image) => {
             acc.set(image.user_id, (acc.get(image.user_id) || 0) + 1);
             return acc;
         }, new Map<string, number>());
+        
+        // 3. Sort users by creation count and get the top 10 user IDs.
+        const sortedUserIds = Array.from(countMap.entries())
+            .sort((a, b) => b[1] - a[1]) // Sort descending by count
+            .slice(0, 10) // Limit to top 10
+            .map(entry => entry[0]); // Get just the user IDs
 
-        const leaderboard = users.map((user, index) => ({
+        // Handle case where there are no images created yet.
+        if (sortedUserIds.length === 0) {
+            return {
+                statusCode: 200,
+                body: JSON.stringify([]),
+            };
+        }
+
+        // 4. Fetch the profiles for the top 10 users.
+        const { data: users, error: usersError } = await supabaseAdmin
+            .from('users')
+            .select('id, display_name, photo_url, xp')
+            .in('id', sortedUserIds);
+
+        if (usersError) throw usersError;
+
+        // 5. Combine user data with creation counts and re-sort to ensure correct order.
+        const leaderboardData = users
+            .map(user => ({
+                ...user,
+                creations_count: countMap.get(user.id) || 0,
+            }))
+            .sort((a, b) => b.creations_count - a.creations_count);
+
+        // 6. Assign final rank and calculate level.
+        const leaderboard = leaderboardData.map((user, index) => ({
             ...user,
             rank: index + 1,
-            // Sửa lỗi: Tính toán và thêm cấp bậc (level) vào dữ liệu trả về
             level: calculateLevelFromXp(user.xp),
-            creations_count: countMap.get(user.id) || 0,
         }));
+
 
         return {
             statusCode: 200,

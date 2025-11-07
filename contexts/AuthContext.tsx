@@ -110,6 +110,36 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             return null;
         }
     }, []);
+
+    const fetchAndSetUser = useCallback(async (session: Session, supabaseClient: SupabaseClient) => {
+        let profile = await fetchUserProfile(session.user, supabaseClient);
+
+        // If profile doesn't exist yet (race condition with trigger), wait and retry once.
+        if (!profile) {
+            await new Promise(resolve => setTimeout(resolve, 1500));
+            profile = await fetchUserProfile(session.user, supabaseClient);
+        }
+        
+        // If it's a new user (diamonds is at default 25), call function to update to 10
+        if (profile && profile.diamonds === 25) {
+             try {
+                const response = await fetch('/.netlify/functions/set-initial-diamonds', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${session.access_token}` }
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.diamonds !== undefined) {
+                        // Mutate the profile object before setting state to prevent UI flicker
+                        profile.diamonds = data.diamonds;
+                    }
+                }
+             } catch(e) {
+                console.error("Non-critical: Failed to update initial diamonds.", e);
+             }
+        }
+        setUser(profile);
+    }, [fetchUserProfile]);
     
     useEffect(() => {
         if (initStarted.current) return;
@@ -127,8 +157,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 setSession(currentSession);
                 
                 if (currentSession) {
-                    const profile = await fetchUserProfile(currentSession.user, supabaseClient);
-                    setUser(profile);
+                    await fetchAndSetUser(currentSession, supabaseClient);
                     if (getRouteFromPath(window.location.pathname) === 'home') {
                         navigate('tool');
                     }
@@ -138,8 +167,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                     async (_event, newSession) => {
                         setSession(newSession);
                         if (newSession?.user) {
-                            const profile = await fetchUserProfile(newSession.user, supabaseClient);
-                            setUser(profile);
+                            await fetchAndSetUser(newSession, supabaseClient);
                             if (_event === 'SIGNED_IN') navigate('tool');
                         } else {
                             setUser(null);

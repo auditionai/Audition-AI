@@ -177,52 +177,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }, [session]);
 
 
-    const hardReset = () => {
-        console.warn("Forcing hard reset: Bypassing Supabase client, clearing storage, and reloading page...");
-        try {
-            const clearStorage = (storage: Storage) => {
-                const keysToRemove: string[] = [];
-                for (let i = 0; i < storage.length; i++) {
-                    const key = storage.key(i);
-                    if (key && (key.startsWith('sb-') || key.toLowerCase().includes('supabase'))) {
-                        keysToRemove.push(key);
-                    }
-                }
-                keysToRemove.forEach(key => storage.removeItem(key));
-            };
-
-            clearStorage(localStorage);
-            clearStorage(sessionStorage);
-            
-            console.log("Cleared Supabase-related storage keys. Reloading page now.");
-            window.location.reload();
-        } catch (e) {
-            console.error("Hard reset failed during storage clear or reload:", e);
-            setLoading(false); 
-            setUser(null);
-            setSession(null);
-        }
-    };
-
     useEffect(() => {
         let isCancelled = false;
-        let timeoutId: number | null = null;
 
         const initializeAuth = async () => {
-            timeoutId = window.setTimeout(() => {
-                if (!isCancelled) {
-                    console.error("A critical error or timeout occurred during auth initialization. Force signing out. Error: Authentication timed out after 8 seconds.");
-                    hardReset();
-                }
-            }, 8000);
-
             try {
                 const { data: { session: currentSession }, error: sessionError } = await supabase.auth.getSession();
                 
                 if (isCancelled) return;
-                
-                if (timeoutId) clearTimeout(timeoutId);
-
                 if (sessionError) throw sessionError;
 
                 if (currentSession) {
@@ -234,20 +196,29 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                             navigate('tool');
                         }
                     } else {
-                        throw new Error("Session is valid but user profile is missing. Data corruption detected.");
+                        // FIX: Instead of throwing a destructive error, log out gracefully.
+                        // This handles cases where a session exists but the profile is missing or fails to load,
+                        // preventing the app from getting stuck in a broken state on refresh.
+                        console.error("Session is valid but user profile is missing. Logging out gracefully.");
+                        await supabase.auth.signOut();
+                        setSession(null);
+                        setUser(null);
+                        navigate('home');
                     }
                 } else {
                     setSession(null);
                     setUser(null);
                 }
-                
-                setLoading(false);
-
             } catch (error) {
                 if (isCancelled) return;
-                console.error("Caught error during auth initialization, triggering hard reset.", error);
-                if (timeoutId) clearTimeout(timeoutId);
-                hardReset();
+                console.error("Critical error during auth initialization, signing out.", error);
+                await supabase.auth.signOut();
+                setSession(null);
+                setUser(null);
+            } finally {
+                if (!isCancelled) {
+                    setLoading(false);
+                }
             }
         };
 
@@ -277,11 +248,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
         return () => {
             isCancelled = true;
-            if (timeoutId) clearTimeout(timeoutId);
             subscription.unsubscribe();
         };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [fetchUserProfile]);
+    }, []);
 
     useEffect(() => {
         if (!user?.id || loading) return;

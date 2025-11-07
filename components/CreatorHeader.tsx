@@ -34,6 +34,14 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
     onNavigate(tab);
     setDropdownOpen(false);
   }
+  
+  // FIX: Create a dedicated handler for logout to ensure dropdown closes first.
+  // This prevents potential race conditions where the component unmounts before
+  // the click event is fully processed.
+  const handleLogout = () => {
+    setDropdownOpen(false);
+    logout();
+  };
 
   return (
     <header className="fixed top-0 left-0 w-full z-40 bg-[#0B0B0F]/80 backdrop-blur-lg border-b border-pink-500/10">
@@ -144,7 +152,7 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
                         </button>
                      </div>
                      <div className="py-1 border-t border-white/10 mt-1">
-                        <button onClick={logout} className="flex items-center gap-3 w-full text-left px-2 py-2 text-sm text-gray-300 rounded-md hover:bg-red-500/20 hover:text-red-400 transition-colors cursor-pointer">
+                        <button onClick={handleLogout} className="flex items-center gap-3 w-full text-left px-2 py-2 text-sm text-gray-300 rounded-md hover:bg-red-500/20 hover:text-red-400 transition-colors cursor-pointer">
                           <i className="ph-fill ph-sign-out"></i>
                           Đăng xuất
                         </button>

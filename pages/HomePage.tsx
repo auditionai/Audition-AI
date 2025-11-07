@@ -1,4 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+
+// Components
 import LandingHeader from '../components/Header';
 import Hero from '../components/Hero';
 import Features from '../components/Features';
@@ -8,27 +10,37 @@ import Pricing from '../components/Pricing';
 import FAQ from '../components/FAQ';
 import Footer from '../components/Footer';
 import AuthModal from '../components/AuthModal';
-import AnimatedSection from '../components/common/AnimatedSection';
-import { useAuth } from '../contexts/AuthContext';
-import InfoModal from '../components/InfoModal';
-import DynamicBackground from '../components/common/DynamicBackground';
-import { GalleryImage } from '../types';
+import TopUpModal from '../components/TopUpModal';
 import ImageModal from '../components/common/ImageModal';
+import InfoModal from '../components/InfoModal';
+import AnimatedSection from '../components/common/AnimatedSection';
+import DynamicBackground from '../components/common/DynamicBackground';
+
+// Hooks & Types
+import { useAuth } from '../contexts/AuthContext';
+import { GalleryImage } from '../types';
 
 const HomePage: React.FC = () => {
-    const { user, login, stats, showToast, navigate } = useAuth();
-    const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-    const [infoModalKey, setInfoModalKey] = useState<'terms' | 'policy' | 'contact' | null>(null);
-    const [activeSection, setActiveSection] = useState('hero');
+    const { user, stats, navigate, showToast, updateUserDiamonds } = useAuth();
+    
+    // Modal states
+    const [isAuthModalOpen, setAuthModalOpen] = useState(false);
+    const [isTopUpModalOpen, setTopUpModalOpen] = useState(false);
     const [selectedImage, setSelectedImage] = useState<GalleryImage | null>(null);
+    const [infoModalKey, setInfoModalKey] = useState<'terms' | 'policy' | 'contact' | null>(null);
+
+    // Gallery state
     const [publicGalleryImages, setPublicGalleryImages] = useState<GalleryImage[]>([]);
     const [isGalleryLoading, setIsGalleryLoading] = useState(true);
 
+    // Dynamic background state
+    const [activeSection, setActiveSection] = useState('hero');
+    
     useEffect(() => {
         const fetchPublicGallery = async () => {
             try {
                 const response = await fetch('/.netlify/functions/public-gallery');
-                if (!response.ok) throw new Error('Không thể tải thư viện cộng đồng.');
+                if (!response.ok) throw new Error('Không thể tải thư viện.');
                 const data = await response.json();
                 setPublicGalleryImages(data);
             } catch (error: any) {
@@ -40,124 +52,139 @@ const HomePage: React.FC = () => {
         fetchPublicGallery();
     }, [showToast]);
 
-    useEffect(() => {
-        const sections = document.querySelectorAll('section[id]');
-        const observer = new IntersectionObserver(
-            (entries) => {
-                entries.forEach((entry) => {
-                    if (entry.isIntersecting) {
-                        setActiveSection(entry.target.id);
-                    }
-                });
-            },
-            { rootMargin: '-50% 0px -50% 0px' }
-        );
-
-        sections.forEach((section) => observer.observe(section));
-
-        return () => sections.forEach((section) => observer.unobserve(section));
-    }, []);
-
-    const handleOpenInfoModal = (key: 'terms' | 'policy' | 'contact') => {
-        setInfoModalKey(key);
-    };
-    
-    const handleDirectGoogleLogin = () => {
-        showToast('Đang đăng nhập bằng Google...', 'success');
-        login();
-    };
-
-    const scrollToSection = (id: string) => {
+    // Scroll handling for background and header
+    const handleScrollTo = (id: string) => {
         const element = document.getElementById(id);
         if (element) {
-            element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            element.scrollIntoView({ behavior: 'smooth' });
+        }
+    };
+
+    const observerCallback = useCallback((entries: IntersectionObserverEntry[]) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                setActiveSection(entry.target.id);
+            }
+        });
+    }, []);
+
+    useEffect(() => {
+        const observer = new IntersectionObserver(observerCallback, {
+            rootMargin: '-50% 0px -50% 0px',
+            threshold: 0
+        });
+
+        const sectionIds = ['hero', 'features', 'how-it-works', 'gallery', 'pricing', 'faq'];
+        const elements = sectionIds.map(id => document.getElementById(id)).filter(Boolean) as HTMLElement[];
+
+        elements.forEach(el => observer.observe(el));
+
+        return () => {
+             elements.forEach(el => observer.unobserve(el));
+        };
+    }, [observerCallback]);
+
+    const handleCtaClick = () => {
+        if (user) {
+            navigate('tool');
+        } else {
+            setAuthModalOpen(true);
         }
     };
     
-    const handleTopUpClick = () => {
+    const onTopUpClick = () => {
         if (user) {
-            navigate('buy-credits');
+             setTopUpModalOpen(true);
         } else {
-            setIsAuthModalOpen(true);
+            setAuthModalOpen(true);
         }
-    };
+    }
 
     return (
         <>
-            <div className="hidden lg:block">
-                <DynamicBackground activeSection={activeSection} />
-            </div>
-            <LandingHeader
+            <DynamicBackground activeSection={activeSection} />
+            <LandingHeader 
                 user={user}
-                onTopUpClick={handleTopUpClick}
-                onScrollTo={scrollToSection}
+                onTopUpClick={onTopUpClick}
+                onScrollTo={handleScrollTo}
             />
-            <main className="relative z-10">
+            
+            <main>
                 <section id="hero">
-                    <Hero
-                        onCtaClick={() => user ? navigate('tool') : setIsAuthModalOpen(true)}
-                        onGoogleLoginClick={handleDirectGoogleLogin}
-                    />
+                    <Hero onCtaClick={handleCtaClick} onGoogleLoginClick={() => setAuthModalOpen(true)} />
                 </section>
+                
                 <AnimatedSection id="features">
                     <Features />
                 </AnimatedSection>
+                
                 <AnimatedSection id="how-it-works">
                     <HowItWorks />
                 </AnimatedSection>
-                 <AnimatedSection id="gallery" className="py-20 sm:py-32">
-                    <div className="container mx-auto px-4">
-                        <div className="text-center max-w-3xl mx-auto mb-12">
-                            <h2 className="text-3xl md:text-4xl font-bold mb-4">
-                                <span className="bg-gradient-to-r from-pink-400 to-fuchsia-500 text-transparent bg-clip-text">Thư viện Sáng tạo</span>
-                            </h2>
-                            <p className="text-lg text-gray-400">
-                                Khám phá những tác phẩm độc đáo được tạo ra bởi cộng đồng Audition AI.
-                            </p>
+                
+                <AnimatedSection id="gallery">
+                    <section className="py-20 sm:py-32 bg-transparent text-white w-full">
+                        <div className="container mx-auto px-4">
+                            <div className="text-center max-w-3xl mx-auto mb-16">
+                                <h2 className="text-3xl md:text-4xl font-bold mb-4">
+                                    <span className="bg-gradient-to-r from-pink-400 to-fuchsia-500 text-transparent bg-clip-text">Tác phẩm từ cộng đồng</span>
+                                </h2>
+                                <p className="text-lg text-gray-400">
+                                    Khám phá những sáng tạo độc đáo từ những người dùng khác.
+                                </p>
+                            </div>
+                            {isGalleryLoading ? (
+                                <div className="text-center">Đang tải...</div>
+                            ) : (
+                                <Gallery 
+                                    images={publicGalleryImages} 
+                                    onImageClick={setSelectedImage}
+                                    limit={8}
+                                    showSeeMore={true}
+                                    onSeeMoreClick={() => navigate('gallery')}
+                                />
+                            )}
                         </div>
-                        {isGalleryLoading ? (
-                             <div className="text-center p-12">Đang tải thư viện...</div>
-                        ) : (
-                            <Gallery 
-                              images={publicGalleryImages}
-                              displayMode="slider"
-                              onImageClick={setSelectedImage}
-                            />
-                        )}
-                         <div className="mt-12 text-center">
-                            <button
-                                onClick={() => navigate('gallery')}
-                                className="px-8 py-4 font-bold text-lg text-white bg-white/10 backdrop-blur-sm border border-white/20 rounded-full transition-all duration-300 hover:bg-white/20 hover:shadow-lg hover:shadow-white/10 hover:-translate-y-1"
-                            >
-                                Xem thêm trong thư viện
-                                <i className="ph-fill ph-arrow-right ml-2"></i>
-                            </button>
-                        </div>
-                    </div>
+                    </section>
                 </AnimatedSection>
+                
                 <AnimatedSection id="pricing">
-                    <Pricing onTopUpClick={handleTopUpClick} />
+                    <Pricing onTopUpClick={onTopUpClick} />
                 </AnimatedSection>
+
                 <AnimatedSection id="faq">
                     <FAQ />
                 </AnimatedSection>
             </main>
-            <Footer onCtaClick={() => setIsAuthModalOpen(true)} stats={stats} onInfoLinkClick={handleOpenInfoModal}/>
+
+            <Footer 
+                onCtaClick={handleCtaClick}
+                stats={stats}
+                onInfoLinkClick={setInfoModalKey}
+            />
 
             {/* Modals */}
-            <AuthModal
-                isOpen={isAuthModalOpen}
-                onClose={() => setIsAuthModalOpen(false)}
+            <AuthModal isOpen={isAuthModalOpen} onClose={() => setAuthModalOpen(false)} />
+            <TopUpModal 
+                isOpen={isTopUpModalOpen}
+                onClose={() => setTopUpModalOpen(false)}
+                onTopUpSuccess={(amount) => {
+                    if (user) {
+                        updateUserDiamonds(user.diamonds + amount);
+                    }
+                    setTopUpModalOpen(false);
+                    showToast(`Nạp thành công ${amount} kim cương!`, 'success');
+                }}
+            />
+            <ImageModal
+                isOpen={!!selectedImage}
+                onClose={() => setSelectedImage(null)}
+                image={selectedImage}
             />
             <InfoModal
                 isOpen={!!infoModalKey}
                 onClose={() => setInfoModalKey(null)}
                 contentKey={infoModalKey}
-            />
-            <ImageModal 
-                isOpen={!!selectedImage}
-                onClose={() => setSelectedImage(null)}
-                image={selectedImage}
             />
         </>
     );

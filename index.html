@@ -304,11 +304,22 @@
 </head>
   <body>
     <script>
-      // ** THE DEFINITIVE FIX V2: SAFETY FUSE SYSTEM **
-      // This system runs before React and acts as a dead man's switch.
-      // If the app freezes during init, it will automatically clear the cache and reload.
+      // ** THE DEFINITIVE FREEZE FIX: THE WATCHDOG **
+      // This script detects if the PREVIOUS page load on this tab failed to complete.
+      // If it did, it assumes localStorage is corrupted and nukes it before React loads.
+      if (sessionStorage.getItem('boot_in_progress') === 'true') {
+        console.error('WATCHDOG: Previous boot did not complete. Clearing localStorage to prevent freeze.');
+        // We use an alert to inform the user of the automatic recovery.
+        alert('Ứng dụng đã gặp sự cố ở lần tải trước. Đang tự động làm sạch cache để khắc phục.');
+        localStorage.clear();
+      }
       
-      // Layer 1: Immediate sanitization check.
+      // Set the flag for the CURRENT boot attempt.
+      // If the app loads successfully, it will clear this flag.
+      // If it freezes, this flag will remain, to be caught by the next load (e.g., F5).
+      sessionStorage.setItem('boot_in_progress', 'true');
+
+      // Also, keep the basic JSON parse check as a first line of defense for simple corruption.
       try {
         const key = Object.keys(localStorage).find(k => k.startsWith('sb-') && k.endsWith('-auth-token'));
         if (key) {
@@ -316,26 +327,9 @@
           if (data) JSON.parse(data); // Will throw on malformed JSON
         }
       } catch (error) {
-        console.error('IMMEDIATE ACTION: Corrupted session JSON detected. Clearing localStorage to prevent app freeze.');
+        console.error('WATCHDOG: Corrupted session JSON detected on initial check. Clearing localStorage.');
         localStorage.clear();
       }
-
-      // Layer 2: The "Dead Man's Switch" Timeout.
-      // This catches freezes caused by valid JSON that the Supabase client cannot handle.
-      const freezeTimeout = 8000; // 8 seconds
-      const freezeDetector = setTimeout(() => {
-        // This code only runs if window.appReady() is NEVER called.
-        console.error('FATAL: Application did not signal readiness. Potential freeze detected.');
-        alert('Ứng dụng gặp sự cố khi tải. Đang tự động làm mới để khắc phục...');
-        localStorage.clear();
-        window.location.reload();
-      }, freezeTimeout);
-
-      // The React app MUST call this function once it has successfully loaded.
-      window.appReady = () => {
-        clearTimeout(freezeDetector);
-        console.log('App is ready. Freeze detector disarmed.');
-      };
     </script>
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>

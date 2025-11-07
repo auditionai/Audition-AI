@@ -7,6 +7,7 @@ import BuyCreditsPage from './pages/BuyCreditsPage';
 import RewardNotification from './components/common/RewardNotification';
 
 // Make window.appReady globally available for type safety.
+// This is no longer used by the new Watchdog system but is kept for potential future use.
 declare global {
   interface Window {
     appReady: () => void;
@@ -28,15 +29,13 @@ const AppLoadingScreen = () => (
 function App() {
   const { user, toast, loading, route, reward, clearReward } = useAuth();
 
-  // ** SAFETY FUSE INTEGRATION **
+  // ** WATCHDOG INTEGRATION **
   // This effect signals to the pre-flight script in index.html that the app has
   // successfully loaded and the loading screen is about to be removed.
-  // This disarms the "dead man's switch" and prevents an unnecessary reload.
+  // This removes the 'boot_in_progress' flag from sessionStorage, disarming the watchdog.
   useEffect(() => {
     if (!loading) {
-      if (window.appReady) {
-        window.appReady();
-      }
+      sessionStorage.removeItem('boot_in_progress');
     }
   }, [loading]);
 

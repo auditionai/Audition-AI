@@ -96,7 +96,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             if (!currentUser) return null;
             const updatedUser = { ...currentUser, ...updates };
             if (updates.xp !== undefined) {
-                updatedUser.level = calculateLevelFromXp(updates.xp ?? 0);
+                updatedUser.level = calculateLevelFromXp(updates.xp);
             }
             return updatedUser;
         });
@@ -120,6 +120,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             return null;
         } catch (error) {
             console.error('Error fetching user profile:', error);
+            // Return null but don't throw, allowing the app to proceed with a logged-in state.
             return null;
         }
     }, []);
@@ -157,6 +158,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                         method: 'POST',
                         headers: { Authorization: `Bearer ${session.access_token}` },
                     });
+                    // Real-time listener will update the user object automatically
                 } catch (error) {
                     console.error('Failed to increment XP:', error);
                 }
@@ -169,34 +171,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         };
     }, [session]);
 
-    // Main effect for session initialization and state changes
-    useEffect(() => {
-        // --- SAFETY FUSE: Hard reset if initialization takes too long ---
-        const initializationTimeout = setTimeout(() => {
-            console.error("App initialization timed out after 7 seconds. This is a critical failure. Forcing a hard reset by logging out and redirecting to the homepage.");
-            supabase.auth.signOut();
-            window.location.href = '/';
-        }, 7000);
 
+    useEffect(() => {
         const initializeSession = async () => {
-            try {
-                const { data: { session: currentSession } } = await supabase.auth.getSession();
-                setSession(currentSession);
-                
-                if (currentSession) {
-                    const profile = await fetchUserProfile(currentSession.user);
-                    setUser(profile);
+            const { data: { session: currentSession } } = await supabase.auth.getSession();
+            setSession(currentSession);
+            
+            if (currentSession) {
+                const profile = await fetchUserProfile(currentSession.user);
+                setUser(profile);
+                if (getRouteFromPath(window.location.pathname) === 'home') {
+                    navigate('tool');
                 }
-            } catch (e) {
-                console.error("Critical error during session initialization:", e);
-                setSession(null);
-                setUser(null);
-            } finally {
-                // This is CRUCIAL. If initialization succeeds or fails gracefully,
-                // we cancel the safety fuse to prevent the hard reset.
-                clearTimeout(initializationTimeout);
-                setLoading(false);
             }
+            setLoading(false);
         };
 
         initializeSession();
@@ -207,11 +195,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 if (newSession?.user) {
                     const profile = await fetchUserProfile(newSession.user);
                     setUser(profile);
-                    if (_event === 'SIGNED_IN' && getRouteFromPath(window.location.pathname) === 'home') {
+                    // Navigate to tool on fresh login
+                    if (_event === 'SIGNED_IN') {
                         navigate('tool');
                     }
                 } else {
                     setUser(null);
+                    // Navigate to home on sign out
                     if (_event === 'SIGNED_OUT') {
                         navigate('home');
                     }
@@ -222,9 +212,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return () => {
             subscription.unsubscribe();
         };
-    }, [fetchUserProfile, navigate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
-    // Realtime listener for user profile updates
     useEffect(() => {
         if (!user?.id || loading) return;
 

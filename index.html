@@ -301,10 +301,35 @@
   }
 }
 </script>
-<link rel="stylesheet" href="/index.css">
 </head>
   <body>
     <div id="root"></div>
+    
+    <!-- Pre-flight Check for Corrupted Session -->
+    <script>
+      try {
+        const supabaseKey = Object.keys(localStorage).find(
+          key => key.startsWith('sb-') && key.endsWith('-auth-token')
+        );
+        if (supabaseKey) {
+          const sessionData = localStorage.getItem(supabaseKey);
+          if (sessionData) {
+            // The critical test: attempt to parse.
+            // If this throws an error on an old browser, the catch block will run.
+            JSON.parse(sessionData);
+          }
+        }
+      } catch (error) {
+        // This is the definitive "clean slate" solution.
+        console.warn(
+          'Corrupted session data detected in localStorage. ' +
+          'This can cause app freezes on older browsers. ' +
+          'Clearing all localStorage to ensure a clean, safe start.'
+        );
+        localStorage.clear();
+      }
+    </script>
+
     <script type="module" src="/index.tsx"></script>
   </body>
 </html>

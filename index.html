@@ -304,24 +304,32 @@
 </head>
   <body>
     <script>
-      // Pre-flight URL Sanitizer Script
-      // This script runs BEFORE any other module script, including React and Supabase.
+      // Definitive Pre-flight Dual Sanitization Script
       (function() {
+        // STAGE 1: Check for and clear corrupted Supabase session from localStorage.
+        // This mimics a manual "Clear Cache" and is the most critical step to prevent freezes.
+        try {
+          const key = Object.keys(localStorage).find(i => i.startsWith('sb-') && i.endsWith('-auth-token'));
+          if (key) {
+            // Attempt to parse. If it fails, the catch block will execute.
+            JSON.parse(localStorage.getItem(key));
+          }
+        } catch (e) {
+          console.warn('Corrupted Supabase session detected. Clearing localStorage to prevent freeze.');
+          localStorage.clear();
+        }
+
+        // STAGE 2: Handle the PayOS redirect to prevent a new corrupted session from being created.
         try {
           const params = new URLSearchParams(window.location.search);
           const status = params.get('status');
           const orderCode = params.get('orderCode');
           const code = params.get('code'); // The conflicting parameter
 
-          // We detect the redirect by checking for parameters that PayOS adds.
-          // The presence of `code` is the most dangerous one for Supabase.
           if (status && orderCode && code) {
-            // Store the necessary information in sessionStorage for the app to use later.
             const paymentResult = { status, orderCode };
             sessionStorage.setItem('payment_redirect_result', JSON.stringify(paymentResult));
-            
             // Immediately clean the URL to prevent Supabase from seeing the 'code' parameter.
-            // This is the critical step that prevents the application from freezing.
             window.history.replaceState(null, '', window.location.pathname);
           }
         } catch (e) {

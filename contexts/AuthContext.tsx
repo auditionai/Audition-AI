@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode, useMemo, useRef } from 'react';
 import { getSupabaseClient } from '../utils/supabaseClient';
-import { Session, User as SupabaseUser } from '@supabase/supabase-js';
+import type { Session, User as SupabaseUser, SupabaseClient } from '@supabase/supabase-js';
 import { User, Stats } from '../types';
 import { calculateLevelFromXp } from '../utils/rankUtils';
 
@@ -10,26 +10,22 @@ const getVNDateString = (date: Date) => {
     return vietnamTime.toISOString().split('T')[0];
 };
 
-// Helper function to parse the route from the URL pathname.
 const getRouteFromPath = (path: string): string => {
     const pathSegment = path.split('/').filter(Boolean)[0];
     const creatorTabs = ['tool', 'leaderboard', 'my-creations', 'settings'];
     if (pathSegment === 'buy-credits' || pathSegment === 'gallery' || creatorTabs.includes(pathSegment)) {
         return pathSegment;
     }
-    // 'home' will be the default route for '/' or any unrecognized path.
     return 'home';
 };
 
-
-// Define the shape of the context
 interface AuthContextType {
     session: Session | null;
     user: User | null;
     loading: boolean;
     stats: Stats;
     toast: { message: string; type: 'success' | 'error' } | null;
-    route: string; // for simple routing
+    route: string;
     reward: { diamonds: number; xp: number } | null;
     hasCheckedInToday: boolean;
     login: () => Promise<void>;
@@ -41,11 +37,10 @@ interface AuthContextType {
     clearReward: () => void;
 }
 
-// Create the context with a default value
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Define the provider component
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+    const [supabase, setSupabase] = useState<SupabaseClient | null>(null);
     const [session, setSession] = useState<Session | null>(null);
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
@@ -55,7 +50,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const [reward, setReward] = useState<{ diamonds: number; xp: number } | null>(null);
 
     const previousUserRef = useRef<User | null>(null);
-    const initStarted = useRef(false); // ** THE SAFETY LOCK **
+    const initStarted = useRef(false);
 
     const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
         setToast({ message, type });
@@ -73,19 +68,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         window.scrollTo(0, 0);
     }, []);
     
-    const clearReward = useCallback(() => {
-        setReward(null);
-    }, []);
+    const clearReward = useCallback(() => setReward(null), []);
 
     useEffect(() => {
-        const handlePopState = () => {
-            setRoute(getRouteFromPath(window.location.pathname));
-        };
-
+        const handlePopState = () => setRoute(getRouteFromPath(window.location.pathname));
         window.addEventListener('popstate', handlePopState);
-        return () => {
-            window.removeEventListener('popstate', handlePopState);
-        };
+        return () => window.removeEventListener('popstate', handlePopState);
     }, []);
 
     const updateUserDiamonds = useCallback((newAmount: number) => {
@@ -103,18 +91,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         });
     }, []);
 
-    const fetchUserProfile = useCallback(async (supabaseUser: SupabaseUser) => {
-        const supabase = getSupabaseClient();
-        if (!supabase) return null;
+    const fetchUserProfile = useCallback(async (supabaseUser: SupabaseUser, supabaseClient: SupabaseClient) => {
         try {
-            const { data, error } = await supabase
+            const { data, error } = await supabaseClient
                 .from('users')
                 .select('id, display_name, email, photo_url, diamonds, xp, is_admin, last_check_in_at, consecutive_check_in_days')
                 .eq('id', supabaseUser.id)
                 .single();
-
             if (error && error.code !== 'PGRST116') throw error;
-
             if (data) {
                 const profile = data as User;
                 profile.level = calculateLevelFromXp(profile.xp ?? 0);
@@ -128,6 +112,55 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }, []);
     
     useEffect(() => {
+        if (initStarted.current) return;
+        initStarted.current = true;
+
+        const initialize = async () => {
+            try {
+                const supabaseClient = await getSupabaseClient();
+                if (!supabaseClient) {
+                    throw new Error("Không thể khởi tạo. Vui lòng xóa cache trình duyệt và thử lại.");
+                }
+                setSupabase(supabaseClient);
+
+                const { data: { session: currentSession } } = await supabaseClient.auth.getSession();
+                setSession(currentSession);
+                
+                if (currentSession) {
+                    const profile = await fetchUserProfile(currentSession.user, supabaseClient);
+                    setUser(profile);
+                    if (getRouteFromPath(window.location.pathname) === 'home') {
+                        navigate('tool');
+                    }
+                }
+
+                const { data: { subscription } } = supabaseClient.auth.onAuthStateChange(
+                    async (_event, newSession) => {
+                        setSession(newSession);
+                        if (newSession?.user) {
+                            const profile = await fetchUserProfile(newSession.user, supabaseClient);
+                            setUser(profile);
+                            if (_event === 'SIGNED_IN') navigate('tool');
+                        } else {
+                            setUser(null);
+                            if (_event === 'SIGNED_OUT') navigate('home');
+                        }
+                    }
+                );
+                return () => subscription.unsubscribe();
+            } catch (error: any) {
+                console.error("CRITICAL INITIALIZATION FAILURE:", error);
+                showToast(error.message, "error");
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        initialize();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    useEffect(() => {
         previousUserRef.current = user;
     }, [user]);
 
@@ -136,14 +169,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (user && previousUser) {
             const diamondDiff = user.diamonds - previousUser.diamonds;
             const xpDiff = user.xp - previousUser.xp;
-
             if (diamondDiff > 0 || xpDiff > 0) {
-                 setReward({ 
-                    diamonds: diamondDiff > 0 ? diamondDiff : 0, 
-                    xp: xpDiff > 0 ? xpDiff : 0 
-                });
+                 setReward({ diamonds: diamondDiff > 0 ? diamondDiff : 0, xp: xpDiff > 0 ? xpDiff : 0 });
             }
-            
             if (user.level > previousUser.level) {
                  showToast(`Chúc mừng! Bạn đã thăng cấp ${user.level}!`, 'success');
             }
@@ -152,135 +180,47 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     
     useEffect(() => {
         let xpInterval: ReturnType<typeof setInterval> | null = null;
-        if (session) {
+        if (session && supabase) {
             xpInterval = setInterval(async () => {
                 try {
                     await fetch('/.netlify/functions/increment-xp', {
                         method: 'POST',
                         headers: { Authorization: `Bearer ${session.access_token}` },
                     });
-                } catch (error) {
-                    console.error('Failed to increment XP:', error);
-                }
+                } catch (error) { console.error('Failed to increment XP:', error); }
             }, 60000);
         }
-        return () => {
-            if (xpInterval) {
-                clearInterval(xpInterval);
-            }
-        };
-    }, [session]);
+        return () => { if (xpInterval) clearInterval(xpInterval); };
+    }, [session, supabase]);
 
     useEffect(() => {
-        if (initStarted.current) {
-            return;
-        }
-        initStarted.current = true;
-
-        const supabase = getSupabaseClient();
-        if (!supabase) {
-            showToast("Lỗi cấu hình nghiêm trọng. Không thể kết nối.", "error");
-            setLoading(false);
-            return;
-        }
-
-        const initializeSession = async () => {
-            try {
-                const { data: { session: currentSession } } = await supabase.auth.getSession();
-                setSession(currentSession);
-                
-                if (currentSession) {
-                    const profile = await fetchUserProfile(currentSession.user);
-                    setUser(profile);
-                    if (getRouteFromPath(window.location.pathname) === 'home') {
-                        navigate('tool');
-                    }
-                }
-            } catch (error) {
-                 console.error("Critical initialization error:", error);
-                 showToast("Lỗi nghiêm trọng khi khởi tạo ứng dụng.", "error");
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        initializeSession();
-
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(
-            async (_event, newSession) => {
-                setSession(newSession);
-                if (newSession?.user) {
-                    const profile = await fetchUserProfile(newSession.user);
-                    setUser(profile);
-                    if (_event === 'SIGNED_IN') {
-                        navigate('tool');
-                    }
-                } else {
-                    setUser(null);
-                    if (_event === 'SIGNED_OUT') {
-                        navigate('home');
-                    }
-                }
-            }
-        );
-
-        return () => {
-            subscription.unsubscribe();
-        };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
-    useEffect(() => {
-        if (!user?.id || loading) return;
-
-        const supabase = getSupabaseClient();
-        if (!supabase) return;
-
+        if (!user?.id || loading || !supabase) return;
         const userChannel = supabase
             .channel(`public:users:id=eq.${user.id}`)
-            .on(
-                'postgres_changes',
-                { event: 'UPDATE', schema: 'public', table: 'users', filter: `id=eq.${user.id}` },
-                (payload) => {
-                    console.log('Realtime user update received:', payload.new);
-                    updateUserProfile(payload.new as Partial<User>);
-                }
-            )
-            .subscribe();
-
-        return () => {
-            supabase.removeChannel(userChannel);
-        };
-    }, [user?.id, updateUserProfile, loading]);
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'users', filter: `id=eq.${user.id}` },
+                (payload) => updateUserProfile(payload.new as Partial<User>)
+            ).subscribe();
+        return () => { supabase.removeChannel(userChannel); };
+    }, [user?.id, updateUserProfile, loading, supabase]);
 
     const hasCheckedInToday = useMemo(() => {
         if (!user?.last_check_in_at) return false;
-        const todayVnString = getVNDateString(new Date());
-        const lastCheckInVnString = getVNDateString(new Date(user.last_check_in_at));
-        return todayVnString === lastCheckInVnString;
+        return getVNDateString(new Date()) === getVNDateString(new Date(user.last_check_in_at));
     }, [user?.last_check_in_at]);
 
     const login = useCallback(async () => {
-        const supabase = getSupabaseClient();
-        if (!supabase) {
-            showToast("Lỗi cấu hình, không thể đăng nhập.", "error");
-            return;
-        }
+        if (!supabase) { showToast("Lỗi kết nối, không thể đăng nhập.", "error"); return; }
         const { error } = await supabase.auth.signInWithOAuth({
             provider: 'google',
             options: { redirectTo: window.location.origin },
         });
-        if (error) {
-            showToast('Đăng nhập thất bại: ' + error.message, 'error');
-            throw error;
-        }
-    }, [showToast]);
+        if (error) { showToast('Đăng nhập thất bại: ' + error.message, 'error'); throw error; }
+    }, [supabase, showToast]);
 
     const logout = useCallback(async () => {
-        const supabase = getSupabaseClient();
         if (!supabase) return;
         await supabase.auth.signOut();
-    }, []);
+    }, [supabase]);
 
     const value = useMemo(() => ({
         session, user, loading, stats, toast, route, hasCheckedInToday, reward,
@@ -293,11 +233,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
-// Custom hook to use the auth context
 export const useAuth = () => {
     const context = useContext(AuthContext);
-    if (context === undefined) {
-        throw new Error('useAuth must be used within an AuthProvider');
-    }
+    if (context === undefined) throw new Error('useAuth must be used within an AuthProvider');
     return context;
 };

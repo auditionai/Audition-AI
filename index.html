@@ -304,32 +304,30 @@
 </head>
   <body>
     <script>
-      // ** THE DEFINITIVE FREEZE FIX: THE WATCHDOG **
-      // This script detects if the PREVIOUS page load on this tab failed to complete.
-      // If it did, it assumes localStorage is corrupted and nukes it before React loads.
-      if (sessionStorage.getItem('boot_in_progress') === 'true') {
-        console.error('WATCHDOG: Previous boot did not complete. Clearing localStorage to prevent freeze.');
-        // We use an alert to inform the user of the automatic recovery.
-        alert('Ứng dụng đã gặp sự cố ở lần tải trước. Đang tự động làm sạch cache để khắc phục.');
-        localStorage.clear();
-      }
-      
-      // Set the flag for the CURRENT boot attempt.
-      // If the app loads successfully, it will clear this flag.
-      // If it freezes, this flag will remain, to be caught by the next load (e.g., F5).
-      sessionStorage.setItem('boot_in_progress', 'true');
+      // Pre-flight URL Sanitizer Script
+      // This script runs BEFORE any other module script, including React and Supabase.
+      (function() {
+        try {
+          const params = new URLSearchParams(window.location.search);
+          const status = params.get('status');
+          const orderCode = params.get('orderCode');
+          const code = params.get('code'); // The conflicting parameter
 
-      // Also, keep the basic JSON parse check as a first line of defense for simple corruption.
-      try {
-        const key = Object.keys(localStorage).find(k => k.startsWith('sb-') && k.endsWith('-auth-token'));
-        if (key) {
-          const data = localStorage.getItem(key);
-          if (data) JSON.parse(data); // Will throw on malformed JSON
+          // We detect the redirect by checking for parameters that PayOS adds.
+          // The presence of `code` is the most dangerous one for Supabase.
+          if (status && orderCode && code) {
+            // Store the necessary information in sessionStorage for the app to use later.
+            const paymentResult = { status, orderCode };
+            sessionStorage.setItem('payment_redirect_result', JSON.stringify(paymentResult));
+            
+            // Immediately clean the URL to prevent Supabase from seeing the 'code' parameter.
+            // This is the critical step that prevents the application from freezing.
+            window.history.replaceState(null, '', window.location.pathname);
+          }
+        } catch (e) {
+          console.error('Error in pre-flight PayOS redirect handler:', e);
         }
-      } catch (error) {
-        console.error('WATCHDOG: Corrupted session JSON detected on initial check. Clearing localStorage.');
-        localStorage.clear();
-      }
+      })();
     </script>
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import CreatorHeader from '../components/CreatorHeader';
 import CreatorFooter from '../components/CreatorFooter';
 import { useAuth } from '../contexts/AuthContext';
@@ -14,7 +14,6 @@ const BuyCreditsPage: React.FC = () => {
     const [isProcessingPayment, setIsProcessingPayment] = useState<string | null>(null); // Store package ID being processed
     const [infoModalKey, setInfoModalKey] = useState<'terms' | 'policy' | 'contact' | null>(null);
     const [isCheckInModalOpen, setCheckInModalOpen] = useState(false);
-    const redirectProcessed = useRef(false);
 
     useEffect(() => {
         const fetchPackages = async () => {
@@ -59,30 +58,24 @@ const BuyCreditsPage: React.FC = () => {
         }
     };
     
-    // Check for payment status from URL redirect
+    // Check for payment status from sessionStorage after redirect
     useEffect(() => {
-        if (redirectProcessed.current) {
-            return;
-        }
+        const paymentResultJSON = sessionStorage.getItem('payment_redirect_result');
+        
+        if (paymentResultJSON) {
+            // We have a result, so process it and then remove it to prevent re-processing.
+            sessionStorage.removeItem('payment_redirect_result');
 
-        const urlParams = new URLSearchParams(window.location.search);
-        const status = urlParams.get('status');
-        const orderCode = urlParams.get('orderCode');
+            try {
+                const { status, orderCode } = JSON.parse(paymentResultJSON);
 
-        if (status && orderCode) {
-            redirectProcessed.current = true;
-
-            // CRITICAL FIX: Defer the URL state change until after the current execution stack is clear.
-            // This avoids interfering with React's/Supabase's initial hydration process, which was the
-            // root cause of the session corruption leading to the freeze on reload.
-            setTimeout(() => {
-                window.history.replaceState(null, '', window.location.pathname);
-            }, 0);
-            
-            if (status === 'PAID') {
-                showToast(`Thanh toán thành công! Giao dịch của bạn đang chờ quản trị viên phê duyệt.`, 'success');
-            } else if (status === 'CANCELLED') {
-                showToast(`Bạn đã hủy thanh toán cho đơn hàng #${orderCode}.`, 'error');
+                if (status === 'PAID') {
+                    showToast(`Thanh toán thành công! Giao dịch của bạn đang chờ quản trị viên phê duyệt.`, 'success');
+                } else if (status === 'CANCELLED') {
+                    showToast(`Bạn đã hủy thanh toán cho đơn hàng #${orderCode}.`, 'error');
+                }
+            } catch (e) {
+                console.error("Failed to parse payment redirect result from sessionStorage:", e);
             }
         }
     }, [showToast]);

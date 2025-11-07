@@ -150,7 +150,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     
      // New Effect for periodic XP gain
     useEffect(() => {
-        let xpInterval: NodeJS.Timeout | null = null;
+        // Fix: Use ReturnType<typeof setInterval> for browser compatibility instead of NodeJS.Timeout.
+        let xpInterval: ReturnType<typeof setInterval> | null = null;
         if (session) {
             xpInterval = setInterval(async () => {
                 try {

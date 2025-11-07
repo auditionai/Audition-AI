@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import CreatorHeader from '../components/CreatorHeader';
 import CreatorFooter from '../components/CreatorFooter';
 import { useAuth } from '../contexts/AuthContext';
@@ -14,6 +14,7 @@ const BuyCreditsPage: React.FC = () => {
     const [isProcessingPayment, setIsProcessingPayment] = useState<string | null>(null); // Store package ID being processed
     const [infoModalKey, setInfoModalKey] = useState<'terms' | 'policy' | 'contact' | null>(null);
     const [isCheckInModalOpen, setCheckInModalOpen] = useState(false);
+    const redirectProcessed = useRef(false);
 
     useEffect(() => {
         const fetchPackages = async () => {
@@ -60,19 +61,27 @@ const BuyCreditsPage: React.FC = () => {
     
     // Check for payment status from URL redirect
     useEffect(() => {
+        // Guard to ensure this logic runs only once, preventing loops from re-renders.
+        if (redirectProcessed.current) {
+            return;
+        }
+
         const urlParams = new URLSearchParams(window.location.search);
         const status = urlParams.get('status');
         const orderCode = urlParams.get('orderCode');
 
         if (status && orderCode) {
+            // Mark as processed immediately to prevent re-execution.
+            redirectProcessed.current = true;
+
+            // Clean the URL first to avoid re-triggering on subsequent renders.
+            window.history.replaceState(null, '', window.location.pathname);
+            
             if (status === 'PAID') {
-                // Sửa đổi thông báo để phản ánh việc chờ phê duyệt thủ công
                 showToast(`Thanh toán thành công! Giao dịch của bạn đang chờ quản trị viên phê duyệt.`, 'success');
             } else if (status === 'CANCELLED') {
                 showToast(`Bạn đã hủy thanh toán cho đơn hàng #${orderCode}.`, 'error');
             }
-             // Clean the URL
-            window.history.replaceState(null, '', window.location.pathname);
         }
     }, [showToast]);
 

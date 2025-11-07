@@ -91,6 +91,20 @@ const Footer: React.FC<FooterProps> = ({ onCtaClick, stats, onInfoLinkClick }) =
             </p>
             <p>Nghiêm cấm nội dung vi phạm pháp luật, 18+, bạo lực, xúc phạm. Người dùng chịu trách nhiệm bản quyền với hình ảnh sử dụng.</p>
         </div>
+         <div className="mt-12 flex flex-wrap justify-center items-center gap-4 border-t border-gray-800 pt-8">
+            <a href="https://caulenhau.io.vn/" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-6 py-3 font-bold text-sm bg-white/10 backdrop-blur-sm border border-white/20 text-white rounded-full transition-all duration-300 hover:bg-white/20 hover:shadow-lg hover:shadow-white/10 hover:-translate-y-1">
+                <i className="ph-fill ph-scroll text-lg text-yellow-300"></i>
+                Câu Lệnh AU
+            </a>
+            <a href="https://byvn.net/codycn-prompt" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-6 py-3 font-bold text-sm bg-white/10 backdrop-blur-sm border border-white/20 text-white rounded-full transition-all duration-300 hover:bg-white/20 hover:shadow-lg hover:shadow-white/10 hover:-translate-y-1">
+                <i className="ph-fill ph-robot text-lg text-cyan-300"></i>
+                PROMPT GPT
+            </a>
+            <a href="https://m.me/cm/AbZT2-fW9wJlrX7M/" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-6 py-3 font-bold text-sm bg-white/10 backdrop-blur-sm border border-white/20 text-white rounded-full transition-all duration-300 hover:bg-white/20 hover:shadow-lg hover:shadow-white/10 hover:-translate-y-1">
+                <i className="ph-fill ph-users-three text-lg text-pink-300"></i>
+                Cộng Đồng AU AI
+            </a>
+        </div>
       </div>
     </footer>
   );

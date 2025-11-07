@@ -1,9 +1,17 @@
+import { useEffect } from 'react';
 import HomePage from './pages/HomePage';
 import CreatorPage, { CreatorTab } from './pages/CreatorPage';
 import GalleryPage from './pages/GalleryPage';
 import { useAuth } from './contexts/AuthContext';
 import BuyCreditsPage from './pages/BuyCreditsPage';
 import RewardNotification from './components/common/RewardNotification';
+
+// Make window.appReady globally available for type safety.
+declare global {
+  interface Window {
+    appReady: () => void;
+  }
+}
 
 const AppLoadingScreen = () => (
   <div className="fixed inset-0 bg-[#0B0B0F] flex items-center justify-center z-[9999]">
@@ -19,6 +27,18 @@ const AppLoadingScreen = () => (
 
 function App() {
   const { user, toast, loading, route, reward, clearReward } = useAuth();
+
+  // ** SAFETY FUSE INTEGRATION **
+  // This effect signals to the pre-flight script in index.html that the app has
+  // successfully loaded and the loading screen is about to be removed.
+  // This disarms the "dead man's switch" and prevents an unnecessary reload.
+  useEffect(() => {
+    if (!loading) {
+      if (window.appReady) {
+        window.appReady();
+      }
+    }
+  }, [loading]);
 
   if (loading) {
     return <AppLoadingScreen />;

@@ -283,34 +283,6 @@
       }
 
     </style>
-<script>
-  // ** THE DEFINITIVE FIX: PRE-FLIGHT SANITIZATION **
-  // This script runs BEFORE React, preventing the app from crashing on load
-  // due to corrupted session data in localStorage, which can freeze the browser's JS engine.
-  try {
-    // Supabase stores its session in a key that looks like 'sb-xxxx-auth-token'
-    const supabaseAuthTokenKey = Object.keys(localStorage).find(
-      (key) => key.startsWith('sb-') && key.endsWith('-auth-token')
-    );
-
-    if (supabaseAuthTokenKey) {
-      const sessionData = localStorage.getItem(supabaseAuthTokenKey);
-      if (sessionData) {
-        // The critical step: attempt to parse the session data.
-        // If this fails, the data is malformed, and the catch block will run.
-        JSON.parse(sessionData);
-      }
-    }
-  } catch (error) {
-    // If parsing fails, the data is corrupted. We must take decisive action.
-    // This mimics the user's manual "clear cache" action and is the most robust fix.
-    console.error(
-      '!!! CRITICAL: Corrupted session data detected. Clearing localStorage to prevent app freeze.'
-    );
-    // WIPE THE SLATE CLEAN.
-    localStorage.clear();
-  }
-</script>
 <script type="importmap">
 {
   "imports": {
@@ -331,6 +303,40 @@
 </script>
 </head>
   <body>
+    <script>
+      // ** THE DEFINITIVE FIX V2: SAFETY FUSE SYSTEM **
+      // This system runs before React and acts as a dead man's switch.
+      // If the app freezes during init, it will automatically clear the cache and reload.
+      
+      // Layer 1: Immediate sanitization check.
+      try {
+        const key = Object.keys(localStorage).find(k => k.startsWith('sb-') && k.endsWith('-auth-token'));
+        if (key) {
+          const data = localStorage.getItem(key);
+          if (data) JSON.parse(data); // Will throw on malformed JSON
+        }
+      } catch (error) {
+        console.error('IMMEDIATE ACTION: Corrupted session JSON detected. Clearing localStorage to prevent app freeze.');
+        localStorage.clear();
+      }
+
+      // Layer 2: The "Dead Man's Switch" Timeout.
+      // This catches freezes caused by valid JSON that the Supabase client cannot handle.
+      const freezeTimeout = 8000; // 8 seconds
+      const freezeDetector = setTimeout(() => {
+        // This code only runs if window.appReady() is NEVER called.
+        console.error('FATAL: Application did not signal readiness. Potential freeze detected.');
+        alert('Ứng dụng gặp sự cố khi tải. Đang tự động làm mới để khắc phục...');
+        localStorage.clear();
+        window.location.reload();
+      }, freezeTimeout);
+
+      // The React app MUST call this function once it has successfully loaded.
+      window.appReady = () => {
+        clearTimeout(freezeDetector);
+        console.log('App is ready. Freeze detector disarmed.');
+      };
+    </script>
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
   </body>

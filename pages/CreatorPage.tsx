@@ -9,6 +9,7 @@ import InfoModal from '../components/InfoModal';
 import BottomNavBar from '../components/common/BottomNavBar';
 import CheckInModal from '../components/CheckInModal'; // Import the new modal
 import MyCreationsPage from './MyCreationsPage'; // Import the new page
+import AnnouncementModal from '../components/AnnouncementModal';
 
 export type CreatorTab = 'tool' | 'leaderboard' | 'settings' | 'my-creations';
 
@@ -17,7 +18,7 @@ interface CreatorPageProps {
 }
 
 const CreatorPage: React.FC<CreatorPageProps> = ({ activeTab }) => {
-    const { navigate } = useAuth();
+    const { navigate, announcement, showAnnouncementModal, markAnnouncementAsRead } = useAuth();
     const [infoModalKey, setInfoModalKey] = useState<'terms' | 'policy' | 'contact' | null>(null);
     const [isCheckInModalOpen, setCheckInModalOpen] = useState(false); // State for the new modal
 
@@ -67,6 +68,12 @@ const CreatorPage: React.FC<CreatorPageProps> = ({ activeTab }) => {
             <CheckInModal 
                 isOpen={isCheckInModalOpen}
                 onClose={() => setCheckInModalOpen(false)}
+            />
+
+            <AnnouncementModal
+                isOpen={showAnnouncementModal}
+                onClose={markAnnouncementAsRead}
+                announcement={announcement}
             />
 
             <InfoModal

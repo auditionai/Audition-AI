@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { ApiKey, AdminManagedUser, CreditPackage, AdminTransaction, TransactionLogEntry } from '../types';
+import { ApiKey, AdminManagedUser, CreditPackage, AdminTransaction, TransactionLogEntry, Announcement } from '../types';
 import { getRankForLevel } from '../utils/rankUtils';
 import XPProgressBar from './common/XPProgressBar';
 import Modal from './common/Modal';
@@ -167,6 +167,12 @@ const Settings: React.FC = () => {
     const [isTransactionsLoading, setIsTransactionsLoading] = useState(false);
     const [processingTransactionId, setProcessingTransactionId] = useState<string | null>(null);
 
+    // Announcement state
+    const [announcement, setAnnouncement] = useState<Announcement | null>(null);
+    const [isAnnouncementLoading, setIsAnnouncementLoading] = useState(false);
+    const [isSavingAnnouncement, setIsSavingAnnouncement] = useState(false);
+
+
     const rank = user ? getRankForLevel(user.level) : null;
     
     const fetchAdminData = useCallback(async () => {
@@ -176,6 +182,7 @@ const Settings: React.FC = () => {
             cache: 'no-cache' as RequestCache
         };
 
+        // All existing admin fetches...
         setIsKeysLoading(true);
         try {
              const response = await fetch('/.netlify/functions/api-keys', fetchOptions);
@@ -207,6 +214,16 @@ const Settings: React.FC = () => {
             setPendingTransactions(await res.json());
         } catch (error: any) { showToast(error.message, 'error'); }
         finally { setIsTransactionsLoading(false); }
+
+        // New fetch for announcement
+        setIsAnnouncementLoading(true);
+        try {
+            const res = await fetch('/.netlify/functions/announcements', fetchOptions); // Admin GET
+            if (!res.ok) throw new Error('Không thể tải thông báo.');
+            setAnnouncement(await res.json());
+        } catch (error: any) { showToast(error.message, 'error'); }
+        finally { setIsAnnouncementLoading(false); }
+
 
     }, [session, showToast, user?.is_admin]);
     
@@ -398,6 +415,24 @@ const Settings: React.FC = () => {
             setProcessingTransactionId(null);
         }
     };
+
+    const handleSaveAnnouncement = async () => {
+        if (!announcement) return;
+        setIsSavingAnnouncement(true);
+        try {
+            const res = await fetch('/.netlify/functions/announcements', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+                body: JSON.stringify(announcement),
+            });
+            if (!res.ok) throw new Error('Không thể lưu thông báo.');
+            showToast('Đã lưu thông báo thành công!', 'success');
+        } catch (e: any) {
+            showToast(e.message, 'error');
+        } finally {
+            setIsSavingAnnouncement(false);
+        }
+    };
     
     // FIX: Add a dedicated handler for the logout button to improve reliability.
     // This prevents the default browser action and ensures the logout function is called.
@@ -516,7 +551,30 @@ const Settings: React.FC = () => {
 
             {user.is_admin && (
                  <div className="space-y-8 mt-8 pt-8 border-t-2 border-dashed border-yellow-500/20">
-                     <div className="bg-[#12121A]/80 border border-blue-500/20 rounded-2xl shadow-lg p-6">
+                     <div className="bg-[#12121A]/80 border border-orange-500/20 rounded-2xl shadow-lg p-6">
+                        <h3 className="text-2xl font-bold mb-4 text-orange-400 flex items-center gap-2"><i className="ph-fill ph-megaphone"></i>Admin: Quản lý Thông báo</h3>
+                        {isAnnouncementLoading ? <p>Đang tải thông báo...</p> : announcement ? (
+                            <div className="space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <label className="text-sm font-medium text-gray-300">Kích hoạt thông báo</label>
+                                    <input type="checkbox" checked={announcement.is_active} onChange={(e) => setAnnouncement({...announcement, is_active: e.target.checked})} className="w-5 h-5 rounded text-pink-500 bg-gray-700 border-gray-600 focus:ring-pink-600" />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-400 mb-1">Tiêu đề</label>
+                                    <input type="text" value={announcement.title} onChange={(e) => setAnnouncement({...announcement, title: e.target.value})} className="auth-input" />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-400 mb-1">Nội dung</label>
+                                    <textarea value={announcement.content} onChange={(e) => setAnnouncement({...announcement, content: e.target.value})} rows={5} className="auth-input resize-y" />
+                                </div>
+                                <button onClick={handleSaveAnnouncement} disabled={isSavingAnnouncement} className="w-full py-2 font-bold text-white bg-gradient-to-r from-orange-500 to-amber-600 rounded-lg hover:opacity-90 transition disabled:opacity-50">
+                                    {isSavingAnnouncement ? 'Đang lưu...' : 'Lưu Thông Báo'}
+                                </button>
+                            </div>
+                        ) : <p className="text-gray-500 text-center">Không tìm thấy thông báo nào.</p>}
+                    </div>
+                    
+                    <div className="bg-[#12121A]/80 border border-blue-500/20 rounded-2xl shadow-lg p-6">
                         <h3 className="text-2xl font-bold mb-4 text-blue-400 flex items-center gap-2"><i className="ph-fill ph-check-square-offset"></i>Admin: Phê Duyệt Giao Dịch</h3>
                         {isTransactionsLoading ? <p>Đang tải giao dịch...</p> : (
                             <div className="max-h-96 overflow-y-auto custom-scrollbar pr-2">

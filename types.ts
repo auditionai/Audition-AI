@@ -43,6 +43,7 @@ export interface User {
     is_admin?: boolean; // snake_case
     last_check_in_at?: string;
     consecutive_check_in_days?: number;
+    last_announcement_seen_id?: number | null;
 }
 
 export interface AdminManagedUser extends User {
@@ -161,5 +162,14 @@ export interface TransactionLogEntry {
     amount: number; // Can be positive or negative
     transaction_type: string;
     description: string;
+    created_at: string;
+}
+
+// For global announcements
+export interface Announcement {
+    id: number;
+    title: string;
+    content: string;
+    is_active: boolean;
     created_at: string;
 }

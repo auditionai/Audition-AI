@@ -1,8 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode, useMemo, useRef } from 'react';
 import { getSupabaseClient } from '../utils/supabaseClient';
 import type { Session, User as SupabaseUser, SupabaseClient } from '@supabase/supabase-js';
-import { User, Stats } from '../types';
+import { User, Stats, Announcement } from '../types';
 import { calculateLevelFromXp } from '../utils/rankUtils';
+import { soundManager } from '../utils/soundManager';
 
 const getVNDateString = (date: Date) => {
     // UTC+7
@@ -28,6 +29,8 @@ interface AuthContextType {
     route: string;
     reward: { diamonds: number; xp: number } | null;
     hasCheckedInToday: boolean;
+    announcement: Announcement | null;
+    showAnnouncementModal: boolean;
     login: () => Promise<void>;
     logout: () => Promise<void>;
     updateUserDiamonds: (newAmount: number) => void;
@@ -35,6 +38,7 @@ interface AuthContextType {
     showToast: (message: string, type: 'success' | 'error') => void;
     navigate: (path: string) => void;
     clearReward: () => void;
+    markAnnouncementAsRead: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -48,12 +52,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const [stats] = useState<Stats>({ users: 1250, visits: 8700, images: 25000 });
     const [route, setRoute] = useState(() => getRouteFromPath(window.location.pathname));
     const [reward, setReward] = useState<{ diamonds: number; xp: number } | null>(null);
+    const [announcement, setAnnouncement] = useState<Announcement | null>(null);
+    const [showAnnouncementModal, setShowAnnouncementModal] = useState(false);
 
     const previousUserRef = useRef<User | null>(null);
     const initStarted = useRef(false);
 
     const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
         setToast({ message, type });
+        if (type === 'success') {
+            soundManager.play('success');
+        } else {
+            soundManager.play('error');
+        }
         setTimeout(() => {
             setToast(null);
         }, 4000); 
@@ -95,7 +106,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         try {
             const { data, error } = await supabaseClient
                 .from('users')
-                .select('id, display_name, email, photo_url, diamonds, xp, is_admin, last_check_in_at, consecutive_check_in_days')
+                .select('id, display_name, email, photo_url, diamonds, xp, is_admin, last_check_in_at, consecutive_check_in_days, last_announcement_seen_id')
                 .eq('id', supabaseUser.id)
                 .single();
             if (error && error.code !== 'PGRST116') throw error;
@@ -188,6 +199,52 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    // Effect to check for new announcements when user logs in or data changes
+    useEffect(() => {
+        const checkAnnouncement = async () => {
+            if (user && session) {
+                try {
+                    const res = await fetch('/.netlify/functions/announcements');
+                    if (res.ok) {
+                        const activeAnnouncement: Announcement = await res.json();
+                        if (activeAnnouncement && activeAnnouncement.id !== user.last_announcement_seen_id) {
+                            setAnnouncement(activeAnnouncement);
+                            setShowAnnouncementModal(true);
+                        }
+                    }
+                } catch (e) {
+                    console.error("Failed to fetch announcement:", e);
+                }
+            }
+        };
+        checkAnnouncement();
+    }, [user, session]);
+
+
+    const markAnnouncementAsRead = useCallback(async () => {
+        if (!announcement || !session) return;
+        
+        setShowAnnouncementModal(false); // Close modal immediately for better UX
+        
+        // Update local state optimistically
+        updateUserProfile({ last_announcement_seen_id: announcement.id });
+        
+        try {
+            await fetch('/.netlify/functions/mark-announcement-read', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${session.access_token}`
+                },
+                body: JSON.stringify({ announcementId: announcement.id }),
+            });
+        } catch (e) {
+            console.error("Failed to mark announcement as read:", e);
+            // Optionally, revert the optimistic update on failure, though it's low-risk
+        }
+    }, [announcement, session, updateUserProfile]);
+
+
     useEffect(() => {
         previousUserRef.current = user;
     }, [user]);
@@ -252,10 +309,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const value = useMemo(() => ({
         session, user, loading, stats, toast, route, hasCheckedInToday, reward,
+        announcement, showAnnouncementModal,
         login, logout, updateUserDiamonds, updateUserProfile, showToast, navigate, clearReward,
+        markAnnouncementAsRead,
     }), [
         session, user, loading, stats, toast, route, hasCheckedInToday, reward,
-        login, logout, updateUserDiamonds, updateUserProfile, showToast, navigate, clearReward
+        announcement, showAnnouncementModal,
+        login, logout, updateUserDiamonds, updateUserProfile, showToast, navigate, clearReward,
+        markAnnouncementAsRead
     ]);
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

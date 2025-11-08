@@ -6,7 +6,8 @@ interface SettingsBlockProps {
     title: string;
     instructionKey: InstructionKey;
     children: React.ReactNode;
-    step: number; // Keep prop for mapping, but don't display
+    // Fix: Made the 'step' prop optional as it is not used by the component, resolving multiple type errors in AiGeneratorTool.tsx.
+    step?: number; // Keep prop for mapping, but don't display
     onInstructionClick: (key: InstructionKey) => void;
 }
 

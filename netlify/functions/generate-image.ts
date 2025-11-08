@@ -8,7 +8,6 @@ const COST_PER_GENERATION = 1;
 const XP_PER_GENERATION = 10;
 
 const handler: Handler = async (event: HandlerEvent) => {
-    // Moved S3Client initialization inside the handler
     const s3Client = new S3Client({
         region: "auto",
         endpoint: process.env.R2_ENDPOINT!,
@@ -23,7 +22,6 @@ const handler: Handler = async (event: HandlerEvent) => {
             return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
         }
         
-        // 1. Authenticate user
         const authHeader = event.headers['authorization'];
         if (!authHeader) return { statusCode: 401, body: JSON.stringify({ error: 'Authorization header is required.' }) };
         const token = authHeader.split(' ')[1];
@@ -32,16 +30,13 @@ const handler: Handler = async (event: HandlerEvent) => {
         const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
         if (authError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized: Invalid token.' }) };
 
-        // 2. Parse and validate request body
-        const { prompt, apiModel, characterImage } = JSON.parse(event.body || '{}');
+        const { prompt, apiModel, characterImage, faceReferenceImage } = JSON.parse(event.body || '{}');
         if (!prompt || !apiModel) return { statusCode: 400, body: JSON.stringify({ error: 'Prompt and apiModel are required.' }) };
         
-        // 3. Check user balance
         const { data: userData, error: userError } = await supabaseAdmin.from('users').select('diamonds, xp').eq('id', user.id).single();
         if (userError || !userData) return { statusCode: 404, body: JSON.stringify({ error: 'User not found.' }) };
         if (userData.diamonds < COST_PER_GENERATION) return { statusCode: 402, body: JSON.stringify({ error: 'Không đủ kim cương.' }) };
         
-        // 4. Get an active API key
         const { data: apiKeyData, error: apiKeyError } = await supabaseAdmin.from('api_keys').select('id, key_value').eq('status', 'active').order('usage_count', { ascending: true }).limit(1).single();
         if (apiKeyError || !apiKeyData) return { statusCode: 503, body: JSON.stringify({ error: 'Hết tài nguyên AI. Vui lòng thử lại sau.' }) };
         
@@ -50,7 +45,6 @@ const handler: Handler = async (event: HandlerEvent) => {
         let finalImageBase64: string;
         let finalImageMimeType: string;
 
-        // 5. Call Google AI API based on model type
         if (apiModel.startsWith('imagen')) {
             const response = await ai.models.generateImages({
                 model: apiModel,
@@ -60,12 +54,25 @@ const handler: Handler = async (event: HandlerEvent) => {
             finalImageBase64 = response.generatedImages[0].image.imageBytes;
             finalImageMimeType = 'image/png';
         } else { // Assuming gemini-flash-image
-            const parts: any[] = [{ text: prompt }];
+            const parts: any[] = [];
+            
+            // Add main character/pose image if provided
             if (characterImage) {
                 const [header, base64] = characterImage.split(',');
                 const mimeType = header.match(/:(.*?);/)[1];
-                parts.unshift({ inlineData: { data: base64, mimeType } });
+                parts.push({ inlineData: { data: base64, mimeType } });
             }
+
+            // Add dedicated face reference image if provided
+            if (faceReferenceImage) {
+                const [header, base64] = faceReferenceImage.split(',');
+                const mimeType = header.match(/:(.*?);/)[1];
+                // Add it as another part for the model to reference
+                parts.push({ inlineData: { data: base64, mimeType } });
+            }
+            
+            // Always add the text prompt
+            parts.push({ text: prompt });
             
             const response = await ai.models.generateContent({
                 model: apiModel,
@@ -80,7 +87,6 @@ const handler: Handler = async (event: HandlerEvent) => {
             finalImageMimeType = imagePartResponse.inlineData.mimeType.includes('png') ? 'image/png' : 'image/jpeg';
         }
 
-        // 6. Upload generated image to R2
         const imageBuffer = Buffer.from(finalImageBase64, 'base64');
         const fileExtension = finalImageMimeType.split('/')[1] || 'png';
         const fileName = `${user.id}/${Date.now()}.${fileExtension}`;
@@ -94,7 +100,6 @@ const handler: Handler = async (event: HandlerEvent) => {
         await (s3Client as any).send(putCommand);
         const publicUrl = `${process.env.R2_PUBLIC_URL}/${fileName}`;
 
-        // 7. Update user profile and log transaction in parallel
         const newDiamondCount = userData.diamonds - COST_PER_GENERATION;
         const newXp = userData.xp + XP_PER_GENERATION;
         
@@ -115,7 +120,6 @@ const handler: Handler = async (event: HandlerEvent) => {
             })
         ]);
 
-        // 8. Return response
         return {
             statusCode: 200,
             body: JSON.stringify({ imageUrl: publicUrl, newDiamondCount, newXp }),

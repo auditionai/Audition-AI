@@ -35,22 +35,19 @@ const ImageModal: React.FC<ImageModalProps> = ({ isOpen, onClose, image, showInf
       onClick={onClose}
     >
       <div 
-        className="relative w-full max-w-4xl max-h-[90vh] flex flex-col"
+        className="relative w-full max-w-6xl max-h-[95vh] flex flex-col items-center"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Main Content: Image and/or Info Panel */}
-        <div className="flex flex-col lg:flex-row gap-4 overflow-y-auto custom-scrollbar">
-            {/* Image Display */}
+        <div className="w-full h-full flex flex-col lg:flex-row gap-4">
             <div className="relative flex-grow flex items-center justify-center bg-black/50 rounded-lg overflow-hidden min-h-[300px]">
                 <img 
                     src={image.image_url} 
                     alt={image.title || 'Gallery Image'}
-                    className="max-w-full max-h-[90vh] object-contain animate-fade-in-up"
+                    className="max-w-full max-h-[95vh] object-contain animate-fade-in-up"
                     style={{ animationDelay: '100ms'}}
                 />
             </div>
-
-            {/* Info Panel */}
+            
             {showInfoPanel && (
                 <div 
                     className="w-full lg:w-80 flex-shrink-0 bg-[#12121A]/80 border border-pink-500/20 rounded-lg p-4 flex flex-col text-white animate-fade-in-up"
@@ -96,10 +93,9 @@ const ImageModal: React.FC<ImageModalProps> = ({ isOpen, onClose, image, showInf
             )}
         </div>
 
-        {/* Action Bar for "My Creations" view */}
-        {!showInfoPanel && (
+        {onShare && (
             <div className="w-full mt-4 flex items-center justify-center gap-4 animate-fade-in">
-                {onShare && !image.is_public && (
+                {!image.is_public && (
                     <button
                         onClick={(e) => {
                             e.stopPropagation();
@@ -124,7 +120,7 @@ const ImageModal: React.FC<ImageModalProps> = ({ isOpen, onClose, image, showInf
         )}
 
       </div>
-       <button onClick={onClose} className="absolute top-4 right-4 text-white text-3xl hover:text-pink-400 transition-colors z-10">
+       <button onClick={onClose} className="absolute top-4 right-4 text-white text-3xl hover:text-pink-400 transition-colors z-[60]">
             <i className="ph-fill ph-x-circle"></i>
         </button>
     </div>

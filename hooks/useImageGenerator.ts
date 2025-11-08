@@ -18,7 +18,7 @@ export const useImageGenerator = () => {
     const abortControllerRef = useRef<AbortController | null>(null);
 
     const generateImage = async (
-        prompt: string, model: AIModel, characterImageFile: File | null,
+        prompt: string, model: AIModel, poseImageFile: File | null,
         styleImageFile: File | null, faceImageFile: File | null,
         aspectRatio: string, negativePrompt: string,
         faceIdStrength: number, styleStrength: number
@@ -32,12 +32,13 @@ export const useImageGenerator = () => {
         let progressInterval: NodeJS.Timeout | null = null;
 
         try {
+            // Simulate initial steps a bit faster
             progressInterval = setInterval(() => {
                 setProgress(prev => (prev < 8 ? prev + 1 : prev));
-            }, 1500);
+            }, 1800);
 
-            const [characterImage, styleImage, faceImage] = await Promise.all([
-                characterImageFile ? fileToBase64(characterImageFile) : Promise.resolve(null),
+            const [poseImage, styleImage, faceImage] = await Promise.all([
+                poseImageFile ? fileToBase64(poseImageFile) : Promise.resolve(null),
                 styleImageFile ? fileToBase64(styleImageFile) : Promise.resolve(null),
                 faceImageFile ? fileToBase64(faceImageFile) : Promise.resolve(null)
             ]);
@@ -50,7 +51,9 @@ export const useImageGenerator = () => {
                 },
                 body: JSON.stringify({
                     prompt, modelId: model.id, apiModel: model.apiModel,
-                    characterImage, styleImage, faceImage,
+                    characterImage: poseImage, // The backend expects 'characterImage'
+                    styleImage, 
+                    faceReferenceImage: faceImage, // Send the new face image
                     aspectRatio, negativePrompt,
                     faceIdStrength, styleStrength,
                 }),
@@ -75,7 +78,7 @@ export const useImageGenerator = () => {
         } catch (err: any) {
             if (err.name === 'AbortError') {
                 console.log('Generation cancelled by user.');
-                resetGenerator(); // Reset state silently
+                resetGenerator();
                 return;
             }
             setError(err.message || 'Đã xảy ra lỗi trong quá trình tạo ảnh.');

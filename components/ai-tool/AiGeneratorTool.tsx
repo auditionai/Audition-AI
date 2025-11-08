@@ -6,8 +6,6 @@ import { AIModel } from '../../types';
 
 import SettingsBlock from './SettingsBlock';
 import ImageUploader from './ImageUploader';
-// import ToggleSwitch from './ToggleSwitch'; // REMOVED: Unused import causing build error
-import AspectRatioButton from './AspectRatioButton';
 import ModelSelectionModal from './ModelSelectionModal';
 import InstructionModal from './InstructionModal';
 import GenerationProgress from './GenerationProgress';
@@ -19,51 +17,43 @@ interface AiGeneratorToolProps {
 
 const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage }) => {
     const { user } = useAuth();
-    const { isGenerating, progress, generatedImage, error, generateImage, resetGenerator } = useImageGenerator();
+    const { isGenerating, progress, generatedImage, error, generateImage, resetGenerator, cancelGeneration } = useImageGenerator();
 
-    // UI State
     const [isModelModalOpen, setModelModalOpen] = useState(false);
     const [isInstructionModalOpen, setInstructionModalOpen] = useState(false);
     const [instructionKey, setInstructionKey] = useState<'character' | 'style' | 'prompt' | 'advanced' | 'face' | null>(null);
     const [isConfirmOpen, setConfirmOpen] = useState(false);
     
-    // Generation Settings
     const [characterImage, setCharacterImage] = useState<{ url: string; file: File } | null>(null);
     const [styleImage, setStyleImage] = useState<{ url: string; file: File } | null>(null);
-    const [faceImage, setFaceImage] = useState<{ url: string; file: File } | null>(null);
     const [prompt, setPrompt] = useState('');
     const [negativePrompt, setNegativePrompt] = useState('');
     const [selectedModel, setSelectedModel] = useState<AIModel>(DETAILED_AI_MODELS.find(m => m.recommended) || DETAILED_AI_MODELS[0]);
     const [selectedStyle, setSelectedStyle] = useState('none');
     const [aspectRatio, setAspectRatio] = useState('3:4');
     
-    // Advanced Settings
-    // FIX: Removed unused state setters to resolve TS6133 build error.
     const [isFaceIdEnabled] = useState(true);
     const [faceIdStrength] = useState(80);
     const [isStyleRefEnabled] = useState(true);
     const [styleStrength] = useState(60);
 
-    // Effect to handle image moved from BgRemoverTool
     useEffect(() => {
         if (initialCharacterImage) {
             setCharacterImage(initialCharacterImage);
         }
     }, [initialCharacterImage]);
     
-    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'character' | 'style' | 'face') => {
+    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'character' | 'style') => {
         const file = e.target.files?.[0];
         if (file) {
             const newImage = { url: URL.createObjectURL(file), file };
             if (type === 'character') setCharacterImage(newImage);
             else if (type === 'style') setStyleImage(newImage);
-            else if (type === 'face') setFaceImage(newImage);
         }
     };
 
     const handleGenerateClick = () => {
         if (!prompt.trim()) {
-            // Simple validation, can be expanded
             alert('Vui lòng nhập mô tả (prompt).');
             return;
         }
@@ -73,15 +63,12 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
     const handleConfirmGeneration = () => {
         setConfirmOpen(false);
         generateImage(
-            prompt,
-            selectedModel,
+            prompt, selectedModel,
             isFaceIdEnabled ? characterImage?.file ?? null : null,
             isStyleRefEnabled ? styleImage?.file ?? null : null,
-            faceImage?.file ?? null,
-            aspectRatio,
-            negativePrompt,
-            faceIdStrength / 100,
-            styleStrength / 100
+            null, // faceImageFile removed in previous refactor
+            aspectRatio, negativePrompt,
+            faceIdStrength / 100, styleStrength / 100
         );
     };
     
@@ -92,16 +79,15 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
 
     const isImageInputDisabled = !selectedModel.supportedModes.includes('image-to-image');
 
-    // Main content rendering
     if (isGenerating || generatedImage) {
         return (
             <div className="bg-black/30 p-4 rounded-lg flex flex-col items-center justify-center min-h-[70vh]">
                 {isGenerating ? (
-                    <GenerationProgress currentStep={progress} />
+                    <GenerationProgress currentStep={progress} onCancel={cancelGeneration} />
                 ) : (
                     <div className="text-center animate-fade-in w-full">
                         <h3 className="text-2xl font-bold mb-4 bg-gradient-to-r from-green-400 to-cyan-400 text-transparent bg-clip-text">Tạo ảnh thành công!</h3>
-                        <div className="max-w-md mx-auto aspect-[3/4] bg-black/20 rounded-lg overflow-hidden">
+                        <div className="max-w-md mx-auto aspect-[3/4] bg-black/20 rounded-lg overflow-hidden border-2 border-pink-500/30">
                             {generatedImage && <img src={generatedImage} alt="Generated result" className="w-full h-full object-contain" />}
                         </div>
                         <div className="flex gap-4 mt-6 justify-center">
@@ -125,51 +111,66 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
             <ModelSelectionModal isOpen={isModelModalOpen} onClose={() => setModelModalOpen(false)} selectedModelId={selectedModel.id} onSelectModel={(id) => setSelectedModel(DETAILED_AI_MODELS.find(m => m.id === id) || selectedModel)} characterImage={!!characterImage} />
             <InstructionModal isOpen={isInstructionModalOpen} onClose={() => setInstructionModalOpen(false)} instructionKey={instructionKey} />
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {/* Left Column: Image Inputs */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <SettingsBlock title="Ảnh Nhân Vật" instructionKey="character" step={1} onInstructionClick={openInstructionModal}>
-                        <ImageUploader onUpload={(e) => handleImageUpload(e, 'character')} image={characterImage} onRemove={() => setCharacterImage(null)} text="Tải ảnh gốc" disabled={isImageInputDisabled || !isFaceIdEnabled} />
-                    </SettingsBlock>
-                    <SettingsBlock title="Ảnh Phong Cách" instructionKey="style" step={2} onInstructionClick={openInstructionModal}>
-                        <ImageUploader onUpload={(e) => handleImageUpload(e, 'style')} image={styleImage} onRemove={() => setStyleImage(null)} text="Tải ảnh mẫu" processType="style" disabled={isImageInputDisabled || !isStyleRefEnabled} />
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Main Content Area (Left) */}
+                <div className="lg:col-span-2 space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <SettingsBlock title="1. Ảnh Nhân Vật" instructionKey="character" onInstructionClick={() => openInstructionModal('character')} step={1}>
+                            <ImageUploader onUpload={(e) => handleImageUpload(e, 'character')} image={characterImage} onRemove={() => setCharacterImage(null)} text="Tải ảnh gốc" disabled={isImageInputDisabled || !isFaceIdEnabled} />
+                        </SettingsBlock>
+                        <SettingsBlock title="2. Ảnh Phong Cách (Tùy chọn)" instructionKey="style" onInstructionClick={() => openInstructionModal('style')} step={2}>
+                            <ImageUploader onUpload={(e) => handleImageUpload(e, 'style')} image={styleImage} onRemove={() => setStyleImage(null)} text="Tải ảnh mẫu" processType="style" disabled={isImageInputDisabled || !isStyleRefEnabled} />
+                        </SettingsBlock>
+                    </div>
+                    
+                    <SettingsBlock title="3. Câu Lệnh Mô Tả (Prompt)" instructionKey="prompt" onInstructionClick={() => openInstructionModal('prompt')} step={3}>
+                        <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Mô tả chi tiết hình ảnh bạn muốn tạo, ví dụ: 'một cô gái tóc hồng, mặc váy công chúa, đang khiêu vũ trong một cung điện lộng lẫy'..." className="w-full p-3 bg-black/30 rounded-md border border-gray-600 focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition text-base text-white flex-grow resize-none min-h-[150px]" />
                     </SettingsBlock>
                 </div>
-                
-                {/* Right Column: Settings */}
-                <div className="space-y-4">
-                    <SettingsBlock title="Câu Lệnh Mô Tả" instructionKey="prompt" step={3} onInstructionClick={openInstructionModal}>
-                        <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Mô tả chi tiết hình ảnh bạn muốn tạo..." className="w-full h-28 p-2 bg-black/30 rounded-md border border-gray-600 focus:border-pink-500 focus:ring-pink-500 transition text-sm text-white flex-grow resize-none" />
-                    </SettingsBlock>
-                    <SettingsBlock title="Cài đặt Nâng cao" instructionKey="advanced" step={4} onInstructionClick={openInstructionModal}>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <button onClick={() => setModelModalOpen(true)} className="p-2 bg-black/30 rounded-md border border-gray-600 hover:border-pink-500 text-left w-full transition">
-                                <span className="text-xs text-gray-400">Mô hình AI</span>
-                                <p className="font-semibold text-white truncate">{selectedModel.name}</p>
-                            </button>
-                             <select value={selectedStyle} onChange={(e) => setSelectedStyle(e.target.value)} className="p-2 bg-black/30 rounded-md border border-gray-600 hover:border-pink-500 text-left w-full transition appearance-none auth-input">
-                                <option value="none" disabled>Chọn phong cách...</option>
-                                {STYLE_PRESETS_NEW.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                            </select>
+
+                {/* Sidebar (Right) */}
+                <div className="lg:col-span-1 bg-[#1a1a22]/80 p-4 rounded-xl border border-white/10 flex flex-col h-full">
+                    <SettingsBlock title="4. Cài đặt Nâng cao" instructionKey="advanced" onInstructionClick={() => openInstructionModal('advanced')} step={4}>
+                        <div className="space-y-3">
+                            <div>
+                                <label className="text-xs text-gray-400">Mô hình AI</label>
+                                <button onClick={() => setModelModalOpen(true)} className="p-2 bg-black/30 rounded-md border border-gray-600 hover:border-pink-500 text-left w-full transition">
+                                    <p className="font-semibold text-white truncate">{selectedModel.name}</p>
+                                </button>
+                            </div>
+                            <div>
+                                <label className="text-xs text-gray-400">Phong cách</label>
+                                <select value={selectedStyle} onChange={(e) => setSelectedStyle(e.target.value)} className="p-2 bg-black/30 rounded-md border border-gray-600 hover:border-pink-500 text-left w-full transition appearance-none auth-input text-white">
+                                    {STYLE_PRESETS_NEW.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                </select>
+                            </div>
+                             <div>
+                                <label className="text-xs text-gray-400">Prompt Phủ định</label>
+                                <textarea value={negativePrompt} onChange={(e) => setNegativePrompt(e.target.value)} placeholder="VD: xấu, mờ, nhiều tay..." className="w-full mt-1 p-2 bg-black/30 rounded-md border border-gray-600 focus:border-pink-500 transition text-sm text-white resize-none" rows={2} />
+                            </div>
+                             <div>
+                                <label className="text-xs text-gray-400 mb-2 block">Tỷ lệ khung hình</label>
+                                <div className="grid grid-cols-3 gap-2">
+                                    <button onClick={() => setAspectRatio('3:4')} className={`p-2 rounded-md flex flex-col items-center justify-center gap-1 border-2 transition ${aspectRatio === '3:4' ? 'border-pink-500 bg-pink-500/10 text-pink-300' : 'border-gray-600 bg-white/5 hover:bg-white/10 text-gray-300'}`}> <div className="w-4 h-5 bg-gray-500 rounded-sm"/> <span className="text-xs font-semibold">3:4</span> </button>
+                                    <button onClick={() => setAspectRatio('1:1')} className={`p-2 rounded-md flex flex-col items-center justify-center gap-1 border-2 transition ${aspectRatio === '1:1' ? 'border-pink-500 bg-pink-500/10 text-pink-300' : 'border-gray-600 bg-white/5 hover:bg-white/10 text-gray-300'}`}> <div className="w-4 h-4 bg-gray-500 rounded-sm"/> <span className="text-xs font-semibold">1:1</span> </button>
+                                    <button onClick={() => setAspectRatio('4:3')} className={`p-2 rounded-md flex flex-col items-center justify-center gap-1 border-2 transition ${aspectRatio === '4:3' ? 'border-pink-500 bg-pink-500/10 text-pink-300' : 'border-gray-600 bg-white/5 hover:bg-white/10 text-gray-300'}`}> <div className="w-5 h-4 bg-gray-500 rounded-sm"/> <span className="text-xs font-semibold">4:3</span> </button>
+                                </div>
+                            </div>
                         </div>
-                        <textarea value={negativePrompt} onChange={(e) => setNegativePrompt(e.target.value)} placeholder="Prompt phủ định (không muốn thấy)..." className="w-full mt-2 p-2 bg-black/30 rounded-md border border-gray-600 focus:border-pink-500 focus:ring-pink-500 transition text-sm text-white resize-none" rows={2} />
-                        <div className="mt-2 grid grid-cols-3 gap-2">
-                            <AspectRatioButton value="3:4" icon={<div className="w-4 h-5 bg-gray-500 rounded-sm"/>} currentValue={aspectRatio} onClick={setAspectRatio} />
-                            <AspectRatioButton value="1:1" icon={<div className="w-4 h-4 bg-gray-500 rounded-sm"/>} currentValue={aspectRatio} onClick={setAspectRatio} />
-                            <AspectRatioButton value="4:3" icon={<div className="w-5 h-4 bg-gray-500 rounded-sm"/>} currentValue={aspectRatio} onClick={setAspectRatio} />
-                        </div>
                     </SettingsBlock>
+                    
+                    {/* Cost and Action Button */}
+                    <div className="mt-auto pt-6 space-y-4">
+                        <div className="text-center text-sm p-3 bg-black/20 rounded-lg">
+                            <p className="text-gray-400">Chi phí: <span className="font-bold text-pink-400 flex items-center justify-center gap-1">1 <i className="ph-fill ph-diamonds-four"></i></span></p>
+                            <p className="text-gray-400">Hiện có: <span className="font-bold text-white">{user?.diamonds.toLocaleString() || 0} 💎</span></p>
+                        </div>
+                        <button onClick={handleGenerateClick} disabled={isGenerating || !prompt.trim()} className="w-full px-8 py-4 font-bold text-lg text-white bg-gradient-to-r from-[#F72585] to-[#CA27FF] rounded-full transition-all duration-300 shadow-xl shadow-[#F72585]/30 hover:shadow-2xl hover:shadow-[#F72585]/40 hover:-translate-y-1.5 hover:scale-105 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                            <i className="ph-fill ph-magic-wand"></i>
+                            Bắt đầu sáng tạo
+                        </button>
+                    </div>
                 </div>
-            </div>
-            {/* Action Bar */}
-            <div className="mt-6 p-4 bg-black/30 rounded-b-xl border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4">
-                <div className="text-sm text-gray-400">
-                    Chi phí: <span className="font-bold text-pink-400 flex items-center gap-1">1 <i className="ph-fill ph-diamonds-four"></i></span> / 1 lần tạo. Kim cương hiện có: <span className="font-bold text-white">{user?.diamonds.toLocaleString() || 0}</span>
-                </div>
-                <button onClick={handleGenerateClick} disabled={isGenerating || !prompt.trim()} className="w-full sm:w-auto px-8 py-4 font-bold text-lg text-white bg-gradient-to-r from-[#F72585] to-[#CA27FF] rounded-full transition-all duration-300 shadow-xl shadow-[#F72585]/30 hover:shadow-2xl hover:shadow-[#F72585]/40 hover:-translate-y-1.5 hover:scale-105 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
-                    <i className="ph-fill ph-magic-wand"></i>
-                    Bắt đầu sáng tạo
-                </button>
             </div>
         </>
     );

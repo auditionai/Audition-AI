@@ -1,22 +1,20 @@
 import React from 'react';
 
-// FIX: Added 'face' to the InstructionKey type to support the Face ID instruction feature.
 type InstructionKey = 'character' | 'style' | 'prompt' | 'advanced' | 'face';
 
 interface SettingsBlockProps {
     title: string;
     instructionKey: InstructionKey;
     children: React.ReactNode;
-    step: number;
+    step: number; // Keep prop for mapping, but don't display
     onInstructionClick: (key: InstructionKey) => void;
 }
 
-const SettingsBlock: React.FC<SettingsBlockProps> = ({ title, instructionKey, children, step, onInstructionClick }) => {
+const SettingsBlock: React.FC<SettingsBlockProps> = ({ title, instructionKey, children, onInstructionClick }) => {
     return (
         <div className="bg-[#1a1a22]/80 p-4 rounded-xl border border-white/10 flex flex-col h-full">
             <div className="flex justify-between items-center mb-4">
                 <div className="text-left flex items-center gap-3 w-full">
-                    <span className="bg-red-500/80 text-white w-6 h-6 rounded-md flex items-center justify-center font-bold text-xs flex-shrink-0">{step}</span>
                     <label className="text-md font-semibold text-gray-200">{title}</label>
                 </div>
                 <button onClick={() => onInstructionClick(instructionKey)} className="flex items-center gap-1 text-xs text-pink-300 hover:text-pink-200 transition-all px-2 py-1 rounded-md bg-pink-500/10 border border-pink-500/30 hover:bg-pink-500/20 shadow-[0_0_8px_rgba(247,37,133,0.3)] hover:shadow-[0_0_12px_rgba(247,37,133,0.5)] flex-shrink-0">

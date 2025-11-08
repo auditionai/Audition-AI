@@ -9,26 +9,23 @@ interface ImageUploaderProps {
     disabled?: boolean;
 }
 
-const StyleProcessOverlay: React.FC = () => {
-    return (
-        <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center text-white p-2 animate-fade-in">
-            <p className="font-semibold text-sm mb-2">AI đang phân tích:</p>
-            <ul className="text-xs text-gray-300 space-y-1">
-                <li><i className="ph-fill ph-check-circle text-green-400 mr-1"></i>Bố cục & Góc nhìn</li>
-                <li><i className="ph-fill ph-check-circle text-green-400 mr-1"></i>Dải màu & Ánh sáng</li>
-                 <li><i className="ph-fill ph-check-circle text-green-400 mr-1"></i>Phong cách nghệ thuật</li>
-            </ul>
-             <div className="absolute bottom-2 text-xs text-gray-500 font-bold p-1 bg-cyan-500/20 rounded">
-                <i className="ph-fill ph-check-circle mr-1"></i>
-                ĐÃ PHÂN TÍCH
-            </div>
+const StyleProcessOverlay: React.FC = () => (
+    <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center text-white p-2 animate-fade-in">
+        <p className="font-semibold text-sm mb-2">AI đang phân tích:</p>
+        <ul className="text-xs text-gray-300 space-y-1">
+            <li><i className="ph-fill ph-check-circle text-green-400 mr-1"></i>Bố cục & Góc nhìn</li>
+            <li><i className="ph-fill ph-check-circle text-green-400 mr-1"></i>Dải màu & Ánh sáng</li>
+            <li><i className="ph-fill ph-check-circle text-green-400 mr-1"></i>Phong cách nghệ thuật</li>
+        </ul>
+        <div className="absolute bottom-2 text-xs text-gray-500 font-bold p-1 bg-cyan-500/20 rounded">
+            <i className="ph-fill ph-check-circle mr-1"></i>
+            ĐÃ PHÂN TÍCH
         </div>
-    );
-};
-
+    </div>
+);
 
 const ImageUploader: React.FC<ImageUploaderProps> = ({ onUpload, image, onRemove, text, processType, disabled = false }) => (
-    <div className={`relative group w-full rounded-lg border-2 border-dashed border-gray-600 flex items-center justify-center bg-black/20 ${!disabled ? 'hover:border-pink-500' : ''} transition-colors p-1 flex-grow h-full ${disabled ? 'group-disabled' : ''}`}>
+    <div className={`relative group w-full aspect-square min-h-48 rounded-lg border-2 border-dashed border-gray-600 flex items-center justify-center bg-black/20 ${!disabled ? 'hover:border-pink-500' : ''} transition-colors p-1 ${disabled ? 'group-disabled' : ''}`}>
         {image && !disabled ? (
             <>
                 <img src={image.url} alt="Uploaded" className={`w-full h-full object-contain rounded-md`}/>

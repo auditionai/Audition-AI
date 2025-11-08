@@ -27,26 +27,21 @@ const ImageModal: React.FC<ImageModalProps> = ({ isOpen, onClose, image, showInf
     }, 2000);
   };
 
-  const handleDownload = async (e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent modal from closing if the button is inside
+  const handleDownload = (e: React.MouseEvent) => {
+    e.stopPropagation();
     if (!image?.image_url) return;
-    try {
-        const response = await fetch(image.image_url);
-        if (!response.ok) throw new Error('Network response was not ok.');
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.style.display = 'none';
-        a.href = url;
-        a.download = `audition-ai-${image.id}.png`;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        a.remove();
-    } catch (error) {
-        console.error('Download error:', error);
-        showToast('Tải ảnh xuống thất bại.', 'error');
-    }
+
+    // Create the proxied download URL
+    const downloadUrl = `/.netlify/functions/download-image?url=${encodeURIComponent(image.image_url)}`;
+
+    // Use a temporary anchor element to trigger the download
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = downloadUrl;
+    a.download = `audition-ai-${image.id}.png`; // Fallback filename
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
   };
   
   const rank = image.creator ? getRankForLevel(image.creator.level) : getRankForLevel(1);

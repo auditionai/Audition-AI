@@ -152,25 +152,20 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
         );
     };
 
-    const handleDownloadResult = async () => {
+    const handleDownloadResult = () => {
         if (!generatedImage) return;
-        try {
-            const response = await fetch(generatedImage);
-            if (!response.ok) throw new Error('Network response was not ok.');
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.style.display = 'none';
-            a.href = url;
-            a.download = `audition-ai-${Date.now()}.png`;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            a.remove();
-        } catch (error) {
-            console.error('Download error:', error);
-            showToast('Tải ảnh xuống thất bại.', 'error');
-        }
+        
+        // Create the proxied download URL
+        const downloadUrl = `/.netlify/functions/download-image?url=${encodeURIComponent(generatedImage)}`;
+
+        // Use a temporary anchor element to trigger the download
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = downloadUrl;
+        a.download = `audition-ai-${Date.now()}.png`; // Fallback filename
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
     };
     
     const openInstructionModal = (key: 'character' | 'style' | 'prompt' | 'advanced' | 'face') => {

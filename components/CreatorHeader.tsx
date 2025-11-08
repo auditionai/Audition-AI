@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { CreatorTab } from '../pages/CreatorPage';
 import { getRankForLevel } from '../utils/rankUtils';
 import XPProgressBar from './common/XPProgressBar';
+import { soundManager } from '../utils/soundManager';
 
 interface CreatorHeaderProps {
   onTopUpClick: () => void;
@@ -15,6 +16,7 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
   const { user, logout, hasCheckedInToday } = useAuth();
   const [isDropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const [isMuted, setIsMuted] = useState(soundManager.getIsMuted());
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -35,13 +37,15 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
     setDropdownOpen(false);
   }
   
-  // FIX: Create a dedicated handler for logout to ensure dropdown closes first.
-  // This prevents potential race conditions where the component unmounts before
-  // the click event is fully processed.
   const handleLogout = (e: React.MouseEvent) => {
     e.preventDefault();
     setDropdownOpen(false);
     logout();
+  };
+
+  const handleToggleMute = () => {
+    const newMuteState = soundManager.toggleMute();
+    setIsMuted(newMuteState);
   };
 
   return (
@@ -49,12 +53,10 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
       <div className="container mx-auto px-4">
         <div className="flex justify-center md:justify-between items-center py-3 md:h-20">
           
-          {/* Left on Desktop, Center on Mobile: Logo & Mobile Diamonds */}
           <div className="flex flex-col items-center md:items-start">
             <div className="text-2xl font-bold cursor-pointer" onClick={() => handleNavClick('tool')}>
               <span className="bg-gradient-to-r from-[#FF3FA4] to-[#CA27FF] text-transparent bg-clip-text">Audition AI Studio</span>
             </div>
-            {/* Mobile Diamond Button */}
             <div className="md:hidden mt-2">
                 <button
                   onClick={onTopUpClick}
@@ -67,7 +69,6 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
             </div>
           </div>
           
-          {/* Center: Navigation */}
            <nav className="hidden md:flex items-center gap-2 absolute left-1/2 -translate-x-1/2">
                 <button 
                   onClick={() => handleNavClick('leaderboard')} 
@@ -104,9 +105,7 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
                 </button>
             </nav>
           
-          {/* Right: Profile area & Desktop Diamonds */}
           <div className="hidden md:flex items-center gap-4">
-            {/* Desktop Diamond Button - RESTORED TO RIGHT SIDE */}
             <button
               onClick={onTopUpClick}
               className="group relative flex items-center p-1 font-bold text-white bg-black/50 rounded-full transition-all duration-300 hover:-translate-y-0.5"
@@ -118,6 +117,10 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
                   <span className="text-sm">{user.diamonds}</span>
                   <span className="pl-2 text-xs font-semibold tracking-wider text-gray-400 group-hover:text-white transition-colors border-l border-white/20">NẠP</span>
               </div>
+            </button>
+            
+            <button onClick={handleToggleMute} className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors" title={isMuted ? 'Bật âm thanh' : 'Tắt âm thanh'}>
+              <i className={`ph-fill ${isMuted ? 'ph-speaker-simple-slash' : 'ph-speaker-simple-high'} text-xl text-white`}></i>
             </button>
 
             <div className="relative flex items-center gap-3" ref={dropdownRef}>

@@ -8,6 +8,17 @@ const COST_BASE = 1;
 const COST_UPSCALE = 1;
 const XP_PER_GENERATION = 10;
 
+// --- ROBUST ASPECT RATIO FIX ---
+// Pre-generated, tiny, gray canvases as base64 strings.
+// These act as a strong visual anchor for the Gemini model.
+const ASPECT_RATIO_CANVASES = {
+    '3:4': 'iVBORw0KGgoAAAANSUhEUgAAAAMAAAAECAIAAADpP+8GAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAAYSURBVAhXY/z//z8DAwMTAwMDAwMjgAADAF91A/3f28dEAAAAAElFTkSuQmCC', // 3x4 Gray
+    '4:3': 'iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAIAAAA7ljmRAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAAWSURBVAhXY/z//z8DAwMTAwMjgAADACvZA/1V2u3UAAAAAElFTkSuQmCC', // 4x3 Gray
+    '1:1': 'iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAAWSURBVAhXY/z//z8DAwMTAwMjgAADACvZA/1V2u3UAAAAAElFTkSuQmCC', // 1x1, but using 4x4 for visibility
+    '9:16': 'iVBORw0KGgoAAAANSUhEUgAAAAkAAAAQCAIAAABLKsIUAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAAeSURBVBhXY/z//z8DAwMTAwMDAwMjgAADwMTAwMAAAD9fBf+6e3Y1AAAAAElFTkSuQmCC', // 9x16 Gray
+    '16:9': 'iVBORw0KGgoAAAANSUhEUgAAABAAAAAJCAIAAAAyvKMIAAABS2lUWHRYTUw6Y29tLmFkb2JlLnhtcAAAAAAAPD94cGFja2V0IGJlZ2luPSLvu78iIGlkPSJXNU0wTXBDZWhpSHpyZVN6TlRjemtjOWQiPz4KPHg6eG1wmetaIHhtbG5zOng9ImFkb2JlOm5zOm1ldGEvIj4KCTxyZGY6UkRGIHhtbG5zOnJkZj0iaHR0cDovL3d3dy53My5vcmcvMTk5OS8wMi8yMi1yZGYtc3ludGF4LW5zIyI+CgkJPHJkZjpEZXNjcmlwdGlvbiByZGY6YWJvdXQ9IiIgeG1sbnM6eG1wPSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvIiB4bWxuczpwaG90b3Nob3A9Imh0dHA6Ly9ucy5hZG9iZS5jb20vcGhvdG9zaG9wLzEuMC8iIHhtcDpDcmVhdG9yVG9vbD0iQWRvYmUgUGhvdG9zaG9wIDI1LjkgKE1hY2ludG9zaCkiIHBob3Rvc2hvcDpDb2xvck1vZGU9IjMiPgogICAgIDwvcmRmOkRlc2NyaXB0aW9uPgoJPC9yZGY6UkRGPgo8L3g6eG1wbWV0YT4KPD94cGFja2V0IGVuZD0iciI/PgHm24MAAAAYdEVYdFNvZnR3YXJlAHBhaW50Lm5ldCA0LjMuMTKfqsfWAAAAF0lEQVQYGWNgYGD4//8/AwcDEwMTAwMjgAADABJ/Aw89x91xAAAAAElFTkSuQmCC', // 16x9 Gray
+};
+
 const handler: Handler = async (event: HandlerEvent) => {
     const s3Client = new S3Client({
         region: "auto",
@@ -52,7 +63,6 @@ const handler: Handler = async (event: HandlerEvent) => {
         let finalImageBase64: string;
         let finalImageMimeType: string;
         
-        // Construct a more descriptive prompt
         let fullPrompt = prompt;
         if (negativePrompt) {
             fullPrompt += ` --no ${negativePrompt}`;
@@ -73,6 +83,20 @@ const handler: Handler = async (event: HandlerEvent) => {
             finalImageMimeType = 'image/png';
         } else { // Assuming gemini-flash-image
             const parts: any[] = [];
+            const hasImageInput = characterImage || styleImage || faceReferenceImage;
+            let finalPromptText = fullPrompt;
+
+            // --- ROBUST ASPECT RATIO FIX IMPLEMENTATION ---
+            if (hasImageInput) {
+                const canvasBase64 = ASPECT_RATIO_CANVASES[aspectRatio as keyof typeof ASPECT_RATIO_CANVASES];
+                if (canvasBase64) {
+                    // 1. Add the pre-sized canvas as the VERY FIRST input.
+                    parts.push({ inlineData: { data: canvasBase64, mimeType: 'image/png' } });
+                    
+                    // 2. Modify the prompt to explicitly command the AI to use the canvas.
+                    finalPromptText = `Strictly adhere to the aspect ratio of the initial gray canvas provided. Fill the entire canvas. The artistic content should be: ${fullPrompt}`;
+                }
+            }
             
             const processImagePart = (imageDataUrl: string | null) => {
                 if (!imageDataUrl) return;
@@ -83,17 +107,17 @@ const handler: Handler = async (event: HandlerEvent) => {
 
             processImagePart(characterImage);
             processImagePart(styleImage);
-            // faceReferenceImage could be from a file upload or from process-face function
             if (faceReferenceImage) {
                  const isDataUrl = faceReferenceImage.startsWith('data:');
                  if (isDataUrl) {
                     processImagePart(faceReferenceImage);
-                 } else { // It's just base64, assume png
+                 } else {
                     parts.push({ inlineData: { data: faceReferenceImage, mimeType: 'image/png' } });
                  }
             }
             
-            parts.push({ text: fullPrompt });
+            // Add the final, potentially modified, text prompt
+            parts.push({ text: finalPromptText });
             
             const response = await ai.models.generateContent({
                 model: apiModel,
@@ -113,8 +137,6 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         // --- Placeholder for Upscaler Logic ---
         if (useUpscaler) {
-            // In a real app, you would call another AI model here to upscale finalImageBase64
-            // For this demo, we'll just log it. The cost has already been deducted.
             console.log(`[UPSCALER] Upscaling image for user ${user.id}... (DEMO)`);
         }
         // --- End of Placeholder ---
@@ -148,7 +170,7 @@ const handler: Handler = async (event: HandlerEvent) => {
                 prompt: prompt,
                 image_url: publicUrl,
                 model_used: apiModel,
-                used_face_enhancer: !!faceReferenceImage // Log if any face reference was used
+                used_face_enhancer: !!faceReferenceImage
             }),
             supabaseAdmin.from('diamond_transactions_log').insert({
                 user_id: user.id,

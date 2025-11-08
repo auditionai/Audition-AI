@@ -3,19 +3,70 @@ import { GoogleGenAI, Modality } from "@google/genai";
 import { supabaseAdmin } from './utils/supabaseClient';
 import { Buffer } from 'buffer';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import Jimp from 'jimp';
 
 const COST_BASE = 1;
 const COST_UPSCALE = 1;
 const XP_PER_GENERATION = 10;
 
-// Pre-generated, tiny, gray canvases as base64 strings.
-const ASPECT_RATIO_CANVASES = {
-    '3:4': 'iVBORw0KGgoAAAANSUhEUgAAAAMAAAAECAIAAADpP+8GAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAAYSURBVAhXY/z//z8DAwMTAwMDAwMjgAADAF91A/3f28dEAAAAAElFTkSuQmCC', // 3x4 Gray
-    '4:3': 'iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAIAAAA7ljmRAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAAWSURBVAhXY/z//z8DAwMTAwMjgAADACvZA/1V2u3UAAAAAElFTkSuQmCC', // 4x3 Gray
-    '1:1': 'iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAAWSURBVAhXY/z//z8DAwMTAwMjgAADACvZA/1V2u3UAAAAAElFTkSuQmCC', // 1x1, but using 4x4 for visibility
-    '9:16': 'iVBORw0KGgoAAAANSUhEUgAAAAkAAAAQCAIAAABLKsIUAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAAeSURBVBhXY/z//z8DAwMTAwMDAwMjgAADwMTAwMAAAD9fBf+6e3Y1AAAAAElFTkSuQmCC', // 9x16 Gray
-    '16:9': 'iVBORw0KGgoAAAANSUhEUgAAABAAAAAJCAIAAAAyvKMIAAABS2lUWHRYTUw6Y29tLmFkb2JlLnhtcAAAAAAAPD94cGFja2V0IGJlZ2luPSLvu78iIGlkPSJXNU0wTXBDZWhpSHpyZVN6TlRjemtjOWQiPz4KPHg6eG1wmetaIHhtbG5zOng9ImFkb2JlOm5zOm1ldGEvIj4KCTxyZGY6UkRGIHhtbG5zOnJkZj0iaHR0cDovL3d3dy53My5vcmcvMTk5OS8wMi8yMi1yZGYtc3ludGF4LW5zIyI+CgkJPHJkZjpEZXNjcmlwdGlvbiByZGY6YWJvdXQ9IiIgeG1sbnM6eG1wPSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvIiB4bWxuczpwaG90b3Nob3A9Imh0dHA6Ly9ucy5hZG9iZS5jb20vcGhvdG9zaG9wLzEuMC8iIHhtcDpDcmVhdG9yVG9vbD0iQWRvYmUgUGhvdG9zaG9wIDI1LjkgKE1hY2ludG9zaCkiIHBob3Rvc2hvcDpDb2xvck1vZGU9IjMiPgogICAgIDwvcmRmOkRlc2NyaXB0aW9uPgoJPC9yZGY6UkRGPgo8L3g6eG1wbWV0YT4KPD94cGFja2V0IGVuZD0iciI/PgHm24MAAAAYdEVYdFNvZnR3YXJlAHBhaW50Lm5ldCA0LjMuMTKfqsfWAAAAF0lEQVQYGWNgYGD4//8/AwcDEwMTAwMjgAADABJ/Aw89x91xAAAAAElFTkSuQmCC', // 16x9 Gray
+/**
+ * Pre-processes an image by placing it onto a new canvas of a target aspect ratio.
+ * This "letterboxing" technique ensures all input images sent to Gemini
+ * have the same aspect ratio, forcing the output to match.
+ * @param imageDataUrl The base64 data URL of the input image.
+ * @param targetAspectRatio The desired aspect ratio string (e.g., '16:9').
+ * @returns A promise that resolves to the new base64 data URL.
+ */
+const processImageForGemini = async (imageDataUrl: string | null, targetAspectRatio: string): Promise<string | null> => {
+    if (!imageDataUrl) return null;
+
+    try {
+        const [header, base64] = imageDataUrl.split(',');
+        if (!base64) return null;
+
+        const imageBuffer = Buffer.from(base64, 'base64');
+        const image = await Jimp.read(imageBuffer);
+        const originalWidth = image.getWidth();
+        const originalHeight = image.getHeight();
+
+        const [aspectW, aspectH] = targetAspectRatio.split(':').map(Number);
+        const targetRatio = aspectW / aspectH;
+        const originalRatio = originalWidth / originalHeight;
+
+        let newCanvasWidth: number, newCanvasHeight: number;
+
+        // Determine new canvas dimensions to match target aspect ratio while enclosing the original image
+        if (targetRatio > originalRatio) {
+            // Target is wider than original (pillarbox)
+            newCanvasHeight = originalHeight;
+            newCanvasWidth = Math.round(originalHeight * targetRatio);
+        } else {
+            // Target is taller than original (letterbox)
+            newCanvasWidth = originalWidth;
+            newCanvasHeight = Math.round(originalWidth / targetRatio);
+        }
+        
+        // Create a new black canvas with the target dimensions
+        const newCanvas = new Jimp(newCanvasWidth, newCanvasHeight, '#000000');
+        
+        // Calculate position to center the original image
+        const x = (newCanvasWidth - originalWidth) / 2;
+        const y = (newCanvasHeight - originalHeight) / 2;
+        
+        // Composite the original image onto the new canvas
+        newCanvas.composite(image, x, y);
+
+        const mime = header.match(/:(.*?);/)?.[1] || Jimp.MIME_PNG;
+        return newCanvas.getBase64Async(mime as any);
+
+    } catch (error) {
+        console.error("Error pre-processing image for Gemini:", error);
+        // If processing fails, return the original to not break the flow,
+        // though aspect ratio might be wrong.
+        return imageDataUrl;
+    }
 };
+
 
 const handler: Handler = async (event: HandlerEvent) => {
     const s3Client = new S3Client({
@@ -81,44 +132,33 @@ const handler: Handler = async (event: HandlerEvent) => {
             finalImageMimeType = 'image/png';
         } else { // Assuming gemini-flash-image
             const parts: any[] = [];
-            const hasImageInput = characterImage || styleImage || faceReferenceImage;
-            let finalPromptText = fullPrompt;
-
-            // --- CRITICAL ORDERING FIX ---
             
-            // 1. Determine the final prompt text first.
-            if (hasImageInput) {
-                finalPromptText = `Strictly adhere to the aspect ratio of the initial gray canvas provided. Fill the entire canvas. The artistic content should be: ${fullPrompt}`;
-            }
-            // 2. The text prompt MUST be the first part of the request.
-            parts.push({ text: finalPromptText });
-
-            // 3. If image inputs exist, the gray canvas MUST be the second part.
-            if (hasImageInput) {
-                const canvasBase64 = ASPECT_RATIO_CANVASES[aspectRatio as keyof typeof ASPECT_RATIO_CANVASES];
-                if (canvasBase64) {
-                    parts.push({ inlineData: { data: canvasBase64, mimeType: 'image/png' } });
-                }
-            }
+            // --- The Ultimate Solution: Pre-process ALL images to match target aspect ratio ---
+            const [
+                processedCharacterImage,
+                processedStyleImage,
+                processedFaceImage,
+            ] = await Promise.all([
+                processImageForGemini(characterImage, aspectRatio),
+                processImageForGemini(styleImage, aspectRatio),
+                processImageForGemini(faceReferenceImage, aspectRatio)
+            ]);
             
-            // 4. Append all other reference images after the instructions and canvas.
-            const processImagePart = (imageDataUrl: string | null) => {
+            // The text prompt is ALWAYS the first part. No modification needed.
+            parts.push({ text: fullPrompt });
+
+            // Helper to add processed image parts
+            const addImagePart = (imageDataUrl: string | null) => {
                 if (!imageDataUrl) return;
                 const [header, base64] = imageDataUrl.split(',');
                 const mimeType = header.match(/:(.*?);/)?.[1] || 'image/png';
                 parts.push({ inlineData: { data: base64, mimeType } });
             };
 
-            processImagePart(characterImage);
-            processImagePart(styleImage);
-            if (faceReferenceImage) {
-                 const isDataUrl = faceReferenceImage.startsWith('data:');
-                 if (isDataUrl) {
-                    processImagePart(faceReferenceImage);
-                 } else {
-                    parts.push({ inlineData: { data: faceReferenceImage, mimeType: 'image/png' } });
-                 }
-            }
+            // Add the pre-processed images to the request
+            addImagePart(processedCharacterImage);
+            addImagePart(processedStyleImage);
+            addImagePart(processedFaceImage);
             
             const response = await ai.models.generateContent({
                 model: apiModel,
@@ -130,7 +170,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             });
 
             const imagePartResponse = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-            if (!imagePartResponse?.inlineData) throw new Error("AI không thể tạo hình ảnh từ mô tả này.");
+            if (!imagePartResponse?.inlineData) throw new Error("AI không thể tạo hình ảnh từ mô tả này. Hãy thử thay đổi prompt hoặc ảnh tham chiếu.");
 
             finalImageBase64 = imagePartResponse.inlineData.data;
             finalImageMimeType = imagePartResponse.inlineData.mimeType.includes('png') ? 'image/png' : 'image/jpeg';
@@ -189,10 +229,14 @@ const handler: Handler = async (event: HandlerEvent) => {
     } catch (error: any) {
         console.error("Generate image function error:", error);
         // Provide a more specific error message if available from Gemini
-        const errorMessage = error?.message || 'An unknown server error occurred during image generation.';
-        const clientFriendlyError = errorMessage.includes("400") ? 
-            `Lỗi từ AI: ${errorMessage}. Hãy thử lại hoặc thay đổi ảnh đầu vào.` : 
-            errorMessage;
+        let clientFriendlyError = 'Lỗi không xác định từ máy chủ.';
+        if (error?.message) {
+            if (error.message.includes('INVALID_ARGUMENT')) {
+                 clientFriendlyError = 'Lỗi từ AI: Không thể xử lý ảnh đầu vào. Hãy thử lại hoặc thay đổi ảnh đầu vào.';
+            } else {
+                clientFriendlyError = error.message;
+            }
+        }
             
         return { statusCode: 500, body: JSON.stringify({ error: clientFriendlyError }) };
     }

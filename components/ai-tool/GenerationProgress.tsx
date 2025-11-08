@@ -12,6 +12,7 @@ const STEPS = [
     { name: 'Khoá Gương mặt', icon: 'ph-face-mask' },
     { name: 'Đang tạo bối cảnh (AI #1)', icon: 'ph-magic-wand' },
     { name: 'Tinh chỉnh gương mặt (AI #2)', icon: 'ph-user-focus' },
+    { name: 'Làm nét & nâng cấp (AI #3)', icon: 'ph-arrows-clockwise' },
     { name: 'Hoàn tất & Tải lên', icon: 'ph-upload-simple' },
     { name: 'Thành công!', icon: 'ph-sparkle' },
 ];

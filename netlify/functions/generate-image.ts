@@ -4,23 +4,11 @@ import { supabaseAdmin } from './utils/supabaseClient';
 import { Buffer } from 'buffer';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 
-// This is a placeholder for a Face Restore/Swap API. 
-// In a real application, you would call a service like Replicate, an external API,
-// or another Google model specialized for this task.
-// For this demo, we will simulate it by simply returning the original generated image.
-const callFaceEnhancerApi = async (baseImage: string, faceReferenceImage: string): Promise<string> => {
-    console.log("SIMULATING: Calling Face Enhancer API.");
-    // In a real scenario, this function would:
-    // 1. Send `baseImage` and `faceReferenceImage` to a specialized AI service.
-    // 2. The service would return a new image with the face swapped/restored.
-    // 3. Return the base64 of the new, enhanced image.
-    await new Promise(res => setTimeout(res, 3000)); // Simulate network latency
-    console.log("SIMULATING: Face Enhancer API returned result.");
-    return baseImage; // For demo, just return the original.
-};
-
+const COST_PER_GENERATION = 1;
+const XP_PER_GENERATION = 10;
 
 const handler: Handler = async (event: HandlerEvent) => {
+    // Moved S3Client initialization inside the handler
     const s3Client = new S3Client({
         region: "auto",
         endpoint: process.env.R2_ENDPOINT!,
@@ -34,75 +22,68 @@ const handler: Handler = async (event: HandlerEvent) => {
         if (event.httpMethod !== 'POST') {
             return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
         }
-
+        
+        // 1. Authenticate user
         const authHeader = event.headers['authorization'];
         if (!authHeader) return { statusCode: 401, body: JSON.stringify({ error: 'Authorization header is required.' }) };
         const token = authHeader.split(' ')[1];
         if (!token) return { statusCode: 401, body: JSON.stringify({ error: 'Bearer token is missing.' }) };
-        
+
         const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
         if (authError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized: Invalid token.' }) };
 
-        const { prompt, poseImage, styleImage, faceReferenceImage, model, style, aspectRatio, useFaceEnhancer } = JSON.parse(event.body || '{}');
-
-        // DYNAMIC COST CALCULATION
-        const cost = 1 + (useFaceEnhancer && faceReferenceImage ? 1 : 0);
-        const xp_reward = 10 + (useFaceEnhancer && faceReferenceImage ? 10 : 0); // More XP for advanced feature
-
+        // 2. Parse and validate request body
+        const { prompt, apiModel, characterImage } = JSON.parse(event.body || '{}');
+        if (!prompt || !apiModel) return { statusCode: 400, body: JSON.stringify({ error: 'Prompt and apiModel are required.' }) };
+        
+        // 3. Check user balance
         const { data: userData, error: userError } = await supabaseAdmin.from('users').select('diamonds, xp').eq('id', user.id).single();
         if (userError || !userData) return { statusCode: 404, body: JSON.stringify({ error: 'User not found.' }) };
-        if (userData.diamonds < cost) return { statusCode: 402, body: JSON.stringify({ error: 'Không đủ kim cương.' }) };
-
+        if (userData.diamonds < COST_PER_GENERATION) return { statusCode: 402, body: JSON.stringify({ error: 'Không đủ kim cương.' }) };
+        
+        // 4. Get an active API key
         const { data: apiKeyData, error: apiKeyError } = await supabaseAdmin.from('api_keys').select('id, key_value').eq('status', 'active').order('usage_count', { ascending: true }).limit(1).single();
         if (apiKeyError || !apiKeyData) return { statusCode: 503, body: JSON.stringify({ error: 'Hết tài nguyên AI. Vui lòng thử lại sau.' }) };
-
+        
         const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
+
         let finalImageBase64: string;
         let finalImageMimeType: string;
 
-        let creativeBrief = prompt;
-        if (style.id !== 'none' && creativeBrief) {
-            creativeBrief = `${prompt}, in the style of ${style.name}`;
+        // 5. Call Google AI API based on model type
+        if (apiModel.startsWith('imagen')) {
+            const response = await ai.models.generateImages({
+                model: apiModel,
+                prompt: prompt,
+                config: { numberOfImages: 1, outputMimeType: 'image/png' },
+            });
+            finalImageBase64 = response.generatedImages[0].image.imageBytes;
+            finalImageMimeType = 'image/png';
+        } else { // Assuming gemini-flash-image
+            const parts: any[] = [{ text: prompt }];
+            if (characterImage) {
+                const [header, base64] = characterImage.split(',');
+                const mimeType = header.match(/:(.*?);/)[1];
+                parts.unshift({ inlineData: { data: base64, mimeType } });
+            }
+            
+            const response = await ai.models.generateContent({
+                model: apiModel,
+                contents: { parts: parts },
+                config: { responseModalities: [Modality.IMAGE] },
+            });
+
+            const imagePartResponse = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+            if (!imagePartResponse?.inlineData) throw new Error("AI không thể tạo hình ảnh từ mô tả này.");
+
+            finalImageBase64 = imagePartResponse.inlineData.data;
+            finalImageMimeType = imagePartResponse.inlineData.mimeType.includes('png') ? 'image/png' : 'image/jpeg';
         }
 
-        // --- Start of Image Generation Logic ---
-        const parts: any[] = [];
-        if (poseImage) parts.push({ inlineData: poseImage });
-        if (styleImage) parts.push({ inlineData: styleImage });
-        
-        // IMPORTANT: Add Face Reference image to parts if NOT using the enhancer
-        // If the enhancer is used, the face image is sent to the second API call, not the first.
-        if (faceReferenceImage && !useFaceEnhancer) {
-            parts.push({ inlineData: faceReferenceImage });
-        }
-
-        if (creativeBrief) parts.push({ text: creativeBrief });
-
-        const response = await ai.models.generateContent({
-            model: model.apiModel,
-            contents: { parts: parts },
-            config: { responseModalities: [Modality.IMAGE] },
-        });
-        const imagePartResponse = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-        if (!imagePartResponse?.inlineData) throw new Error("AI không thể tạo hình ảnh này (Gemini).");
-        
-        let generatedImageBase64 = imagePartResponse.inlineData.data;
-        finalImageMimeType = imagePartResponse.inlineData.mimeType.includes('png') ? 'image/png' : 'image/jpeg';
-        // --- End of Image Generation Logic ---
-        
-        // --- Start of Face Enhancement Logic ---
-        if (useFaceEnhancer && faceReferenceImage) {
-            finalImageBase64 = await callFaceEnhancerApi(generatedImageBase64, faceReferenceImage.data);
-        } else {
-            finalImageBase64 = generatedImageBase64;
-        }
-        // --- End of Face Enhancement Logic ---
-
-
-        // --- START OF R2 UPLOAD LOGIC ---
+        // 6. Upload generated image to R2
         const imageBuffer = Buffer.from(finalImageBase64, 'base64');
-        const finalFileExtension = finalImageMimeType.split('/')[1] || 'png';
-        const fileName = `${user.id}/${Date.now()}.${finalFileExtension}`;
+        const fileExtension = finalImageMimeType.split('/')[1] || 'png';
+        const fileName = `${user.id}/${Date.now()}.${fileExtension}`;
 
         const putCommand = new PutObjectCommand({
             Bucket: process.env.R2_BUCKET_NAME!,
@@ -110,35 +91,39 @@ const handler: Handler = async (event: HandlerEvent) => {
             Body: imageBuffer,
             ContentType: finalImageMimeType,
         });
-        
-        // FIX: Cast s3Client to 'any' to bypass a likely environment-specific TypeScript type resolution error.
         await (s3Client as any).send(putCommand);
         const publicUrl = `${process.env.R2_PUBLIC_URL}/${fileName}`;
-        // --- END OF R2 UPLOAD LOGIC ---
 
-        const newDiamondCount = userData.diamonds - cost;
-        const newXp = userData.xp + xp_reward;
+        // 7. Update user profile and log transaction in parallel
+        const newDiamondCount = userData.diamonds - COST_PER_GENERATION;
+        const newXp = userData.xp + XP_PER_GENERATION;
         
         await Promise.all([
             supabaseAdmin.from('users').update({ diamonds: newDiamondCount, xp: newXp }).eq('id', user.id),
-            supabaseAdmin.from('generated_images').insert({ user_id: user.id, prompt: prompt, image_url: publicUrl, model_used: model.name }),
             supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id }),
+            supabaseAdmin.from('generated_images').insert({
+                user_id: user.id,
+                prompt: prompt,
+                image_url: publicUrl,
+                model_used: apiModel
+            }),
             supabaseAdmin.from('diamond_transactions_log').insert({
                 user_id: user.id,
-                amount: -cost,
-                transaction_type: useFaceEnhancer ? 'IMAGE_GENERATION_ENHANCED' : 'IMAGE_GENERATION',
-                description: `Tạo ảnh${useFaceEnhancer ? ' (Face ID)' : ''}: ${model.name}`
+                amount: -COST_PER_GENERATION,
+                transaction_type: 'IMAGE_GENERATION',
+                description: `Tạo ảnh: ${prompt.substring(0, 50)}...`
             })
         ]);
-        
+
+        // 8. Return response
         return {
             statusCode: 200,
             body: JSON.stringify({ imageUrl: publicUrl, newDiamondCount, newXp }),
         };
 
     } catch (error: any) {
-        console.error("Image Generation Function Error:", error);
-        return { statusCode: 500, body: JSON.stringify({ error: `Lỗi khi tạo ảnh: ${error.message || 'Unknown server error.'}` }) };
+        console.error("Generate image function error:", error);
+        return { statusCode: 500, body: JSON.stringify({ error: error.message || 'An unknown server error occurred during image generation.' }) };
     }
 };
 

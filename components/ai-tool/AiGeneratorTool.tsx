@@ -79,7 +79,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                     }
                     else if (type === 'style') setStyleImage(newImage);
                 })
-                .catch(err => {
+                .catch((err: any) => {
                     console.error("Error resizing image:", err);
                     showToast("Lỗi khi xử lý ảnh đầu vào.", "error");
                 });

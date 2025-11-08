@@ -24,7 +24,7 @@ const BgRemoverTool: React.FC<BgRemoverToolProps> = ({ onMoveToGenerator }) => {
              resizeImage(file, 1024).then(({ file: resizedFile, dataUrl: resizedDataUrl }) => {
                 const newImage = { id: crypto.randomUUID(), url: resizedDataUrl, file: resizedFile };
                 setImagesForBgRemoval(prev => [...prev, newImage]);
-            }).catch(err => {
+            }).catch((err: any) => {
                 console.error("Error resizing image for background removal:", err);
                 showToast("Lỗi khi xử lý ảnh.", "error");
             });

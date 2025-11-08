@@ -1,61 +1,42 @@
-// Helper function to resize an image file before uploading
-export const resizeImage = (file: File, maxSize: number): Promise<{ file: File; dataUrl: string }> => {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            if (!event.target?.result) return reject(new Error('FileReader did not return a result.'));
-            const img = new Image();
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                let { width, height } = img;
+import { Rank } from '../types';
+import { RANKS } from '../constants/ranks';
 
-                if (width > height) {
-                    if (width > maxSize) {
-                        height *= maxSize / width;
-                        width = maxSize;
-                    }
-                } else {
-                    if (height > maxSize) {
-                        width *= maxSize / height;
-                        height = maxSize;
-                    }
-                }
-
-                canvas.width = width;
-                canvas.height = height;
-                const ctx = canvas.getContext('2d');
-                if (!ctx) return reject(new Error('Could not get canvas context'));
-
-                // Preserve transparency for PNG files
-                const outputMimeType = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
-                const outputQuality = 0.9;
-
-                ctx.drawImage(img, 0, 0, width, height);
-
-                const dataUrl = canvas.toDataURL(outputMimeType, outputQuality);
-                
-                canvas.toBlob((blob) => {
-                    if (!blob) return reject(new Error('Canvas to Blob conversion failed'));
-                    const resizedFile = new File([blob], file.name, { type: outputMimeType });
-                    resolve({ file: resizedFile, dataUrl });
-                }, outputMimeType, outputQuality);
-            };
-            img.onerror = reject;
-            img.src = event.target.result as string;
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-    });
+/**
+ * Calculates a user's level based on their total XP.
+ * This is a simple linear progression for the demo.
+ * @param xp The user's total experience points.
+ * @returns The calculated level.
+ */
+export const calculateLevelFromXp = (xp: number): number => {
+  // Example: 100 XP per level
+  return Math.floor(xp / 100) + 1;
 };
 
-// Helper function to convert a base64 string back to a File object
-export const base64ToFile = (base64: string, filename: string, mimeType: string): File => {
-    const byteCharacters = atob(base64);
-    const byteNumbers = new Array(byteCharacters.length);
-    for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
+/**
+ * Gets the required XP for the next level.
+ * @param currentLevel The user's current level.
+ * @returns The total XP needed to reach the next level.
+ */
+export const getXpForNextLevel = (currentLevel: number): number => {
+  return currentLevel * 100;
+};
+
+
+/**
+ * Finds the correct rank (title, icon) for a given level.
+ * It finds the highest rank tier that the user's level has surpassed.
+ * @param level The user's current level.
+ * @returns The corresponding Rank object.
+ */
+export const getRankForLevel = (level: number): Rank => {
+  // RANKS are sorted by levelThreshold ascending
+  let currentRank: Rank = RANKS[0];
+  for (const rank of RANKS) {
+    if (level >= rank.levelThreshold) {
+      currentRank = rank;
+    } else {
+      break; // Stop when we find a rank the user hasn't reached yet
     }
-    const byteArray = new Uint8Array(byteNumbers);
-    const blob = new Blob([byteArray], { type: mimeType });
-    return new File([blob], filename, { type: mimeType });
+  }
+  return currentRank;
 };

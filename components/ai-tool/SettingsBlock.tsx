@@ -1,6 +1,7 @@
 import React from 'react';
 
-type InstructionKey = 'character' | 'style' | 'prompt' | 'advanced';
+// FIX: Added 'face' to the InstructionKey type to support the Face ID instruction feature.
+type InstructionKey = 'character' | 'style' | 'prompt' | 'advanced' | 'face';
 
 interface SettingsBlockProps {
     title: string;

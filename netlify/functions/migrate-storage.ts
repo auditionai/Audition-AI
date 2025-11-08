@@ -1,4 +1,5 @@
 
+
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
 import { Buffer } from 'buffer';
@@ -75,7 +76,8 @@ const handler: Handler = async (event: HandlerEvent) => {
                     Body: buffer,
                     ContentType: mimeType,
                 });
-                await s3Client.send(putCommand);
+                // FIX: Cast s3Client to 'any' to bypass a likely environment-specific TypeScript type resolution error.
+                await (s3Client as any).send(putCommand);
 
                 // c. Cập nhật URL trong CSDL
                 const publicUrl = `${process.env.R2_PUBLIC_URL}/${newFileName}`;

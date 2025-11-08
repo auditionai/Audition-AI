@@ -59,7 +59,8 @@ const handler: Handler = async (event: HandlerEvent) => {
             Key: key,
         });
 
-        await s3Client.send(deleteCommand);
+        // FIX: Cast s3Client to 'any' to bypass a likely environment-specific TypeScript type resolution error.
+        await (s3Client as any).send(deleteCommand);
 
         // 6. Delete image record from Supabase database
         const { error: deleteDbError } = await supabaseAdmin

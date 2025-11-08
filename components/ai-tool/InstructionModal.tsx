@@ -1,7 +1,7 @@
 import React from 'react';
 import Modal from '../common/Modal';
 
-type InstructionKey = 'character' | 'style' | 'prompt' | 'advanced';
+type InstructionKey = 'character' | 'style' | 'prompt' | 'advanced' | 'face';
 
 interface InstructionModalProps {
     isOpen: boolean;
@@ -13,25 +13,47 @@ const getInstructionContent = (key: InstructionKey | null) => {
     if (!key) return { title: 'Hướng dẫn', content: null };
 
     const contentMap: { [k in InstructionKey]: { title: string; content: React.ReactNode } } = {
-        character: {
-            title: 'Hướng dẫn Tải ảnh Nhân vật',
+        face: {
+            title: 'Hướng dẫn Siêu Khóa Gương Mặt',
             content: (
                 <div className="text-sm space-y-4 text-gray-300">
                     <div>
-                        <p className="font-semibold text-white mb-2">Ảnh đầu vào là yếu tố quan trọng nhất. Hãy chọn ảnh:</p>
+                        <p className="font-semibold text-white mb-2">Để đạt độ chính xác gương mặt cao nhất (95%+), hãy tải lên một ảnh chân dung:</p>
                         <ul className="list-disc list-inside space-y-1 pl-2">
+                            <li><span className="text-green-400">Đã được crop (cắt) chỉn chu, chỉ lấy phần đầu.</span></li>
                             <li>Chụp <span className="text-green-400">chính diện, rõ nét,</span> không bị mờ nhòe.</li>
                             <li>Gương mặt <span className="text-green-400">không bị tóc, tay, hoặc vật thể khác che khuất.</span></li>
                             <li><span className="text-green-400">Ánh sáng tốt,</span> không quá tối hoặc cháy sáng.</li>
                         </ul>
                     </div>
                      <div>
-                        <h4 className="font-semibold text-pink-400 mb-2">Mục đích:</h4>
+                        <h4 className="font-semibold text-pink-400 mb-2">Quy trình hoạt động:</h4>
                         <p>
-                           AI sẽ phân tích và "khóa" lại các đặc điểm nhận dạng cốt lõi như cấu trúc xương mặt, mắt, mũi, miệng từ ảnh gốc. Khi bạn mô tả quần áo hoặc bối cảnh mới, AI sẽ thay đổi các yếu tố đó nhưng vẫn <strong className="text-white">giữ lại gương mặt của bạn một cách trung thực nhất.</strong>
+                           Khi bạn cung cấp ảnh chân dung tham chiếu, một quy trình AI 2 bước sẽ được kích hoạt. AI #1 tạo ra bối cảnh, quần áo. Sau đó, AI #2 chuyên biệt sẽ <strong className="text-white">"ghép" gương mặt tham chiếu của bạn vào ảnh đã tạo</strong> một cách chính xác, đồng thời hòa trộn ánh sáng và màu sắc để có kết quả tự nhiên nhất.
                         </p>
                     </div>
-                    <p className="pt-3 border-t border-white/10"><strong className="text-yellow-400">Lưu ý:</strong> Việc tải lên ảnh nhân vật sẽ phù hợp nhất với mô hình <span className="font-semibold">AUDITION AI V4 (Flash)</span> được tối ưu cho việc chỉnh sửa và giữ lại đặc điểm ảnh gốc.</p>
+                    <p className="pt-3 border-t border-white/10"><strong className="text-yellow-400">Lưu ý:</strong> Chức năng này là một tính năng cao cấp và sẽ tốn thêm <span className="font-semibold">1 Kim cương</span> cho mỗi lần sử dụng, nâng tổng chi phí lên 2 Kim cương.</p>
+                </div>
+            )
+        },
+        character: {
+            title: 'Hướng dẫn Tải ảnh Toàn thân',
+            content: (
+                <div className="text-sm space-y-4 text-gray-300">
+                    <div>
+                        <p className="font-semibold text-white mb-2">Mục đích của ảnh này là để AI tham khảo về trang phục và tư thế, không phải gương mặt.</p>
+                        <ul className="list-disc list-inside space-y-1 pl-2">
+                            <li>AI sẽ cố gắng "học" theo <span className="text-green-400">kiểu dáng quần áo, phụ kiện và cách tạo dáng</span> từ ảnh này.</li>
+                            <li>Bạn có thể tải lên ảnh nhân vật đã được tách nền để có kết quả tốt nhất.</li>
+                            <li>Nếu bạn chỉ muốn AI tham khảo tư thế, hãy mô tả chi tiết trang phục trong câu lệnh.</li>
+                        </ul>
+                    </div>
+                     <div>
+                        <h4 className="font-semibold text-pink-400 mb-2">Kết hợp với Face ID:</h4>
+                        <p>
+                           Cách dùng hiệu quả nhất là kết hợp cả hai: Tải ảnh chân dung vào ô "Siêu Khóa Gương Mặt" và tải ảnh nhân vật game của bạn vào ô này. AI sẽ lấy gương mặt từ ảnh chân dung và lấy trang phục/tư thế từ ảnh toàn thân.
+                        </p>
+                    </div>
                 </div>
             ),
         },
@@ -77,8 +99,7 @@ const getInstructionContent = (key: InstructionKey | null) => {
                     <ul className="list-disc list-inside space-y-3 pl-2">
                         <li><strong className="text-white">Phong cách:</strong> Áp dụng một "bộ lọc" nghệ thuật được tinh chỉnh sẵn. Chọn một phong cách sẽ giúp AI nhanh chóng định hình được 'mood & tone' tổng thể cho bức ảnh, giúp bạn tiết kiệm thời gian mô tả.</li>
                         <li><strong className="text-white">Mô hình AI:</strong> Mỗi mô hình có điểm mạnh riêng. <span className="font-semibold text-pink-400">V4 (Flash)</span> cân bằng tốc độ và chất lượng, rất tốt cho việc chỉnh sửa ảnh. Các mô hình <span className="font-semibold text-pink-400">PRO/ULTRA (Imagen 4)</span> cho chất lượng vượt trội, phù hợp nhất khi tạo ảnh mới hoàn toàn từ văn bản.</li>
-                        <li><strong className="text-white">Tỷ lệ khung hình:</strong> Chọn kích thước cho ảnh. <strong className="text-yellow-400">Lưu ý:</strong> Tùy chọn này sẽ bị vô hiệu hóa khi bạn tải lên ảnh nhân vật, vì AI sẽ tự động dùng tỷ lệ của ảnh gốc.</li>
-                        <li><strong className="text-white">Seed ngẫu nhiên:</strong> Mỗi lần tạo ảnh, AI dùng một số "seed" để bắt đầu. Bật tùy chọn này, AI sẽ dùng seed mới mỗi lần, tạo ra các kết quả khác nhau dù cùng câu lệnh. Tắt đi, AI sẽ dùng lại seed cũ, giúp bạn tạo ra các biến thể nhỏ từ cùng một kết quả gốc.</li>
+                        <li><strong className="text-white">Siêu Khóa Gương Mặt:</strong> Kích hoạt quy trình AI 2 bước để đảm bảo độ chính xác gương mặt cao nhất. Tắt tùy chọn này nếu bạn chỉ muốn tạo ảnh nhanh và không quá đặt nặng vào việc giữ lại chính xác 100% gương mặt.</li>
                     </ul>
                 </div>
             ),

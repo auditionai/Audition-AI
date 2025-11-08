@@ -102,7 +102,8 @@ const handler: Handler = async (event: HandlerEvent) => {
             ContentType: finalImageMimeType,
         });
 
-        await s3Client.send(putCommand);
+        // FIX: Cast s3Client to 'any' to bypass a likely environment-specific TypeScript type resolution error.
+        await (s3Client as any).send(putCommand);
 
         const publicUrl = `${process.env.R2_PUBLIC_URL}/${fileName}`;
         // --- END OF R2 UPLOAD LOGIC ---

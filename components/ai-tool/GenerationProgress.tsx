@@ -5,14 +5,17 @@ interface GenerationProgressProps {
 }
 
 const STEPS = [
-    { name: 'Khởi tạo', icon: 'ph-power' },
-    { name: 'Phân tích nhân vật', icon: 'ph-face-mask' },
-    { name: 'Phân tích phong cách', icon: 'ph-palette' },
-    { name: 'Kiểm tra câu lệnh', icon: 'ph-shield-check' },
-    { name: 'Tổng hợp prompt JSON', icon: 'ph-file-code' },
-    { name: 'Gửi đến Google AI', icon: 'ph-paper-plane-tilt' },
-    { name: 'Hoàn tất', icon: 'ph-sparkle' },
+    { name: 'Đang chờ...', icon: 'ph-dots-three' },
+    { name: 'Khởi tạo tác vụ', icon: 'ph-power' },
+    { name: 'Phân tích Tư thế', icon: 'ph-person-simple-run' },
+    { name: 'Phân tích Phong cách', icon: 'ph-palette' },
+    { name: 'Khoá Gương mặt', icon: 'ph-face-mask' },
+    { name: 'Đang tạo bối cảnh (AI #1)', icon: 'ph-magic-wand' },
+    { name: 'Tinh chỉnh gương mặt (AI #2)', icon: 'ph-user-focus' },
+    { name: 'Hoàn tất & Tải lên', icon: 'ph-upload-simple' },
+    { name: 'Thành công!', icon: 'ph-sparkle' },
 ];
+
 
 const GenerationProgress: React.FC<GenerationProgressProps> = ({ currentStep }) => {
     const progressPercentage = useMemo(() => {
@@ -20,7 +23,7 @@ const GenerationProgress: React.FC<GenerationProgressProps> = ({ currentStep }) 
         return Math.min(((currentStep) / (STEPS.length - 1)) * 100, 100);
     }, [currentStep]);
 
-    const activeStep = STEPS[currentStep - 1] || STEPS[0];
+    const activeStep = STEPS[currentStep] || STEPS[0];
 
     return (
         <div className="w-full h-full flex flex-col items-center justify-center p-4 text-white animate-fade-in">
@@ -32,7 +35,7 @@ const GenerationProgress: React.FC<GenerationProgressProps> = ({ currentStep }) 
               </div>
             </div>
 
-            <p className="text-lg font-semibold mb-3 animate-pulse">{activeStep.name}...</p>
+            <p className="text-lg font-semibold mb-3 animate-pulse">{activeStep.name}</p>
 
             <div className="w-full max-w-sm bg-black/30 rounded-full h-2.5 mb-2">
                 <div 

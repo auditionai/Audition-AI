@@ -65,20 +65,26 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
     const { user, showToast } = useAuth();
     const { isLoading, generatedImage, generateImage, COST_PER_IMAGE } = useImageGenerator();
 
-    const [characterImages, setCharacterImages] = useState<Array<{id: string, url: string, file: File}>>([]);
-    const [selectedCharacterId, setSelectedCharacterId] = useState<string | null>(null);
-    const [faceLockStatuses, setFaceLockStatuses] = useState<{ [id: string]: 'locking' | 'locked' }>({});
+    // NEW: State for face reference image
+    const [faceReferenceImage, setFaceReferenceImage] = useState<{url: string, file: File} | null>(null);
+    const [isFaceLocked, setIsFaceLocked] = useState(false);
+
+    // OLD: Renamed to poseImage
+    const [poseImage, setPoseImage] = useState<{url: string, file: File} | null>(null);
+
     const [styleImage, setStyleImage] = useState<{url: string, file: File} | null>(null);
     const [prompt, setPrompt] = useState<string>('');
     const [selectedModelId, setSelectedModelId] = useState<string>(DETAILED_AI_MODELS[0].id);
     const [selectedStyleId, setSelectedStyleId] = useState<string>(STYLE_PRESETS_NEW[1].id);
     const [aspectRatio, setAspectRatio] = useState('1:1');
-    const [randomSeed, setRandomSeed] = useState(true);
     
+    // NEW: Super face lock toggle
+    const [superFaceLock, setSuperFaceLock] = useState(true);
+
     const [isConfirmationOpen, setConfirmationOpen] = useState(false);
     const [isModelModalOpen, setModelModalOpen] = useState(false);
     const [isInstructionModalOpen, setInstructionModalOpen] = useState(false);
-    const [instructionKey, setInstructionKey] = useState<'character' | 'style' | 'prompt' | 'advanced' | null>(null);
+    const [instructionKey, setInstructionKey] = useState<'character' | 'style' | 'prompt' | 'advanced' | 'face' | null>(null);
     const [isPreviewModalOpen, setPreviewModalOpen] = useState(false);
     
     const [generationStep, setGenerationStep] = useState(0);
@@ -89,22 +95,16 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
     const selectedStyle = useMemo(() => STYLE_PRESETS_NEW.find(s => s.id === selectedStyleId)!, [selectedStyleId]);
     const isImageToImageSupported = useMemo(() => selectedModel.supportedModes.includes('image-to-image'), [selectedModel]);
     
+    // NEW: Calculate cost dynamically
+    const generationCost = COST_PER_IMAGE + (faceReferenceImage && superFaceLock ? 1 : 0);
+
     // Effect to handle the image moved from the background remover
     useEffect(() => {
         if (initialCharacterImage) {
-            const newImage = { ...initialCharacterImage, id: crypto.randomUUID() };
-             // Start face lock process for the new image
-            setFaceLockStatuses(prev => ({ ...prev, [newImage.id]: 'locking' }));
-            setTimeout(() => {
-                setFaceLockStatuses(prev => ({ ...prev, [newImage.id]: 'locked' }));
-            }, 2000);
-
-            setCharacterImages(prev => [...prev, newImage]);
-            if (!selectedCharacterId) {
-                setSelectedCharacterId(newImage.id);
-            }
+            setPoseImage(initialCharacterImage);
+            showToast('Ảnh đã tách nền được chuyển vào ô "Ảnh Toàn Thân". Hãy tải ảnh gương mặt để có kết quả tốt nhất!', 'success');
         }
-    }, [initialCharacterImage]);
+    }, [initialCharacterImage, showToast]);
 
 
     useEffect(() => {
@@ -121,43 +121,38 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
         const model = DETAILED_AI_MODELS.find(m => m.id === selectedModelId)!;
         if (!model.supportedModes.includes('image-to-image')) {
             let imagesCleared = false;
-            if (characterImages.length > 0) {
-                setCharacterImages([]);
-                setSelectedCharacterId(null);
-                setFaceLockStatuses({});
-                imagesCleared = true;
-            }
-            if (styleImage) {
-                setStyleImage(null);
-                imagesCleared = true;
-            }
+            if (poseImage) { setPoseImage(null); imagesCleared = true; }
+            if (styleImage) { setStyleImage(null); imagesCleared = true; }
+            if (faceReferenceImage) { setFaceReferenceImage(null); setIsFaceLocked(false); imagesCleared = true; }
             if (imagesCleared) {
                 showToast(`Đã xóa ảnh. Model "${model.name}" chỉ hỗ trợ văn bản.`, 'success');
             }
         }
-    }, [selectedModelId, characterImages, styleImage, showToast]);
+    }, [selectedModelId, poseImage, styleImage, faceReferenceImage, showToast]);
 
-    const handleCharacterImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handlePoseImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
             resizeImage(file, 1024).then(({ file: resizedFile, dataUrl: resizedDataUrl }) => {
-                const newImage = { id: crypto.randomUUID(), url: resizedDataUrl, file: resizedFile };
-                setCharacterImages(prev => [...prev, newImage]);
-                
-                // Set status to locking
-                setFaceLockStatuses(prev => ({ ...prev, [newImage.id]: 'locking' }));
-                
-                // Simulate locking process
-                setTimeout(() => {
-                    setFaceLockStatuses(prev => ({ ...prev, [newImage.id]: 'locked' }));
-                }, 2000); // 2-second delay for simulation
-
-                if (!selectedCharacterId) {
-                    setSelectedCharacterId(newImage.id);
-                }
+                setPoseImage({ url: resizedDataUrl, file: resizedFile });
             }).catch(err => {
-                console.error("Error resizing character image:", err);
-                showToast("Lỗi khi xử lý ảnh nhân vật.", "error");
+                console.error("Error resizing pose image:", err);
+                showToast("Lỗi khi xử lý ảnh toàn thân.", "error");
+            });
+        }
+        e.target.value = '';
+    };
+
+    const handleFaceImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            setIsFaceLocked(false);
+            resizeImage(file, 1024).then(({ file: resizedFile, dataUrl: resizedDataUrl }) => {
+                setFaceReferenceImage({ url: resizedDataUrl, file: resizedFile });
+                setTimeout(() => setIsFaceLocked(true), 1500); // Simulate locking
+            }).catch(err => {
+                console.error("Error resizing face image:", err);
+                showToast("Lỗi khi xử lý ảnh gương mặt.", "error");
             });
         }
         e.target.value = '';
@@ -176,28 +171,13 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
         e.target.value = '';
     };
 
-    const handleRemoveCharacterImage = (idToRemove: string) => {
-        setCharacterImages(prev => prev.filter(img => img.id !== idToRemove));
-        
-        // Remove from face lock statuses
-        setFaceLockStatuses(prev => {
-            const newStatuses = { ...prev };
-            delete newStatuses[idToRemove];
-            return newStatuses;
-        });
-
-        if (selectedCharacterId === idToRemove) {
-            setSelectedCharacterId(characterImages.length > 1 ? characterImages.find(img => img.id !== idToRemove)!.id : null);
-        }
-    };
-
     const handleGenerateClick = () => {
-        if (!prompt.trim() && !selectedCharacterId) {
-            showToast('Vui lòng nhập mô tả hoặc tải ảnh nhân vật.', 'error');
+        if (!prompt.trim() && !faceReferenceImage && !poseImage) {
+            showToast('Vui lòng nhập mô tả hoặc tải lên ít nhất một ảnh.', 'error');
             return;
         }
-        if (user && user.diamonds < COST_PER_IMAGE) {
-            showToast('Bạn không đủ kim cương. Vui lòng nạp thêm.', 'error');
+        if (user && user.diamonds < generationCost) {
+            showToast(`Bạn cần ${generationCost} kim cương, nhưng chỉ có ${user.diamonds}. Vui lòng nạp thêm.`, 'error');
             return;
         }
         setConfirmationOpen(true);
@@ -206,17 +186,14 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
     const handleConfirmGeneration = () => {
         setConfirmationOpen(false);
         setGenerationStep(0);
-        const selectedImageFile = characterImages.find(img => img.id === selectedCharacterId)?.file || null;
-        generateImage(prompt, selectedImageFile, styleImage?.file || null, selectedModel, selectedStyle, aspectRatio, setGenerationStep);
+        generateImage(prompt, poseImage?.file || null, styleImage?.file || null, faceReferenceImage?.file || null, selectedModel, selectedStyle, aspectRatio, superFaceLock && !!faceReferenceImage, setGenerationStep);
     };
 
-    const handleOpenInstruction = (key: 'character' | 'style' | 'prompt' | 'advanced') => {
+    const handleOpenInstruction = (key: 'character' | 'style' | 'prompt' | 'advanced' | 'face') => {
         setInstructionKey(key);
         setInstructionModalOpen(true);
     };
     
-    const currentLockStatus = selectedCharacterId ? faceLockStatuses[selectedCharacterId] : null;
-
     const ResultPanel = ({ isMobile = false }) => (
       <div className={`${isMobile ? 'block lg:hidden mt-6' : 'hidden lg:block lg:sticky top-24 h-[calc(100vh-7rem)] bg-black/20 p-4 rounded-2xl border border-white/5'}`}>
           {isMobile && <h3 className="text-lg font-semibold mb-3 text-gray-300">Kết quả</h3>}
@@ -244,7 +221,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                   <div className="w-full">
                       <button onClick={handleGenerateClick} disabled={isLoading} className="w-full mt-2 py-3.5 font-bold text-lg text-white bg-gradient-to-r from-[#F72585] to-[#CA27FF] rounded-full hover:scale-105 transform transition-transform duration-300 shadow-lg shadow-[#F72585]/30 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed disabled:scale-100">
                          <i className="ph-fill ph-magic-wand"></i>
-                         {isLoading ? "Đang xử lý..." : `Tạo ảnh (-${COST_PER_IMAGE} kim cương)`}
+                         {isLoading ? "Đang xử lý..." : `Tạo ảnh (-${generationCost} kim cương)`}
                      </button>
                   </div>
               )}
@@ -259,61 +236,52 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                 <div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="sm:col-span-2">
-                            <SettingsBlock step={1} title="Tải ảnh Nhân vật" instructionKey="character" onInstructionClick={handleOpenInstruction}>
-                                <div id="character-uploader" className={`p-2 rounded-lg bg-black/20 ${isImageToImageSupported ? '' : 'group-disabled'}`}>
-                                    {characterImages.length > 0 && (
-                                        <div className="flex items-center gap-2 overflow-x-auto pb-2 mb-2">
-                                            {characterImages.map(img => (
-                                                <div key={img.id} onClick={() => setSelectedCharacterId(img.id)} className={`relative flex-shrink-0 w-24 h-24 rounded-md cursor-pointer border-2 transition-all ${selectedCharacterId === img.id ? 'border-pink-500 selected-glow' : 'border-transparent'}`}>
-                                                    <img src={img.url} className="w-full h-full object-cover rounded" alt="Character"/>
-                                                    <button onClick={(e) => {e.stopPropagation(); handleRemoveCharacterImage(img.id)}} className="absolute top-1 right-1 bg-black/60 text-white rounded-full p-0.5 hover:bg-red-500 transition-colors z-10">
-                                                        <i className="ph-fill ph-x text-sm"></i>
-                                                    </button>
-                                                    {selectedCharacterId === img.id && <div className="absolute inset-0 bg-pink-500/30 rounded-md pointer-events-none"></div>}
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                    <label className={`relative w-full h-28 flex items-center justify-center text-center text-gray-400 rounded-lg border-2 border-dashed ${isImageToImageSupported ? 'border-gray-600 hover:border-pink-500 cursor-pointer' : 'border-gray-700'} bg-black/20`}>
-                                        <div><i className="ph-fill ph-plus-circle text-3xl"></i><p className="text-xs mt-1">Thêm ảnh nhân vật</p></div>
-                                        <input type="file" accept="image/*" onChange={handleCharacterImageUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" disabled={!isImageToImageSupported}/>
-                                    </label>
-                                    {isImageToImageSupported === false && <p className="text-xs text-yellow-400 mt-2 text-center">Model hiện tại không hỗ trợ ảnh nhân vật.</p>}
+                             <SettingsBlock step={1} title="Siêu Khóa Gương Mặt (Face ID)" instructionKey="face" onInstructionClick={handleOpenInstruction}>
+                                <div className={`relative p-2 rounded-lg bg-black/20 glowing-border ${faceReferenceImage ? 'glowing-border-active' : ''}`}>
+                                    <ImageUploader 
+                                        image={faceReferenceImage} 
+                                        onUpload={handleFaceImageUpload} 
+                                        onRemove={() => { setFaceReferenceImage(null); setIsFaceLocked(false); }} 
+                                        text="Tải ảnh chân dung rõ nét" 
+                                        disabled={!isImageToImageSupported} 
+                                    />
                                 </div>
-                                {currentLockStatus && (
+                                {faceReferenceImage && (
                                     <div className="mt-3 text-center animate-fade-in px-2">
-                                        {currentLockStatus === 'locking' && (
+                                        {!isFaceLocked ? (
                                             <div className="flex items-center justify-center gap-2 text-sm text-cyan-300">
                                                 <div className="w-4 h-4 border-2 border-cyan-300/50 border-t-cyan-300 rounded-full animate-spin"></div>
                                                 <span>AI đang phân tích & khoá gương mặt...</span>
                                             </div>
-                                        )}
-                                        {currentLockStatus === 'locked' && (
+                                        ) : (
                                             <div className="flex items-center justify-center gap-2 text-sm text-green-400 font-semibold p-2 bg-green-500/10 rounded-lg">
                                                 <i className="ph-fill ph-check-circle"></i>
-                                                <span>Gương mặt đã được khoá thành công!</span>
+                                                <span>Gương mặt đã được khoá! (+1 💎)</span>
                                             </div>
                                         )}
                                     </div>
                                 )}
-                            </SettingsBlock>
+                             </SettingsBlock>
+                        </div>
+
+                        <div className="h-full">
+                           <SettingsBlock step={2} title="Ảnh Toàn Thân (Tùy chọn)" instructionKey="character" onInstructionClick={handleOpenInstruction}>
+                               <ImageUploader image={poseImage} onUpload={handlePoseImageUpload} onRemove={() => setPoseImage(null)} text="Tải ảnh tham khảo tư thế, trang phục" disabled={!isImageToImageSupported} />
+                           </SettingsBlock>
                         </div>
                         <div className="h-full">
-                            <SettingsBlock step={2} title="Tải ảnh Mẫu" instructionKey="style" onInstructionClick={handleOpenInstruction}>
-                                <ImageUploader image={styleImage} onUpload={handleStyleImageUpload} onRemove={() => setStyleImage(null)} text="Tải ảnh Phong cách" processType="style" disabled={!isImageToImageSupported} />
+                            <SettingsBlock step={3} title="Ảnh Mẫu (Tùy chọn)" instructionKey="style" onInstructionClick={handleOpenInstruction}>
+                                <ImageUploader image={styleImage} onUpload={handleStyleImageUpload} onRemove={() => setStyleImage(null)} text="Tải ảnh tham khảo phong cách" processType="style" disabled={!isImageToImageSupported} />
                             </SettingsBlock>
                         </div>
-                        <div className="h-full">
-                            <SettingsBlock step={3} title="Nhập câu lệnh" instructionKey="prompt" onInstructionClick={handleOpenInstruction}>
+
+                        <div className="sm:col-span-2">
+                            <SettingsBlock step={4} title="Nhập câu lệnh & Cài đặt" instructionKey="prompt" onInstructionClick={handleOpenInstruction}>
                                 <textarea 
                                     rows={4} value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="VD: một cô gái tóc hồng, mặc váy công chúa..."
-                                    className="w-full h-full bg-white/5 p-3 rounded-lg border border-gray-700 focus:ring-2 focus:ring-pink-500 focus:border-pink-500 transition"
+                                    className="w-full bg-white/5 p-3 rounded-lg border border-gray-700 focus:ring-2 focus:ring-pink-500 focus:border-pink-500 transition"
                                 />
-                            </SettingsBlock>
-                        </div>
-                        <div className="sm:col-span-2">
-                            <SettingsBlock step={4} title="Cài đặt nâng cao" instructionKey="advanced" onInstructionClick={handleOpenInstruction}>
-                                <div className="space-y-4">
+                                <div className="mt-4 space-y-4">
                                     <div>
                                         <label className="text-sm font-medium text-gray-400 mb-1 block">Phong cách</label>
                                         <div className="relative" ref={styleDropdownRef}>
@@ -332,26 +300,21 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                                                 </div>
                                             )}
                                         </div>
-                                </div>
-                                <div>
+                                    </div>
+                                    <div>
                                         <label className="text-sm font-medium text-gray-400 mb-1 block">Mô hình AI</label>
                                         <button onClick={() => setModelModalOpen(true)} className="w-full flex justify-between items-center text-left bg-white/5 p-3 rounded-lg border border-gray-700 hover:border-pink-500 transition">
                                             <span className="font-semibold">{selectedModel.name}</span> <i className="ph-fill ph-stack text-pink-400"></i>
                                         </button>
-                                </div>
-                                <div>
-                                        <label className="text-sm font-medium text-gray-400 mb-2 block">Tỷ lệ khung hình</label>
-                                        <div className="grid grid-cols-5 gap-2">
-                                        <AspectRatioButton value="1:1" icon={<div className="w-6 h-6 bg-gray-500 rounded-sm"/>} currentValue={aspectRatio} onClick={setAspectRatio} />
-                                        <AspectRatioButton value="3:4" icon={<div className="w-5 h-7 bg-gray-500 rounded-sm"/>} currentValue={aspectRatio} onClick={setAspectRatio} />
-                                        <AspectRatioButton value="4:3" icon={<div className="w-7 h-5 bg-gray-500 rounded-sm"/>} currentValue={aspectRatio} onClick={setAspectRatio} />
-                                        <AspectRatioButton value="9:16" icon={<div className="w-4 h-8 bg-gray-500 rounded-sm"/>} currentValue={aspectRatio} onClick={setAspectRatio} />
-                                        <AspectRatioButton value="16:9" icon={<div className="w-8 h-4 bg-gray-500 rounded-sm"/>} currentValue={aspectRatio} onClick={setAspectRatio} />
-                                        </div>
-                                </div>
-                                <div className="pt-2 border-t border-white/10 mt-2">
-                                    <ToggleSwitch label="Seed ngẫu nhiên" checked={randomSeed} onChange={(e) => setRandomSeed(e.target.checked)} />
-                                </div>
+                                    </div>
+                                    <div className="pt-2 border-t border-white/10 mt-2">
+                                        <ToggleSwitch 
+                                            label="Kích hoạt Siêu Khóa Gương Mặt" 
+                                            checked={superFaceLock} 
+                                            onChange={(e) => setSuperFaceLock(e.target.checked)}
+                                            disabled={!faceReferenceImage}
+                                        />
+                                    </div>
                                 </div>
                             </SettingsBlock>
                         </div>
@@ -365,12 +328,12 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
             <div className="md:hidden fixed bottom-16 left-0 w-full p-3 z-30 mobile-ai-footer">
                 <button onClick={handleGenerateClick} disabled={isLoading} className="w-full py-3 font-bold text-lg text-white bg-gradient-to-r from-[#F72585] to-[#CA27FF] rounded-full flex items-center justify-center gap-2 disabled:opacity-60">
                     <i className="ph-fill ph-magic-wand"></i>
-                    {isLoading ? "Đang xử lý..." : `Tạo ảnh (-${COST_PER_IMAGE} Kim cương)`}
+                    {isLoading ? "Đang xử lý..." : `Tạo ảnh (-${generationCost} Kim cương)`}
                 </button>
             </div>
             
-            <ConfirmationModal isOpen={isConfirmationOpen} onClose={() => setConfirmationOpen(false)} onConfirm={handleConfirmGeneration} cost={COST_PER_IMAGE}/>
-            <ModelSelectionModal isOpen={isModelModalOpen} onClose={() => setModelModalOpen(false)} selectedModelId={selectedModelId} onSelectModel={setSelectedModelId} characterImage={characterImages.length > 0}/>
+            <ConfirmationModal isOpen={isConfirmationOpen} onClose={() => setConfirmationOpen(false)} onConfirm={handleConfirmGeneration} cost={generationCost}/>
+            <ModelSelectionModal isOpen={isModelModalOpen} onClose={() => setModelModalOpen(false)} selectedModelId={selectedModelId} onSelectModel={setSelectedModelId} characterImage={!!poseImage || !!faceReferenceImage}/>
             <InstructionModal isOpen={isInstructionModalOpen} onClose={() => setInstructionModalOpen(false)} instructionKey={instructionKey}/>
 
             {isPreviewModalOpen && generatedImage && (

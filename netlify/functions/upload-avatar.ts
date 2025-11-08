@@ -56,7 +56,8 @@ const handler: Handler = async (event: HandlerEvent) => {
             ContentType: mimeType,
         });
 
-        await s3Client.send(putCommand);
+        // FIX: Cast s3Client to 'any' to bypass a likely environment-specific TypeScript type resolution error.
+        await (s3Client as any).send(putCommand);
 
         // 4. Get public URL and update user profile
         // Add timestamp to bust cache

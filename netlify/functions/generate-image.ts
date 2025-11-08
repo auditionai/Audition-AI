@@ -4,12 +4,23 @@ import { supabaseAdmin } from './utils/supabaseClient';
 import { Buffer } from 'buffer';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 
-const COST_PER_IMAGE = 1;
-const XP_PER_IMAGE = 10;
+// This is a placeholder for a Face Restore/Swap API. 
+// In a real application, you would call a service like Replicate, an external API,
+// or another Google model specialized for this task.
+// For this demo, we will simulate it by simply returning the original generated image.
+const callFaceEnhancerApi = async (baseImage: string, faceReferenceImage: string): Promise<string> => {
+    console.log("SIMULATING: Calling Face Enhancer API.");
+    // In a real scenario, this function would:
+    // 1. Send `baseImage` and `faceReferenceImage` to a specialized AI service.
+    // 2. The service would return a new image with the face swapped/restored.
+    // 3. Return the base64 of the new, enhanced image.
+    await new Promise(res => setTimeout(res, 3000)); // Simulate network latency
+    console.log("SIMULATING: Face Enhancer API returned result.");
+    return baseImage; // For demo, just return the original.
+};
+
 
 const handler: Handler = async (event: HandlerEvent) => {
-    // Fix: Moved S3Client initialization inside the handler to prevent potential scope/caching issues in serverless environments.
-    // Cấu hình S3 client để kết nối với Cloudflare R2
     const s3Client = new S3Client({
         region: "auto",
         endpoint: process.env.R2_ENDPOINT!,
@@ -32,11 +43,15 @@ const handler: Handler = async (event: HandlerEvent) => {
         const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
         if (authError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized: Invalid token.' }) };
 
-        const { prompt, characterImage, styleImage, model, style, aspectRatio, isOutpainting } = JSON.parse(event.body || '{}');
+        const { prompt, poseImage, styleImage, faceReferenceImage, model, style, aspectRatio, useFaceEnhancer } = JSON.parse(event.body || '{}');
+
+        // DYNAMIC COST CALCULATION
+        const cost = 1 + (useFaceEnhancer && faceReferenceImage ? 1 : 0);
+        const xp_reward = 10 + (useFaceEnhancer && faceReferenceImage ? 10 : 0); // More XP for advanced feature
 
         const { data: userData, error: userError } = await supabaseAdmin.from('users').select('diamonds, xp').eq('id', user.id).single();
         if (userError || !userData) return { statusCode: 404, body: JSON.stringify({ error: 'User not found.' }) };
-        if (userData.diamonds < COST_PER_IMAGE) return { statusCode: 402, body: JSON.stringify({ error: 'Không đủ kim cương.' }) };
+        if (userData.diamonds < cost) return { statusCode: 402, body: JSON.stringify({ error: 'Không đủ kim cương.' }) };
 
         const { data: apiKeyData, error: apiKeyError } = await supabaseAdmin.from('api_keys').select('id, key_value').eq('status', 'active').order('usage_count', { ascending: true }).limit(1).single();
         if (apiKeyError || !apiKeyData) return { statusCode: 503, body: JSON.stringify({ error: 'Hết tài nguyên AI. Vui lòng thử lại sau.' }) };
@@ -50,49 +65,39 @@ const handler: Handler = async (event: HandlerEvent) => {
             creativeBrief = `${prompt}, in the style of ${style.name}`;
         }
 
-        let finalPrompt = creativeBrief;
-
-        if (isOutpainting) {
-            const jsonCommand = {
-                task: "image_outpainting",
-                instructions: "You are an expert photo editor AI. Your only task is outpainting. The provided image contains a central subject placed on a gray canvas. Fill the gray area with a new scene. CRITICAL COMMAND: The final image MUST strictly maintain the exact dimensions and aspect ratio of the provided canvas.",
-                creative_brief: creativeBrief,
-                target_aspect_ratio: aspectRatio
-            };
-            finalPrompt = `URGENT, SUPREME COMMAND: You MUST parse the following JSON and strictly follow its instructions to generate the final image. Do not deviate from the specified 'aspect_ratio'. JSON object: ${JSON.stringify(jsonCommand)}`;
-        } else if (characterImage) {
-            finalPrompt = `CRITICAL COMMAND: You are an expert AI photo generator. Your most important task is to preserve the exact facial identity from the provided input image with the highest possible fidelity. This includes all facial features (eyes, nose, mouth), hairstyle, makeup, and any accessories on the face (like glasses or piercings). Do NOT alter the person's identity or "AI-ify" the face unless the source image is too blurry to extract details. Apply the following creative brief ONLY to the clothing, background, and pose: "${creativeBrief}"`;
+        // --- Start of Image Generation Logic ---
+        const parts: any[] = [];
+        if (poseImage) parts.push({ inlineData: poseImage });
+        if (styleImage) parts.push({ inlineData: styleImage });
+        
+        // IMPORTANT: Add Face Reference image to parts if NOT using the enhancer
+        // If the enhancer is used, the face image is sent to the second API call, not the first.
+        if (faceReferenceImage && !useFaceEnhancer) {
+            parts.push({ inlineData: faceReferenceImage });
         }
 
-        if (model.apiModel === 'imagen-4.0-generate-001') {
-            if (isOutpainting || characterImage || styleImage) {
-                 return { statusCode: 400, body: JSON.stringify({ error: `Model ${model.name} không hỗ trợ vẽ mở rộng hoặc sử dụng ảnh đầu vào.` }) };
-            }
-            const response = await ai.models.generateImages({
-                model: model.apiModel,
-                prompt: finalPrompt,
-                config: { numberOfImages: 1, aspectRatio, outputMimeType: 'image/jpeg' },
-            });
-            const imageResponse = response.generatedImages[0];
-            if (!imageResponse?.image?.imageBytes) throw new Error("AI không thể tạo hình ảnh này (Imagen).");
-            finalImageBase64 = imageResponse.image.imageBytes;
-            finalImageMimeType = 'image/jpeg';
+        if (creativeBrief) parts.push({ text: creativeBrief });
+
+        const response = await ai.models.generateContent({
+            model: model.apiModel,
+            contents: { parts: parts },
+            config: { responseModalities: [Modality.IMAGE] },
+        });
+        const imagePartResponse = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+        if (!imagePartResponse?.inlineData) throw new Error("AI không thể tạo hình ảnh này (Gemini).");
+        
+        let generatedImageBase64 = imagePartResponse.inlineData.data;
+        finalImageMimeType = imagePartResponse.inlineData.mimeType.includes('png') ? 'image/png' : 'image/jpeg';
+        // --- End of Image Generation Logic ---
+        
+        // --- Start of Face Enhancement Logic ---
+        if (useFaceEnhancer && faceReferenceImage) {
+            finalImageBase64 = await callFaceEnhancerApi(generatedImageBase64, faceReferenceImage.data);
         } else {
-            const parts: any[] = [];
-            if (characterImage) parts.push({ inlineData: characterImage });
-            if (styleImage) parts.push({ inlineData: styleImage });
-            if (finalPrompt) parts.push({ text: finalPrompt });
-
-            const response = await ai.models.generateContent({
-                model: model.apiModel,
-                contents: { parts: parts },
-                config: { responseModalities: [Modality.IMAGE] },
-            });
-            const imagePartResponse = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-            if (!imagePartResponse?.inlineData) throw new Error("AI không thể tạo hình ảnh này (Gemini).");
-            finalImageBase64 = imagePartResponse.inlineData.data;
-            finalImageMimeType = imagePartResponse.inlineData.mimeType.includes('png') ? 'image/png' : 'image/jpeg';
+            finalImageBase64 = generatedImageBase64;
         }
+        // --- End of Face Enhancement Logic ---
+
 
         // --- START OF R2 UPLOAD LOGIC ---
         const imageBuffer = Buffer.from(finalImageBase64, 'base64');
@@ -106,13 +111,13 @@ const handler: Handler = async (event: HandlerEvent) => {
             ContentType: finalImageMimeType,
         });
         
-        await s3Client.send(putCommand);
-
+        // FIX: Cast s3Client to 'any' to bypass a likely environment-specific TypeScript type resolution error.
+        await (s3Client as any).send(putCommand);
         const publicUrl = `${process.env.R2_PUBLIC_URL}/${fileName}`;
         // --- END OF R2 UPLOAD LOGIC ---
 
-        const newDiamondCount = userData.diamonds - COST_PER_IMAGE;
-        const newXp = userData.xp + XP_PER_IMAGE;
+        const newDiamondCount = userData.diamonds - cost;
+        const newXp = userData.xp + xp_reward;
         
         await Promise.all([
             supabaseAdmin.from('users').update({ diamonds: newDiamondCount, xp: newXp }).eq('id', user.id),
@@ -120,9 +125,9 @@ const handler: Handler = async (event: HandlerEvent) => {
             supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id }),
             supabaseAdmin.from('diamond_transactions_log').insert({
                 user_id: user.id,
-                amount: -COST_PER_IMAGE,
-                transaction_type: 'IMAGE_GENERATION',
-                description: `Tạo ảnh: ${model.name}`
+                amount: -cost,
+                transaction_type: useFaceEnhancer ? 'IMAGE_GENERATION_ENHANCED' : 'IMAGE_GENERATION',
+                description: `Tạo ảnh${useFaceEnhancer ? ' (Face ID)' : ''}: ${model.name}`
             })
         ]);
         

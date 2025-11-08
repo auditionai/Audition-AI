@@ -12,6 +12,7 @@ import GenerationProgress from './GenerationProgress';
 import ConfirmationModal from '../ConfirmationModal';
 import ImageModal from '../common/ImageModal';
 import ToggleSwitch from './ToggleSwitch';
+import { resizeImage } from '../../utils/imageUtils';
 
 interface AiGeneratorToolProps {
     initialCharacterImage?: { url: string; file: File } | null;
@@ -68,13 +69,20 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
     const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'pose' | 'face' | 'style') => {
         const file = e.target.files?.[0];
         if (file) {
-            const newImage = { url: URL.createObjectURL(file), file };
-            if (type === 'pose') setPoseImage(newImage);
-            else if (type === 'face') {
-                setRawFaceImage(newImage);
-                setProcessedFaceImage(null); // Reset processed image if a new one is uploaded
-            }
-            else if (type === 'style') setStyleImage(newImage);
+            resizeImage(file, 1024) // Resize to max 1024px
+                .then(({ file: resizedFile, dataUrl: resizedDataUrl }) => {
+                    const newImage = { url: resizedDataUrl, file: resizedFile };
+                    if (type === 'pose') setPoseImage(newImage);
+                    else if (type === 'face') {
+                        setRawFaceImage(newImage);
+                        setProcessedFaceImage(null); // Reset processed image if a new one is uploaded
+                    }
+                    else if (type === 'style') setStyleImage(newImage);
+                })
+                .catch(err => {
+                    console.error("Error resizing image:", err);
+                    showToast("Lỗi khi xử lý ảnh đầu vào.", "error");
+                });
         }
     };
 

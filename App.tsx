@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import HomePage from './pages/HomePage';
 import CreatorPage, { CreatorTab } from './pages/CreatorPage';
 import GalleryPage from './pages/GalleryPage';

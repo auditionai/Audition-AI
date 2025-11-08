@@ -13,7 +13,6 @@ import ConfirmationModal from '../ConfirmationModal';
 import ImageModal from '../common/ImageModal';
 import ToggleSwitch from './ToggleSwitch';
 import { resizeImage } from '../../utils/imageUtils';
-import { soundManager } from '../../utils/soundManager';
 
 interface AiGeneratorToolProps {
     initialCharacterImage?: { url: string; file: File } | null;
@@ -67,14 +66,6 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    // Effect to speak when generation is successful
-    useEffect(() => {
-        if (generatedImage) {
-            soundManager.speak('Tạo ảnh thành công! Bạn có thể tải xuống hoặc tạo một tác phẩm khác.');
-        }
-    }, [generatedImage]);
-
-
     const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'pose' | 'face' | 'style') => {
         const file = e.target.files?.[0];
         if (file) {
@@ -107,7 +98,6 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
     const handleProcessFace = async () => {
         if (!rawFaceImage || !session) return;
         setIsProcessingFace(true);
-        soundManager.playSound('click');
         try {
             const reader = new FileReader();
             reader.readAsDataURL(rawFaceImage.file);
@@ -136,7 +126,6 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
     const generationCost = 1 + (useUpscaler ? 1 : 0);
 
     const handleGenerateClick = () => {
-        soundManager.playSound('click');
         if (!prompt.trim()) {
             showToast('Vui lòng nhập mô tả (prompt).', 'error');
             return;
@@ -165,14 +154,15 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
 
     const handleDownloadResult = () => {
         if (!generatedImage) return;
-        soundManager.playSound('click');
         
+        // Create the proxied download URL
         const downloadUrl = `/.netlify/functions/download-image?url=${encodeURIComponent(generatedImage)}`;
 
+        // Use a temporary anchor element to trigger the download
         const a = document.createElement('a');
         a.style.display = 'none';
         a.href = downloadUrl;
-        a.download = `audition-ai-${Date.now()}.png`;
+        a.download = `audition-ai-${Date.now()}.png`; // Fallback filename
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -246,6 +236,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
             <InstructionModal isOpen={isInstructionModalOpen} onClose={() => setInstructionModalOpen(false)} instructionKey={instructionKey} />
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                {/* Main Content Area (Left) */}
                 <div className="lg:col-span-8 flex flex-col gap-6">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <SettingsBlock title="Ảnh Nhân Vật" instructionKey="character" onInstructionClick={() => openInstructionModal('character')}>
@@ -284,6 +275,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                     </SettingsBlock>
                 </div>
 
+                {/* Sidebar (Right) */}
                 <div className="lg:col-span-4 bg-[#1a1a22]/80 p-4 rounded-xl border border-white/10 flex flex-col">
                     <SettingsBlock title="Cài đặt Nâng cao" instructionKey="advanced" onInstructionClick={() => openInstructionModal('advanced')}>
                         <div className="space-y-4">

@@ -3,7 +3,6 @@ import { getSupabaseClient } from '../utils/supabaseClient';
 import type { Session, User as SupabaseUser, SupabaseClient } from '@supabase/supabase-js';
 import { User, Stats } from '../types';
 import { calculateLevelFromXp } from '../utils/rankUtils';
-import { soundManager } from '../utils/soundManager';
 
 const getVNDateString = (date: Date) => {
     // UTC+7
@@ -55,7 +54,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
         setToast({ message, type });
-        soundManager.playSound(type); // Play sound on toast
         setTimeout(() => {
             setToast(null);
         }, 4000); 
@@ -201,15 +199,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             const xpDiff = user.xp - previousUser.xp;
             if (diamondDiff > 0 || xpDiff > 0) {
                  setReward({ diamonds: diamondDiff > 0 ? diamondDiff : 0, xp: xpDiff > 0 ? xpDiff : 0 });
-                 soundManager.playSound('notification');
             }
             if (user.level > previousUser.level) {
-                 const levelUpMessage = `Chúc mừng! Bạn đã thăng cấp ${user.level}!`;
-                 showToast(levelUpMessage, 'success');
-                 soundManager.speak(levelUpMessage);
+                 showToast(`Chúc mừng! Bạn đã thăng cấp ${user.level}!`, 'success');
             }
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user, showToast]);
     
     useEffect(() => {

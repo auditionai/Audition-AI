@@ -6,14 +6,6 @@ import { useAuth } from './contexts/AuthContext';
 import BuyCreditsPage from './pages/BuyCreditsPage';
 import RewardNotification from './components/common/RewardNotification';
 
-// Make window.appReady globally available for type safety.
-// This is no longer used by the new Watchdog system but is kept for potential future use.
-declare global {
-  interface Window {
-    appReady: () => void;
-  }
-}
-
 const AppLoadingScreen = () => (
   <div className="fixed inset-0 bg-[#0B0B0F] flex items-center justify-center z-[9999]">
     <div className="text-center">
@@ -28,16 +20,6 @@ const AppLoadingScreen = () => (
 
 function App() {
   const { user, toast, loading, route, reward, clearReward } = useAuth();
-
-  // ** WATCHDOG INTEGRATION **
-  // This effect signals to the pre-flight script in index.html that the app has
-  // successfully loaded and the loading screen is about to be removed.
-  // This removes the 'boot_in_progress' flag from sessionStorage, disarming the watchdog.
-  useEffect(() => {
-    if (!loading) {
-      sessionStorage.removeItem('boot_in_progress');
-    }
-  }, [loading]);
 
   if (loading) {
     return <AppLoadingScreen />;

@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { soundManager } from '../../utils/soundManager';
+
+import React from 'react';
 
 interface ModalProps {
   isOpen: boolean;
@@ -9,12 +9,6 @@ interface ModalProps {
 }
 
 const Modal: React.FC<ModalProps> = ({ isOpen, onClose, children, title }) => {
-  useEffect(() => {
-    if (isOpen) {
-      soundManager.playSound('swoosh');
-    }
-  }, [isOpen]);
-
   if (!isOpen) return null;
 
   return (

@@ -8,9 +8,7 @@ const COST_BASE = 1;
 const COST_UPSCALE = 1;
 const XP_PER_GENERATION = 10;
 
-// --- ROBUST ASPECT RATIO FIX ---
 // Pre-generated, tiny, gray canvases as base64 strings.
-// These act as a strong visual anchor for the Gemini model.
 const ASPECT_RATIO_CANVASES = {
     '3:4': 'iVBORw0KGgoAAAANSUhEUgAAAAMAAAAECAIAAADpP+8GAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAAYSURBVAhXY/z//z8DAwMTAwMDAwMjgAADAF91A/3f28dEAAAAAElFTkSuQmCC', // 3x4 Gray
     '4:3': 'iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAIAAAA7ljmRAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAAWSURBVAhXY/z//z8DAwMTAwMjgAADACvZA/1V2u3UAAAAAElFTkSuQmCC', // 4x3 Gray
@@ -86,18 +84,24 @@ const handler: Handler = async (event: HandlerEvent) => {
             const hasImageInput = characterImage || styleImage || faceReferenceImage;
             let finalPromptText = fullPrompt;
 
-            // --- ROBUST ASPECT RATIO FIX IMPLEMENTATION ---
+            // --- CRITICAL ORDERING FIX ---
+            
+            // 1. Determine the final prompt text first.
+            if (hasImageInput) {
+                finalPromptText = `Strictly adhere to the aspect ratio of the initial gray canvas provided. Fill the entire canvas. The artistic content should be: ${fullPrompt}`;
+            }
+            // 2. The text prompt MUST be the first part of the request.
+            parts.push({ text: finalPromptText });
+
+            // 3. If image inputs exist, the gray canvas MUST be the second part.
             if (hasImageInput) {
                 const canvasBase64 = ASPECT_RATIO_CANVASES[aspectRatio as keyof typeof ASPECT_RATIO_CANVASES];
                 if (canvasBase64) {
-                    // 1. Add the pre-sized canvas as the VERY FIRST input.
                     parts.push({ inlineData: { data: canvasBase64, mimeType: 'image/png' } });
-                    
-                    // 2. Modify the prompt to explicitly command the AI to use the canvas.
-                    finalPromptText = `Strictly adhere to the aspect ratio of the initial gray canvas provided. Fill the entire canvas. The artistic content should be: ${fullPrompt}`;
                 }
             }
             
+            // 4. Append all other reference images after the instructions and canvas.
             const processImagePart = (imageDataUrl: string | null) => {
                 if (!imageDataUrl) return;
                 const [header, base64] = imageDataUrl.split(',');
@@ -115,9 +119,6 @@ const handler: Handler = async (event: HandlerEvent) => {
                     parts.push({ inlineData: { data: faceReferenceImage, mimeType: 'image/png' } });
                  }
             }
-            
-            // Add the final, potentially modified, text prompt
-            parts.push({ text: finalPromptText });
             
             const response = await ai.models.generateContent({
                 model: apiModel,
@@ -187,7 +188,13 @@ const handler: Handler = async (event: HandlerEvent) => {
 
     } catch (error: any) {
         console.error("Generate image function error:", error);
-        return { statusCode: 500, body: JSON.stringify({ error: error.message || 'An unknown server error occurred during image generation.' }) };
+        // Provide a more specific error message if available from Gemini
+        const errorMessage = error?.message || 'An unknown server error occurred during image generation.';
+        const clientFriendlyError = errorMessage.includes("400") ? 
+            `Lỗi từ AI: ${errorMessage}. Hãy thử lại hoặc thay đổi ảnh đầu vào.` : 
+            errorMessage;
+            
+        return { statusCode: 500, body: JSON.stringify({ error: clientFriendlyError }) };
     }
 };
 

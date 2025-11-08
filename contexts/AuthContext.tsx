@@ -3,7 +3,6 @@ import { getSupabaseClient } from '../utils/supabaseClient';
 import type { Session, User as SupabaseUser, SupabaseClient } from '@supabase/supabase-js';
 import { User, Stats, Announcement } from '../types';
 import { calculateLevelFromXp } from '../utils/rankUtils';
-import { soundManager } from '../utils/soundManager';
 
 const getVNDateString = (date: Date) => {
     // UTC+7
@@ -60,11 +59,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
         setToast({ message, type });
-        if (type === 'success') {
-            soundManager.play('success');
-        } else {
-            soundManager.play('error');
-        }
         setTimeout(() => {
             setToast(null);
         }, 4000); 
@@ -96,7 +90,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             if (!currentUser) return null;
             const updatedUser = { ...currentUser, ...updates };
             if (updates.xp !== undefined) {
-                updatedUser.level = calculateLevelFromXp(updates.xp);
+                updatedUser.level = calculateLevelFromXp(updates.xp ?? 0);
             }
             return updatedUser;
         });

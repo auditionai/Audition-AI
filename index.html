@@ -62,6 +62,20 @@
       .neon-text-glow {
         animation: neon-text-glow-keyframes 3s infinite alternate;
       }
+       /* New Neon Text effect for highlights */
+      @keyframes neon-highlight-pulse {
+        0%, 100% { 
+          text-shadow: 0 0 3px currentColor, 0 0 6px currentColor;
+          opacity: 0.9;
+        }
+        50% { 
+          text-shadow: 0 0 6px currentColor, 0 0 12px currentColor; 
+          opacity: 1;
+        }
+      }
+      .neon-highlight {
+        animation: neon-highlight-pulse 3s infinite alternate;
+      }
       .glowing-border::before {
         content: '';
         position: absolute;

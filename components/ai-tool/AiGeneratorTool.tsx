@@ -219,7 +219,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                             <ImageUploader onUpload={(e) => handleImageUpload(e, 'pose')} image={poseImage} onRemove={() => handleRemoveImage('pose')} text="Tư thế & Trang phục" disabled={isImageInputDisabled} />
                             <div className="mt-2 space-y-2">
                                 <ToggleSwitch label="Face Lock (70-80%)" checked={useBasicFaceLock} onChange={(e) => setUseBasicFaceLock(e.target.checked)} disabled={isImageInputDisabled || !poseImage} />
-                                <p className="text-xs text-gray-500 px-1">AI sẽ vẽ lại gương mặt dựa trên ảnh này. Để có độ chính xác 95%+, hãy dùng "Siêu Khóa Gương Mặt".</p>
+                                <p className="text-xs text-gray-400 px-1 leading-relaxed">AI sẽ vẽ lại gương mặt dựa trên ảnh này. Để có độ chính xác <span className="font-bold text-yellow-400 neon-highlight"> 95%+</span>, hãy dùng <span className="font-bold text-pink-400">"Siêu Khóa Gương Mặt"</span>.</p>
                             </div>
                         </SettingsBlock>
                          <SettingsBlock title="Siêu Khóa Gương Mặt" instructionKey="face" onInstructionClick={() => openInstructionModal('face')}>
@@ -235,13 +235,13 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                                         <i className="ph-fill ph-check-circle mr-1"></i> Gương mặt đã được khóa
                                     </div>
                                 )}
-                                <p className="text-xs text-gray-500 px-1">Tải ảnh chân dung rõ nét, sau đó nhấn nút "Xử lý" để AI làm nét và khóa gương mặt. Thao tác này tốn 1 kim cương.</p>
+                                <p className="text-xs text-gray-400 px-1 leading-relaxed">Tải ảnh chân dung rõ nét, sau đó <span className="font-bold text-cyan-400 neon-highlight">bắt buộc phải nhấn nút "Xử lý"</span> để AI làm nét và khóa gương mặt. Thao tác này tốn <span className="font-bold text-pink-400">1 kim cương</span>.</p>
                             </div>
                         </SettingsBlock>
                          <SettingsBlock title="Ảnh Phong Cách" instructionKey="style" onInstructionClick={() => openInstructionModal('style')}>
                             <ImageUploader onUpload={(e) => handleImageUpload(e, 'style')} image={styleImage} onRemove={() => handleRemoveImage('style')} text="Style Reference" processType="style" disabled={isImageInputDisabled} />
                             <div className="mt-2 space-y-2">
-                                <p className="text-xs text-gray-500 px-1">AI sẽ học hỏi dải màu, ánh sáng và bố cục từ ảnh này để áp dụng vào tác phẩm của bạn.</p>
+                                <p className="text-xs text-gray-400 px-1 leading-relaxed">AI sẽ <span className="font-bold text-cyan-400 neon-highlight">học hỏi</span> dải màu, ánh sáng và bố cục từ ảnh này để áp dụng vào tác phẩm của bạn.</p>
                             </div>
                         </SettingsBlock>
                     </div>
@@ -307,7 +307,10 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                                 </div>
                             </div>
                             
-                            <ToggleSwitch label="Làm Nét & Nâng Cấp (+1 💎)" checked={useUpscaler} onChange={e => setUseUpscaler(e.target.checked)} />
+                            <div>
+                                <ToggleSwitch label="Làm Nét & Nâng Cấp (+1 💎)" checked={useUpscaler} onChange={e => setUseUpscaler(e.target.checked)} />
+                                <p className="text-xs text-gray-400 px-1 mt-1 leading-relaxed">Khi bật, ảnh AI tạo ra sẽ có kết quả <span className="font-bold text-cyan-400 neon-highlight">siêu nét</span>, chi tiết rõ ràng, và dung lượng ảnh cao hơn.</p>
+                            </div>
                         </div>
                     </SettingsBlock>
                     

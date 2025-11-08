@@ -5,7 +5,6 @@ import { useImageGenerator } from '../../hooks/useImageGenerator';
 import ConfirmationModal from '../ConfirmationModal';
 import SettingsBlock from './SettingsBlock';
 import ImageUploader from './ImageUploader';
-import AspectRatioButton from './AspectRatioButton';
 import ModelSelectionModal from './ModelSelectionModal';
 import InstructionModal from './InstructionModal';
 import GenerationProgress from './GenerationProgress';
@@ -76,7 +75,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
     const [prompt, setPrompt] = useState<string>('');
     const [selectedModelId, setSelectedModelId] = useState<string>(DETAILED_AI_MODELS[0].id);
     const [selectedStyleId, setSelectedStyleId] = useState<string>(STYLE_PRESETS_NEW[1].id);
-    const [aspectRatio, setAspectRatio] = useState('1:1');
+    const aspectRatio = '1:1'; // Hardcoded as there is no UI to change it
     
     // NEW: Super face lock toggle
     const [superFaceLock, setSuperFaceLock] = useState(true);

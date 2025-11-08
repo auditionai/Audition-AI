@@ -6,7 +6,7 @@ import { AIModel } from '../../types';
 
 import SettingsBlock from './SettingsBlock';
 import ImageUploader from './ImageUploader';
-import ToggleSwitch from './ToggleSwitch';
+// import ToggleSwitch from './ToggleSwitch'; // REMOVED: Unused import causing build error
 import AspectRatioButton from './AspectRatioButton';
 import ModelSelectionModal from './ModelSelectionModal';
 import InstructionModal from './InstructionModal';
@@ -38,10 +38,11 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
     const [aspectRatio, setAspectRatio] = useState('3:4');
     
     // Advanced Settings
-    const [isFaceIdEnabled, setFaceIdEnabled] = useState(true);
-    const [faceIdStrength, setFaceIdStrength] = useState(80);
-    const [isStyleRefEnabled, setStyleRefEnabled] = useState(true);
-    const [styleStrength, setStyleStrength] = useState(60);
+    // FIX: Removed unused state setters to resolve TS6133 build error.
+    const [isFaceIdEnabled] = useState(true);
+    const [faceIdStrength] = useState(80);
+    const [isStyleRefEnabled] = useState(true);
+    const [styleStrength] = useState(60);
 
     // Effect to handle image moved from BgRemoverTool
     useEffect(() => {

@@ -26,6 +26,28 @@ const ImageModal: React.FC<ImageModalProps> = ({ isOpen, onClose, image, showInf
         setIsCopied(false);
     }, 2000);
   };
+
+  const handleDownload = async (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent modal from closing if the button is inside
+    if (!image?.image_url) return;
+    try {
+        const response = await fetch(image.image_url);
+        if (!response.ok) throw new Error('Network response was not ok.');
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = `audition-ai-${image.id}.png`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        a.remove();
+    } catch (error) {
+        console.error('Download error:', error);
+        showToast('Tải ảnh xuống thất bại.', 'error');
+    }
+  };
   
   const rank = image.creator ? getRankForLevel(image.creator.level) : getRankForLevel(1);
 
@@ -35,7 +57,7 @@ const ImageModal: React.FC<ImageModalProps> = ({ isOpen, onClose, image, showInf
       onClick={onClose}
     >
       <div 
-        className="relative w-full max-w-6xl max-h-[95vh] flex flex-col items-center"
+        className="relative w-auto max-w-6xl max-h-[95vh] flex flex-col items-center"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="w-full h-full flex flex-col lg:flex-row gap-4">
@@ -79,14 +101,13 @@ const ImageModal: React.FC<ImageModalProps> = ({ isOpen, onClose, image, showInf
                                 <i className={`ph-fill ${isCopied ? 'ph-check-circle' : 'ph-copy'}`}></i>
                                 {isCopied ? 'Đã sao chép!' : 'Sao chép Prompt'}
                             </button>
-                            <a 
-                                href={image.image_url} 
-                                download={`audition-ai-${image.id}.png`}
+                            <button 
+                                onClick={handleDownload}
                                 className="w-full mt-2 px-4 py-2 text-sm font-semibold rounded-lg flex items-center justify-center gap-2 transition-all duration-300 bg-green-500/20 text-green-300 hover:bg-green-500/30"
                             >
                                 <i className="ph-fill ph-download-simple"></i>
                                 <span>Tải xuống</span>
-                            </a>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -107,21 +128,19 @@ const ImageModal: React.FC<ImageModalProps> = ({ isOpen, onClose, image, showInf
                         Chia sẻ
                     </button>
                 )}
-                <a 
-                    href={image.image_url} 
-                    download={`audition-ai-${image.id}.png`}
-                    onClick={(e) => e.stopPropagation()}
+                <button 
+                    onClick={handleDownload}
                     className="bg-green-500 text-white rounded-full py-3 px-6 hover:bg-green-600 transition-colors z-10 font-bold flex items-center gap-2 text-lg"
                 >
                     <i className="ph-fill ph-download-simple"></i>
                     Tải xuống
-                </a>
+                </button>
             </div>
         )}
 
       </div>
-       <button onClick={onClose} className="absolute top-4 right-4 text-white text-3xl hover:text-pink-400 transition-colors z-[60]">
-            <i className="ph-fill ph-x-circle"></i>
+       <button onClick={onClose} className="absolute top-4 right-4 bg-black/50 text-white rounded-full p-2 hover:bg-pink-500/80 transition-all z-[60]">
+            <i className="ph-fill ph-x text-2xl"></i>
         </button>
     </div>
   );

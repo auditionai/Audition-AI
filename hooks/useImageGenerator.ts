@@ -29,7 +29,8 @@ export const useImageGenerator = () => {
         setGeneratedImage(null);
         abortControllerRef.current = new AbortController();
 
-        let progressInterval: NodeJS.Timeout | null = null;
+        // Fix: Changed NodeJS.Timeout to ReturnType<typeof setInterval> for browser compatibility.
+        let progressInterval: ReturnType<typeof setInterval> | null = null;
 
         try {
             // Simulate initial steps a bit faster

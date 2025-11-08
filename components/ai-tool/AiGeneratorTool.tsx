@@ -151,6 +151,27 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
             seed || undefined, useUpscaler
         );
     };
+
+    const handleDownloadResult = async () => {
+        if (!generatedImage) return;
+        try {
+            const response = await fetch(generatedImage);
+            if (!response.ok) throw new Error('Network response was not ok.');
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = `audition-ai-${Date.now()}.png`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            a.remove();
+        } catch (error) {
+            console.error('Download error:', error);
+            showToast('Tải ảnh xuống thất bại.', 'error');
+        }
+    };
     
     const openInstructionModal = (key: 'character' | 'style' | 'prompt' | 'advanced' | 'face') => {
         setInstructionKey(key);
@@ -203,9 +224,9 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                         <button onClick={resetGenerator} className="px-6 py-3 font-semibold bg-white/10 text-white rounded-lg hover:bg-white/20 transition">
                             <i className="ph-fill ph-arrow-counter-clockwise mr-2"></i>Tạo ảnh khác
                         </button>
-                        <a href={generatedImage || ''} download={`audition-ai-${Date.now()}.png`} className="px-6 py-3 font-bold text-white bg-gradient-to-r from-pink-500 to-fuchsia-600 rounded-lg hover:opacity-90 transition">
+                        <button onClick={handleDownloadResult} className="px-6 py-3 font-bold text-white bg-gradient-to-r from-pink-500 to-fuchsia-600 rounded-lg hover:opacity-90 transition">
                             <i className="ph-fill ph-download-simple mr-2"></i>Tải xuống
-                        </a>
+                        </button>
                     </div>
                 </div>
              </>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useImageGenerator } from '../../hooks/useImageGenerator';
 import { useAuth } from '../../contexts/AuthContext';
 import { DETAILED_AI_MODELS, STYLE_PRESETS_NEW } from '../../constants/aiToolData';
@@ -11,31 +11,43 @@ import InstructionModal from './InstructionModal';
 import GenerationProgress from './GenerationProgress';
 import ConfirmationModal from '../ConfirmationModal';
 import ImageModal from '../common/ImageModal';
+import ToggleSwitch from './ToggleSwitch';
 
 interface AiGeneratorToolProps {
     initialCharacterImage?: { url: string; file: File } | null;
 }
 
 const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage }) => {
-    const { user } = useAuth();
+    const { user, session, showToast, updateUserDiamonds } = useAuth();
     const { isGenerating, progress, generatedImage, error, generateImage, resetGenerator, cancelGeneration } = useImageGenerator();
 
+    // Modal States
     const [isModelModalOpen, setModelModalOpen] = useState(false);
     const [isInstructionModalOpen, setInstructionModalOpen] = useState(false);
     const [instructionKey, setInstructionKey] = useState<'character' | 'style' | 'prompt' | 'advanced' | 'face' | null>(null);
     const [isConfirmOpen, setConfirmOpen] = useState(false);
     const [isResultModalOpen, setIsResultModalOpen] = useState(false);
     
-    // Inputs
+    // Feature States
     const [poseImage, setPoseImage] = useState<{ url: string; file: File } | null>(null);
-    const [faceReferenceImage, setFaceReferenceImage] = useState<{ url: string; file: File } | null>(null);
+    const [rawFaceImage, setRawFaceImage] = useState<{ url: string; file: File } | null>(null);
+    const [processedFaceImage, setProcessedFaceImage] = useState<string | null>(null); // Stores base64 of processed face
     const [styleImage, setStyleImage] = useState<{ url: string; file: File } | null>(null);
+    const [isProcessingFace, setIsProcessingFace] = useState(false);
 
     const [prompt, setPrompt] = useState('');
     const [negativePrompt, setNegativePrompt] = useState('');
     const [selectedModel, setSelectedModel] = useState<AIModel>(DETAILED_AI_MODELS.find(m => m.recommended) || DETAILED_AI_MODELS[0]);
     const [selectedStyle, setSelectedStyle] = useState('none');
     const [aspectRatio, setAspectRatio] = useState('3:4');
+    const [seed, setSeed] = useState<number | ''>('');
+    const [useUpscaler, setUseUpscaler] = useState(false);
+    const [useBasicFaceLock, setUseBasicFaceLock] = useState(true);
+    
+    // Custom Style Dropdown State
+    const [isStyleDropdownOpen, setIsStyleDropdownOpen] = useState(false);
+    const styleDropdownRef = useRef<HTMLDivElement>(null);
+
 
     useEffect(() => {
         if (initialCharacterImage) {
@@ -43,19 +55,75 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
         }
     }, [initialCharacterImage]);
     
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (styleDropdownRef.current && !styleDropdownRef.current.contains(event.target as Node)) {
+                setIsStyleDropdownOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
     const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'pose' | 'face' | 'style') => {
         const file = e.target.files?.[0];
         if (file) {
             const newImage = { url: URL.createObjectURL(file), file };
             if (type === 'pose') setPoseImage(newImage);
-            else if (type === 'face') setFaceReferenceImage(newImage);
+            else if (type === 'face') {
+                setRawFaceImage(newImage);
+                setProcessedFaceImage(null); // Reset processed image if a new one is uploaded
+            }
             else if (type === 'style') setStyleImage(newImage);
         }
     };
 
+    const handleRemoveImage = (type: 'pose' | 'face' | 'style') => {
+        if (type === 'pose') setPoseImage(null);
+        else if (type === 'face') {
+            setRawFaceImage(null);
+            setProcessedFaceImage(null);
+        }
+        else if (type === 'style') setStyleImage(null);
+    }
+    
+    const handleProcessFace = async () => {
+        if (!rawFaceImage || !session) return;
+        setIsProcessingFace(true);
+        try {
+            const reader = new FileReader();
+            reader.readAsDataURL(rawFaceImage.file);
+            reader.onloadend = async () => {
+                const base64Image = reader.result;
+                const response = await fetch('/.netlify/functions/process-face', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+                    body: JSON.stringify({ image: base64Image }),
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.error || 'Xử lý gương mặt thất bại.');
+
+                setProcessedFaceImage(result.processedImageBase64);
+                updateUserDiamonds(result.newDiamondCount);
+                showToast('Xử lý & Khóa gương mặt thành công!', 'success');
+            };
+        } catch (err: any) {
+            showToast(err.message, 'error');
+        } finally {
+            setIsProcessingFace(false);
+        }
+    };
+
+
+    const generationCost = 1 + (useUpscaler ? 1 : 0);
+
     const handleGenerateClick = () => {
         if (!prompt.trim()) {
-            alert('Vui lòng nhập mô tả (prompt).');
+            showToast('Vui lòng nhập mô tả (prompt).', 'error');
+            return;
+        }
+        if (user && user.diamonds < generationCost) {
+            showToast(`Bạn cần ${generationCost} kim cương, nhưng chỉ có ${user.diamonds}. Vui lòng nạp thêm.`, 'error');
             return;
         }
         setConfirmOpen(true);
@@ -63,13 +131,16 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
     
     const handleConfirmGeneration = () => {
         setConfirmOpen(false);
+        // Determine which face image to send
+        const finalFaceImage = processedFaceImage ? processedFaceImage : (useBasicFaceLock && poseImage) ? poseImage.file : null;
+
         generateImage(
             prompt, selectedModel,
             poseImage?.file ?? null,
             styleImage?.file ?? null,
-            faceReferenceImage?.file ?? null,
+            finalFaceImage,
             aspectRatio, negativePrompt,
-            0.8, 0.6 // faceIdStrength, styleStrength - currently hardcoded
+            seed || undefined, useUpscaler
         );
     };
     
@@ -80,7 +151,6 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
 
     const isImageInputDisabled = !selectedModel.supportedModes.includes('image-to-image');
     
-    // Create a dummy gallery image object for the modal
     const resultImageForModal = generatedImage ? {
         id: 'generated-result',
         image_url: generatedImage,
@@ -107,12 +177,13 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                     isOpen={isResultModalOpen}
                     onClose={() => setIsResultModalOpen(false)}
                     image={resultImageForModal}
-                    showInfoPanel={false} // Don't show the full info panel, just the image
+                    showInfoPanel={false}
                 />
                 <div className="text-center animate-fade-in w-full min-h-[70vh] flex flex-col items-center justify-center">
                     <h3 className="text-2xl font-bold mb-4 bg-gradient-to-r from-green-400 to-cyan-400 text-transparent bg-clip-text">Tạo ảnh thành công!</h3>
                     <div 
-                        className="max-w-md w-full mx-auto aspect-[3/4] bg-black/20 rounded-lg overflow-hidden border-2 border-pink-500/30 cursor-pointer group relative"
+                        className="max-w-md w-full mx-auto bg-black/20 rounded-lg overflow-hidden border-2 border-pink-500/30 cursor-pointer group relative"
+                        style={{ aspectRatio: aspectRatio.replace(':', '/') }}
                         onClick={() => setIsResultModalOpen(true)}
                     >
                         <img src={generatedImage} alt="Generated result" className="w-full h-full object-contain" />
@@ -136,7 +207,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
 
     return (
         <>
-            <ConfirmationModal isOpen={isConfirmOpen} onClose={() => setConfirmOpen(false)} onConfirm={handleConfirmGeneration} cost={1} />
+            <ConfirmationModal isOpen={isConfirmOpen} onClose={() => setConfirmOpen(false)} onConfirm={handleConfirmGeneration} cost={generationCost} />
             <ModelSelectionModal isOpen={isModelModalOpen} onClose={() => setModelModalOpen(false)} selectedModelId={selectedModel.id} onSelectModel={(id) => setSelectedModel(DETAILED_AI_MODELS.find(m => m.id === id) || selectedModel)} characterImage={!!poseImage} />
             <InstructionModal isOpen={isInstructionModalOpen} onClose={() => setInstructionModalOpen(false)} instructionKey={instructionKey} />
 
@@ -144,14 +215,34 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                 {/* Main Content Area (Left) */}
                 <div className="lg:col-span-8 flex flex-col gap-6">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                         <SettingsBlock title="Ảnh Tham Chiếu" instructionKey="character" onInstructionClick={() => openInstructionModal('character')}>
-                            <ImageUploader onUpload={(e) => handleImageUpload(e, 'pose')} image={poseImage} onRemove={() => setPoseImage(null)} text="Tư thế & Trang phục" disabled={isImageInputDisabled} />
+                        <SettingsBlock title="Ảnh Tham Chiếu" instructionKey="character" onInstructionClick={() => openInstructionModal('character')}>
+                            <ImageUploader onUpload={(e) => handleImageUpload(e, 'pose')} image={poseImage} onRemove={() => handleRemoveImage('pose')} text="Tư thế & Trang phục" disabled={isImageInputDisabled} />
+                            <div className="mt-2 space-y-2">
+                                <ToggleSwitch label="Face Lock (70-80%)" checked={useBasicFaceLock} onChange={(e) => setUseBasicFaceLock(e.target.checked)} disabled={isImageInputDisabled || !poseImage} />
+                                <p className="text-xs text-gray-500 px-1">AI sẽ vẽ lại gương mặt dựa trên ảnh này. Để có độ chính xác 95%+, hãy dùng "Siêu Khóa Gương Mặt".</p>
+                            </div>
                         </SettingsBlock>
                          <SettingsBlock title="Siêu Khóa Gương Mặt" instructionKey="face" onInstructionClick={() => openInstructionModal('face')}>
-                            <ImageUploader onUpload={(e) => handleImageUpload(e, 'face')} image={faceReferenceImage} onRemove={() => setFaceReferenceImage(null)} text="Face ID" disabled={isImageInputDisabled} />
+                            <ImageUploader onUpload={(e) => handleImageUpload(e, 'face')} image={rawFaceImage ? { url: processedFaceImage ? `data:image/png;base64,${processedFaceImage}` : rawFaceImage.url } : null} onRemove={() => handleRemoveImage('face')} text="Face ID (95%+)" disabled={isImageInputDisabled} />
+                             <div className="mt-2 space-y-2">
+                                {rawFaceImage && !processedFaceImage && (
+                                    <button onClick={handleProcessFace} disabled={isProcessingFace} className="w-full text-sm font-bold py-2 px-3 bg-yellow-500/20 text-yellow-300 rounded-lg hover:bg-yellow-500/30 disabled:opacity-50 disabled:cursor-wait">
+                                        {isProcessingFace ? 'Đang xử lý...' : 'Xử lý & Khóa Gương Mặt (-1 💎)'}
+                                    </button>
+                                )}
+                                {processedFaceImage && (
+                                     <div className="w-full text-sm font-bold py-2 px-3 bg-green-500/20 text-green-300 rounded-lg text-center">
+                                        <i className="ph-fill ph-check-circle mr-1"></i> Gương mặt đã được khóa
+                                    </div>
+                                )}
+                                <p className="text-xs text-gray-500 px-1">Tải ảnh chân dung rõ nét, sau đó nhấn nút "Xử lý" để AI làm nét và khóa gương mặt. Thao tác này tốn 1 kim cương.</p>
+                            </div>
                         </SettingsBlock>
                          <SettingsBlock title="Ảnh Phong Cách" instructionKey="style" onInstructionClick={() => openInstructionModal('style')}>
-                            <ImageUploader onUpload={(e) => handleImageUpload(e, 'style')} image={styleImage} onRemove={() => setStyleImage(null)} text="Style Reference" processType="style" disabled={isImageInputDisabled} />
+                            <ImageUploader onUpload={(e) => handleImageUpload(e, 'style')} image={styleImage} onRemove={() => handleRemoveImage('style')} text="Style Reference" processType="style" disabled={isImageInputDisabled} />
+                            <div className="mt-2 space-y-2">
+                                <p className="text-xs text-gray-500 px-1">AI sẽ học hỏi dải màu, ánh sáng và bố cục từ ảnh này để áp dụng vào tác phẩm của bạn.</p>
+                            </div>
                         </SettingsBlock>
                     </div>
                     
@@ -170,30 +261,59 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                                     <p className="font-semibold text-white truncate">{selectedModel.name}</p>
                                 </button>
                             </div>
-                            <div>
+                            
+                            <div className="relative" ref={styleDropdownRef}>
                                 <label className="text-sm font-semibold text-gray-300 mb-1 block">Phong cách</label>
-                                <select value={selectedStyle} onChange={(e) => setSelectedStyle(e.target.value)} className="p-2 bg-black/30 rounded-md border border-gray-600 hover:border-pink-500 text-left w-full transition appearance-none auth-input text-white">
-                                    {STYLE_PRESETS_NEW.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                                </select>
+                                <div className="custom-select-wrapper">
+                                    <button onClick={() => setIsStyleDropdownOpen(!isStyleDropdownOpen)} className="custom-select-trigger">
+                                        <span>{STYLE_PRESETS_NEW.find(p => p.id === selectedStyle)?.name}</span>
+                                        <i className={`ph-fill ph-caret-down transition-transform ${isStyleDropdownOpen ? 'rotate-180' : ''}`}></i>
+                                    </button>
+                                    {isStyleDropdownOpen && (
+                                        <div className="custom-select-options">
+                                            {STYLE_PRESETS_NEW.map(p => (
+                                                <button key={p.id} onClick={() => { setSelectedStyle(p.id); setIsStyleDropdownOpen(false); }} className={`custom-select-option ${selectedStyle === p.id ? 'active' : ''}`}>
+                                                    <span>{p.name}</span>
+                                                    {selectedStyle === p.id && <i className="ph-fill ph-check"></i>}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
+
                              <div>
                                 <label className="text-sm font-semibold text-gray-300 mb-1 block">Prompt Phủ định</label>
                                 <textarea value={negativePrompt} onChange={(e) => setNegativePrompt(e.target.value)} placeholder="VD: xấu, mờ, nhiều tay..." className="w-full p-2 bg-black/30 rounded-md border border-gray-600 focus:border-pink-500 transition text-sm text-white resize-none" rows={2} />
                             </div>
+
                              <div>
+                                <label className="text-sm font-semibold text-gray-300 mb-1 block">Seed</label>
+                                 <input type="number" value={seed} onChange={(e) => setSeed(e.target.value === '' ? '' : parseInt(e.target.value, 10))} placeholder="Để trống để tạo ngẫu nhiên" className="w-full p-2 bg-black/30 rounded-md border border-gray-600 focus:border-pink-500 transition text-sm text-white" />
+                            </div>
+                            
+                            <div>
                                 <label className="text-sm font-semibold text-gray-300 mb-2 block">Tỷ lệ khung hình</label>
-                                <div className="grid grid-cols-3 gap-2">
-                                    <button onClick={() => setAspectRatio('3:4')} className={`p-2 rounded-md flex flex-col items-center justify-center gap-1 border-2 transition ${aspectRatio === '3:4' ? 'selected-glow' : 'border-gray-600 bg-white/5 hover:border-pink-500/50 text-gray-300'}`}> <div className="w-4 h-5 bg-gray-500 rounded-sm"/> <span className="text-xs font-semibold">3:4</span> </button>
-                                    <button onClick={() => setAspectRatio('1:1')} className={`p-2 rounded-md flex flex-col items-center justify-center gap-1 border-2 transition ${aspectRatio === '1:1' ? 'selected-glow' : 'border-gray-600 bg-white/5 hover:border-pink-500/50 text-gray-300'}`}> <div className="w-4 h-4 bg-gray-500 rounded-sm"/> <span className="text-xs font-semibold">1:1</span> </button>
-                                    <button onClick={() => setAspectRatio('4:3')} className={`p-2 rounded-md flex flex-col items-center justify-center gap-1 border-2 transition ${aspectRatio === '4:3' ? 'selected-glow' : 'border-gray-600 bg-white/5 hover:border-pink-500/50 text-gray-300'}`}> <div className="w-5 h-4 bg-gray-500 rounded-sm"/> <span className="text-xs font-semibold">4:3</span> </button>
+                                <div className="grid grid-cols-5 gap-2">
+                                    {(['3:4', '1:1', '4:3', '9:16', '16:9'] as const).map(ar => {
+                                        const dims = { '3:4': 'w-3 h-4', '1:1': 'w-4 h-4', '4:3': 'w-4 h-3', '9:16': 'w-[1.125rem] h-5', '16:9': 'w-5 h-[1.125rem]' };
+                                        return (
+                                            <button key={ar} onClick={() => setAspectRatio(ar)} className={`p-2 rounded-md flex flex-col items-center justify-center gap-1 border-2 transition ${aspectRatio === ar ? 'selected-glow' : 'border-gray-600 bg-white/5 hover:border-pink-500/50 text-gray-300'}`}>
+                                                <div className={`${dims[ar]} bg-gray-500 rounded-sm`}/>
+                                                <span className="text-xs font-semibold">{ar}</span>
+                                            </button>
+                                        );
+                                    })}
                                 </div>
                             </div>
+                            
+                            <ToggleSwitch label="Làm Nét & Nâng Cấp (+1 💎)" checked={useUpscaler} onChange={e => setUseUpscaler(e.target.checked)} />
                         </div>
                     </SettingsBlock>
                     
                     <div className="mt-auto pt-6 space-y-4">
                         <div className="text-center text-sm p-3 bg-black/20 rounded-lg">
-                            <p className="text-gray-400">Chi phí: <span className="font-bold text-pink-400 flex items-center justify-center gap-1">1 <i className="ph-fill ph-diamonds-four"></i></span></p>
+                            <p className="text-gray-400">Chi phí: <span className="font-bold text-pink-400 flex items-center justify-center gap-1">{generationCost} <i className="ph-fill ph-diamonds-four"></i></span></p>
                             <p className="text-gray-400">Hiện có: <span className="font-bold text-white">{user?.diamonds.toLocaleString() || 0} 💎</span></p>
                         </div>
                         <button onClick={handleGenerateClick} disabled={isGenerating || !prompt.trim()} className="w-full px-8 py-4 font-bold text-lg text-white bg-gradient-to-r from-[#F72585] to-[#CA27FF] rounded-full transition-all duration-300 shadow-xl shadow-[#F72585]/30 hover:shadow-2xl hover:shadow-[#F72585]/40 hover:-translate-y-1.5 hover:scale-105 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">

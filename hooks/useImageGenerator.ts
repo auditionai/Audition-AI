@@ -19,9 +19,9 @@ export const useImageGenerator = () => {
 
     const generateImage = async (
         prompt: string, model: AIModel, poseImageFile: File | null,
-        styleImageFile: File | null, faceImageFile: File | null,
+        styleImageFile: File | null, faceImage: File | string | null,
         aspectRatio: string, negativePrompt: string,
-        faceIdStrength: number, styleStrength: number
+        seed: number | undefined, useUpscaler: boolean
     ) => {
         setIsGenerating(true);
         setProgress(1);
@@ -37,10 +37,10 @@ export const useImageGenerator = () => {
                 setProgress(prev => (prev < 8 ? prev + 1 : prev));
             }, 1800);
 
-            const [poseImage, styleImage, faceImage] = await Promise.all([
+            const [poseImageBase64, styleImageBase64, faceImageBase64] = await Promise.all([
                 poseImageFile ? fileToBase64(poseImageFile) : Promise.resolve(null),
                 styleImageFile ? fileToBase64(styleImageFile) : Promise.resolve(null),
-                faceImageFile ? fileToBase64(faceImageFile) : Promise.resolve(null)
+                faceImage instanceof File ? fileToBase64(faceImage) : Promise.resolve(faceImage)
             ]);
 
             const response = await fetch('/.netlify/functions/generate-image', {
@@ -51,11 +51,11 @@ export const useImageGenerator = () => {
                 },
                 body: JSON.stringify({
                     prompt, modelId: model.id, apiModel: model.apiModel,
-                    characterImage: poseImage, // The backend expects 'characterImage'
-                    styleImage, 
-                    faceReferenceImage: faceImage, // Send the new face image
+                    characterImage: poseImageBase64,
+                    styleImage: styleImageBase64, 
+                    faceReferenceImage: faceImageBase64,
                     aspectRatio, negativePrompt,
-                    faceIdStrength, styleStrength,
+                    seed, useUpscaler
                 }),
                 signal: abortControllerRef.current.signal,
             });

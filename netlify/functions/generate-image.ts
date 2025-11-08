@@ -4,7 +4,8 @@ import { supabaseAdmin } from './utils/supabaseClient';
 import { Buffer } from 'buffer';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 
-const COST_PER_GENERATION = 1;
+const COST_BASE = 1;
+const COST_UPSCALE = 1;
 const XP_PER_GENERATION = 10;
 
 const handler: Handler = async (event: HandlerEvent) => {
@@ -30,12 +31,18 @@ const handler: Handler = async (event: HandlerEvent) => {
         const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
         if (authError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized: Invalid token.' }) };
 
-        const { prompt, apiModel, characterImage, faceReferenceImage } = JSON.parse(event.body || '{}');
+        const { 
+            prompt, apiModel, characterImage, faceReferenceImage, styleImage, 
+            aspectRatio, negativePrompt, seed, useUpscaler 
+        } = JSON.parse(event.body || '{}');
+
         if (!prompt || !apiModel) return { statusCode: 400, body: JSON.stringify({ error: 'Prompt and apiModel are required.' }) };
         
+        const totalCost = COST_BASE + (useUpscaler ? COST_UPSCALE : 0);
+
         const { data: userData, error: userError } = await supabaseAdmin.from('users').select('diamonds, xp').eq('id', user.id).single();
         if (userError || !userData) return { statusCode: 404, body: JSON.stringify({ error: 'User not found.' }) };
-        if (userData.diamonds < COST_PER_GENERATION) return { statusCode: 402, body: JSON.stringify({ error: 'Không đủ kim cương.' }) };
+        if (userData.diamonds < totalCost) return { statusCode: 402, body: JSON.stringify({ error: `Không đủ kim cương. Cần ${totalCost}, bạn có ${userData.diamonds}.` }) };
         
         const { data: apiKeyData, error: apiKeyError } = await supabaseAdmin.from('api_keys').select('id, key_value').eq('status', 'active').order('usage_count', { ascending: true }).limit(1).single();
         if (apiKeyError || !apiKeyData) return { statusCode: 503, body: JSON.stringify({ error: 'Hết tài nguyên AI. Vui lòng thử lại sau.' }) };
@@ -44,40 +51,57 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         let finalImageBase64: string;
         let finalImageMimeType: string;
+        
+        // Construct a more descriptive prompt
+        let fullPrompt = prompt;
+        if (negativePrompt) {
+            fullPrompt += ` --no ${negativePrompt}`;
+        }
 
         if (apiModel.startsWith('imagen')) {
             const response = await ai.models.generateImages({
                 model: apiModel,
-                prompt: prompt,
-                config: { numberOfImages: 1, outputMimeType: 'image/png' },
+                prompt: fullPrompt,
+                config: { 
+                    numberOfImages: 1, 
+                    outputMimeType: 'image/png',
+                    aspectRatio: aspectRatio,
+                    seed: seed ? Number(seed) : undefined,
+                },
             });
             finalImageBase64 = response.generatedImages[0].image.imageBytes;
             finalImageMimeType = 'image/png';
         } else { // Assuming gemini-flash-image
             const parts: any[] = [];
             
-            // Add main character/pose image if provided
-            if (characterImage) {
-                const [header, base64] = characterImage.split(',');
-                const mimeType = header.match(/:(.*?);/)[1];
+            const processImagePart = (imageDataUrl: string | null) => {
+                if (!imageDataUrl) return;
+                const [header, base64] = imageDataUrl.split(',');
+                const mimeType = header.match(/:(.*?);/)?.[1] || 'image/png';
                 parts.push({ inlineData: { data: base64, mimeType } });
-            }
+            };
 
-            // Add dedicated face reference image if provided
+            processImagePart(characterImage);
+            processImagePart(styleImage);
+            // faceReferenceImage could be from a file upload or from process-face function
             if (faceReferenceImage) {
-                const [header, base64] = faceReferenceImage.split(',');
-                const mimeType = header.match(/:(.*?);/)[1];
-                // Add it as another part for the model to reference
-                parts.push({ inlineData: { data: base64, mimeType } });
+                 const isDataUrl = faceReferenceImage.startsWith('data:');
+                 if (isDataUrl) {
+                    processImagePart(faceReferenceImage);
+                 } else { // It's just base64, assume png
+                    parts.push({ inlineData: { data: faceReferenceImage, mimeType: 'image/png' } });
+                 }
             }
             
-            // Always add the text prompt
-            parts.push({ text: prompt });
+            parts.push({ text: fullPrompt });
             
             const response = await ai.models.generateContent({
                 model: apiModel,
                 contents: { parts: parts },
-                config: { responseModalities: [Modality.IMAGE] },
+                config: { 
+                    responseModalities: [Modality.IMAGE],
+                    seed: seed ? Number(seed) : undefined,
+                },
             });
 
             const imagePartResponse = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
@@ -86,6 +110,14 @@ const handler: Handler = async (event: HandlerEvent) => {
             finalImageBase64 = imagePartResponse.inlineData.data;
             finalImageMimeType = imagePartResponse.inlineData.mimeType.includes('png') ? 'image/png' : 'image/jpeg';
         }
+
+        // --- Placeholder for Upscaler Logic ---
+        if (useUpscaler) {
+            // In a real app, you would call another AI model here to upscale finalImageBase64
+            // For this demo, we'll just log it. The cost has already been deducted.
+            console.log(`[UPSCALER] Upscaling image for user ${user.id}... (DEMO)`);
+        }
+        // --- End of Placeholder ---
 
         const imageBuffer = Buffer.from(finalImageBase64, 'base64');
         const fileExtension = finalImageMimeType.split('/')[1] || 'png';
@@ -100,8 +132,13 @@ const handler: Handler = async (event: HandlerEvent) => {
         await (s3Client as any).send(putCommand);
         const publicUrl = `${process.env.R2_PUBLIC_URL}/${fileName}`;
 
-        const newDiamondCount = userData.diamonds - COST_PER_GENERATION;
+        const newDiamondCount = userData.diamonds - totalCost;
         const newXp = userData.xp + XP_PER_GENERATION;
+        
+        let logDescription = `Tạo ảnh: ${prompt.substring(0, 50)}...`;
+        if (useUpscaler) {
+            logDescription += " (Nâng cấp)";
+        }
         
         await Promise.all([
             supabaseAdmin.from('users').update({ diamonds: newDiamondCount, xp: newXp }).eq('id', user.id),
@@ -110,13 +147,14 @@ const handler: Handler = async (event: HandlerEvent) => {
                 user_id: user.id,
                 prompt: prompt,
                 image_url: publicUrl,
-                model_used: apiModel
+                model_used: apiModel,
+                used_face_enhancer: !!faceReferenceImage // Log if any face reference was used
             }),
             supabaseAdmin.from('diamond_transactions_log').insert({
                 user_id: user.id,
-                amount: -COST_PER_GENERATION,
+                amount: -totalCost,
                 transaction_type: 'IMAGE_GENERATION',
-                description: `Tạo ảnh: ${prompt.substring(0, 50)}...`
+                description: logDescription
             })
         ]);
 

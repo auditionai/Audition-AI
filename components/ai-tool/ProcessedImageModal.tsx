@@ -33,7 +33,8 @@ const ProcessedImageModal: React.FC<ProcessedImageModalProps> = ({ isOpen, onClo
       height
     );
     setCrop(initialCrop);
-    setCompletedCrop(initialCrop); // Set an initial completed crop
+    // The onComplete handler will be called with the pixel values for this initial crop,
+    // so we do not need to set the completedCrop here. Doing so causes a type error.
   }
   
   const getCroppedImg = useCallback(async () => {

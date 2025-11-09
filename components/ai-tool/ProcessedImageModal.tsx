@@ -2,10 +2,12 @@ import React, { useState, useRef, useCallback } from 'react';
 import Modal from '../common/Modal';
 import { base64ToFile } from '../../utils/imageUtils';
 
+// Cập nhật interface để bao gồm imageBase64
 interface ProcessedImage {
     processedUrl: string;
     fileName: string;
     mimeType: string;
+    imageBase64: string; 
 }
 
 interface ProcessedImageModalProps {
@@ -77,10 +79,10 @@ const ProcessedImageModal: React.FC<ProcessedImageModalProps> = ({ isOpen, onClo
     <Modal isOpen={isOpen} onClose={handleClose} title={isCropping ? "Crop Gương Mặt" : "Xem ảnh đã tách nền"}>
         <div className="flex flex-col items-center">
             <div className="w-full max-w-md bg-black/30 rounded-lg p-2 mb-6 relative">
-                {/* We need to load the image from the R2 URL with crossOrigin to use it in canvas */}
+                {/* SỬA LỖI: Sử dụng data URI từ imageBase64 để đảm bảo hiển thị ổn định */}
                 <img 
                     ref={imgRef}
-                    src={image.processedUrl} 
+                    src={`data:${image.mimeType};base64,${image.imageBase64}`} 
                     alt="Processed result"
                     crossOrigin="anonymous" 
                     className="w-full h-auto object-contain rounded-md max-h-[60vh]"

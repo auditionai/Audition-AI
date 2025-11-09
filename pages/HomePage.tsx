@@ -158,7 +158,8 @@ const HomePage: React.FC = () => {
                         <Gallery 
                             images={publicGalleryImages} 
                             onImageClick={setSelectedImage} 
-                            limit={8} 
+                            limit={12} 
+                            displayMode="slider"
                             showSeeMore={true}
                             onSeeMoreClick={() => navigate('gallery')}
                         />

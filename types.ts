@@ -173,3 +173,13 @@ export interface Announcement {
     is_active: boolean;
     created_at: string;
 }
+
+// For check-in rewards configuration
+export interface CheckInReward {
+    id: string;
+    consecutive_days: number;
+    diamond_reward: number;
+    xp_reward: number;
+    is_active: boolean;
+    created_at: string;
+}

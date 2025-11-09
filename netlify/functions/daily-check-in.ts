@@ -50,20 +50,26 @@ const handler: Handler = async (event: HandlerEvent) => {
             newConsecutiveDays = (userProfile.consecutive_check_in_days || 0) + 1;
         }
 
-        let diamondReward = 10;
-        const xpReward = 50;
-        let message = `Điểm danh thành công! Bạn nhận được ${diamondReward} Kim cương và ${xpReward} XP.`;
+        // Fetch the highest applicable reward from the database
+        // Fix: Changed const to let to allow reassignment for fallback reward.
+        let { data: rewardData, error: rewardError } = await supabaseAdmin
+            .from('check_in_rewards')
+            .select('diamond_reward, xp_reward')
+            .eq('is_active', true)
+            .lte('consecutive_days', newConsecutiveDays)
+            .order('consecutive_days', { ascending: false })
+            .limit(1)
+            .single();
 
-        if (newConsecutiveDays === 30) {
-            diamondReward += 100;
-            message = `Điểm danh thành công chuỗi 30 ngày! Bạn nhận thưởng lớn: ${diamondReward} Kim cương và ${xpReward} XP!`;
-        } else if (newConsecutiveDays === 14) {
-            diamondReward += 50;
-            message = `Điểm danh thành công chuỗi 14 ngày! Bạn nhận được ${diamondReward} Kim cương và ${xpReward} XP!`;
-        } else if (newConsecutiveDays === 7) {
-            diamondReward += 20;
-            message = `Điểm danh thành công chuỗi 7 ngày! Bạn nhận được ${diamondReward} Kim cương và ${xpReward} XP!`;
+        if (rewardError || !rewardData) {
+            // Fallback to a default reward if none is configured
+            console.error("Could not find a valid check-in reward, using fallback.", rewardError);
+            rewardData = { diamond_reward: 1, xp_reward: 10 };
         }
+
+        const { diamond_reward: diamondReward, xp_reward: xpReward } = rewardData;
+
+        let message = `Điểm danh thành công! Bạn nhận được ${diamondReward} Kim cương và ${xpReward} XP.`;
 
         const newTotalDiamonds = userProfile.diamonds + diamondReward;
         const newTotalXp = userProfile.xp + xpReward;
@@ -87,7 +93,7 @@ const handler: Handler = async (event: HandlerEvent) => {
                 user_id: user.id,
                 amount: diamondReward,
                 transaction_type: 'DAILY_CHECK_IN',
-                description: `Điểm danh ngày thứ ${newConsecutiveDays}`
+                description: `Điểm danh chuỗi ${newConsecutiveDays} ngày`
              })
         ]);
 

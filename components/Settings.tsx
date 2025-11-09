@@ -6,6 +6,44 @@ import XPProgressBar from './common/XPProgressBar';
 import Modal from './common/Modal';
 import { RANKS } from '../constants/ranks';
 
+// --- NEW ---
+interface CheckInReward {
+    id: string;
+    consecutive_days: number;
+    diamond_reward: number;
+    xp_reward: number;
+    is_active: boolean;
+    created_at: string;
+}
+
+const EditCheckInRewardModal: React.FC<{ reward: CheckInReward; onClose: () => void; onSave: (id: string, updates: Partial<CheckInReward>) => void; }> = ({ reward, onClose, onSave }) => {
+    const [days, setDays] = useState(reward.consecutive_days);
+    const [diamonds, setDiamonds] = useState(reward.diamond_reward);
+    const [xp, setXp] = useState(reward.xp_reward);
+
+    const handleSave = () => {
+        onSave(reward.id, {
+            consecutive_days: Number(days),
+            diamond_reward: Number(diamonds),
+            xp_reward: Number(xp),
+        });
+        onClose();
+    };
+
+    return (
+        <Modal isOpen={true} onClose={onClose} title="Chỉnh sửa Mốc Thưởng">
+            <div className="space-y-4">
+                <div><label className="block text-sm font-medium text-gray-400 mb-1">Mốc (ngày)</label><input type="number" value={days} onChange={(e) => setDays(Number(e.target.value))} className="auth-input" disabled={days === 1} /></div>
+                <div><label className="block text-sm font-medium text-gray-400 mb-1">Thưởng Kim cương</label><input type="number" value={diamonds} onChange={(e) => setDiamonds(Number(e.target.value))} className="auth-input" /></div>
+                <div><label className="block text-sm font-medium text-gray-400 mb-1">Thưởng XP</label><input type="number" value={xp} onChange={(e) => setXp(Number(e.target.value))} className="auth-input" /></div>
+                <div className="flex gap-4 mt-6"><button onClick={onClose} className="flex-1 py-2 font-semibold bg-white/10 text-white rounded-lg hover:bg-white/20 transition">Hủy</button><button onClick={handleSave} className="flex-1 py-2 font-bold text-white bg-gradient-to-r from-pink-500 to-fuchsia-600 rounded-lg hover:opacity-90 transition">Lưu</button></div>
+            </div>
+        </Modal>
+    );
+};
+// --- END NEW ---
+
+
 // Component for a single API Key in the admin panel
 const ApiKeyRow: React.FC<{ apiKey: ApiKey; onUpdate: (id: string, status: 'active' | 'inactive') => void; onDelete: (id: string) => void; }> = ({ apiKey, onUpdate, onDelete }) => {
     const cost = apiKey.usage_count * 1000;
@@ -172,6 +210,14 @@ const Settings: React.FC = () => {
     const [isAnnouncementLoading, setIsAnnouncementLoading] = useState(false);
     const [isSavingAnnouncement, setIsSavingAnnouncement] = useState(false);
 
+    // --- NEW ---
+    // Check-in reward management state
+    const [checkInRewards, setCheckInRewards] = useState<CheckInReward[]>([]);
+    const [isRewardsLoading, setIsRewardsLoading] = useState(false);
+    const [editingReward, setEditingReward] = useState<CheckInReward | null>(null);
+    const [newReward, setNewReward] = useState({ consecutive_days: 0, diamond_reward: 0, xp_reward: 0 });
+    // --- END NEW ---
+
 
     const rank = user ? getRankForLevel(user.level) : null;
     
@@ -223,6 +269,17 @@ const Settings: React.FC = () => {
             setAnnouncement(await res.json());
         } catch (error: any) { showToast(error.message, 'error'); }
         finally { setIsAnnouncementLoading(false); }
+        
+        // --- NEW ---
+        // Fetch for check-in rewards
+        setIsRewardsLoading(true);
+        try {
+            const res = await fetch('/.netlify/functions/admin-check-in-rewards', fetchOptions);
+            if (!res.ok) throw new Error('Không thể tải cấu hình thưởng điểm danh.');
+            setCheckInRewards(await res.json());
+        } catch (error: any) { showToast(error.message, 'error'); }
+        finally { setIsRewardsLoading(false); }
+        // --- END NEW ---
 
 
     }, [session, showToast, user?.is_admin]);
@@ -434,8 +491,56 @@ const Settings: React.FC = () => {
         }
     };
     
-    // FIX: Add a dedicated handler for the logout button to improve reliability.
-    // This prevents the default browser action and ensures the logout function is called.
+    // --- NEW ---
+    const handleAddReward = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (newReward.consecutive_days <= 0) {
+            showToast('Số ngày phải lớn hơn 0.', 'error');
+            return;
+        }
+        try {
+            const res = await fetch('/.netlify/functions/admin-check-in-rewards', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+                body: JSON.stringify(newReward),
+            });
+            const addedReward = await res.json();
+            if (!res.ok) throw new Error(addedReward.error);
+            setCheckInRewards(prev => [...prev, addedReward].sort((a,b) => a.consecutive_days - b.consecutive_days));
+            setNewReward({ consecutive_days: 0, diamond_reward: 0, xp_reward: 0 });
+            showToast('Thêm mốc thưởng thành công!', 'success');
+        } catch (e: any) { showToast(e.message, 'error'); }
+    };
+    
+    const handleUpdateReward = async (id: string, updates: Partial<CheckInReward>) => {
+        try {
+            const res = await fetch('/.netlify/functions/admin-check-in-rewards', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+                body: JSON.stringify({ id, ...updates }),
+            });
+            const updatedReward = await res.json();
+            if (!res.ok) throw new Error(updatedReward.error);
+            setCheckInRewards(prev => prev.map(r => r.id === id ? updatedReward : r).sort((a, b) => a.consecutive_days - b.consecutive_days));
+            showToast('Cập nhật mốc thưởng thành công!', 'success');
+        } catch (e: any) { showToast(e.message, 'error'); }
+    };
+
+    const handleDeleteReward = async (id: string) => {
+        if (!window.confirm('Bạn có chắc muốn xóa mốc thưởng này?')) return;
+        try {
+            const res = await fetch('/.netlify/functions/admin-check-in-rewards', {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+                body: JSON.stringify({ id }),
+            });
+            if (!res.ok) throw new Error('Xóa thất bại.');
+            setCheckInRewards(prev => prev.filter(r => r.id !== id));
+            showToast('Xóa mốc thưởng thành công!', 'success');
+        } catch (e: any) { showToast(e.message, 'error'); }
+    };
+    // --- END NEW ---
+
     const handleLogoutClick = (e: React.MouseEvent) => {
         e.preventDefault();
         logout();
@@ -453,6 +558,7 @@ const Settings: React.FC = () => {
         <div className="container mx-auto px-4 py-8 animate-fade-in max-w-4xl">
              {editingUser && <EditUserModal user={editingUser} onClose={() => setEditingUser(null)} onSave={handleUpdateUser} />}
              {editingPackage && <EditPackageModal pkg={editingPackage} onClose={() => setEditingPackage(null)} onSave={handlePackageUpdate} />}
+             {editingReward && <EditCheckInRewardModal reward={editingReward} onClose={() => setEditingReward(null)} onSave={handleUpdateReward} />}
 
             <div className="text-center mb-12">
                 <h1 className="text-4xl font-bold mb-4 bg-gradient-to-r from-pink-400 to-fuchsia-500 text-transparent bg-clip-text">Cài đặt Tài khoản</h1>
@@ -551,6 +657,33 @@ const Settings: React.FC = () => {
 
             {user.is_admin && (
                  <div className="space-y-8 mt-8 pt-8 border-t-2 border-dashed border-yellow-500/20">
+                    <div className="bg-[#12121A]/80 border border-cyan-500/20 rounded-2xl shadow-lg p-6">
+                        <h3 className="text-2xl font-bold mb-4 text-cyan-400 flex items-center gap-2"><i className="ph-fill ph-calendar-check"></i>Admin: Quản lý Thưởng Điểm Danh</h3>
+                        {isRewardsLoading ? <p>Đang tải cấu hình thưởng...</p> : (
+                            <div className="space-y-4">
+                                <form onSubmit={handleAddReward} className="grid grid-cols-1 md:grid-cols-12 gap-4 p-4 bg-black/20 rounded-lg">
+                                    <input type="number" placeholder="Mốc (ngày)" value={newReward.consecutive_days || ''} onChange={e => setNewReward({...newReward, consecutive_days: Number(e.target.value)})} className="auth-input md:col-span-3" required />
+                                    <input type="number" placeholder="Thưởng KC" value={newReward.diamond_reward || ''} onChange={e => setNewReward({...newReward, diamond_reward: Number(e.target.value)})} className="auth-input md:col-span-3" required />
+                                    <input type="number" placeholder="Thưởng XP" value={newReward.xp_reward || ''} onChange={e => setNewReward({...newReward, xp_reward: Number(e.target.value)})} className="auth-input md:col-span-4" required />
+                                    <button type="submit" className="md:col-span-2 bg-green-600 hover:bg-green-700 text-white font-bold p-2 rounded-md">Thêm</button>
+                                </form>
+                                <div className="space-y-2 max-h-72 overflow-y-auto custom-scrollbar pr-2">
+                                    {checkInRewards.map(reward => (
+                                        <div key={reward.id} className="grid grid-cols-12 gap-4 items-center p-3 bg-white/5 rounded-lg text-sm">
+                                            <div className="col-span-3 font-semibold">Ngày thứ {reward.consecutive_days}</div>
+                                            <div className="col-span-2 font-semibold text-pink-300">💎 +{reward.diamond_reward}</div>
+                                            <div className="col-span-2 font-semibold text-cyan-300">XP +{reward.xp_reward}</div>
+                                            <div className="col-span-5 flex items-center justify-end gap-2">
+                                                <button onClick={() => handleUpdateReward(reward.id, { is_active: !reward.is_active })} className={`px-3 py-1 text-xs font-semibold rounded-full ${reward.is_active ? 'bg-green-500/20 text-green-300' : 'bg-gray-500/20 text-gray-400'}`}>{reward.is_active ? 'Active' : 'Inactive'}</button>
+                                                <button onClick={() => setEditingReward(reward)} className="text-gray-400 hover:text-white"><i className="ph-fill ph-pencil-simple"></i></button>
+                                                {reward.consecutive_days > 1 && <button onClick={() => handleDeleteReward(reward.id)} className="text-gray-400 hover:text-red-500"><i className="ph-fill ph-trash"></i></button>}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
                      <div className="bg-[#12121A]/80 border border-orange-500/20 rounded-2xl shadow-lg p-6">
                         <h3 className="text-2xl font-bold mb-4 text-orange-400 flex items-center gap-2"><i className="ph-fill ph-megaphone"></i>Admin: Quản lý Thông báo</h3>
                         {isAnnouncementLoading ? <p>Đang tải thông báo...</p> : announcement ? (

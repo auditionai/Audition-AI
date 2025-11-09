@@ -65,16 +65,16 @@ const handler: Handler = async (event: HandlerEvent) => {
                 return { statusCode: 200, body: JSON.stringify({ message: 'Transaction approved successfully.' }) };
 
             } else { // action === 'reject'
-                // Cập nhật trạng thái sang 'canceled' theo gợi ý chính xác từ người dùng.
-                const { error: updateError } = await supabaseAdmin
+                // **FIX:** Instead of updating to a non-existent status, delete the pending transaction record.
+                const { error: deleteError } = await supabaseAdmin
                     .from('transactions')
-                    .update({ status: 'canceled', updated_at: new Date().toISOString() })
+                    .delete()
                     .eq('id', transactionId)
                     .eq('status', 'pending');
                 
-                if (updateError) {
-                    console.error("Error rejecting transaction:", updateError);
-                    return { statusCode: 500, body: JSON.stringify({ error: `Rejection failed: ${updateError.message}` }) };
+                if (deleteError) {
+                    console.error("Error rejecting (deleting) transaction:", deleteError);
+                    return { statusCode: 500, body: JSON.stringify({ error: `Rejection failed: ${deleteError.message}` }) };
                 }
                 return { statusCode: 200, body: JSON.stringify({ message: 'Transaction rejected successfully.' }) };
             }

@@ -5,11 +5,19 @@ import BgRemoverTool from './ai-tool/BgRemoverTool';
 const AITool: React.FC = () => {
     const [activeTool, setActiveTool] = useState<'generate' | 'removeBg'>('removeBg');
     
-    // State to manage moving a processed image from the remover to the generator
+    // State to manage moving images from the remover to the generator
     const [imageToMove, setImageToMove] = useState<{ url: string; file: File } | null>(null);
+    const [faceToMove, setFaceToMove] = useState<{ url: string; file: File } | null>(null);
 
     const handleMoveToGenerator = (image: { url: string; file: File }) => {
         setImageToMove(image);
+        setFaceToMove(null); // Clear face image if full image is moved
+        setActiveTool('generate');
+    };
+    
+    const handleMoveFaceToGenerator = (image: { url: string; file: File }) => {
+        setFaceToMove(image);
+        setImageToMove(null); // Clear full image if face is moved
         setActiveTool('generate');
     };
 
@@ -25,8 +33,8 @@ const AITool: React.FC = () => {
                 {/* Content based on tab */}
                 <div>
                     {activeTool === 'generate' ? 
-                        <AiGeneratorTool initialCharacterImage={imageToMove} /> : 
-                        <BgRemoverTool onMoveToGenerator={handleMoveToGenerator} />
+                        <AiGeneratorTool initialCharacterImage={imageToMove} initialFaceImage={faceToMove} /> : 
+                        <BgRemoverTool onMoveToGenerator={handleMoveToGenerator} onMoveFaceToGenerator={handleMoveFaceToGenerator} />
                     }
                 </div>
             </div>

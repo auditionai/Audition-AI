@@ -4,10 +4,11 @@ import { useBackgroundRemover } from '../../hooks/useBackgroundRemover';
 import { DiamondIcon } from '../common/DiamondIcon';
 import ConfirmationModal from '../ConfirmationModal';
 import { resizeImage, base64ToFile } from '../../utils/imageUtils';
-import ProcessedImageModal from './ProcessedImageModal'; // Import the new modal
+import ProcessedImageModal from './ProcessedImageModal';
 
 interface BgRemoverToolProps {
     onMoveToGenerator: (image: { url: string; file: File }) => void;
+    onMoveFaceToGenerator: (image: { url: string; file: File }) => void;
 }
 
 // Define a serializable structure for session storage
@@ -20,7 +21,7 @@ interface ProcessedImageData {
     fileName: string;
 }
 
-const BgRemoverTool: React.FC<BgRemoverToolProps> = ({ onMoveToGenerator }) => {
+const BgRemoverTool: React.FC<BgRemoverToolProps> = ({ onMoveToGenerator, onMoveFaceToGenerator }) => {
     const { user, showToast } = useAuth();
     const { isProcessing, removeBackground, COST_PER_REMOVAL } = useBackgroundRemover();
 
@@ -98,17 +99,17 @@ const BgRemoverTool: React.FC<BgRemoverToolProps> = ({ onMoveToGenerator }) => {
 
     const handleUseInGenerator = (image: ProcessedImageData) => {
         const file = base64ToFile(image.imageBase64, `processed_${image.fileName}`, image.mimeType);
-        onMoveToGenerator({ url: image.processedUrl, file: file });
+        onMoveToGenerator({ url: `data:${image.mimeType};base64,${image.imageBase64}`, file: file });
         setSelectedProcessedImage(null); // Close modal
         showToast('Đã chuyển ảnh sang trình tạo AI!', 'success');
     };
 
-    const handleDownload = (imageUrl: string) => {
+    const handleDownload = (imageUrl: string, fileName: string) => {
         const downloadUrl = `/.netlify/functions/download-image?url=${encodeURIComponent(imageUrl)}`;
         const a = document.createElement('a');
         a.style.display = 'none';
         a.href = downloadUrl;
-        a.download = `audition-ai-bg-removed-${Date.now()}.png`;
+        a.download = `audition-ai-bg-removed-${fileName}.png`;
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -130,11 +131,16 @@ const BgRemoverTool: React.FC<BgRemoverToolProps> = ({ onMoveToGenerator }) => {
                 isOpen={!!selectedProcessedImage}
                 onClose={() => setSelectedProcessedImage(null)}
                 image={selectedProcessedImage}
-                onUse={() => {
+                onUseFull={() => {
                     if (selectedProcessedImage) handleUseInGenerator(selectedProcessedImage);
                 }}
+                onUseCropped={(croppedImage) => {
+                    onMoveFaceToGenerator(croppedImage);
+                    setSelectedProcessedImage(null);
+                    showToast('Đã chuyển ảnh gương mặt sang trình tạo AI!', 'success');
+                }}
                 onDownload={() => {
-                    if (selectedProcessedImage) handleDownload(selectedProcessedImage.processedUrl);
+                    if (selectedProcessedImage) handleDownload(selectedProcessedImage.processedUrl, selectedProcessedImage.fileName);
                 }}
             />
             <div className="flex-grow flex flex-col lg:grid lg:grid-cols-2 gap-6">
@@ -174,6 +180,7 @@ const BgRemoverTool: React.FC<BgRemoverToolProps> = ({ onMoveToGenerator }) => {
                 {/* Right Column: Results */}
                 <div className="flex flex-col">
                     <h3 className="font-semibold mb-3 text-lg">2. Kết quả (Lưu tạm)</h3>
+                    <p className="text-xs text-gray-500 -mt-2 mb-3">Lưu ý: Ảnh chỉ được lưu tạm thời. Tải lại trang sẽ làm mất ảnh.</p>
                     <div className="bg-black/20 rounded-lg border border-white/10 flex-grow p-4 aspect-square">
                         {processedImages.length === 0 && !isProcessing ? (
                             <div className="flex flex-col items-center justify-center h-full text-gray-500 text-center">

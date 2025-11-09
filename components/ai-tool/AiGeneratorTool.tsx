@@ -16,9 +16,10 @@ import { resizeImage } from '../../utils/imageUtils';
 
 interface AiGeneratorToolProps {
     initialCharacterImage?: { url: string; file: File } | null;
+    initialFaceImage?: { url: string; file: File } | null;
 }
 
-const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage }) => {
+const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage, initialFaceImage }) => {
     const { user, session, showToast, updateUserDiamonds } = useAuth();
     const { isGenerating, progress, generatedImage, error, generateImage, resetGenerator, cancelGeneration } = useImageGenerator();
 
@@ -54,7 +55,11 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
         if (initialCharacterImage) {
             setPoseImage(initialCharacterImage);
         }
-    }, [initialCharacterImage]);
+        if (initialFaceImage) {
+            setRawFaceImage(initialFaceImage);
+            setProcessedFaceImage(null);
+        }
+    }, [initialCharacterImage, initialFaceImage]);
     
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {

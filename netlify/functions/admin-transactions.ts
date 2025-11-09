@@ -65,7 +65,7 @@ const handler: Handler = async (event: HandlerEvent) => {
                 return { statusCode: 200, body: JSON.stringify({ message: 'Transaction approved successfully.' }) };
 
             } else { // action === 'reject'
-                // Cập nhật trạng thái từ 'pending' sang 'canceled' để khớp với check constraint
+                // Cập nhật trạng thái sang 'canceled' theo gợi ý chính xác từ người dùng.
                 const { error: updateError } = await supabaseAdmin
                     .from('transactions')
                     .update({ status: 'canceled', updated_at: new Date().toISOString() })

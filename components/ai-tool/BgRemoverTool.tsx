@@ -1,13 +1,23 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useBackgroundRemover } from '../../hooks/useBackgroundRemover';
 import { DiamondIcon } from '../common/DiamondIcon';
 import ConfirmationModal from '../ConfirmationModal';
 import { resizeImage, base64ToFile } from '../../utils/imageUtils';
-
+import ProcessedImageModal from './ProcessedImageModal'; // Import the new modal
 
 interface BgRemoverToolProps {
     onMoveToGenerator: (image: { url: string; file: File }) => void;
+}
+
+// Define a serializable structure for session storage
+interface ProcessedImageData {
+    id: string;
+    originalUrl: string;
+    processedUrl: string; // R2 URL
+    imageBase64: string; // Base64 data of the processed image
+    mimeType: string;
+    fileName: string;
 }
 
 const BgRemoverTool: React.FC<BgRemoverToolProps> = ({ onMoveToGenerator }) => {
@@ -15,8 +25,28 @@ const BgRemoverTool: React.FC<BgRemoverToolProps> = ({ onMoveToGenerator }) => {
     const { isProcessing, removeBackground, COST_PER_REMOVAL } = useBackgroundRemover();
 
     const [imagesForBgRemoval, setImagesForBgRemoval] = useState<Array<{id: string, url: string, file: File}>>([]);
-    const [processedImages, setProcessedImages] = useState<Array<{id: string, originalUrl: string, processedUrl: string, file: File}>>([]);
+    const [processedImages, setProcessedImages] = useState<ProcessedImageData[]>([]);
     const [isConfirmOpen, setConfirmOpen] = useState(false);
+    const [selectedProcessedImage, setSelectedProcessedImage] = useState<ProcessedImageData | null>(null);
+    
+    // Load processed images from sessionStorage on component mount
+    useEffect(() => {
+        try {
+            const storedImages = sessionStorage.getItem('processedBgImages');
+            if (storedImages) {
+                setProcessedImages(JSON.parse(storedImages));
+            }
+        } catch (e) {
+            console.error("Failed to parse processed images from sessionStorage", e);
+            sessionStorage.removeItem('processedBgImages');
+        }
+    }, []);
+
+    // Save processed images to sessionStorage whenever they change
+    useEffect(() => {
+        sessionStorage.setItem('processedBgImages', JSON.stringify(processedImages));
+    }, [processedImages]);
+
 
     const handleBgRemovalImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = Array.from(e.target.files ?? []);
@@ -54,17 +84,36 @@ const BgRemoverTool: React.FC<BgRemoverToolProps> = ({ onMoveToGenerator }) => {
             const result = await removeBackground(image.file);
             if (result) {
                 const { processedUrl, imageBase64, mimeType } = result;
-                // Directly convert base64 to a File object, bypassing the CORS-inducing fetch call.
-                const processedFile = base64ToFile(imageBase64, `processed_${image.file.name}`, mimeType);
-                setProcessedImages(prev => [...prev, { id: image.id, originalUrl: image.url, processedUrl, file: processedFile }]);
+                setProcessedImages(prev => [...prev, {
+                    id: image.id,
+                    originalUrl: image.url,
+                    processedUrl,
+                    imageBase64,
+                    mimeType,
+                    fileName: image.file.name,
+                }]);
             }
         }
     };
 
-    const handleInternalMove = (image: {processedUrl: string, file: File}) => {
-        onMoveToGenerator({ url: image.processedUrl, file: image.file });
+    const handleUseInGenerator = (image: ProcessedImageData) => {
+        const file = base64ToFile(image.imageBase64, `processed_${image.fileName}`, image.mimeType);
+        onMoveToGenerator({ url: image.processedUrl, file: file });
+        setSelectedProcessedImage(null); // Close modal
         showToast('Đã chuyển ảnh sang trình tạo AI!', 'success');
     };
+
+    const handleDownload = (imageUrl: string) => {
+        const downloadUrl = `/.netlify/functions/download-image?url=${encodeURIComponent(imageUrl)}`;
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = downloadUrl;
+        a.download = `audition-ai-bg-removed-${Date.now()}.png`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+    };
+
 
     const totalCost = imagesForBgRemoval.length * COST_PER_REMOVAL;
 
@@ -76,6 +125,17 @@ const BgRemoverTool: React.FC<BgRemoverToolProps> = ({ onMoveToGenerator }) => {
                 onConfirm={handleConfirmProcess}
                 cost={totalCost}
                 isLoading={isProcessing}
+            />
+             <ProcessedImageModal
+                isOpen={!!selectedProcessedImage}
+                onClose={() => setSelectedProcessedImage(null)}
+                image={selectedProcessedImage}
+                onUse={() => {
+                    if (selectedProcessedImage) handleUseInGenerator(selectedProcessedImage);
+                }}
+                onDownload={() => {
+                    if (selectedProcessedImage) handleDownload(selectedProcessedImage.processedUrl);
+                }}
             />
             <div className="flex-grow flex flex-col lg:grid lg:grid-cols-2 gap-6">
             
@@ -105,7 +165,7 @@ const BgRemoverTool: React.FC<BgRemoverToolProps> = ({ onMoveToGenerator }) => {
                         <button onClick={handleProcessClick} disabled={isProcessing || imagesForBgRemoval.length === 0} className="w-full mt-4 py-3 font-bold text-lg text-white bg-gradient-to-r from-pink-500 to-fuchsia-600 rounded-full flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
                             {isProcessing ? <div className="w-6 h-6 border-2 border-white/50 border-t-white rounded-full animate-spin"></div> : <>
                                 <DiamondIcon className="w-6 h-6" />
-                                <span>Tách nền ({imagesForBgRemoval.length} ảnh)</span>
+                                <span>Tách nền ({totalCost} 💎)</span>
                             </>}
                         </button>
                     </div>
@@ -113,7 +173,7 @@ const BgRemoverTool: React.FC<BgRemoverToolProps> = ({ onMoveToGenerator }) => {
         
                 {/* Right Column: Results */}
                 <div className="flex flex-col">
-                    <h3 className="font-semibold mb-3 text-lg">2. Kết quả</h3>
+                    <h3 className="font-semibold mb-3 text-lg">2. Kết quả (Lưu tạm)</h3>
                     <div className="bg-black/20 rounded-lg border border-white/10 flex-grow p-4 aspect-square">
                         {processedImages.length === 0 && !isProcessing ? (
                             <div className="flex flex-col items-center justify-center h-full text-gray-500 text-center">
@@ -123,13 +183,16 @@ const BgRemoverTool: React.FC<BgRemoverToolProps> = ({ onMoveToGenerator }) => {
                         ) : (
                             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-3 gap-4 h-full overflow-y-auto custom-scrollbar">
                             {processedImages.map(img => (
-                                <div key={img.id} className="group relative aspect-square">
-                                <img src={img.processedUrl} alt="Processed" className="w-full h-full object-cover rounded-md" />
-                                <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center p-2">
-                                    <button onClick={() => handleInternalMove({ processedUrl: img.processedUrl, file: img.file })} className="px-3 py-2 bg-pink-600 text-white font-semibold rounded-lg text-sm hover:bg-pink-700 transition">
-                                    Sử dụng
-                                    </button>
-                                </div>
+                                <div 
+                                    key={img.id} 
+                                    className="group relative aspect-square cursor-pointer"
+                                    onClick={() => setSelectedProcessedImage(img)}
+                                >
+                                    <img src={img.processedUrl} alt="Processed" className="w-full h-full object-cover rounded-md" />
+                                    <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center p-2 text-center">
+                                        <i className="ph-fill ph-eye text-3xl text-white"></i>
+                                        <p className="text-xs text-white mt-1">Xem chi tiết</p>
+                                    </div>
                                 </div>
                             ))}
                             {isProcessing && Array(imagesForBgRemoval.length > 0 ? imagesForBgRemoval.length : 1).fill(0).map((_, i) => (

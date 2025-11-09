@@ -1,9 +1,17 @@
+import { useEffect } from 'react';
 import HomePage from './pages/HomePage';
 import CreatorPage, { CreatorTab } from './pages/CreatorPage';
 import GalleryPage from './pages/GalleryPage';
 import { useAuth } from './contexts/AuthContext';
 import BuyCreditsPage from './pages/BuyCreditsPage';
 import RewardNotification from './components/common/RewardNotification';
+
+// Khai báo type cho hàm gtag của Google Analytics trên window object
+declare global {
+  interface Window {
+    gtag?: (command: string, targetId: string, config: { page_path: string }) => void;
+  }
+}
 
 const AppLoadingScreen = () => (
   <div className="fixed inset-0 bg-[#0B0B0F] flex items-center justify-center z-[9999]">
@@ -19,6 +27,16 @@ const AppLoadingScreen = () => (
 
 function App() {
   const { user, toast, loading, route, reward, clearReward } = useAuth();
+
+  // Gửi page_view đến Google Analytics mỗi khi route thay đổi
+  useEffect(() => {
+    if (typeof window.gtag === 'function') {
+      window.gtag('config', 'G-32R3PLY2JT', {
+        page_path: window.location.pathname,
+      });
+    }
+  }, [route]);
+
 
   if (loading) {
     return <AppLoadingScreen />;

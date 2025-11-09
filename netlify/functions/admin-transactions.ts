@@ -65,12 +65,12 @@ const handler: Handler = async (event: HandlerEvent) => {
                 return { statusCode: 200, body: JSON.stringify({ message: 'Transaction approved successfully.' }) };
 
             } else { // action === 'reject'
-                // Cập nhật trạng thái từ 'pending' sang 'rejected'
+                // Cập nhật trạng thái từ 'pending' sang 'canceled' để khớp với check constraint
                 const { error: updateError } = await supabaseAdmin
                     .from('transactions')
-                    .update({ status: 'rejected', updated_at: new Date().toISOString() })
+                    .update({ status: 'canceled', updated_at: new Date().toISOString() })
                     .eq('id', transactionId)
-                    .eq('status', 'pending'); // <-- THAY ĐỔI
+                    .eq('status', 'pending');
                 
                 if (updateError) {
                     console.error("Error rejecting transaction:", updateError);

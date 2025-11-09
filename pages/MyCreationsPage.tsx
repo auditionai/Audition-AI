@@ -117,6 +117,15 @@ const MyCreationsPage: React.FC = () => {
                 showInfoPanel={false} // Custom actions for user's own images
                 onShare={setImageToShare}
             />
+            <div className="bg-yellow-500/10 border border-yellow-500/30 text-yellow-300 p-4 rounded-lg mb-8 flex items-start gap-4">
+                <i className="ph-fill ph-warning-circle text-2xl text-yellow-400 mt-1 flex-shrink-0"></i>
+                <div>
+                    <h4 className="font-bold text-yellow-200">Lưu ý quan trọng về lưu trữ ảnh</h4>
+                    <p className="text-sm mt-1 leading-relaxed">
+                        Để đảm bảo hiệu suất và duy trì chi phí hoạt động, các tác phẩm của bạn sẽ chỉ được lưu trữ trên hệ thống trong vòng <strong>tối đa 7 ngày</strong> kể từ ngày tạo. Vui lòng <strong>tải xuống</strong> những hình ảnh bạn yêu thích trước khi chúng bị hệ thống tự động xóa vĩnh viễn.
+                    </p>
+                </div>
+            </div>
             <div className="text-center max-w-2xl mx-auto mb-12">
                 <h1 className="text-4xl font-bold mb-4 bg-gradient-to-r from-blue-400 via-cyan-400 to-blue-500 text-transparent bg-clip-text">Tác Phẩm Của Tôi</h1>
                 <p className="text-lg text-gray-400">Quản lý tất cả các hình ảnh bạn đã tạo bằng Audition AI.</p>

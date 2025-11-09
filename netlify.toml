@@ -52,3 +52,22 @@
     X-Frame-Options = "DENY"
     # Ngăn trình duyệt tự động đoán sai loại nội dung của tệp.
     X-Content-Type-Options = "nosniff"
+
+
+# =============================================================================
+# Functions Settings (Cài đặt Hàm Serverless)
+# =============================================================================
+[functions]
+  # Đảm bảo các tệp tiện ích trong thư mục 'utils' được đóng gói cùng với tất cả các hàm.
+  # Điều này rất quan trọng để các hàm có thể truy cập supabaseClient.
+  included_files = ["netlify/functions/utils/**"]
+
+
+# =============================================================================
+# Scheduled Functions (Hàm Lên lịch)
+# =============================================================================
+# Lên lịch cho hàm 'cleanup-old-images' chạy hàng ngày lúc 2 giờ sáng UTC (9 giờ sáng Việt Nam).
+# Cú pháp cron: "phút giờ ngày-trong-tháng tháng ngày-trong-tuần"
+[functions."cleanup-old-images"]
+  # "0 2 * * *" có nghĩa là: vào phút 0 của giờ thứ 2, mỗi ngày, mỗi tháng, mỗi ngày trong tuần.
+  schedule = "0 2 * * *"

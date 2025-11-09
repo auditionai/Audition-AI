@@ -19,7 +19,9 @@ interface ProcessedImageModalProps {
 
 const ProcessedImageModal: React.FC<ProcessedImageModalProps> = ({ isOpen, onClose, image, onUseFull, onUseCropped, onDownload }) => {
   const [isCropping, setIsCropping] = useState(false);
-  const [crop, setCrop] = useState({ aspect: 1, x: 25, y: 25, width: 50, height: 50 });
+  // FIX: Replaced unused state setter `setCrop` with a simple const to resolve build error TS6133.
+  // The crop UI is currently static, so state management is not required.
+  const crop = { aspect: 1, x: 25, y: 25, width: 50, height: 50 };
   
   const imgRef = useRef<HTMLImageElement>(null);
   
@@ -60,7 +62,8 @@ const ProcessedImageModal: React.FC<ProcessedImageModalProps> = ({ isOpen, onClo
     const file = base64ToFile(base64Url.split(',')[1], `cropped_${image?.fileName || 'face'}.png`, 'image/png');
     
     onUseCropped({ url: base64Url, file });
-  }, [crop, image, onUseCropped]);
+    // FIX: Removed `crop` from the dependency array as it is now a constant.
+  }, [image, onUseCropped]);
 
 
   const handleClose = () => {

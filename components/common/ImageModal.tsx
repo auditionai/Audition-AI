@@ -85,7 +85,7 @@ const ImageModal: React.FC<ImageModalProps> = ({ isOpen, onClose, image, showInf
                             <i className="ph-fill ph-quotes"></i>
                             Câu lệnh (Prompt)
                         </h4>
-                        <p className="text-sm text-gray-300 italic bg-white/5 p-3 rounded-md flex-grow">
+                        <p className="text-sm text-gray-300 italic bg-white/5 p-3 rounded-md flex-grow max-h-40 overflow-y-auto custom-scrollbar">
                             "{image.prompt}"
                         </p>
                         <div className="mt-auto pt-3">

@@ -1,15 +1,9 @@
 import { useState, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { AIModel } from '../types';
+import { fileToBase64 } from '../utils/imageUtils';
 
-const fileToBase64 = (file: File): Promise<string> => new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-});
-
-// --- NEW: Logic moved from backend to frontend ---
+// Logic moved from backend to frontend
 const buildSignaturePrompt = (
     text: string, style: string, position: string, 
     color: string, customColor: string, size: string
@@ -39,7 +33,6 @@ const buildSignaturePrompt = (
     instruction += ` The signature is ${sizeMap[size] || 'medium-sized'}, in ${styleMap[style] || 'a clean font style'}, with ${colorDesc}, and placed ${positionMap[position] || 'in the bottom-right corner'}.`;
     return ' ' + instruction;
 };
-// --- END NEW ---
 
 export const useImageGenerator = () => {
     const { session, showToast, updateUserProfile } = useAuth();
@@ -51,7 +44,7 @@ export const useImageGenerator = () => {
 
     const generateImage = async (
         prompt: string, model: AIModel, poseImageFile: File | null,
-        styleImageFile: File | null, faceImage: File | string | null,
+        styleImageFile: File | null, faceImage: string | null, // <-- REFACTORED: Now consistently string or null
         aspectRatio: string, useUpscaler: boolean,
         useSignature: boolean,
         signatureOptions: {
@@ -76,35 +69,32 @@ export const useImageGenerator = () => {
                 setProgress(prev => (prev < 8 ? prev + 1 : prev));
             }, 1800);
 
-            // --- REFACTORED PROMPT LOGIC ---
-            let finalPrompt = prompt;
+            let fullPrompt = prompt;
             if (useSignature) {
                 const signatureInstruction = buildSignaturePrompt(
                     signatureOptions.signatureText, signatureOptions.signatureStyle, signatureOptions.signaturePosition,
                     signatureOptions.signatureColor, signatureOptions.signatureCustomColor, signatureOptions.signatureSize
                 );
-                finalPrompt += signatureInstruction;
+                fullPrompt += signatureInstruction;
             }
-            // --- END REFACTOR ---
 
-            const [poseImageBase64, styleImageBase64, faceImageBase64] = await Promise.all([
+            // --- REFACTORED & SIMPLIFIED: No longer needs to check for File type ---
+            const [poseImageBase64, styleImageBase64] = await Promise.all([
                 poseImageFile ? fileToBase64(poseImageFile) : Promise.resolve(null),
                 styleImageFile ? fileToBase64(styleImageFile) : Promise.resolve(null),
-                faceImage instanceof File ? fileToBase64(faceImage) : Promise.resolve(faceImage)
             ]);
             
-            // --- SIMPLIFIED PAYLOAD ---
             const bodyPayload = {
-                prompt: finalPrompt, // Send the final, complete prompt
+                originalPrompt: prompt,
+                fullPrompt: fullPrompt,
                 apiModel: model.apiModel,
                 characterImage: poseImageBase64,
                 styleImage: styleImageBase64, 
-                faceReferenceImage: faceImageBase64,
+                faceReferenceImage: faceImage, // Already a data URL string or null
                 aspectRatio, 
                 useUpscaler
             };
-            // No more separate signature fields are sent.
-            // --- END SIMPLIFIED PAYLOAD ---
+            // --- END REFACTOR ---
 
             const response = await fetch('/.netlify/functions/generate-image', {
                 method: 'POST',

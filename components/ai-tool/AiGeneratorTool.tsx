@@ -12,8 +12,8 @@ import GenerationProgress from './GenerationProgress';
 import ConfirmationModal from '../ConfirmationModal';
 import ImageModal from '../common/ImageModal';
 import ToggleSwitch from './ToggleSwitch';
-import { resizeImage } from '../../utils/imageUtils';
-import SignatureSettings from './SignatureSettings'; // Import the new component
+import { resizeImage, fileToBase64 } from '../../utils/imageUtils'; // Import fileToBase64
+import SignatureSettings from './SignatureSettings';
 
 interface AiGeneratorToolProps {
     initialCharacterImage?: { url: string; file: File } | null;
@@ -150,15 +150,34 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
         setConfirmOpen(true);
     };
     
-    const handleConfirmGeneration = () => {
+    const handleConfirmGeneration = async () => {
         setConfirmOpen(false);
-        const finalFaceImage = processedFaceImage ? processedFaceImage : (useBasicFaceLock && poseImage) ? poseImage.file : null;
+
+        // --- REFACTOR: NORMALIZE DATA AT THE SOURCE ---
+        // Determine the source for the face image (string, File, or null)
+        const faceImageSource = processedFaceImage ? processedFaceImage : (useBasicFaceLock && poseImage) ? poseImage.file : null;
+        let finalFaceImageForHook: string | null = null;
+
+        // Convert any source into a consistent type (string | null) before calling the hook
+        if (faceImageSource) {
+            if (typeof faceImageSource === 'string') {
+                finalFaceImageForHook = faceImageSource; // It's already a data URL
+            } else { // It's a File object
+                try {
+                    finalFaceImageForHook = await fileToBase64(faceImageSource);
+                } catch (e) {
+                    showToast('Lỗi xử lý ảnh gương mặt để tạo ảnh.', 'error');
+                    return; // Stop generation if conversion fails
+                }
+            }
+        }
+        // --- END REFACTOR ---
 
         generateImage(
             prompt, selectedModel,
             poseImage?.file ?? null,
             styleImage?.file ?? null,
-            finalFaceImage,
+            finalFaceImageForHook, // Pass the consistently typed variable
             aspectRatio, useUpscaler,
             useSignature,
             {

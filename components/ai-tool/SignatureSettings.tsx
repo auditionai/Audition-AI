@@ -51,7 +51,7 @@ const SignatureSettings: React.FC<SignatureSettingsProps> = (props) => {
     const allStyles = styles.flatMap(group => group.options);
 
     return (
-        <div className="space-y-4 border-t border-b border-white/10 py-4">
+        <div className="space-y-4 animate-fade-in-down">
             <h4 className="text-sm font-semibold text-gray-300">Chữ ký trong ảnh</h4>
             <div>
                 <input type="text" value={text} onChange={e => onTextChange(e.target.value)} placeholder="Nhập chữ ký của bạn..." className="w-full p-2 bg-black/30 rounded-md border border-gray-600 focus:border-pink-500 transition text-sm text-white" maxLength={25} />

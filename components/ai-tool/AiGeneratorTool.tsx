@@ -46,6 +46,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
     const [useBasicFaceLock, setUseBasicFaceLock] = useState(true);
 
     // NEW: Signature State
+    const [useSignature, setUseSignature] = useState(false);
     const [signatureText, setSignatureText] = useState('');
     const [signatureStyle, setSignatureStyle] = useState('handwritten');
     const [signaturePosition, setSignaturePosition] = useState('bottom_right');
@@ -159,6 +160,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
             styleImage?.file ?? null,
             finalFaceImage,
             aspectRatio, useUpscaler,
+            useSignature,
             {
                 signatureText, signatureStyle, signaturePosition,
                 signatureColor, signatureCustomColor, signatureSize
@@ -318,15 +320,25 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                                 </div>
                             </div>
                             
-                            {/* NEW: Signature Settings Component */}
-                            <SignatureSettings
-                                text={signatureText} onTextChange={setSignatureText}
-                                style={signatureStyle} onStyleChange={setSignatureStyle}
-                                position={signaturePosition} onPositionChange={setSignaturePosition}
-                                color={signatureColor} onColorChange={setSignatureColor}
-                                customColor={signatureCustomColor} onCustomColorChange={setSignatureCustomColor}
-                                size={signatureSize} onSizeChange={setSignatureSize}
-                            />
+                            <div className="border-t border-b border-white/10 py-4">
+                                <ToggleSwitch 
+                                    label="Thêm Chữ ký vào ảnh" 
+                                    checked={useSignature} 
+                                    onChange={e => setUseSignature(e.target.checked)} 
+                                />
+                            </div>
+                            
+                            {useSignature && (
+                                <SignatureSettings
+                                    text={signatureText} onTextChange={setSignatureText}
+                                    style={signatureStyle} onStyleChange={setSignatureStyle}
+                                    position={signaturePosition} onPositionChange={setSignaturePosition}
+                                    color={signatureColor} onColorChange={setSignatureColor}
+                                    customColor={signatureCustomColor} onCustomColorChange={setSignatureCustomColor}
+                                    size={signatureSize} onSizeChange={setSignatureSize}
+                                />
+                            )}
+
 
                             <div>
                                 <label className="text-sm font-semibold text-gray-300 mb-2 block">Tỷ lệ khung hình</label>

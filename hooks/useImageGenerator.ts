@@ -21,6 +21,7 @@ export const useImageGenerator = () => {
         prompt: string, model: AIModel, poseImageFile: File | null,
         styleImageFile: File | null, faceImage: File | string | null,
         aspectRatio: string, useUpscaler: boolean,
+        useSignature: boolean,
         signatureOptions: {
             signatureText: string;
             signatureStyle: string;
@@ -48,6 +49,18 @@ export const useImageGenerator = () => {
                 styleImageFile ? fileToBase64(styleImageFile) : Promise.resolve(null),
                 faceImage instanceof File ? fileToBase64(faceImage) : Promise.resolve(faceImage)
             ]);
+            
+            const bodyPayload: any = {
+                prompt, modelId: model.id, apiModel: model.apiModel,
+                characterImage: poseImageBase64,
+                styleImage: styleImageBase64, 
+                faceReferenceImage: faceImageBase64,
+                aspectRatio, useUpscaler,
+            };
+
+            if (useSignature && signatureOptions.signatureText.trim() !== '') {
+                Object.assign(bodyPayload, signatureOptions);
+            }
 
             const response = await fetch('/.netlify/functions/generate-image', {
                 method: 'POST',
@@ -55,14 +68,7 @@ export const useImageGenerator = () => {
                     'Content-Type': 'application/json',
                     Authorization: `Bearer ${session?.access_token}`,
                 },
-                body: JSON.stringify({
-                    prompt, modelId: model.id, apiModel: model.apiModel,
-                    characterImage: poseImageBase64,
-                    styleImage: styleImageBase64, 
-                    faceReferenceImage: faceImageBase64,
-                    aspectRatio, useUpscaler,
-                    ...signatureOptions
-                }),
+                body: JSON.stringify(bodyPayload),
                 signal: abortControllerRef.current.signal,
             });
             

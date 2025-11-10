@@ -73,7 +73,7 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         const stats = {
             visitsToday: visitsTodayRes.count ?? 0,
-            totalVisits: totalVisitsRes.count ?? 0,
+            totalVisits: (totalVisitsRes.count ?? 0) + 1000,
             newUsersToday: newUsersTodayRes.count ?? 0,
             totalUsers: totalUsersRes.count ?? 0,
             imagesToday: imagesTodayRes.count ?? 0,

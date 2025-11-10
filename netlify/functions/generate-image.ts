@@ -62,15 +62,22 @@ const handler: Handler = async (event: HandlerEvent) => {
         console.log(`[OK] User authenticated: ${user.id}`);
 
         console.log("[STEP 2/10] Parsing request body...");
-        // --- SIMPLIFIED: The backend no longer knows about signature details ---
+        // --- MODIFIED: Parse both original and full prompts ---
         const { 
-            prompt, apiModel, characterImage, faceReferenceImage, styleImage, 
+            originalPrompt, fullPrompt, apiModel, characterImage, faceReferenceImage, styleImage, 
             aspectRatio, useUpscaler
         } = JSON.parse(event.body || '{}');
 
-        if (!prompt || !apiModel) {
-            console.error("[FAIL] Missing prompt or apiModel in request body.");
-            return { statusCode: 400, body: JSON.stringify({ error: 'Prompt and apiModel are required.' }) };
+        // --- NEW & IMPROVED VALIDATION ---
+        const missingFields = [];
+        if (!originalPrompt) missingFields.push('originalPrompt');
+        if (!fullPrompt) missingFields.push('fullPrompt');
+        if (!apiModel) missingFields.push('apiModel');
+
+        if (missingFields.length > 0) {
+            const errorMsg = `Missing required fields: ${missingFields.join(', ')}.`;
+            console.error(`[FAIL] Validation failed. ${errorMsg}`);
+            return { statusCode: 400, body: JSON.stringify({ error: errorMsg }) };
         }
         console.log(`[OK] Body parsed. Model: ${apiModel}, Upscaler: ${useUpscaler}`);
         
@@ -100,9 +107,8 @@ const handler: Handler = async (event: HandlerEvent) => {
         let finalImageBase64: string;
         let finalImageMimeType: string;
         
-        console.log("[STEP 5/10] Using final prompt from client...");
-        const fullPrompt = prompt; // The prompt is now received complete.
-        console.log(`[OK] Prompt received. Length: ${fullPrompt.length}`);
+        console.log("[STEP 5/10] Using full prompt from client...");
+        console.log(`[OK] Prompt for AI received. Length: ${fullPrompt.length}`);
 
         const randomSeed = Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
         
@@ -186,7 +192,8 @@ const handler: Handler = async (event: HandlerEvent) => {
         const newDiamondCount = userData.diamonds - totalCost;
         const newXp = userData.xp + XP_PER_GENERATION;
         
-        let logDescription = `Tạo ảnh: ${prompt.substring(0, 50)}...`;
+        // --- MODIFIED: Use originalPrompt for logging ---
+        let logDescription = `Tạo ảnh: ${originalPrompt.substring(0, 50)}...`;
         if (useUpscaler) logDescription += " (Nâng cấp)";
         
         await Promise.all([
@@ -194,7 +201,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id }),
             supabaseAdmin.from('generated_images').insert({
                 user_id: user.id,
-                prompt: prompt, // Log the original user prompt, not the full one
+                prompt: originalPrompt, // Use the shorter, original prompt for DB
                 image_url: publicUrl,
                 model_used: apiModel,
                 used_face_enhancer: !!faceReferenceImage
@@ -225,7 +232,10 @@ const handler: Handler = async (event: HandlerEvent) => {
                  clientFriendlyError = 'Lỗi từ AI: Không thể xử lý ảnh đầu vào. Hãy thử lại hoặc thay đổi ảnh đầu vào.';
             } else if (error.message.includes('Supabase server environment variables')) {
                  clientFriendlyError = 'Lỗi cấu hình máy chủ. Vui lòng liên hệ quản trị viên.';
-            } else {
+            } else if (error.message.includes('value too long for type')) {
+                 clientFriendlyError = 'Lỗi cơ sở dữ liệu: Dữ liệu prompt quá dài. Vui lòng rút ngắn mô tả của bạn.';
+            }
+            else {
                 clientFriendlyError = error.message;
             }
         }

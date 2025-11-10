@@ -1,28 +1,6 @@
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
 
-// Helper to get start and end of day in UTC, corresponding to Vietnam's timezone (UTC+7)
-const getVnDayUtcRange = () => {
-    const now = new Date();
-    // Create a date object representing current time in Vietnam
-    const vnTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
-    
-    // Start of day in Vietnam
-    const startOfDayVn = new Date(vnTime);
-    startOfDayVn.setHours(0, 0, 0, 0);
-
-    // End of day in Vietnam
-    const endOfDayVn = new Date(vnTime);
-    endOfDayVn.setHours(23, 59, 59, 999);
-
-    // Convert back to UTC ISO strings for Supabase query
-    return {
-        start: startOfDayVn.toISOString(),
-        end: endOfDayVn.toISOString()
-    };
-};
-
-
 const handler: Handler = async (event: HandlerEvent) => {
     // 1. Admin Authentication
     const authHeader = event.headers['authorization'];
@@ -42,29 +20,39 @@ const handler: Handler = async (event: HandlerEvent) => {
     }
 
     try {
-        const { start, end } = getVnDayUtcRange();
+        // We will perform all timezone conversions directly in the database
+        // using PostgreSQL's `AT TIME ZONE` capabilities for accuracy.
+        const vietnamTimezone = 'Asia/Ho_Chi_Minh';
 
         const [
-            // Visits
             { count: visitsToday, error: visitsTodayError },
             { count: totalVisits, error: totalVisitsError },
-            // Users
             { count: newUsersToday, error: newUsersError },
             { count: totalUsers, error: totalUsersError },
-            // Images
             { count: imagesToday, error: imagesTodayError },
             { count: totalImages, error: totalImagesError },
         ] = await Promise.all([
-            // 1. Visits Today
-            supabaseAdmin.from('daily_visits').select('*', { count: 'exact', head: true }).gte('visited_at', start).lte('visited_at', end),
+            // 1. Visits Today (in Vietnam Timezone)
+            supabaseAdmin.from('daily_visits').select('*', { count: 'exact', head: true })
+                .filter('visited_at', 'gte', `(now() AT TIME ZONE '${vietnamTimezone}') - interval '1 day' * (EXTRACT(hour FROM now() AT TIME ZONE '${vietnamTimezone}') / 24)`)
+                .filter('visited_at', 'lt', `(now() AT TIME ZONE '${vietnamTimezone}') + interval '1 day' * (1 - EXTRACT(hour FROM now() AT TIME ZONE '${vietnamTimezone}') / 24)`),
+
             // 2. Total Visits
             supabaseAdmin.from('daily_visits').select('*', { count: 'exact', head: true }),
-            // 3. New Users Today
-            supabaseAdmin.from('users').select('*', { count: 'exact', head: true }).gte('created_at', start).lte('created_at', end),
+
+            // 3. New Users Today (in Vietnam Timezone)
+            supabaseAdmin.from('users').select('*', { count: 'exact', head: true })
+               .filter('created_at', 'gte', `(now() AT TIME ZONE '${vietnamTimezone}') - interval '1 day' * (EXTRACT(hour FROM now() AT TIME ZONE '${vietnamTimezone}') / 24)`)
+               .filter('created_at', 'lt', `(now() AT TIME ZONE '${vietnamTimezone}') + interval '1 day' * (1 - EXTRACT(hour FROM now() AT TIME ZONE '${vietnamTimezone}') / 24)`),
+
             // 4. Total Users
             supabaseAdmin.from('users').select('*', { count: 'exact', head: true }),
-            // 5. Images Created Today
-            supabaseAdmin.from('generated_images').select('*', { count: 'exact', head: true }).gte('created_at', start).lte('created_at', end),
+
+            // 5. Images Created Today (in Vietnam Timezone)
+            supabaseAdmin.from('generated_images').select('*', { count: 'exact', head: true })
+              .filter('created_at', 'gte', `(now() AT TIME ZONE '${vietnamTimezone}') - interval '1 day' * (EXTRACT(hour FROM now() AT TIME ZONE '${vietnamTimezone}') / 24)`)
+              .filter('created_at', 'lt', `(now() AT TIME ZONE '${vietnamTimezone}') + interval '1 day' * (1 - EXTRACT(hour FROM now() AT TIME ZONE '${vietnamTimezone}') / 24)`),
+              
             // 6. Total Images
             supabaseAdmin.from('generated_images').select('*', { count: 'exact', head: true }),
         ]);

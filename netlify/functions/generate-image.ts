@@ -3,8 +3,10 @@ import { GoogleGenAI, Modality } from "@google/genai";
 import { supabaseAdmin } from './utils/supabaseClient';
 import { Buffer } from 'buffer';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
-// Fix: Changed to a standard ES module default import for Jimp to resolve the "Import assignment cannot be used" error.
-import Jimp from 'jimp';
+// Fix: The previous default import for 'jimp' was incorrect for the TS configuration.
+// Using a namespace import (`import * as Jimp`) correctly resolves the Jimp object
+// and its static methods, constructor, and constants.
+import * as Jimp from 'jimp';
 
 const COST_BASE = 1;
 const COST_UPSCALE = 1;
@@ -48,56 +50,49 @@ const buildSignaturePrompt = (
 ): string => {
     if (!text || text.trim() === '') return '';
 
-    const instructions: string[] = [];
-    instructions.push(`Add the text "${text.trim()}" as a signature.`);
-
+    // A more descriptive, less imperative style for image models.
+    let instruction = `The image should include a signature that says "${text.trim()}".`;
+    
     const styleMap: { [key: string]: string } = {
-        handwritten: 'in a handwritten script style',
-        sans_serif: 'in a clean, modern sans-serif font',
-        bold: 'in a bold, oversized font',
-        vintage: 'in a vintage, retro-style font',
-        '3d': 'as 3D typography',
-        messy: 'in a messy, grunge-style font',
-        outline: 'as an outline font',
-        teen_code: 'in a playful, teen-code style font',
-        mixed: 'using a creative mix of fonts',
+        handwritten: 'a handwritten script style',
+        sans_serif: 'a clean sans-serif font style',
+        bold: 'a bold font style',
+        vintage: 'a vintage retro font style',
+        '3d': 'a 3D typography style',
+        messy: 'a messy grunge font style',
+        outline: 'an outline font style',
+        teen_code: 'a playful teen-code font style',
+        mixed: 'a creative mixed font style',
     };
-    if (styleMap[style]) {
-        instructions.push(`The signature should be ${styleMap[style]}.`);
-    }
 
     const sizeMap: { [key: string]: string } = {
-        small: 'It should be small and discreet.',
-        medium: 'It should be a medium, noticeable size.',
-        large: 'It should be large and prominent.',
+        small: 'small and discreet',
+        medium: 'medium-sized and noticeable',
+        large: 'large and prominent',
     };
-    if (sizeMap[size]) {
-        instructions.push(sizeMap[size]);
-    }
-
-    if (color === 'rainbow') {
-        instructions.push('The color should be a vibrant rainbow gradient.');
-    } else if (color === 'custom' && customColor) {
-        instructions.push(`The color should be ${customColor}.`);
-    } else if (color === 'random') {
-        instructions.push('The color should be a random, complementary color.');
-    } else {
-        instructions.push('The color should be white or another contrasting color.');
-    }
     
     const positionMap: { [key: string]: string } = {
-        bottom_right: 'Place it in the bottom-right corner.',
-        bottom_left: 'Place it in the bottom-left corner.',
-        top_right: 'Place it in the top-right corner.',
-        top_left: 'Place it in the top-left corner.',
-        center: 'Place it in the center.',
-        random: 'Place it in a random but pleasing location.',
+        bottom_right: 'in the bottom-right corner',
+        bottom_left: 'in the bottom-left corner',
+        top_right: 'in the top-right corner',
+        top_left: 'in the top-left corner',
+        center: 'in the center',
+        random: 'in a visually pleasing location',
     };
-    if (positionMap[position]) {
-        instructions.push(positionMap[position]);
+    
+    let colorDesc = 'white or a contrasting color';
+    if (color === 'rainbow') {
+        colorDesc = 'a vibrant rainbow gradient color';
+    } else if (color === 'custom' && customColor) {
+        colorDesc = `the color ${customColor}`;
+    } else if (color === 'random') {
+        colorDesc = 'a random, complementary color';
     }
 
-    return ' ' + instructions.join(' ');
+    // Combine into a more natural phrase.
+    instruction += ` The signature is ${sizeMap[size] || 'medium-sized'}, in ${styleMap[style] || 'a clean font style'}, with ${colorDesc}, and placed ${positionMap[position] || 'in the bottom-right corner'}.`;
+
+    return ' ' + instruction;
 };
 
 

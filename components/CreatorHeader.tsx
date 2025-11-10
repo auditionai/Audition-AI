@@ -4,7 +4,7 @@ import { CreatorTab } from '../pages/CreatorPage';
 import { getRankForLevel } from '../utils/rankUtils';
 import XPProgressBar from './common/XPProgressBar';
 import NotificationDropdown from './common/NotificationDropdown';
-import { CHANGELOG_DATA } from '../../constants/changelogData';
+import { CHANGELOG_DATA } from '../constants/changelogData';
 
 interface CreatorHeaderProps {
   onTopUpClick: () => void;

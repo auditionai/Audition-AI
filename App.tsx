@@ -5,7 +5,6 @@ import GalleryPage from './pages/GalleryPage';
 import { useAuth } from './contexts/AuthContext';
 import BuyCreditsPage from './pages/BuyCreditsPage';
 import RewardNotification from './components/common/RewardNotification';
-import AdminGalleryPage from './pages/AdminGalleryPage';
 
 // Khai báo type cho hàm gtag của Google Analytics trên window object
 declare global {

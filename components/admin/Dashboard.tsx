@@ -113,7 +113,6 @@ const Dashboard: React.FC = () => {
                     value={stats?.totalVisits ?? 0}
                     icon={<i className="ph-fill ph-globe-hemisphere-west"></i>}
                     color="cyan"
-                    isSubtle
                 />
                  <StatCard 
                     title="Người dùng mới (hôm nay)"
@@ -126,7 +125,6 @@ const Dashboard: React.FC = () => {
                     value={stats?.totalUsers ?? 0}
                     icon={<i className="ph-fill ph-users"></i>}
                     color="green"
-                    isSubtle
                 />
                  <StatCard 
                     title="Ảnh tạo (hôm nay)"
@@ -139,7 +137,6 @@ const Dashboard: React.FC = () => {
                     value={stats?.totalImages ?? 0}
                     icon={<i className="ph-fill ph-images"></i>}
                     color="pink"
-                    isSubtle
                 />
             </div>
         </div>

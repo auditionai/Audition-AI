@@ -124,7 +124,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                 const result = await response.json();
                 if (!response.ok) throw new Error(result.error || 'Xử lý gương mặt thất bại.');
 
-                setProcessedFaceImage(result.processedImageBase64);
+                setProcessedFaceImage(result.processedImageDataUrl);
                 updateUserDiamonds(result.newDiamondCount);
                 showToast('Xử lý & Khóa gương mặt thành công!', 'success');
             };
@@ -261,7 +261,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                             </div>
                         </SettingsBlock>
                          <SettingsBlock title="Siêu Khóa Gương Mặt" instructionKey="face" onInstructionClick={() => openInstructionModal('face')}>
-                            <ImageUploader onUpload={(e) => handleImageUpload(e, 'face')} image={rawFaceImage ? { url: processedFaceImage ? `data:image/png;base64,${processedFaceImage}` : rawFaceImage.url } : null} onRemove={() => handleRemoveImage('face')} text="Face ID (95%+)" disabled={isImageInputDisabled} />
+                            <ImageUploader onUpload={(e) => handleImageUpload(e, 'face')} image={rawFaceImage ? { url: processedFaceImage || rawFaceImage.url } : null} onRemove={() => handleRemoveImage('face')} text="Face ID (95%+)" disabled={isImageInputDisabled} />
                              <div className="mt-2 space-y-2">
                                 {rawFaceImage && !processedFaceImage && (
                                     <button onClick={handleProcessFace} disabled={isProcessingFace} className="w-full text-sm font-bold py-2 px-3 bg-yellow-500/20 text-yellow-300 rounded-lg hover:bg-yellow-500/30 disabled:opacity-50 disabled:cursor-wait">

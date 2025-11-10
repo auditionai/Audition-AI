@@ -78,7 +78,7 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         const response = await ai.models.generateContent({
             model,
-            contents: { parts: parts },
+            contents: [{ parts: parts }],
             config: { responseModalities: [Modality.IMAGE] },
         });
 

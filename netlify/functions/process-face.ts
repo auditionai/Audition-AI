@@ -40,12 +40,14 @@ const handler: Handler = async (event: HandlerEvent) => {
         }
 
         // 3. Simulate AI processing (crop, sharpen)
-        // In a real app, you would call a dedicated AI service here (e.g., Google Vision API, or another Gemini call).
-        // For this demo, we'll just return the original image's base64 data to prove the workflow.
         console.log(`[FACE PROCESS] Simulating AI face crop/sharpen for user ${user.id}...`);
         await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate processing time
-        const [_header, base64] = imageDataUrl.split(',');
-        const processedImageBase64 = base64; // Placeholder
+        
+        const [header, base64] = imageDataUrl.split(',');
+        const mimeType = header.match(/:(.*?);/)?.[1] || 'image/png';
+        const processedImageBase64 = base64; // Placeholder for actual AI processing
+        const processedImageDataUrl = `data:${mimeType};base64,${processedImageBase64}`;
+
 
         // 4. Deduct cost and log transaction
         const newDiamondCount = userData.diamonds - COST_PER_FACE_PROCESS;
@@ -68,7 +70,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             body: JSON.stringify({ 
                 success: true,
                 message: "Xử lý gương mặt thành công!",
-                processedImageBase64,
+                processedImageDataUrl, // Return the full data URL
                 newDiamondCount
             }),
         };

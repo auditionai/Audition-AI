@@ -13,6 +13,7 @@ import ConfirmationModal from '../ConfirmationModal';
 import ImageModal from '../common/ImageModal';
 import ToggleSwitch from './ToggleSwitch';
 import { resizeImage } from '../../utils/imageUtils';
+import SignatureSettings from './SignatureSettings'; // Import the new component
 
 interface AiGeneratorToolProps {
     initialCharacterImage?: { url: string; file: File } | null;
@@ -33,18 +34,24 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
     // Feature States
     const [poseImage, setPoseImage] = useState<{ url: string; file: File } | null>(null);
     const [rawFaceImage, setRawFaceImage] = useState<{ url: string; file: File } | null>(null);
-    const [processedFaceImage, setProcessedFaceImage] = useState<string | null>(null); // Stores base64 of processed face
+    const [processedFaceImage, setProcessedFaceImage] = useState<string | null>(null);
     const [styleImage, setStyleImage] = useState<{ url: string; file: File } | null>(null);
     const [isProcessingFace, setIsProcessingFace] = useState(false);
 
     const [prompt, setPrompt] = useState('');
-    const [negativePrompt, setNegativePrompt] = useState('');
     const [selectedModel, setSelectedModel] = useState<AIModel>(DETAILED_AI_MODELS.find(m => m.recommended) || DETAILED_AI_MODELS[0]);
     const [selectedStyle, setSelectedStyle] = useState('none');
     const [aspectRatio, setAspectRatio] = useState('3:4');
-    const [seed, setSeed] = useState<number | ''>('');
     const [useUpscaler, setUseUpscaler] = useState(false);
     const [useBasicFaceLock, setUseBasicFaceLock] = useState(true);
+
+    // NEW: Signature State
+    const [signatureText, setSignatureText] = useState('');
+    const [signatureStyle, setSignatureStyle] = useState('handwritten');
+    const [signaturePosition, setSignaturePosition] = useState('bottom_right');
+    const [signatureColor, setSignatureColor] = useState('default');
+    const [signatureCustomColor, setSignatureCustomColor] = useState('#FFFFFF');
+    const [signatureSize, setSignatureSize] = useState('small');
     
     // Custom Style Dropdown State
     const [isStyleDropdownOpen, setIsStyleDropdownOpen] = useState(false);
@@ -74,13 +81,13 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
     const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'pose' | 'face' | 'style') => {
         const file = e.target.files?.[0];
         if (file) {
-            resizeImage(file, 1024) // Resize to max 1024px
+            resizeImage(file, 1024)
                 .then(({ file: resizedFile, dataUrl: resizedDataUrl }) => {
                     const newImage = { url: resizedDataUrl, file: resizedFile };
                     if (type === 'pose') setPoseImage(newImage);
                     else if (type === 'face') {
                         setRawFaceImage(newImage);
-                        setProcessedFaceImage(null); // Reset processed image if a new one is uploaded
+                        setProcessedFaceImage(null);
                     }
                     else if (type === 'style') setStyleImage(newImage);
                 })
@@ -144,7 +151,6 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
     
     const handleConfirmGeneration = () => {
         setConfirmOpen(false);
-        // Determine which face image to send
         const finalFaceImage = processedFaceImage ? processedFaceImage : (useBasicFaceLock && poseImage) ? poseImage.file : null;
 
         generateImage(
@@ -152,22 +158,23 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
             poseImage?.file ?? null,
             styleImage?.file ?? null,
             finalFaceImage,
-            aspectRatio, negativePrompt,
-            seed || undefined, useUpscaler
+            aspectRatio, useUpscaler,
+            {
+                signatureText, signatureStyle, signaturePosition,
+                signatureColor, signatureCustomColor, signatureSize
+            }
         );
     };
 
     const handleDownloadResult = () => {
         if (!generatedImage) return;
         
-        // Create the proxied download URL
         const downloadUrl = `/.netlify/functions/download-image?url=${encodeURIComponent(generatedImage)}`;
 
-        // Use a temporary anchor element to trigger the download
         const a = document.createElement('a');
         a.style.display = 'none';
         a.href = downloadUrl;
-        a.download = `audition-ai-${Date.now()}.png`; // Fallback filename
+        a.download = `audition-ai-${Date.now()}.png`;
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -310,17 +317,17 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                                     )}
                                 </div>
                             </div>
-
-                             <div>
-                                <label className="text-sm font-semibold text-gray-300 mb-1 block">Prompt Phủ định</label>
-                                <textarea value={negativePrompt} onChange={(e) => setNegativePrompt(e.target.value)} placeholder="VD: xấu, mờ, nhiều tay..." className="w-full p-2 bg-black/30 rounded-md border border-gray-600 focus:border-pink-500 transition text-sm text-white resize-none" rows={2} />
-                            </div>
-
-                             <div>
-                                <label className="text-sm font-semibold text-gray-300 mb-1 block">Seed</label>
-                                 <input type="number" value={seed} onChange={(e) => setSeed(e.target.value === '' ? '' : parseInt(e.target.value, 10))} placeholder="Để trống để tạo ngẫu nhiên" className="w-full p-2 bg-black/30 rounded-md border border-gray-600 focus:border-pink-500 transition text-sm text-white" />
-                            </div>
                             
+                            {/* NEW: Signature Settings Component */}
+                            <SignatureSettings
+                                text={signatureText} onTextChange={setSignatureText}
+                                style={signatureStyle} onStyleChange={setSignatureStyle}
+                                position={signaturePosition} onPositionChange={setSignaturePosition}
+                                color={signatureColor} onColorChange={setSignatureColor}
+                                customColor={signatureCustomColor} onCustomColorChange={setSignatureCustomColor}
+                                size={signatureSize} onSizeChange={setSignatureSize}
+                            />
+
                             <div>
                                 <label className="text-sm font-semibold text-gray-300 mb-2 block">Tỷ lệ khung hình</label>
                                 <div className="grid grid-cols-5 gap-2">

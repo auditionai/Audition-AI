@@ -20,8 +20,15 @@ export const useImageGenerator = () => {
     const generateImage = async (
         prompt: string, model: AIModel, poseImageFile: File | null,
         styleImageFile: File | null, faceImage: File | string | null,
-        aspectRatio: string, negativePrompt: string,
-        seed: number | undefined, useUpscaler: boolean
+        aspectRatio: string, useUpscaler: boolean,
+        signatureOptions: {
+            signatureText: string;
+            signatureStyle: string;
+            signaturePosition: string;
+            signatureColor: string;
+            signatureCustomColor: string;
+            signatureSize: string;
+        }
     ) => {
         setIsGenerating(true);
         setProgress(1);
@@ -29,11 +36,9 @@ export const useImageGenerator = () => {
         setGeneratedImage(null);
         abortControllerRef.current = new AbortController();
 
-        // Fix: Changed NodeJS.Timeout to ReturnType<typeof setInterval> for browser compatibility.
         let progressInterval: ReturnType<typeof setInterval> | null = null;
 
         try {
-            // Simulate initial steps a bit faster
             progressInterval = setInterval(() => {
                 setProgress(prev => (prev < 8 ? prev + 1 : prev));
             }, 1800);
@@ -55,8 +60,8 @@ export const useImageGenerator = () => {
                     characterImage: poseImageBase64,
                     styleImage: styleImageBase64, 
                     faceReferenceImage: faceImageBase64,
-                    aspectRatio, negativePrompt,
-                    seed, useUpscaler
+                    aspectRatio, useUpscaler,
+                    ...signatureOptions
                 }),
                 signal: abortControllerRef.current.signal,
             });

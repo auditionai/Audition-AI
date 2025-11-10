@@ -3,68 +3,104 @@ import { GoogleGenAI, Modality } from "@google/genai";
 import { supabaseAdmin } from './utils/supabaseClient';
 import { Buffer } from 'buffer';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
-import Jimp from 'jimp';
+// Fix: Changed import statement for Jimp to use `import = require()` for better CommonJS module compatibility in the Node.js environment. This resolves errors where `Jimp.read`, the `Jimp` constructor, and `Jimp.MIME_PNG` were not found.
+import Jimp = require('jimp');
 
 const COST_BASE = 1;
 const COST_UPSCALE = 1;
 const XP_PER_GENERATION = 10;
 
-/**
- * Pre-processes an image by placing it onto a new canvas of a target aspect ratio.
- * This "letterboxing" technique ensures all input images sent to Gemini
- * have the same aspect ratio, forcing the output to match.
- * @param imageDataUrl The base64 data URL of the input image.
- * @param targetAspectRatio The desired aspect ratio string (e.g., '16:9').
- * @returns A promise that resolves to the new base64 data URL.
- */
 const processImageForGemini = async (imageDataUrl: string | null, targetAspectRatio: string): Promise<string | null> => {
     if (!imageDataUrl) return null;
-
     try {
         const [header, base64] = imageDataUrl.split(',');
         if (!base64) return null;
-
         const imageBuffer = Buffer.from(base64, 'base64');
         const image = await Jimp.read(imageBuffer);
         const originalWidth = image.getWidth();
         const originalHeight = image.getHeight();
-
         const [aspectW, aspectH] = targetAspectRatio.split(':').map(Number);
         const targetRatio = aspectW / aspectH;
         const originalRatio = originalWidth / originalHeight;
-
         let newCanvasWidth: number, newCanvasHeight: number;
-
-        // Determine new canvas dimensions to match target aspect ratio while enclosing the original image
         if (targetRatio > originalRatio) {
-            // Target is wider than original (pillarbox)
             newCanvasHeight = originalHeight;
             newCanvasWidth = Math.round(originalHeight * targetRatio);
         } else {
-            // Target is taller than original (letterbox)
             newCanvasWidth = originalWidth;
             newCanvasHeight = Math.round(originalWidth / targetRatio);
         }
-        
-        // Create a new black canvas with the target dimensions
         const newCanvas = new Jimp(newCanvasWidth, newCanvasHeight, '#000000');
-        
-        // Calculate position to center the original image
         const x = (newCanvasWidth - originalWidth) / 2;
         const y = (newCanvasHeight - originalHeight) / 2;
-        
-        // Composite the original image onto the new canvas
         newCanvas.composite(image, x, y);
-
         const mime = header.match(/:(.*?);/)?.[1] || Jimp.MIME_PNG;
         return newCanvas.getBase64Async(mime as any);
-
     } catch (error) {
         console.error("Error pre-processing image for Gemini:", error);
-        // If processing fails, return the original to not break the flow,
-        // though aspect ratio might be wrong.
         return imageDataUrl;
     }
+};
+
+const buildSignaturePrompt = (
+    text: string, style: string, position: string, 
+    color: string, customColor: string, size: string
+): string => {
+    if (!text || text.trim() === '') return '';
+
+    let signatureInstruction = ` Add a signature with the text "${text.trim()}".`;
+    
+    // Style
+    const styleMap: { [key: string]: string } = {
+        handwritten: 'in a handwritten script style',
+        sans_serif: 'in a clean, modern sans-serif font',
+        bold: 'in a bold, oversized font',
+        vintage: 'in a vintage, retro-style font',
+        '3d': 'as 3D typography',
+        messy: 'in a messy, grunge-style font',
+        outline: 'as an outline font',
+        teen_code: 'in a playful, teen-code style font',
+        mixed: 'using a creative mix of fonts',
+    };
+    if (styleMap[style]) {
+        signatureInstruction += ` ${styleMap[style]}.`;
+    }
+
+    // Size
+    const sizeMap: { [key: string]: string } = {
+        small: 'The signature should be small and discreet.',
+        medium: 'The signature should be of a medium, noticeable size.',
+        large: 'The signature should be large and prominent.',
+    };
+    if (sizeMap[size]) {
+        signatureInstruction += ` ${sizeMap[size]}`;
+    }
+
+    // Color
+    if (color === 'rainbow') {
+        signatureInstruction += ' The signature should have a vibrant rainbow color gradient.';
+    } else if (color === 'custom' && customColor) {
+        signatureInstruction += ` The signature color should be ${customColor}.`;
+    } else if (color === 'random') {
+        signatureInstruction += ' The signature should be a random color that complements the image.';
+    } else {
+        signatureInstruction += ' The signature color should be white or a color that contrasts well with the background.'
+    }
+    
+    // Position
+    const positionMap: { [key: string]: string } = {
+        bottom_right: 'Place it in the bottom-right corner.',
+        bottom_left: 'Place it in the bottom-left corner.',
+        top_right: 'Place it in the top-right corner.',
+        top_left: 'Place it in the top-left corner.',
+        center: 'Place it in the center of the image.',
+        random: 'Place it in a random but aesthetically pleasing location.',
+    };
+    if (positionMap[position]) {
+        signatureInstruction += ` ${positionMap[position]}`;
+    }
+
+    return signatureInstruction;
 };
 
 
@@ -93,7 +129,8 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         const { 
             prompt, apiModel, characterImage, faceReferenceImage, styleImage, 
-            aspectRatio, negativePrompt, seed, useUpscaler 
+            aspectRatio, useUpscaler,
+            signatureText, signatureStyle, signaturePosition, signatureColor, signatureCustomColor, signatureSize
         } = JSON.parse(event.body || '{}');
 
         if (!prompt || !apiModel) return { statusCode: 400, body: JSON.stringify({ error: 'Prompt and apiModel are required.' }) };
@@ -113,9 +150,16 @@ const handler: Handler = async (event: HandlerEvent) => {
         let finalImageMimeType: string;
         
         let fullPrompt = prompt;
-        if (negativePrompt) {
-            fullPrompt += ` --no ${negativePrompt}`;
+        
+        // Append signature instructions to the prompt
+        const signatureInstruction = buildSignaturePrompt(
+            signatureText, signatureStyle, signaturePosition, signatureColor, signatureCustomColor, signatureSize
+        );
+        if (signatureInstruction) {
+            fullPrompt += signatureInstruction;
         }
+
+        const randomSeed = Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
 
         if (apiModel.startsWith('imagen')) {
             const response = await ai.models.generateImages({
@@ -125,7 +169,7 @@ const handler: Handler = async (event: HandlerEvent) => {
                     numberOfImages: 1, 
                     outputMimeType: 'image/png',
                     aspectRatio: aspectRatio,
-                    seed: seed ? Number(seed) : undefined,
+                    seed: randomSeed,
                 },
             });
             finalImageBase64 = response.generatedImages[0].image.imageBytes;
@@ -133,7 +177,6 @@ const handler: Handler = async (event: HandlerEvent) => {
         } else { // Assuming gemini-flash-image
             const parts: any[] = [];
             
-            // --- The Ultimate Solution: Pre-process ALL images to match target aspect ratio ---
             const [
                 processedCharacterImage,
                 processedStyleImage,
@@ -144,10 +187,8 @@ const handler: Handler = async (event: HandlerEvent) => {
                 processImageForGemini(faceReferenceImage, aspectRatio)
             ]);
             
-            // The text prompt is ALWAYS the first part. No modification needed.
             parts.push({ text: fullPrompt });
 
-            // Helper to add processed image parts
             const addImagePart = (imageDataUrl: string | null) => {
                 if (!imageDataUrl) return;
                 const [header, base64] = imageDataUrl.split(',');
@@ -155,7 +196,6 @@ const handler: Handler = async (event: HandlerEvent) => {
                 parts.push({ inlineData: { data: base64, mimeType } });
             };
 
-            // Add the pre-processed images to the request
             addImagePart(processedCharacterImage);
             addImagePart(processedStyleImage);
             addImagePart(processedFaceImage);
@@ -165,7 +205,7 @@ const handler: Handler = async (event: HandlerEvent) => {
                 contents: { parts: parts },
                 config: { 
                     responseModalities: [Modality.IMAGE],
-                    seed: seed ? Number(seed) : undefined,
+                    seed: randomSeed,
                 },
             });
 
@@ -176,11 +216,9 @@ const handler: Handler = async (event: HandlerEvent) => {
             finalImageMimeType = imagePartResponse.inlineData.mimeType.includes('png') ? 'image/png' : 'image/jpeg';
         }
 
-        // --- Placeholder for Upscaler Logic ---
         if (useUpscaler) {
             console.log(`[UPSCALER] Upscaling image for user ${user.id}... (DEMO)`);
         }
-        // --- End of Placeholder ---
 
         const imageBuffer = Buffer.from(finalImageBase64, 'base64');
         const fileExtension = finalImageMimeType.split('/')[1] || 'png';
@@ -228,7 +266,6 @@ const handler: Handler = async (event: HandlerEvent) => {
 
     } catch (error: any) {
         console.error("Generate image function error:", error);
-        // Provide a more specific error message if available from Gemini
         let clientFriendlyError = 'Lỗi không xác định từ máy chủ.';
         if (error?.message) {
             if (error.message.includes('INVALID_ARGUMENT')) {

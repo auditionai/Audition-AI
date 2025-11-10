@@ -3,8 +3,8 @@ import { GoogleGenAI, Modality } from "@google/genai";
 import { supabaseAdmin } from './utils/supabaseClient';
 import { Buffer } from 'buffer';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
-// Fix: Changed import statement for Jimp to use `import = require()` for better CommonJS module compatibility in the Node.js environment. This resolves errors where `Jimp.read`, the `Jimp` constructor, and `Jimp.MIME_PNG` were not found.
-import Jimp = require('jimp');
+// Fix: Changed to a standard ES module default import for Jimp to resolve the "Import assignment cannot be used" error.
+import Jimp from 'jimp';
 
 const COST_BASE = 1;
 const COST_UPSCALE = 1;
@@ -48,9 +48,9 @@ const buildSignaturePrompt = (
 ): string => {
     if (!text || text.trim() === '') return '';
 
-    let signatureInstruction = ` Add a signature with the text "${text.trim()}".`;
-    
-    // Style
+    const instructions: string[] = [];
+    instructions.push(`Add the text "${text.trim()}" as a signature.`);
+
     const styleMap: { [key: string]: string } = {
         handwritten: 'in a handwritten script style',
         sans_serif: 'in a clean, modern sans-serif font',
@@ -63,44 +63,41 @@ const buildSignaturePrompt = (
         mixed: 'using a creative mix of fonts',
     };
     if (styleMap[style]) {
-        signatureInstruction += ` ${styleMap[style]}.`;
+        instructions.push(`The signature should be ${styleMap[style]}.`);
     }
 
-    // Size
     const sizeMap: { [key: string]: string } = {
-        small: 'The signature should be small and discreet.',
-        medium: 'The signature should be of a medium, noticeable size.',
-        large: 'The signature should be large and prominent.',
+        small: 'It should be small and discreet.',
+        medium: 'It should be a medium, noticeable size.',
+        large: 'It should be large and prominent.',
     };
     if (sizeMap[size]) {
-        signatureInstruction += ` ${sizeMap[size]}`;
+        instructions.push(sizeMap[size]);
     }
 
-    // Color
     if (color === 'rainbow') {
-        signatureInstruction += ' The signature should have a vibrant rainbow color gradient.';
+        instructions.push('The color should be a vibrant rainbow gradient.');
     } else if (color === 'custom' && customColor) {
-        signatureInstruction += ` The signature color should be ${customColor}.`;
+        instructions.push(`The color should be ${customColor}.`);
     } else if (color === 'random') {
-        signatureInstruction += ' The signature should be a random color that complements the image.';
+        instructions.push('The color should be a random, complementary color.');
     } else {
-        signatureInstruction += ' The signature color should be white or a color that contrasts well with the background.'
+        instructions.push('The color should be white or another contrasting color.');
     }
     
-    // Position
     const positionMap: { [key: string]: string } = {
         bottom_right: 'Place it in the bottom-right corner.',
         bottom_left: 'Place it in the bottom-left corner.',
         top_right: 'Place it in the top-right corner.',
         top_left: 'Place it in the top-left corner.',
-        center: 'Place it in the center of the image.',
-        random: 'Place it in a random but aesthetically pleasing location.',
+        center: 'Place it in the center.',
+        random: 'Place it in a random but pleasing location.',
     };
     if (positionMap[position]) {
-        signatureInstruction += ` ${positionMap[position]}`;
+        instructions.push(positionMap[position]);
     }
 
-    return signatureInstruction;
+    return ' ' + instructions.join(' ');
 };
 
 

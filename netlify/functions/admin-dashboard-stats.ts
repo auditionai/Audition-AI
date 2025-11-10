@@ -1,10 +1,27 @@
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
 
-const getVNDateString = (date: Date) => {
-    const vietnamTime = new Date(date.getTime() + 7 * 3600 * 1000);
-    return vietnamTime.toISOString().split('T')[0];
+// Helper to get start and end of day in UTC, corresponding to Vietnam's timezone (UTC+7)
+const getVnDayUtcRange = () => {
+    const now = new Date();
+    // Create a date object representing current time in Vietnam
+    const vnTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
+    
+    // Start of day in Vietnam
+    const startOfDayVn = new Date(vnTime);
+    startOfDayVn.setHours(0, 0, 0, 0);
+
+    // End of day in Vietnam
+    const endOfDayVn = new Date(vnTime);
+    endOfDayVn.setHours(23, 59, 59, 999);
+
+    // Convert back to UTC ISO strings for Supabase query
+    return {
+        start: startOfDayVn.toISOString(),
+        end: endOfDayVn.toISOString()
+    };
 };
+
 
 const handler: Handler = async (event: HandlerEvent) => {
     // 1. Admin Authentication
@@ -25,35 +42,46 @@ const handler: Handler = async (event: HandlerEvent) => {
     }
 
     try {
-        const today = new Date();
-        const todayStart = new Date(today);
-        todayStart.setUTCHours(0, 0, 0, 0);
-        
-        // Convert to Vietnam time for querying
-        const todayVnString = getVNDateString(today);
+        const { start, end } = getVnDayUtcRange();
 
         const [
-            { count: totalUsers, error: totalUsersError },
+            // Visits
+            { count: visitsToday, error: visitsTodayError },
+            { count: totalVisits, error: totalVisitsError },
+            // Users
             { count: newUsersToday, error: newUsersError },
+            { count: totalUsers, error: totalUsersError },
+            // Images
+            { count: imagesToday, error: imagesTodayError },
             { count: totalImages, error: totalImagesError },
-            { count: dailyActiveUsers, error: dauError },
         ] = await Promise.all([
+            // 1. Visits Today
+            supabaseAdmin.from('daily_visits').select('*', { count: 'exact', head: true }).gte('visited_at', start).lte('visited_at', end),
+            // 2. Total Visits
+            supabaseAdmin.from('daily_visits').select('*', { count: 'exact', head: true }),
+            // 3. New Users Today
+            supabaseAdmin.from('users').select('*', { count: 'exact', head: true }).gte('created_at', start).lte('created_at', end),
+            // 4. Total Users
             supabaseAdmin.from('users').select('*', { count: 'exact', head: true }),
-            supabaseAdmin.from('users').select('*', { count: 'exact', head: true }).gte('created_at', todayStart.toISOString()),
+            // 5. Images Created Today
+            supabaseAdmin.from('generated_images').select('*', { count: 'exact', head: true }).gte('created_at', start).lte('created_at', end),
+            // 6. Total Images
             supabaseAdmin.from('generated_images').select('*', { count: 'exact', head: true }),
-            supabaseAdmin.from('daily_active_users').select('*', { count: 'exact', head: true }).eq('activity_date', todayVnString),
         ]);
 
-        if (totalUsersError || newUsersError || totalImagesError || dauError) {
-             console.error({ totalUsersError, newUsersError, totalImagesError, dauError });
-             throw new Error("One or more database queries failed.");
+        const errors = [visitsTodayError, totalVisitsError, newUsersError, totalUsersError, imagesTodayError, totalImagesError].filter(Boolean);
+        if (errors.length > 0) {
+             console.error("One or more dashboard queries failed:", errors);
+             throw new Error("Database query failed while fetching dashboard stats.");
         }
 
         const stats = {
-            totalUsers: totalUsers ?? 0,
+            visitsToday: visitsToday ?? 0,
+            totalVisits: totalVisits ?? 0,
             newUsersToday: newUsersToday ?? 0,
+            totalUsers: totalUsers ?? 0,
+            imagesToday: imagesToday ?? 0,
             totalImages: totalImages ?? 0,
-            dailyActiveUsers: dailyActiveUsers ?? 0,
         };
 
         return {

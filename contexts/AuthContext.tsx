@@ -57,6 +57,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const previousUserRef = useRef<User | null>(null);
     const initStarted = useRef(false);
+    const visitLogged = useRef(false); // Ref to track if the visit has been logged
 
     const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
         setToast({ message, type });
@@ -158,6 +159,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                     throw new Error("Không thể khởi tạo. Vui lòng xóa cache trình duyệt và thử lại.");
                 }
                 setSupabase(supabaseClient);
+
+                // Log app visit once per session
+                if (!visitLogged.current) {
+                    visitLogged.current = true;
+                    // We don't need to await this, let it run in the background
+                    fetch('/.netlify/functions/log-app-visit', { method: 'POST' });
+                }
 
                 const { data: { session: currentSession } } = await supabaseClient.auth.getSession();
                 setSession(currentSession);

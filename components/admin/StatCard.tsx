@@ -5,6 +5,7 @@ interface StatCardProps {
     value: number;
     icon: React.ReactNode;
     color: 'cyan' | 'green' | 'pink' | 'purple';
+    isSubtle?: boolean;
 }
 
 const colorConfig = {
@@ -63,11 +64,11 @@ const AnimatedNumber: React.FC<{ value: number }> = ({ value }) => {
 };
 
 
-const StatCard: React.FC<StatCardProps> = ({ title, value, icon, color }) => {
+const StatCard: React.FC<StatCardProps> = ({ title, value, icon, color, isSubtle = false }) => {
     const styles = colorConfig[color];
 
     return (
-        <div className={`relative bg-[#12121A]/80 p-6 rounded-2xl border border-white/10 interactive-3d shadow-lg ${styles.glow}`}>
+        <div className={`relative bg-[#12121A]/80 p-6 rounded-2xl border border-white/10 interactive-3d shadow-lg ${isSubtle ? 'opacity-70' : styles.glow}`}>
             <div className="glowing-border"></div>
             <div className="flex items-start justify-between">
                 <h3 className="text-gray-400 font-semibold">{title}</h3>
@@ -75,7 +76,7 @@ const StatCard: React.FC<StatCardProps> = ({ title, value, icon, color }) => {
                     {icon}
                 </div>
             </div>
-            <p className={`text-5xl font-bold mt-4 ${styles.text} neon-text-flow`} style={{ animationDuration: '6s' }}>
+            <p className={`text-5xl font-bold mt-4 ${styles.text} ${!isSubtle ? 'neon-text-flow' : ''}`} style={{ animationDuration: '6s' }}>
                 <AnimatedNumber value={value} />
             </p>
         </div>

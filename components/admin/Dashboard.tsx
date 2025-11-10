@@ -4,10 +4,12 @@ import StatCard from './StatCard';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
 interface DashboardStats {
-    totalUsers: number;
+    visitsToday: number;
+    totalVisits: number;
     newUsersToday: number;
+    totalUsers: number;
+    imagesToday: number;
     totalImages: number;
-    dailyActiveUsers: number;
 }
 
 const Dashboard: React.FC = () => {
@@ -40,14 +42,27 @@ const Dashboard: React.FC = () => {
 
         const channels: RealtimeChannel[] = [];
 
+        // Listen for new app visits
+        const visitsChannel = supabase.channel('public:daily_visits')
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'daily_visits' },
+                () => {
+                    setStats(currentStats => currentStats ? {
+                        ...currentStats,
+                        visitsToday: currentStats.visitsToday + 1,
+                        totalVisits: currentStats.totalVisits + 1,
+                    } : null);
+                }
+            ).subscribe();
+        channels.push(visitsChannel);
+
         // Listen for new users
         const usersChannel = supabase.channel('public:users')
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'users' },
                 () => {
                     setStats(currentStats => currentStats ? {
                         ...currentStats,
-                        totalUsers: currentStats.totalUsers + 1,
                         newUsersToday: currentStats.newUsersToday + 1,
+                        totalUsers: currentStats.totalUsers + 1,
                     } : null);
                 }
             ).subscribe();
@@ -59,23 +74,12 @@ const Dashboard: React.FC = () => {
                 () => {
                      setStats(currentStats => currentStats ? {
                         ...currentStats,
+                        imagesToday: currentStats.imagesToday + 1,
                         totalImages: currentStats.totalImages + 1,
                     } : null);
                 }
             ).subscribe();
         channels.push(imagesChannel);
-
-        // Listen for new daily active users
-        const dauChannel = supabase.channel('public:daily_active_users')
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'daily_active_users' },
-                () => {
-                    setStats(currentStats => currentStats ? {
-                        ...currentStats,
-                        dailyActiveUsers: currentStats.dailyActiveUsers + 1,
-                    } : null);
-                }
-            ).subscribe();
-        channels.push(dauChannel);
 
         return () => {
             channels.forEach(channel => supabase.removeChannel(channel));
@@ -97,30 +101,45 @@ const Dashboard: React.FC = () => {
                 <h2 className="text-3xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 text-transparent bg-clip-text">Bảng Điều Khiển Dữ Liệu</h2>
                 <p className="text-gray-400">Thống kê thời gian thực về hoạt động của ứng dụng.</p>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 <StatCard 
-                    title="Người Dùng Hoạt Động Hôm Nay"
-                    value={stats?.dailyActiveUsers ?? 0}
+                    title="Lượt truy cập (hôm nay)"
+                    value={stats?.visitsToday ?? 0}
                     icon={<i className="ph-fill ph-user-list"></i>}
                     color="cyan"
                 />
                 <StatCard 
-                    title="Người Dùng Mới Hôm Nay"
+                    title="Tổng lượt truy cập"
+                    value={stats?.totalVisits ?? 0}
+                    icon={<i className="ph-fill ph-globe-hemisphere-west"></i>}
+                    color="cyan"
+                    isSubtle
+                />
+                 <StatCard 
+                    title="Người dùng mới (hôm nay)"
                     value={stats?.newUsersToday ?? 0}
                     icon={<i className="ph-fill ph-user-plus"></i>}
                     color="green"
                 />
                 <StatCard 
-                    title="Tổng Số Người Dùng"
+                    title="Tổng người dùng"
                     value={stats?.totalUsers ?? 0}
                     icon={<i className="ph-fill ph-users"></i>}
+                    color="green"
+                    isSubtle
+                />
+                 <StatCard 
+                    title="Ảnh tạo (hôm nay)"
+                    value={stats?.imagesToday ?? 0}
+                    icon={<i className="ph-fill ph-image-square"></i>}
                     color="pink"
                 />
                 <StatCard 
-                    title="Tổng Số Ảnh Đã Tạo"
+                    title="Tổng số ảnh"
                     value={stats?.totalImages ?? 0}
                     icon={<i className="ph-fill ph-images"></i>}
-                    color="purple"
+                    color="pink"
+                    isSubtle
                 />
             </div>
         </div>

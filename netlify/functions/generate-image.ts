@@ -192,10 +192,11 @@ const handler: Handler = async (event: HandlerEvent) => {
                 parts.push({ inlineData: { data: base64, mimeType } });
             };
             
+            // --- FIX: Put the text part first to provide context to the model ---
+            parts.push({ text: fullPrompt });
             addImagePart(characterImage);
             addImagePart(styleImage);
             addImagePart(faceReferenceImage);
-            parts.push({ text: fullPrompt });
             
             console.log(`[INFO] Calling Gemini Vision with ${parts.length} parts. Text length: ${fullPrompt.length}`);
             const response = await ai.models.generateContent({

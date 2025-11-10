@@ -20,56 +20,55 @@ const handler: Handler = async (event: HandlerEvent) => {
     }
 
     try {
-        // We will perform all timezone conversions directly in the database
-        // using PostgreSQL's `AT TIME ZONE` capabilities for accuracy.
         const vietnamTimezone = 'Asia/Ho_Chi_Minh';
+        const nowInVietnam = `(now() AT TIME ZONE '${vietnamTimezone}')`;
+        const startOfTodayInVietnam = `date_trunc('day', ${nowInVietnam})`;
 
-        const [
-            { count: visitsToday, error: visitsTodayError },
-            { count: totalVisits, error: totalVisitsError },
-            { count: newUsersToday, error: newUsersError },
-            { count: totalUsers, error: totalUsersError },
-            { count: imagesToday, error: imagesTodayError },
-            { count: totalImages, error: totalImagesError },
-        ] = await Promise.all([
+        const results = await Promise.all([
             // 1. Visits Today (in Vietnam Timezone)
             supabaseAdmin.from('daily_visits').select('*', { count: 'exact', head: true })
-                .filter('visited_at', 'gte', `(now() AT TIME ZONE '${vietnamTimezone}') - interval '1 day' * (EXTRACT(hour FROM now() AT TIME ZONE '${vietnamTimezone}') / 24)`)
-                .filter('visited_at', 'lt', `(now() AT TIME ZONE '${vietnamTimezone}') + interval '1 day' * (1 - EXTRACT(hour FROM now() AT TIME ZONE '${vietnamTimezone}') / 24)`),
+                .gte('visited_at', startOfTodayInVietnam),
 
             // 2. Total Visits
             supabaseAdmin.from('daily_visits').select('*', { count: 'exact', head: true }),
 
             // 3. New Users Today (in Vietnam Timezone)
             supabaseAdmin.from('users').select('*', { count: 'exact', head: true })
-               .filter('created_at', 'gte', `(now() AT TIME ZONE '${vietnamTimezone}') - interval '1 day' * (EXTRACT(hour FROM now() AT TIME ZONE '${vietnamTimezone}') / 24)`)
-               .filter('created_at', 'lt', `(now() AT TIME ZONE '${vietnamTimezone}') + interval '1 day' * (1 - EXTRACT(hour FROM now() AT TIME ZONE '${vietnamTimezone}') / 24)`),
+               .gte('created_at', startOfTodayInVietnam),
 
             // 4. Total Users
             supabaseAdmin.from('users').select('*', { count: 'exact', head: true }),
 
             // 5. Images Created Today (in Vietnam Timezone)
             supabaseAdmin.from('generated_images').select('*', { count: 'exact', head: true })
-              .filter('created_at', 'gte', `(now() AT TIME ZONE '${vietnamTimezone}') - interval '1 day' * (EXTRACT(hour FROM now() AT TIME ZONE '${vietnamTimezone}') / 24)`)
-              .filter('created_at', 'lt', `(now() AT TIME ZONE '${vietnamTimezone}') + interval '1 day' * (1 - EXTRACT(hour FROM now() AT TIME ZONE '${vietnamTimezone}') / 24)`),
+              .gte('created_at', startOfTodayInVietnam),
               
             // 6. Total Images
             supabaseAdmin.from('generated_images').select('*', { count: 'exact', head: true }),
         ]);
 
-        const errors = [visitsTodayError, totalVisitsError, newUsersError, totalUsersError, imagesTodayError, totalImagesError].filter(Boolean);
+        const errors = results.map(res => res.error).filter(Boolean);
         if (errors.length > 0) {
              console.error("One or more dashboard queries failed:", errors);
              throw new Error("Database query failed while fetching dashboard stats.");
         }
 
+        const [
+            visitsTodayRes,
+            totalVisitsRes,
+            newUsersTodayRes,
+            totalUsersRes,
+            imagesTodayRes,
+            totalImagesRes,
+        ] = results;
+
         const stats = {
-            visitsToday: visitsToday ?? 0,
-            totalVisits: totalVisits ?? 0,
-            newUsersToday: newUsersToday ?? 0,
-            totalUsers: totalUsers ?? 0,
-            imagesToday: imagesToday ?? 0,
-            totalImages: totalImages ?? 0,
+            visitsToday: visitsTodayRes.count ?? 0,
+            totalVisits: totalVisitsRes.count ?? 0,
+            newUsersToday: newUsersTodayRes.count ?? 0,
+            totalUsers: totalUsersRes.count ?? 0,
+            imagesToday: imagesTodayRes.count ?? 0,
+            totalImages: totalImagesRes.count ?? 0,
         };
 
         return {

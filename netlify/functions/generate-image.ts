@@ -179,8 +179,6 @@ const handler: Handler = async (event: HandlerEvent) => {
                 processImageForGemini(faceReferenceImage, aspectRatio)
             ]);
             
-            parts.push({ text: fullPrompt });
-
             const addImagePart = (imageDataUrl: string | null) => {
                 if (!imageDataUrl) return;
                 const [header, base64] = imageDataUrl.split(',');
@@ -188,9 +186,12 @@ const handler: Handler = async (event: HandlerEvent) => {
                 parts.push({ inlineData: { data: base64, mimeType } });
             };
 
+            // Reordered: Put images before the text prompt.
             addImagePart(processedCharacterImage);
             addImagePart(processedStyleImage);
             addImagePart(processedFaceImage);
+            
+            parts.push({ text: fullPrompt });
             
             const response = await ai.models.generateContent({
                 model: apiModel,

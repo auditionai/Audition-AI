@@ -1,12 +1,12 @@
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { GoogleGenAI, Modality } from "@google/genai";
 import { supabaseAdmin } from './utils/supabaseClient';
-import { Buffer } from 'buffer';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
-// Fix: The previous default import for 'jimp' was incorrect for the TS configuration.
-// Using a namespace import (`import * as Jimp`) correctly resolves the Jimp object
-// and its static methods, constructor, and constants.
-import * as Jimp from 'jimp';
+// The Buffer object is global in Node.js environments (like Netlify Functions).
+// Importing it from the 'buffer' package is for browser compatibility and can cause conflicts here.
+// import { Buffer } from 'buffer'; 
+// Fix: Use `import = require()` for CommonJS compatibility with the Jimp library in a Node.js environment.
+import Jimp = require('jimp');
 
 const COST_BASE = 1;
 const COST_UPSCALE = 1;
@@ -121,7 +121,7 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         const { 
             prompt, apiModel, characterImage, faceReferenceImage, styleImage, 
-            aspectRatio, useUpscaler,
+            aspectRatio, useUpscaler, useSignature,
             signatureText, signatureStyle, signaturePosition, signatureColor, signatureCustomColor, signatureSize
         } = JSON.parse(event.body || '{}');
 
@@ -143,12 +143,13 @@ const handler: Handler = async (event: HandlerEvent) => {
         
         let fullPrompt = prompt;
         
-        // Append signature instructions to the prompt
-        const signatureInstruction = buildSignaturePrompt(
-            signatureText, signatureStyle, signaturePosition, signatureColor, signatureCustomColor, signatureSize
-        );
-        if (signatureInstruction) {
-            fullPrompt += signatureInstruction;
+        if (useSignature) {
+            const signatureInstruction = buildSignaturePrompt(
+                signatureText, signatureStyle, signaturePosition, signatureColor, signatureCustomColor, signatureSize
+            );
+            if (signatureInstruction) {
+                fullPrompt += signatureInstruction;
+            }
         }
 
         const randomSeed = Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);

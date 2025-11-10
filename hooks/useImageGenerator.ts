@@ -55,10 +55,10 @@ export const useImageGenerator = () => {
                 characterImage: poseImageBase64,
                 styleImage: styleImageBase64, 
                 faceReferenceImage: faceImageBase64,
-                aspectRatio, useUpscaler,
+                aspectRatio, useUpscaler, useSignature
             };
 
-            if (useSignature && signatureOptions.signatureText.trim() !== '') {
+            if (useSignature) {
                 Object.assign(bodyPayload, signatureOptions);
             }
 

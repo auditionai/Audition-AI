@@ -5,6 +5,7 @@ import { getRankForLevel } from '../utils/rankUtils';
 import XPProgressBar from './common/XPProgressBar';
 import Modal from './common/Modal';
 import { RANKS } from '../constants/ranks';
+import Dashboard from './admin/Dashboard'; // Import the new Dashboard component
 
 // --- NEW ---
 interface CheckInReward {
@@ -555,18 +556,20 @@ const Settings: React.FC = () => {
     if (!user || !rank) return null;
 
     return (
-        <div className="container mx-auto px-4 py-8 animate-fade-in max-w-4xl">
+        <div className="container mx-auto px-4 py-8 animate-fade-in max-w-6xl">
              {editingUser && <EditUserModal user={editingUser} onClose={() => setEditingUser(null)} onSave={handleUpdateUser} />}
              {editingPackage && <EditPackageModal pkg={editingPackage} onClose={() => setEditingPackage(null)} onSave={handlePackageUpdate} />}
              {editingReward && <EditCheckInRewardModal reward={editingReward} onClose={() => setEditingReward(null)} onSave={handleUpdateReward} />}
 
-            <div className="text-center mb-12">
+            {user.is_admin && <Dashboard />}
+
+            <div className="text-center mb-12 mt-8">
                 <h1 className="text-4xl font-bold mb-4 bg-gradient-to-r from-pink-400 to-fuchsia-500 text-transparent bg-clip-text">Cài đặt Tài khoản</h1>
                 <p className="text-lg text-gray-400">Quản lý thông tin cá nhân và các cài đặt khác.</p>
             </div>
             
              {/* Redesigned Profile Section */}
-            <div className="bg-[#12121A]/80 border border-white/10 rounded-2xl shadow-lg p-6 mb-8 text-center">
+            <div className="bg-[#12121A]/80 border border-white/10 rounded-2xl shadow-lg p-6 mb-8 text-center max-w-4xl mx-auto">
                 <div className="relative inline-block group w-28 h-28">
                     <img src={avatarPreview || user.photo_url} alt={user.display_name} className="w-28 h-28 rounded-full border-4 border-pink-500/50" />
                 </div>
@@ -614,7 +617,7 @@ const Settings: React.FC = () => {
             </div>
 
             {/* How to Earn XP Section */}
-            <div className="bg-[#12121A]/80 border border-cyan-500/20 rounded-2xl shadow-lg p-6 mb-8 relative overflow-hidden">
+            <div className="bg-[#12121A]/80 border border-cyan-500/20 rounded-2xl shadow-lg p-6 mb-8 relative overflow-hidden max-w-4xl mx-auto">
                  <div className="glowing-border glowing-border-active" style={{'--glow-color1': '#22d3ee', '--glow-color2': '#0e7490'} as React.CSSProperties}></div>
                  <h3 className="text-2xl font-bold mb-4 text-cyan-300 flex items-center gap-3"><i className="ph-fill ph-rocket-launch"></i><span className="neon-text-flow" style={{animationDuration: '5s'}}>Bí Kíp Thăng Cấp: Cách Kiếm XP</span></h3>
                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
@@ -626,7 +629,7 @@ const Settings: React.FC = () => {
             </div>
             
             {/* Transaction History Section */}
-            <div className="bg-[#12121A]/80 border border-purple-500/20 rounded-2xl shadow-lg p-6 mb-8">
+            <div className="bg-[#12121A]/80 border border-purple-500/20 rounded-2xl shadow-lg p-6 mb-8 max-w-4xl mx-auto">
                 <h3 className="text-2xl font-bold mb-4 text-purple-400 flex items-center gap-2"><i className="ph-fill ph-list-dashes"></i>Lịch sử Giao dịch</h3>
                 <div className="flex items-center gap-2 mb-4 p-1 bg-black/30 rounded-full w-full max-w-md">
                     <button onClick={() => setHistoryFilter('all')} className={`w-1/3 py-1.5 rounded-full font-semibold text-sm transition ${historyFilter === 'all' ? 'bg-purple-600' : 'text-gray-300'}`}>Tất cả</button>
@@ -864,7 +867,7 @@ const Settings: React.FC = () => {
                 </div>
             )}
 
-            <div className="bg-[#12121A]/80 border border-red-500/20 rounded-2xl shadow-lg p-6 mt-8">
+            <div className="bg-[#12121A]/80 border border-red-500/20 rounded-2xl shadow-lg p-6 mt-8 max-w-4xl mx-auto">
                 <h3 className="text-2xl font-bold text-red-400 mb-4">Khu vực nguy hiểm</h3>
                 <div className="flex justify-between items-center">
                     <p>Đăng xuất khỏi tài khoản của bạn.</p>

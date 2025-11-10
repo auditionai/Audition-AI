@@ -30,6 +30,7 @@ interface AuthContextType {
     hasCheckedInToday: boolean;
     announcement: Announcement | null;
     showAnnouncementModal: boolean;
+    supabase: SupabaseClient | null; // Expose supabase client
     login: () => Promise<void>;
     logout: () => Promise<void>;
     updateUserDiamonds: (newAmount: number) => void;
@@ -258,18 +259,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }, [user, showToast]);
     
     useEffect(() => {
-        let xpInterval: ReturnType<typeof setInterval> | null = null;
+        let activityInterval: ReturnType<typeof setInterval> | null = null;
         if (session && supabase) {
-            xpInterval = setInterval(async () => {
+            activityInterval = setInterval(async () => {
                 try {
-                    await fetch('/.netlify/functions/increment-xp', {
+                    // This now handles both XP and activity logging
+                    await fetch('/.netlify/functions/record-user-activity', {
                         method: 'POST',
                         headers: { Authorization: `Bearer ${session.access_token}` },
                     });
-                } catch (error) { console.error('Failed to increment XP:', error); }
+                } catch (error) { console.error('Failed to record user activity:', error); }
             }, 60000);
         }
-        return () => { if (xpInterval) clearInterval(xpInterval); };
+        return () => { if (activityInterval) clearInterval(activityInterval); };
     }, [session, supabase]);
 
     useEffect(() => {
@@ -303,12 +305,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const value = useMemo(() => ({
         session, user, loading, stats, toast, route, hasCheckedInToday, reward,
-        announcement, showAnnouncementModal,
+        announcement, showAnnouncementModal, supabase,
         login, logout, updateUserDiamonds, updateUserProfile, showToast, navigate, clearReward,
         markAnnouncementAsRead,
     }), [
         session, user, loading, stats, toast, route, hasCheckedInToday, reward,
-        announcement, showAnnouncementModal,
+        announcement, showAnnouncementModal, supabase,
         login, logout, updateUserDiamonds, updateUserProfile, showToast, navigate, clearReward,
         markAnnouncementAsRead
     ]);

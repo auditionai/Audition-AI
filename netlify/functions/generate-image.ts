@@ -2,47 +2,10 @@ import type { Handler, HandlerEvent } from "@netlify/functions";
 import { GoogleGenAI, Modality } from "@google/genai";
 import { supabaseAdmin } from './utils/supabaseClient';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
-// The Buffer object is global in Node.js environments (like Netlify Functions).
-// Importing it from the 'buffer' package is for browser compatibility and can cause conflicts here.
-// import { Buffer } from 'buffer'; 
-// Fix: Use `import = require()` for CommonJS compatibility with the Jimp library in a Node.js environment.
-import Jimp = require('jimp');
 
 const COST_BASE = 1;
 const COST_UPSCALE = 1;
 const XP_PER_GENERATION = 10;
-
-const processImageForGemini = async (imageDataUrl: string | null, targetAspectRatio: string): Promise<string | null> => {
-    if (!imageDataUrl) return null;
-    try {
-        const [header, base64] = imageDataUrl.split(',');
-        if (!base64) return null;
-        const imageBuffer = Buffer.from(base64, 'base64');
-        const image = await Jimp.read(imageBuffer);
-        const originalWidth = image.getWidth();
-        const originalHeight = image.getHeight();
-        const [aspectW, aspectH] = targetAspectRatio.split(':').map(Number);
-        const targetRatio = aspectW / aspectH;
-        const originalRatio = originalWidth / originalHeight;
-        let newCanvasWidth: number, newCanvasHeight: number;
-        if (targetRatio > originalRatio) {
-            newCanvasHeight = originalHeight;
-            newCanvasWidth = Math.round(originalHeight * targetRatio);
-        } else {
-            newCanvasWidth = originalWidth;
-            newCanvasHeight = Math.round(originalWidth / targetRatio);
-        }
-        const newCanvas = new Jimp(newCanvasWidth, newCanvasHeight, '#000000');
-        const x = (newCanvasWidth - originalWidth) / 2;
-        const y = (newCanvasHeight - originalHeight) / 2;
-        newCanvas.composite(image, x, y);
-        const mime = header.match(/:(.*?);/)?.[1] || Jimp.MIME_PNG;
-        return newCanvas.getBase64Async(mime as any);
-    } catch (error) {
-        console.error("Error pre-processing image for Gemini:", error);
-        return imageDataUrl;
-    }
-};
 
 const buildSignaturePrompt = (
     text: string, style: string, position: string, 
@@ -170,28 +133,24 @@ const handler: Handler = async (event: HandlerEvent) => {
         } else { // Assuming gemini-flash-image
             const parts: any[] = [];
             
-            const [
-                processedCharacterImage,
-                processedStyleImage,
-                processedFaceImage,
-            ] = await Promise.all([
-                processImageForGemini(characterImage, aspectRatio),
-                processImageForGemini(styleImage, aspectRatio),
-                processImageForGemini(faceReferenceImage, aspectRatio)
-            ]);
+            // Add aspect ratio instruction to the prompt for Gemini Vision model
+            fullPrompt += ` Please ensure the final image has a ${aspectRatio} aspect ratio.`;
             
             const addImagePart = (imageDataUrl: string | null) => {
                 if (!imageDataUrl) return;
                 const [header, base64] = imageDataUrl.split(',');
+                if (!base64) {
+                     console.warn("Skipping malformed image data URL.");
+                     return;
+                }
                 const mimeType = header.match(/:(.*?);/)?.[1] || 'image/png';
                 parts.push({ inlineData: { data: base64, mimeType } });
             };
-
-            // Reordered: Put images before the text prompt.
-            addImagePart(processedCharacterImage);
-            addImagePart(processedStyleImage);
-            addImagePart(processedFaceImage);
             
+            // Send images first, then the prompt
+            addImagePart(characterImage);
+            addImagePart(styleImage);
+            addImagePart(faceReferenceImage);
             parts.push({ text: fullPrompt });
             
             const response = await ai.models.generateContent({

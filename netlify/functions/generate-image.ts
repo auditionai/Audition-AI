@@ -60,18 +60,19 @@ const buildSignaturePrompt = (
 
 
 const handler: Handler = async (event: HandlerEvent) => {
-    const s3Client = new S3Client({
-        region: "auto",
-        endpoint: process.env.R2_ENDPOINT!,
-        credentials: {
-            accessKeyId: process.env.R2_ACCESS_KEY_ID!,
-            secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
-        },
-    });
-    
     console.log("--- [START] /generate-image function execution ---");
 
     try {
+        // ARCHITECTURAL FIX: Initialize S3 Client inside the handler to prevent cold start issues.
+        const s3Client = new S3Client({
+            region: "auto",
+            endpoint: process.env.R2_ENDPOINT!,
+            credentials: {
+                accessKeyId: process.env.R2_ACCESS_KEY_ID!,
+                secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
+            },
+        });
+
         if (event.httpMethod !== 'POST') {
             return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
         }

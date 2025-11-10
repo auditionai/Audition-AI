@@ -1,6 +1,6 @@
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { GoogleGenAI, Modality } from "@google/genai";
-import { supabaseAdmin } from './utils/supabaseClient';
+// REMOVED: import { supabaseAdmin } from './utils/supabaseClient'; // This was causing top-level crashes.
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 
 const COST_BASE = 1;
@@ -60,24 +60,30 @@ const buildSignaturePrompt = (
 
 
 const handler: Handler = async (event: HandlerEvent) => {
-    // --- RADICAL PRE-FLIGHT CHECK ---
-    const requiredEnvVars = [
-        'R2_ENDPOINT', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 
-        'R2_BUCKET_NAME', 'R2_PUBLIC_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'VITE_SUPABASE_URL'
-    ];
-    const missingVars = requiredEnvVars.filter(v => !process.env[v]);
-    if (missingVars.length > 0) {
-        console.error(`[FATAL] Server configuration error. Missing environment variables: ${missingVars.join(', ')}`);
-        return {
-            statusCode: 500,
-            body: JSON.stringify({ error: `Lỗi cấu hình máy chủ. Vui lòng liên hệ quản trị viên. Thiếu: ${missingVars.join(', ')}` }),
-        };
-    }
-    // --- END OF PRE-FLIGHT CHECK ---
-
-    console.log("--- [START] /generate-image function execution ---");
-
     try {
+        // --- DYNAMIC IMPORT FIX ---
+        // Lazily import the Supabase client only when the handler is invoked.
+        // This prevents the top-level 'throw' in the utility file from crashing the entire function container on a cold start with missing env vars.
+        const { supabaseAdmin } = await import('./utils/supabaseClient');
+        
+        // --- RADICAL PRE-FLIGHT CHECK ---
+        const requiredEnvVars = [
+            'R2_ENDPOINT', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 
+            'R2_BUCKET_NAME', 'R2_PUBLIC_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'VITE_SUPABASE_URL'
+        ];
+        const missingVars = requiredEnvVars.filter(v => !process.env[v]);
+        if (missingVars.length > 0) {
+            console.error(`[FATAL] Server configuration error. Missing environment variables: ${missingVars.join(', ')}`);
+            return {
+                statusCode: 500,
+                body: JSON.stringify({ error: `Lỗi cấu hình máy chủ. Vui lòng liên hệ quản trị viên. Thiếu: ${missingVars.join(', ')}` }),
+            };
+        }
+        // --- END OF PRE-FLIGHT CHECK ---
+
+        console.log("--- [START] /generate-image function execution ---");
+
+    
         const s3Client = new S3Client({
             region: "auto",
             endpoint: process.env.R2_ENDPOINT!,
@@ -267,13 +273,15 @@ const handler: Handler = async (event: HandlerEvent) => {
 
     } catch (error: any) {
         console.error("--- [FATAL] /generate-image function error ---");
-        // Log the full error object for better debugging
+        // This will now catch initialization errors as well.
         console.error("Error object:", error); 
         
         let clientFriendlyError = 'Lỗi không xác định từ máy chủ.';
         if (error?.message) {
             if (error.message.includes('INVALID_ARGUMENT')) {
                  clientFriendlyError = 'Lỗi từ AI: Không thể xử lý ảnh đầu vào. Hãy thử lại hoặc thay đổi ảnh đầu vào.';
+            } else if (error.message.includes('Supabase server environment variables')) {
+                 clientFriendlyError = 'Lỗi cấu hình máy chủ. Vui lòng liên hệ quản trị viên.';
             } else {
                 clientFriendlyError = error.message;
             }

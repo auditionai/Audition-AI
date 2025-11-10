@@ -10,11 +10,12 @@ import BottomNavBar from '../components/common/BottomNavBar';
 import CheckInModal from '../components/CheckInModal'; // Import the new modal
 import MyCreationsPage from './MyCreationsPage'; // Import the new page
 import AnnouncementModal from '../components/AnnouncementModal';
+import AdminGalleryPage from './AdminGalleryPage'; // Import new admin page
 
 export type CreatorTab = 'tool' | 'leaderboard' | 'settings' | 'my-creations';
 
 interface CreatorPageProps {
-    activeTab: CreatorTab;
+    activeTab: CreatorTab | 'admin-gallery';
 }
 
 const CreatorPage: React.FC<CreatorPageProps> = ({ activeTab }) => {
@@ -34,6 +35,8 @@ const CreatorPage: React.FC<CreatorPageProps> = ({ activeTab }) => {
                 return <Leaderboard />;
             case 'my-creations':
                 return <MyCreationsPage />;
+            case 'admin-gallery':
+                return <AdminGalleryPage />;
             case 'settings':
                 return <Settings />;
             default:
@@ -59,8 +62,8 @@ const CreatorPage: React.FC<CreatorPageProps> = ({ activeTab }) => {
 
 
             <BottomNavBar
-                activeTab={activeTab}
-                onTabChange={navigate}
+                activeTab={activeTab as CreatorTab}
+                onTabChange={(tab) => navigate(tab)}
                 onTopUpClick={() => navigate('buy-credits')}
                 onCheckInClick={() => setCheckInModalOpen(true)}
             />

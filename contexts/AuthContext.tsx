@@ -12,8 +12,8 @@ const getVNDateString = (date: Date) => {
 
 const getRouteFromPath = (path: string): string => {
     const pathSegment = path.split('/').filter(Boolean)[0];
-    const creatorTabs = ['tool', 'leaderboard', 'my-creations', 'settings'];
-    if (pathSegment === 'buy-credits' || pathSegment === 'gallery' || creatorTabs.includes(pathSegment)) {
+    const validRoutes = ['tool', 'leaderboard', 'my-creations', 'settings', 'buy-credits', 'gallery', 'admin-gallery'];
+    if (validRoutes.includes(pathSegment)) {
         return pathSegment;
     }
     return 'home';

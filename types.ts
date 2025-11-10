@@ -183,3 +183,14 @@ export interface CheckInReward {
     is_active: boolean;
     created_at: string;
 }
+
+// For Gift Code system
+export interface GiftCode {
+  id: string;
+  code: string;
+  diamond_reward: number;
+  usage_limit: number;
+  usage_count: number;
+  is_active: boolean;
+  created_at: string;
+}

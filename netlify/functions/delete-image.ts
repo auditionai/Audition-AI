@@ -27,6 +27,11 @@ const handler: Handler = async (event: HandlerEvent) => {
     if (authError || !user) {
         return { statusCode: 401, body: JSON.stringify({ error: 'Invalid token' }) };
     }
+    
+    // Fetch user role
+    const { data: userProfile } = await supabaseAdmin.from('users').select('is_admin').eq('id', user.id).single();
+    const isAdmin = userProfile?.is_admin || false;
+
 
     // 3. Body validation
     const { imageId } = JSON.parse(event.body || '{}');
@@ -35,7 +40,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     }
 
     try {
-        // 4. Verify image ownership
+        // 4. Verify image ownership OR admin status
         const { data: imageData, error: imageError } = await supabaseAdmin
             .from('generated_images')
             .select('user_id, image_url')
@@ -46,7 +51,8 @@ const handler: Handler = async (event: HandlerEvent) => {
             return { statusCode: 404, body: JSON.stringify({ error: 'Image not found.' }) };
         }
 
-        if (imageData.user_id !== user.id) {
+        // --- MODIFICATION: Allow deletion if user is owner OR is an admin ---
+        if (imageData.user_id !== user.id && !isAdmin) {
             return { statusCode: 403, body: JSON.stringify({ error: 'You do not have permission to delete this image.' }) };
         }
 
@@ -59,7 +65,6 @@ const handler: Handler = async (event: HandlerEvent) => {
             Key: key,
         });
 
-        // FIX: Cast s3Client to 'any' to bypass a likely environment-specific TypeScript type resolution error.
         await (s3Client as any).send(deleteCommand);
 
         // 6. Delete image record from Supabase database

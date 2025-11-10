@@ -5,6 +5,7 @@ import GalleryPage from './pages/GalleryPage';
 import { useAuth } from './contexts/AuthContext';
 import BuyCreditsPage from './pages/BuyCreditsPage';
 import RewardNotification from './components/common/RewardNotification';
+import AdminGalleryPage from './pages/AdminGalleryPage';
 
 // Khai báo type cho hàm gtag của Google Analytics trên window object
 declare global {
@@ -44,10 +45,14 @@ function App() {
 
   const renderPage = () => {
     const creatorTabs: CreatorTab[] = ['tool', 'leaderboard', 'my-creations', 'settings'];
+    const adminTabs: string[] = ['admin-gallery'];
 
     if (user) {
         if (creatorTabs.includes(route as CreatorTab)) {
             return <CreatorPage activeTab={route as CreatorTab} />;
+        }
+        if (adminTabs.includes(route) && user.is_admin) {
+            return <CreatorPage activeTab={route as 'admin-gallery'} />;
         }
         if (route === 'gallery') {
             return <GalleryPage />;

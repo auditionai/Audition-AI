@@ -1,4 +1,4 @@
-// Triggering a rebuild to test environment variables.
+// Triggering a rebuild for the 'develop' branch.
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';

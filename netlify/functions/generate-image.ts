@@ -7,57 +7,8 @@ const COST_BASE = 1;
 const COST_UPSCALE = 1;
 const XP_PER_GENERATION = 10;
 
-const buildSignaturePrompt = (
-    text: string, style: string, position: string, 
-    color: string, customColor: string, size: string
-): string => {
-    if (!text || text.trim() === '') return '';
-
-    // A more descriptive, less imperative style for image models.
-    let instruction = `The image should include a signature that says "${text.trim()}".`;
-    
-    const styleMap: { [key: string]: string } = {
-        handwritten: 'a handwritten script style',
-        sans_serif: 'a clean sans-serif font style',
-        bold: 'a bold font style',
-        vintage: 'a vintage retro font style',
-        '3d': 'a 3D typography style',
-        messy: 'a messy grunge font style',
-        outline: 'an outline font style',
-        teen_code: 'a playful teen-code font style',
-        mixed: 'a creative mixed font style',
-    };
-
-    const sizeMap: { [key: string]: string } = {
-        small: 'small and discreet',
-        medium: 'medium-sized and noticeable',
-        large: 'large and prominent',
-    };
-    
-    const positionMap: { [key: string]: string } = {
-        bottom_right: 'in the bottom-right corner',
-        bottom_left: 'in the bottom-left corner',
-        top_right: 'in the top-right corner',
-        top_left: 'in the top-left corner',
-        center: 'in the center',
-        random: 'in a visually pleasing location',
-    };
-    
-    let colorDesc = 'white or a contrasting color';
-    if (color === 'rainbow') {
-        colorDesc = 'a vibrant rainbow gradient color';
-    } else if (color === 'custom' && customColor) {
-        colorDesc = `the color ${customColor}`;
-    } else if (color === 'random') {
-        colorDesc = 'a random, complementary color';
-    }
-
-    // Combine into a more natural phrase.
-    instruction += ` The signature is ${sizeMap[size] || 'medium-sized'}, in ${styleMap[style] || 'a clean font style'}, with ${colorDesc}, and placed ${positionMap[position] || 'in the bottom-right corner'}.`;
-
-    return ' ' + instruction;
-};
-
+// REMOVED: The buildSignaturePrompt function has been moved to the client-side hook.
+// The backend is now signature-agnostic.
 
 const handler: Handler = async (event: HandlerEvent) => {
     try {
@@ -111,17 +62,17 @@ const handler: Handler = async (event: HandlerEvent) => {
         console.log(`[OK] User authenticated: ${user.id}`);
 
         console.log("[STEP 2/10] Parsing request body...");
+        // --- SIMPLIFIED: The backend no longer knows about signature details ---
         const { 
             prompt, apiModel, characterImage, faceReferenceImage, styleImage, 
-            aspectRatio, useUpscaler, useSignature,
-            signatureText, signatureStyle, signaturePosition, signatureColor, signatureCustomColor, signatureSize
+            aspectRatio, useUpscaler
         } = JSON.parse(event.body || '{}');
 
         if (!prompt || !apiModel) {
             console.error("[FAIL] Missing prompt or apiModel in request body.");
             return { statusCode: 400, body: JSON.stringify({ error: 'Prompt and apiModel are required.' }) };
         }
-        console.log(`[OK] Body parsed. Model: ${apiModel}, Upscaler: ${useUpscaler}, Signature: ${useSignature}`);
+        console.log(`[OK] Body parsed. Model: ${apiModel}, Upscaler: ${useUpscaler}`);
         
         console.log("[STEP 3/10] Checking user balance...");
         const totalCost = COST_BASE + (useUpscaler ? COST_UPSCALE : 0);
@@ -149,16 +100,9 @@ const handler: Handler = async (event: HandlerEvent) => {
         let finalImageBase64: string;
         let finalImageMimeType: string;
         
-        console.log("[STEP 5/10] Building full prompt...");
-        let fullPrompt = prompt;
-        
-        if (useSignature) {
-            const signatureInstruction = buildSignaturePrompt(
-                signatureText, signatureStyle, signaturePosition, signatureColor, signatureCustomColor, signatureSize
-            );
-            fullPrompt += signatureInstruction;
-        }
-        console.log(`[OK] Prompt built. Length: ${fullPrompt.length}`);
+        console.log("[STEP 5/10] Using final prompt from client...");
+        const fullPrompt = prompt; // The prompt is now received complete.
+        console.log(`[OK] Prompt received. Length: ${fullPrompt.length}`);
 
         const randomSeed = Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
         
@@ -178,8 +122,6 @@ const handler: Handler = async (event: HandlerEvent) => {
             finalImageMimeType = 'image/png';
         } else { // Assuming gemini-flash-image
             const parts: any[] = [];
-            
-            fullPrompt += ` Please ensure the final image has a ${aspectRatio} aspect ratio.`;
             
             const addImagePart = (imageDataUrl: string | null) => {
                 if (!imageDataUrl) return;
@@ -252,7 +194,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id }),
             supabaseAdmin.from('generated_images').insert({
                 user_id: user.id,
-                prompt: prompt,
+                prompt: prompt, // Log the original user prompt, not the full one
                 image_url: publicUrl,
                 model_used: apiModel,
                 used_face_enhancer: !!faceReferenceImage

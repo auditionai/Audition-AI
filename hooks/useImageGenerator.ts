@@ -9,6 +9,38 @@ const fileToBase64 = (file: File): Promise<string> => new Promise((resolve, reje
     reader.readAsDataURL(file);
 });
 
+// --- NEW: Logic moved from backend to frontend ---
+const buildSignaturePrompt = (
+    text: string, style: string, position: string, 
+    color: string, customColor: string, size: string
+): string => {
+    if (!text || text.trim() === '') return '';
+
+    let instruction = `The image should include a signature that says "${text.trim()}".`;
+    
+    const styleMap: { [key: string]: string } = {
+        handwritten: 'a handwritten script style', sans_serif: 'a clean sans-serif font style',
+        bold: 'a bold font style', vintage: 'a vintage retro font style', '3d': 'a 3D typography style',
+        messy: 'a messy grunge font style', outline: 'an outline font style', teen_code: 'a playful teen-code font style',
+        mixed: 'a creative mixed font style',
+    };
+    const sizeMap: { [key: string]: string } = { small: 'small and discreet', medium: 'medium-sized and noticeable', large: 'large and prominent' };
+    const positionMap: { [key: string]: string } = {
+        bottom_right: 'in the bottom-right corner', bottom_left: 'in the bottom-left corner',
+        top_right: 'in the top-right corner', top_left: 'in the top-left corner',
+        center: 'in the center', random: 'in a visually pleasing location',
+    };
+    
+    let colorDesc = 'white or a contrasting color';
+    if (color === 'rainbow') colorDesc = 'a vibrant rainbow gradient color';
+    else if (color === 'custom' && customColor) colorDesc = `the color ${customColor}`;
+    else if (color === 'random') colorDesc = 'a random, complementary color';
+
+    instruction += ` The signature is ${sizeMap[size] || 'medium-sized'}, in ${styleMap[style] || 'a clean font style'}, with ${colorDesc}, and placed ${positionMap[position] || 'in the bottom-right corner'}.`;
+    return ' ' + instruction;
+};
+// --- END NEW ---
+
 export const useImageGenerator = () => {
     const { session, showToast, updateUserProfile } = useAuth();
     const [isGenerating, setIsGenerating] = useState(false);
@@ -44,23 +76,35 @@ export const useImageGenerator = () => {
                 setProgress(prev => (prev < 8 ? prev + 1 : prev));
             }, 1800);
 
+            // --- REFACTORED PROMPT LOGIC ---
+            let finalPrompt = prompt;
+            if (useSignature) {
+                const signatureInstruction = buildSignaturePrompt(
+                    signatureOptions.signatureText, signatureOptions.signatureStyle, signatureOptions.signaturePosition,
+                    signatureOptions.signatureColor, signatureOptions.signatureCustomColor, signatureOptions.signatureSize
+                );
+                finalPrompt += signatureInstruction;
+            }
+            // --- END REFACTOR ---
+
             const [poseImageBase64, styleImageBase64, faceImageBase64] = await Promise.all([
                 poseImageFile ? fileToBase64(poseImageFile) : Promise.resolve(null),
                 styleImageFile ? fileToBase64(styleImageFile) : Promise.resolve(null),
                 faceImage instanceof File ? fileToBase64(faceImage) : Promise.resolve(faceImage)
             ]);
             
-            const bodyPayload: any = {
-                prompt, modelId: model.id, apiModel: model.apiModel,
+            // --- SIMPLIFIED PAYLOAD ---
+            const bodyPayload = {
+                prompt: finalPrompt, // Send the final, complete prompt
+                apiModel: model.apiModel,
                 characterImage: poseImageBase64,
                 styleImage: styleImageBase64, 
                 faceReferenceImage: faceImageBase64,
-                aspectRatio, useUpscaler, useSignature
+                aspectRatio, 
+                useUpscaler
             };
-
-            if (useSignature) {
-                Object.assign(bodyPayload, signatureOptions);
-            }
+            // No more separate signature fields are sent.
+            // --- END SIMPLIFIED PAYLOAD ---
 
             const response = await fetch('/.netlify/functions/generate-image', {
                 method: 'POST',

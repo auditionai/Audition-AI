@@ -60,10 +60,24 @@ const buildSignaturePrompt = (
 
 
 const handler: Handler = async (event: HandlerEvent) => {
+    // --- RADICAL PRE-FLIGHT CHECK ---
+    const requiredEnvVars = [
+        'R2_ENDPOINT', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 
+        'R2_BUCKET_NAME', 'R2_PUBLIC_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'VITE_SUPABASE_URL'
+    ];
+    const missingVars = requiredEnvVars.filter(v => !process.env[v]);
+    if (missingVars.length > 0) {
+        console.error(`[FATAL] Server configuration error. Missing environment variables: ${missingVars.join(', ')}`);
+        return {
+            statusCode: 500,
+            body: JSON.stringify({ error: `Lỗi cấu hình máy chủ. Vui lòng liên hệ quản trị viên. Thiếu: ${missingVars.join(', ')}` }),
+        };
+    }
+    // --- END OF PRE-FLIGHT CHECK ---
+
     console.log("--- [START] /generate-image function execution ---");
 
     try {
-        // ARCHITECTURAL FIX: Initialize S3 Client inside the handler to prevent cold start issues.
         const s3Client = new S3Client({
             region: "auto",
             endpoint: process.env.R2_ENDPOINT!,

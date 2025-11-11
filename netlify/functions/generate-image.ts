@@ -1,23 +1,16 @@
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { GoogleGenAI, Modality } from "@google/genai";
-// REMOVED: import { supabaseAdmin } from './utils/supabaseClient'; // This was causing top-level crashes.
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 
 const COST_BASE = 1;
 const COST_UPSCALE = 1;
 const XP_PER_GENERATION = 10;
-
-// REMOVED: The buildSignaturePrompt function has been moved to the client-side hook.
-// The backend is now signature-agnostic.
+const DB_PROMPT_TRUNCATE_LENGTH = 1000; // Max length for prompt in DB
 
 const handler: Handler = async (event: HandlerEvent) => {
     try {
-        // --- DYNAMIC IMPORT FIX ---
-        // Lazily import the Supabase client only when the handler is invoked.
-        // This prevents the top-level 'throw' in the utility file from crashing the entire function container on a cold start with missing env vars.
         const { supabaseAdmin } = await import('./utils/supabaseClient');
         
-        // --- RADICAL PRE-FLIGHT CHECK ---
         const requiredEnvVars = [
             'R2_ENDPOINT', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 
             'R2_BUCKET_NAME', 'R2_PUBLIC_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'VITE_SUPABASE_URL'
@@ -27,14 +20,12 @@ const handler: Handler = async (event: HandlerEvent) => {
             console.error(`[FATAL] Server configuration error. Missing environment variables: ${missingVars.join(', ')}`);
             return {
                 statusCode: 500,
-                body: JSON.stringify({ error: `Lỗi cấu hình máy chủ. Vui lòng liên hệ quản trị viên. Thiếu: ${missingVars.join(', ')}` }),
+                body: JSON.stringify({ error: `Lỗi cấu hình máy chủ. Thiếu: ${missingVars.join(', ')}` }),
             };
         }
-        // --- END OF PRE-FLIGHT CHECK ---
 
         console.log("--- [START] /generate-image function execution ---");
 
-    
         const s3Client = new S3Client({
             region: "auto",
             endpoint: process.env.R2_ENDPOINT!,
@@ -62,20 +53,16 @@ const handler: Handler = async (event: HandlerEvent) => {
         console.log(`[OK] User authenticated: ${user.id}`);
 
         console.log("[STEP 2/10] Parsing request body...");
-        // --- MODIFIED: Parse both original and full prompts ---
         const { 
-            originalPrompt, fullPrompt, apiModel, characterImage, faceReferenceImage, styleImage, 
+            prompt, apiModel, characterImage, faceReferenceImage, styleImage, 
             aspectRatio, useUpscaler
         } = JSON.parse(event.body || '{}');
 
-        // --- NEW & IMPROVED VALIDATION ---
-        const missingFields = [];
-        if (!originalPrompt) missingFields.push('originalPrompt');
-        if (!fullPrompt) missingFields.push('fullPrompt');
-        if (!apiModel) missingFields.push('apiModel');
-
-        if (missingFields.length > 0) {
-            const errorMsg = `Missing required fields: ${missingFields.join(', ')}.`;
+        if (!prompt || !apiModel) {
+            const missing = [];
+            if (!prompt) missing.push('prompt');
+            if (!apiModel) missing.push('apiModel');
+            const errorMsg = `Yêu cầu thiếu các trường bắt buộc: ${missing.join(', ')}.`;
             console.error(`[FAIL] Validation failed. ${errorMsg}`);
             return { statusCode: 400, body: JSON.stringify({ error: errorMsg }) };
         }
@@ -107,16 +94,14 @@ const handler: Handler = async (event: HandlerEvent) => {
         let finalImageBase64: string;
         let finalImageMimeType: string;
         
-        console.log("[STEP 5/10] Using full prompt from client...");
-        console.log(`[OK] Prompt for AI received. Length: ${fullPrompt.length}`);
-
+        console.log("[STEP 5/10] Preparing AI payload...");
         const randomSeed = Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
         
         console.log(`[STEP 6/10] Calling AI model: ${apiModel}...`);
         if (apiModel.startsWith('imagen')) {
             const response = await ai.models.generateImages({
                 model: apiModel,
-                prompt: fullPrompt,
+                prompt: prompt,
                 config: { 
                     numberOfImages: 1, 
                     outputMimeType: 'image/png',
@@ -126,9 +111,10 @@ const handler: Handler = async (event: HandlerEvent) => {
             });
             finalImageBase64 = response.generatedImages[0].image.imageBytes;
             finalImageMimeType = 'image/png';
-        } else { // Assuming gemini-flash-image
+        } else {
             const parts: any[] = [];
-            
+            const uniqueImages = new Set<string>(); // Use a Set to track unique base64 strings
+
             const addImagePart = (imageDataUrl: string | null) => {
                 if (!imageDataUrl) return;
                 const [header, base64] = imageDataUrl.split(',');
@@ -136,17 +122,24 @@ const handler: Handler = async (event: HandlerEvent) => {
                      console.warn("Skipping malformed image data URL.");
                      return;
                 }
+            
+                // De-duplication logic
+                if (uniqueImages.has(base64)) {
+                    console.log("[INFO] Duplicate image detected. Skipping.");
+                    return;
+                }
+                uniqueImages.add(base64);
+            
                 const mimeType = header.match(/:(.*?);/)?.[1] || 'image/png';
                 parts.push({ inlineData: { data: base64, mimeType } });
             };
             
-            // --- FIX: Put the text part first to provide context to the model ---
-            parts.push({ text: fullPrompt });
+            parts.push({ text: prompt });
             addImagePart(characterImage);
             addImagePart(styleImage);
             addImagePart(faceReferenceImage);
             
-            console.log(`[INFO] Calling Gemini Vision with ${parts.length} parts. Text length: ${fullPrompt.length}`);
+            console.log(`[INFO] Calling Gemini Vision with ${parts.length} parts. Text length: ${prompt.length}`);
             const response = await ai.models.generateContent({
                 model: apiModel,
                 contents: [{ parts: parts }],
@@ -192,8 +185,8 @@ const handler: Handler = async (event: HandlerEvent) => {
         const newDiamondCount = userData.diamonds - totalCost;
         const newXp = userData.xp + XP_PER_GENERATION;
         
-        // --- MODIFIED: Use originalPrompt for logging ---
-        let logDescription = `Tạo ảnh: ${originalPrompt.substring(0, 50)}...`;
+        const promptForDb = prompt.substring(0, DB_PROMPT_TRUNCATE_LENGTH);
+        let logDescription = `Tạo ảnh: ${promptForDb.substring(0, 50)}...`;
         if (useUpscaler) logDescription += " (Nâng cấp)";
         
         await Promise.all([
@@ -201,7 +194,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id }),
             supabaseAdmin.from('generated_images').insert({
                 user_id: user.id,
-                prompt: originalPrompt, // Use the shorter, original prompt for DB
+                prompt: promptForDb,
                 image_url: publicUrl,
                 model_used: apiModel,
                 used_face_enhancer: !!faceReferenceImage
@@ -223,19 +216,13 @@ const handler: Handler = async (event: HandlerEvent) => {
 
     } catch (error: any) {
         console.error("--- [FATAL] /generate-image function error ---");
-        // This will now catch initialization errors as well.
         console.error("Error object:", error); 
         
         let clientFriendlyError = 'Lỗi không xác định từ máy chủ.';
         if (error?.message) {
             if (error.message.includes('INVALID_ARGUMENT')) {
-                 clientFriendlyError = 'Lỗi từ AI: Không thể xử lý ảnh đầu vào. Hãy thử lại hoặc thay đổi ảnh đầu vào.';
-            } else if (error.message.includes('Supabase server environment variables')) {
-                 clientFriendlyError = 'Lỗi cấu hình máy chủ. Vui lòng liên hệ quản trị viên.';
-            } else if (error.message.includes('value too long for type')) {
-                 clientFriendlyError = 'Lỗi cơ sở dữ liệu: Dữ liệu prompt quá dài. Vui lòng rút ngắn mô tả của bạn.';
-            }
-            else {
+                 clientFriendlyError = 'Lỗi từ AI: Không thể xử lý dữ liệu hình ảnh đầu vào. Hãy thử lại hoặc thay đổi ảnh đầu vào.';
+            } else {
                 clientFriendlyError = error.message;
             }
         }

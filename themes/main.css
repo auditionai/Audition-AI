@@ -1,625 +1,431 @@
-/* ==========================================================================
-   THEME ENGINE FOR AUDITION AI
-   ========================================================================== */
+/* ---
+  AUDITION AI - MAIN THEME & STYLESHEET
+  This file contains the core theming variables and custom CSS for the entire application.
+--- */
 
-/* --- 0. Base Styles & Default (Homepage) Theme --- */
-:root {
-    --color-fill: #0B0B0F;
-    --color-fill-secondary: #12121A;
-    --color-fill-modal: #1e1b25;
-    --color-text-base: #FFFFFF;
-    --color-text-muted: #94a3b8;
-    --color-accent: 247 37 133; /* RGB for opacity */
-    --color-accent-secondary: #CA27FF;
-    --color-accent-text: #FFFFFF;
-    --color-border: rgba(255, 255, 255, 0.1);
-    --color-border-accent: rgba(247, 37, 133, 0.3);
-    --shadow-accent: 0 0 15px rgba(247, 37, 133, 0.4);
-    --shadow-accent-lg: 0 0 25px rgba(247, 37, 133, 0.5);
-    --font-heading: 'Poppins', sans-serif;
-    --font-body: 'Poppins', sans-serif;
+/* ==========================================================================
+   1. THEME SYSTEM: COLOR & SHADOW VARIABLES
+   ========================================================================== */
+/*
+  The application uses a CSS variable-based theming system.
+  The `data-theme` attribute is set on a top-level element.
+  This file defines the color palettes for each available theme.
+  The `tailwind.config.js` is configured to use these variables.
+*/
+
+/* --- THEME 1: Vũ Điệu Neon (Cyber Punk) --- */
+[data-theme="cyber-punk"] {
+  --color-fill: #0B0B0F;
+  --color-fill-secondary: #12121A;
+  --color-fill-modal: #1A1A24;
+  --color-text-base: #E0E0E0;
+  --color-text-muted: #888899;
+  --color-accent: 247, 37, 133; /* Pink */
+  --color-accent-secondary: #7209B7; /* Purple */
+  --color-accent-text: #FFFFFF;
+  --color-border: rgba(255, 255, 255, 0.1);
+  --color-border-accent: rgba(247, 37, 133, 0.4);
+  --shadow-accent: 0 0 15px rgba(247, 37, 133, 0.4);
+  --shadow-accent-lg: 0 0 25px rgba(247, 37, 133, 0.5);
 }
 
+/* --- THEME 2: Kẹo Ngọt Pastel (Solar Flare) --- */
+[data-theme="solar-flare"] {
+  --color-fill: #FFF8F0;
+  --color-fill-secondary: #FFFFFF;
+  --color-fill-modal: #FFFFFF;
+  --color-text-base: #5C3D2E;
+  --color-text-muted: #A88B79;
+  --color-accent: 255, 119, 119; /* Pastel Red */
+  --color-accent-secondary: #FFD6A5; /* Pastel Orange */
+  --color-accent-text: #5C3D2E;
+  --color-border: rgba(0, 0, 0, 0.1);
+  --color-border-accent: rgba(255, 119, 119, 0.4);
+  --shadow-accent: 0 4px 15px rgba(255, 119, 119, 0.2);
+  --shadow-accent-lg: 0 6px 25px rgba(255, 119, 119, 0.3);
+}
+
+/* --- THEME 3: Dải Ngân Hà (Dreamy Galaxy) --- */
+[data-theme="dreamy-galaxy"] {
+  --color-fill: #0C0A1D;
+  --color-fill-secondary: #110E2A;
+  --color-fill-modal: #1A163D;
+  --color-text-base: #E6E6FA;
+  --color-text-muted: #A098D0;
+  --color-accent: 173, 95, 255; /* Bright Purple */
+  --color-accent-secondary: #00BFFF; /* Deep Sky Blue */
+  --color-accent-text: #FFFFFF;
+  --color-border: rgba(173, 95, 255, 0.2);
+  --color-border-accent: rgba(173, 95, 255, 0.5);
+  --shadow-accent: 0 0 15px rgba(173, 95, 255, 0.4);
+  --shadow-accent-lg: 0 0 25px rgba(173, 95, 255, 0.5);
+}
+
+/* --- THEME 4: Giáng Sinh (Classic Dark) --- */
+[data-theme="classic-dark"] {
+  --color-fill: #1A2D27;
+  --color-fill-secondary: #243831;
+  --color-fill-modal: #2D423A;
+  --color-text-base: #F0E6D2;
+  --color-text-muted: #A89F8D;
+  --color-accent: 205, 53, 53; /* Deep Red */
+  --color-accent-secondary: #D4AF37; /* Gold */
+  --color-accent-text: #FFFFFF;
+  --color-border: rgba(212, 175, 55, 0.2);
+  --color-border-accent: rgba(205, 53, 53, 0.5);
+  --shadow-accent: 0 0 15px rgba(205, 53, 53, 0.4);
+  --shadow-accent-lg: 0 0 25px rgba(205, 53, 53, 0.5);
+}
+
+/* --- THEME 5: Lâu Đài Pha Lê (Neon Vibe) --- */
+[data-theme="neon-vibe"] {
+  --color-fill: #E9F1F7;
+  --color-fill-secondary: #F4F8FA;
+  --color-fill-modal: #FFFFFF;
+  --color-text-base: #2C3E50;
+  --color-text-muted: #7F8C8D;
+  --color-accent: 52, 152, 219; /* Peter River Blue */
+  --color-accent-secondary: #1ABC9C; /* Turquoise */
+  --color-accent-text: #FFFFFF;
+  --color-border: rgba(44, 62, 80, 0.15);
+  --color-border-accent: rgba(52, 152, 219, 0.4);
+  --shadow-accent: 0 4px 15px rgba(52, 152, 219, 0.2);
+  --shadow-accent-lg: 0 6px 25px rgba(52, 152, 219, 0.3);
+}
+
+/* ==========================================================================
+   2. GLOBAL STYLES & BASE DEFINITIONS
+   ========================================================================== */
 body {
-    background-color: var(--color-fill);
-    color: var(--color-text-base);
-    font-family: var(--font-body);
+  font-family: 'Montserrat', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--color-fill);
+  color: var(--color-text-base);
 }
 
-/* Homepage Slider Fix */
-.image-slider-container {
-    width: 100%;
-    overflow: hidden;
-    -webkit-mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
-    mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
-}
-.image-slider-track {
-    display: flex;
-    width: calc(250px * 24); /* (width + gap) * total images */
-    animation: scroll 60s linear infinite;
-}
-.slider-image-item {
-    width: 240px;
-    margin-right: 10px;
-    flex-shrink: 0;
-}
-@keyframes scroll {
-    0% { transform: translateX(0); }
-    100% { transform: translateX(calc(-250px * 12)); }
+.font-orbitron {
+  font-family: 'Orbitron', sans-serif;
 }
 
+.themed-heading {
+  font-family: 'Poppins', sans-serif;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
 
-/* --- 1. Scoped Theme Container --- */
-/* All theme styles will be scoped to this container to not affect the homepage */
-div[data-theme] {
-    background-color: var(--color-fill);
-    color: var(--color-text-base);
-    font-family: var(--font-body);
-    min-height: 100vh;
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(0,0,0,0.2);
+  border-radius: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(var(--color-accent), 0.5);
+  border-radius: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(var(--color-accent), 0.8);
 }
 
 /* ==========================================================================
-   A. CYBER PUNK THEME (Vũ Điệu Neon)
+   3. THEME-AWARE COMPONENTS
    ========================================================================== */
-div[data-theme='cyber-punk'] {
-    --color-fill: #000000;
-    --color-fill-secondary: #0c020f;
-    --color-fill-modal: #1a041f;
-    --color-text-base: #e0e0e0;
-    --color-text-muted: #8d8d8d;
-    --color-accent: 255 30 86; /* Red */
-    --color-accent-secondary: #ff073a;
-    --color-accent-text: #FFFFFF;
-    --color-border: rgba(255, 30, 86, 0.2);
-    --color-border-accent: rgba(255, 30, 86, 0.5);
-    --shadow-accent: 0 0 15px rgba(255, 30, 86, 0.5);
-    --shadow-accent-lg: 0 0 25px rgba(255, 30, 86, 0.6);
-    --font-heading: 'Orbitron', sans-serif;
-    --font-body: 'Barlow', sans-serif;
-    --cyber-glitch-color-1: #00ffff;
-    --cyber-glitch-color-2: #ff00ff;
-}
-
-div[data-theme='cyber-punk'] .themed-panel {
-    background-color: var(--color-fill-secondary);
-    border: 1px solid var(--color-border);
-    clip-path: polygon(0 10px, 10px 0, calc(100% - 10px) 0, 100% 10px, 100% calc(100% - 10px), calc(100% - 10px) 100%, 10px 100%, 0 calc(100% - 10px));
-    padding: 1.5rem;
-    position: relative;
-    transition: transform 0.3s ease, box-shadow 0.3s ease;
-}
-
-div[data-theme='cyber-punk'] .themed-settings-block {
-    background: #00000030;
-    padding: 1rem;
-    border: 1px solid var(--color-border);
-    clip-path: polygon(0 8px, 8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%);
-}
-
-div[data-theme='cyber-punk'] .logo-text {
-    font-family: 'Orbitron', sans-serif;
-    font-weight: 900;
-    font-size: 2rem;
-    color: #fff;
-    text-shadow: 0 0 5px #ff1e56, 0 0 10px #ff1e56, 0 0 15px #ff1e56, 0 0 20px #ff1e56;
-    animation: cyberpunk-glitch 2s infinite;
-}
-
-div[data-theme='cyber-punk'] .logo-subtext {
-    font-family: 'Barlow', sans-serif;
-    color: var(--color-text-muted);
-    font-weight: 700;
-    text-shadow: 0 0 3px #ff1e5680;
-}
-
-
-/* ==========================================================================
-   B. SOLAR FLARE THEME (Kẹo Ngọt Pastel)
-   ========================================================================== */
-div[data-theme='solar-flare'] {
-    --color-fill: #FEEAFA;
-    --color-fill-secondary: #FFF6FE;
-    --color-fill-modal: #ffffff;
-    --color-text-base: #4B2840; /* Dark brown for contrast */
-    --color-text-muted: #855d7d;
-    --color-accent: 247 37 133; /* Hot Pink */
-    --color-accent-secondary: #ff85b1;
-    --color-accent-text: #FFFFFF;
-    --color-border: rgba(75, 40, 64, 0.1);
-    --color-border-accent: rgba(247, 37, 133, 0.3);
-    --shadow-accent: 0 4px 15px rgba(247, 37, 133, 0.2);
-    --shadow-accent-lg: 0 6px 25px rgba(247, 37, 133, 0.3);
-    --font-heading: 'Poppins', sans-serif;
-    --font-body: 'Poppins', sans-serif;
-}
-
-div[data-theme='solar-flare'] .themed-panel,
-div[data-theme='solar-flare'] .themed-settings-block {
-    background: #ffffff;
-    border-radius: 20px;
-    padding: 1.5rem;
-    box-shadow: 
-        8px 8px 16px #d7c7d5,
-        -8px -8px 16px #ffffff;
-    transition: box-shadow 0.3s ease;
-}
-div[data-theme='solar-flare'] .themed-button-primary:active {
-     box-shadow: inset 4px 4px 8px #d7c7d5, inset -4px -4px 8px #ffffff;
-}
-
-div[data-theme='solar-flare'] .logo-text {
-    font-family: 'Poppins', sans-serif;
-    font-weight: 900;
-    font-size: 2rem;
-    color: rgb(var(--color-accent));
-    text-shadow: 1px 1px 0px #fff, 2px 2px 0px rgba(0,0,0,0.05);
-}
-div[data-theme='solar-flare'] .logo-subtext {
-    color: var(--color-text-muted);
-    font-weight: 600;
-}
-
-
-/* ==========================================================================
-   C. CLASSIC DARK THEME (Giáng Sinh)
-   ========================================================================== */
-div[data-theme='classic-dark'] {
-    --color-fill: #1a222c;
-    --color-fill-secondary: #2c3e50;
-    --color-fill-modal: #283645;
-    --color-text-base: #ecf0f1;
-    --color-text-muted: #bdc3c7;
-    --color-accent: 231 76 60; /* Red */
-    --color-accent-secondary: #e74c3c;
-    --color-accent-text: #FFFFFF;
-    --color-border: rgba(255, 255, 255, 0.1);
-    --color-border-accent: #f1c40f;
-    --shadow-accent: 0 0 15px #f1c40f80;
-    --shadow-accent-lg: 0 0 25px #f1c40f99;
-    --font-heading: 'Playfair Display', serif;
-    --font-body: 'Playfair Display', serif;
-}
-div[data-theme='classic-dark'] .themed-panel,
-div[data-theme='classic-dark'] .themed-settings-block {
-    background-color: var(--color-fill-secondary);
-    border: 1px solid var(--color-border-accent);
-    border-radius: 12px;
-    padding: 1.5rem;
-    box-shadow: var(--shadow-accent);
-}
-
-div[data-theme='classic-dark'] .logo-text {
-    font-family: 'Playfair Display', serif;
-    font-weight: 700;
-    font-style: italic;
-    color: var(--color-border-accent);
-    font-size: 2.2rem;
-    text-shadow: 0 0 5px var(--color-border-accent);
-}
-
-/* ==========================================================================
-   D. DREAMY GALAXY THEME (Dải Ngân Hà)
-   ========================================================================== */
-div[data-theme='dreamy-galaxy'] {
-    --color-fill: #0c0a1a;
-    --color-fill-secondary: #1a162f;
-    --color-fill-modal: #211c3e;
-    --color-text-base: #e6e0ff;
-    --color-text-muted: #9e93d1;
-    --color-accent: 147 51 234; /* Purple */
-    --color-accent-secondary: #a855f7;
-    --color-accent-text: #FFFFFF;
-    --color-border: rgba(147, 51, 234, 0.3);
-    --color-border-accent: rgba(147, 51, 234, 0.7);
-    --shadow-accent: 0 0 20px rgba(147, 51, 234, 0.5);
-    --shadow-accent-lg: 0 0 30px rgba(147, 51, 234, 0.6);
-    --font-heading: 'Barlow', sans-serif;
-    --font-body: 'Barlow', sans-serif;
-}
-
-div[data-theme='dreamy-galaxy'] .themed-panel {
-    background: linear-gradient(145deg, #1f1a38, #16122a);
-    border: 1px solid var(--color-border);
-    padding: 1.5rem;
-    border-radius: 8px;
-    box-shadow: var(--shadow-accent);
-}
-div[data-theme='dreamy-galaxy'] .themed-settings-block {
-    background: rgba(12, 10, 26, 0.5);
-    padding: 1rem;
-    border: 1px solid var(--color-border);
-    border-radius: 4px;
-}
-div[data-theme='dreamy-galaxy'] .logo-text {
-    font-family: 'Barlow', sans-serif;
-    font-weight: 700;
-    font-size: 2rem;
-    background: linear-gradient(45deg, #a855f7, #60a5fa, #fde047);
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-}
-
-
-/* ==========================================================================
-   E. NEON VIBE THEME (Lâu Đài Pha Lê)
-   ========================================================================== */
-div[data-theme='neon-vibe'] {
-    --color-fill: #0a192f;
-    --color-fill-secondary: #0f2444;
-    --color-fill-modal: #132d57;
-    --color-text-base: #ccd6f6;
-    --color-text-muted: #8892b0;
-    --color-accent: 34 211 238; /* Cyan */
-    --color-accent-secondary: #67e8f9;
-    --color-accent-text: #0a192f;
-    --color-border: rgba(34, 211, 238, 0.2);
-    --color-border-accent: rgba(34, 211, 238, 0.7);
-    --shadow-accent: 0 0 15px rgba(34, 211, 238, 0.4);
-    --shadow-accent-lg: 0 0 25px rgba(34, 211, 238, 0.5);
-    --font-heading: 'Montserrat', sans-serif;
-    --font-body: 'Montserrat', sans-serif;
-}
-
-div[data-theme='neon-vibe'] .themed-panel {
-    background: rgba(100, 116, 139, 0.1);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    border-radius: 16px;
-    padding: 1.5rem;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    position: relative;
-    overflow: hidden;
-}
-div[data-theme='neon-vibe'] .themed-panel::before,
-div[data-theme='neon-vibe'] .themed-settings-block::before {
-    content: '';
-    position: absolute;
-    top: 0; right: 0; bottom: 0; left: 0;
-    border-radius: inherit;
-    border: 2px solid transparent;
-    background: linear-gradient(120deg, #81e6d9, #d53f8c, #81e6d9) border-box;
-    -webkit-mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
-    -webkit-mask-composite: destination-out;
-    mask-composite: exclude;
-    animation: iridescent-border 4s linear infinite;
-}
-div[data-theme='neon-vibe'] .logo-text {
-    font-family: 'Montserrat', sans-serif;
-    font-weight: 900;
-    font-size: 2rem;
-    color: transparent;
-    -webkit-text-stroke: 1px rgb(var(--color-accent));
-    text-shadow: 0 0 8px rgba(var(--color-accent), 0.5);
-}
-
-
-/* ==========================================================================
-   THEMED COMMON COMPONENTS
-   ========================================================================== */
-
-/* Buttons */
 .themed-button-primary {
-    background: linear-gradient(45deg, rgb(var(--color-accent)), var(--color-accent-secondary));
-    color: var(--color-accent-text);
-    border-radius: 9999px;
-    box-shadow: var(--shadow-accent-lg);
-    transition: all 0.3s ease;
+  background: linear-gradient(45deg, rgb(var(--color-accent)), var(--color-accent-secondary));
+  color: var(--color-accent-text);
+  border-radius: 9999px;
+  box-shadow: var(--shadow-accent-lg);
+  transition: all 0.3s ease;
 }
 .themed-button-primary:hover {
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-accent-lg), 0 10px 20px rgba(0,0,0,0.2);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-accent-lg), 0 5px 15px rgba(0,0,0,0.2);
 }
+
 .themed-button-secondary {
-    background-color: rgba(255, 255, 255, 0.1);
-    border: 1px solid var(--color-border);
-    color: var(--color-text-base);
-    border-radius: 9999px;
-    transition: all 0.3s ease;
+  background-color: rgba(255, 255, 255, 0.1);
+  color: var(--color-text-base);
+  border: 1px solid var(--color-border);
+  border-radius: 9999px;
+  transition: all 0.3s ease;
 }
 .themed-button-secondary:hover {
-    background-color: rgba(255, 255, 255, 0.2);
-    border-color: var(--color-border-accent);
+  background-color: rgba(255, 255, 255, 0.2);
+  border-color: var(--color-border-accent);
 }
 
-/* Headings */
-.themed-heading {
-    font-family: var(--font-heading);
-    font-weight: 900;
-}
-
-/* Custom Dropdown */
-.custom-select-wrapper { position: relative; }
-.custom-select-trigger {
-    width: 100%;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.5rem;
+.auth-input {
     background-color: rgba(0,0,0,0.3);
-    border-radius: 0.375rem;
     border: 1px solid var(--color-border);
+    border-radius: 0.5rem;
+    padding: 0.75rem 1rem;
+    color: var(--color-text-base);
+    transition: all 0.2s ease-in-out;
+}
+.auth-input:focus {
+    outline: none;
+    border-color: rgba(var(--color-accent), 0.8);
+    box-shadow: 0 0 0 2px rgba(var(--color-accent), 0.3);
+}
+
+.admin-tab {
+    padding: 0.5rem 1rem;
+    border-radius: 9999px;
+    font-weight: 600;
+    font-size: 0.875rem;
+    background-color: rgba(255,255,255,0.05);
+    color: var(--color-text-muted);
+    transition: all 0.2s ease;
+}
+.admin-tab:hover {
+    background-color: rgba(255,255,255,0.1);
     color: var(--color-text-base);
 }
-.custom-select-options {
-    position: absolute;
-    top: calc(100% + 4px);
-    left: 0;
-    width: 100%;
-    background-color: var(--color-fill-modal);
-    border: 1px solid var(--color-border);
-    border-radius: 0.375rem;
-    z-index: 10;
-    max-height: 200px;
-    overflow-y: auto;
-}
-.custom-select-option {
-    width: 100%;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.5rem 0.75rem;
-    text-align: left;
-    color: var(--color-text-muted);
-}
-.custom-select-option:hover { color: var(--color-text-base); background-color: rgba(var(--color-accent), 0.1); }
-.custom-select-option.active { color: rgb(var(--color-accent)); font-weight: 600; }
-
-/* 3D Effect */
-.interactive-3d {
-    transform-style: preserve-3d;
-    transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-}
-.interactive-3d:hover {
-    transform: perspective(1000px) rotateY(var(--rotate-y, 0)) rotateX(var(--rotate-x, 0)) scale3d(1.05, 1.05, 1.05);
+.admin-tab-active {
+    padding: 0.5rem 1rem;
+    border-radius: 9999px;
+    font-weight: 600;
+    font-size: 0.875rem;
+    background-color: rgb(var(--color-accent));
+    color: var(--color-accent-text);
+    box-shadow: var(--shadow-accent);
 }
 
-/* Footer Theme Switcher */
-.theme-display-highlight {
-    animation: highlight-theme-name 1.5s ease-out;
-}
-@keyframes highlight-theme-name {
-    0%, 100% { transform: scale(1); opacity: 1; }
-    20% { transform: scale(1.2); opacity: 0.7; color: var(--color-accent-secondary); }
-    40% { transform: scale(1); opacity: 1; }
-}
-.footer-neon-text {
-    font-family: var(--font-heading);
-    color: rgb(var(--color-accent));
-    text-shadow: 0 0 5px rgba(var(--color-accent), 0.7);
-}
-
-/* ==========================================================================
-   BACKGROUND EFFECTS
-   ========================================================================== */
-/* A. Snow (Christmas) */
-.snow-container { position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
-.snowflake { position: absolute; background: #fff; border-radius: 50%; opacity: 0.8; }
-@keyframes fall {
-    0% { transform: translateY(-10vh) translateX(0px); }
-    100% { transform: translateY(110vh) translateX(100px); }
-}
-
-/* B. Bokeh (Christmas) */
-.bokeh-container { position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
-.bokeh-dot { position: absolute; border-radius: 50%; animation: bokeh-float 20s infinite; opacity: 0; }
-@keyframes bokeh-float {
-    0% { transform: translateY(10vh) scale(0.8); opacity: 0; }
-    25% { opacity: 0.3; }
-    50% { transform: translateY(-10vh) scale(1); }
-    75% { opacity: 0.3; }
-    100% { transform: translateY(-30vh) scale(0.8); opacity: 0; }
-}
-
-/* C. Animated Gradient (Pastel) */
-.animated-gradient-bg {
-    background: linear-gradient(-45deg, #ffc3a0, #ffafbd, #d4a5a5, #8981d6);
-    background-size: 400% 400%;
-    animation: gradient-flow 15s ease infinite;
-    position: fixed; inset: 0; z-index: -1;
-}
-@keyframes gradient-flow {
-    0% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-    100% { background-position: 0% 50%; }
-}
-
-
-/* D. Stars (Galaxy) */
-.galaxy-bg { position: fixed; inset: 0; z-index: -1; pointer-events: none; }
-#stars, #stars2, #stars3 {
-    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-    width: 100%; height: 100%; display: block;
-}
-#stars { background: transparent url('https://www.script-tutorials.com/demos/360/images/stars.png') repeat top center; animation: move-twink-back 200s linear infinite; }
-#stars2 { background: transparent url('https://www.script-tutorials.com/demos/360/images/twinkling.png') repeat top center; animation: move-twink-back 150s linear infinite; }
-#stars3 { background: transparent url('https://www.script-tutorials.com/demos/360/images/clouds.png') repeat top center; }
-@keyframes move-twink-back { from {transform: translateX(0);} to {transform: translateX(-10000px);} }
-
-/* E. Sparkles (Crystal Palace) */
-.sparkle-container { position: fixed; inset: 0; z-index: -1; pointer-events: none; }
-.sparkle { position: absolute; background: #fff; border-radius: 50%; opacity: 0; animation: sparkle-anim 5s infinite; }
-@keyframes sparkle-anim {
-    0% { transform: scale(0); opacity: 0; }
-    50% { opacity: 1; }
-    100% { transform: scale(1.5); opacity: 0; }
-}
-
-/* F. Caustics (Crystal Palace) */
-.caustics-container { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
-.caustics-layer {
-    position: absolute; inset: 0;
-    background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAACXBIWXMAAAsTAAALEwEAmpwYAAAFHUlEQVR4nO2bW4hVVRjHf8/UaWlR5kGEoUWaZlJpZEMgKuhCIle6EEF3ISoEfQQlghARQREUBRG9iFAVlEKkKHoRhQ2yME3zMAszL9PMyzSP02nsw+bYc+6zZ8+5Zx44/2C/9a/1/t/a/9prr73O/yTgFcAxcBNwGjgNPAf6gW3gbWAb0AbMg+dAHHAFmAE2Ie45wLPAA2B+oN4gA8gCjwFvgR3YAlwE7h+ot0gAsoD7wO3gV+AZcCO4NlB/kgAUEAe8BVwLnoDdwO3B+okEUIC8CfwGPAfBwGnghED9SAIQBzwEbgZf4jRwA3BKoP4kAZgDXgTuBq/gcPAncE2g/iQBmAIeAO4D13AZeBq4JFB/EgHMAu8AdwPXcBY4GFweqD9JAMaA9wJ3g6s4C3wL3BOoP0kAxoC3gDuBa1gN3AncFqg/SQB6gfuBO8FvWAtcFqg/SQB6gWuB+8EvWAGcEKg/SQB6gQ+B+8EvWAScFKg/SQD6gSuB+8EvWAvcEKg/SYD+FjgAvA9cwyngQuD2QP1IAvQXwAXgbuAazgGXRco/kYD+AvgAuBrA8YwCLguej5R/IgH6C2AB8DCA4xkBXBwo/0QC9BfA5cAIAcczChwQKP9EAvQ/gOuBZwEczxjgqEC5J5Kg/wFcBD4FcDxjgo8Gyj2RAA0AngBuB2cAcFz9gAOBck8kQKOALwCPgLkAHJc1sFSg3BMJ0CjgQ+A3MBeA4xEBnBwo90QCNBL4AngNzAWguMZiCqjcEwnQSOAL4FcwF4Dy0kYGUJkjEqCRwBfAMzAXgOIS41mByh2RAJ3B+DPAWWAsALXhJ6+VqNyRCdA5wM8B8gE4Lm2gsEDljkSCzgC+BD4H8gE4Tj+wXqDykUiBzgS+BDIBCG/c+CagckckQGcAvgE8BuQCEH658lKBch2RAp0A+BzwM5AHQLgiYy9RuSISMJjAPwDngHMAHE+fBwYGlfsgATqD+QGcA8YCOB5n4FlA5e9+BOh/AOeA2cB2AI5jCbgN+AV+KqjckUqA/gM4G2wC1gA4jpE6C5/7X+U+kQL9C/gZ6ArAF8CxjNQXwXU+g3KPSID+BTwO1AXgM2AuAH+dC+Q+kQL9H3gL1AXgnYAFwI9K+U8kQP8LXBWoL8D7wGvAZ4HyTyRA/wu8FKgvwHvAs8A3gXJPJEBd+AvwNVD/AnAHuA18T6DckynQXwD3A3dD9S/gs+B+4PZEuSeqQF8Avg/c3Uv138BbwP1A3QlyTyTA/gA+Ddzdg+rPwC3B+gB1T6A8EgnYX4DXgHs3UD0P/B6oX6/uk0D5RyJgHwHPAHduoHr+A4oF6g/qS6M8ExGwj4D3gDsfUD0d/AF4JVA/Uf+H8g1EwD4C/gU8+oDq7sEcwJVA/Ue5LhIwn4APgSdeUPXtwY3Aq4H6j3JdJGB+Au4HXnxE1acL6h+pXz+4F6h+S/xPJR/7NPA68OoDqs8HdgL3B+ovS/xfJR97BHgZeO0B1fcL+wD7g/UHS/zfJR97FHgdeP8B1ffQdwHXB+ovS/w/kR87A/gE2H+c3yO3KxJwT8X/IqD/E3yXfATgHODpLgJ+L2gCdgFwA7iW28CrwQKA75GAb8BPgFu5CPgR4CLgduA2cAdwB3Au8AG4DngK3AYGgP0AXAX2A+cE2g+UfU8Cdi7A/w2Uf2wCVjYAAAAASUVORK5CYII=");
-    background-size: 100% 100%;
-    animation: moveCaustics 10s infinite linear;
-    mix-blend-mode: overlay;
-    opacity: 0.3;
-}
-@keyframes moveCaustics {
-    0% { background-position: 0 0; }
-    100% { background-position: -256px 256px; }
-}
-
-/* G. Animated Grid (Cyber Punk) */
-.animated-grid-bg {
-    position: fixed; inset: 0; z-index: -1;
+/* AI Tool Specific Styles */
+.themed-settings-block {
     background-color: var(--color-fill);
-    background-image: 
-        linear-gradient(rgba(var(--color-accent), 0.2) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(var(--color-accent), 0.2) 1px, transparent 1px);
-    background-size: 40px 40px;
-    animation: grid-pan 8s linear infinite;
+    border: 1px solid var(--color-border);
+    border-radius: 1rem;
+    padding: 1rem;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    display: flex;
+    flex-direction: column;
+    height: 100%;
 }
-@keyframes grid-pan {
-    from { background-position: 0 0; }
-    to { background-position: -40px -40px; }
+.themed-panel {
+    background-color: var(--color-fill-secondary);
+    border: 1px solid var(--color-border);
+    border-radius: 1rem;
 }
-
-/* FIX: Refactored to use CSS variables to prevent renderer crash */
-@keyframes cyberpunk-glitch{
-  0%, 100%{ text-shadow: -1.5px -1.5px 0 var(--cyber-glitch-color-1), 1.5px 1.5px 0 var(--cyber-glitch-color-2); }
-  25%{ text-shadow: 1.5px 1.5px 0 var(--cyber-glitch-color-1), -1.5px -1.5px 0 var(--cyber-glitch-color-2); }
-  50%{ text-shadow: 1.5px -1.5px 0 var(--cyber-glitch-color-1), -1.5px 1.5px 0 var(--cyber-glitch-color-2); }
-  75%{ text-shadow: -1.5px 1.5px 0 var(--cyber-glitch-color-1), 1.5px -1.5px 0 var(--cyber-glitch-color-2); }
+.toggle-switch-dot {
+    transition: transform 0.2s ease-in-out;
 }
-
-@keyframes iridescent-border {
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
-}
-.neon-text-flow {
-    animation: neon-flow 4s ease-in-out infinite;
-    background-size: 200% auto;
-    background-clip: text;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-}
-@keyframes neon-flow {
-	to {
-		background-position: 200% center;
-	}
-}
-
-/* Fix for animation conflicts */
-.aurora-background, .progress-flow, .reward-sparkles, .animated-gradient-bg {
-    position: relative;
-}
-
-/* General Animations */
-@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
-@keyframes fade-in-up { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes fade-in-down { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
-
-.animate-fade-in { animation: fade-in 0.5s ease-out; }
-.animate-fade-in-up { animation: fade-in-up 0.6s ease-out both; }
-.animate-fade-in-down { animation: fade-in-down 0.6s ease-out both; }
-.custom-scrollbar::-webkit-scrollbar { width: 6px; }
-.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-.custom-scrollbar::-webkit-scrollbar-thumb { background-color: rgba(255,255,255,0.2); border-radius: 10px; }
-.neon-highlight {
-    color: currentColor;
-    text-shadow: 0 0 5px currentColor, 0 0 8px currentColor;
-}
-.button-neon-glow {
-    box-shadow: 0 0 8px rgba(var(--color-accent), 0.6), 0 0 16px rgba(var(--color-accent), 0.4);
-}
-.neon-text-glow {
-    text-shadow: 0 0 8px currentColor;
-}
-.shimmer-text {
-    background-size: 200% 100%;
-    animation: shimmer 3s linear infinite;
-}
-@keyframes shimmer {
-    0% { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
-}
-
-.subtle-pulse {
-    animation: subtle-pulse-anim 2.5s infinite cubic-bezier(0.4, 0, 0.6, 1);
-}
-@keyframes subtle-pulse-anim {
-    0%, 100% {
-        transform: scale(1);
-        box-shadow: 0 0 0 0 rgba(var(--color-accent), 0.4);
-    }
-    50% {
-        transform: scale(1.02);
-        box-shadow: 0 0 15px 5px rgba(var(--color-accent), 0);
-    }
-}
-
 .selected-glow {
     border-color: rgb(var(--color-accent));
     background-color: rgba(var(--color-accent), 0.1);
     color: rgb(var(--color-accent));
-    box-shadow: 0 0 10px rgba(var(--color-accent), 0.5);
+    box-shadow: 0 0 8px rgba(var(--color-accent), 0.5);
 }
 
-.admin-tab {
-    @apply px-4 py-2 text-sm font-semibold text-gray-400 rounded-md hover:bg-white/10 hover:text-white transition-colors;
+.custom-select-wrapper .custom-select-trigger {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    padding: 0.5rem;
+    background-color: rgba(0,0,0,0.3);
+    border: 1px solid var(--color-border);
+    border-radius: 0.375rem;
+    transition: all 0.2s;
 }
-.admin-tab-active {
-     @apply px-4 py-2 text-sm font-semibold text-white bg-pink-500 rounded-md;
+.custom-select-wrapper .custom-select-trigger:hover {
+    border-color: rgba(var(--color-accent), 0.6);
+}
+.custom-select-wrapper .custom-select-options {
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    right: 0;
+    margin-bottom: 0.5rem;
+    background-color: var(--color-fill-modal);
+    border: 1px solid var(--color-border-accent);
+    border-radius: 0.375rem;
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 10;
+    box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+}
+.custom-select-wrapper .custom-select-option {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+    font-size: 0.875rem;
+    transition: background-color 0.2s;
+}
+.custom-select-wrapper .custom-select-option:hover {
+    background-color: rgba(var(--color-accent), 0.1);
+}
+.custom-select-wrapper .custom-select-option.active {
+    background-color: rgba(var(--color-accent), 0.2);
+    color: rgb(var(--color-accent));
+    font-weight: 600;
 }
 
-.auth-input {
-    @apply w-full p-3 bg-black/30 rounded-md border border-gray-600 focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition text-base text-white;
+/* ==========================================================================
+   4. ANIMATIONS & EFFECTS
+   ========================================================================== */
+
+/* --- Keyframe Animations --- */
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fade-in-up { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes fade-in-down { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes shimmer { 
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+@keyframes subtle-pulse-anim { 0%, 100% { transform: scale(1); box-shadow: 0 0 15px rgba(244, 114, 182, 0.4), 0 0 5px rgba(244, 114, 182, 0.6) inset; } 50% { transform: scale(1.05); box-shadow: 0 0 30px rgba(244, 114, 182, 0.6), 0 0 10px rgba(244, 114, 182, 0.8) inset; } }
+@keyframes animStar { from { transform: translateY(0px); } to { transform: translateY(-2000px); } }
+@keyframes scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@keyframes progress-flow { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+@keyframes theme-change-pop { 0% { transform: scale(1); } 50% { transform: scale(1.2); } 100% { transform: scale(1); } }
+@keyframes footer-flicker { 0%, 18%, 22%, 25%, 53%, 57%, 100% { text-shadow: 0 0 4px var(--color-accent), 0 0 11px var(--color-accent), 0 0 19px var(--color-accent), 0 0 40px var(--color-accent-secondary), 0 0 80px var(--color-accent-secondary), 0 0 90px var(--color-accent-secondary), 0 0 100px var(--color-accent-secondary), 0 0 150px var(--color-accent-secondary); } 20%, 24%, 55% { text-shadow: none; } }
+@keyframes reward-enter { from { opacity: 0; transform: scale(0.8) translateY(20px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+@keyframes reward-exit { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0.9); } }
+@keyframes reward-icon-pop { 0% { transform: scale(1); } 50% { transform: scale(1.2) rotate(-10deg); } 100% { transform: scale(1) rotate(0deg); } }
+@keyframes reward-item-enter { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes sparkle-move { from { background-position: 0 0; } to { background-position: -100px 100px; } }
+@keyframes fly-heart { to { transform: translateY(-105vh) rotate(360deg); opacity: 0; } }
+
+/* --- Animation Utility Classes --- */
+.animate-fade-in { animation: fade-in 0.6s ease-out forwards; }
+.animate-fade-in-up { animation: fade-in-up 0.6s ease-out forwards; }
+.animate-fade-in-down { animation: fade-in-down 0.6s ease-out forwards; }
+
+.shimmer-text {
+    background-image: linear-gradient(90deg, #fff 0%, #fff 40%, #f72585 50%, #fff 60%, #fff 100%);
+    background-size: 200% 100%;
+    color: transparent;
+    -webkit-background-clip: text;
+    background-clip: text;
+    animation: shimmer 4s linear infinite;
+}
+[data-theme="solar-flare"] .shimmer-text,
+[data-theme="neon-vibe"] .shimmer-text {
+    background-image: linear-gradient(90deg, #5C3D2E 0%, #5C3D2E 40%, #fff 50%, #5C3D2E 60%, #5C3D2E 100%);
 }
 
-/* Reward Notification animations */
-@keyframes reward-enter {
-  from { opacity: 0; transform: scale(0.8) translateY(20px); }
-  to { opacity: 1; transform: scale(1) translateY(0); }
+
+.subtle-pulse { animation: subtle-pulse-anim 2.5s infinite ease-in-out; }
+
+.neon-text-glow { text-shadow: 0 0 5px currentColor, 0 0 10px currentColor; }
+.neon-highlight { text-shadow: 0 0 8px currentColor; }
+
+.button-neon-glow {
+  box-shadow: var(--shadow-accent-lg);
+  transition: box-shadow 0.3s ease-in-out;
 }
-@keyframes reward-exit {
-  from { opacity: 1; transform: scale(1); }
-  to { opacity: 0; transform: scale(0.9); }
+.button-neon-glow:hover {
+  box-shadow: 0 0 16px rgba(var(--color-accent), 0.7), 0 0 32px rgba(var(--color-accent), 0.7);
 }
-@keyframes reward-icon-pop {
-  0% { transform: scale(0.5); }
-  60% { transform: scale(1.1); }
-  100% { transform: scale(1); }
+
+.theme-display-highlight {
+    animation: theme-change-pop 0.5s ease-in-out;
 }
-@keyframes reward-item-enter {
-  from { opacity: 0; transform: translateX(-20px); }
-  to { opacity: 1; transform: translateX(0); }
+
+.footer-neon-text {
+    color: var(--color-accent);
+    animation: footer-flicker 4s infinite alternate;
 }
+
 .reward-sparkles {
-    background-image:
-        radial-gradient(circle at 10% 20%, rgba(253, 224, 71, 0.5), transparent 20%),
-        radial-gradient(circle at 80% 10%, rgba(253, 224, 71, 0.5), transparent 20%),
-        radial-gradient(circle at 90% 90%, rgba(253, 224, 71, 0.4), transparent 20%),
-        radial-gradient(circle at 20% 85%, rgba(253, 224, 71, 0.4), transparent 20%);
-    background-size: 10px 10px;
-    animation: sparkle-move 10s linear infinite;
-}
-@keyframes sparkle-move {
-    from { background-position: 0 0; }
-    to { background-position: 100px 100px; }
+    background-image: url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgdmlld0JveD0iMCAwIDEwMCAxMDAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iNTAiIGN5PSI1MCIgcj0iMiIgZmlsbD0iI2ZmZiIvPjxjaXJjbGUgY3g9IjEwIiBjeT0iMjAiIHI9IjEiIGZpbGw9IiNmZmYiLz48Y2lyY2xlIGN4PSI4MCIgY3k9IjMwIiByPSIxLjUiIGZpbGw9IiNmZmYiLz48Y2lyY2xlIGN4PSIyMCIgY3k9IjgwIiByPSIxIiBmaWxsPSIjZmZmIi8+PGNpcmNsZSBjeD0iOTAiIGN5PSI5MCIgcj0iMiIgZmlsbD0iI2ZmZiIvPjwvc3ZnPg==');
+    background-size: 100px 100px;
+    animation: sparkle-move 5s linear infinite;
 }
 
-@keyframes progress-flow {
-    0% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-    100% { background-position: 0% 50%; }
+
+/* --- Image Slider for Gallery --- */
+.image-slider-container {
+  width: 100%;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
+  mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
+}
+.image-slider-track {
+  display: flex;
+  width: fit-content;
+  animation: scroll 60s linear infinite;
+}
+.image-slider-container:hover .image-slider-track { animation-play-state: paused; }
+.slider-image-item {
+  width: 250px;
+  height: 333px;
+  margin: 0 10px;
+  flex-shrink: 0;
 }
 
-/* ---
-FIX: This is where the file was being truncated.
-A full rebuild of the content is required.
---- */
-@keyframes fly-heart {
-  to { transform: translateY(-105vh) rotate(360deg); opacity: 0; }
+/* --- Interactive Card Effects --- */
+.interactive-3d {
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  will-change: transform;
+}
+.interactive-3d:hover {
+  transform: perspective(1000px) rotateX(5deg) rotateY(-5deg) scale(1.05);
+  box-shadow: 0 15px 30px rgba(0,0,0,0.3);
+}
+.glowing-border {
+  position: absolute;
+  inset: 0;
+  border-radius: 1rem;
+  padding: 2px;
+  background: linear-gradient(45deg, rgba(var(--color-accent), 0), rgba(var(--color-accent), 0.5), rgba(var(--color-accent), 0));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.group:hover .glowing-border { opacity: 1; }
+
+/* --- Special Effects (Galaxy Theme, Flying Hearts, etc.) --- */
+/* Dreamy Galaxy Starfield Background */
+.galaxy-bg {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 100%;
+  height: 100%;
+  transform: translate(-50%, -50%);
+}
+#stars, #stars2, #stars3 {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  width: 100%; height: 100%;
+  display: block;
+}
+#stars {
+  background: transparent url('data:image/svg+xml;base64,PHN2ZyB2ZXJzaW9uPSIxLjEiIGlkPSJMYXllcl8xIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB4PSIwcHgiIHk9IjBweCIgdmlld0JveD0iMCAwIDUwIDUwIiBzdHlsZT0iZW5hYmxlLWJhY2tncm91bmQ6bmV3IDAgMCA1MCA1MDsiIHhtbDpzcGFjZT0icHJlc2VydmUiPjxyZWN0IGZpbGw9IiNGRkZGRkYiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiLz48L3N2Zz4=') repeat;
+  background-size: 1px 1px;
+  animation: animStar 50s linear infinite;
+}
+#stars2 {
+  background: transparent url('data:image/svg+xml;base64,PHN2ZyB2ZXJzaW9uPSIxLjEiIGlkPSJMYXllcl8xIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB4PSIwcHgiIHk9IjBweCIgdmlld0JveD0iMCAwIDUwIDUwIiBzdHlsZT0iZW5hYmxlLWJhY2tncm91bmQ6bmV3IDAgMCA1MCA1MDsiIHhtbDpzcGFjZT0icHJlc2VydmUiPjxyZWN0IGZpbGw9IiNGRkZGRkYiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiLz48L3N2Zz4=') repeat;
+  background-size: 2px 2px;
+  animation: animStar 100s linear infinite;
+}
+#stars3 {
+  background: transparent url('data:image/svg+xml;base64,PHN2ZyB2ZXJzaW9uPSIxLjEiIGlkPSJMYXllcl8xIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB4PSIwcHgiIHk9IjBweCIgdmlld0JveD0iMCAwIDUwIDUwIiBzdHlsZT0iZW5hYmxlLWJhY2tncm91bmQ6bmV3IDAgMCA1MCA1MDsiIHhtbDpzcGFjZT0icHJlc2VydmUiPjxyZWN0IGZpbGw9IiNGRkZGRkYiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiLz48L3N2Zz4=') repeat;
+  background-size: 3px 3px;
+  animation: animStar 150s linear infinite;
 }
 
+/* Flying Hearts (Example effect, can be triggered via JS) */
 .heart-container {
-    position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
 }
 .heart {
-    position: absolute;
-    bottom: -50px;
-    font-size: 2rem;
-    animation: fly-heart linear infinite;
+  position: absolute;
+  bottom: -50px;
+  font-size: 2rem;
+  animation: fly-heart linear infinite;
 }

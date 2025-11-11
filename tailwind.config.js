@@ -13,7 +13,7 @@ export default {
           'fill-modal': 'var(--color-fill-modal)',
           base: 'var(--color-text-base)',
           muted: 'var(--color-text-muted)',
-          accent: 'var(--color-accent)',
+          accent: 'rgb(var(--color-accent) / <alpha-value>)',
           'accent-secondary': 'var(--color-accent-secondary)',
           'accent-text': 'var(--color-accent-text)',
           border: 'var(--color-border)',

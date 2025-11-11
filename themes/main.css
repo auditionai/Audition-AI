@@ -84,7 +84,7 @@ div[data-theme="cyber-punk"] {
   --color-fill-modal: #141218;
   --color-text-base: #E0E0E0;
   --color-text-muted: #888888;
-  --color-accent: #FF1E56; /* Hot Red */
+  --color-accent: 255 30 86; /* #FF1E56 */
   --color-accent-secondary: #FF4D79;
   --color-accent-text: #FFFFFF;
   --color-border: rgba(255, 30, 86, 0.2);
@@ -107,7 +107,7 @@ div[data-theme="solar-flare"] {
   --color-fill-modal: #FFFFFF;
   --color-text-base: #4A2E3D; /* Dark brown for text */
   --color-text-muted: #8B6B7B;
-  --color-accent: #FF70B8; /* Bright Pink */
+  --color-accent: 255 112 184; /* #FF70B8 */
   --color-accent-secondary: #FFA8D9;
   --color-accent-text: #FFFFFF;
   --color-border: #FDD2F4;
@@ -132,7 +132,7 @@ div[data-theme="classic-dark"] {
   --color-fill-modal: #223F36;
   --color-text-base: #F0E6D2; /* Creamy white */
   --color-text-muted: #A09383;
-  --color-accent: #E5B873; /* Gold */
+  --color-accent: 229 184 115; /* #E5B873 */
   --color-accent-secondary: #C82A3A; /* Festive Red */
   --color-accent-text: #1A2F2A;
   --color-border: rgba(229, 184, 115, 0.2);
@@ -155,7 +155,7 @@ div[data-theme="dreamy-galaxy"] {
   --color-fill-modal: #221545;
   --color-text-base: #E9E4F0;
   --color-text-muted: #A098B0;
-  --color-accent: #7F5AF0; /* Nebula Purple */
+  --color-accent: 127 90 240; /* #7F5AF0 */
   --color-accent-secondary: #00DBDE; /* Cyan */
   --color-accent-text: #FFFFFF;
   --color-border: rgba(127, 90, 240, 0.25);
@@ -179,7 +179,7 @@ div[data-theme="neon-vibe"] {
   --color-fill-modal: rgba(23, 42, 70, 0.8);
   --color-text-base: #E0F2F1;
   --color-text-muted: #80CBC4;
-  --color-accent: #4DD0E1; /* Aqua */
+  --color-accent: 77 208 225; /* #4DD0E1 */
   --color-accent-secondary: #B2EBF2;
   --color-accent-text: #0F1C2E;
   --color-border: rgba(77, 208, 225, 0.2);

@@ -136,16 +136,14 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
             </nav>
           
           <div className="hidden md:flex items-center gap-4">
-            <button
-              onClick={onTopUpClick}
-              className="group relative flex items-center p-1 font-bold text-skin-base bg-black/50 rounded-full transition-all duration-300 hover:-translate-y-0.5 button-neon-glow"
-            >
-              <div className="absolute -inset-px bg-gradient-to-r from-skin-accent to-skin-accent-secondary rounded-full opacity-50 group-hover:opacity-80 transition-opacity duration-300 blur-sm"></div>
-              <div className="relative flex items-center gap-2 bg-black/80 px-3 py-1 rounded-full">
-                  <i className="ph-fill ph-diamonds-four text-lg text-skin-accent neon-text-glow"></i>
-                  <span className="text-sm">{user.diamonds}</span>
-                  <span className="pl-2 text-xs font-semibold tracking-wider text-skin-muted group-hover:text-skin-base transition-colors border-l border-white/20">NẠP</span>
-              </div>
+            <button onClick={onTopUpClick} className="themed-top-up-button">
+                <div className="themed-top-up-button__icon-wrapper">
+                    <i className="ph-fill ph-diamonds-four"></i>
+                </div>
+                <div className="themed-top-up-button__content-wrapper">
+                    <span className="themed-top-up-button__amount">{user.diamonds.toLocaleString()}</span>
+                    <span className="themed-top-up-button__action">NẠP</span>
+                </div>
             </button>
             
             {/* Notification Bell */}

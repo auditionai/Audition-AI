@@ -6,8 +6,8 @@ import XPProgressBar from './common/XPProgressBar';
 import Modal from './common/Modal';
 import { RANKS } from '../constants/ranks';
 import Dashboard from './admin/Dashboard';
-import RedeemGiftCode from '../user/RedeemGiftCode';
-import GiftCodeManager from '../admin/GiftCodeManager';
+import RedeemGiftCode from './user/RedeemGiftCode';
+import GiftCodeManager from './admin/GiftCodeManager';
 
 // --- NEW ---
 interface CheckInReward {

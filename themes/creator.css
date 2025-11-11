@@ -236,6 +236,15 @@
 @keyframes reward-item-enter { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
 @keyframes sparkle-move { from { background-position: 0 0; } to { background-position: -100px 100px; } }
 
+/* New Title effect */
+.themed-title-glow {
+  background-image: linear-gradient(90deg, rgb(var(--color-accent)), var(--color-accent-secondary));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 8px rgba(var(--color-accent), 0.6));
+}
+
 .neon-highlight { text-shadow: 0 0 8px currentColor; }
 
 .button-neon-glow {

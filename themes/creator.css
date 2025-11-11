@@ -1,4 +1,3 @@
---- START OF FILE themes/creator.css ---
 /* ---
   AUDITION AI - CREATOR APP STYLESHEET
   Contains the theming system and component styles for the logged-in application.
@@ -815,4 +814,4 @@
 }
 [data-theme="neon-vibe"] .themed-top-up-button__icon-wrapper { color: rgb(var(--color-accent)); }
 [data-theme="neon-vibe"] .themed-top-up-button__content-wrapper { color: var(--color-text-base); }
-[data-theme="neon-vibe"] .themed-top-up-button__action { border-color: rgba(44, 62, 80, 0.3); }--- END OF FILE themes/creator.css ---
+[data-theme="neon-vibe"] .themed-top-up-button__action { border-color: rgba(44, 62, 80, 0.3); }

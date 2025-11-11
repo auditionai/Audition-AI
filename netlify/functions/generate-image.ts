@@ -147,7 +147,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             console.log(`[INFO] Calling Gemini Vision with ${parts.length} parts. Text length: ${prompt.length}`);
             const response = await ai.models.generateContent({
                 model: apiModel,
-                contents: [{ parts: parts }],
+                contents: { parts: parts },
                 config: { 
                     responseModalities: [Modality.IMAGE],
                     seed: randomSeed,

@@ -69,17 +69,30 @@ const BokehBackground: React.FC = () => {
     )
 }
 
+const Sparkles: React.FC = () => {
+    const sparkles = Array.from({ length: 50 }).map((_, i) => {
+        const style = {
+            top: `${Math.random() * 100}%`,
+            left: `${Math.random() * 100}%`,
+            animationDuration: `${Math.random() * 2 + 1}s`,
+            animationDelay: `${Math.random() * 3}s`,
+        };
+        return <div key={i} className="sparkle" style={style}></div>;
+    });
+    return <div className="sparkles-container">{sparkles}</div>;
+};
+
 
 const ThemeEffects: React.FC = () => {
     const { theme } = useTheme();
 
     return (
-        <>
+        <div className="fixed inset-0 pointer-events-none z-0">
             {theme === 'magical-christmas' && <> <Snowfall /> <BokehBackground /> </>}
-            {theme === 'crystal-palace' && <Bubbles />}
+            {theme === 'crystal-palace' && <><Bubbles /><Sparkles /></>}
             {theme === 'sweet-pastel' && <FloatingHearts />} 
             {theme === 'dreamy-galaxy' && <ShootingStars />}
-        </>
+        </div>
     );
 };
 

@@ -75,7 +75,9 @@ function App() {
   return (
     <div className="bg-skin-fill text-skin-base selection:bg-pink-500 selection:text-white">
       <ThemeEffects />
-      {renderPage()}
+      <div className="relative z-10">
+        {renderPage()}
+      </div>
 
       {/* Reward Notification */}
       {reward && <RewardNotification reward={reward} onDismiss={clearReward} />}

@@ -1,18 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useImageGenerator } from '../../../hooks/useImageGenerator';
-import { useAuth } from '../../../contexts/AuthContext';
-import { DETAILED_AI_MODELS, STYLE_PRESETS_NEW } from '../../../constants/aiToolData';
-import { AIModel, GalleryImage, StylePreset } from '../../../types';
+import { useImageGenerator } from '../../hooks/useImageGenerator';
+import { useAuth } from '../../contexts/AuthContext';
+import { DETAILED_AI_MODELS, STYLE_PRESETS_NEW } from '../../constants/aiToolData';
+import { AIModel, GalleryImage, StylePreset } from '../../types';
 
-import SettingsBlock from '../../ai-tool/SettingsBlock';
-import ImageUploader from '../../ai-tool/ImageUploader';
-import ModelSelectionModal from '../../ai-tool/ModelSelectionModal';
-import InstructionModal from '../../ai-tool/InstructionModal';
-import GenerationProgress from '../../ai-tool/GenerationProgress';
-import ConfirmationModal from '../../ConfirmationModal';
-import ImageModal from '../../common/ImageModal';
-import ToggleSwitch from '../../ai-tool/ToggleSwitch';
-import { resizeImage } from '../../../utils/imageUtils';
+import SettingsBlock from './SettingsBlock';
+import ImageUploader from './ImageUploader';
+import ModelSelectionModal from './ModelSelectionModal';
+import InstructionModal from './InstructionModal';
+import GenerationProgress from './GenerationProgress';
+import ConfirmationModal from '../common/ConfirmationModal';
+import ImageModal from '../common/ImageModal';
+import ToggleSwitch from './ToggleSwitch';
+import { resizeImage } from '../../utils/imageUtils';
 
 interface AiGeneratorToolProps {
     initialCharacterImage?: { url: string; file: File } | null;
@@ -245,14 +245,14 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                 <div className="w-full lg:w-2/3 flex flex-col gap-6">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <SettingsBlock title="Ảnh Nhân Vật" instructionKey="character" onInstructionClick={() => openInstructionModal('character')}>
-                            <ImageUploader onUpload={(e) => handleImageUpload(e, 'pose')} image={poseImage} onRemove={() => handleRemoveImage('pose')} text="Tư thế & Trang phục" disabled={isImageInputDisabled} />
+                            <ImageUploader onUpload={(e: React.ChangeEvent<HTMLInputElement>) => handleImageUpload(e, 'pose')} image={poseImage} onRemove={() => handleRemoveImage('pose')} text="Tư thế & Trang phục" disabled={isImageInputDisabled} />
                             <div className="mt-2 space-y-2">
                                 <ToggleSwitch label="Face Lock (70-80%)" checked={useBasicFaceLock} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUseBasicFaceLock(e.target.checked)} disabled={isImageInputDisabled || !poseImage} />
                                 <p className="text-xs text-gray-400 px-1 leading-relaxed">AI sẽ vẽ lại gương mặt dựa trên ảnh này. Để có độ chính xác <span className="font-bold text-yellow-400 neon-highlight"> 95%+</span>, hãy dùng <span className="font-bold text-pink-400">"Siêu Khóa Gương Mặt"</span>.</p>
                             </div>
                         </SettingsBlock>
                          <SettingsBlock title="Siêu Khóa Gương Mặt" instructionKey="face" onInstructionClick={() => openInstructionModal('face')}>
-                            <ImageUploader onUpload={(e) => handleImageUpload(e, 'face')} image={rawFaceImage ? { url: processedFaceImage ? `data:image/png;base64,${processedFaceImage}` : rawFaceImage.url } : null} onRemove={() => handleRemoveImage('face')} text="Face ID (95%+)" disabled={isImageInputDisabled} />
+                            <ImageUploader onUpload={(e: React.ChangeEvent<HTMLInputElement>) => handleImageUpload(e, 'face')} image={rawFaceImage ? { url: processedFaceImage ? `data:image/png;base64,${processedFaceImage}` : rawFaceImage.url } : null} onRemove={() => handleRemoveImage('face')} text="Face ID (95%+)" disabled={isImageInputDisabled} />
                              <div className="mt-2 space-y-2">
                                 {rawFaceImage && !processedFaceImage && (
                                     <button onClick={handleProcessFace} disabled={isProcessingFace} className="w-full text-sm font-bold py-2 px-3 bg-yellow-500/20 text-yellow-300 rounded-lg hover:bg-yellow-500/30 disabled:opacity-50 disabled:cursor-wait">
@@ -268,7 +268,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                             </div>
                         </SettingsBlock>
                          <SettingsBlock title="Ảnh Phong Cách" instructionKey="style" onInstructionClick={() => openInstructionModal('style')}>
-                            <ImageUploader onUpload={(e) => handleImageUpload(e, 'style')} image={styleImage} onRemove={() => handleRemoveImage('style')} text="Style Reference" processType="style" disabled={isImageInputDisabled} />
+                            <ImageUploader onUpload={(e: React.ChangeEvent<HTMLInputElement>) => handleImageUpload(e, 'style')} image={styleImage} onRemove={() => handleRemoveImage('style')} text="Style Reference" processType="style" disabled={isImageInputDisabled} />
                             <div className="mt-2 space-y-2">
                                 <p className="text-xs text-gray-400 px-1 leading-relaxed">AI sẽ <span className="font-bold text-cyan-400 neon-highlight">học hỏi</span> dải màu, ánh sáng và bố cục từ ảnh này để áp dụng vào tác phẩm của bạn.</p>
                             </div>

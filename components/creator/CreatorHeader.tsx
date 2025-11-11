@@ -3,7 +3,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { CreatorTab } from '../../pages/CreatorPage';
 import { getRankForLevel } from '../../utils/rankUtils';
 import XPProgressBar from '../common/XPProgressBar';
-import NotificationDropdown from './NotificationDropdown';
+import NotificationDropdown from '../common/NotificationDropdown';
 import { CHANGELOG_DATA } from '../../constants/changelogData';
 import Logo from '../common/Logo';
 

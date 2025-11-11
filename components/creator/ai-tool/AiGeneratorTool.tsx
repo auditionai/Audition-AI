@@ -6,13 +6,13 @@ import { AIModel } from '../../../types';
 
 // Fix: Corrected import path for SettingsBlock to point to the local component, resolving a module resolution error.
 import SettingsBlock from './SettingsBlock';
-import ImageUploader from '../../ai-tool/ImageUploader';
-import ModelSelectionModal from '../../ai-tool/ModelSelectionModal';
-import InstructionModal from '../../ai-tool/InstructionModal';
-import GenerationProgress from '../../ai-tool/GenerationProgress';
+import ImageUploader from './ImageUploader';
+import ModelSelectionModal from './ModelSelectionModal';
+import InstructionModal from './InstructionModal';
+import GenerationProgress from './GenerationProgress';
 import ConfirmationModal from '../../ConfirmationModal';
 import ImageModal from '../../common/ImageModal';
-import ToggleSwitch from '../../ai-tool/ToggleSwitch';
+import ToggleSwitch from './ToggleSwitch';
 import { resizeImage } from '../../../utils/imageUtils';
 
 interface AiGeneratorToolProps {

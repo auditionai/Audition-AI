@@ -18,8 +18,8 @@
   --color-fill: #0B0B0F;
   --color-fill-secondary: #12121A;
   --color-fill-modal: #1A1A24;
-  --color-text-base: #E0E0E0;
-  --color-text-muted: #888899;
+  --color-text-base: #D1D5DB; /* Softer white (Tailwind gray-300) */
+  --color-text-muted: #9CA3AF; /* Cooler gray (Tailwind gray-400) */
   --color-accent: 247, 37, 133; /* Pink */
   --color-accent-secondary: #7209B7; /* Purple */
   --color-accent-text: #FFFFFF;
@@ -97,7 +97,7 @@
    2. GLOBAL STYLES & BASE DEFINITIONS
    ========================================================================== */
 body {
-  font-family: 'Montserrat', sans-serif;
+  font-family: 'Barlow', sans-serif; /* NEW professional body font */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background-color: var(--color-fill);
@@ -108,8 +108,13 @@ body {
   font-family: 'Orbitron', sans-serif;
 }
 
-.themed-heading {
+.font-poppins {
   font-family: 'Poppins', sans-serif;
+}
+
+
+.themed-heading {
+  font-family: 'Montserrat', sans-serif; /* NEW strong heading font */
   font-weight: 900;
   letter-spacing: -0.02em;
   line-height: 1.1;
@@ -411,7 +416,7 @@ body {
   animation: animStar 100s linear infinite;
 }
 #stars3 {
-  background: transparent url('data:image/svg+xml;base64,PHN2ZyB2ZXJzaW9uPSIxLjEiIGlkPSJMYXllcl8xIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB4PSIwcHgiIHk9IjBweCIgdmlld0JveD0iMCAwIDUwIDUwIiBzdHlsZT0iZW5hYmxlLWJhY2tncm91bmQ6bmV3IDAgMCA1MCA1MDsiIHhtbDpzcGFjZT0icHJlc2VydmUiPjxyZWN0IGZpbGw9IiNGRkZGRkYiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiLz48L3N2Zz4=') repeat;
+  background: transparent url('data:image/svg+xml;base64,PHN2ZyB2ZXJzaW9uPSIxLjEiIGlkPSJMYXllcl8xIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB4PSIwcHgiIHk9IjBweCIgdmlld0JveD0iMCAwIDUwIDUwIiBzdHlsZT0iZW5hYmxlLWJhY2tncm91bmQ6bmV3IDAgMCA1MCIgdmlld0JveD0iMCAwIDUwIDUwIiBzdHlsZT0iZW5hYmxlLWJhY2tncm91bmQ6bmV3IDAgMCA1MCA1MDsiIHhtbDpzcGFjZT0icHJlc2VydmUiPjxyZWN0IGZpbGw9IiNGRkZGRkYiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiLz48L3N2Zz4=') repeat;
   background-size: 3px 3px;
   animation: animStar 150s linear infinite;
 }

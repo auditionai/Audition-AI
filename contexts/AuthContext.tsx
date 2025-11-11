@@ -2,8 +2,8 @@ import React, { createContext, useContext, useState, useEffect, useCallback, Rea
 import { getSupabaseClient } from '../utils/supabaseClient';
 // Fix: The types `Session` and `User` are not exported from the root of `@supabase/supabase-js` in v1.
 // They are removed from here to fix the compile error. `any` will be used for the session object.
-import type { SupabaseClient, Subscription } from '@supabase/supabase-js';
-import { User, OldStats, Announcement } from '../types';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { User, Announcement } from '../types';
 import { calculateLevelFromXp } from '../utils/rankUtils';
 
 const getVNDateString = (date: Date) => {
@@ -25,7 +25,6 @@ interface AuthContextType {
     session: any | null;
     user: User | null;
     loading: boolean;
-    stats: OldStats;
     toast: { message: string; type: 'success' | 'error' } | null;
     route: string;
     reward: { diamonds: number; xp: number } | null;
@@ -51,7 +50,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-    const [stats] = useState<OldStats>({ users: 1250, visits: 8700, images: 25000 });
     const [route, setRoute] = useState(() => getRouteFromPath(window.location.pathname));
     const [reward, setReward] = useState<{ diamonds: number; xp: number } | null>(null);
     const [announcement, setAnnouncement] = useState<Announcement | null>(null);
@@ -320,12 +318,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }, [supabase]);
 
     const value = useMemo(() => ({
-        session, user, loading, stats, toast, route, hasCheckedInToday, reward,
+        session, user, loading, toast, route, hasCheckedInToday, reward,
         announcement, showAnnouncementModal, supabase,
         login, logout, updateUserDiamonds, updateUserProfile, showToast, navigate, clearReward,
         markAnnouncementAsRead,
     }), [
-        session, user, loading, stats, toast, route, hasCheckedInToday, reward,
+        session, user, loading, toast, route, hasCheckedInToday, reward,
         announcement, showAnnouncementModal, supabase,
         login, logout, updateUserDiamonds, updateUserProfile, showToast, navigate, clearReward,
         markAnnouncementAsRead

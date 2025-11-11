@@ -1,11 +1,5 @@
 import type React from 'react';
 
-export interface OldStats {
-  users: number;
-  visits: number;
-  images: number;
-}
-
 // NEW: Shared type for detailed dashboard statistics
 export interface DashboardStats {
     visitsToday: number;

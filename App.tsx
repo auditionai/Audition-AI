@@ -17,22 +17,17 @@ const App: React.FC = () => {
     const { theme } = useTheme();
 
     // CRITICAL FIX: Apply the theme to the body tag directly.
-    // This ensures that global CSS variables like --color-fill are applied
-    // to the entire page background, fixing the missing background issue.
+    // The cleanup function was removed because it was too aggressive. It would remove
+    // the data-theme attribute on every re-render before the effect could re-apply it,
+    // causing a flicker or a permanent loss of the theme background. The effect's
+    // main logic is sufficient to add/remove the attribute as needed.
     useEffect(() => {
-        // Only apply themes to the body if it's a creator page to avoid affecting the landing page
         const isCreatorInterface = ['tool', 'leaderboard', 'my-creations', 'settings', 'admin-gallery', 'buy-credits'].includes(route);
         if (isCreatorInterface && user) {
              document.body.setAttribute('data-theme', theme);
         } else {
-            // Ensure landing page has no theme attribute on the body
             document.body.removeAttribute('data-theme');
         }
-        
-        // Cleanup function to remove the attribute when the component unmounts or route changes
-        return () => {
-             document.body.removeAttribute('data-theme');
-        };
     }, [theme, route, user]);
 
 

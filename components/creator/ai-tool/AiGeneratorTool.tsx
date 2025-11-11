@@ -1,18 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useImageGenerator } from '../../hooks/useImageGenerator';
-import { useAuth } from '../../contexts/AuthContext';
-import { DETAILED_AI_MODELS, STYLE_PRESETS_NEW } from '../../constants/aiToolData';
-import { AIModel } from '../../types';
+import { useImageGenerator } from '../../../hooks/useImageGenerator';
+import { useAuth } from '../../../contexts/AuthContext';
+import { DETAILED_AI_MODELS, STYLE_PRESETS_NEW } from '../../../constants/aiToolData';
+import { AIModel, StylePreset } from '../../../types';
 
-import SettingsBlock from './SettingsBlock';
-import ImageUploader from './ImageUploader';
-import ModelSelectionModal from './ModelSelectionModal';
-import InstructionModal from './InstructionModal';
-import GenerationProgress from './GenerationProgress';
-import ConfirmationModal from '../ConfirmationModal';
-import ImageModal from '../common/ImageModal';
-import ToggleSwitch from './ToggleSwitch';
-import { resizeImage } from '../../utils/imageUtils';
+import SettingsBlock from '../../ai-tool/SettingsBlock';
+import ImageUploader from '../../ai-tool/ImageUploader';
+import ModelSelectionModal from '../../ai-tool/ModelSelectionModal';
+import InstructionModal from '../../ai-tool/InstructionModal';
+import GenerationProgress from '../../ai-tool/GenerationProgress';
+import ConfirmationModal from '../../ConfirmationModal';
+import ImageModal from '../../common/ImageModal';
+import ToggleSwitch from '../../ai-tool/ToggleSwitch';
+import { resizeImage } from '../../../utils/imageUtils';
 
 interface AiGeneratorToolProps {
     initialCharacterImage?: { url: string; file: File } | null;
@@ -39,7 +39,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
 
     const [prompt, setPrompt] = useState('');
     const [negativePrompt, setNegativePrompt] = useState('');
-    const [selectedModel, setSelectedModel] = useState<AIModel>(DETAILED_AI_MODELS.find(m => m.recommended) || DETAILED_AI_MODELS[0]);
+    const [selectedModel, setSelectedModel] = useState<AIModel>(DETAILED_AI_MODELS.find((m: AIModel) => m.recommended) || DETAILED_AI_MODELS[0]);
     const [selectedStyle, setSelectedStyle] = useState('none');
     const [aspectRatio, setAspectRatio] = useState('3:4');
     const [seed, setSeed] = useState<number | ''>('');
@@ -75,7 +75,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
         const file = e.target.files?.[0];
         if (file) {
             resizeImage(file, 1024) // Resize to max 1024px
-                .then(({ file: resizedFile, dataUrl: resizedDataUrl }) => {
+                .then(({ file: resizedFile, dataUrl: resizedDataUrl }: { file: File, dataUrl: string }) => {
                     const newImage = { url: resizedDataUrl, file: resizedFile };
                     if (type === 'pose') setPoseImage(newImage);
                     else if (type === 'face') {
@@ -237,7 +237,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
     return (
         <>
             <ConfirmationModal isOpen={isConfirmOpen} onClose={() => setConfirmOpen(false)} onConfirm={handleConfirmGeneration} cost={generationCost} />
-            <ModelSelectionModal isOpen={isModelModalOpen} onClose={() => setModelModalOpen(false)} selectedModelId={selectedModel.id} onSelectModel={(id: string) => setSelectedModel(DETAILED_AI_MODELS.find(m => m.id === id) || selectedModel)} characterImage={!!poseImage} />
+            <ModelSelectionModal isOpen={isModelModalOpen} onClose={() => setModelModalOpen(false)} selectedModelId={selectedModel.id} onSelectModel={(id: string) => setSelectedModel(DETAILED_AI_MODELS.find((m: AIModel) => m.id === id) || selectedModel)} characterImage={!!poseImage} />
             <InstructionModal isOpen={isInstructionModalOpen} onClose={() => setInstructionModalOpen(false)} instructionKey={instructionKey} />
 
             <div className="flex flex-col lg:flex-row gap-6">
@@ -247,7 +247,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                         <SettingsBlock title="Ảnh Nhân Vật" instructionKey="character" onInstructionClick={() => openInstructionModal('character')}>
                             <ImageUploader onUpload={(e) => handleImageUpload(e, 'pose')} image={poseImage} onRemove={() => handleRemoveImage('pose')} text="Tư thế & Trang phục" disabled={isImageInputDisabled} />
                             <div className="mt-2 space-y-2">
-                                <ToggleSwitch label="Face Lock (70-80%)" checked={useBasicFaceLock} onChange={(e) => setUseBasicFaceLock(e.target.checked)} disabled={isImageInputDisabled || !poseImage} />
+                                <ToggleSwitch label="Face Lock (70-80%)" checked={useBasicFaceLock} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUseBasicFaceLock(e.target.checked)} disabled={isImageInputDisabled || !poseImage} />
                                 <p className="text-xs text-gray-400 px-1 leading-relaxed">AI sẽ vẽ lại gương mặt dựa trên ảnh này. Để có độ chính xác <span className="font-bold text-yellow-400 neon-highlight"> 95%+</span>, hãy dùng <span className="font-bold text-pink-400">"Siêu Khóa Gương Mặt"</span>.</p>
                             </div>
                         </SettingsBlock>
@@ -295,12 +295,12 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                                 <label className="text-sm font-semibold text-gray-300 mb-1 block">Phong cách</label>
                                 <div className="custom-select-wrapper">
                                     <button onClick={() => setIsStyleDropdownOpen(!isStyleDropdownOpen)} className="custom-select-trigger">
-                                        <span>{STYLE_PRESETS_NEW.find(p => p.id === selectedStyle)?.name}</span>
+                                        <span>{STYLE_PRESETS_NEW.find((p: StylePreset) => p.id === selectedStyle)?.name}</span>
                                         <i className={`ph-fill ph-caret-down transition-transform ${isStyleDropdownOpen ? 'rotate-180' : ''}`}></i>
                                     </button>
                                     {isStyleDropdownOpen && (
                                         <div className="custom-select-options">
-                                            {STYLE_PRESETS_NEW.map(p => (
+                                            {STYLE_PRESETS_NEW.map((p: StylePreset) => (
                                                 <button key={p.id} onClick={() => { setSelectedStyle(p.id); setIsStyleDropdownOpen(false); }} className={`custom-select-option ${selectedStyle === p.id ? 'active' : ''}`}>
                                                     <span>{p.name}</span>
                                                     {selectedStyle === p.id && <i className="ph-fill ph-check"></i>}
@@ -325,7 +325,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                                 <label className="text-sm font-semibold text-gray-300 mb-2 block">Tỷ lệ khung hình</label>
                                 <div className="grid grid-cols-5 gap-2">
                                     {(['3:4', '1:1', '4:3', '9:16', '16:9'] as const).map(ar => {
-                                        const dims = { '3:4': 'w-3 h-4', '1:1': 'w-4 h-4', '4:3': 'w-4 h-3', '9:16': 'w-[1.125rem] h-5', '16:9': 'w-5 h-[1.125rem]' };
+                                        const dims: { [key: string]: string } = { '3:4': 'w-3 h-4', '1:1': 'w-4 h-4', '4:3': 'w-4 h-3', '9:16': 'w-[1.125rem] h-5', '16:9': 'w-5 h-[1.125rem]' };
                                         return (
                                             <button key={ar} onClick={() => setAspectRatio(ar)} className={`p-2 rounded-md flex flex-col items-center justify-center gap-1 border-2 transition ${aspectRatio === ar ? 'selected-glow' : 'border-gray-600 bg-white/5 hover:border-pink-500/50 text-gray-300'}`}>
                                                 <div className={`${dims[ar]} bg-gray-500 rounded-sm`}/>
@@ -337,7 +337,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                             </div>
                             
                             <div>
-                                <ToggleSwitch label="Làm Nét & Nâng Cấp (+1 💎)" checked={useUpscaler} onChange={e => setUseUpscaler(e.target.checked)} />
+                                <ToggleSwitch label="Làm Nét & Nâng Cấp (+1 💎)" checked={useUpscaler} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUseUpscaler(e.target.checked)} />
                                 <p className="text-xs text-gray-400 px-1 mt-1 leading-relaxed">Khi bật, ảnh AI tạo ra sẽ có kết quả <span className="font-bold text-cyan-400 neon-highlight">siêu nét</span>, chi tiết rõ ràng, và dung lượng ảnh cao hơn.</p>
                             </div>
                         </div>

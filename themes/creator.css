@@ -29,7 +29,7 @@
   --color-fill-secondary: #FFFFFF;
   --color-fill-modal: #FFFFFF;
   --color-text-base: #5C3D2E;
-  --color-text-muted: #856858;
+  --color-text-muted: #2C3E50; /* UPDATED to near-black for readability */
   --color-accent: 255, 119, 119; /* Pastel Red */
   --color-accent-secondary: #FFD6A5; /* Pastel Orange */
   --color-accent-text: #5C3D2E;
@@ -77,7 +77,7 @@
   --color-fill-secondary: #F4F8FA;
   --color-fill-modal: #FFFFFF;
   --color-text-base: #2C3E50;
-  --color-text-muted: #495B6C;
+  --color-text-muted: #2C3E50; /* UPDATED to near-black for readability */
   --color-accent: 52, 152, 219; /* Peter River Blue */
   --color-accent-secondary: #1ABC9C; /* Turquoise */
   --color-accent-text: #FFFFFF;

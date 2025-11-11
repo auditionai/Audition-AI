@@ -4,14 +4,15 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { DETAILED_AI_MODELS, STYLE_PRESETS_NEW } from '../../../constants/aiToolData';
 import { AIModel } from '../../../types';
 
+// Fix: Corrected import path for SettingsBlock to point to the local component, resolving a module resolution error.
 import SettingsBlock from './SettingsBlock';
-import ImageUploader from './ImageUploader';
-import ModelSelectionModal from './ModelSelectionModal';
-import InstructionModal from './InstructionModal';
-import GenerationProgress from './GenerationProgress';
-import ConfirmationModal from '../ConfirmationModal';
+import ImageUploader from '../../ai-tool/ImageUploader';
+import ModelSelectionModal from '../../ai-tool/ModelSelectionModal';
+import InstructionModal from '../../ai-tool/InstructionModal';
+import GenerationProgress from '../../ai-tool/GenerationProgress';
+import ConfirmationModal from '../../ConfirmationModal';
 import ImageModal from '../../common/ImageModal';
-import ToggleSwitch from './ToggleSwitch';
+import ToggleSwitch from '../../ai-tool/ToggleSwitch';
 import { resizeImage } from '../../../utils/imageUtils';
 
 interface AiGeneratorToolProps {
@@ -237,7 +238,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
     return (
         <>
             <ConfirmationModal isOpen={isConfirmOpen} onClose={() => setConfirmOpen(false)} onConfirm={handleConfirmGeneration} cost={generationCost} />
-            <ModelSelectionModal isOpen={isModelModalOpen} onClose={() => setModelModalOpen(false)} selectedModelId={selectedModel.id} onSelectModel={(id) => setSelectedModel(DETAILED_AI_MODELS.find(m => m.id === id) || selectedModel)} characterImage={!!poseImage} />
+            <ModelSelectionModal isOpen={isModelModalOpen} onClose={() => setModelModalOpen(false)} selectedModelId={selectedModel.id} onSelectModel={(id: string) => setSelectedModel(DETAILED_AI_MODELS.find(m => m.id === id) || selectedModel)} characterImage={!!poseImage} />
             <InstructionModal isOpen={isInstructionModalOpen} onClose={() => setInstructionModalOpen(false)} instructionKey={instructionKey} />
 
             <div className="flex flex-col lg:flex-row gap-6">
@@ -247,7 +248,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                         <SettingsBlock title="Ảnh Nhân Vật" instructionKey="character" onInstructionClick={() => openInstructionModal('character')}>
                             <ImageUploader onUpload={(e) => handleImageUpload(e, 'pose')} image={poseImage} onRemove={() => handleRemoveImage('pose')} text="Tư thế & Trang phục" disabled={isImageInputDisabled} />
                             <div className="mt-2 space-y-2">
-                                <ToggleSwitch label="Face Lock (70-80%)" checked={useBasicFaceLock} onChange={(e) => setUseBasicFaceLock(e.target.checked)} disabled={isImageInputDisabled || !poseImage} />
+                                <ToggleSwitch label="Face Lock (70-80%)" checked={useBasicFaceLock} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUseBasicFaceLock(e.target.checked)} disabled={isImageInputDisabled || !poseImage} />
                                 <p className="text-xs text-gray-400 px-1 leading-relaxed">AI sẽ vẽ lại gương mặt dựa trên ảnh này. Để có độ chính xác <span className="font-bold text-yellow-400 neon-highlight"> 95%+</span>, hãy dùng <span className="font-bold text-pink-400">"Siêu Khóa Gương Mặt"</span>.</p>
                             </div>
                         </SettingsBlock>
@@ -313,12 +314,12 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
 
                              <div>
                                 <label className="text-sm font-semibold text-gray-300 mb-1 block">Prompt Phủ định</label>
-                                <textarea value={negativePrompt} onChange={(e) => setNegativePrompt(e.target.value)} placeholder="VD: xấu, mờ, nhiều tay..." className="w-full p-2 bg-black/30 rounded-md border border-gray-600 focus:border-pink-500 transition text-sm text-white resize-none auth-input" rows={2} />
+                                <textarea value={negativePrompt} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNegativePrompt(e.target.value)} placeholder="VD: xấu, mờ, nhiều tay..." className="w-full p-2 bg-black/30 rounded-md border border-gray-600 focus:border-pink-500 transition text-sm text-white resize-none auth-input" rows={2} />
                             </div>
 
                              <div>
                                 <label className="text-sm font-semibold text-gray-300 mb-1 block">Seed</label>
-                                 <input type="number" value={seed} onChange={(e) => setSeed(e.target.value === '' ? '' : parseInt(e.target.value, 10))} placeholder="Để trống để tạo ngẫu nhiên" className="w-full p-2 bg-black/30 rounded-md border border-gray-600 focus:border-pink-500 transition text-sm text-white auth-input" />
+                                 <input type="number" value={seed} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSeed(e.target.value === '' ? '' : parseInt(e.target.value, 10))} placeholder="Để trống để tạo ngẫu nhiên" className="w-full p-2 bg-black/30 rounded-md border border-gray-600 focus:border-pink-500 transition text-sm text-white auth-input" />
                             </div>
                             
                             <div>

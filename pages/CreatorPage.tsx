@@ -6,15 +6,15 @@ import { useTheme } from '../contexts/ThemeContext';
 import CreatorHeader from '../components/creator/CreatorHeader';
 import CreatorFooter from '../components/creator/CreatorFooter';
 import AITool from '../components/creator/AITool';
-import Leaderboard from '../components/creator/Leaderboard';
+import Leaderboard from '../components/Leaderboard';
 import MyCreationsPage from './MyCreationsPage';
-import Settings from '../components/creator/Settings';
+import Settings from '../components/Settings';
 import AdminGalleryPage from './AdminGalleryPage';
 import BottomNavBar from '../components/common/BottomNavBar';
 import InfoModal from '../components/creator/InfoModal';
 import TopUpModal from '../components/creator/TopUpModal';
-import CheckInModal from '../components/creator/CheckInModal';
-import AnnouncementModal from '../components/creator/AnnouncementModal';
+import CheckInModal from '../components/CheckInModal';
+import AnnouncementModal from '../components/AnnouncementModal';
 import ThemeEffects from '../components/themes/ThemeEffects';
 
 // Define the possible tabs for type safety

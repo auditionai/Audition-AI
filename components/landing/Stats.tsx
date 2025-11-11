@@ -1,6 +1,6 @@
 import React from 'react';
 import { DashboardStats } from '../../types';
-import StatCard from '../creator/admin/StatCard';
+import StatCard from '../../components/common/StatCard';
 
 interface StatsProps {
   stats: DashboardStats | null;

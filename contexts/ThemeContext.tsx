@@ -1,19 +1,21 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useMemo } from 'react';
 
-export type Theme = 'cyber-dance' | 'crystal-palace' | 'sweet-pastel' | 'magical-christmas' | 'dreamy-galaxy';
+// Cập nhật type và mảng THEMES để khớp với CSS
+export type Theme = 'cyber-punk' | 'solar-flare' | 'dreamy-galaxy' | 'classic-dark' | 'neon-vibe';
 
-export const THEMES: { id: Theme; name: string; icon: string; }[] = [
-    { id: 'cyber-dance', name: 'Vũ Điệu Neon', icon: 'ph-person-simple-run' },
-    { id: 'crystal-palace', name: 'Lâu Đài Thủy Tinh', icon: 'ph-snowflake' },
-    { id: 'sweet-pastel', name: 'Kẹo Ngọt Pastel', icon: 'ph-heart' },
-    { id: 'magical-christmas', name: 'Giáng Sinh Diệu Kỳ', icon: 'ph-tree-evergreen' },
-    { id: 'dreamy-galaxy', name: 'Dải Ngân Hà', icon: 'ph-sparkle' },
-];
-
-const getRandomTheme = (): Theme => {
-    const availableThemes = THEMES.map(t => t.id);
-    return availableThemes[Math.floor(Math.random() * availableThemes.length)];
+export interface ThemeOption {
+    id: Theme;
+    name: string;
+    icon: string;
 }
+
+export const THEMES: ThemeOption[] = [
+    { id: 'cyber-punk', name: 'Vũ Điệu Neon', icon: 'ph-skull' },
+    { id: 'solar-flare', name: 'Kẹo Ngọt Pastel', icon: 'ph-sun' },
+    { id: 'classic-dark', name: 'Giáng Sinh', icon: 'ph-tree' },
+    { id: 'dreamy-galaxy', name: 'Dải Ngân Hà', icon: 'ph-planet' },
+    { id: 'neon-vibe', name: 'Lâu Đài Pha Lê', icon: 'ph-diamond' },
+];
 
 interface ThemeContextType {
     theme: Theme;
@@ -24,26 +26,28 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const [theme, setThemeState] = useState<Theme>(() => {
-        try {
-            // Use sessionStorage to keep the theme consistent within a tab, but random on new tabs/sessions.
-            const savedTheme = sessionStorage.getItem('app-theme') as Theme;
-            return THEMES.some(t => t.id === savedTheme) ? savedTheme : getRandomTheme();
-        } catch (error) {
-            return getRandomTheme();
+        // Ưu tiên theme đã lưu trong localStorage
+        const storedTheme = localStorage.getItem('app-theme') as Theme;
+        if (THEMES.find(t => t.id === storedTheme)) {
+            return storedTheme;
         }
-    });
 
-    useEffect(() => {
-        document.documentElement.setAttribute('data-theme', theme);
-        try {
-            sessionStorage.setItem('app-theme', theme);
-        } catch (error) {
-            console.warn('Could not save theme to sessionStorage.');
+        // Nếu không có, kiểm tra sessionStorage (cho phiên truy cập hiện tại)
+        const sessionTheme = sessionStorage.getItem('session-theme') as Theme;
+        if (THEMES.find(t => t.id === sessionTheme)) {
+            return sessionTheme;
         }
-    }, [theme]);
+
+        // Nếu không có gì cả, random một theme mới cho phiên này
+        const randomTheme = THEMES[Math.floor(Math.random() * THEMES.length)].id;
+        sessionStorage.setItem('session-theme', randomTheme);
+        return randomTheme;
+    });
 
     const setTheme = (newTheme: Theme) => {
         setThemeState(newTheme);
+        // Khi người dùng chọn thủ công, lưu vào localStorage để ghi nhớ lựa chọn
+        localStorage.setItem('app-theme', newTheme);
     };
 
     const value = useMemo(() => ({ theme, setTheme }), [theme]);

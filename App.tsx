@@ -1,70 +1,61 @@
-
 import React from 'react';
 import { useAuth } from './contexts/AuthContext';
+import { useTheme } from './contexts/ThemeContext';
+
+// Import Pages
 import HomePage from './pages/HomePage';
 import CreatorPage from './pages/CreatorPage';
-import BuyCreditsPage from './pages/BuyCreditsPage';
 import GalleryPage from './pages/GalleryPage';
+import BuyCreditsPage from './pages/BuyCreditsPage';
+
+// Import Common Components
 import RewardNotification from './components/common/RewardNotification';
 import ThemeEffects from './components/themes/ThemeEffects';
 
-const Toast: React.FC<{ message: string, type: 'success' | 'error', onDismiss: () => void }> = ({ message, type, onDismiss }) => {
-    React.useEffect(() => {
-        const timer = setTimeout(onDismiss, 4000);
-        return () => clearTimeout(timer);
-    }, [onDismiss]);
-
-    const icon = type === 'success' ? 'ph-check-circle' : 'ph-warning-circle';
-    const colors = type === 'success' ? 'bg-green-500/80 border-green-400/50' : 'bg-red-500/80 border-red-400/50';
-
-    return (
-        <div className={`fixed top-5 right-5 z-[9999] flex items-center gap-3 p-4 rounded-lg shadow-lg text-white backdrop-blur-md border animate-fade-in-down ${colors}`}>
-            <i className={`ph-fill ${icon} text-2xl`}></i>
-            <span className="font-semibold">{message}</span>
-        </div>
-    );
-};
-
-const LoadingSpinner: React.FC = () => (
-    <div className="fixed inset-0 bg-skin-fill flex flex-col justify-center items-center z-[10000]">
-      <div className="relative w-24 h-24">
-        <div className="absolute inset-0 border-4 border-skin-accent/30 rounded-full"></div>
-        <div className="absolute inset-0 border-4 border-t-skin-accent rounded-full animate-spin"></div>
-      </div>
-      <p className="mt-6 text-lg text-skin-muted font-semibold animate-pulse">Đang tải...</p>
-    </div>
-);
-
-
 const App: React.FC = () => {
-    const { loading, route, toast, showToast, user, reward, clearReward } = useAuth();
-    
+    const { user, loading, route, toast, reward, clearReward } = useAuth();
+    const { theme } = useTheme();
+
+    if (loading) {
+        return (
+            <div className="fixed inset-0 bg-[#0B0B0F] flex items-center justify-center z-[9999]">
+                <div className="w-16 h-16 border-4 border-gray-800 border-t-pink-500 rounded-full animate-spin"></div>
+            </div>
+        );
+    }
+
     const renderPage = () => {
-        if (loading) {
-            return <LoadingSpinner />;
-        }
-        
-        // Always show CreatorPage if user is logged in, unless they're explicitly on a public page
-        if (user) {
-             switch (route) {
-                case 'home':
+        const isUserArea = user && ['tool', 'leaderboard', 'my-creations', 'settings', 'buy-credits', 'admin-gallery'].includes(route);
+
+        if (isUserArea) {
+            let pageComponent;
+            switch (route) {
                 case 'tool':
                 case 'leaderboard':
                 case 'my-creations':
                 case 'settings':
                 case 'admin-gallery':
-                    return <CreatorPage activeTab={route === 'home' ? 'tool' : route} />;
+                    pageComponent = <CreatorPage activeTab={route} />;
+                    break;
                 case 'buy-credits':
-                    return <BuyCreditsPage />;
-                case 'gallery':
-                    return <GalleryPage />;
+                    pageComponent = <BuyCreditsPage />;
+                    break;
                 default:
-                    return <CreatorPage activeTab="tool" />;
+                    pageComponent = <HomePage />; // Fallback, should not happen
             }
+
+            return (
+                <div data-theme={theme} className="relative">
+                    <ThemeEffects />
+                    <div className="relative z-[1]">
+                        {pageComponent}
+                    </div>
+                </div>
+            );
         }
-        
-        // Public pages for logged-out users
-        switch(route) {
+
+        // Render public pages without theme wrappers
+        switch (route) {
             case 'gallery':
                 return <GalleryPage />;
             case 'home':
@@ -75,11 +66,21 @@ const App: React.FC = () => {
 
     return (
         <>
-            <ThemeEffects />
             {renderPage()}
-            {toast && toast.message && <Toast message={toast.message} type={toast.type} onDismiss={() => showToast('', 'success')} />}
+            
+            {/* Global Toast Notification */}
+            {toast && (
+                <div 
+                    className={`fixed top-5 right-5 z-[9999] p-4 rounded-lg shadow-lg animate-fade-in-down
+                        ${toast.type === 'success' ? 'bg-green-500/80 backdrop-blur-sm' : 'bg-red-500/80 backdrop-blur-sm'} text-white`}
+                >
+                    <p className="font-semibold">{toast.message}</p>
+                </div>
+            )}
+            
+            {/* Global Reward Notification */}
             {reward && (reward.diamonds > 0 || reward.xp > 0) && (
-                <RewardNotification reward={reward} onDismiss={clearReward} />
+                 <RewardNotification reward={reward} onDismiss={clearReward} />
             )}
         </>
     );

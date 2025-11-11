@@ -1,130 +1,46 @@
-import React, { useState, useEffect } from 'react';
-import ThemeSwitcher from './common/ThemeSwitcher';
-import { useTheme, THEMES } from '../contexts/ThemeContext';
-
+import React from 'react';
+import { Stats } from '../types';
+import Logo from './common/Logo';
 
 interface FooterProps {
-    onCtaClick: () => void;
-    stats: {
-        users: number;
-        visits: number;
-        images: number;
-    };
-    onInfoLinkClick: (key: 'terms' | 'policy' | 'contact') => void;
+  onCtaClick: () => void;
+  stats: Stats;
+  onInfoLinkClick: (key: 'terms' | 'policy' | 'contact') => void;
 }
 
-const AnimatedStat: React.FC<{ value: number }> = ({ value }) => {
-    const [displayValue, setDisplayValue] = useState(0);
-
-    useEffect(() => {
-        const duration = 1500;
-        const frameRate = 1000 / 60;
-        const totalFrames = Math.round(duration / frameRate);
-        let frame = 0;
-        
-        const counter = setInterval(() => {
-            frame++;
-            const progress = frame / totalFrames;
-            const currentVal = Math.round(value * progress);
-            setDisplayValue(currentVal);
-
-            if (frame === totalFrames) {
-                clearInterval(counter);
-                setDisplayValue(value);
-            }
-        }, frameRate);
-
-        return () => clearInterval(counter);
-    }, [value]);
-    
-    return <span>{displayValue.toLocaleString('vi-VN')}</span>;
-};
-
-
 const Footer: React.FC<FooterProps> = ({ onCtaClick, stats, onInfoLinkClick }) => {
-    const { theme } = useTheme();
-    const [highlight, setHighlight] = useState(false);
-    const currentThemeName = THEMES.find(t => t.id === theme)?.name || 'Mặc định';
-
-    useEffect(() => {
-        setHighlight(true);
-        const timer = setTimeout(() => setHighlight(false), 1500); // Duration of the animation
-        return () => clearTimeout(timer);
-    }, [theme]);
-    
-    const statsData = [
-        { label: 'Người dùng đã đăng ký', value: stats.users },
-        { label: 'Lượt truy cập ứng dụng', value: stats.visits },
-        { label: 'Ảnh đã được tạo', value: stats.images },
-    ];
-
   return (
-    <footer className="bg-skin-fill-secondary border-t border-skin-border text-skin-base">
-      <div className="container mx-auto px-4 py-16">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-center mb-16 border-b border-gray-800 pb-16">
-            {statsData.map((stat, index) => (
-                 <div key={index} 
-                    className="bg-skin-fill/50 rounded-2xl p-8 interactive-3d neon-glow"
-                    style={{ animationDelay: `${index * 250}ms` }}
-                >
-                    <h3 className="text-4xl font-bold bg-gradient-to-r from-skin-accent to-skin-accent-secondary text-transparent bg-clip-text mb-2">
-                        <AnimatedStat value={stat.value} />+
-                    </h3>
-                    <p className="text-skin-muted">{stat.label}</p>
-                </div>
-            ))}
+    <footer className="bg-skin-fill-secondary border-t border-skin-border text-skin-base relative z-10">
+      <div className="container mx-auto px-4 py-12">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-center md:text-left">
+          <div className="flex flex-col items-center md:items-start">
+            <Logo onClick={() => window.scrollTo(0, 0)} />
+            <p className="text-skin-muted mt-4 text-sm max-w-xs">
+              Nền tảng sáng tạo ảnh 3D AI theo phong cách Audition độc đáo.
+            </p>
+          </div>
+          
+          <div>
+            <h3 className="font-bold text-lg mb-4 text-skin-accent">Thông tin</h3>
+            <nav className="flex flex-col space-y-2 text-skin-muted">
+              <a onClick={() => onInfoLinkClick('terms')} className="hover:text-skin-base cursor-pointer transition">Chính sách Kim Cương</a>
+              <a onClick={() => onInfoLinkClick('policy')} className="hover:text-skin-base cursor-pointer transition">Chính sách Bảo mật</a>
+              <a onClick={() => onInfoLinkClick('contact')} className="hover:text-skin-base cursor-pointer transition">Liên hệ & Hỗ trợ</a>
+            </nav>
+          </div>
+
+          <div>
+            <h3 className="font-bold text-lg mb-4 text-skin-accent">Thống kê</h3>
+            <div className="space-y-2 text-skin-muted">
+              <p><strong>{stats.users.toLocaleString('vi-VN')}</strong> Người dùng</p>
+              <p><strong>{stats.visits.toLocaleString('vi-VN')}</strong> Lượt truy cập</p>
+              <p><strong>{stats.images.toLocaleString('vi-VN')}</strong> Tác phẩm được tạo</p>
+            </div>
+          </div>
         </div>
 
-        <div className="text-center mb-12">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4 bg-gradient-to-r from-skin-accent to-skin-accent-secondary text-transparent bg-clip-text shimmer-text">Sẵn sàng tỏa sáng cùng Audition AI?</h2>
-            <p className="text-lg text-skin-muted mb-8">Bắt đầu tạo những bức ảnh 3D độc đáo của bạn ngay hôm nay!</p>
-            <button
-                onClick={onCtaClick}
-                className="px-8 py-4 font-bold text-lg text-skin-accent-text bg-gradient-to-r from-skin-accent to-skin-accent-secondary rounded-full transition-all duration-300 shadow-accent-lg hover:shadow-accent-lg hover:-translate-y-1.5 hover:scale-105 subtle-pulse"
-            >
-                Bắt đầu sáng tạo
-            </button>
-        </div>
-        
-        <div className="flex flex-col items-center border-t border-gray-800 pt-8">
-            <div className="flex flex-col md:flex-row md:flex-wrap items-center justify-center gap-y-6 gap-x-8 w-full">
-                <div className="flex items-center gap-3">
-                    <span className="text-sm font-semibold text-skin-muted">Giao diện:</span>
-                    <span className={`text-sm font-bold text-skin-accent ${highlight ? 'theme-display-highlight' : ''}`}>
-                        {currentThemeName}
-                    </span>
-                </div>
-                <ThemeSwitcher />
-                <div className="flex gap-2 items-center text-skin-muted">
-                    <a onClick={() => onInfoLinkClick('terms')} className="px-4 py-2 rounded-full bg-white/5 hover:bg-skin-accent/10 text-skin-muted hover:text-skin-base border border-transparent hover:border-skin-border-accent transition-all duration-300 cursor-pointer text-sm font-semibold">Điều khoản</a>
-                    <a onClick={() => onInfoLinkClick('policy')} className="px-4 py-2 rounded-full bg-white/5 hover:bg-skin-accent/10 text-skin-muted hover:text-skin-base border border-transparent hover:border-skin-border-accent transition-all duration-300 cursor-pointer text-sm font-semibold">Chính sách</a>
-                    <a onClick={() => onInfoLinkClick('contact')} className="px-4 py-2 rounded-full bg-white/5 hover:bg-skin-accent/10 text-skin-muted hover:text-skin-base border border-transparent hover:border-skin-border-accent transition-all duration-300 cursor-pointer text-sm font-semibold">Liên hệ</a>
-                </div>
-            </div>
-            <p className="font-semibold text-base my-6 footer-neon-text">
-                &copy; {new Date().getFullYear()} AUDITION AI Studio.
-            </p>
-        </div>
-         <div className="mt-8 text-center text-xs text-gray-500">
-            <p className="font-semibold mb-2 flex items-center justify-center gap-2">
-                <i className="ph-fill ph-warning-circle text-yellow-500"></i>
-                Lưu ý pháp lý & an toàn:
-            </p>
-            <p>Nghiêm cấm nội dung vi phạm pháp luật, 18+, bạo lực, xúc phạm. Người dùng chịu trách nhiệm bản quyền với hình ảnh sử dụng.</p>
-        </div>
-         <div className="mt-12 flex flex-wrap justify-center items-center gap-4 border-t border-gray-800 pt-8">
-            <a href="https://caulenhau.io.vn/" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-6 py-3 font-bold text-sm bg-white/10 backdrop-blur-sm border border-white/20 text-skin-base rounded-full transition-all duration-300 hover:bg-white/20 hover:shadow-lg hover:shadow-white/10 hover:-translate-y-1">
-                <i className="ph-fill ph-scroll text-lg text-yellow-300"></i>
-                Câu Lệnh AU
-            </a>
-            <a href="https://byvn.net/codycn-prompt" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-6 py-3 font-bold text-sm bg-white/10 backdrop-blur-sm border border-white/20 text-skin-base rounded-full transition-all duration-300 hover:bg-white/20 hover:shadow-lg hover:shadow-white/10 hover:-translate-y-1">
-                <i className="ph-fill ph-robot text-lg text-cyan-300"></i>
-                PROMPT GPT
-            </a>
-            <a href="https://m.me/cm/AbZT2-fW9wJlrX7M/" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-6 py-3 font-bold text-sm bg-white/10 backdrop-blur-sm border border-white/20 text-skin-base rounded-full transition-all duration-300 hover:bg-white/20 hover:shadow-lg hover:shadow-white/10 hover:-translate-y-1">
-                <i className="ph-fill ph-users-three text-lg text-pink-300"></i>
-                Cộng Đồng AU AI
-            </a>
+        <div className="mt-12 pt-8 border-t border-skin-border text-center text-skin-muted text-sm">
+          <p>&copy; {new Date().getFullYear()} AUDITION AI Studio. Sáng tạo bởi Nguyễn Quốc Cường.</p>
         </div>
       </div>
     </footer>

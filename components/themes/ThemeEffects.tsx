@@ -57,13 +57,25 @@ const ShootingStars: React.FC = () => {
     );
 };
 
+const BokehBackground: React.FC = () => {
+    return (
+        <div className="bokeh-background">
+            <div></div>
+            <div></div>
+            <div></div>
+            <div></div>
+            <div></div>
+        </div>
+    )
+}
+
 
 const ThemeEffects: React.FC = () => {
     const { theme } = useTheme();
 
     return (
         <>
-            {theme === 'magical-christmas' && <Snowfall />}
+            {theme === 'magical-christmas' && <> <Snowfall /> <BokehBackground /> </>}
             {theme === 'crystal-palace' && <Bubbles />}
             {theme === 'sweet-pastel' && <FloatingHearts />} 
             {theme === 'dreamy-galaxy' && <ShootingStars />}

@@ -20,23 +20,23 @@ const CreatorFooter: React.FC<CreatorFooterProps> = ({ onInfoLinkClick }) => {
   return (
     <footer className="bg-skin-fill-secondary border-t border-skin-border text-skin-base hidden md:block">
       <div className="container mx-auto px-4 py-6">
-        <div className="flex flex-col items-center">
-            <div className="mb-4 flex items-center gap-3">
+        <div className="flex flex-col md:flex-row md:flex-wrap items-center justify-center gap-y-6 gap-x-8 w-full">
+            <div className="flex items-center gap-3">
                 <span className="text-sm font-semibold text-skin-muted">Giao diện:</span>
                 <span className={`text-sm font-bold text-skin-accent ${highlight ? 'theme-display-highlight' : ''}`}>
                     {currentThemeName}
                 </span>
             </div>
             <ThemeSwitcher />
-            <div className="flex gap-2 items-center text-skin-muted mt-6">
+            <div className="flex gap-2 items-center text-skin-muted">
                 <a onClick={() => onInfoLinkClick('terms')} className="px-4 py-2 rounded-full bg-white/5 hover:bg-skin-accent/10 text-skin-muted hover:text-skin-base border border-transparent hover:border-skin-border-accent transition-all duration-300 cursor-pointer text-sm font-semibold">Điều khoản</a>
                 <a onClick={() => onInfoLinkClick('policy')} className="px-4 py-2 rounded-full bg-white/5 hover:bg-skin-accent/10 text-skin-muted hover:text-skin-base border border-transparent hover:border-skin-border-accent transition-all duration-300 cursor-pointer text-sm font-semibold">Chính sách</a>
                 <a onClick={() => onInfoLinkClick('contact')} className="px-4 py-2 rounded-full bg-white/5 hover:bg-skin-accent/10 text-skin-muted hover:text-skin-base border border-transparent hover:border-skin-border-accent transition-all duration-300 cursor-pointer text-sm font-semibold">Hỗ trợ</a>
             </div>
-             <p className="font-semibold text-base my-6 footer-neon-text">
-                &copy; {new Date().getFullYear()} AUDITION AI Studio.
-            </p>
         </div>
+        <p className="font-semibold text-base my-6 text-center footer-neon-text">
+            &copy; {new Date().getFullYear()} AUDITION AI Studio.
+        </p>
         <div className="mt-8 flex flex-wrap justify-center items-center gap-4 border-t border-gray-800 pt-6">
             <a href="https://caulenhau.io.vn/" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-6 py-3 font-bold text-sm bg-white/10 backdrop-blur-sm border border-white/20 text-skin-base rounded-full transition-all duration-300 hover:bg-white/20 hover:shadow-lg hover:shadow-white/10 hover:-translate-y-1">
                 <i className="ph-fill ph-scroll text-lg text-yellow-300"></i>

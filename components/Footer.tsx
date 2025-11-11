@@ -87,21 +87,23 @@ const Footer: React.FC<FooterProps> = ({ onCtaClick, stats, onInfoLinkClick }) =
         </div>
         
         <div className="flex flex-col items-center border-t border-gray-800 pt-8">
-          <div className="mb-4 flex items-center gap-3">
-             <span className="text-sm font-semibold text-skin-muted">Giao diện:</span>
-             <span className={`text-sm font-bold text-skin-accent ${highlight ? 'theme-display-highlight' : ''}`}>
-                {currentThemeName}
-             </span>
-          </div>
-          <ThemeSwitcher />
-          <div className="flex gap-2 items-center text-skin-muted mt-6">
-            <a onClick={() => onInfoLinkClick('terms')} className="px-4 py-2 rounded-full bg-white/5 hover:bg-skin-accent/10 text-skin-muted hover:text-skin-base border border-transparent hover:border-skin-border-accent transition-all duration-300 cursor-pointer text-sm font-semibold">Điều khoản</a>
-            <a onClick={() => onInfoLinkClick('policy')} className="px-4 py-2 rounded-full bg-white/5 hover:bg-skin-accent/10 text-skin-muted hover:text-skin-base border border-transparent hover:border-skin-border-accent transition-all duration-300 cursor-pointer text-sm font-semibold">Chính sách</a>
-            <a onClick={() => onInfoLinkClick('contact')} className="px-4 py-2 rounded-full bg-white/5 hover:bg-skin-accent/10 text-skin-muted hover:text-skin-base border border-transparent hover:border-skin-border-accent transition-all duration-300 cursor-pointer text-sm font-semibold">Liên hệ</a>
-          </div>
-           <p className="font-semibold text-base my-6 footer-neon-text">
-            &copy; {new Date().getFullYear()} AUDITION AI Studio.
-          </p>
+            <div className="flex flex-col md:flex-row md:flex-wrap items-center justify-center gap-y-6 gap-x-8 w-full">
+                <div className="flex items-center gap-3">
+                    <span className="text-sm font-semibold text-skin-muted">Giao diện:</span>
+                    <span className={`text-sm font-bold text-skin-accent ${highlight ? 'theme-display-highlight' : ''}`}>
+                        {currentThemeName}
+                    </span>
+                </div>
+                <ThemeSwitcher />
+                <div className="flex gap-2 items-center text-skin-muted">
+                    <a onClick={() => onInfoLinkClick('terms')} className="px-4 py-2 rounded-full bg-white/5 hover:bg-skin-accent/10 text-skin-muted hover:text-skin-base border border-transparent hover:border-skin-border-accent transition-all duration-300 cursor-pointer text-sm font-semibold">Điều khoản</a>
+                    <a onClick={() => onInfoLinkClick('policy')} className="px-4 py-2 rounded-full bg-white/5 hover:bg-skin-accent/10 text-skin-muted hover:text-skin-base border border-transparent hover:border-skin-border-accent transition-all duration-300 cursor-pointer text-sm font-semibold">Chính sách</a>
+                    <a onClick={() => onInfoLinkClick('contact')} className="px-4 py-2 rounded-full bg-white/5 hover:bg-skin-accent/10 text-skin-muted hover:text-skin-base border border-transparent hover:border-skin-border-accent transition-all duration-300 cursor-pointer text-sm font-semibold">Liên hệ</a>
+                </div>
+            </div>
+            <p className="font-semibold text-base my-6 footer-neon-text">
+                &copy; {new Date().getFullYear()} AUDITION AI Studio.
+            </p>
         </div>
          <div className="mt-8 text-center text-xs text-gray-500">
             <p className="font-semibold mb-2 flex items-center justify-center gap-2">

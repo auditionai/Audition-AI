@@ -240,9 +240,9 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
             <ModelSelectionModal isOpen={isModelModalOpen} onClose={() => setModelModalOpen(false)} selectedModelId={selectedModel.id} onSelectModel={(id) => setSelectedModel(DETAILED_AI_MODELS.find(m => m.id === id) || selectedModel)} characterImage={!!poseImage} />
             <InstructionModal isOpen={isInstructionModalOpen} onClose={() => setInstructionModalOpen(false)} instructionKey={instructionKey} />
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <div className="flex flex-col lg:flex-row gap-6">
                 {/* Main Content Area (Left) */}
-                <div className="lg:col-span-8 flex flex-col gap-6">
+                <div className="w-full lg:w-2/3 flex flex-col gap-6">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <SettingsBlock title="Ảnh Nhân Vật" instructionKey="character" onInstructionClick={() => openInstructionModal('character')}>
                             <ImageUploader onUpload={(e) => handleImageUpload(e, 'pose')} image={poseImage} onRemove={() => handleRemoveImage('pose')} text="Tư thế & Trang phục" disabled={isImageInputDisabled} />
@@ -281,7 +281,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                 </div>
 
                 {/* Sidebar (Right) */}
-                <div className="themed-panel p-4 flex flex-col">
+                <div className="w-full lg:w-1/3 themed-panel p-4 flex flex-col">
                     <SettingsBlock title="Cài đặt Nâng cao" instructionKey="advanced" onInstructionClick={() => openInstructionModal('advanced')}>
                         <div className="space-y-4">
                             <div>

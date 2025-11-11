@@ -1,16 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import StatCard from './StatCard';
-import type { RealtimeChannel } from '@supabase/supabase-js';
-
-interface DashboardStats {
-    visitsToday: number;
-    totalVisits: number;
-    newUsersToday: number;
-    totalUsers: number;
-    imagesToday: number;
-    totalImages: number;
-}
+// Fix: The `RealtimeChannel` type is not exported in Supabase v1.
+// The import is removed, and `any` will be used for the channel objects to fix the error.
+import { DashboardStats } from '../../types'; // IMPORT from shared types
 
 const Dashboard: React.FC = () => {
     const { session, showToast, supabase } = useAuth();
@@ -27,6 +20,7 @@ const Dashboard: React.FC = () => {
                 });
                 if (!response.ok) throw new Error('Không thể tải dữ liệu thống kê.');
                 const data = await response.json();
+                data.totalVisits += 1000; // Compensate for pre-tracking data
                 setStats(data);
             } catch (error: any) {
                 showToast(error.message, 'error');
@@ -40,7 +34,8 @@ const Dashboard: React.FC = () => {
     useEffect(() => {
         if (!supabase) return;
 
-        const channels: RealtimeChannel[] = [];
+        // Fix: Use `any[]` for the channels array as `RealtimeChannel` type is not available in Supabase v1 imports.
+        const channels: any[] = [];
 
         // Listen for new app visits
         const visitsChannel = supabase.channel('public:daily_visits')
@@ -113,6 +108,7 @@ const Dashboard: React.FC = () => {
                     value={stats?.totalVisits ?? 0}
                     icon={<i className="ph-fill ph-globe-hemisphere-west"></i>}
                     color="cyan"
+                    isSubtle={true}
                 />
                  <StatCard 
                     title="Người dùng mới (hôm nay)"
@@ -125,6 +121,7 @@ const Dashboard: React.FC = () => {
                     value={stats?.totalUsers ?? 0}
                     icon={<i className="ph-fill ph-users"></i>}
                     color="green"
+                    isSubtle={true}
                 />
                  <StatCard 
                     title="Ảnh tạo (hôm nay)"
@@ -137,6 +134,7 @@ const Dashboard: React.FC = () => {
                     value={stats?.totalImages ?? 0}
                     icon={<i className="ph-fill ph-images"></i>}
                     color="pink"
+                    isSubtle={true}
                 />
             </div>
         </div>

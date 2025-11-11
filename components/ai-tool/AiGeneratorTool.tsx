@@ -38,7 +38,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
     const [styleImage, setStyleImage] = useState<{ url: string; file: File } | null>(null);
     const [isProcessingFace, setIsProcessingFace] = useState(false);
 
-    const [prompt, setPrompt] = useState('');
+    const promptRef = useRef<HTMLTextAreaElement>(null); // Use ref for uncontrolled component
     const [selectedModel, setSelectedModel] = useState<AIModel>(DETAILED_AI_MODELS.find(m => m.recommended) || DETAILED_AI_MODELS[0]);
     const [selectedStyle, setSelectedStyle] = useState('none');
     const [aspectRatio, setAspectRatio] = useState('3:4');
@@ -139,8 +139,8 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
     const generationCost = 1 + (useUpscaler ? 1 : 0);
 
     const handleGenerateClick = () => {
-        // CRITICAL FIX: Restore client-side prompt validation.
-        if (!prompt || !prompt.trim()) {
+        const promptValue = promptRef.current?.value;
+        if (!promptValue || !promptValue.trim()) {
             showToast('Yêu cầu thiếu các trường bắt buộc: prompt.', 'error');
             return;
         }
@@ -153,6 +153,8 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
     
     const handleConfirmGeneration = async () => {
         setConfirmOpen(false);
+
+        const promptValue = promptRef.current?.value || '';
 
         // --- REFACTOR: NORMALIZE DATA AT THE SOURCE ---
         // Determine the source for the face image (string, File, or null)
@@ -175,7 +177,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
         // --- END REFACTOR ---
 
         generateImage(
-            prompt, selectedModel,
+            promptValue, selectedModel,
             poseImage?.file ?? null,
             styleImage?.file ?? null,
             finalFaceImageForHook, // Pass the consistently typed variable
@@ -212,7 +214,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
     const resultImageForModal = generatedImage ? {
         id: 'generated-result',
         image_url: generatedImage,
-        prompt: prompt,
+        prompt: promptRef.current?.value || '',
         creator: user ? { display_name: user.display_name, photo_url: user.photo_url, level: user.level } : { display_name: 'Bạn', photo_url: '', level: 1 },
         created_at: new Date().toISOString(),
         model_used: selectedModel.name,
@@ -305,7 +307,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                     </div>
                     
                     <SettingsBlock title="Câu Lệnh Mô Tả (Prompt)" instructionKey="prompt" onInstructionClick={() => openInstructionModal('prompt')}>
-                        <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Mô tả chi tiết hình ảnh bạn muốn tạo, ví dụ: 'một cô gái tóc hồng, mặc váy công chúa, đang khiêu vũ trong một cung điện lộng lẫy'..." className="w-full p-3 bg-black/30 rounded-md border border-gray-600 focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition text-base text-white flex-grow resize-none min-h-[150px]" />
+                        <textarea ref={promptRef} defaultValue="" placeholder="Mô tả chi tiết hình ảnh bạn muốn tạo, ví dụ: 'một cô gái tóc hồng, mặc váy công chúa, đang khiêu vũ trong một cung điện lộng lẫy'..." className="w-full p-3 bg-black/30 rounded-md border border-gray-600 focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition text-base text-white flex-grow resize-none min-h-[150px]" />
                     </SettingsBlock>
                 </div>
 

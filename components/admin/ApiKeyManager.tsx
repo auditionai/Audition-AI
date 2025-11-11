@@ -61,15 +61,28 @@ const ApiKeyManager: React.FC = () => {
                 <input value={newValue} onChange={e => setNewValue(e.target.value)} placeholder="Giá trị API Key" className="auth-input md:col-span-1"/>
                 <button type="submit" className="themed-button-primary py-2 md:col-span-1">Thêm Key Mới</button>
             </form>
-            <div className="space-y-2">
+
+            {/* Headers for the list */}
+            <div className="grid grid-cols-5 gap-4 items-center px-2 py-1 text-xs text-gray-500 font-bold uppercase border-b border-white/10 mb-2">
+                <div>Tên Key</div>
+                <div className="truncate">Giá trị Key</div>
+                <div>Lượt dùng</div>
+                <div>Chi tiêu</div>
+                <div className="text-right">Trạng thái</div>
+            </div>
+
+            <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar pr-2">
                 {keys.map(k => (
-                    <div key={k.id} className="grid grid-cols-4 gap-4 items-center p-2 bg-white/5 rounded">
+                    <div key={k.id} className="grid grid-cols-5 gap-4 items-center p-2 bg-white/5 rounded">
                         <div className="font-semibold">{k.name}</div>
                         <div className="text-gray-400 text-xs truncate font-mono">...{k.key_value.slice(-8)}</div>
-                        <div className="text-gray-300">Lượt dùng: {k.usage_count}</div>
-                        <button onClick={() => handleToggle(k)} className={`px-3 py-1 text-xs font-semibold rounded-full w-20 ${k.status === 'active' ? 'bg-green-500/20 text-green-300' : 'bg-gray-500/20 text-gray-400'}`}>
-                            {k.status === 'active' ? 'Active' : 'Inactive'}
-                        </button>
+                        <div className="text-gray-300">{k.usage_count}</div>
+                        <div className="text-yellow-400 font-semibold">{(k.usage_count * 1000).toLocaleString('vi-VN')}đ</div>
+                        <div className="text-right">
+                            <button onClick={() => handleToggle(k)} className={`px-3 py-1 text-xs font-semibold rounded-full w-20 ${k.status === 'active' ? 'bg-green-500/20 text-green-300' : 'bg-gray-500/20 text-gray-400'}`}>
+                                {k.status === 'active' ? 'Active' : 'Inactive'}
+                            </button>
+                        </div>
                     </div>
                 ))}
             </div>

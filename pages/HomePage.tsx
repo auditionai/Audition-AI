@@ -116,7 +116,7 @@ const HomePage: React.FC = () => {
   };
 
   return (
-    <div className="bg-[#0B0B0F]">
+    <>
       <DynamicBackground activeSection={activeSection} />
       <LandingHeader
         user={user}
@@ -212,7 +212,7 @@ const HomePage: React.FC = () => {
         onClose={() => setSelectedImage(null)}
         image={selectedImage}
       />
-    </div>
+    </>
   );
 };
 

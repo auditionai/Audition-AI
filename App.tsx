@@ -73,9 +73,9 @@ function App() {
   }
 
   return (
-    <div className="bg-skin-fill text-skin-base selection:bg-pink-500 selection:text-white">
+    <div className="text-skin-base selection:bg-pink-500 selection:text-white">
       <ThemeEffects />
-      <div className="relative z-10">
+      <div className="relative z-10 bg-skin-fill">
         {renderPage()}
       </div>
 

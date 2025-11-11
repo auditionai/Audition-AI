@@ -393,7 +393,9 @@
 /* --- Theme-Specific Styles --- */
 /* 1. Cyber Punk */
 [data-theme="cyber-punk"] .themed-main-title {
-  font-family: 'Orbitron', sans-serif;
+  font-family: 'Barlow', sans-serif; /* Use Vietnamese-supported font */
+  font-weight: 900; /* Make it bold to fit the theme */
+  letter-spacing: 0.05em; /* Add some spacing for a tech feel */
   color: rgb(var(--color-accent));
   text-shadow: 0 0 10px rgba(var(--color-accent), 0.7), 0 0 20px rgba(var(--color-accent), 0.5);
 }

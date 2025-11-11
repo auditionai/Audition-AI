@@ -3,8 +3,8 @@ import { GoogleGenAI, Modality } from "@google/genai";
 import { supabaseAdmin } from './utils/supabaseClient';
 import { Buffer } from 'buffer';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
-// Fix: Use `import = require()` for better CommonJS compatibility with the 'jimp' library.
-import Jimp = require('jimp');
+// Fix: Use a standard ES module import for 'jimp' as the project is targeting ECMAScript modules.
+import Jimp from 'jimp';
 
 const COST_BASE = 1;
 const COST_UPSCALE = 1;

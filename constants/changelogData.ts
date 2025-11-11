@@ -8,6 +8,13 @@ export interface ChangelogItem {
 
 export const CHANGELOG_DATA: ChangelogItem[] = [
   {
+    id: 5,
+    version: 'v1.5.0',
+    date: '12-11-2025',
+    title: 'Cải tiến Siêu Khóa Gương Mặt & Giao diện',
+    description: 'Nâng cấp tính năng Siêu Khóa Gương Mặt (Face ID+) cho độ chính xác cao hơn. Tích hợp công cụ Tách Nền vào tab chính để quy trình làm việc liền mạch và thuận tiện hơn.',
+  },
+  {
     id: 4,
     version: 'v1.4.0',
     date: '11-11-2025',

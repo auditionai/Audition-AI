@@ -3,8 +3,17 @@ import { useAuth } from '../contexts/AuthContext';
 import { TransactionLogEntry } from '../types';
 import XPProgressBar from './common/XPProgressBar';
 import RedeemGiftCode from './user/RedeemGiftCode';
+
+// Import all new admin components
 import Dashboard from './admin/Dashboard';
 import GiftCodeManager from './admin/GiftCodeManager';
+import TransactionApproval from './admin/TransactionApproval';
+import UserManager from './admin/UserManager';
+import PackageEditor from './admin/PackageEditor';
+import RewardManager from './admin/RewardManager';
+import AnnouncementEditor from './admin/AnnouncementEditor';
+import ApiKeyManager from './admin/ApiKeyManager';
+
 
 // User-facing Transaction History Component
 const TransactionHistory: React.FC = () => {
@@ -55,8 +64,13 @@ const AdminPanel: React.FC = () => {
     const renderContent = () => {
         switch (activeTab) {
             case 'dashboard': return <Dashboard />;
+            case 'transactions': return <TransactionApproval />;
+            case 'users': return <UserManager />;
             case 'gift_codes': return <GiftCodeManager />;
-            // Placeholder for other admin panels
+            case 'packages': return <PackageEditor />;
+            case 'rewards': return <RewardManager />;
+            case 'announcements': return <AnnouncementEditor />;
+            case 'api_keys': return <ApiKeyManager />;
             default: return <p className="text-center text-gray-500 py-8">Chức năng này đang được phát triển.</p>;
         }
     };

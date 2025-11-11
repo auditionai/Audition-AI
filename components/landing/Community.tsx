@@ -9,41 +9,27 @@ interface CommunityProps {
   onSeeMoreClick: () => void;
 }
 
-const Community: React.FC<CommunityProps> = ({ images, onLoginClick, onImageClick, onSeeMoreClick }) => {
+const Community: React.FC<CommunityProps> = ({ images, onImageClick, onSeeMoreClick }) => {
   return (
-    <section id="gallery" className="py-16 sm:py-24 bg-transparent text-white">
+    <div className="py-12 sm:py-24">
       <div className="container mx-auto px-4">
-        <div className="text-center max-w-3xl mx-auto mb-16">
+        <div className="text-center max-w-3xl mx-auto mb-12">
           <h2 className="text-3xl md:text-4xl font-bold mb-4">
-            <span className="bg-gradient-to-r from-pink-400 to-fuchsia-500 text-transparent bg-clip-text">Tỏa Sáng Cùng Cộng Đồng</span>
+             <span className="bg-gradient-to-r from-pink-400 to-fuchsia-500 text-transparent bg-clip-text">Cộng Đồng Sáng Tạo</span>
           </h2>
-          <p className="text-lg text-gray-400 mb-8">
-            Chia sẻ những tác phẩm đẹp nhất của bạn ra thư viện chung để mọi người cùng chiêm ngưỡng. Chỉ tốn 1 kim cương cho mỗi lần chia sẻ!
+          <p className="text-lg text-gray-400">
+            Khám phá những tác phẩm độc đáo được tạo ra bởi những người dùng khác và tìm cảm hứng cho riêng bạn.
           </p>
-          <button
-            onClick={onLoginClick}
-            className="themed-button-secondary px-8 py-3 font-bold text-lg"
-          >
-            Đăng nhập để bắt đầu <i className="ph-fill ph-arrow-right ml-2"></i>
-          </button>
         </div>
-        
-        <div className="text-center mb-12">
-            <h3 className="text-2xl md:text-3xl font-bold">
-                 <span className="bg-gradient-to-r from-pink-400 to-fuchsia-500 text-transparent bg-clip-text">Tác Phẩm Nổi Bật</span>
-            </h3>
-        </div>
-
-        <Gallery 
+         <Gallery 
             images={images}
             onImageClick={onImageClick}
             displayMode="slider"
             showSeeMore={true}
             onSeeMoreClick={onSeeMoreClick}
-        />
-
+          />
       </div>
-    </section>
+    </div>
   );
 };
 

@@ -1,30 +1,60 @@
-import React from 'react';
+import React, { useState } from 'react';
+import AiGeneratorTool from './ai-tool/AiGeneratorTool';
+import BgRemoverTool from '../ai-tool/BgRemoverTool';
 
-type InstructionKey = 'character' | 'style' | 'prompt' | 'advanced' | 'face';
+const AITool: React.FC = () => {
+    const [activeTab, setActiveTab] = useState<'generator' | 'bgRemover'>('generator');
+    const [imageToMove, setImageToMove] = useState<{ url: string, file: File } | null>(null);
+    const [faceImageToMove, setFaceImageToMove] = useState<{ url: string, file: File } | null>(null);
 
-interface SettingsBlockProps {
-    title: string;
-    instructionKey: InstructionKey;
-    children: React.ReactNode;
-    // Fix: Made the 'step' prop optional as it is not used by the component, resolving multiple type errors in AiGeneratorTool.tsx.
-    step?: number; // Keep prop for mapping, but don't display
-    onInstructionClick: (key: InstructionKey) => void;
-}
+    const handleMoveToGenerator = (image: { url: string, file: File }) => {
+        setImageToMove(image);
+        setFaceImageToMove(null);
+        setActiveTab('generator');
+    };
 
-const SettingsBlock: React.FC<SettingsBlockProps> = ({ title, instructionKey, children, onInstructionClick }) => {
+    const handleMoveFaceToGenerator = (image: { url: string, file: File }) => {
+        setFaceImageToMove(image);
+        setImageToMove(null);
+        setActiveTab('generator');
+    };
+
     return (
-        <div className="themed-settings-block">
-            <div className="flex justify-between items-center mb-4">
-                <div className="text-left flex items-center gap-3 w-full">
-                    <label className="themed-heading text-md font-semibold text-pink-300 neon-text-glow">{title}</label>
+        <div className="container mx-auto px-4 pb-8">
+            <div className="mb-6 flex justify-center">
+                <div className="bg-skin-fill-secondary p-1.5 rounded-full flex items-center gap-2 border border-skin-border">
+                    <button
+                        onClick={() => setActiveTab('generator')}
+                        className={`px-6 py-2 rounded-full font-semibold text-sm transition-colors duration-300 ${activeTab === 'generator' ? 'bg-skin-accent text-skin-accent-text' : 'text-skin-muted hover:text-skin-base'}`}
+                    >
+                        <i className="ph-fill ph-magic-wand mr-2"></i>Trình Tạo Ảnh AI
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('bgRemover')}
+                        className={`px-6 py-2 rounded-full font-semibold text-sm transition-colors duration-300 ${activeTab === 'bgRemover' ? 'bg-skin-accent text-skin-accent-text' : 'text-skin-muted hover:text-skin-base'}`}
+                    >
+                       <i className="ph-fill ph-person-simple-run mr-2"></i>Tách Nền & Khóa Mặt
+                    </button>
                 </div>
-                <button onClick={() => onInstructionClick(instructionKey)} className="flex items-center gap-1 text-xs text-pink-300 hover:text-pink-200 transition-all px-2 py-1 rounded-md bg-pink-500/10 border border-pink-500/30 hover:bg-pink-500/20 shadow-[0_0_8px_rgba(247,37,133,0.3)] hover:shadow-[0_0_12px_rgba(247,37,133,0.5)] flex-shrink-0">
-                    <i className="ph-fill ph-book-open"></i> Hướng Dẫn
-                </button>
             </div>
-            <div className="flex flex-col flex-grow">{children}</div>
+
+            <div className="animate-fade-in">
+                {activeTab === 'generator' && (
+                    <AiGeneratorTool 
+                        key={imageToMove?.url || faceImageToMove?.url} // Remount component when image is moved
+                        initialCharacterImage={imageToMove} 
+                        initialFaceImage={faceImageToMove}
+                    />
+                )}
+                {activeTab === 'bgRemover' && (
+                    <BgRemoverTool 
+                        onMoveToGenerator={handleMoveToGenerator}
+                        onMoveFaceToGenerator={handleMoveFaceToGenerator}
+                    />
+                )}
+            </div>
         </div>
     );
 };
 
-export default SettingsBlock;
+export default AITool;

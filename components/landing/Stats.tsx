@@ -1,79 +1,64 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { DashboardStats } from '../../types';
-import StatCard from '../../components/common/StatCard';
 
-interface StatsProps {
-  stats: DashboardStats | null;
-}
+const AnimatedNumber: React.FC<{ value: number }> = ({ value }) => {
+    const [displayValue, setDisplayValue] = useState(0);
 
-const Stats: React.FC<StatsProps> = ({ stats }) => {
-  if (!stats) {
-    // Show a loading or placeholder state
-    return (
-        <section id="stats" className="py-16 sm:py-24">
-            <div className="container mx-auto px-4 text-center">
-                 <div className="w-8 h-8 border-4 border-t-pink-400 border-white/20 rounded-full animate-spin mx-auto"></div>
-                 <p className="mt-4 text-gray-400">Đang tải dữ liệu thời gian thực...</p>
-            </div>
-        </section>
-    );
-  }
+    useEffect(() => {
+        const duration = 1500;
+        const frameRate = 1000 / 60;
+        const totalFrames = Math.round(duration / frameRate);
+        let frame = 0;
+        const startValue = displayValue;
+        const diff = value - startValue;
+        
+        const counter = setInterval(() => {
+            frame++;
+            const progress = frame / totalFrames;
+            const easedProgress = 1 - Math.pow(1 - progress, 3);
+            const currentVal = Math.round(startValue + diff * easedProgress);
+            setDisplayValue(currentVal);
 
+            if (frame === totalFrames) {
+                clearInterval(counter);
+                setDisplayValue(value);
+            }
+        }, frameRate);
+
+        return () => clearInterval(counter);
+    }, [value]);
+    
+    return <span>{displayValue.toLocaleString('vi-VN')}</span>;
+};
+
+
+const StatsDisplay: React.FC<{ stats: DashboardStats | null }> = ({ stats }) => {
   return (
-    <section id="stats" className="py-16 sm:py-24">
+    <div className="py-12 sm:py-24">
       <div className="container mx-auto px-4">
-        <div className="text-center max-w-3xl mx-auto mb-16">
-          <h2 className="text-3xl md:text-4xl font-bold mb-4">
-            <span className="bg-gradient-to-r from-pink-400 to-fuchsia-500 text-transparent bg-clip-text">Thống Kê Thời Gian Thực</span>
-          </h2>
-          <p className="text-lg text-gray-400">
-            Dữ liệu được cập nhật liên tục từ hoạt động của cộng đồng Audition AI.
-          </p>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
-            <StatCard 
-                title="Lượt truy cập (hôm nay)"
-                value={stats.visitsToday}
-                icon={<i className="ph-fill ph-user-list"></i>}
-                color="cyan"
-            />
-            <StatCard 
-                title="Tổng lượt truy cập"
-                value={stats.totalVisits}
-                icon={<i className="ph-fill ph-globe-hemisphere-west"></i>}
-                color="cyan"
-                isSubtle={true}
-            />
-            <StatCard 
-                title="Người dùng mới (hôm nay)"
-                value={stats.newUsersToday}
-                icon={<i className="ph-fill ph-user-plus"></i>}
-                color="green"
-            />
-            <StatCard 
-                title="Tổng người dùng"
-                value={stats.totalUsers}
-                icon={<i className="ph-fill ph-users"></i>}
-                color="green"
-                isSubtle={true}
-            />
-            <StatCard 
-                title="Ảnh tạo (hôm nay)"
-                value={stats.imagesToday}
-                icon={<i className="ph-fill ph-image-square"></i>}
-                color="pink"
-            />
-            <StatCard 
-                title="Tổng số ảnh"
-                value={stats.totalImages}
-                icon={<i className="ph-fill ph-images"></i>}
-                color="pink"
-                isSubtle={true}
-            />
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 text-center">
+          <div>
+            <p className="text-5xl md:text-6xl font-bold bg-gradient-to-r from-pink-400 to-fuchsia-500 text-transparent bg-clip-text">
+              <AnimatedNumber value={stats?.totalUsers ?? 0} />+
+            </p>
+            <p className="text-lg text-gray-400 mt-2">Người Dùng</p>
+          </div>
+          <div>
+            <p className="text-5xl md:text-6xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 text-transparent bg-clip-text">
+              <AnimatedNumber value={stats?.totalImages ?? 0} />+
+            </p>
+            <p className="text-lg text-gray-400 mt-2">Tác Phẩm Được Tạo</p>
+          </div>
+          <div>
+            <p className="text-5xl md:text-6xl font-bold bg-gradient-to-r from-green-400 to-teal-500 text-transparent bg-clip-text">
+              <AnimatedNumber value={stats?.totalVisits ?? 0} />+
+            </p>
+            <p className="text-lg text-gray-400 mt-2">Lượt Truy Cập</p>
+          </div>
         </div>
       </div>
-    </section>
+    </div>
   );
 };
 
-export default Stats;
+export default StatsDisplay;

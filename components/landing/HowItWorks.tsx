@@ -3,31 +3,43 @@ import { HOW_IT_WORKS } from '../../constants/landingPageData';
 
 const HowItWorks: React.FC = () => {
   return (
-    <div className="py-12 sm:py-24">
+    <section id="how-it-works" className="py-16 sm:py-24 text-white w-full">
       <div className="container mx-auto px-4">
         <div className="text-center max-w-3xl mx-auto mb-16">
-          <h2 className="text-3xl md:text-4xl font-bold mb-4">4 Bước Đơn Giản Để Tỏa Sáng</h2>
+          <h2 className="text-3xl md:text-4xl font-bold mb-4">
+            <span className="bg-gradient-to-r from-pink-400 to-fuchsia-500 text-transparent bg-clip-text">4 Bước Đơn Giản Để Có Ảnh Cực Chất</span>
+          </h2>
           <p className="text-lg text-gray-400">
-            Quy trình sáng tạo được tối ưu hóa để bạn có thể dễ dàng tạo ra những tác phẩm nghệ thuật chỉ trong vài phút.
+            Chỉ vài cú nhấp chuột, bạn đã có ngay một tác phẩm nghệ thuật đậm chất Audition.
           </p>
         </div>
-        <div className="relative">
-          <div className="hidden lg:block absolute top-10 left-0 w-full h-0.5 bg-gradient-to-r from-transparent via-pink-500/30 to-transparent"></div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-            {HOW_IT_WORKS.map((step) => (
-              <div key={step.step} className="landing-card text-center p-8 flex flex-col items-center">
-                <div className="relative w-20 h-20 rounded-full bg-gradient-to-br from-pink-500 to-fuchsia-600 flex items-center justify-center text-white mb-6">
-                  {step.icon}
-                   <span className="absolute -top-2 -right-2 w-8 h-8 rounded-full bg-skin-fill border-2 border-pink-500 flex items-center justify-center font-bold text-pink-400">{step.step}</span>
+
+        <div className="relative max-w-4xl mx-auto">
+          <div className="absolute left-1/2 -translate-x-1/2 top-0 h-full w-0.5 bg-gradient-to-b from-pink-500/30 via-fuchsia-500/30 to-transparent hidden md:block"></div>
+          
+          {HOW_IT_WORKS.map((item, index) => (
+            <div key={item.step} className={`flex md:items-center mb-12 md:mb-0 ${index % 2 === 0 ? 'md:flex-row' : 'md:flex-row-reverse'}`}>
+              <div className="flex-1 md:w-1/2 md:px-8">
+                <div className="bg-[#12121A] p-6 rounded-xl border border-gray-800 shadow-lg hover:border-fuchsia-500/50 interactive-3d">
+                  <div className="flex items-center gap-4 mb-3">
+                    <div className="bg-gradient-to-br from-pink-500 to-fuchsia-600 w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-xl flex-shrink-0">
+                      {item.step}
+                    </div>
+                    <h3 className="text-2xl font-bold text-white">{item.title}</h3>
+                  </div>
+                  <p className="text-gray-400">{item.description}</p>
                 </div>
-                <h3 className="text-xl font-bold mb-3 text-white">{step.title}</h3>
-                <p className="text-gray-400 text-sm leading-relaxed">{step.description}</p>
               </div>
-            ))}
-          </div>
+              <div className="hidden md:flex flex-shrink-0 w-1/2 justify-center items-center">
+                 <div className="w-16 h-16 bg-gradient-to-br from-pink-500 to-fuchsia-600 rounded-full flex items-center justify-center text-white shadow-lg shadow-pink-500/30 transform transition-transform duration-500 group-hover:rotate-12">
+                     {item.icon}
+                 </div>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
-    </div>
+    </section>
   );
 };
 

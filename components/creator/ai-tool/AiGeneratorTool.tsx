@@ -4,6 +4,7 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { DETAILED_AI_MODELS, STYLE_PRESETS_NEW } from '../../../constants/aiToolData';
 import { AIModel } from '../../../types';
 
+// Fix: Corrected import path for SettingsBlock to point to the local component, resolving a module resolution error.
 import SettingsBlock from './SettingsBlock';
 import ImageUploader from '../../ai-tool/ImageUploader';
 import ModelSelectionModal from '../../ai-tool/ModelSelectionModal';
@@ -237,7 +238,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
     return (
         <>
             <ConfirmationModal isOpen={isConfirmOpen} onClose={() => setConfirmOpen(false)} onConfirm={handleConfirmGeneration} cost={generationCost} />
-            <ModelSelectionModal isOpen={isModelModalOpen} onClose={() => setModelModalOpen(false)} selectedModelId={selectedModel.id} onSelectModel={(id) => setSelectedModel(DETAILED_AI_MODELS.find(m => m.id === id) || selectedModel)} characterImage={!!poseImage} />
+            <ModelSelectionModal isOpen={isModelModalOpen} onClose={() => setModelModalOpen(false)} selectedModelId={selectedModel.id} onSelectModel={(id: string) => setSelectedModel(DETAILED_AI_MODELS.find(m => m.id === id) || selectedModel)} characterImage={!!poseImage} />
             <InstructionModal isOpen={isInstructionModalOpen} onClose={() => setInstructionModalOpen(false)} instructionKey={instructionKey} />
 
             <div className="flex flex-col lg:flex-row gap-6">
@@ -247,8 +248,8 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                         <SettingsBlock title="Ảnh Nhân Vật" instructionKey="character" onInstructionClick={() => openInstructionModal('character')}>
                             <ImageUploader onUpload={(e) => handleImageUpload(e, 'pose')} image={poseImage} onRemove={() => handleRemoveImage('pose')} text="Tư thế & Trang phục" disabled={isImageInputDisabled} />
                             <div className="mt-2 space-y-2">
-                                <ToggleSwitch label="Face Lock (70-80%)" checked={useBasicFaceLock} onChange={(e) => setUseBasicFaceLock(e.target.checked)} disabled={isImageInputDisabled || !poseImage} />
-                                <p className="text-xs text-skin-muted px-1 leading-relaxed">AI sẽ vẽ lại gương mặt dựa trên ảnh này. Để có độ chính xác <span className="font-bold text-yellow-400"> 95%+</span>, hãy dùng <span className="font-bold text-pink-400">"Siêu Khóa Gương Mặt"</span>.</p>
+                                <ToggleSwitch label="Face Lock (70-80%)" checked={useBasicFaceLock} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUseBasicFaceLock(e.target.checked)} disabled={isImageInputDisabled || !poseImage} />
+                                <p className="text-xs text-gray-400 px-1 leading-relaxed">AI sẽ vẽ lại gương mặt dựa trên ảnh này. Để có độ chính xác <span className="font-bold text-yellow-400 neon-highlight"> 95%+</span>, hãy dùng <span className="font-bold text-pink-400">"Siêu Khóa Gương Mặt"</span>.</p>
                             </div>
                         </SettingsBlock>
                          <SettingsBlock title="Siêu Khóa Gương Mặt" instructionKey="face" onInstructionClick={() => openInstructionModal('face')}>
@@ -264,19 +265,19 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                                         <i className="ph-fill ph-check-circle mr-1"></i> Gương mặt đã được khóa
                                     </div>
                                 )}
-                                <p className="text-xs text-skin-muted px-1 leading-relaxed">Tải ảnh chân dung rõ nét, sau đó <span className="font-bold text-cyan-400">bắt buộc phải nhấn nút "Xử lý"</span> để AI làm nét và khóa gương mặt. Thao tác này tốn <span className="font-bold text-pink-400">1 kim cương</span>.</p>
+                                <p className="text-xs text-gray-400 px-1 leading-relaxed">Tải ảnh chân dung rõ nét, sau đó <span className="font-bold text-cyan-400 neon-highlight">bắt buộc phải nhấn nút "Xử lý"</span> để AI làm nét và khóa gương mặt. Thao tác này tốn <span className="font-bold text-pink-400">1 kim cương</span>.</p>
                             </div>
                         </SettingsBlock>
                          <SettingsBlock title="Ảnh Phong Cách" instructionKey="style" onInstructionClick={() => openInstructionModal('style')}>
                             <ImageUploader onUpload={(e) => handleImageUpload(e, 'style')} image={styleImage} onRemove={() => handleRemoveImage('style')} text="Style Reference" processType="style" disabled={isImageInputDisabled} />
                             <div className="mt-2 space-y-2">
-                                <p className="text-xs text-skin-muted px-1 leading-relaxed">AI sẽ <span className="font-bold text-cyan-400">học hỏi</span> dải màu, ánh sáng và bố cục từ ảnh này để áp dụng vào tác phẩm của bạn.</p>
+                                <p className="text-xs text-gray-400 px-1 leading-relaxed">AI sẽ <span className="font-bold text-cyan-400 neon-highlight">học hỏi</span> dải màu, ánh sáng và bố cục từ ảnh này để áp dụng vào tác phẩm của bạn.</p>
                             </div>
                         </SettingsBlock>
                     </div>
                     
                     <SettingsBlock title="Câu Lệnh Mô Tả (Prompt)" instructionKey="prompt" onInstructionClick={() => openInstructionModal('prompt')}>
-                        <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Mô tả chi tiết hình ảnh bạn muốn tạo, ví dụ: 'một cô gái tóc hồng, mặc váy công chúa, đang khiêu vũ trong một cung điện lộng lẫy'..." className="auth-input w-full min-h-[150px] resize-none" />
+                        <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Mô tả chi tiết hình ảnh bạn muốn tạo, ví dụ: 'một cô gái tóc hồng, mặc váy công chúa, đang khiêu vũ trong một cung điện lộng lẫy'..." className="w-full p-3 bg-black/30 rounded-md border border-gray-600 focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition text-base text-white flex-grow resize-none min-h-[150px] auth-input" />
                     </SettingsBlock>
                 </div>
 
@@ -285,14 +286,14 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                     <SettingsBlock title="Cài đặt Nâng cao" instructionKey="advanced" onInstructionClick={() => openInstructionModal('advanced')}>
                         <div className="space-y-4">
                             <div>
-                                <label className="text-sm font-semibold text-skin-muted mb-1 block">Mô hình AI</label>
-                                <button onClick={() => setModelModalOpen(true)} className="auth-input p-2 text-left w-full">
-                                    <p className="font-semibold text-skin-base truncate">{selectedModel.name}</p>
+                                <label className="text-sm font-semibold text-gray-300 mb-1 block">Mô hình AI</label>
+                                <button onClick={() => setModelModalOpen(true)} className="p-2 bg-black/30 rounded-md border border-gray-600 hover:border-pink-500 text-left w-full transition auth-input">
+                                    <p className="font-semibold text-white truncate">{selectedModel.name}</p>
                                 </button>
                             </div>
                             
                             <div className="relative" ref={styleDropdownRef}>
-                                <label className="text-sm font-semibold text-skin-muted mb-1 block">Phong cách</label>
+                                <label className="text-sm font-semibold text-gray-300 mb-1 block">Phong cách</label>
                                 <div className="custom-select-wrapper">
                                     <button onClick={() => setIsStyleDropdownOpen(!isStyleDropdownOpen)} className="custom-select-trigger">
                                         <span>{STYLE_PRESETS_NEW.find(p => p.id === selectedStyle)?.name}</span>
@@ -312,23 +313,23 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                             </div>
 
                              <div>
-                                <label className="text-sm font-semibold text-skin-muted mb-1 block">Prompt Phủ định</label>
-                                <textarea value={negativePrompt} onChange={(e) => setNegativePrompt(e.target.value)} placeholder="VD: xấu, mờ, nhiều tay..." className="auth-input w-full resize-none" rows={2} />
+                                <label className="text-sm font-semibold text-gray-300 mb-1 block">Prompt Phủ định</label>
+                                <textarea value={negativePrompt} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNegativePrompt(e.target.value)} placeholder="VD: xấu, mờ, nhiều tay..." className="w-full p-2 bg-black/30 rounded-md border border-gray-600 focus:border-pink-500 transition text-sm text-white resize-none auth-input" rows={2} />
                             </div>
 
                              <div>
-                                <label className="text-sm font-semibold text-skin-muted mb-1 block">Seed</label>
-                                 <input type="number" value={seed} onChange={(e) => setSeed(e.target.value === '' ? '' : parseInt(e.target.value, 10))} placeholder="Để trống để tạo ngẫu nhiên" className="auth-input w-full" />
+                                <label className="text-sm font-semibold text-gray-300 mb-1 block">Seed</label>
+                                 <input type="number" value={seed} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSeed(e.target.value === '' ? '' : parseInt(e.target.value, 10))} placeholder="Để trống để tạo ngẫu nhiên" className="w-full p-2 bg-black/30 rounded-md border border-gray-600 focus:border-pink-500 transition text-sm text-white auth-input" />
                             </div>
                             
                             <div>
-                                <label className="text-sm font-semibold text-skin-muted mb-2 block">Tỷ lệ khung hình</label>
+                                <label className="text-sm font-semibold text-gray-300 mb-2 block">Tỷ lệ khung hình</label>
                                 <div className="grid grid-cols-5 gap-2">
                                     {(['3:4', '1:1', '4:3', '9:16', '16:9'] as const).map(ar => {
                                         const dims = { '3:4': 'w-3 h-4', '1:1': 'w-4 h-4', '4:3': 'w-4 h-3', '9:16': 'w-[1.125rem] h-5', '16:9': 'w-5 h-[1.125rem]' };
                                         return (
-                                            <button key={ar} onClick={() => setAspectRatio(ar)} className={`p-2 rounded-md flex flex-col items-center justify-center gap-1 border-2 transition ${aspectRatio === ar ? 'border-skin-border-accent bg-skin-accent/10 text-skin-accent' : 'border-skin-border bg-skin-fill-secondary hover:border-skin-border-accent/50 text-skin-muted'}`}>
-                                                <div className={`${dims[ar]} bg-current rounded-sm`}/>
+                                            <button key={ar} onClick={() => setAspectRatio(ar)} className={`p-2 rounded-md flex flex-col items-center justify-center gap-1 border-2 transition ${aspectRatio === ar ? 'selected-glow' : 'border-gray-600 bg-white/5 hover:border-pink-500/50 text-gray-300'}`}>
+                                                <div className={`${dims[ar]} bg-gray-500 rounded-sm`}/>
                                                 <span className="text-xs font-semibold">{ar}</span>
                                             </button>
                                         );
@@ -338,15 +339,15 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                             
                             <div>
                                 <ToggleSwitch label="Làm Nét & Nâng Cấp (+1 💎)" checked={useUpscaler} onChange={e => setUseUpscaler(e.target.checked)} />
-                                <p className="text-xs text-skin-muted px-1 mt-1 leading-relaxed">Khi bật, ảnh AI tạo ra sẽ có kết quả <span className="font-bold text-cyan-400">siêu nét</span>, chi tiết rõ ràng, và dung lượng ảnh cao hơn.</p>
+                                <p className="text-xs text-gray-400 px-1 mt-1 leading-relaxed">Khi bật, ảnh AI tạo ra sẽ có kết quả <span className="font-bold text-cyan-400 neon-highlight">siêu nét</span>, chi tiết rõ ràng, và dung lượng ảnh cao hơn.</p>
                             </div>
                         </div>
                     </SettingsBlock>
                     
                     <div className="mt-auto pt-6 space-y-4">
                         <div className="text-center text-sm p-3 bg-black/20 rounded-lg">
-                            <p className="text-skin-muted">Chi phí: <span className="font-bold text-pink-400 flex items-center justify-center gap-1">{generationCost} <i className="ph-fill ph-diamonds-four"></i></span></p>
-                            <p className="text-skin-muted">Hiện có: <span className="font-bold text-skin-base">{user?.diamonds.toLocaleString() || 0} 💎</span></p>
+                            <p className="text-gray-400">Chi phí: <span className="font-bold text-pink-400 flex items-center justify-center gap-1">{generationCost} <i className="ph-fill ph-diamonds-four"></i></span></p>
+                            <p className="text-gray-400">Hiện có: <span className="font-bold text-white">{user?.diamonds.toLocaleString() || 0} 💎</span></p>
                         </div>
                         <button onClick={handleGenerateClick} disabled={isGenerating || !prompt.trim()} className="themed-button-primary w-full px-8 py-4 font-bold text-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
                             <i className="ph-fill ph-magic-wand"></i>

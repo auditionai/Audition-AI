@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+// Fix: The `RealtimeChannel` type is not exported in Supabase v1.
+// The import is removed, and `any` will be used for the channel objects to fix the error.
 
 // Import Landing Page Sections
 import Hero from '../components/landing/Hero';
@@ -18,6 +20,7 @@ import AuthModal from '../components/landing/AuthModal';
 import TopUpModal from '../components/landing/TopUpModal';
 import InfoModal from '../components/landing/InfoModal';
 import ImageModal from '../components/common/ImageModal';
+import AuroraBackground from '../components/common/AuroraBackground'; // NEW
 import AnimatedSection from '../components/common/AnimatedSection';
 
 // Import types and data
@@ -33,38 +36,19 @@ const HomePage: React.FC = () => {
     const [selectedImage, setSelectedImage] = useState<GalleryImage | null>(null);
 
     // State for Data
-    const [allPackages, setAllPackages] = useState<CreditPackage[]>([]);
+    const [featuredPackages, setFeaturedPackages] = useState<CreditPackage[]>([]);
     const [isPackagesLoading, setIsPackagesLoading] = useState(true);
     const [publicGalleryImages, setPublicGalleryImages] = useState<GalleryImage[]>([]);
     const [isGalleryLoading, setIsGalleryLoading] = useState(true);
     const [stats, setStats] = useState<DashboardStats | null>(null);
     
-    // NEW: Add mouse tracking for landing card hover effect
     useEffect(() => {
-        const handleMouseMove = (e: MouseEvent) => {
-            document.querySelectorAll('.landing-card').forEach(card => {
-                const rect = (card as HTMLElement).getBoundingClientRect();
-                const x = e.clientX - rect.left;
-                const y = e.clientY - rect.top;
-                (card as HTMLElement).style.setProperty('--mouse-x', `${x}px`);
-                (card as HTMLElement).style.setProperty('--mouse-y', `${y}px`);
-            });
-        };
-
-        window.addEventListener('mousemove', handleMouseMove);
-
-        return () => {
-            window.removeEventListener('mousemove', handleMouseMove);
-        };
-    }, []);
-
-    useEffect(() => {
-        // Fetch ALL packages for the new 3x2 layout
+        // Fetch featured packages
         const fetchPackages = async () => {
             try {
-                const response = await fetch('/.netlify/functions/credit-packages'); // Removed ?featured=true
+                const response = await fetch('/.netlify/functions/credit-packages?featured=true');
                 if (!response.ok) throw new Error('Could not load pricing plans.');
-                setAllPackages(await response.json());
+                setFeaturedPackages(await response.json());
             } catch (error: any) {
                 showToast(error.message, 'error');
             } finally {
@@ -111,6 +95,7 @@ const HomePage: React.FC = () => {
     useEffect(() => {
         if (!supabase) return;
 
+        // Fix: Use `any[]` for the channels array as `RealtimeChannel` type is not available in Supabase v1 imports.
         const channels: any[] = [];
         const updateStat = (updater: (prev: DashboardStats) => DashboardStats) => {
             setStats(currentStats => currentStats ? updater(currentStats) : null);
@@ -161,7 +146,9 @@ const HomePage: React.FC = () => {
     };
 
     return (
-        <div className="bg-skin-fill text-skin-base font-sans leading-normal tracking-normal">
+        <div className="bg-transparent text-skin-base font-sans leading-normal tracking-normal">
+            <AuroraBackground />
+
             <LandingHeader 
                 user={user}
                 onTopUpClick={handleTopUpClick}
@@ -197,7 +184,7 @@ const HomePage: React.FC = () => {
                 <AnimatedSection id="pricing">
                     <Pricing 
                         onCtaClick={handleCtaClick} 
-                        packages={allPackages}
+                        packages={featuredPackages}
                         isLoading={isPackagesLoading}
                     />
                 </AnimatedSection>

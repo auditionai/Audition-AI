@@ -1,63 +1,135 @@
-import React from 'react';
-import Modal from './Modal';
+import React, { useState } from 'react';
 import { GalleryImage } from '../../types';
+import { useAuth } from '../../contexts/AuthContext';
 import { getRankForLevel } from '../../utils/rankUtils';
 
 interface ImageModalProps {
   isOpen: boolean;
   onClose: () => void;
   image: GalleryImage | null;
-  showInfoPanel?: boolean; // New prop to control info panel visibility
+  showInfoPanel?: boolean;
+  onShare?: (image: GalleryImage) => void;
 }
 
-const ImageModal: React.FC<ImageModalProps> = ({ isOpen, onClose, image, showInfoPanel = true }) => {
+const ImageModal: React.FC<ImageModalProps> = ({ isOpen, onClose, image, showInfoPanel = true, onShare }) => {
+  const { showToast } = useAuth();
+  const [isCopied, setIsCopied] = useState(false);
+
   if (!isOpen || !image) return null;
 
-  const rank = getRankForLevel(image.creator.level);
+  const handleCopyPrompt = () => {
+    if (!image.prompt) return;
+    navigator.clipboard.writeText(image.prompt);
+    showToast('Đã sao chép prompt!', 'success');
+    setIsCopied(true);
+    setTimeout(() => {
+        setIsCopied(false);
+    }, 2000);
+  };
+
+  const handleDownload = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!image?.image_url) return;
+
+    const downloadUrl = `/.netlify/functions/download-image?url=${encodeURIComponent(image.image_url)}`;
+
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = downloadUrl;
+    a.download = `audition-ai-${image.id}.png`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+  
+  const rank = image.creator ? getRankForLevel(image.creator.level) : getRankForLevel(1);
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={image.title || 'Chi tiết tác phẩm'}>
-      <div className="flex flex-col md:flex-row gap-6 max-h-[80vh]">
-        <div className="flex-shrink-0 md:w-2/3 flex items-center justify-center bg-black/20 rounded-lg">
-          <img src={image.image_url} alt={image.prompt} className="max-w-full max-h-[75vh] object-contain rounded-md" />
+    <div 
+      className="fixed inset-0 bg-black bg-opacity-80 backdrop-blur-lg flex justify-center items-center z-50 p-4 animate-fade-in"
+      onClick={onClose}
+    >
+      <div 
+        className="relative bg-[#12121A] border border-pink-500/20 rounded-2xl shadow-lg w-full max-w-4xl h-auto max-h-[85vh] lg:h-[700px] lg:max-h-none flex flex-col lg:flex-row overflow-hidden animate-fade-in-up"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Image Container */}
+        <div className="relative flex-1 bg-black/50 flex items-center justify-center p-2 lg:p-4 overflow-hidden">
+            <img 
+                src={image.image_url} 
+                alt={image.title || 'Gallery Image'}
+                className="w-auto h-auto max-w-full max-h-full object-contain"
+            />
         </div>
-        {showInfoPanel && (
-            <div className="flex-grow md:w-1/3 space-y-4 overflow-y-auto custom-scrollbar pr-2">
-            <div className="flex items-center gap-3">
-              <img src={image.creator.photo_url} alt={image.creator.display_name} className="w-12 h-12 rounded-full border-2 border-white/80" />
-              <div>
-                <p className={`font-bold text-lg drop-shadow-lg ${rank.color} neon-text-glow`}>{image.creator.display_name}</p>
-                <p className={`text-gray-300 text-sm drop-shadow flex items-center gap-1 ${rank.color}`}>{rank.icon} {rank.title}</p>
-              </div>
+        
+        {/* Info & Actions Panel */}
+        <div className="w-full lg:w-80 flex-shrink-0 bg-[#1e1b25]/50 flex flex-col text-white">
+            <div className="flex-grow p-4 overflow-y-auto custom-scrollbar space-y-4">
+                {/* Conditionally show Creator info */}
+                {showInfoPanel && image.creator && (
+                    <div className="flex items-center gap-3 pb-4 border-b border-white/10">
+                        <img src={image.creator.photo_url} alt={image.creator.display_name} className="w-12 h-12 rounded-full" />
+                        <div>
+                            <p className={`font-bold ${rank.color} neon-text-glow`}>{image.creator.display_name}</p>
+                            <p className={`text-xs font-semibold flex items-center gap-1.5 ${rank.color}`}>{rank.icon} {rank.title}</p>
+                        </div>
+                    </div>
+                )}
+                
+                {/* Always show Prompt */}
+                <div>
+                    <h4 className="font-semibold text-pink-400 mb-2 flex items-center gap-2">
+                        <i className="ph-fill ph-quotes"></i>
+                        Câu lệnh (Prompt)
+                    </h4>
+                    <p className="text-sm text-gray-300 italic bg-white/5 p-3 rounded-md max-h-40 overflow-y-auto custom-scrollbar">
+                        "{image.prompt}"
+                    </p>
+                </div>
             </div>
 
-            <div>
-              <h4 className="font-semibold text-pink-300">Prompt</h4>
-              <p className="text-sm text-gray-300 bg-white/5 p-2 rounded-md mt-1">{image.prompt}</p>
+            {/* Actions at the bottom of the panel */}
+            <div className="p-4 border-t border-white/10 space-y-2">
+                 <button
+                    onClick={handleCopyPrompt}
+                    className={`w-full px-4 py-2 text-sm font-semibold rounded-lg flex items-center justify-center gap-2 transition-all duration-300 ${isCopied ? 'bg-green-500/20 text-green-300' : 'bg-pink-500/20 text-pink-300 hover:bg-pink-500/30'}`}
+                >
+                    <i className={`ph-fill ${isCopied ? 'ph-check-circle' : 'ph-copy'}`}></i>
+                    {isCopied ? 'Đã sao chép!' : 'Sao chép Prompt'}
+                </button>
+                <button 
+                    onClick={handleDownload}
+                    className="w-full px-4 py-2 text-sm font-semibold rounded-lg flex items-center justify-center gap-2 transition-all duration-300 bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30"
+                >
+                    <i className="ph-fill ph-download-simple"></i>
+                    <span>Tải xuống</span>
+                </button>
+                 
+                 {/* Share button for "My Creations" */}
+                 {onShare && !image.is_public && (
+                     <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onShare(image);
+                        }}
+                        className="w-full px-4 py-2 text-sm font-semibold rounded-lg flex items-center justify-center gap-2 transition-all duration-300 bg-green-500/20 text-green-300 hover:bg-green-500/30"
+                    >
+                        <i className="ph-fill ph-share-network"></i>
+                        Chia sẻ (1 💎)
+                    </button>
+                 )}
+                 {onShare && image.is_public && (
+                    <div className="text-center text-xs font-semibold text-green-400 bg-green-500/10 py-2 rounded-lg">
+                        Đã chia sẻ công khai
+                    </div>
+                 )}
             </div>
-            
-             <div>
-              <h4 className="font-semibold text-cyan-300">Model đã dùng</h4>
-              <p className="text-sm text-gray-300 bg-white/5 p-2 rounded-md mt-1">{image.model_used}</p>
-            </div>
-            
-            <div>
-              <h4 className="font-semibold text-gray-400">Ngày tạo</h4>
-              <p className="text-sm text-gray-300 bg-white/5 p-2 rounded-md mt-1">{new Date(image.created_at).toLocaleString('vi-VN')}</p>
-            </div>
-
-            <div className="pt-4 border-t border-gray-700">
-              <button
-                onClick={onClose}
-                className="w-full py-3 font-bold text-white bg-white/10 rounded-lg hover:bg-white/20 transition"
-              >
-                Đóng
-              </button>
-            </div>
-          </div>
-        )}
+        </div>
       </div>
-    </Modal>
+       <button onClick={onClose} className="absolute top-4 right-4 bg-black/50 text-white rounded-full p-2 hover:bg-pink-500/80 transition-all z-[60]">
+            <i className="ph-fill ph-x text-2xl"></i>
+        </button>
+    </div>
   );
 };
 

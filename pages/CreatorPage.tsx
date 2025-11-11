@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
 
 // Import Creator-specific components
 import CreatorHeader from '../components/creator/CreatorHeader';
@@ -14,6 +15,7 @@ import InfoModal from '../components/creator/InfoModal';
 import TopUpModal from '../components/creator/TopUpModal';
 import CheckInModal from '../components/CheckInModal';
 import AnnouncementModal from '../components/AnnouncementModal';
+import ThemeEffects from '../components/themes/ThemeEffects';
 
 // Define the possible tabs for type safety
 export type CreatorTab = 'tool' | 'leaderboard' | 'my-creations' | 'settings';
@@ -24,6 +26,7 @@ interface CreatorPageProps {
 
 const CreatorPage: React.FC<CreatorPageProps> = ({ activeTab }) => {
     const { user, navigate, showToast, updateUserDiamonds, announcement, showAnnouncementModal, markAnnouncementAsRead } = useAuth();
+    const { theme } = useTheme();
 
     // State for modals
     const [isTopUpModalOpen, setIsTopUpModalOpen] = useState(false);
@@ -62,7 +65,8 @@ const CreatorPage: React.FC<CreatorPageProps> = ({ activeTab }) => {
     };
 
     return (
-        <div className="flex flex-col min-h-screen bg-transparent text-skin-base pb-16 md:pb-0">
+        <div data-theme={theme} className="flex flex-col min-h-screen bg-skin-fill text-skin-base pb-16 md:pb-0">
+             <ThemeEffects />
              <CreatorHeader
                 onTopUpClick={handleTopUpClick}
                 activeTab={activeTab}

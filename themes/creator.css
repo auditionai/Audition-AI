@@ -1,289 +1,288 @@
-/* 
-============================================
-GLOBAL STYLES (Used by both)
-============================================
-*/
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* ---
+  AUDITION AI - CREATOR APP STYLESHEET
+  Contains the theming system and component styles for the logged-in application.
+--- */
 
-@layer components {
-    .themed-button-primary {
-      @apply bg-skin-accent text-skin-accent-text rounded-lg transition-all duration-300 transform hover:-translate-y-0.5 shadow-accent;
-    }
-    .themed-button-secondary {
-      @apply bg-skin-fill-secondary text-skin-base rounded-lg transition-colors duration-300 border border-skin-border hover:bg-skin-fill hover:border-skin-border-accent;
-    }
-    .themed-panel {
-      @apply bg-skin-fill-secondary border border-skin-border rounded-xl;
-    }
-     .auth-input {
-      @apply w-full bg-skin-fill border border-skin-border rounded-lg p-3 text-skin-base placeholder-skin-muted focus:outline-none focus:ring-2 focus:ring-skin-accent focus:border-transparent transition;
-    }
-     .admin-tab {
-      @apply px-4 py-2 text-sm font-semibold rounded-full text-skin-muted bg-skin-fill-secondary hover:bg-skin-fill hover:text-skin-base transition;
-    }
-    .admin-tab-active {
-      @apply px-4 py-2 text-sm font-bold rounded-full text-skin-accent-text bg-skin-accent shadow-md;
-    }
-     .custom-scrollbar {
-        scrollbar-width: thin;
-        scrollbar-color: var(--color-accent) var(--color-fill-secondary);
-    }
-    .custom-scrollbar::-webkit-scrollbar {
-        width: 6px;
-    }
-    .custom-scrollbar::-webkit-scrollbar-track {
-        background: var(--color-fill-secondary);
-        border-radius: 10px;
-    }
-    .custom-scrollbar::-webkit-scrollbar-thumb {
-        background-color: var(--color-accent);
-        border-radius: 10px;
-        border: 2px solid var(--color-fill-secondary);
-    }
+/* ==========================================================================
+   1. THEME SYSTEM: COLOR & SHADOW VARIABLES
+   ========================================================================== */
 
-    .custom-select-wrapper {
-        position: relative;
-    }
-    .custom-select-trigger {
-        @apply auth-input w-full p-2 flex justify-between items-center cursor-pointer;
-    }
-    .custom-select-options {
-        @apply absolute top-full left-0 right-0 z-10 mt-1 bg-skin-fill-modal border border-skin-border rounded-lg shadow-lg max-h-60 overflow-y-auto custom-scrollbar;
-    }
-    .custom-select-option {
-        @apply w-full text-left px-3 py-2 text-sm text-skin-muted hover:bg-skin-accent/10 hover:text-skin-base flex justify-between items-center;
-    }
-     .custom-select-option.active {
-        @apply bg-skin-accent/20 text-skin-accent font-semibold;
-     }
-
+/* --- THEME 1: Vũ Điệu Neon (Cyber Punk) --- */
+[data-theme="cyber-punk"] {
+  --color-fill: #110C13;
+  --color-fill-secondary: #1A121C;
+  --color-fill-modal: #211A24;
+  --color-text-base: #D1D5DB; /* Softer white (Tailwind gray-300) */
+  --color-text-muted: #9CA3AF; /* Cooler gray (Tailwind gray-400) */
+  --color-accent: 247, 37, 133; /* Pink */
+  --color-accent-secondary: #7209B7; /* Purple */
+  --color-accent-text: #FFFFFF;
+  --color-border: rgba(255, 255, 255, 0.1);
+  --color-border-accent: rgba(247, 37, 133, 0.4);
+  --shadow-accent: 0 0 15px rgba(247, 37, 133, 0.4);
+  --shadow-accent-lg: 0 0 25px rgba(247, 37, 133, 0.5);
 }
 
-/* Toggle Switch Animation */
+/* --- THEME 2: Kẹo Ngọt Pastel (Solar Flare) --- */
+[data-theme="solar-flare"] {
+  --color-fill: #FFF8F0;
+  --color-fill-secondary: #FFFFFF;
+  --color-fill-modal: #FFFFFF;
+  --color-text-base: #5C3D2E;
+  --color-text-muted: #A88B79;
+  --color-accent: 255, 119, 119; /* Pastel Red */
+  --color-accent-secondary: #FFD6A5; /* Pastel Orange */
+  --color-accent-text: #5C3D2E;
+  --color-border: rgba(0, 0, 0, 0.1);
+  --color-border-accent: rgba(255, 119, 119, 0.4);
+  --shadow-accent: 0 4px 15px rgba(255, 119, 119, 0.2);
+  --shadow-accent-lg: 0 6px 25px rgba(255, 119, 119, 0.3);
+}
+
+/* --- THEME 3: Dải Ngân Hà (Dreamy Galaxy) --- */
+[data-theme="dreamy-galaxy"] {
+  --color-fill: #0C0A1D;
+  --color-fill-secondary: #110E2A;
+  --color-fill-modal: #1A163D;
+  --color-text-base: #E6E6FA;
+  --color-text-muted: #A098D0;
+  --color-accent: 173, 95, 255; /* Bright Purple */
+  --color-accent-secondary: #00BFFF; /* Deep Sky Blue */
+  --color-accent-text: #FFFFFF;
+  --color-border: rgba(173, 95, 255, 0.2);
+  --color-border-accent: rgba(173, 95, 255, 0.5);
+  --shadow-accent: 0 0 15px rgba(173, 95, 255, 0.4);
+  --shadow-accent-lg: 0 0 25px rgba(173, 95, 255, 0.5);
+}
+
+/* --- THEME 4: Giáng Sinh (Classic Dark) --- */
+[data-theme="classic-dark"] {
+  --color-fill: #1A2D27;
+  --color-fill-secondary: #243831;
+  --color-fill-modal: #2D423A;
+  --color-text-base: #F0E6D2;
+  --color-text-muted: #A89F8D;
+  --color-accent: 205, 53, 53; /* Deep Red */
+  --color-accent-secondary: #D4AF37; /* Gold */
+  --color-accent-text: #FFFFFF;
+  --color-border: rgba(212, 175, 55, 0.2);
+  --color-border-accent: rgba(205, 53, 53, 0.5);
+  --shadow-accent: 0 0 15px rgba(205, 53, 53, 0.4);
+  --shadow-accent-lg: 0 0 25px rgba(205, 53, 53, 0.5);
+}
+
+/* --- THEME 5: Lâu Đài Pha Lê (Neon Vibe) --- */
+[data-theme="neon-vibe"] {
+  --color-fill: #E9F1F7;
+  --color-fill-secondary: #F4F8FA;
+  --color-fill-modal: #FFFFFF;
+  --color-text-base: #2C3E50;
+  --color-text-muted: #7F8C8D;
+  --color-accent: 52, 152, 219; /* Peter River Blue */
+  --color-accent-secondary: #1ABC9C; /* Turquoise */
+  --color-accent-text: #FFFFFF;
+  --color-border: rgba(44, 62, 80, 0.15);
+  --color-border-accent: rgba(52, 152, 219, 0.4);
+  --shadow-accent: 0 4px 15px rgba(52, 152, 219, 0.2);
+  --shadow-accent-lg: 0 6px 25px rgba(52, 152, 219, 0.3);
+}
+
+/* ==========================================================================
+   2. THEME-AWARE COMPONENTS
+   ========================================================================== */
+.themed-button-primary {
+  background: linear-gradient(45deg, rgb(var(--color-accent)), var(--color-accent-secondary));
+  color: var(--color-accent-text);
+  border-radius: 9999px;
+  box-shadow: var(--shadow-accent-lg);
+  transition: all 0.3s ease;
+}
+.themed-button-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-accent-lg), 0 5px 15px rgba(0,0,0,0.2);
+}
+
+.themed-button-secondary {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: var(--color-text-base);
+  border: 1px solid var(--color-border);
+  border-radius: 9999px;
+  transition: all 0.3s ease;
+}
+.themed-button-secondary:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+  border-color: var(--color-border-accent);
+}
+
+.auth-input {
+    background-color: rgba(0,0,0,0.3);
+    border: 1px solid var(--color-border);
+    border-radius: 0.5rem;
+    padding: 0.75rem 1rem;
+    color: var(--color-text-base);
+    transition: all 0.2s ease-in-out;
+}
+.auth-input:focus {
+    outline: none;
+    border-color: rgba(var(--color-accent), 0.8);
+    box-shadow: 0 0 0 2px rgba(var(--color-accent), 0.3);
+}
+
+.admin-tab {
+    padding: 0.5rem 1rem;
+    border-radius: 9999px;
+    font-weight: 600;
+    font-size: 0.875rem;
+    background-color: rgba(255,255,255,0.05);
+    color: var(--color-text-muted);
+    transition: all 0.2s ease;
+}
+.admin-tab:hover {
+    background-color: rgba(255,255,255,0.1);
+    color: var(--color-text-base);
+}
+.admin-tab-active {
+    padding: 0.5rem 1rem;
+    border-radius: 9999px;
+    font-weight: 600;
+    font-size: 0.875rem;
+    background-color: rgb(var(--color-accent));
+    color: var(--color-accent-text);
+    box-shadow: var(--shadow-accent);
+}
+
+/* AI Tool Specific Styles */
+.themed-settings-block {
+    background-color: var(--color-fill);
+    border: 1px solid var(--color-border);
+    border-radius: 1rem;
+    padding: 1rem;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+.themed-panel {
+    background-color: var(--color-fill-secondary);
+    border: 1px solid var(--color-border);
+    border-radius: 1rem;
+}
 .toggle-switch-dot {
-    transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    transition: transform 0.2s ease-in-out;
+}
+.selected-glow {
+    border-color: rgb(var(--color-accent));
+    background-color: rgba(var(--color-accent), 0.1);
+    color: rgb(var(--color-accent));
+    box-shadow: 0 0 8px rgba(var(--color-accent), 0.5);
 }
 
-/* Progress Bar Animation */
-@keyframes progress-flow {
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
+.custom-select-wrapper .custom-select-trigger {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    padding: 0.5rem;
+    background-color: rgba(0,0,0,0.3);
+    border: 1px solid var(--color-border);
+    border-radius: 0.375rem;
+    transition: all 0.2s;
+}
+.custom-select-wrapper .custom-select-trigger:hover {
+    border-color: rgba(var(--color-accent), 0.6);
+}
+.custom-select-wrapper .custom-select-options {
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    right: 0;
+    margin-bottom: 0.5rem;
+    background-color: var(--color-fill-modal);
+    border: 1px solid var(--color-border-accent);
+    border-radius: 0.375rem;
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 10;
+    box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+}
+.custom-select-wrapper .custom-select-option {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+    font-size: 0.875rem;
+    transition: background-color 0.2s;
+}
+.custom-select-wrapper .custom-select-option:hover {
+    background-color: rgba(var(--color-accent), 0.1);
+}
+.custom-select-wrapper .custom-select-option.active {
+    background-color: rgba(var(--color-accent), 0.2);
+    color: rgb(var(--color-accent));
+    font-weight: 600;
 }
 
-/* Reward Notification Animations */
-@keyframes reward-enter {
-  from { opacity: 0; transform: scale(0.8) translateY(20px); }
-  to { opacity: 1; transform: scale(1) translateY(0); }
-}
-@keyframes reward-exit {
-  from { opacity: 1; transform: scale(1); }
-  to { opacity: 0; transform: scale(0.9); }
-}
-@keyframes reward-icon-pop {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.15); }
-}
-@keyframes reward-item-enter {
-   from { opacity: 0; transform: translateX(-20px); }
-   to { opacity: 1; transform: translateX(0); }
-}
-.reward-sparkles {
-  background-image:
-    radial-gradient(circle at 10% 20%, rgba(255,255,255,0.3) 0px, transparent 2px),
-    radial-gradient(circle at 80% 30%, rgba(255,255,255,0.3) 0px, transparent 2px),
-    radial-gradient(circle at 50% 90%, rgba(255,255,255,0.3) 0px, transparent 2px);
-  animation: sparkle-anim 5s linear infinite;
-}
-@keyframes sparkle-anim {
-  from { transform: translateY(0); }
-  to { transform: translateY(-100px); }
-}
+/* ==========================================================================
+   3. ANIMATIONS & THEME-SPECIFIC EFFECTS
+   ========================================================================== */
+@keyframes animStar { from { transform: translateY(0px); } to { transform: translateY(-2000px); } }
+@keyframes progress-flow { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+@keyframes theme-change-pop { 0% { transform: scale(1); } 50% { transform: scale(1.2); } 100% { transform: scale(1); } }
+@keyframes reward-enter { from { opacity: 0; transform: scale(0.8) translateY(20px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+@keyframes reward-exit { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0.9); } }
+@keyframes reward-icon-pop { 0% { transform: scale(1); } 50% { transform: scale(1.2) rotate(-10deg); } 100% { transform: scale(1) rotate(0deg); } }
+@keyframes reward-item-enter { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes sparkle-move { from { background-position: 0 0; } to { background-position: -100px 100px; } }
 
-/* Theme name display highlight */
-@keyframes highlight-theme {
-  0%, 100% {
-    color: var(--color-accent);
-    transform: scale(1);
-    opacity: 1;
-  }
-  50% {
-    color: #fff;
-    transform: scale(1.2);
-    opacity: 0.8;
-  }
+.neon-highlight { text-shadow: 0 0 8px currentColor; }
+
+.button-neon-glow {
+  box-shadow: var(--shadow-accent-lg);
+  transition: box-shadow 0.3s ease-in-out;
+}
+.button-neon-glow:hover {
+  box-shadow: 0 0 16px rgba(var(--color-accent), 0.7), 0 0 32px rgba(var(--color-accent), 0.7);
 }
 
 .theme-display-highlight {
-  animation: highlight-theme 1.5s ease-in-out;
+    animation: theme-change-pop 0.5s ease-in-out;
 }
 
-.footer-neon-text {
-  animation: footer-glow 4s ease-in-out infinite alternate;
+.reward-sparkles {
+    background-image: url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgdmlld0JveD0iMCAwIDEwMCAxMDAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iNTAiIGN5PSI1MCIgcj0iMiIgZmlsbD0iI2ZmZiIvPjxjaXJjbGUgY3g9IjEwIiBjeT0iMjAiIHI9IjEiIGZpbGw9IiNmZmYiLz48Y2lyY2xlIGN4PSI4MCIgY3k9IjMwIiByPSIxLjUiIGZpbGw9IiNmZmYiLz48Y2lyY2xlIGN4PSIyMCIgY3k9IjgwIiByPSIxIiBmaWxsPSIjZmZmIi8+PGNpcmNsZSBjeD0iOTAiIGN5PSI5MCIgcj0iMiIgZmlsbD0iI2ZmZiIvPjwvc3ZnPg==');
+    background-size: 100px 100px;
+    animation: sparkle-move 5s linear infinite;
 }
 
-@keyframes footer-glow {
-  from {
-    text-shadow:
-      0 0 5px #fff,
-      0 0 10px #fff,
-      0 0 15px rgb(var(--color-accent) / 0.8),
-      0 0 20px rgb(var(--color-accent) / 0.7);
-  }
-  to {
-    text-shadow:
-      0 0 10px #fff,
-      0 0 20px rgb(var(--color-accent) / 0.8),
-      0 0 30px rgb(var(--color-accent) / 0.7),
-      0 0 40px rgb(var(--color-accent) / 0.6);
-  }
-}
-
-.button-neon-glow {
-  animation: button-glow 3s ease-in-out infinite alternate;
-}
-
-@keyframes button-glow {
-  from {
-    box-shadow: 0 0 5px var(--tw-shadow-color), 0 0 10px var(--tw-shadow-color);
-  }
-  to {
-     box-shadow: 0 0 15px var(--tw-shadow-color), 0 0 25px var(--tw-shadow-color);
-  }
-}
-
-/*
-============================================
-THEMES
-============================================
-*/
-
-/* 1. Vũ Điệu Neon (Default Dark) - Was 'Cyber Punk' */
-body[data-theme='cyber-punk'] {
-  --color-fill: #0B0B0F;
-  --color-fill-secondary: #12121A;
-  --color-fill-modal: #100E17;
-  --color-text-base: #EAEAEA;
-  --color-text-muted: #A0A0A0;
-  --color-border: rgba(255, 255, 255, 0.1);
-  --color-border-accent: rgba(247, 37, 133, 0.5);
-  --color-accent: 247, 37, 133;
-  --color-accent-secondary: 114, 9, 183;
-  --color-accent-text: #FFFFFF;
-  --shadow-accent: 0 4px 14px 0 rgba(247, 37, 133, 0.39);
-  --shadow-accent-lg: 0 10px 30px -5px rgba(247, 37, 133, 0.45);
-}
-
-/* 2. Kẹo Ngọt Pastel - Was 'Solar Flare' */
-body[data-theme='solar-flare'] {
-    --color-fill: #FEF3E0;
-    --color-fill-secondary: #FFFFFF;
-    --color-fill-modal: #FFF8F0;
-    --color-text-base: #1F2937; /* Dark gray for high contrast */
-    --color-text-muted: #6B7280; /* Medium gray */
-    --color-border: #E5E7EB; /* Light gray border */
-    --color-border-accent: #FBCFE8; /* Light pink border */
-    --color-accent: 244, 114, 182; /* Pink */
-    --color-accent-secondary: 251, 146, 60; /* Orange */
-    --color-accent-text: #FFFFFF;
-    --shadow-accent: 0 4px 14px 0 rgba(244, 114, 182, 0.3);
-    --shadow-accent-lg: 0 10px 25px -5px rgba(244, 114, 182, 0.35);
-}
-
-/* 3. Dải Ngân Hà - Was 'Dreamy Galaxy' */
-body[data-theme='dreamy-galaxy'] {
-    --color-fill: #000000;
-    --color-fill-secondary: #111827;
-    --color-fill-modal: #0c1222;
-    --color-text-base: #E5E7EB;
-    --color-text-muted: #9CA3AF;
-    --color-border: #374151;
-    --color-border-accent: #A78BFA;
-    --color-accent: 139, 92, 246; /* Violet */
-    --color-accent-secondary: 59, 130, 246; /* Blue */
-    --color-accent-text: #FFFFFF;
-    --shadow-accent: 0 4px 14px 0 rgba(139, 92, 246, 0.3);
-    --shadow-accent-lg: 0 10px 25px -5px rgba(139, 92, 246, 0.35);
-}
-
-/* Special background for galaxy theme */
+/* Dreamy Galaxy Starfield Background */
 .galaxy-bg {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    background: radial-gradient(ellipse at bottom, #1B2735 0%, #090A0F 100%);
-    overflow: hidden;
-}
-
-@function random_range($min, $max) {
-  @return $min + random($max - $min);
-}
-
-#stars, #stars2, #stars3 {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  top: 50%;
+  left: 50%;
   width: 100%;
   height: 100%;
-  display: block;
-  background: transparent;
+  transform: translate(-50%, -50%);
 }
-#stars { background: transparent url('data:image/svg+xml;base64,PHN2ZyB2ZXJzaW9uPSIxLjEiIGlkPSJMYXllcl8xIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB4PSIwcHgiIHk9IjBweCIgd2lkdGg9IjEwMHB4IiBoZWlnaHQ9IjEwMHB4IiB2aWV3Qm94PSIwIDAgMTAwIDEwMCIgZW5hYmxlLWJhY2tncm91bmQ9Im5ldyAwIDAgMTAwIDEwMCIgeG1sOnNwYWNlPSJwcmVzZXJ2ZSI+ICA8Y2lyY2xlIGZpbGw9IiNGRkZGRkYiIGN4PSIyIiBjeT0iMiIgcj0iMC41Ij48L2NpcmNsZT48L3N2Zz4='); animation: animStar 50s linear infinite; }
-#stars2 { background: transparent url('data:image/svg+xml;base64,PHN2ZyB2ZXJzaW9uPSIxLjEiIGlkPSJMYXllcl8xIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB4PSIwcHgiIHk9IjBweCIgd2lkdGg9IjEwMHB4IiBoZWlnaHQ9IjEwMHB4IiB2aWV3Qm94PSIwIDAgMTAwIDEwMCIgZW5hYmxlLWJhY2tncm91bmQ9Im5ldyAwIDAgMTAwIDEwMCIgeG1sOnNwYWNlPSJwcmVzZXJ2ZSI+ICA8Y2lyY2xlIGZpbGw9IiNGRkZGRkYiIGN4PSI1IiBjeT0iNSIgcj0iMSI+PC9jaXJjbGU+PC9zdmc+'); animation: animStar 100s linear infinite; }
-#stars3 { background: transparent url('data:image/svg+xml;base64,PHN2ZyB2ZXJzaW9uPSIxLjEiIGlkPSJMYXllcl8xIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB4PSIwcHgiIHk9IjBweCIgd2lkdGg9IjEwMHB4IiBoZWlnaHQ9IjEwMHB4IiB2aWV3Qm94PSIwIDAgMTAwIDEwMCIgZW5hYmxlLWJhY2tncm91bmQ9Im5ldyAwIDAgMTAwIDEwMCIgeG1sOnNwYWNlPSJwcmVzZXJ2ZSI+ICA8Y2lyY2xlIGZpbGw9IiNGRkZGRkYiIGN4PSIxMCIgY3k9IjEwIiByPSIxLjUiPjwvY2lyY2xlPjwvc3ZnPg=='); animation: animStar 150s linear infinite; }
-
-@keyframes animStar { from { transform: translateY(0px) } to { transform: translateY(-2000px) } }
-
-
-/* 4. Giáng Sinh - Was 'Classic Dark' */
-body[data-theme='classic-dark'] {
-    --color-fill: #0d1a26;
-    --color-fill-secondary: #1a2c3a;
-    --color-fill-modal: #0f1e2b;
-    --color-text-base: #E0F2F1;
-    --color-text-muted: #B0BEC5;
-    --color-border: #37474F;
-    --color-border-accent: #E57373;
-    --color-accent: 229, 115, 115; /* Red */
-    --color-accent-secondary: 129, 199, 132; /* Green */
-    --color-accent-text: #FFFFFF;
-    --shadow-accent: 0 4px 14px 0 rgba(229, 115, 115, 0.3);
-    --shadow-accent-lg: 0 10px 25px -5px rgba(229, 115, 115, 0.35);
-}
-
-.snowfall-bg { background-color: transparent; }
-.snow {
-  width: 10px; height: 10px;
-  background: white;
-  border-radius: 50%;
+#stars, #stars2, #stars3 {
   position: absolute;
-  top: -10px;
-  animation: fall linear infinite;
+  top: 0; left: 0; right: 0; bottom: 0;
+  width: 100%; height: 100%;
+  display: block;
 }
-@keyframes fall {
-  to { transform: translateY(100vh); }
+#stars {
+  background: transparent url('data:image/svg+xml;base64,PHN2ZyB2ZXJzaW9uPSIxLjEiIGlkPSJMYXllcl8xIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB4PSIwcHgiIHk9IjBweCIgdmlld0JveD0iMCAwIDUwIDUwIiBzdHlsZT0iZW5hYmxlLWJhY2tncm91bmQ6bmV3IDAgMCA1MCA1MDsiIHhtbDpzcGFjZT0icHJlc2VydmUiPjxyZWN0IGZpbGw9IiNGRkZGRkYiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiLz48L3N2Zz4=') repeat;
+  background-size: 1px 1px;
+  animation: animStar 50s linear infinite;
 }
-/* Assign random animation properties to each snowflake */
-/* A SASS loop would be ideal here, but for plain CSS, we need to do it manually or with JS */
-
-
-/* 5. Lâu Đài Pha Lê - Was 'Neon Vibe' */
-body[data-theme='neon-vibe'] {
-    --color-fill: #1a1a2e;
-    --color-fill-secondary: #242444;
-    --color-fill-modal: #1f1f3a;
-    --color-text-base: #E0E0FF;
-    --color-text-muted: #A0A0C0;
-    --color-border: #4a4a70;
-    --color-border-accent: #00E5FF;
-    --color-accent: 0, 229, 255; /* Cyan */
-    --color-accent-secondary: 255, 48, 129; /* Pink */
-    --color-accent-text: #0D0D1E;
-    --shadow-accent: 0 4px 14px 0 rgba(0, 229, 255, 0.3);
-    --shadow-accent-lg: 0 10px 25px -5px rgba(0, 229, 255, 0.35);
+#stars2 {
+  background: transparent url('data:image/svg+xml;base64,PHN2ZyB2ZXJzaW9uPSIxLjEiIGlkPSJMYXllcl8xIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB4PSIwcHgiIHk9IjBweCIgdmlld0JveD0iMCAwIDUwIDUwIiBzdHlsZT0iZW5hYmxlLWJhY2tncm91bmQ6bmV3IDAgMCA1MCA1MDsiIHhtbDpzcGFjZT0icHJlc2VydmUiPjxyZWN0IGZpbGw9IiNGRkZGRkYiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiLz48L3N2Zz4=') repeat;
+  background-size: 2px 2px;
+  animation: animStar 100s linear infinite;
+}
+#stars3 {
+  background: transparent url('data:image/svg+xml;base64,PHN2ZyB2ZXJzaW9uPSIxLjEiIGlkPSJMYXllcl8xIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB4PSIwcHgiIHk9IjBweCIgdmlld0JveD0iMCAwIDUwIDUwIiBzdHlsZT0iZW5hYmxlLWJhY2tncm91bmQ6bmV3IDAgMCA1MCA1MDsiIHhtbDpzcGFjZT0icHJlc2VydmUiPjxyZWN0IGZpbGw9IiNGRkZGRkYiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiLz48L3N2Zz4=') repeat;
+  background-size: 3px 3px;
+  animation: animStar 150s linear infinite;
 }

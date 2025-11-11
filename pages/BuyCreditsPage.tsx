@@ -1,30 +1,28 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../contexts/AuthContext';
-import { CreditPackage } from '../types';
+// FIX: Corrected import paths for creator-specific components.
 import CreatorHeader from '../components/creator/CreatorHeader';
 import CreatorFooter from '../components/creator/CreatorFooter';
-import BottomNavBar from '../components/common/BottomNavBar';
+import { useAuth } from '../contexts/AuthContext';
+import { CreditPackage } from '../types';
 import InfoModal from '../components/creator/InfoModal';
 import CheckInModal from '../components/CheckInModal';
+import BottomNavBar from '../components/common/BottomNavBar';
 
 const BuyCreditsPage: React.FC = () => {
-    const { session, user, navigate, showToast } = useAuth();
+    const { session, navigate, showToast } = useAuth();
     const [packages, setPackages] = useState<CreditPackage[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [isProcessing, setIsProcessing] = useState<string | null>(null);
-
-    // Modal states
+    const [isProcessingPayment, setIsProcessingPayment] = useState<string | null>(null); // Store package ID being processed
     const [infoModalKey, setInfoModalKey] = useState<'terms' | 'policy' | 'contact' | null>(null);
     const [isCheckInModalOpen, setCheckInModalOpen] = useState(false);
 
     useEffect(() => {
         const fetchPackages = async () => {
-            setIsLoading(true);
             try {
-                // Fetch all active packages, not just featured
-                const response = await fetch('/.netlify/functions/credit-packages');
-                if (!response.ok) throw new Error('Không thể tải các gói nạp.');
-                setPackages(await response.json());
+                const res = await fetch('/.netlify/functions/credit-packages');
+                if (!res.ok) throw new Error('Không thể tải các gói nạp.');
+                const data = await res.json();
+                setPackages(data);
             } catch (error: any) {
                 showToast(error.message, 'error');
             } finally {
@@ -34,110 +32,146 @@ const BuyCreditsPage: React.FC = () => {
         fetchPackages();
     }, [showToast]);
 
-    const handleSelectPackage = async (packageId: string) => {
+    const handleBuyClick = async (pkg: CreditPackage) => {
         if (!session) {
-            showToast('Vui lòng đăng nhập để tiếp tục.', 'error');
+            showToast('Vui lòng đăng nhập để nạp kim cương.', 'error');
             return;
         }
-        setIsProcessing(packageId);
+        setIsProcessingPayment(pkg.id);
         try {
-            const response = await fetch('/.netlify/functions/create-payment-link', {
+            const res = await fetch('/.netlify/functions/create-payment-link', {
                 method: 'POST',
-                headers: {
+                headers: { 
                     'Content-Type': 'application/json',
-                    Authorization: `Bearer ${session.access_token}`,
+                    'Authorization': `Bearer ${session.access_token}`
                 },
-                body: JSON.stringify({ packageId }),
+                body: JSON.stringify({ packageId: pkg.id }),
             });
-            const result = await response.json();
-            if (!response.ok) throw new Error(result.error || 'Tạo liên kết thanh toán thất bại.');
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Không thể tạo liên kết thanh toán.');
             
-            // Redirect to PayOS checkout URL
-            window.location.href = result.checkoutUrl;
+            // Redirect to PayOS checkout
+            window.location.href = data.checkoutUrl;
 
         } catch (error: any) {
             showToast(error.message, 'error');
-        } finally {
-            setIsProcessing(null);
+            setIsProcessingPayment(null);
         }
     };
+    
+    // Check for payment status from sessionStorage after redirect
+    useEffect(() => {
+        const paymentResultJSON = sessionStorage.getItem('payment_redirect_result');
+        
+        if (paymentResultJSON) {
+            // We have a result, so process it and then remove it to prevent re-processing.
+            sessionStorage.removeItem('payment_redirect_result');
 
-    if (!user) {
-        navigate('home');
-        return null;
-    }
+            try {
+                const { status, orderCode } = JSON.parse(paymentResultJSON);
+
+                if (status === 'PAID') {
+                    showToast(`Thanh toán thành công! Giao dịch của bạn đang chờ quản trị viên phê duyệt.`, 'success');
+                } else if (status === 'CANCELLED') {
+                    showToast(`Bạn đã hủy thanh toán cho đơn hàng #${orderCode}.`, 'error');
+                }
+            } catch (e) {
+                console.error("Failed to parse payment redirect result from sessionStorage:", e);
+            }
+        }
+    }, [showToast]);
 
     return (
-        <div className="flex flex-col min-h-screen bg-transparent text-skin-base pb-16 md:pb-0">
-            <CreatorHeader
-                onTopUpClick={() => navigate('buy-credits')}
-                activeTab="tool"
-                onNavigate={navigate}
-                onCheckInClick={() => setCheckInModalOpen(true)}
-            />
-            
-            <main className="flex-grow pt-24 md:pt-28">
-                <div className="container mx-auto px-4 py-8 animate-fade-in">
-                    <div className="max-w-4xl mx-auto">
-                        <div className="text-center mb-12">
-                            <h1 className="text-4xl md:text-5xl font-bold mb-4">
-                                <span className="bg-gradient-to-r from-pink-400 to-fuchsia-500 text-transparent bg-clip-text">Nạp Kim Cương</span>
-                            </h1>
-                            <p className="text-lg text-skin-muted">
-                                Chọn gói phù hợp để tiếp tục hành trình sáng tạo của bạn. Gói càng lớn, ưu đãi càng nhiều.
-                            </p>
+        <div className="flex flex-col min-h-screen bg-[#0B0B0F] pb-16 md:pb-0">
+            <CreatorHeader onTopUpClick={() => {}} activeTab={'tool'} onNavigate={navigate} onCheckInClick={() => setCheckInModalOpen(true)} />
+            <main className="flex-grow pt-24 relative">
+                <div className="absolute inset-0 z-0 aurora-background opacity-70"></div>
+                <div className="container mx-auto px-4 relative z-10">
+                    <div className="max-w-4xl mx-auto text-center">
+                        <h1 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-pink-400 to-fuchsia-500 text-transparent bg-clip-text">Nạp Kim Cương</h1>
+                        
+                        <div className="max-w-3xl mx-auto mt-6 bg-black/30 border border-white/10 rounded-2xl p-4 text-sm shadow-lg">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-y-3 md:gap-x-4">
+                                <div className="flex items-center justify-center gap-2.5 p-2 rounded-lg bg-white/5">
+                                    <i className="ph-fill ph-prohibit text-2xl text-red-400 neon-text-glow" style={{ color: '#f87171' }}></i>
+                                    <p className="text-gray-300">
+                                        <span className="font-bold text-white">Không</span> hoàn tiền &amp; chuyển nhượng.
+                                    </p>
+                                </div>
+                                
+                                <div className="flex items-center justify-center gap-2.5 p-2 rounded-lg bg-white/5">
+                                    <i className="ph-fill ph-calendar-x text-2xl text-yellow-400 neon-text-glow" style={{ color: '#facc15' }}></i>
+                                    <p className="text-gray-300">
+                                        Hạn sử dụng: <span className="font-bold text-white">2 năm</span>
+                                    </p>
+                                </div>
+                                
+                                <div className="flex items-center justify-center gap-2.5 p-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors">
+                                    <i className="ph-fill ph-book-open text-2xl text-cyan-400 neon-text-glow" style={{ color: '#22d3ee' }}></i>
+                                    <a onClick={() => setInfoModalKey('terms')} className="text-cyan-400 font-semibold hover:text-cyan-300 cursor-pointer">
+                                        Xem Chính Sách
+                                    </a>
+                                </div>
+                            </div>
                         </div>
 
-                        {isLoading ? (
-                            <div className="text-center p-12">
-                                <div className="w-12 h-12 border-4 border-pink-500/20 border-t-pink-500 rounded-full animate-spin mx-auto"></div>
-                                <p className="mt-4 text-skin-muted">Đang tải các gói nạp...</p>
-                            </div>
-                        ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                {packages.map((plan) => (
-                                    <div key={plan.id} className={`relative bg-skin-fill-secondary border border-skin-border rounded-2xl p-6 text-center flex flex-col transition-all duration-300 hover:-translate-y-2 ${plan.is_featured ? 'border-2 border-skin-border-accent shadow-accent-lg' : ''}`}>
-                                        {plan.is_featured && <div className="absolute -top-3 right-4 px-3 py-1 bg-skin-accent text-skin-accent-text font-bold text-xs rounded-full shadow-lg">Phổ biến</div>}
-                                        {plan.tag && <div className={`font-bold text-sm mb-2 ${plan.is_flash_sale ? 'text-red-400' : 'text-yellow-400'}`}>{plan.tag}</div>}
-                                        <h3 className="text-xl font-bold mb-2 text-skin-base">{plan.name}</h3>
-                                        <p className="text-4xl font-bold my-4 text-skin-accent">{plan.price_vnd.toLocaleString('vi-VN')}đ</p>
-                                        <div className="space-y-2 w-full text-left bg-skin-fill p-3 rounded-lg text-sm mb-6 flex-grow">
-                                            <p className="flex justify-between items-center"><span className="flex items-center gap-2 text-skin-muted">Gói chính:</span> <span className="font-bold">{plan.credits_amount.toLocaleString()} 💎</span></p>
-                                            <p className="flex justify-between items-center"><span className="flex items-center gap-2 text-yellow-400">Thưởng:</span> <span className="font-bold text-yellow-400">+{plan.bonus_credits.toLocaleString()} 💎</span></p>
-                                            <hr className="border-skin-border"/>
-                                            <p className="flex justify-between items-center text-lg font-bold text-cyan-400"><span className="flex items-center gap-2">Tổng nhận:</span> <span className="neon-text-glow">{(plan.credits_amount + plan.bonus_credits).toLocaleString()} 💎</span></p>
-                                        </div>
-                                        <button 
-                                            onClick={() => handleSelectPackage(plan.id)}
-                                            disabled={isProcessing === plan.id}
-                                            className="w-full mt-auto py-3 font-bold themed-button-primary disabled:opacity-50"
-                                        >
-                                            {isProcessing === plan.id ? 'Đang xử lý...' : 'Chọn Mua'}
-                                        </button>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
+                        <p className="text-sm text-gray-400 mt-4">Đừng quên điểm danh hàng ngày để nhận <span className="font-bold text-pink-400">Kim Cương miễn phí</span> và các phần thưởng hấp dẫn khác!</p>
                     </div>
+
+                    {isLoading ? (
+                         <div className="flex justify-center items-center py-20">
+                            <div className="w-12 h-12 border-4 border-t-pink-400 border-white/20 rounded-full animate-spin"></div>
+                         </div>
+                    ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 mt-12 max-w-6xl mx-auto">
+                            {packages.map(pkg => {
+                                const totalCredits = pkg.credits_amount + pkg.bonus_credits;
+                                return (
+                                <div key={pkg.id} className="relative bg-[#12121A]/80 border border-pink-500/20 rounded-2xl shadow-lg p-6 flex flex-col text-center interactive-3d group">
+                                    {pkg.tag && (
+                                        <div 
+                                            className="absolute top-0 -translate-y-1/2 left-1/2 -translate-x-1/2 bg-gradient-to-r from-yellow-400 to-amber-500 text-black text-xs font-bold px-3 py-1 rounded-full uppercase shadow-lg shadow-yellow-500/30"
+                                            style={{ animation: 'subtle-pulse 2s infinite' }}
+                                        >
+                                            {pkg.tag}
+                                        </div>
+                                    )}
+                                    <div className="glowing-border"></div>
+                                    <div className="flex-grow">
+                                        <div className="flex items-center justify-center gap-2 mb-2">
+                                            <i className="ph-fill ph-diamonds-four text-3xl text-pink-400"></i>
+                                            <p className="text-4xl font-extrabold text-white">{totalCredits.toLocaleString('vi-VN')}</p>
+                                        </div>
+                                        <p className="text-gray-400 text-sm mb-4">Kim cương</p>
+                                        {pkg.bonus_credits > 0 && (
+                                            <p className="text-xs text-gray-500 mb-4">
+                                                Tổng: {pkg.credits_amount.toLocaleString('vi-VN')} + {pkg.bonus_credits.toLocaleString('vi-VN')} Thưởng
+                                            </p>
+                                        )}
+                                    </div>
+                                    <p className="text-2xl font-bold text-white mb-6">{pkg.price_vnd.toLocaleString('vi-VN')} đ</p>
+                                    <button
+                                        onClick={() => handleBuyClick(pkg)}
+                                        disabled={isProcessingPayment === pkg.id}
+                                        className="w-full py-3 font-bold rounded-lg transition-all duration-300 bg-gradient-to-r from-[#F72585] to-[#CA27FF] text-white hover:shadow-lg hover:shadow-pink-500/30 hover:-translate-y-1 disabled:opacity-50 disabled:cursor-wait"
+                                    >
+                                        {isProcessingPayment === pkg.id ? 'Đang xử lý...' : 'Mua'}
+                                    </button>
+                                </div>
+                            )})}
+                        </div>
+                    )}
                 </div>
             </main>
-
             <CreatorFooter onInfoLinkClick={setInfoModalKey} />
-            
             <BottomNavBar
-                activeTab={'buy-credits'}
+                activeTab="buy-credits"
                 onTabChange={navigate}
-                onTopUpClick={() => navigate('buy-credits')}
+                onTopUpClick={() => {}}
                 onCheckInClick={() => setCheckInModalOpen(true)}
             />
-            
-            {/* Modals */}
-            <InfoModal
-                isOpen={!!infoModalKey}
-                onClose={() => setInfoModalKey(null)}
-                contentKey={infoModalKey}
-            />
-            <CheckInModal
+            <InfoModal isOpen={!!infoModalKey} onClose={() => setInfoModalKey(null)} contentKey={infoModalKey} />
+            <CheckInModal 
                 isOpen={isCheckInModalOpen}
                 onClose={() => setCheckInModalOpen(false)}
             />

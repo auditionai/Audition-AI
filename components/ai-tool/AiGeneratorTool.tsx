@@ -12,7 +12,7 @@ import GenerationProgress from './GenerationProgress';
 import ConfirmationModal from '../ConfirmationModal';
 import ImageModal from '../common/ImageModal';
 import ToggleSwitch from './ToggleSwitch';
-import { resizeImage, fileToBase64 } from '../../utils/imageUtils'; // Import fileToBase64
+import { resizeImage } from '../../utils/imageUtils';
 import SignatureSettings from './SignatureSettings';
 
 interface AiGeneratorToolProps {
@@ -31,21 +31,24 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
     const [isConfirmOpen, setConfirmOpen] = useState(false);
     const [isResultModalOpen, setIsResultModalOpen] = useState(false);
     
-    // Feature States
-    const [poseImage, setPoseImage] = useState<{ url: string; file: File } | null>(null);
-    const [rawFaceImage, setRawFaceImage] = useState<{ url: string; file: File } | null>(null);
+    // Feature States (Simplified to store data URLs directly)
+    const [poseImage, setPoseImage] = useState<string | null>(null);
+    const [rawFaceImage, setRawFaceImage] = useState<string | null>(null);
     const [processedFaceImage, setProcessedFaceImage] = useState<string | null>(null);
-    const [styleImage, setStyleImage] = useState<{ url: string; file: File } | null>(null);
+    const [styleImage, setStyleImage] = useState<string | null>(null);
     const [isProcessingFace, setIsProcessingFace] = useState(false);
 
-    const promptRef = useRef<HTMLTextAreaElement>(null); // Use ref for uncontrolled component
+    // --- CRITICAL FIX: Convert prompt input to a controlled component using useState ---
+    const [prompt, setPrompt] = useState('');
+    // const promptRef = useRef<HTMLTextAreaElement>(null); // REMOVED
+
     const [selectedModel, setSelectedModel] = useState<AIModel>(DETAILED_AI_MODELS.find(m => m.recommended) || DETAILED_AI_MODELS[0]);
     const [selectedStyle, setSelectedStyle] = useState('none');
     const [aspectRatio, setAspectRatio] = useState('3:4');
     const [useUpscaler, setUseUpscaler] = useState(false);
     const [useBasicFaceLock, setUseBasicFaceLock] = useState(true);
 
-    // NEW: Signature State
+    // Signature State
     const [useSignature, setUseSignature] = useState(false);
     const [signatureText, setSignatureText] = useState('');
     const [signatureStyle, setSignatureStyle] = useState('handwritten');
@@ -58,13 +61,10 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
     const [isStyleDropdownOpen, setIsStyleDropdownOpen] = useState(false);
     const styleDropdownRef = useRef<HTMLDivElement>(null);
 
-
     useEffect(() => {
-        if (initialCharacterImage) {
-            setPoseImage(initialCharacterImage);
-        }
+        if (initialCharacterImage) setPoseImage(initialCharacterImage.url);
         if (initialFaceImage) {
-            setRawFaceImage(initialFaceImage);
+            setRawFaceImage(initialFaceImage.url);
             setProcessedFaceImage(null);
         }
     }, [initialCharacterImage, initialFaceImage]);
@@ -83,14 +83,13 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
         const file = e.target.files?.[0];
         if (file) {
             resizeImage(file, 1024)
-                .then(({ file: resizedFile, dataUrl: resizedDataUrl }) => {
-                    const newImage = { url: resizedDataUrl, file: resizedFile };
-                    if (type === 'pose') setPoseImage(newImage);
+                .then(({ dataUrl }) => { // Directly use the dataUrl
+                    if (type === 'pose') setPoseImage(dataUrl);
                     else if (type === 'face') {
-                        setRawFaceImage(newImage);
+                        setRawFaceImage(dataUrl);
                         setProcessedFaceImage(null);
                     }
-                    else if (type === 'style') setStyleImage(newImage);
+                    else if (type === 'style') setStyleImage(dataUrl);
                 })
                 .catch((err: any) => {
                     console.error("Error resizing image:", err);
@@ -112,22 +111,17 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
         if (!rawFaceImage || !session) return;
         setIsProcessingFace(true);
         try {
-            const reader = new FileReader();
-            reader.readAsDataURL(rawFaceImage.file);
-            reader.onloadend = async () => {
-                const base64Image = reader.result;
-                const response = await fetch('/.netlify/functions/process-face', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-                    body: JSON.stringify({ image: base64Image }),
-                });
-                const result = await response.json();
-                if (!response.ok) throw new Error(result.error || 'Xử lý gương mặt thất bại.');
+            const response = await fetch('/.netlify/functions/process-face', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+                body: JSON.stringify({ image: rawFaceImage }), // Send the data URL directly
+            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.error || 'Xử lý gương mặt thất bại.');
 
-                setProcessedFaceImage(result.processedImageDataUrl);
-                updateUserDiamonds(result.newDiamondCount);
-                showToast('Xử lý & Khóa gương mặt thành công!', 'success');
-            };
+            setProcessedFaceImage(result.processedImageDataUrl);
+            updateUserDiamonds(result.newDiamondCount);
+            showToast('Xử lý & Khóa gương mặt thành công!', 'success');
         } catch (err: any) {
             showToast(err.message, 'error');
         } finally {
@@ -135,12 +129,10 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
         }
     };
 
-
     const generationCost = 1 + (useUpscaler ? 1 : 0);
 
     const handleGenerateClick = () => {
-        const promptValue = promptRef.current?.value;
-        if (!promptValue || !promptValue.trim()) {
+        if (!prompt || !prompt.trim()) {
             showToast('Yêu cầu thiếu các trường bắt buộc: prompt.', 'error');
             return;
         }
@@ -153,34 +145,14 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
     
     const handleConfirmGeneration = async () => {
         setConfirmOpen(false);
-
-        const promptValue = promptRef.current?.value || '';
-
-        // --- REFACTOR: NORMALIZE DATA AT THE SOURCE ---
-        // Determine the source for the face image (string, File, or null)
-        const faceImageSource = processedFaceImage ? processedFaceImage : (useBasicFaceLock && poseImage) ? poseImage.file : null;
-        let finalFaceImageForHook: string | null = null;
-
-        // Convert any source into a consistent type (string | null) before calling the hook
-        if (faceImageSource) {
-            if (typeof faceImageSource === 'string') {
-                finalFaceImageForHook = faceImageSource; // It's already a data URL
-            } else { // It's a File object
-                try {
-                    finalFaceImageForHook = await fileToBase64(faceImageSource);
-                } catch (e) {
-                    showToast('Lỗi xử lý ảnh gương mặt để tạo ảnh.', 'error');
-                    return; // Stop generation if conversion fails
-                }
-            }
-        }
-        // --- END REFACTOR ---
+        
+        const finalFaceImage = processedFaceImage ? processedFaceImage : (useBasicFaceLock && poseImage) ? poseImage : null;
 
         generateImage(
-            promptValue, selectedModel,
-            poseImage?.file ?? null,
-            styleImage?.file ?? null,
-            finalFaceImageForHook, // Pass the consistently typed variable
+            prompt, selectedModel,
+            poseImage,
+            styleImage,
+            finalFaceImage,
             aspectRatio, useUpscaler,
             useSignature,
             {
@@ -214,7 +186,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
     const resultImageForModal = generatedImage ? {
         id: 'generated-result',
         image_url: generatedImage,
-        prompt: promptRef.current?.value || '',
+        prompt: prompt,
         creator: user ? { display_name: user.display_name, photo_url: user.photo_url, level: user.level } : { display_name: 'Bạn', photo_url: '', level: 1 },
         created_at: new Date().toISOString(),
         model_used: selectedModel.name,
@@ -264,7 +236,6 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
         )
     }
 
-
     return (
         <>
             <ConfirmationModal isOpen={isConfirmOpen} onClose={() => setConfirmOpen(false)} onConfirm={handleConfirmGeneration} cost={generationCost} />
@@ -276,14 +247,14 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                 <div className="lg:col-span-8 flex flex-col gap-6">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <SettingsBlock title="Ảnh Nhân Vật" instructionKey="character" onInstructionClick={() => openInstructionModal('character')}>
-                            <ImageUploader onUpload={(e) => handleImageUpload(e, 'pose')} image={poseImage} onRemove={() => handleRemoveImage('pose')} text="Tư thế & Trang phục" disabled={isImageInputDisabled} />
+                            <ImageUploader onUpload={(e) => handleImageUpload(e, 'pose')} image={poseImage ? { url: poseImage } : null} onRemove={() => handleRemoveImage('pose')} text="Tư thế & Trang phục" disabled={isImageInputDisabled} />
                             <div className="mt-2 space-y-2">
                                 <ToggleSwitch label="Face Lock (70-80%)" checked={useBasicFaceLock} onChange={(e) => setUseBasicFaceLock(e.target.checked)} disabled={isImageInputDisabled || !poseImage} />
                                 <p className="text-xs text-gray-400 px-1 leading-relaxed">AI sẽ vẽ lại gương mặt dựa trên ảnh này. Để có độ chính xác <span className="font-bold text-yellow-400 neon-highlight"> 95%+</span>, hãy dùng <span className="font-bold text-pink-400">"Siêu Khóa Gương Mặt"</span>.</p>
                             </div>
                         </SettingsBlock>
                          <SettingsBlock title="Siêu Khóa Gương Mặt" instructionKey="face" onInstructionClick={() => openInstructionModal('face')}>
-                            <ImageUploader onUpload={(e) => handleImageUpload(e, 'face')} image={rawFaceImage ? { url: processedFaceImage || rawFaceImage.url } : null} onRemove={() => handleRemoveImage('face')} text="Face ID (95%+)" disabled={isImageInputDisabled} />
+                            <ImageUploader onUpload={(e) => handleImageUpload(e, 'face')} image={rawFaceImage ? { url: processedFaceImage || rawFaceImage } : null} onRemove={() => handleRemoveImage('face')} text="Face ID (95%+)" disabled={isImageInputDisabled} />
                              <div className="mt-2 space-y-2">
                                 {rawFaceImage && !processedFaceImage && (
                                     <button onClick={handleProcessFace} disabled={isProcessingFace} className="w-full text-sm font-bold py-2 px-3 bg-yellow-500/20 text-yellow-300 rounded-lg hover:bg-yellow-500/30 disabled:opacity-50 disabled:cursor-wait">
@@ -299,7 +270,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                             </div>
                         </SettingsBlock>
                          <SettingsBlock title="Ảnh Phong Cách" instructionKey="style" onInstructionClick={() => openInstructionModal('style')}>
-                            <ImageUploader onUpload={(e) => handleImageUpload(e, 'style')} image={styleImage} onRemove={() => handleRemoveImage('style')} text="Style Reference" processType="style" disabled={isImageInputDisabled} />
+                            <ImageUploader onUpload={(e) => handleImageUpload(e, 'style')} image={styleImage ? { url: styleImage } : null} onRemove={() => handleRemoveImage('style')} text="Style Reference" processType="style" disabled={isImageInputDisabled} />
                             <div className="mt-2 space-y-2">
                                 <p className="text-xs text-gray-400 px-1 leading-relaxed">AI sẽ <span className="font-bold text-cyan-400 neon-highlight">học hỏi</span> dải màu, ánh sáng và bố cục từ ảnh này để áp dụng vào tác phẩm của bạn.</p>
                             </div>
@@ -307,7 +278,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                     </div>
                     
                     <SettingsBlock title="Câu Lệnh Mô Tả (Prompt)" instructionKey="prompt" onInstructionClick={() => openInstructionModal('prompt')}>
-                        <textarea ref={promptRef} defaultValue="" placeholder="Mô tả chi tiết hình ảnh bạn muốn tạo, ví dụ: 'một cô gái tóc hồng, mặc váy công chúa, đang khiêu vũ trong một cung điện lộng lẫy'..." className="w-full p-3 bg-black/30 rounded-md border border-gray-600 focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition text-base text-white flex-grow resize-none min-h-[150px]" />
+                        <textarea value={prompt} onChange={e => setPrompt(e.target.value)} placeholder="Mô tả chi tiết hình ảnh bạn muốn tạo, ví dụ: 'một cô gái tóc hồng, mặc váy công chúa, đang khiêu vũ trong một cung điện lộng lẫy'..." className="w-full p-3 bg-black/30 rounded-md border border-gray-600 focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition text-base text-white flex-grow resize-none min-h-[150px]" />
                     </SettingsBlock>
                 </div>
 

@@ -1,5 +1,33 @@
 /* themes/main.css */
 
+/* --- DEFAULT ROOT THEME (FOR HOMEPAGE) --- */
+:root {
+  --color-fill: #0B0B0F;
+  --color-fill-secondary: #12121A;
+  --color-fill-modal: #141218;
+  --color-text-base: #E0E0E0;
+  --color-text-muted: #888888;
+  /* Original pinkish accent */
+  --color-accent: 247 37 133; /* #F72585 */
+  --color-accent-secondary: #CA27FF; /* A fuchsia color */
+  --color-accent-text: #FFFFFF;
+  --color-border: rgba(247, 37, 133, 0.2);
+  --color-border-accent: rgba(247, 37, 133, 0.5);
+  --shadow-accent: 0 0 15px rgba(247, 37, 133, 0.4);
+  --shadow-accent-lg: 0 0 25px rgba(247, 37, 133, 0.5);
+
+  /* Font from original */
+  --font-heading: 'Be Vietnam Pro', sans-serif;
+  --font-body: 'Be Vietnam Pro', sans-serif;
+
+  /* Panel styles from original */
+  --panel-radius: 1rem;
+  --panel-border: 1px solid var(--color-border);
+  --panel-shadow: 0 8px 25px rgba(0, 0, 0, 0.5);
+  --button-radius: 9999px; /* Rounded buttons */
+}
+
+
 /* --- GENERAL SETUP & ANIMATIONS --- */
 @keyframes fade-in-up {
   from { opacity: 0; transform: translateY(20px); }
@@ -276,7 +304,7 @@ div[data-theme="solar-flare"] .themed-settings-block {
 
 /* Themed Buttons */
 .themed-button-primary {
-  background: linear-gradient(90deg, var(--color-accent), var(--color-accent-secondary));
+  background: linear-gradient(90deg, rgb(var(--color-accent)), var(--color-accent-secondary));
   color: var(--color-accent-text);
   border-radius: var(--button-radius);
   box-shadow: var(--shadow-accent);
@@ -309,7 +337,7 @@ div[data-theme="solar-flare"] .themed-button-secondary {
 }
 div[data-theme="solar-flare"] .themed-button-secondary:hover {
     border-color: var(--color-accent);
-    color: var(--color-accent);
+    color: rgb(var(--color-accent));
 }
 
 /* Themed Headings */
@@ -326,7 +354,7 @@ div[data-theme="solar-flare"] .themed-button-secondary:hover {
   font-size: 1.75rem;
   font-weight: 700;
   line-height: 1;
-  background: linear-gradient(90deg, var(--color-accent), var(--color-accent-secondary));
+  background: linear-gradient(90deg, rgb(var(--color-accent)), var(--color-accent-secondary));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
@@ -340,7 +368,7 @@ div[data-theme="solar-flare"] .themed-button-secondary:hover {
 /* Custom Select Dropdown */
 .custom-select-wrapper { @apply relative w-full; }
 .custom-select-trigger {
-  @apply p-2 bg-black/30 rounded-md border border-gray-600 hover:border-pink-500 text-left w-full transition flex justify-between items-center;
+  @apply p-2 rounded-md border text-left w-full transition flex justify-between items-center;
   background-color: var(--color-fill);
   border: 1px solid var(--color-border);
   border-radius: var(--button-radius);
@@ -350,12 +378,17 @@ div[data-theme="solar-flare"] .themed-button-secondary:hover {
   @apply absolute top-full left-0 right-0 mt-2 bg-skin-fill-modal border border-skin-border rounded-lg shadow-lg z-20 max-h-60 overflow-y-auto;
   border-radius: var(--panel-radius);
 }
+/* FIX: Build error from using @apply with opacity modifier */
 .custom-select-option {
-  @apply w-full text-left px-4 py-2 hover:bg-skin-accent/10 flex justify-between items-center;
+  @apply w-full text-left px-4 py-2 flex justify-between items-center;
   color: var(--color-text-muted);
+  transition: background-color 0.2s ease-in-out;
+}
+.custom-select-option:hover {
+    background-color: rgb(var(--color-accent) / 0.1);
 }
 .custom-select-option.active {
-  color: var(--color-accent);
+  color: rgb(var(--color-accent));
   font-weight: 600;
 }
 
@@ -393,7 +426,7 @@ div[data-theme="solar-flare"] .themed-button-secondary:hover {
     width: 10px;
     height: 10px;
     position: absolute;
-    background-color: var(--color-accent);
+    background-color: rgb(var(--color-accent));
     transform: rotate(-45deg);
     animation: hearts-up 10s linear infinite;
 }
@@ -402,7 +435,7 @@ div[data-theme="solar-flare"] .themed-button-secondary:hover {
     width: 10px;
     height: 10px;
     position: absolute;
-    background-color: var(--color-accent);
+    background-color: rgb(var(--color-accent));
     border-radius: 50%;
 }
 .heart::before { top: -5px; left: 0; }
@@ -436,7 +469,7 @@ div[data-theme="solar-flare"] .themed-button-secondary:hover {
 
 /* 5. Bubbles (for Crystal Palace - fallback) */
 .bubble {
-    background-color: var(--color-accent);
+    background-color: rgb(var(--color-accent));
     opacity: 0.3;
     animation: bubble-up 15s linear infinite;
 }
@@ -480,8 +513,8 @@ div[data-theme="solar-flare"] .themed-button-secondary:hover {
 div[data-theme="cyber-punk"] .footer-neon-text,
 div[data-theme="dreamy-galaxy"] .footer-neon-text {
   font-family: var(--font-heading);
-  color: var(--color-accent);
-  text-shadow: 0 0 5px var(--color-accent), 0 0 10px var(--color-accent), 0 0 15px var(--color-accent-secondary);
+  color: rgb(var(--color-accent));
+  text-shadow: 0 0 5px rgb(var(--color-accent)), 0 0 10px rgb(var(--color-accent)), 0 0 15px var(--color-accent-secondary);
 }
 
 .theme-display-highlight {
@@ -490,15 +523,15 @@ div[data-theme="dreamy-galaxy"] .footer-neon-text {
 
 @keyframes theme-highlight-anim {
     0% {
-        text-shadow: 0 0 0px var(--color-accent);
+        text-shadow: 0 0 0px rgb(var(--color-accent));
         transform: scale(1);
     }
     50% {
-        text-shadow: 0 0 20px var(--color-accent), 0 0 30px var(--color-accent);
+        text-shadow: 0 0 20px rgb(var(--color-accent)), 0 0 30px rgb(var(--color-accent));
         transform: scale(1.1);
     }
     100% {
-        text-shadow: 0 0 0px var(--color-accent);
+        text-shadow: 0 0 0px rgb(var(--color-accent));
         transform: scale(1);
     }
 }

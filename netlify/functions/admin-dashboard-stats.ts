@@ -2,19 +2,6 @@ import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
 
 const handler: Handler = async (event: HandlerEvent) => {
-    // 1. Admin Authentication
-    const authHeader = event.headers['authorization'];
-    if (!authHeader) return { statusCode: 401, body: JSON.stringify({ error: 'Authorization header is required.' }) };
-    
-    const token = authHeader.split(' ')[1];
-    if (!token) return { statusCode: 401, body: JSON.stringify({ error: 'Bearer token is missing.' }) };
-
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
-    if (authError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized: Invalid token.' }) };
-
-    const { data: userData } = await supabaseAdmin.from('users').select('is_admin').eq('id', user.id).single();
-    if (!userData?.is_admin) return { statusCode: 403, body: JSON.stringify({ error: 'Forbidden' }) };
-
     if (event.httpMethod !== 'GET') {
         return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
     }
@@ -73,7 +60,7 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         const stats = {
             visitsToday: visitsTodayRes.count ?? 0,
-            totalVisits: (totalVisitsRes.count ?? 0) + 1000,
+            totalVisits: totalVisitsRes.count ?? 0,
             newUsersToday: newUsersTodayRes.count ?? 0,
             totalUsers: totalUsersRes.count ?? 0,
             imagesToday: imagesTodayRes.count ?? 0,

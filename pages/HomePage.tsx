@@ -70,12 +70,19 @@ const HomePage: React.FC = () => {
         // Fetch public stats for footer
         const fetchStats = async () => {
             try {
-                const response = await fetch('/.netlify/functions/public-stats');
+                // Use the admin dashboard stats endpoint as the single source of truth for all stats.
+                const response = await fetch('/.netlify/functions/admin-dashboard-stats');
                 if (!response.ok) {
                     console.error('Could not load public stats.');
                     return; // Silently fail and keep mock data
                 }
-                setStats(await response.json());
+                const dashboardStats = await response.json();
+                // Map the detailed stats to the simpler structure needed for the homepage.
+                setStats({
+                    users: dashboardStats.totalUsers,
+                    visits: dashboardStats.totalVisits,
+                    images: dashboardStats.totalImages,
+                });
             } catch (error) {
                 console.error('Could not load public stats:', error);
             }

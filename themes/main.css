@@ -412,217 +412,212 @@ body {
 
 /* Neon Text Effect */
 .neon-text-flow {
-  background: linear-gradient(90deg, #d1c8ff, #ffffff, #ffd1f8, #d1c8ff);
-  background-size: 250% auto;
-  color: #fff;
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  animation: neon-flow 8s linear infinite;
+  animation: neon-text-flow-animation 4s infinite alternate;
 }
-@keyframes neon-flow {
-  to { background-position: -250% center; }
+@keyframes neon-text-flow-animation {
+  from {
+    text-shadow:
+      0 0 4px #fff,
+      0 0 8px #fff,
+      0 0 12px var(--color-accent),
+      0 0 16px var(--color-accent);
+  }
+  to {
+    text-shadow:
+      0 0 6px #fff,
+      0 0 10px #fff,
+      0 0 18px var(--color-accent-secondary),
+      0 0 24px var(--color-accent-secondary);
+  }
+}
+/* ADDED FOR LOGO */
+.logo-container {
+  transition: all 0.5s ease;
+}
+.logo-text {
+  font-size: 1.75rem;
+  font-weight: 800;
+  line-height: 1;
+  transition: all 0.5s ease;
+  font-family: var(--font-heading);
+}
+.logo-subtext {
+  font-size: 0.65rem;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+  transition: all 0.5s ease;
+}
+
+[data-theme="cyber-dance"] .logo-text {
+  color: var(--color-accent);
+  text-shadow: 0 0 5px var(--color-accent), 0 0 10px var(--color-accent);
+  animation: flicker 3s infinite alternate;
+}
+@keyframes flicker {
+  0%, 18%, 22%, 25%, 53%, 57%, 100% {
+    text-shadow: 0 0 4px #fff, 0 0 11px var(--color-accent), 0 0 19px var(--color-accent), 0 0 40px var(--color-accent);
+  }
+  20%, 24%, 55% { text-shadow: none; }
+}
+
+[data-theme="crystal-palace"] .logo-text {
+  color: transparent;
+  -webkit-text-stroke: 1px var(--color-accent);
+  filter: drop-shadow(0 0 5px var(--color-accent));
+}
+
+[data-theme="sweet-pastel"] .logo-text {
+  color: var(--color-accent-text);
+  text-shadow: 1px 1px 0px #fff, 2px 2px 0px var(--color-accent);
+}
+
+[data-theme="magical-christmas"] .logo-text {
+  color: #ffd700;
+  background-image: linear-gradient(45deg, #ffd700, #f0e68c);
+  -webkit-background-clip: text;
+  background-clip: text;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+  animation: shimmer 5s infinite;
+}
+
+[data-theme="dreamy-galaxy"] .logo-text {
+  background-image: linear-gradient(45deg, #a78bfa, #d8b4fe, #a78bfa);
+  background-size: 200% 200%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 5s infinite;
+}
+
+/* ADDED FOR THEME SWITCHER */
+.theme-display-highlight {
+  animation: highlight-text 1.5s ease-out;
+}
+@keyframes highlight-text {
+  0% { text-shadow: 0 0 15px var(--color-accent); opacity: 1; transform: scale(1); }
+  50% { text-shadow: 0 0 25px var(--color-accent); opacity: 1; transform: scale(1.15); }
+  100% { text-shadow: none; opacity: 1; transform: scale(1); }
 }
 
 .footer-neon-text {
-  background: linear-gradient(90deg, var(--color-accent), #ffffff, var(--color-accent-secondary), var(--color-accent));
-  background-size: 250% auto;
-  color: #fff;
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  animation: footer-neon-flow 6s linear infinite;
-  text-shadow: 0 0 2px rgba(255, 255, 255, 0.7), 0 0 5px var(--color-accent), 0 0 10px var(--color-accent), 0 0 15px var(--color-accent-secondary), 0 0 20px var(--color-accent-secondary);
+  font-family: var(--font-heading);
+  color: var(--color-text-muted);
 }
-@keyframes footer-neon-flow {
-  to { background-position: 250% center; }
-}
+[data-theme="cyber-dance"] .footer-neon-text { color: var(--color-accent); text-shadow: 0 0 5px var(--color-accent); }
+[data-theme="dreamy-galaxy"] .footer-neon-text { color: var(--color-accent); text-shadow: 0 0 5px var(--color-accent); }
 
-/* 3D effect for cards */
-.interactive-3d {
-  transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), box-shadow 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
-  will-change: transform, box-shadow;
-}
-.interactive-3d:hover {
-  transform: translateY(-8px) perspective(1000px) rotateX(4deg);
-  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.2), 0 8px 16px rgba(0, 0, 0, 0.15);
+/* --- THEME-SPECIFIC PARTICLE EFFECTS --- */
+
+/* Snowfall */
+.snowfall-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1000; }
+.snowflake { position: absolute; background: white; border-radius: 50%; animation: fall linear infinite; }
+.snowflake::before, .snowflake::after { content: ''; position: absolute; background: white; border-radius: 50%; }
+.snowflake::before { width: 100%; height: 100%; transform: rotate(45deg); }
+.snowflake::after { width: 100%; height: 100%; transform: rotate(-45deg); }
+@keyframes fall {
+  0% { transform: translateY(-10vh) translateX(0) scale(0.5); width: 4px; height: 4px; }
+  100% { transform: translateY(110vh) translateX(10vw) scale(1); width: 8px; height: 8px; }
 }
 
-/* Image Slider */
-.image-slider-container { overflow: hidden; position: relative; width: 100%; -webkit-mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent); mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent); }
-.image-slider-track { display: flex; width: fit-content; animation: scroll 60s linear infinite; }
-.image-slider-container:hover .image-slider-track { animation-play-state: paused; }
-@keyframes scroll { from { transform: translateX(-50%); } to { transform: translateX(0); } }
-.slider-image-item { width: 280px; margin: 0 8px; flex-shrink: 0; }
-
-/* Keyframes for animations */
-@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
-@keyframes fade-in-up { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes fade-in-down { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
-.animate-fade-in { animation: fade-in 0.5s ease-out forwards; }
-.animate-fade-in-up { animation: fade-in-up 0.5s ease-out forwards; }
-.animate-fade-in-down { animation: fade-in-down 0.3s ease-out forwards; }
-
-/* New Keyframe for TopUp Button Glow */
-@keyframes button-neon-glow-keyframes {
-  0%, 100% { box-shadow: 0 0 4px color-mix(in srgb, var(--color-accent) 50%, transparent), 0 0 8px color-mix(in srgb, var(--color-accent) 40%, transparent), 0 0 12px color-mix(in srgb, var(--color-accent-secondary) 40%, transparent); }
-  50% { box-shadow: 0 0 8px color-mix(in srgb, var(--color-accent) 80%, transparent), 0 0 16px color-mix(in srgb, var(--color-accent) 60%, transparent), 0 0 24px color-mix(in srgb, var(--color-accent-secondary) 60%, transparent); }
+/* Bubbles */
+.bubbles-container { position: fixed; bottom: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: -1; }
+.bubble { position: absolute; bottom: -50px; background: color-mix(in srgb, var(--color-accent) 20%, transparent); border: 1px solid color-mix(in srgb, var(--color-accent) 50%, transparent); border-radius: 50%; animation: rise linear infinite; }
+@keyframes rise {
+  0% { transform: translateY(0) translateX(0); opacity: 1; }
+  100% { transform: translateY(-110vh) translateX(calc(sin(var(--i, 0) * 1deg) * 50px)); opacity: 0; }
 }
-.button-neon-glow {
-  animation: button-neon-glow-keyframes 4s infinite alternate;
+[data-theme="crystal-palace"] body {
+  background-image: radial-gradient(circle at 20% 80%, rgba(99, 212, 255, 0.1) 0%, transparent 40%),
+                    radial-gradient(circle at 80% 30%, rgba(162, 234, 255, 0.08) 0%, transparent 30%);
 }
-
-/* --- THEME-SPECIFIC LOGO STYLES --- */
-.logo-container .logo-text { font-family: var(--font-heading); font-size: 1.875rem; line-height: 2.25rem; font-weight: 700; transition: all 0.5s ease; }
-.logo-container .logo-subtext { font-family: var(--font-body); font-size: 0.75rem; line-height: 1rem; margin-top: -0.25rem; transition: all 0.5s ease; }
-
-/* Cyber Dance (Default) Logo */
-@keyframes glitch { 2%, 64% { transform: translate(2px, 0) skew(0deg); } 4%, 60% { transform: translate(-2px, 0) skew(0deg); } 62% { transform: translate(0, 0) skew(5deg); } }
-@keyframes glitch-top { 2%, 64% { transform: translate(2px, -2px); } 4%, 60% { transform: translate(-2px, 2px); } 62% { transform: translate(13px, -1px) skew(-13deg); } }
-@keyframes glitch-bottom { 2%, 64% { transform: translate(-2px, 0); } 4%, 60% { transform: translate(-2px, 0); } 62% { transform: translate(-22px, 5px) skew(21deg); } }
-
-[data-theme="cyber-dance"] .logo-text { color: var(--color-text-base); text-shadow: -1px 0 var(--color-accent); animation: glitch 1s linear infinite; }
-[data-theme="cyber-dance"] .logo-text::before, [data-theme="cyber-dance"] .logo-text::after { content: 'Audition AI'; position: absolute; left: 0; }
-[data-theme="cyber-dance"] .logo-text::before { animation: glitch-top 1s linear infinite; clip-path: polygon(0 0, 100% 0, 100% 33%, 0 33%); }
-[data-theme="cyber-dance"] .logo-text::after { animation: glitch-bottom 1.5s linear infinite; clip-path: polygon(0 67%, 100% 67%, 100% 100%, 0 100%); }
-[data-theme="cyber-dance"] .logo-subtext { color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.1em; }
-
-
-/* Crystal Palace Logo */
-[data-theme="crystal-palace"] .logo-text { color: var(--color-accent); text-shadow: 0 0 5px #fff, 0 0 10px var(--color-accent), 0 0 15px var(--color-accent); }
-[data-theme="crystal-palace"] .logo-subtext { color: var(--color-text-muted); }
-
-/* Sweet Pastel Logo */
-[data-theme="sweet-pastel"] .logo-text { color: var(--color-accent-text); text-shadow: 2px 2px 0px var(--color-accent); }
-[data-theme="sweet-pastel"] .logo-subtext { color: var(--color-text-muted); }
-
-/* Magical Christmas Logo */
-[data-theme="magical-christmas"] { --gold-color: #ffd700; }
-[data-theme="magical-christmas"] .logo-text { color: var(--gold-color); animation: shimmer 3s infinite; background-image: linear-gradient(-45deg, var(--gold-color) 40%, #fff 50%, var(--gold-color) 60%); background-size: 300%; -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
-[data-theme="magical-christmas"] .logo-subtext { color: var(--color-text-muted); }
-
-/* Dreamy Galaxy Logo */
-[data-theme="dreamy-galaxy"] .logo-text { background-image: linear-gradient(45deg, #f3ec78, #af4261, #6a4ca4, #4ca1a3); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
-[data-theme="dreamy-galaxy"] .logo-subtext { color: var(--color-text-muted); }
-
-
-/* --- THEME-SPECIFIC PARTICLE & BACKGROUND EFFECTS --- */
-
-/* Sweet Pastel - Floating Hearts */
-.hearts-container { position: fixed; bottom: -150px; left: 0; width: 100%; height: calc(100% + 150px); pointer-events: none; z-index: 1000; }
-.floating-heart { position: absolute; bottom: 0; color: var(--color-accent); opacity: 0; animation: heart-rise linear infinite; }
-@keyframes heart-rise {
-  0% { transform: translateY(0) rotate(0deg); opacity: 0.7; }
-  100% { transform: translateY(-120vh) rotate(360deg); opacity: 0; }
-}
-
-
-/* Magical Christmas - Snowfall & Bokeh */
-[data-theme="magical-christmas"]::before {
+[data-theme="crystal-palace"]::before {
   content: '';
   position: fixed;
-  top: 0; left: 0;
-  width: 100%; height: 100%;
-  background-image:
-    radial-gradient(circle at 20% 20%, #ffd70033 0%, transparent 30%),
-    radial-gradient(circle at 80% 30%, #ff8c8c33 0%, transparent 30%),
-    radial-gradient(circle at 50% 70%, #8cff8c33 0%, transparent 30%);
-  animation: bokeh-float 20s infinite alternate;
-  filter: blur(50px);
-  z-index: -1;
-}
-@keyframes bokeh-float {
-  0% { transform: translate(0, 0); }
-  100% { transform: translate(10vw, 10vh) scale(1.2); }
-}
-
-.snowfall-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1000; }
-.snowflake { position: absolute; background: white; border-radius: 50%; width: 5px; height: 5px; animation: snowfall linear infinite; }
-@keyframes snowfall {
-  0% { transform: translateY(-10vh) translateX(0); }
-  100% { transform: translateY(110vh) translateX(5vw); }
-}
-
-/* Crystal Palace - Bubbles & Caustics */
-[data-theme="crystal-palace"]::before {
-  content: "";
-  position: fixed;
-  left: 0; top: 0;
-  width: 100%; height: 100%;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 40' width='80' height='40'%3E%3Cpath fill='%2363d4ff' fill-opacity='0.1' d='M0 40a20 20 0 1 1 40 0h40V0H0v40z'/%3E%3C/svg%3E");
-  animation: caustics 10s infinite linear;
-  z-index: -1;
-  filter: blur(1px);
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800"><defs><filter id="f"><feTurbulence type="fractalNoise" baseFrequency="0.01 0.005" numOctaves="3" seed="2" /><feDisplacementMap in="SourceGraphic" scale="50" /></filter></defs><rect width="100%" height="100%" fill="hsl(210, 50%, 15%)" /><rect width="100%" height="100%" filter="url(%23f)" opacity="0.1" /></svg>');
+  animation: caustics 30s infinite linear alternate;
+  pointer-events: none;
+  z-index: -2;
 }
 @keyframes caustics {
-  0% { background-position: 0 0; }
-  100% { background-position: 160px 80px; }
-}
-.bubbles-container { position: fixed; bottom: -150px; left: 0; width: 100%; height: calc(100% + 150px); pointer-events: none; z-index: 1000; }
-.bubble { position: absolute; bottom: 0; border-radius: 50%; animation: bubble-rise linear infinite; }
-.bubble { background: radial-gradient(circle, rgba(99, 212, 255, 0.4) 0%, rgba(99, 212, 255, 0.1) 100%); border: 1px solid rgba(162, 234, 255, 0.3); }
-@keyframes bubble-rise {
-  0% { transform: translateY(0); opacity: 0.8; }
-  100% { transform: translateY(-120vh) opacity: 0; }
+  from { transform: scale(1.1) translate(0, 0); }
+  to { transform: scale(1.1) translate(-100px, -50px); }
 }
 
-/* Dreamy Galaxy - Parallax Stars & Shooting Stars */
-[data-theme="dreamy-galaxy"] {
-  --stars-1-url: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Ccircle cx='50' cy='50' r='1' fill='%23a78bfa80'/%3E%3C/svg%3E");
-  --stars-2-url: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Ccircle cx='100' cy='100' r='2' fill='%23e9d5ff66'/%3E%3C/svg%3E");
-}
-[data-theme="dreamy-galaxy"]::before, [data-theme="dreamy-galaxy"]::after {
-  content: '';
-  position: fixed;
-  top: 0; left: 0;
-  width: 100%; height: 100%;
-  z-index: -1;
-}
-[data-theme="dreamy-galaxy"]::before {
-  background-image: var(--stars-1-url);
-  background-size: 100px 100px;
-  animation: move-stars 60s linear infinite;
-}
-[data-theme="dreamy-galaxy"]::after {
-  background-image: var(--stars-2-url);
-  background-size: 200px 200px;
-  animation: move-stars 120s linear infinite;
-}
-@keyframes move-stars {
-  from { transform: translateY(0); }
-  to { transform: translateY(-200px); }
+/* Floating Hearts */
+.hearts-container { position: fixed; bottom: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: -1; }
+.floating-heart { position: absolute; bottom: -50px; color: var(--color-accent); animation: float-heart ease-in-out infinite; opacity: 0; }
+@keyframes float-heart {
+  0% { transform: translateY(0) scale(0.5); opacity: 0; }
+  10%, 90% { opacity: 0.7; }
+  100% { transform: translateY(-100vh) scale(1.2); opacity: 0; }
 }
 
-.shooting-stars-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1000; }
+/* Shooting Stars */
+.shooting-stars-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: -1; transform: rotateZ(45deg); }
 .shooting-star {
-  position: absolute;
-  height: 2px;
-  background: linear-gradient(-45deg, #fff, rgba(255, 255, 255, 0));
-  border-radius: 999px;
-  filter: drop-shadow(0 0 6px #fff);
-  animation: shooting-star-fall 3s linear infinite;
+    position: absolute;
+    height: 2px;
+    background: linear-gradient(-45deg, #a78bfa, rgba(0, 0, 255, 0));
+    border-radius: 999px;
+    filter: drop-shadow(0 0 6px #a78bfa);
+    animation: shooting-star-fall 3s linear infinite;
 }
 @keyframes shooting-star-fall {
-  0% { transform: translateX(0vw) translateY(0vh); opacity: 1; width: 150px; }
-  100% { transform: translateX(-100vw) translateY(100vh); opacity: 0; width: 1px; }
+  0% { opacity: 1; width: 0; transform: translateX(0); }
+  10% { opacity: 1; width: 150px; }
+  100% { opacity: 0; width: 150px; transform: translateX(300px); }
 }
 
-/* Footer Theme Display Highlight */
-@keyframes theme-highlight-anim {
-  0% {
-    text-shadow: 0 0 4px var(--color-accent), 0 0 8px var(--color-accent);
-    opacity: 0.8;
-  }
-  50% {
-    text-shadow: 0 0 8px var(--color-accent), 0 0 16px var(--color-accent);
-    opacity: 1;
-    transform: scale(1.1);
-  }
-  100% {
-    text-shadow: 0 0 4px var(--color-accent), 0 0 8px var(--color-accent);
-    opacity: 0.8;
-  }
+[data-theme="magical-christmas"] body {
+  background: radial-gradient(ellipse at bottom, #1b2735 0%, #090a0f 100%);
+  overflow: hidden;
 }
-.theme-display-highlight {
-  animation: theme-highlight-anim 1.5s ease-in-out;
+[data-theme="magical-christmas"] .snowfall-container {
+  z-index: -1;
 }
+
+[data-theme="sweet-pastel"] body::before {
+  content: '';
+  position: fixed;
+  top: 0; left: 0; width: 100%; height: 100%;
+  background: linear-gradient(45deg, #ffb8d2, #ffcce0, #fdf6f8);
+  background-size: 400% 400%;
+  animation: pastel-gradient 15s ease infinite;
+  z-index: -2;
+}
+
+@keyframes pastel-gradient {
+	0% { background-position: 0% 50%; }
+	50% { background-position: 100% 50%; }
+	100% { background-position: 0% 50%; }
+}
+
+[data-theme="cyber-dance"] body::after {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+  z-index: 2;
+  background-size: 100% 2px, 3px 100%;
+  pointer-events: none;
+  animation: glitch 1s infinite;
+}
+
+@keyframes glitch {
+  0% { transform: translate(0); }
+  10% { transform: translate(-2px, 2px); }
+  20% { transform: translate(2px, -2px); }
+  30% { transform: translate(-2px, -2px); }
+  40% { transform: translate(2px, 2px); }
+  50%, 100% { transform: translate(0); }
+}
+
+/* ... other styles ... */

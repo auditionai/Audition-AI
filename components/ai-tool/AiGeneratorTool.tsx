@@ -139,7 +139,8 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
     const generationCost = 1 + (useUpscaler ? 1 : 0);
 
     const handleGenerateClick = () => {
-        if (!prompt.trim()) {
+        // CRITICAL FIX: Restore client-side prompt validation.
+        if (!prompt || !prompt.trim()) {
             showToast('Yêu cầu thiếu các trường bắt buộc: prompt.', 'error');
             return;
         }

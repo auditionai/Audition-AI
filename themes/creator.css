@@ -235,6 +235,19 @@
 @keyframes reward-icon-pop { 0% { transform: scale(1); } 50% { transform: scale(1.2) rotate(-10deg); } 100% { transform: scale(1) rotate(0deg); } }
 @keyframes reward-item-enter { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
 @keyframes sparkle-move { from { background-position: 0 0; } to { background-position: -100px 100px; } }
+@keyframes footer-flicker { 
+  0%, 18%, 22%, 25%, 53%, 57%, 100% { 
+    text-shadow: 
+      0 0 4px rgba(255, 255, 255, 0.7),
+      0 0 10px rgb(var(--color-accent)),
+      0 0 20px rgb(var(--color-accent)),
+      0 0 40px var(--color-accent-secondary),
+      0 0 80px var(--color-accent-secondary);
+  } 
+  20%, 24%, 55% { 
+    text-shadow: 0 0 4px rgba(255, 255, 255, 0.7); 
+  } 
+}
 
 /* New Title effect */
 .themed-title-glow {
@@ -263,6 +276,11 @@
     background-image: url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgdmlld0JveD0iMCAwIDEwMCAxMDAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iNTAiIGN5PSI1MCIgcj0iMiIgZmlsbD0iI2ZmZiIvPjxjaXJjbGUgY3g9IjEwIiBjeT0iMjAiIHI9IjEiIGZpbGw9IiNmZmYiLz48Y2lyY2xlIGN4PSI4MCIgY3k9IjMwIiByPSIxLjUiIGZpbGw9IiNmZmYiLz48Y2lyY2xlIGN4PSIyMCIgY3k9IjgwIiByPSIxIiBmaWxsPSIjZmZmIi8+PGNpcmNsZSBjeD0iOTAiIGN5PSI5MCIgcj0iMiIgZmlsbD0iI2ZmZiIvPjwvc3ZnPg==');
     background-size: 100px 100px;
     animation: sparkle-move 5s linear infinite;
+}
+
+.themed-footer-copyright {
+  color: #fff; /* Bright base color for clarity */
+  animation: footer-flicker 4s infinite alternate;
 }
 
 /* Dreamy Galaxy Starfield Background */

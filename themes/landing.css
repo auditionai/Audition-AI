@@ -53,7 +53,6 @@ body {
 @keyframes fade-in-down { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes subtle-pulse-anim { 0%, 100% { transform: scale(1); box-shadow: 0 0 15px rgba(244, 114, 182, 0.4), 0 0 5px rgba(244, 114, 182, 0.6) inset; } 50% { transform: scale(1.05); box-shadow: 0 0 30px rgba(244, 114, 182, 0.6), 0 0 10px rgba(244, 114, 182, 0.8) inset; } }
 @keyframes scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
-@keyframes footer-flicker { 0%, 18%, 22%, 25%, 53%, 57%, 100% { text-shadow: 0 0 4px #f9a8d4, 0 0 11px #f9a8d4, 0 0 19px #f9a8d4, 0 0 40px #ec4899, 0 0 80px #ec4899, 0 0 90px #ec4899, 0 0 100px #ec4899, 0 0 150px #ec4899; } 20%, 24%, 55% { text-shadow: none; } }
 @keyframes aurora-move {
     0% { transform: translate(-50%, -50%) rotate(0deg) scale(1); }
     50% { transform: translate(-55%, -45%) rotate(180deg) scale(1.2); }
@@ -78,11 +77,6 @@ body {
 }
 
 .neon-text-glow { text-shadow: 0 0 5px currentColor, 0 0 10px currentColor; }
-
-.footer-neon-text {
-    color: #ec4899;
-    animation: footer-flicker 4s infinite alternate;
-}
 
 /* --- Image Slider for Gallery --- */
 .image-slider-container {

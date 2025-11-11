@@ -34,7 +34,7 @@ const CreatorFooter: React.FC<CreatorFooterProps> = ({ onInfoLinkClick }) => {
                 <a onClick={() => onInfoLinkClick('contact')} className="px-4 py-2 rounded-full bg-white/5 hover:bg-skin-accent/10 text-skin-muted hover:text-skin-base border border-transparent hover:border-skin-border-accent transition-all duration-300 cursor-pointer text-sm font-semibold">Hỗ trợ</a>
             </div>
         </div>
-        <p className="font-semibold text-base my-6 text-center footer-neon-text">
+        <p className="font-semibold text-base my-6 text-center themed-footer-copyright">
             &copy; {new Date().getFullYear()} AUDITION AI Studio.
         </p>
         <div className="mt-8 flex flex-wrap justify-center items-center gap-4 border-t border-gray-800 pt-6">

@@ -1,18 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useImageGenerator } from '../../hooks/useImageGenerator';
-import { useAuth } from '../../contexts/AuthContext';
-import { DETAILED_AI_MODELS, STYLE_PRESETS_NEW } from '../../constants/aiToolData';
-import { AIModel, GalleryImage } from '../../types';
+import { useImageGenerator } from '../../../hooks/useImageGenerator';
+import { useAuth } from '../../../contexts/AuthContext';
+import { DETAILED_AI_MODELS, STYLE_PRESETS_NEW } from '../../../constants/aiToolData';
+import { AIModel, GalleryImage, StylePreset } from '../../../types';
 
-import SettingsBlock from './SettingsBlock';
-import ImageUploader from './ImageUploader';
-import ModelSelectionModal from './ModelSelectionModal';
-import InstructionModal from './InstructionModal';
-import GenerationProgress from './GenerationProgress';
-import ConfirmationModal from '../ConfirmationModal';
-import ImageModal from '../common/ImageModal';
-import ToggleSwitch from './ToggleSwitch';
-import { resizeImage } from '../../utils/imageUtils';
+import SettingsBlock from '../../ai-tool/SettingsBlock';
+import ImageUploader from '../../ai-tool/ImageUploader';
+import ModelSelectionModal from '../../ai-tool/ModelSelectionModal';
+import InstructionModal from '../../ai-tool/InstructionModal';
+import GenerationProgress from '../../ai-tool/GenerationProgress';
+import ConfirmationModal from '../../ConfirmationModal';
+import ImageModal from '../../common/ImageModal';
+import ToggleSwitch from '../../ai-tool/ToggleSwitch';
+import { resizeImage } from '../../../utils/imageUtils';
 
 interface AiGeneratorToolProps {
     initialCharacterImage?: { url: string; file: File } | null;
@@ -75,7 +75,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
         const file = e.target.files?.[0];
         if (file) {
             resizeImage(file, 1024) // Resize to max 1024px
-                .then(({ file: resizedFile, dataUrl: resizedDataUrl }) => {
+                .then(({ file: resizedFile, dataUrl: resizedDataUrl }: { file: File, dataUrl: string }) => {
                     const newImage = { url: resizedDataUrl, file: resizedFile };
                     if (type === 'pose') setPoseImage(newImage);
                     else if (type === 'face') {
@@ -180,7 +180,6 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
 
     const isImageInputDisabled = !selectedModel.supportedModes.includes('image-to-image');
     
-    // @FIX: Add GalleryImage type annotation.
     const resultImageForModal: GalleryImage | null = generatedImage ? {
         id: 'generated-result',
         image_url: generatedImage,
@@ -238,7 +237,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
     return (
         <>
             <ConfirmationModal isOpen={isConfirmOpen} onClose={() => setConfirmOpen(false)} onConfirm={handleConfirmGeneration} cost={generationCost} />
-            <ModelSelectionModal isOpen={isModelModalOpen} onClose={() => setModelModalOpen(false)} selectedModelId={selectedModel.id} onSelectModel={(id: string) => setSelectedModel(DETAILED_AI_MODELS.find(m => m.id === id) || selectedModel)} characterImage={!!poseImage} />
+            <ModelSelectionModal isOpen={isModelModalOpen} onClose={() => setModelModalOpen(false)} selectedModelId={selectedModel.id} onSelectModel={(id: string) => setSelectedModel(DETAILED_AI_MODELS.find((m: AIModel) => m.id === id) || selectedModel)} characterImage={!!poseImage} />
             <InstructionModal isOpen={isInstructionModalOpen} onClose={() => setInstructionModalOpen(false)} instructionKey={instructionKey} />
 
             <div className="flex flex-col lg:flex-row gap-6">
@@ -296,12 +295,12 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                                 <label className="text-sm font-semibold text-gray-300 mb-1 block">Phong cách</label>
                                 <div className="custom-select-wrapper">
                                     <button onClick={() => setIsStyleDropdownOpen(!isStyleDropdownOpen)} className="custom-select-trigger">
-                                        <span>{STYLE_PRESETS_NEW.find(p => p.id === selectedStyle)?.name}</span>
+                                        <span>{STYLE_PRESETS_NEW.find((p: StylePreset) => p.id === selectedStyle)?.name}</span>
                                         <i className={`ph-fill ph-caret-down transition-transform ${isStyleDropdownOpen ? 'rotate-180' : ''}`}></i>
                                     </button>
                                     {isStyleDropdownOpen && (
                                         <div className="custom-select-options">
-                                            {STYLE_PRESETS_NEW.map(p => (
+                                            {STYLE_PRESETS_NEW.map((p: StylePreset) => (
                                                 <button key={p.id} onClick={() => { setSelectedStyle(p.id); setIsStyleDropdownOpen(false); }} className={`custom-select-option ${selectedStyle === p.id ? 'active' : ''}`}>
                                                     <span>{p.name}</span>
                                                     {selectedStyle === p.id && <i className="ph-fill ph-check"></i>}

@@ -1,18 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useImageGenerator } from '../../../hooks/useImageGenerator';
-import { useAuth } from '../../../contexts/AuthContext';
-import { DETAILED_AI_MODELS, STYLE_PRESETS_NEW } from '../../../constants/aiToolData';
-import { AIModel, StylePreset } from '../../../types';
+import { useImageGenerator } from '../../hooks/useImageGenerator';
+import { useAuth } from '../../contexts/AuthContext';
+import { DETAILED_AI_MODELS, STYLE_PRESETS_NEW } from '../../constants/aiToolData';
+import { AIModel, StylePreset } from '../../types';
 
-import SettingsBlock from '../../ai-tool/SettingsBlock';
-import ImageUploader from '../../ai-tool/ImageUploader';
-import ModelSelectionModal from '../../ai-tool/ModelSelectionModal';
-import InstructionModal from '../../ai-tool/InstructionModal';
-import GenerationProgress from '../../ai-tool/GenerationProgress';
-import ConfirmationModal from '../../ConfirmationModal';
-import ImageModal from '../../common/ImageModal';
-import ToggleSwitch from '../../ai-tool/ToggleSwitch';
-import { resizeImage } from '../../../utils/imageUtils';
+import SettingsBlock from './SettingsBlock';
+import ImageUploader from './ImageUploader';
+import ModelSelectionModal from './ModelSelectionModal';
+import InstructionModal from './InstructionModal';
+import GenerationProgress from './GenerationProgress';
+import ConfirmationModal from '../ConfirmationModal';
+import ImageModal from '../common/ImageModal';
+import ToggleSwitch from './ToggleSwitch';
+import { resizeImage } from '../../utils/imageUtils';
 
 interface AiGeneratorToolProps {
     initialCharacterImage?: { url: string; file: File } | null;

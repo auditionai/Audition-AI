@@ -5,6 +5,7 @@ import GalleryPage from './pages/GalleryPage';
 import { useAuth } from './contexts/AuthContext';
 import BuyCreditsPage from './pages/BuyCreditsPage';
 import RewardNotification from './components/common/RewardNotification';
+import ThemeEffects from './components/themes/ThemeEffects';
 
 // Khai báo type cho hàm gtag của Google Analytics trên window object
 declare global {
@@ -72,7 +73,8 @@ function App() {
   }
 
   return (
-    <div className="bg-[#0B0B0F] text-white selection:bg-pink-500 selection:text-white">
+    <div className="bg-skin-fill text-skin-base selection:bg-pink-500 selection:text-white">
+      <ThemeEffects />
       {renderPage()}
 
       {/* Reward Notification */}

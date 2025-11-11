@@ -5,6 +5,7 @@ import { getRankForLevel } from '../utils/rankUtils';
 import XPProgressBar from './common/XPProgressBar';
 import NotificationDropdown from './common/NotificationDropdown';
 import { CHANGELOG_DATA } from '../constants/changelogData';
+import Logo from '../common/Logo';
 
 interface CreatorHeaderProps {
   onTopUpClick: () => void;
@@ -68,19 +69,16 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
   };
 
   return (
-    <header className="fixed top-0 left-0 w-full z-40 bg-[#0B0B0F]/80 backdrop-blur-lg border-b border-pink-500/10">
+    <header className="fixed top-0 left-0 w-full z-40 bg-skin-fill/80 backdrop-blur-lg border-b border-skin-border">
       <div className="container mx-auto px-4">
         <div className="flex justify-center md:justify-between items-center py-3 md:h-20">
           
           <div className="flex flex-col items-center md:items-start">
-            <div className="text-2xl font-bold cursor-pointer" onClick={() => handleNavClick('tool')}>
-              <span className="bg-gradient-to-r from-[#FF3FA4] to-[#CA27FF] text-transparent bg-clip-text">Audition AI Studio</span>
-            </div>
+             <Logo onClick={() => handleNavClick('tool')} />
             <div className="md:hidden mt-2">
                 <button
                   onClick={onTopUpClick}
-                  className="flex items-center gap-2 px-4 py-2 rounded-full cursor-pointer transition-transform active:scale-95 bg-gradient-to-r from-[#F72585] to-[#CA27FF] text-white shadow-lg shadow-[#F72585]/40"
-                  style={{ animation: 'button-neon-glow 4s infinite alternate' }}
+                  className="flex items-center gap-2 px-4 py-2 rounded-full cursor-pointer transition-transform active:scale-95 bg-gradient-to-r from-skin-accent to-skin-accent-secondary text-skin-accent-text shadow-accent-lg button-neon-glow"
                 >
                   <i className="ph-fill ph-diamonds-four text-lg"></i>
                   <span className="font-bold text-sm">{user.diamonds} Kim cương</span>
@@ -106,7 +104,7 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
                     {!hasCheckedInToday && (
                         <span className="absolute -top-0.5 -right-0.5 flex h-3 w-3">
                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-pink-400 opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-3 w-3 bg-pink-500 border-2 border-[#0B0B0F]"></span>
+                            <span className="relative inline-flex rounded-full h-3 w-3 bg-pink-500 border-2 border-skin-fill"></span>
                         </span>
                     )}
                     <i className="ph-fill ph-calendar-check text-base"></i>
@@ -140,14 +138,13 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
           <div className="hidden md:flex items-center gap-4">
             <button
               onClick={onTopUpClick}
-              className="group relative flex items-center p-1 font-bold text-white bg-black/50 rounded-full transition-all duration-300 hover:-translate-y-0.5"
-              style={{ animation: 'button-neon-glow 4s infinite alternate' }}
+              className="group relative flex items-center p-1 font-bold text-skin-base bg-black/50 rounded-full transition-all duration-300 hover:-translate-y-0.5 button-neon-glow"
             >
-              <div className="absolute -inset-px bg-gradient-to-r from-[#F72585] to-[#CA27FF] rounded-full opacity-50 group-hover:opacity-80 transition-opacity duration-300 blur-sm"></div>
+              <div className="absolute -inset-px bg-gradient-to-r from-skin-accent to-skin-accent-secondary rounded-full opacity-50 group-hover:opacity-80 transition-opacity duration-300 blur-sm"></div>
               <div className="relative flex items-center gap-2 bg-black/80 px-3 py-1 rounded-full">
-                  <i className="ph-fill ph-diamonds-four text-lg text-pink-400 neon-text-glow"></i>
+                  <i className="ph-fill ph-diamonds-four text-lg text-skin-accent neon-text-glow"></i>
                   <span className="text-sm">{user.diamonds}</span>
-                  <span className="pl-2 text-xs font-semibold tracking-wider text-gray-400 group-hover:text-white transition-colors border-l border-white/20">NẠP</span>
+                  <span className="pl-2 text-xs font-semibold tracking-wider text-skin-muted group-hover:text-skin-base transition-colors border-l border-white/20">NẠP</span>
               </div>
             </button>
             
@@ -161,7 +158,7 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
                     {hasUnread && (
                          <span className="absolute -top-0.5 -right-0.5 flex h-3 w-3">
                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-pink-400 opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-3 w-3 bg-pink-500 border-2 border-[#0B0B0F]"></span>
+                            <span className="relative inline-flex rounded-full h-3 w-3 bg-pink-500 border-2 border-skin-fill"></span>
                         </span>
                     )}
                 </button>
@@ -170,24 +167,24 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
 
             <div className="relative flex items-center gap-3" ref={dropdownRef}>
                 <div className="hidden sm:flex items-center gap-2 text-right">
-                    <span className="font-semibold text-white">{user.display_name}</span>
-                    <span className="text-xs text-gray-400">{rank.title}</span>
+                    <span className="font-semibold text-skin-base">{user.display_name}</span>
+                    <span className="text-xs text-skin-muted">{rank.title}</span>
                 </div>
                 <button onClick={() => setDropdownOpen(!isDropdownOpen)} className="flex items-center gap-3 cursor-pointer">
                   <div className="relative">
-                     <img src={user.photo_url} alt={user.display_name} className="w-11 h-11 rounded-full border-2 border-transparent group-hover:border-pink-500 transition-all" />
-                      <div className={`absolute inset-0 rounded-full border-2 border-pink-500 transition-all duration-300 shadow-[0_0_12px_rgba(247,37,133,0.7)] ${isDropdownOpen ? 'opacity-100' : 'opacity-0'}`}></div>
+                     <img src={user.photo_url} alt={user.display_name} className="w-11 h-11 rounded-full border-2 border-transparent group-hover:border-skin-accent transition-all" />
+                      <div className={`absolute inset-0 rounded-full border-2 border-skin-accent transition-all duration-300 shadow-accent ${isDropdownOpen ? 'opacity-100' : 'opacity-0'}`}></div>
                   </div>
                 </button>
               {isDropdownOpen && (
-                <div className="absolute right-0 mt-3 top-full w-72 origin-top-right bg-[#1e1b25] border border-white/10 rounded-md shadow-lg z-50 animate-fade-in-down">
+                <div className="absolute right-0 mt-3 top-full w-72 origin-top-right bg-skin-fill-modal border border-skin-border rounded-md shadow-lg z-50 animate-fade-in-down">
                   <div className="p-2">
-                     <div className="px-2 py-2 border-b border-white/10">
+                     <div className="px-2 py-2 border-b border-skin-border">
                         <div className="flex items-center gap-3">
                            <span className="text-2xl">{rank.icon}</span>
                            <div>
-                               <p className="font-semibold text-sm text-white">{user.display_name}</p>
-                               <p className="text-xs text-gray-400 truncate">{rank.title} - Cấp {user.level}</p>
+                               <p className="font-semibold text-sm text-skin-base">{user.display_name}</p>
+                               <p className="text-xs text-skin-muted truncate">{rank.title} - Cấp {user.level}</p>
                            </div>
                         </div>
                         <div className="mt-3">
@@ -195,13 +192,13 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
                         </div>
                      </div>
                      <div className="py-1 mt-1">
-                        <button onClick={() => handleNavClick('settings')} className={`flex items-center gap-3 w-full text-left px-2 py-2 text-sm rounded-md cursor-pointer ${activeTab === 'settings' ? 'bg-pink-500/20 text-white' : 'text-gray-300 hover:bg-white/10'}`}>
+                        <button onClick={() => handleNavClick('settings')} className={`flex items-center gap-3 w-full text-left px-2 py-2 text-sm rounded-md cursor-pointer ${activeTab === 'settings' ? 'bg-skin-accent/20 text-skin-base' : 'text-skin-muted hover:bg-white/10'}`}>
                             <i className="ph-fill ph-gear"></i>
                             Cài đặt tài khoản
                         </button>
                      </div>
-                     <div className="py-1 border-t border-white/10 mt-1">
-                        <button onClick={handleLogout} className="flex items-center gap-3 w-full text-left px-2 py-2 text-sm text-gray-300 rounded-md hover:bg-red-500/20 hover:text-red-400 transition-colors cursor-pointer">
+                     <div className="py-1 border-t border-skin-border mt-1">
+                        <button onClick={handleLogout} className="flex items-center gap-3 w-full text-left px-2 py-2 text-sm text-skin-muted rounded-md hover:bg-red-500/20 hover:text-red-400 transition-colors cursor-pointer">
                           <i className="ph-fill ph-sign-out"></i>
                           Đăng xuất
                         </button>

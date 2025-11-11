@@ -1,5 +1,6 @@
 import React from 'react';
 import { User } from '../types';
+import Logo from './common/Logo';
 
 interface LandingHeaderProps {
   user: User | null;
@@ -19,20 +20,15 @@ const LandingHeader: React.FC<LandingHeaderProps> = ({ user, onTopUpClick, onScr
   }, []);
 
   return (
-    <header className={`fixed top-0 left-0 w-full z-40 transition-all duration-300 ${isScrolled ? 'bg-[#0B0B0F]/80 backdrop-blur-lg border-b border-pink-500/10' : 'bg-transparent'}`}>
+    <header className={`fixed top-0 left-0 w-full z-40 transition-all duration-300 ${isScrolled ? 'bg-skin-fill/80 backdrop-blur-lg border-b border-skin-border' : 'bg-transparent'}`}>
       <div className="container mx-auto px-4">
         <div className="flex justify-between items-center h-20">
-          <div className="cursor-pointer" onClick={() => onScrollTo('hero')}>
-             <h1 className="text-3xl font-bold">
-                <span className="bg-gradient-to-r from-[#FF3FA4] to-[#CA27FF] text-transparent bg-clip-text">Audition AI</span>
-             </h1>
-             <p className="text-xs neon-text-flow -mt-1" style={{ animationDuration: '5s' }}>Sáng tạo không giới hạn</p>
-          </div>
+          <Logo onClick={() => onScrollTo('hero')} />
           <nav className="hidden md:flex items-center gap-2">
-            <a onClick={() => onScrollTo('features')} className="px-4 py-2 rounded-full bg-white/5 hover:bg-pink-500/10 text-gray-300 hover:text-white border border-transparent hover:border-pink-500/20 transition-all duration-300 cursor-pointer text-sm">Tính năng</a>
-            <a onClick={() => onScrollTo('how-it-works')} className="px-4 py-2 rounded-full bg-white/5 hover:bg-pink-500/10 text-gray-300 hover:text-white border border-transparent hover:border-pink-500/20 transition-all duration-300 cursor-pointer text-sm">Cách hoạt động</a>
-            <a onClick={() => onScrollTo('pricing')} className="px-4 py-2 rounded-full bg-white/5 hover:bg-pink-500/10 text-gray-300 hover:text-white border border-transparent hover:border-pink-500/20 transition-all duration-300 cursor-pointer text-sm">Bảng giá</a>
-            <a onClick={() => onScrollTo('faq')} className="px-4 py-2 rounded-full bg-white/5 hover:bg-pink-500/10 text-gray-300 hover:text-white border border-transparent hover:border-pink-500/20 transition-all duration-300 cursor-pointer text-sm">FAQ</a>
+            <a onClick={() => onScrollTo('features')} className="px-4 py-2 rounded-full bg-white/5 hover:bg-skin-accent/10 text-skin-muted hover:text-skin-base border border-transparent hover:border-skin-border-accent transition-all duration-300 cursor-pointer text-sm">Tính năng</a>
+            <a onClick={() => onScrollTo('how-it-works')} className="px-4 py-2 rounded-full bg-white/5 hover:bg-skin-accent/10 text-skin-muted hover:text-skin-base border border-transparent hover:border-skin-border-accent transition-all duration-300 cursor-pointer text-sm">Cách hoạt động</a>
+            <a onClick={() => onScrollTo('pricing')} className="px-4 py-2 rounded-full bg-white/5 hover:bg-skin-accent/10 text-skin-muted hover:text-skin-base border border-transparent hover:border-skin-border-accent transition-all duration-300 cursor-pointer text-sm">Bảng giá</a>
+            <a onClick={() => onScrollTo('faq')} className="px-4 py-2 rounded-full bg-white/5 hover:bg-skin-accent/10 text-skin-muted hover:text-skin-base border border-transparent hover:border-skin-border-accent transition-all duration-300 cursor-pointer text-sm">FAQ</a>
           </nav>
           <div className="flex items-center gap-4">
             {user ? (
@@ -40,7 +36,7 @@ const LandingHeader: React.FC<LandingHeaderProps> = ({ user, onTopUpClick, onScr
                 <div 
                     onClick={onTopUpClick}
                     className="flex items-center gap-2 bg-white/10 px-4 py-2 rounded-full cursor-pointer hover:bg-white/20 transition">
-                  <i className="ph-fill ph-diamonds-four text-pink-400"></i>
+                  <i className="ph-fill ph-diamonds-four text-skin-accent"></i>
                   <span className="font-bold">{user.diamonds}</span>
                 </div>
                  {/* Fix: Use snake_case properties `photo_url` and `display_name` to match the User type. */}

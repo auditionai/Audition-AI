@@ -26,7 +26,8 @@ const processImageForGemini = async (imageDataUrl: string | null, targetAspectRa
         if (!base64) return null;
 
         const imageBuffer = Buffer.from(base64, 'base64');
-        const image = await Jimp.read(imageBuffer);
+        // FIX: The type definitions for 'jimp' may not align with its ESM module exports. Casting to 'any' bypasses the TypeScript error for `read`, assuming the method exists at runtime.
+        const image = await (Jimp as any).read(imageBuffer);
         const originalWidth = image.getWidth();
         const originalHeight = image.getHeight();
 
@@ -48,7 +49,8 @@ const processImageForGemini = async (imageDataUrl: string | null, targetAspectRa
         }
         
         // Create a new black canvas with the target dimensions
-        const newCanvas = new Jimp(newCanvasWidth, newCanvasHeight, '#000000');
+        // FIX: The 'jimp' constructor is not constructable on the imported type. Using `new (Jimp as any)` bypasses the strict type check.
+        const newCanvas = new (Jimp as any)(newCanvasWidth, newCanvasHeight, '#000000');
         
         // Calculate position to center the original image
         const x = (newCanvasWidth - originalWidth) / 2;
@@ -57,7 +59,8 @@ const processImageForGemini = async (imageDataUrl: string | null, targetAspectRa
         // Composite the original image onto the new canvas
         newCanvas.composite(image, x, y);
 
-        const mime = header.match(/:(.*?);/)?.[1] || Jimp.MIME_PNG;
+        // FIX: The type definitions for 'jimp' may not align with its ESM module exports. Casting to 'any' bypasses the TypeScript error for the MIME_PNG constant.
+        const mime = header.match(/:(.*?);/)?.[1] || (Jimp as any).MIME_PNG;
         return newCanvas.getBase64Async(mime as any);
 
     } catch (error) {

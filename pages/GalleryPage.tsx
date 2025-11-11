@@ -10,7 +10,7 @@ import AuthModal from '../components/AuthModal';
 import InfoModal from '../components/InfoModal';
 
 const GalleryPage: React.FC = () => {
-    const { navigate, stats, user, updateUserDiamonds, showToast } = useAuth();
+    const { navigate, user, updateUserDiamonds, showToast } = useAuth();
     const [selectedImage, setSelectedImage] = useState<GalleryImage | null>(null);
     const [publicGalleryImages, setPublicGalleryImages] = useState<GalleryImage[]>([]);
     const [isGalleryLoading, setIsGalleryLoading] = useState(true);
@@ -67,7 +67,6 @@ const GalleryPage: React.FC = () => {
                 </section>
             </main>
             <Footer 
-                stats={stats} 
                 onInfoLinkClick={setInfoModalKey}
             />
             

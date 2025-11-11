@@ -1,96 +1,88 @@
-import { useEffect } from 'react';
-import HomePage from './pages/HomePage';
-import CreatorPage, { CreatorTab } from './pages/CreatorPage';
-import GalleryPage from './pages/GalleryPage';
+
+import React from 'react';
 import { useAuth } from './contexts/AuthContext';
+import HomePage from './pages/HomePage';
+import CreatorPage from './pages/CreatorPage';
 import BuyCreditsPage from './pages/BuyCreditsPage';
+import GalleryPage from './pages/GalleryPage';
 import RewardNotification from './components/common/RewardNotification';
 import ThemeEffects from './components/themes/ThemeEffects';
 
-// Khai báo type cho hàm gtag của Google Analytics trên window object
-declare global {
-  interface Window {
-    gtag?: (command: string, targetId: string, config: { page_path: string }) => void;
-  }
-}
+const Toast: React.FC<{ message: string, type: 'success' | 'error', onDismiss: () => void }> = ({ message, type, onDismiss }) => {
+    React.useEffect(() => {
+        const timer = setTimeout(onDismiss, 4000);
+        return () => clearTimeout(timer);
+    }, [onDismiss]);
 
-const AppLoadingScreen = () => (
-  <div className="fixed inset-0 bg-[#0B0B0F] flex items-center justify-center z-[9999]">
-    <div className="text-center">
-        <div className="relative w-24 h-24 mx-auto">
-            <div className="absolute inset-0 border-4 border-pink-500/30 rounded-full"></div>
-            <div className="absolute inset-0 border-4 border-t-pink-500 rounded-full animate-spin"></div>
+    const icon = type === 'success' ? 'ph-check-circle' : 'ph-warning-circle';
+    const colors = type === 'success' ? 'bg-green-500/80 border-green-400/50' : 'bg-red-500/80 border-red-400/50';
+
+    return (
+        <div className={`fixed top-5 right-5 z-[9999] flex items-center gap-3 p-4 rounded-lg shadow-lg text-white backdrop-blur-md border animate-fade-in-down ${colors}`}>
+            <i className={`ph-fill ${icon} text-2xl`}></i>
+            <span className="font-semibold">{message}</span>
         </div>
-        <p className="mt-4 text-lg font-semibold text-gray-300 animate-pulse">Đang khởi tạo Audition AI...</p>
+    );
+};
+
+const LoadingSpinner: React.FC = () => (
+    <div className="fixed inset-0 bg-skin-fill flex flex-col justify-center items-center z-[10000]">
+      <div className="relative w-24 h-24">
+        <div className="absolute inset-0 border-4 border-skin-accent/30 rounded-full"></div>
+        <div className="absolute inset-0 border-4 border-t-skin-accent rounded-full animate-spin"></div>
+      </div>
+      <p className="mt-6 text-lg text-skin-muted font-semibold animate-pulse">Đang tải...</p>
     </div>
-  </div>
 );
 
-function App() {
-  const { user, toast, loading, route, reward, clearReward } = useAuth();
 
-  // Gửi page_view đến Google Analytics mỗi khi route thay đổi
-  useEffect(() => {
-    if (typeof window.gtag === 'function') {
-      window.gtag('config', 'G-32R3PLY2JT', {
-        page_path: window.location.pathname,
-      });
-    }
-  }, [route]);
-
-
-  if (loading) {
-    return <AppLoadingScreen />;
-  }
-
-  const renderPage = () => {
-    const creatorTabs: CreatorTab[] = ['tool', 'leaderboard', 'my-creations', 'settings'];
-    const adminTabs: string[] = ['admin-gallery'];
-
-    if (user) {
-        if (creatorTabs.includes(route as CreatorTab)) {
-            return <CreatorPage activeTab={route as CreatorTab} />;
+const App: React.FC = () => {
+    const { loading, route, toast, showToast, user, reward, clearReward } = useAuth();
+    
+    const renderPage = () => {
+        if (loading) {
+            return <LoadingSpinner />;
         }
-        if (adminTabs.includes(route) && user.is_admin) {
-            return <CreatorPage activeTab={route as 'admin-gallery'} />;
+        
+        // Always show CreatorPage if user is logged in, unless they're explicitly on a public page
+        if (user) {
+             switch (route) {
+                case 'home':
+                case 'tool':
+                case 'leaderboard':
+                case 'my-creations':
+                case 'settings':
+                case 'admin-gallery':
+                    return <CreatorPage activeTab={route === 'home' ? 'tool' : route} />;
+                case 'buy-credits':
+                    return <BuyCreditsPage />;
+                case 'gallery':
+                    return <GalleryPage />;
+                default:
+                    return <CreatorPage activeTab="tool" />;
+            }
         }
-        if (route === 'gallery') {
-            return <GalleryPage />;
+        
+        // Public pages for logged-out users
+        switch(route) {
+            case 'gallery':
+                return <GalleryPage />;
+            case 'home':
+            default:
+                return <HomePage />;
         }
-        if (route === 'buy-credits') {
-            return <BuyCreditsPage />;
-        }
-        // If logged in and route is 'home' or invalid, default to 'tool'
-        return <CreatorPage activeTab="tool" />;
-    } else {
-        // Logged out users
-        if (route === 'gallery') {
-            return <GalleryPage />;
-        }
-        // For any other route (including 'home' or protected routes like 'settings'), show HomePage
-        return <HomePage />;
-    }
-  }
+    };
 
-  return (
-    <div className="text-skin-base selection:bg-pink-500 selection:text-white">
-      <ThemeEffects />
-      <div className="relative z-10 bg-skin-fill">
-        {renderPage()}
-      </div>
-
-      {/* Reward Notification */}
-      {reward && <RewardNotification reward={reward} onDismiss={clearReward} />}
-
-      {/* Toast Notification */}
-      {toast && (
-          <div className={`fixed bottom-5 left-1/2 -translate-x-1/2 w-auto max-w-[90%] p-4 rounded-xl shadow-2xl text-white flex items-center gap-4 animate-fade-in-up z-[9999] ${toast.type === 'success' ? 'bg-gradient-to-r from-green-500 to-emerald-600' : 'bg-gradient-to-r from-red-500 to-rose-600'}`}>
-              <i className={`ph-fill ${toast.type === 'success' ? 'ph-gift' : 'ph-warning-circle'} text-3xl flex-shrink-0`}></i>
-              <span className="font-semibold text-base">{toast.message}</span>
-          </div>
-      )}
-    </div>
-  );
-}
+    return (
+        <>
+            <ThemeEffects />
+            {renderPage()}
+            {toast && toast.message && <Toast message={toast.message} type={toast.type} onDismiss={() => showToast('', 'success')} />}
+            {reward && (reward.diamonds > 0 || reward.xp > 0) && (
+                <RewardNotification reward={reward} onDismiss={clearReward} />
+            )}
+        </>
+    );
+};
 
 export default App;

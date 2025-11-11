@@ -209,7 +209,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                     showInfoPanel={false}
                 />
                 <div className="text-center animate-fade-in w-full min-h-[70vh] flex flex-col items-center justify-center">
-                    <h3 className="text-2xl font-bold mb-4 bg-gradient-to-r from-green-400 to-cyan-400 text-transparent bg-clip-text">Tạo ảnh thành công!</h3>
+                    <h3 className="themed-heading text-2xl font-bold mb-4 bg-gradient-to-r from-green-400 to-cyan-400 text-transparent bg-clip-text">Tạo ảnh thành công!</h3>
                     <div 
                         className="max-w-md w-full mx-auto bg-black/20 rounded-lg overflow-hidden border-2 border-pink-500/30 cursor-pointer group relative"
                         style={{ aspectRatio: aspectRatio.replace(':', '/') }}
@@ -221,10 +221,10 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                         </div>
                     </div>
                     <div className="flex gap-4 mt-6 justify-center">
-                        <button onClick={resetGenerator} className="px-6 py-3 font-semibold bg-white/10 text-white rounded-lg hover:bg-white/20 transition">
+                        <button onClick={resetGenerator} className="themed-button-secondary px-6 py-3 font-semibold">
                             <i className="ph-fill ph-arrow-counter-clockwise mr-2"></i>Tạo ảnh khác
                         </button>
-                        <button onClick={handleDownloadResult} className="px-6 py-3 font-bold text-white bg-gradient-to-r from-pink-500 to-fuchsia-600 rounded-lg hover:opacity-90 transition">
+                        <button onClick={handleDownloadResult} className="themed-button-primary px-6 py-3 font-bold">
                             <i className="ph-fill ph-download-simple mr-2"></i>Tải xuống
                         </button>
                     </div>
@@ -276,17 +276,17 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                     </div>
                     
                     <SettingsBlock title="Câu Lệnh Mô Tả (Prompt)" instructionKey="prompt" onInstructionClick={() => openInstructionModal('prompt')}>
-                        <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Mô tả chi tiết hình ảnh bạn muốn tạo, ví dụ: 'một cô gái tóc hồng, mặc váy công chúa, đang khiêu vũ trong một cung điện lộng lẫy'..." className="w-full p-3 bg-black/30 rounded-md border border-gray-600 focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition text-base text-white flex-grow resize-none min-h-[150px]" />
+                        <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Mô tả chi tiết hình ảnh bạn muốn tạo, ví dụ: 'một cô gái tóc hồng, mặc váy công chúa, đang khiêu vũ trong một cung điện lộng lẫy'..." className="w-full p-3 bg-black/30 rounded-md border border-gray-600 focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition text-base text-white flex-grow resize-none min-h-[150px] auth-input" />
                     </SettingsBlock>
                 </div>
 
                 {/* Sidebar (Right) */}
-                <div className="lg:col-span-4 bg-[#1a1a22]/80 p-4 rounded-xl border border-white/10 flex flex-col">
+                <div className="themed-panel p-4 flex flex-col">
                     <SettingsBlock title="Cài đặt Nâng cao" instructionKey="advanced" onInstructionClick={() => openInstructionModal('advanced')}>
                         <div className="space-y-4">
                             <div>
                                 <label className="text-sm font-semibold text-gray-300 mb-1 block">Mô hình AI</label>
-                                <button onClick={() => setModelModalOpen(true)} className="p-2 bg-black/30 rounded-md border border-gray-600 hover:border-pink-500 text-left w-full transition">
+                                <button onClick={() => setModelModalOpen(true)} className="p-2 bg-black/30 rounded-md border border-gray-600 hover:border-pink-500 text-left w-full transition auth-input">
                                     <p className="font-semibold text-white truncate">{selectedModel.name}</p>
                                 </button>
                             </div>
@@ -313,12 +313,12 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
 
                              <div>
                                 <label className="text-sm font-semibold text-gray-300 mb-1 block">Prompt Phủ định</label>
-                                <textarea value={negativePrompt} onChange={(e) => setNegativePrompt(e.target.value)} placeholder="VD: xấu, mờ, nhiều tay..." className="w-full p-2 bg-black/30 rounded-md border border-gray-600 focus:border-pink-500 transition text-sm text-white resize-none" rows={2} />
+                                <textarea value={negativePrompt} onChange={(e) => setNegativePrompt(e.target.value)} placeholder="VD: xấu, mờ, nhiều tay..." className="w-full p-2 bg-black/30 rounded-md border border-gray-600 focus:border-pink-500 transition text-sm text-white resize-none auth-input" rows={2} />
                             </div>
 
                              <div>
                                 <label className="text-sm font-semibold text-gray-300 mb-1 block">Seed</label>
-                                 <input type="number" value={seed} onChange={(e) => setSeed(e.target.value === '' ? '' : parseInt(e.target.value, 10))} placeholder="Để trống để tạo ngẫu nhiên" className="w-full p-2 bg-black/30 rounded-md border border-gray-600 focus:border-pink-500 transition text-sm text-white" />
+                                 <input type="number" value={seed} onChange={(e) => setSeed(e.target.value === '' ? '' : parseInt(e.target.value, 10))} placeholder="Để trống để tạo ngẫu nhiên" className="w-full p-2 bg-black/30 rounded-md border border-gray-600 focus:border-pink-500 transition text-sm text-white auth-input" />
                             </div>
                             
                             <div>
@@ -348,7 +348,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                             <p className="text-gray-400">Chi phí: <span className="font-bold text-pink-400 flex items-center justify-center gap-1">{generationCost} <i className="ph-fill ph-diamonds-four"></i></span></p>
                             <p className="text-gray-400">Hiện có: <span className="font-bold text-white">{user?.diamonds.toLocaleString() || 0} 💎</span></p>
                         </div>
-                        <button onClick={handleGenerateClick} disabled={isGenerating || !prompt.trim()} className="w-full px-8 py-4 font-bold text-lg text-white bg-gradient-to-r from-[#F72585] to-[#CA27FF] rounded-full transition-all duration-300 shadow-xl shadow-[#F72585]/30 hover:shadow-2xl hover:shadow-[#F72585]/40 hover:-translate-y-1.5 hover:scale-105 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                        <button onClick={handleGenerateClick} disabled={isGenerating || !prompt.trim()} className="themed-button-primary w-full px-8 py-4 font-bold text-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
                             <i className="ph-fill ph-magic-wand"></i>
                             Bắt đầu sáng tạo
                         </button>

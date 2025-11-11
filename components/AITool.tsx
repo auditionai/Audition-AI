@@ -23,7 +23,7 @@ const AITool: React.FC = () => {
 
     return (
         <div id="ai-tool" className="container mx-auto px-4 py-8 text-white">
-            <div className="bg-[#1a1a22]/80 rounded-2xl border border-white/10 shadow-lg p-4 md:p-6">
+            <div className="themed-panel p-4 md:p-6">
                 {/* Tab switcher */}
                 <div className="mb-6 max-w-md mx-auto p-1 bg-black/30 rounded-full flex items-center">
                     <button onClick={() => setActiveTool('removeBg')} className={`w-1/2 py-2 rounded-full font-bold transition-all ${activeTool === 'removeBg' ? 'bg-pink-600 shadow-lg shadow-pink-500/30' : 'text-gray-400'}`}>Tách Nền</button>

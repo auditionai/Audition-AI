@@ -17,7 +17,7 @@ const Hero: React.FC<HeroProps> = ({ onCtaClick, onGoogleLoginClick }) => {
                 Tạo ảnh chỉ 1.000đ/ảnh · 1 Kim cương
             </div>
             
-            <h1 className="text-4xl md:text-6xl lg:text-7xl font-extrabold mb-4 leading-tight animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
+            <h1 className="themed-heading text-4xl md:text-6xl lg:text-7xl font-extrabold mb-4 leading-tight animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
                 <span className="bg-gradient-to-r from-white to-gray-400 text-transparent bg-clip-text">Tạo Ảnh 3D AI</span>
                 <br/>
                 <span className="bg-gradient-to-r from-skin-accent to-skin-accent-secondary text-transparent bg-clip-text shimmer-text">Phong Cách Audition</span>
@@ -30,14 +30,14 @@ const Hero: React.FC<HeroProps> = ({ onCtaClick, onGoogleLoginClick }) => {
             <div className="flex flex-col sm:flex-row gap-4 justify-center animate-fade-in-up" style={{ animationDelay: '0.6s' }}>
                 <button 
                     onClick={onCtaClick}
-                    className="px-8 py-4 font-bold text-lg text-skin-accent-text bg-gradient-to-r from-skin-accent to-skin-accent-secondary rounded-full transition-all duration-300 shadow-accent-lg hover:shadow-accent-lg hover:-translate-y-1.5 hover:scale-105 flex items-center justify-center gap-2"
+                    className="themed-button-primary px-8 py-4 font-bold text-lg flex items-center justify-center gap-2"
                 >
                     <i className="ph-fill ph-magic-wand"></i>
                     Bắt đầu sáng tạo
                 </button>
                 <button
                     onClick={onGoogleLoginClick} 
-                    className="px-8 py-4 font-bold text-lg bg-white/10 backdrop-blur-sm border border-white/20 text-skin-base rounded-full transition-all duration-300 hover:bg-white/20 hover:shadow-lg hover:shadow-white/10 hover:-translate-y-1"
+                    className="themed-button-secondary px-8 py-4 font-bold text-lg"
                 >
                     Đăng nhập Google
                 </button>

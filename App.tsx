@@ -25,43 +25,40 @@ const App: React.FC = () => {
     }
 
     const renderPage = () => {
-        const isUserArea = user && ['tool', 'leaderboard', 'my-creations', 'settings', 'buy-credits', 'admin-gallery'].includes(route);
+        let pageComponent;
 
-        if (isUserArea) {
-            let pageComponent;
-            switch (route) {
-                case 'tool':
-                case 'leaderboard':
-                case 'my-creations':
-                case 'settings':
-                case 'admin-gallery':
-                    pageComponent = <CreatorPage activeTab={route} />;
-                    break;
-                case 'buy-credits':
-                    pageComponent = <BuyCreditsPage />;
-                    break;
-                default:
-                    pageComponent = <HomePage />; // Fallback, should not happen
-            }
-
-            return (
-                <div data-theme={theme} className="relative">
-                    <ThemeEffects />
-                    <div className="relative z-[1]">
-                        {pageComponent}
-                    </div>
-                </div>
-            );
-        }
-
-        // Render public pages without theme wrappers
+        // Determine which page component to render based on the route and user status
         switch (route) {
+            case 'tool':
+            case 'leaderboard':
+            case 'my-creations':
+            case 'settings':
+            case 'admin-gallery':
+                // These routes are for logged-in users.
+                // If the user is not logged in, AuthContext handles redirection,
+                // but we render HomePage as a safe fallback.
+                pageComponent = user ? <CreatorPage activeTab={route} /> : <HomePage />;
+                break;
+            case 'buy-credits':
+                pageComponent = user ? <BuyCreditsPage /> : <HomePage />;
+                break;
             case 'gallery':
-                return <GalleryPage />;
+                pageComponent = <GalleryPage />;
+                break;
             case 'home':
             default:
-                return <HomePage />;
+                pageComponent = <HomePage />;
         }
+        
+        // Apply the theme wrapper universally to all pages to fix rendering issues.
+        return (
+            <div data-theme={theme} className="relative">
+                <ThemeEffects />
+                <div className="relative z-[1]">
+                    {pageComponent}
+                </div>
+            </div>
+        );
     };
 
     return (

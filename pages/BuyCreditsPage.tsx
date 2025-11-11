@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import CreatorHeader from '../components/CreatorHeader';
-import CreatorFooter from '../components/CreatorFooter';
+// FIX: Corrected import paths for creator-specific components.
+import CreatorHeader from '../components/creator/CreatorHeader';
+import CreatorFooter from '../components/creator/CreatorFooter';
 import { useAuth } from '../contexts/AuthContext';
 import { CreditPackage } from '../types';
-import InfoModal from '../components/InfoModal';
-import CheckInModal from '../components/CheckInModal';
+import InfoModal from '../components/creator/InfoModal';
+import CheckInModal from '../components/creator/CheckInModal';
 import BottomNavBar from '../components/common/BottomNavBar';
 
 const BuyCreditsPage: React.FC = () => {

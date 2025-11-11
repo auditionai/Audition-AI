@@ -3,18 +3,18 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 
 // Import Creator-specific components
-import CreatorHeader from '../components/CreatorHeader';
-import CreatorFooter from '../components/CreatorFooter';
-import AITool from '../components/AITool';
-import Leaderboard from '../components/Leaderboard';
+import CreatorHeader from '../components/creator/CreatorHeader';
+import CreatorFooter from '../components/creator/CreatorFooter';
+import AITool from '../components/creator/AITool';
+import Leaderboard from '../components/creator/Leaderboard';
 import MyCreationsPage from './MyCreationsPage';
-import Settings from '../components/Settings';
+import Settings from '../components/creator/Settings';
 import AdminGalleryPage from './AdminGalleryPage';
 import BottomNavBar from '../components/common/BottomNavBar';
-import InfoModal from '../components/InfoModal';
-import TopUpModal from '../components/TopUpModal';
-import CheckInModal from '../components/CheckInModal';
-import AnnouncementModal from '../components/AnnouncementModal';
+import InfoModal from '../components/creator/InfoModal';
+import TopUpModal from '../components/creator/TopUpModal';
+import CheckInModal from '../components/creator/CheckInModal';
+import AnnouncementModal from '../components/creator/AnnouncementModal';
 import ThemeEffects from '../components/themes/ThemeEffects';
 
 // Define the possible tabs for type safety

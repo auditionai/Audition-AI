@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import LandingHeader from '../components/Header';
-import Footer from '../components/Footer';
-import Gallery from '../components/Gallery';
+// FIX: Corrected import paths for components.
+import LandingHeader from '../components/landing/Header';
+import Footer from '../components/landing/Footer';
+import Gallery from '../components/landing/Gallery';
 import { useAuth } from '../contexts/AuthContext';
 import { GalleryImage } from '../types';
 import ImageModal from '../components/common/ImageModal';
-import TopUpModal from '../components/TopUpModal';
-import AuthModal from '../components/AuthModal';
-import InfoModal from '../components/InfoModal';
+// FIX: Corrected import paths for components.
+import TopUpModal from '../components/landing/TopUpModal';
+import AuthModal from '../components/landing/AuthModal';
+import InfoModal from '../components/landing/InfoModal';
 
 const GalleryPage: React.FC = () => {
     const { navigate, user, updateUserDiamonds, showToast } = useAuth();

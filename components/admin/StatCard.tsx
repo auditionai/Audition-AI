@@ -58,7 +58,7 @@ const AnimatedNumber: React.FC<{ value: number }> = ({ value }) => {
         }, frameRate);
 
         return () => clearInterval(counter);
-    }, [value]);
+    }, [value, displayValue]);
     
     return <span>{displayValue.toLocaleString('vi-VN')}</span>;
 };

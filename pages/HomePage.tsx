@@ -4,21 +4,21 @@ import { useAuth } from '../contexts/AuthContext';
 // The import is removed, and `any` will be used for the channel objects to fix the error.
 
 // Import Landing Page Sections
-import Hero from '../components/Hero';
-import Features from '../components/Features';
-import HowItWorks from '../components/HowItWorks';
-import Community from '../components/Community';
-import Pricing from '../components/Pricing';
-import FAQ from '../components/FAQ';
-import StatsDisplay from '../components/Stats';
-import Cta from '../components/Cta';
+import Hero from '../components/landing/Hero';
+import Features from '../components/landing/Features';
+import HowItWorks from '../components/landing/HowItWorks';
+import Community from '../components/landing/Community';
+import Pricing from '../components/landing/Pricing';
+import FAQ from '../components/landing/FAQ';
+import StatsDisplay from '../components/landing/Stats';
+import Cta from '../components/landing/Cta';
 
 // Import Common Components
-import LandingHeader from '../components/Header';
-import Footer from '../components/Footer';
-import AuthModal from '../components/AuthModal';
-import TopUpModal from '../components/TopUpModal';
-import InfoModal from '../components/InfoModal';
+import LandingHeader from '../components/landing/Header';
+import Footer from '../components/landing/Footer';
+import AuthModal from '../components/landing/AuthModal';
+import TopUpModal from '../components/landing/TopUpModal';
+import InfoModal from '../components/landing/InfoModal';
 import ImageModal from '../components/common/ImageModal';
 import AuroraBackground from '../components/common/AuroraBackground'; // NEW
 import AnimatedSection from '../components/common/AnimatedSection';

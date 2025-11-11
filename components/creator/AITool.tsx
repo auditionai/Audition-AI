@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
+// FIX: Corrected import path to use the version of AiGeneratorTool within the creator folder.
 import AiGeneratorTool from './ai-tool/AiGeneratorTool';
-import BgRemoverTool from './ai-tool/BgRemoverTool';
+import BgRemoverTool from '../ai-tool/BgRemoverTool';
 import InstructionModal from '../common/InstructionModal';
 
 type AIToolTab = 'generator' | 'utilities';

@@ -313,3 +313,187 @@
   background-size: 3px 3px;
   animation: animStar 150s linear infinite;
 }
+
+/* ==========================================================================
+   4. THEMED MAIN TITLE SECTION
+   ========================================================================== */
+
+/* --- Keyframes for Main Title Animations --- */
+@keyframes glitch-anim {
+  0% { transform: translate(0); }
+  20% { transform: translate(-3px, 3px); }
+  40% { transform: translate(-3px, -3px); }
+  60% { transform: translate(3px, 3px); }
+  80% { transform: translate(3px, -3px); }
+  100% { transform: translate(0); }
+}
+
+@keyframes sun-ray-anim {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 100% 50%; }
+}
+
+@keyframes bounce-in {
+  0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
+  40% { transform: translateY(-10px); }
+  60% { transform: translateY(-5px); }
+}
+
+@keyframes galaxy-shimmer {
+  0%, 100% { opacity: 1; text-shadow: 0 0 10px #fff, 0 0 20px #fff, 0 0 30px var(--color-accent-secondary), 0 0 40px var(--color-accent-secondary); }
+  50% { opacity: 0.8; text-shadow: 0 0 10px #fff, 0 0 20px #fff, 0 0 35px var(--color-accent-secondary), 0 0 50px var(--color-accent-secondary); }
+}
+
+@keyframes gold-flicker {
+  0%, 100% { filter: drop-shadow(0 0 5px var(--color-accent-secondary)); opacity: 1; }
+  50% { filter: drop-shadow(0 0 15px var(--color-accent-secondary)); opacity: 0.9; }
+}
+
+@keyframes crystal-shine {
+  0% { background-position: -200%; }
+  100% { background-position: 200%; }
+}
+
+/* --- Base Styles --- */
+.themed-main-title {
+  position: relative;
+  transition: all 0.3s ease;
+}
+.themed-main-subtitle {
+  color: var(--color-text-muted);
+  font-weight: 500;
+  transition: color 0.3s ease;
+}
+.themed-guide-button {
+  margin-top: 1rem;
+  padding: 0.75rem 1.5rem;
+  font-weight: 700;
+  font-size: 0.875rem;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  transition: all 0.3s ease;
+  transform: perspective(1px) translateZ(0);
+}
+
+/* --- Theme-Specific Styles --- */
+/* 1. Cyber Punk */
+[data-theme="cyber-punk"] .themed-main-title {
+  font-family: 'Orbitron', sans-serif;
+  color: rgb(var(--color-accent));
+  text-shadow: 0 0 10px rgba(var(--color-accent), 0.7), 0 0 20px rgba(var(--color-accent), 0.5);
+}
+[data-theme="cyber-punk"] .themed-main-title::before,
+[data-theme="cyber-punk"] .themed-main-title::after {
+  content: "Audition AI Studio";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--color-fill);
+  overflow: hidden;
+}
+[data-theme="cyber-punk"] .themed-main-title::before {
+  left: 2px;
+  text-shadow: -2px 0 var(--color-accent-secondary);
+  animation: glitch-anim 2.5s infinite linear alternate-reverse;
+}
+[data-theme="cyber-punk"] .themed-main-title::after {
+  left: -2px;
+  text-shadow: -2px 0 rgb(var(--color-accent)), 2px 2px var(--color-accent-secondary);
+  animation: glitch-anim 2s infinite linear alternate-reverse;
+}
+[data-theme="cyber-punk"] .themed-guide-button {
+  background-color: rgba(var(--color-accent), 0.1);
+  color: rgb(var(--color-accent));
+  border: 1px solid rgba(var(--color-accent), 0.4);
+  box-shadow: inset 0 0 10px rgba(var(--color-accent), 0.2), var(--shadow-accent);
+}
+[data-theme="cyber-punk"] .themed-guide-button:hover {
+  background-color: rgba(var(--color-accent), 0.2);
+  box-shadow: inset 0 0 10px rgba(var(--color-accent), 0.4), var(--shadow-accent-lg);
+  transform: translateY(-2px);
+}
+
+/* 2. Solar Flare */
+[data-theme="solar-flare"] .themed-main-title {
+  font-family: 'Poppins', sans-serif;
+  background: linear-gradient(135deg, rgb(var(--color-accent)), var(--color-accent-secondary), rgb(var(--color-accent)));
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: sun-ray-anim 5s linear infinite, bounce-in 3s ease-in-out infinite;
+  animation-delay: 0s, 1s;
+}
+[data-theme="solar-flare"] .themed-guide-button {
+  background-color: var(--color-accent-secondary);
+  color: var(--color-text-base);
+  border: 2px solid var(--color-text-base);
+  box-shadow: 4px 4px 0 var(--color-text-base);
+}
+[data-theme="solar-flare"] .themed-guide-button:hover {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 var(--color-text-base);
+}
+
+/* 3. Dreamy Galaxy */
+[data-theme="dreamy-galaxy"] .themed-main-title {
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  color: #fff;
+  animation: galaxy-shimmer 4s ease-in-out infinite;
+}
+[data-theme="dreamy-galaxy"] .themed-guide-button {
+  background: linear-gradient(45deg, rgb(var(--color-accent)), var(--color-accent-secondary));
+  color: var(--color-accent-text);
+  box-shadow: var(--shadow-accent);
+}
+[data-theme="dreamy-galaxy"] .themed-guide-button:hover {
+  box-shadow: var(--shadow-accent-lg);
+  transform: translateY(-2px);
+}
+
+/* 4. Classic Dark */
+[data-theme="classic-dark"] .themed-main-title {
+  font-family: 'Playfair Display', serif;
+  color: var(--color-accent-secondary);
+  animation: gold-flicker 3s ease-in-out infinite;
+}
+[data-theme="classic-dark"] .themed-guide-button {
+  background-color: transparent;
+  color: var(--color-accent-secondary);
+  border: 1px solid var(--color-accent-secondary);
+  text-shadow: 0 0 5px var(--color-accent-secondary);
+}
+[data-theme="classic-dark"] .themed-guide-button:hover {
+  background-color: rgba(212, 175, 55, 0.1);
+  box-shadow: 0 0 10px rgba(212, 175, 55, 0.5);
+}
+
+/* 5. Neon Vibe */
+[data-theme="neon-vibe"] .themed-main-title {
+  font-family: 'Barlow', sans-serif;
+  color: transparent;
+  background: linear-gradient(90deg, rgb(var(--color-accent)) 0%, var(--color-accent-secondary) 50%, rgb(var(--color-accent)) 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: crystal-shine 5s linear infinite;
+}
+[data-theme="neon-vibe"] .themed-guide-button {
+  background-color: var(--color-fill-secondary);
+  color: var(--color-text-base);
+  border: 1px solid var(--color-border);
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+[data-theme="neon-vibe"] .themed-guide-button:hover {
+  background-color: var(--color-fill);
+  border-color: rgb(var(--color-accent));
+  color: rgb(var(--color-accent));
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-accent);
+}

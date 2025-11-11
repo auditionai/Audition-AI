@@ -32,17 +32,19 @@ const AITool: React.FC = () => {
                 isOpen={isInstructionModalOpen} 
                 onClose={() => setInstructionModalOpen(false)} 
             />
-            <div className="text-center max-w-4xl mx-auto mb-8">
-                <h1 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-pink-400 to-fuchsia-500 text-transparent bg-clip-text">Audition AI Studio</h1>
-                <p className="text-lg text-gray-400">
+            <div className="themed-main-title-container text-center max-w-4xl mx-auto mb-12">
+                <h1 className="themed-main-title text-4xl md:text-5xl lg:text-6xl font-black mb-4 leading-tight">
+                    Audition AI Studio
+                </h1>
+                <p className="themed-main-subtitle text-lg md:text-xl max-w-2xl mx-auto">
                     Nền tảng sáng tạo ảnh 3D AI theo phong cách Audition độc đáo.
                 </p>
                 <button
                     onClick={() => setInstructionModalOpen(true)}
-                    className="mt-4 px-6 py-2 font-bold text-sm text-white bg-white/10 backdrop-blur-sm border border-white/20 rounded-full transition-all duration-300 hover:bg-white/20 hover:shadow-lg hover:shadow-white/10 hover:-translate-y-1"
+                    className="themed-guide-button"
                 >
-                    <i className="ph-fill ph-book-open mr-2"></i>
-                    Xem Hướng Dẫn Nhanh
+                    <i className="ph-fill ph-book-open"></i>
+                    <span>Xem Hướng Dẫn Nhanh</span>
                 </button>
             </div>
             

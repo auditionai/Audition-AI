@@ -181,7 +181,6 @@ const HomePage: React.FC = () => {
         </AnimatedSection>
       </main>
       <Footer
-        onCtaClick={handleCtaClick}
         stats={stats}
         onInfoLinkClick={setInfoModalKey}
       />

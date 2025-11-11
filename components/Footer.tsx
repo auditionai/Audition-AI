@@ -3,12 +3,11 @@ import { Stats } from '../types';
 import Logo from './common/Logo';
 
 interface FooterProps {
-  onCtaClick: () => void;
   stats: Stats;
   onInfoLinkClick: (key: 'terms' | 'policy' | 'contact') => void;
 }
 
-const Footer: React.FC<FooterProps> = ({ onCtaClick, stats, onInfoLinkClick }) => {
+const Footer: React.FC<FooterProps> = ({ stats, onInfoLinkClick }) => {
   return (
     <footer className="bg-skin-fill-secondary border-t border-skin-border text-skin-base relative z-10">
       <div className="container mx-auto px-4 py-12">

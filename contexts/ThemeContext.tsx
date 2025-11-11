@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode, useMemo } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useMemo } from 'react';
 
 // Cập nhật type và mảng THEMES để khớp với CSS
 export type Theme = 'cyber-punk' | 'solar-flare' | 'dreamy-galaxy' | 'classic-dark' | 'neon-vibe';

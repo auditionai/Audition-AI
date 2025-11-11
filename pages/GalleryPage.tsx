@@ -67,7 +67,6 @@ const GalleryPage: React.FC = () => {
                 </section>
             </main>
             <Footer 
-                onCtaClick={() => setIsAuthModalOpen(true)} 
                 stats={stats} 
                 onInfoLinkClick={setInfoModalKey}
             />

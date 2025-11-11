@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { GalleryImage } from '../types';
 import ImageModal from '../components/common/ImageModal';
-import ConfirmationModal from '../components/ConfirmationModal';
+import ConfirmationModal from '../components/common/ConfirmationModal';
 
 const MyCreationsPage: React.FC = () => {
     const { session, showToast, updateUserDiamonds } = useAuth();

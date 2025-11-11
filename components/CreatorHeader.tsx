@@ -5,7 +5,7 @@ import { getRankForLevel } from '../utils/rankUtils';
 import XPProgressBar from './common/XPProgressBar';
 import NotificationDropdown from './common/NotificationDropdown';
 import { CHANGELOG_DATA } from '../constants/changelogData';
-import Logo from '../common/Logo';
+import Logo from './common/Logo';
 
 interface CreatorHeaderProps {
   onTopUpClick: () => void;

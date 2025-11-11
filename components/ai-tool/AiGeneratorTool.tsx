@@ -140,7 +140,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
 
     const handleGenerateClick = () => {
         if (!prompt.trim()) {
-            showToast('Vui lòng nhập mô tả (prompt).', 'error');
+            showToast('Yêu cầu thiếu các trường bắt buộc: prompt.', 'error');
             return;
         }
         if (user && user.diamonds < generationCost) {
@@ -386,7 +386,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                             <p className="text-gray-400">Chi phí: <span className="font-bold text-pink-400 flex items-center justify-center gap-1">{generationCost} <i className="ph-fill ph-diamonds-four"></i></span></p>
                             <p className="text-gray-400">Hiện có: <span className="font-bold text-white">{user?.diamonds.toLocaleString() || 0} 💎</span></p>
                         </div>
-                        <button onClick={handleGenerateClick} disabled={isGenerating || !prompt.trim()} className="w-full px-8 py-4 font-bold text-lg text-white bg-gradient-to-r from-[#F72585] to-[#CA27FF] rounded-full transition-all duration-300 shadow-xl shadow-[#F72585]/30 hover:shadow-2xl hover:shadow-[#F72585]/40 hover:-translate-y-1.5 hover:scale-105 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                        <button onClick={handleGenerateClick} disabled={isGenerating} className="w-full px-8 py-4 font-bold text-lg text-white bg-gradient-to-r from-[#F72585] to-[#CA27FF] rounded-full transition-all duration-300 shadow-xl shadow-[#F72585]/30 hover:shadow-2xl hover:shadow-[#F72585]/40 hover:-translate-y-1.5 hover:scale-105 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
                             <i className="ph-fill ph-magic-wand"></i>
                             Bắt đầu sáng tạo
                         </button>

@@ -53,10 +53,15 @@ const handler: Handler = async (event: HandlerEvent) => {
         console.log(`[OK] User authenticated: ${user.id}`);
 
         console.log("[STEP 2/10] Parsing request body...");
+        const body = JSON.parse(event.body || '{}');
+        
+        // Defensive validation: ensure prompt is a string and trim it.
+        const prompt = body.prompt ? String(body.prompt).trim() : '';
         const { 
-            prompt, apiModel, characterImage, faceReferenceImage, styleImage, 
+            apiModel, characterImage, faceReferenceImage, styleImage, 
             aspectRatio, useUpscaler
-        } = JSON.parse(event.body || '{}');
+        } = body;
+
 
         if (!prompt || !apiModel) {
             const missing = [];

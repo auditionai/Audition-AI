@@ -1,4 +1,6 @@
 @import 'react-image-crop/dist/ReactCrop.css';
+@import './themes/landing.css';
+@import './themes/creator.css';
 
 @tailwind base;
 @tailwind components;

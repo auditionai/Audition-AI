@@ -1,10 +1,21 @@
-import React from 'react';
+import type React from 'react';
 
 export interface Stats {
   users: number;
   visits: number;
   images: number;
 }
+
+// NEW: Shared type for detailed dashboard statistics
+export interface DashboardStats {
+    visitsToday: number;
+    totalVisits: number;
+    newUsersToday: number;
+    totalUsers: number;
+    imagesToday: number;
+    totalImages: number;
+}
+
 
 export interface Feature {
   icon: React.ReactNode;
@@ -165,18 +176,6 @@ export interface TransactionLogEntry {
     created_at: string;
 }
 
-// Fix: Add the missing GiftCode interface to resolve the import error in GiftCodeManager.tsx.
-// For Gift Codes
-export interface GiftCode {
-    id: string;
-    code: string;
-    diamond_reward: number;
-    usage_limit: number;
-    usage_count: number;
-    is_active: boolean;
-    created_at: string;
-}
-
 // For global announcements
 export interface Announcement {
     id: number;
@@ -192,6 +191,18 @@ export interface CheckInReward {
     consecutive_days: number;
     diamond_reward: number;
     xp_reward: number;
+    is_active: boolean;
+    created_at: string;
+}
+
+// FIX: Add missing GiftCode type definition
+// For Admin Gift Code Management
+export interface GiftCode {
+    id: string;
+    code: string;
+    diamond_reward: number;
+    usage_limit: number;
+    usage_count: number;
     is_active: boolean;
     created_at: string;
 }

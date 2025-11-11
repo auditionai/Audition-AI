@@ -146,7 +146,7 @@ const HomePage: React.FC = () => {
     };
 
     return (
-        <div className="bg-skin-fill text-skin-base font-sans leading-normal tracking-normal">
+        <div className="bg-transparent text-skin-base font-sans leading-normal tracking-normal">
             <AuroraBackground />
 
             <LandingHeader 

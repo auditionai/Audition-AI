@@ -18,9 +18,11 @@ const Hero: React.FC<HeroProps> = ({ onCtaClick, onGoogleLoginClick }) => {
             </div>
             
             <h1 className="themed-heading text-5xl md:text-7xl lg:text-8xl font-black mb-4 leading-tight animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
-                <span className="text-gray-100" style={{ filter: 'drop-shadow(0 2px 15px rgba(0,0,0,0.5))' }}>Tạo Ảnh 3D AI</span>
-                <br/>
-                <span className="bg-gradient-to-r from-skin-accent to-skin-accent-secondary text-transparent bg-clip-text shimmer-text">Phong Cách Audition</span>
+                <span className="text-neon-pink" style={{ filter: 'drop-shadow(0 2px 15px rgba(0,0,0,0.5))' }}>
+                    Tạo Ảnh 3D AI
+                    <br/>
+                    Phong Cách Audition
+                </span>
             </h1>
 
             <p className="max-w-3xl mx-auto text-lg md:text-xl text-gray-300 mb-10 animate-fade-in-up" style={{ animationDelay: '0.4s' }}>

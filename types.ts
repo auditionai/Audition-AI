@@ -165,6 +165,18 @@ export interface TransactionLogEntry {
     created_at: string;
 }
 
+// Fix: Add the missing GiftCode interface to resolve the import error in GiftCodeManager.tsx.
+// For Gift Codes
+export interface GiftCode {
+    id: string;
+    code: string;
+    diamond_reward: number;
+    usage_limit: number;
+    usage_count: number;
+    is_active: boolean;
+    created_at: string;
+}
+
 // For global announcements
 export interface Announcement {
     id: number;
@@ -182,15 +194,4 @@ export interface CheckInReward {
     xp_reward: number;
     is_active: boolean;
     created_at: string;
-}
-
-// For Gift Code system
-export interface GiftCode {
-  id: string;
-  code: string;
-  diamond_reward: number;
-  usage_limit: number;
-  usage_count: number;
-  is_active: boolean;
-  created_at: string;
 }

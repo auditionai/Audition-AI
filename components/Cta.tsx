@@ -6,7 +6,7 @@ interface CtaProps {
 
 const Cta: React.FC<CtaProps> = ({ onCtaClick }) => {
   return (
-    <section id="cta" className="py-16 sm:py-24 bg-[#0B0B0F] text-white">
+    <section id="cta" className="py-16 sm:py-24 text-white">
       <div className="container mx-auto px-4 text-center">
         <h2 className="text-3xl md:text-4xl font-bold mb-4">
           <span className="bg-gradient-to-r from-pink-400 to-fuchsia-500 text-transparent bg-clip-text">Sẵn sàng tỏa sáng cùng Audition AI?</span>

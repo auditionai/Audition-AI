@@ -50,7 +50,7 @@ const StatItem: React.FC<{ value: number; label: string }> = ({ value, label }) 
 
 const Stats: React.FC<StatsProps> = ({ stats }) => {
   return (
-    <section id="stats" className="py-16 sm:py-24 bg-[#12121A]">
+    <section id="stats" className="py-16 sm:py-24">
       <div className="container mx-auto px-4">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
           <StatItem value={stats.users} label="Người dùng đã đăng ký" />

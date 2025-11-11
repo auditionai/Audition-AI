@@ -32,7 +32,7 @@ const FAQ: React.FC = () => {
   };
 
   return (
-    <section id="faq" className="py-16 sm:py-24 bg-[#12121A] text-white w-full">
+    <section id="faq" className="py-16 sm:py-24 text-white w-full">
       <div className="container mx-auto px-4">
         <div className="text-center max-w-3xl mx-auto mb-16">
           <h2 className="text-3xl md:text-4xl font-bold mb-4">

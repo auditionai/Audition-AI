@@ -6,7 +6,7 @@ interface FooterProps {
 
 const Footer: React.FC<FooterProps> = ({ onInfoLinkClick }) => {
   return (
-    <footer className="bg-skin-fill-secondary border-t border-skin-border text-skin-base relative z-10">
+    <footer className="bg-transparent border-t border-skin-border text-skin-base relative z-10">
       <div className="container mx-auto px-4 py-8">
         <div className="flex flex-col sm:flex-row justify-between items-center text-center text-skin-muted text-sm gap-4">
             <p>&copy; 2025 AUDITION AI Studio.</p>

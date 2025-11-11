@@ -1,92 +1,46 @@
 <!DOCTYPE html>
-<html lang="vi" class="scroll-smooth">
-  <head>
+<html lang="en">
+<head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AUDITION AI - Tạo Ảnh AI Phong Cách Audition</title>
-    <meta name="description" content="Tạo ảnh 3D AI nhân vật Audition bằng mô hình AI mới nhất của Google." />
-    <meta property="og:title" content="AUDITION AI - Tạo Ảnh AI Phong Cách Audition" />
-    <meta property="og:description" content="Tạo ảnh 3D AI nhân vật Audition đẹp – nhanh – siêu rẻ." />
-    <meta property="og:image" content="https://picsum.photos/1200/630" />
-    <meta property="og:type" content="website" />
+    <title>AUDITION AI</title>
     
+    <!-- Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web@2.0.3"></script>
+    
+    <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=Josefin+Sans:wght@400;600;700&family=Lato:wght@400;700&family=Pacifico&family=Quicksand:wght@400;500;700&family=Playfair+Display:wght@700;800&family=Merriweather:wght@400;700&family=Orbitron:wght@700;800&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
-    <script src="https://unpkg.com/@phosphor-icons/web"></script>
-    <link rel="stylesheet" href="/themes/main.css" />
-    <style>
-      body {
-        /* Fallback font */
-        font-family: 'Be Vietnam Pro', sans-serif;
+    <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;700&family=Montserrat:wght@400;700;900&family=Orbitron:wght@400;700;900&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Poppins:wght@400;600;700;900&display=swap" rel="stylesheet">
+
+    <!-- Stylesheets -->
+    <link rel="stylesheet" href="/index.css">
+    <link rel="stylesheet" href="/themes/main.css">
+    
+    <script type="importmap">
+    {
+      "imports": {
+        "vite": "https://aistudiocdn.com/vite@^7.2.2",
+        "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+        "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.0",
+        "@google/genai": "https://aistudiocdn.com/@google/genai@^1.29.0",
+        "react/": "https://aistudiocdn.com/react@^19.2.0/",
+        "react": "https://aistudiocdn.com/react@^19.2.0",
+        "react-image-crop": "https://aistudiocdn.com/react-image-crop@^11.0.10",
+        "crypto": "https://aistudiocdn.com/crypto@^1.0.1",
+        "@supabase/supabase-js": "https://aistudiocdn.com/@supabase/supabase-js@^2.81.0",
+        "buffer": "https://aistudiocdn.com/buffer@^6.0.3",
+        "jimp": "https://aistudiocdn.com/jimp@^1.6.0",
+        "@aws-sdk/client-s3": "https://aistudiocdn.com/@aws-sdk/client-s3@^3.928.0",
+        "@netlify/functions": "https://aistudiocdn.com/@netlify/functions@^5.1.0"
       }
-    </style>
-    <!-- Google tag (gtag.js) -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-32R3PLY2JT"></script>
-    <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-
-      gtag('config', 'G-32R3PLY2JT');
+    }
     </script>
-<script type="importmap">
-{
-  "imports": {
-    "@supabase/supabase-js": "https://aistudiocdn.com/@supabase/supabase-js@^2.79.0",
-    "buffer": "https://aistudiocdn.com/buffer@^6.0.3",
-    "react/": "https://aistudiocdn.com/react@^19.2.0/",
-    "react": "https://aistudiocdn.com/react@^19.2.0",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.28.0",
-    "@netlify/functions": "https://aistudiocdn.com/@netlify/functions@^5.1.0",
-    "vite": "https://aistudiocdn.com/vite@^7.2.2",
-    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.0",
-    "crypto": "https://aistudiocdn.com/crypto@^1.0.1",
-    "@aws-sdk/client-s3": "https://aistudiocdn.com/@aws-sdk/client-s3@^3.926.0",
-    "jimp": "https://aistudiocdn.com/jimp@^1.6.0",
-    "react-image-crop": "https://aistudiocdn.com/react-image-crop@^11.0.10"
-  }
-}
-</script>
+
 </head>
-  <body>
-    <script>
-      // Definitive Pre-flight Dual Sanitization Script
-      (function() {
-        // STAGE 1: Check for and clear corrupted Supabase session from localStorage.
-        // This mimics a manual "Clear Cache" and is the most critical step to prevent freezes.
-        try {
-          const key = Object.keys(localStorage).find(i => i.startsWith('sb-') && i.endsWith('-auth-token'));
-          if (key) {
-            // Attempt to parse. If it fails, the catch block will execute.
-            JSON.parse(localStorage.getItem(key));
-          }
-        } catch (e) {
-          console.warn('Corrupted Supabase session detected. Clearing localStorage to prevent freeze.');
-          localStorage.clear();
-        }
-
-        // STAGE 2: Handle the PayOS redirect to prevent a new corrupted session from being created.
-        try {
-          const params = new URLSearchParams(window.location.search);
-          const status = params.get('status');
-          const orderCode = params.get('orderCode');
-          const code = params.get('code'); // The conflicting parameter
-
-          if (status && orderCode && code) {
-            const paymentResult = { status, orderCode };
-            sessionStorage.setItem('payment_redirect_result', JSON.stringify(paymentResult));
-            // Immediately clean the URL to prevent Supabase from seeing the 'code' parameter.
-            window.history.replaceState(null, '', window.location.pathname);
-          }
-        } catch (e) {
-          console.error('Error in pre-flight PayOS redirect handler:', e);
-        }
-      })();
-    </script>
+<body>
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
-  </body>
+</body>
 </html>

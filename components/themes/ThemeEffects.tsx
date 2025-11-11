@@ -4,13 +4,9 @@ import { useTheme } from '../../contexts/ThemeContext';
 const ThemeEffects: React.FC = () => {
     const { theme } = useTheme();
 
-    // This component is now responsible for rendering the correct background
-    // and any associated visual effects for the current theme.
-    // The page container that uses this should have a transparent background.
-
     if (theme === 'dreamy-galaxy') {
         return (
-            <div className="fixed inset-0 pointer-events-none z-[-1] overflow-hidden bg-skin-fill">
+            <div className="fixed inset-0 pointer-events-none z-[-1] overflow-hidden">
                 <div className="galaxy-bg">
                     <div id="stars"></div>
                     <div id="stars2"></div>
@@ -27,7 +23,7 @@ const ThemeEffects: React.FC = () => {
         ));
 
         return (
-            <div className="fixed inset-0 pointer-events-none z-[-1] overflow-hidden bg-skin-fill">
+            <div className="fixed inset-0 pointer-events-none z-[-1] overflow-hidden">
                 <div className="snowfall-bg">
                     {snowflakes}
                 </div>
@@ -35,11 +31,9 @@ const ThemeEffects: React.FC = () => {
         );
     }
     
-    // Default case for themes without special particle/animation effects.
-    // This ensures they still get their intended background color from the CSS variables.
-    return (
-        <div className="fixed inset-0 pointer-events-none z-[-1] overflow-hidden bg-skin-fill" />
-    );
+    // For themes without special effects, render nothing. The background color
+    // is now handled by the 'body' tag via CSS variables.
+    return null;
 };
 
 export default ThemeEffects;

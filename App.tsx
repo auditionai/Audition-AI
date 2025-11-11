@@ -26,6 +26,7 @@ const App: React.FC = () => {
 
     const renderPage = () => {
         let pageComponent;
+        const isCreatorInterface = ['tool', 'leaderboard', 'my-creations', 'settings', 'admin-gallery', 'buy-credits'].includes(route);
 
         // Determine which page component to render based on the route and user status
         switch (route) {
@@ -34,9 +35,6 @@ const App: React.FC = () => {
             case 'my-creations':
             case 'settings':
             case 'admin-gallery':
-                // These routes are for logged-in users.
-                // If the user is not logged in, AuthContext handles redirection,
-                // but we render HomePage as a safe fallback.
                 pageComponent = user ? <CreatorPage activeTab={route} /> : <HomePage />;
                 break;
             case 'buy-credits':
@@ -50,15 +48,20 @@ const App: React.FC = () => {
                 pageComponent = <HomePage />;
         }
         
-        // Apply the theme wrapper universally to all pages to fix rendering issues.
-        return (
-            <div data-theme={theme} className="relative">
-                <ThemeEffects />
-                <div className="relative z-[1]">
-                    {pageComponent}
+        if (isCreatorInterface && user) {
+            // Wrapper for the creator app with themes and effects
+            return (
+                <div data-theme={theme} className="relative">
+                    <ThemeEffects />
+                    <div className="relative z-[1]">
+                        {pageComponent}
+                    </div>
                 </div>
-            </div>
-        );
+            );
+        }
+        
+        // For landing page and related pages, render without the theme wrapper
+        return pageComponent;
     };
 
     return (

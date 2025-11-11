@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { useTheme } from '../contexts/ThemeContext';
 
 // Import Creator-specific components
 import CreatorHeader from '../components/creator/CreatorHeader';
@@ -25,7 +24,6 @@ interface CreatorPageProps {
 
 const CreatorPage: React.FC<CreatorPageProps> = ({ activeTab }) => {
     const { user, navigate, showToast, updateUserDiamonds, announcement, showAnnouncementModal, markAnnouncementAsRead } = useAuth();
-    const { theme } = useTheme();
 
     // State for modals
     const [isTopUpModalOpen, setIsTopUpModalOpen] = useState(false);
@@ -64,7 +62,7 @@ const CreatorPage: React.FC<CreatorPageProps> = ({ activeTab }) => {
     };
 
     return (
-        <div data-theme={theme} className="flex flex-col min-h-screen bg-transparent text-skin-base pb-16 md:pb-0">
+        <div className="flex flex-col min-h-screen bg-transparent text-skin-base pb-16 md:pb-0">
              <CreatorHeader
                 onTopUpClick={handleTopUpClick}
                 activeTab={activeTab}

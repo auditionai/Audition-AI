@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { ApiKey, AdminManagedUser, CreditPackage, AdminTransaction, TransactionLogEntry, Announcement } from '../types';
+import { ApiKey, AdminManagedUser, CreditPackage, AdminTransaction, TransactionLogEntry, Announcement, GiftCode } from '../types';
 import { getRankForLevel } from '../utils/rankUtils';
 import XPProgressBar from './common/XPProgressBar';
 import Modal from './common/Modal';

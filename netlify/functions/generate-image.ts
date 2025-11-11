@@ -1,177 +1,187 @@
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { GoogleGenAI, Modality } from "@google/genai";
+import { supabaseAdmin } from './utils/supabaseClient';
+import { Buffer } from 'buffer';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import Jimp from 'jimp';
 
 const COST_BASE = 1;
 const COST_UPSCALE = 1;
 const XP_PER_GENERATION = 10;
-const DB_PROMPT_TRUNCATE_LENGTH = 1000; // Max length for prompt in DB
+
+/**
+ * Pre-processes an image by placing it onto a new canvas of a target aspect ratio.
+ * This "letterboxing" technique ensures all input images sent to Gemini
+ * have the same aspect ratio, forcing the output to match.
+ * @param imageDataUrl The base64 data URL of the input image.
+ * @param targetAspectRatio The desired aspect ratio string (e.g., '16:9').
+ * @returns A promise that resolves to the new base64 data URL.
+ */
+const processImageForGemini = async (imageDataUrl: string | null, targetAspectRatio: string): Promise<string | null> => {
+    if (!imageDataUrl) return null;
+
+    try {
+        const [header, base64] = imageDataUrl.split(',');
+        if (!base64) return null;
+
+        const imageBuffer = Buffer.from(base64, 'base64');
+        const image = await Jimp.read(imageBuffer);
+        const originalWidth = image.getWidth();
+        const originalHeight = image.getHeight();
+
+        const [aspectW, aspectH] = targetAspectRatio.split(':').map(Number);
+        const targetRatio = aspectW / aspectH;
+        const originalRatio = originalWidth / originalHeight;
+
+        let newCanvasWidth: number, newCanvasHeight: number;
+
+        // Determine new canvas dimensions to match target aspect ratio while enclosing the original image
+        if (targetRatio > originalRatio) {
+            // Target is wider than original (pillarbox)
+            newCanvasHeight = originalHeight;
+            newCanvasWidth = Math.round(originalHeight * targetRatio);
+        } else {
+            // Target is taller than original (letterbox)
+            newCanvasWidth = originalWidth;
+            newCanvasHeight = Math.round(originalWidth / targetRatio);
+        }
+        
+        // Create a new black canvas with the target dimensions
+        const newCanvas = new Jimp(newCanvasWidth, newCanvasHeight, '#000000');
+        
+        // Calculate position to center the original image
+        const x = (newCanvasWidth - originalWidth) / 2;
+        const y = (newCanvasHeight - originalHeight) / 2;
+        
+        // Composite the original image onto the new canvas
+        newCanvas.composite(image, x, y);
+
+        const mime = header.match(/:(.*?);/)?.[1] || Jimp.MIME_PNG;
+        return newCanvas.getBase64Async(mime as any);
+
+    } catch (error) {
+        console.error("Error pre-processing image for Gemini:", error);
+        // If processing fails, return the original to not break the flow,
+        // though aspect ratio might be wrong.
+        return imageDataUrl;
+    }
+};
+
 
 const handler: Handler = async (event: HandlerEvent) => {
+    const s3Client = new S3Client({
+        region: "auto",
+        endpoint: process.env.R2_ENDPOINT!,
+        credentials: {
+            accessKeyId: process.env.R2_ACCESS_KEY_ID!,
+            secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
+        },
+    });
+
     try {
-        const { supabaseAdmin } = await import('./utils/supabaseClient');
-        
-        const requiredEnvVars = [
-            'R2_ENDPOINT', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 
-            'R2_BUCKET_NAME', 'R2_PUBLIC_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'VITE_SUPABASE_URL'
-        ];
-        const missingVars = requiredEnvVars.filter(v => !process.env[v]);
-        if (missingVars.length > 0) {
-            console.error(`[FATAL] Server configuration error. Missing environment variables: ${missingVars.join(', ')}`);
-            return {
-                statusCode: 500,
-                body: JSON.stringify({ error: `Lỗi cấu hình máy chủ. Thiếu: ${missingVars.join(', ')}` }),
-            };
-        }
-
-        console.log("--- [START] /generate-image function execution ---");
-
-        const s3Client = new S3Client({
-            region: "auto",
-            endpoint: process.env.R2_ENDPOINT!,
-            credentials: {
-                accessKeyId: process.env.R2_ACCESS_KEY_ID!,
-                secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
-            },
-        });
-
         if (event.httpMethod !== 'POST') {
             return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
         }
         
-        console.log("[STEP 1/10] Authenticating user...");
         const authHeader = event.headers['authorization'];
         if (!authHeader) return { statusCode: 401, body: JSON.stringify({ error: 'Authorization header is required.' }) };
         const token = authHeader.split(' ')[1];
         if (!token) return { statusCode: 401, body: JSON.stringify({ error: 'Bearer token is missing.' }) };
 
         const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
-        if (authError || !user) {
-            console.error("[FAIL] Authentication failed:", authError);
-            return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized: Invalid token.' }) };
-        }
-        console.log(`[OK] User authenticated: ${user.id}`);
+        if (authError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized: Invalid token.' }) };
 
-        console.log("[STEP 2/10] Parsing request body...");
-        const body = JSON.parse(event.body || '{}');
-        
-        // Defensive validation: ensure prompt is a string and trim it.
-        const prompt = body.prompt ? String(body.prompt).trim() : '';
         const { 
-            apiModel, characterImage, faceReferenceImage, styleImage, 
-            aspectRatio, useUpscaler
-        } = body;
+            prompt, apiModel, characterImage, faceReferenceImage, styleImage, 
+            aspectRatio, negativePrompt, seed, useUpscaler 
+        } = JSON.parse(event.body || '{}');
 
-
-        if (!prompt || !apiModel) {
-            const missing = [];
-            if (!prompt) missing.push('prompt');
-            if (!apiModel) missing.push('apiModel');
-            const errorMsg = `Yêu cầu thiếu các trường bắt buộc: ${missing.join(', ')}.`;
-            console.error(`[FAIL] Validation failed. ${errorMsg}`);
-            return { statusCode: 400, body: JSON.stringify({ error: errorMsg }) };
-        }
-        console.log(`[OK] Body parsed. Model: ${apiModel}, Upscaler: ${useUpscaler}`);
+        if (!prompt || !apiModel) return { statusCode: 400, body: JSON.stringify({ error: 'Prompt and apiModel are required.' }) };
         
-        console.log("[STEP 3/10] Checking user balance...");
         const totalCost = COST_BASE + (useUpscaler ? COST_UPSCALE : 0);
+
         const { data: userData, error: userError } = await supabaseAdmin.from('users').select('diamonds, xp').eq('id', user.id).single();
-        if (userError || !userData) {
-             console.error(`[FAIL] User not found in DB: ${user.id}`, userError);
-            return { statusCode: 404, body: JSON.stringify({ error: 'User not found.' }) };
-        }
-        if (userData.diamonds < totalCost) {
-            console.error(`[FAIL] Insufficient balance for user ${user.id}. Needed: ${totalCost}, Has: ${userData.diamonds}`);
-            return { statusCode: 402, body: JSON.stringify({ error: `Không đủ kim cương. Cần ${totalCost}, bạn có ${userData.diamonds}.` }) };
-        }
-        console.log(`[OK] User ${user.id} has sufficient balance. Cost: ${totalCost}, Balance: ${userData.diamonds}`);
+        if (userError || !userData) return { statusCode: 404, body: JSON.stringify({ error: 'User not found.' }) };
+        if (userData.diamonds < totalCost) return { statusCode: 402, body: JSON.stringify({ error: `Không đủ kim cương. Cần ${totalCost}, bạn có ${userData.diamonds}.` }) };
         
-        console.log("[STEP 4/10] Fetching available AI API key...");
         const { data: apiKeyData, error: apiKeyError } = await supabaseAdmin.from('api_keys').select('id, key_value').eq('status', 'active').order('usage_count', { ascending: true }).limit(1).single();
-        if (apiKeyError || !apiKeyData) {
-            console.error("[FAIL] No active API keys available.", apiKeyError);
-            return { statusCode: 503, body: JSON.stringify({ error: 'Hết tài nguyên AI. Vui lòng thử lại sau.' }) };
-        }
-        console.log(`[OK] Fetched API key ID: ${apiKeyData.id}`);
+        if (apiKeyError || !apiKeyData) return { statusCode: 503, body: JSON.stringify({ error: 'Hết tài nguyên AI. Vui lòng thử lại sau.' }) };
         
         const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
 
         let finalImageBase64: string;
         let finalImageMimeType: string;
         
-        console.log("[STEP 5/10] Preparing AI payload...");
-        const randomSeed = Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
-        
-        console.log(`[STEP 6/10] Calling AI model: ${apiModel}...`);
+        let fullPrompt = prompt;
+        if (negativePrompt) {
+            fullPrompt += ` --no ${negativePrompt}`;
+        }
+
         if (apiModel.startsWith('imagen')) {
             const response = await ai.models.generateImages({
                 model: apiModel,
-                prompt: prompt,
+                prompt: fullPrompt,
                 config: { 
                     numberOfImages: 1, 
                     outputMimeType: 'image/png',
                     aspectRatio: aspectRatio,
-                    seed: randomSeed,
+                    seed: seed ? Number(seed) : undefined,
                 },
             });
             finalImageBase64 = response.generatedImages[0].image.imageBytes;
             finalImageMimeType = 'image/png';
-        } else {
+        } else { // Assuming gemini-flash-image
             const parts: any[] = [];
-            const uniqueImages = new Set<string>(); // Use a Set to track unique base64 strings
+            
+            // --- The Ultimate Solution: Pre-process ALL images to match target aspect ratio ---
+            const [
+                processedCharacterImage,
+                processedStyleImage,
+                processedFaceImage,
+            ] = await Promise.all([
+                processImageForGemini(characterImage, aspectRatio),
+                processImageForGemini(styleImage, aspectRatio),
+                processImageForGemini(faceReferenceImage, aspectRatio)
+            ]);
+            
+            // The text prompt is ALWAYS the first part. No modification needed.
+            parts.push({ text: fullPrompt });
 
+            // Helper to add processed image parts
             const addImagePart = (imageDataUrl: string | null) => {
                 if (!imageDataUrl) return;
                 const [header, base64] = imageDataUrl.split(',');
-                if (!base64) {
-                     console.warn("Skipping malformed image data URL.");
-                     return;
-                }
-            
-                // De-duplication logic
-                if (uniqueImages.has(base64)) {
-                    console.log("[INFO] Duplicate image detected. Skipping.");
-                    return;
-                }
-                uniqueImages.add(base64);
-            
                 const mimeType = header.match(/:(.*?);/)?.[1] || 'image/png';
                 parts.push({ inlineData: { data: base64, mimeType } });
             };
+
+            // Add the pre-processed images to the request
+            addImagePart(processedCharacterImage);
+            addImagePart(processedStyleImage);
+            addImagePart(processedFaceImage);
             
-            parts.push({ text: prompt });
-            addImagePart(characterImage);
-            addImagePart(styleImage);
-            addImagePart(faceReferenceImage);
-            
-            console.log(`[INFO] Calling Gemini Vision with ${parts.length} parts. Text length: ${prompt.length}`);
             const response = await ai.models.generateContent({
                 model: apiModel,
                 contents: { parts: parts },
                 config: { 
                     responseModalities: [Modality.IMAGE],
-                    seed: randomSeed,
+                    seed: seed ? Number(seed) : undefined,
                 },
             });
 
-            console.log("[STEP 7/10] AI response received. Processing image part...");
             const imagePartResponse = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-            if (!imagePartResponse?.inlineData) {
-                console.error("[FAIL] AI response did not contain an image part. Response:", JSON.stringify(response, null, 2));
-                throw new Error("AI không thể tạo hình ảnh từ mô tả này. Hãy thử thay đổi prompt hoặc ảnh tham chiếu.");
-            }
-            console.log("[OK] Image part found in AI response.");
+            if (!imagePartResponse?.inlineData) throw new Error("AI không thể tạo hình ảnh từ mô tả này. Hãy thử thay đổi prompt hoặc ảnh tham chiếu.");
 
             finalImageBase64 = imagePartResponse.inlineData.data;
             finalImageMimeType = imagePartResponse.inlineData.mimeType.includes('png') ? 'image/png' : 'image/jpeg';
         }
-        console.log("[OK] AI model call successful.");
 
+        // --- Placeholder for Upscaler Logic ---
         if (useUpscaler) {
-            console.log(`[INFO] Upscaler requested for user ${user.id}. (DEMO)`);
+            console.log(`[UPSCALER] Upscaling image for user ${user.id}... (DEMO)`);
         }
+        // --- End of Placeholder ---
 
-        console.log("[STEP 8/10] Uploading generated image to R2 storage...");
         const imageBuffer = Buffer.from(finalImageBase64, 'base64');
         const fileExtension = finalImageMimeType.split('/')[1] || 'png';
         const fileName = `${user.id}/${Date.now()}.${fileExtension}`;
@@ -184,22 +194,21 @@ const handler: Handler = async (event: HandlerEvent) => {
         });
         await (s3Client as any).send(putCommand);
         const publicUrl = `${process.env.R2_PUBLIC_URL}/${fileName}`;
-        console.log(`[OK] Image uploaded to R2: ${publicUrl}`);
 
-        console.log("[STEP 9/10] Updating user data and transaction logs...");
         const newDiamondCount = userData.diamonds - totalCost;
         const newXp = userData.xp + XP_PER_GENERATION;
         
-        const promptForDb = prompt.substring(0, DB_PROMPT_TRUNCATE_LENGTH);
-        let logDescription = `Tạo ảnh: ${promptForDb.substring(0, 50)}...`;
-        if (useUpscaler) logDescription += " (Nâng cấp)";
+        let logDescription = `Tạo ảnh: ${prompt.substring(0, 50)}...`;
+        if (useUpscaler) {
+            logDescription += " (Nâng cấp)";
+        }
         
         await Promise.all([
             supabaseAdmin.from('users').update({ diamonds: newDiamondCount, xp: newXp }).eq('id', user.id),
             supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id }),
             supabaseAdmin.from('generated_images').insert({
                 user_id: user.id,
-                prompt: promptForDb,
+                prompt: prompt,
                 image_url: publicUrl,
                 model_used: apiModel,
                 used_face_enhancer: !!faceReferenceImage
@@ -211,22 +220,19 @@ const handler: Handler = async (event: HandlerEvent) => {
                 description: logDescription
             })
         ]);
-        console.log(`[OK] Database updated for user ${user.id}. New balance: ${newDiamondCount} diamonds, ${newXp} XP.`);
 
-        console.log("[STEP 10/10] Generation complete. Sending response to client.");
         return {
             statusCode: 200,
             body: JSON.stringify({ imageUrl: publicUrl, newDiamondCount, newXp }),
         };
 
     } catch (error: any) {
-        console.error("--- [FATAL] /generate-image function error ---");
-        console.error("Error object:", error); 
-        
+        console.error("Generate image function error:", error);
+        // Provide a more specific error message if available from Gemini
         let clientFriendlyError = 'Lỗi không xác định từ máy chủ.';
         if (error?.message) {
             if (error.message.includes('INVALID_ARGUMENT')) {
-                 clientFriendlyError = 'Lỗi từ AI: Không thể xử lý dữ liệu hình ảnh đầu vào. Hãy thử lại hoặc thay đổi ảnh đầu vào.';
+                 clientFriendlyError = 'Lỗi từ AI: Không thể xử lý ảnh đầu vào. Hãy thử lại hoặc thay đổi ảnh đầu vào.';
             } else {
                 clientFriendlyError = error.message;
             }

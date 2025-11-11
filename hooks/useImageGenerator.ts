@@ -1,38 +1,13 @@
 import { useState, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { AIModel } from '../types';
-import { fileToBase64 } from '../utils/imageUtils';
 
-// Logic moved from backend to frontend
-const buildSignaturePrompt = (
-    text: string, style: string, position: string, 
-    color: string, customColor: string, size: string
-): string => {
-    if (!text || text.trim() === '') return '';
-
-    let instruction = `The image should include a signature that says "${text.trim()}".`;
-    
-    const styleMap: { [key: string]: string } = {
-        handwritten: 'a handwritten script style', sans_serif: 'a clean sans-serif font style',
-        bold: 'a bold font style', vintage: 'a vintage retro font style', '3d': 'a 3D typography style',
-        messy: 'a messy grunge font style', outline: 'an outline font style', teen_code: 'a playful teen-code font style',
-        mixed: 'a creative mixed font style',
-    };
-    const sizeMap: { [key: string]: string } = { small: 'small and discreet', medium: 'medium-sized and noticeable', large: 'large and prominent' };
-    const positionMap: { [key: string]: string } = {
-        bottom_right: 'in the bottom-right corner', bottom_left: 'in the bottom-left corner',
-        top_right: 'in the top-right corner', top_left: 'in the top-left corner',
-        center: 'in the center', random: 'in a visually pleasing location',
-    };
-    
-    let colorDesc = 'white or a contrasting color';
-    if (color === 'rainbow') colorDesc = 'a vibrant rainbow gradient color';
-    else if (color === 'custom' && customColor) colorDesc = `the color ${customColor}`;
-    else if (color === 'random') colorDesc = 'a random, complementary color';
-
-    instruction += ` The signature is ${sizeMap[size] || 'medium-sized'}, in ${styleMap[style] || 'a clean font style'}, with ${colorDesc}, and placed ${positionMap[position] || 'in the bottom-right corner'}.`;
-    return ' ' + instruction;
-};
+const fileToBase64 = (file: File): Promise<string> => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+});
 
 export const useImageGenerator = () => {
     const { session, showToast, updateUserProfile } = useAuth();
@@ -44,17 +19,9 @@ export const useImageGenerator = () => {
 
     const generateImage = async (
         prompt: string, model: AIModel, poseImageFile: File | null,
-        styleImageFile: File | null, faceImage: string | null, // <-- REFACTORED: Now consistently string or null
-        aspectRatio: string, useUpscaler: boolean,
-        useSignature: boolean,
-        signatureOptions: {
-            signatureText: string;
-            signatureStyle: string;
-            signaturePosition: string;
-            signatureColor: string;
-            signatureCustomColor: string;
-            signatureSize: string;
-        }
+        styleImageFile: File | null, faceImage: File | string | null,
+        aspectRatio: string, negativePrompt: string,
+        seed: number | undefined, useUpscaler: boolean
     ) => {
         setIsGenerating(true);
         setProgress(1);
@@ -62,39 +29,20 @@ export const useImageGenerator = () => {
         setGeneratedImage(null);
         abortControllerRef.current = new AbortController();
 
+        // Fix: Changed NodeJS.Timeout to ReturnType<typeof setInterval> for browser compatibility.
         let progressInterval: ReturnType<typeof setInterval> | null = null;
 
         try {
+            // Simulate initial steps a bit faster
             progressInterval = setInterval(() => {
                 setProgress(prev => (prev < 8 ? prev + 1 : prev));
             }, 1800);
 
-            let fullPrompt = prompt;
-            if (useSignature) {
-                const signatureInstruction = buildSignaturePrompt(
-                    signatureOptions.signatureText, signatureOptions.signatureStyle, signatureOptions.signaturePosition,
-                    signatureOptions.signatureColor, signatureOptions.signatureCustomColor, signatureOptions.signatureSize
-                );
-                fullPrompt += signatureInstruction;
-            }
-
-            // --- REFACTORED & SIMPLIFIED: No longer needs to check for File type ---
-            const [poseImageBase64, styleImageBase64] = await Promise.all([
+            const [poseImageBase64, styleImageBase64, faceImageBase64] = await Promise.all([
                 poseImageFile ? fileToBase64(poseImageFile) : Promise.resolve(null),
                 styleImageFile ? fileToBase64(styleImageFile) : Promise.resolve(null),
+                faceImage instanceof File ? fileToBase64(faceImage) : Promise.resolve(faceImage)
             ]);
-            
-            const bodyPayload = {
-                originalPrompt: prompt,
-                fullPrompt: fullPrompt,
-                apiModel: model.apiModel,
-                characterImage: poseImageBase64,
-                styleImage: styleImageBase64, 
-                faceReferenceImage: faceImage, // Already a data URL string or null
-                aspectRatio, 
-                useUpscaler
-            };
-            // --- END REFACTOR ---
 
             const response = await fetch('/.netlify/functions/generate-image', {
                 method: 'POST',
@@ -102,7 +50,14 @@ export const useImageGenerator = () => {
                     'Content-Type': 'application/json',
                     Authorization: `Bearer ${session?.access_token}`,
                 },
-                body: JSON.stringify(bodyPayload),
+                body: JSON.stringify({
+                    prompt, modelId: model.id, apiModel: model.apiModel,
+                    characterImage: poseImageBase64,
+                    styleImage: styleImageBase64, 
+                    faceReferenceImage: faceImageBase64,
+                    aspectRatio, negativePrompt,
+                    seed, useUpscaler
+                }),
                 signal: abortControllerRef.current.signal,
             });
             

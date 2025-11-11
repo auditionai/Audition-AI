@@ -2,10 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useImageGenerator } from '../../hooks/useImageGenerator';
 import { useAuth } from '../../contexts/AuthContext';
 import { DETAILED_AI_MODELS, STYLE_PRESETS_NEW } from '../../constants/aiToolData';
-// @FIX: Import 'GalleryImage' type.
 import { AIModel, GalleryImage } from '../../types';
 
-// Fix: Corrected import path for SettingsBlock to point to the local component, resolving a module resolution error.
 import SettingsBlock from './SettingsBlock';
 import ImageUploader from './ImageUploader';
 import ModelSelectionModal from './ModelSelectionModal';
@@ -279,7 +277,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                     </div>
                     
                     <SettingsBlock title="Câu Lệnh Mô Tả (Prompt)" instructionKey="prompt" onInstructionClick={() => openInstructionModal('prompt')}>
-                        <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Mô tả chi tiết hình ảnh bạn muốn tạo, ví dụ: 'một cô gái tóc hồng, mặc váy công chúa, đang khiêu vũ trong một cung điện lộng lẫy'..." className="w-full p-3 bg-black/30 rounded-md border border-gray-600 focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition text-base text-white flex-grow resize-none min-h-[150px] auth-input" />
+                        <textarea value={prompt} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setPrompt(e.target.value)} placeholder="Mô tả chi tiết hình ảnh bạn muốn tạo, ví dụ: 'một cô gái tóc hồng, mặc váy công chúa, đang khiêu vũ trong một cung điện lộng lẫy'..." className="w-full p-3 bg-black/30 rounded-md border border-gray-600 focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition text-base text-white flex-grow resize-none min-h-[150px] auth-input" />
                     </SettingsBlock>
                 </div>
 
@@ -340,7 +338,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                             </div>
                             
                             <div>
-                                <ToggleSwitch label="Làm Nét & Nâng Cấp (+1 💎)" checked={useUpscaler} onChange={e => setUseUpscaler(e.target.checked)} />
+                                <ToggleSwitch label="Làm Nét & Nâng Cấp (+1 💎)" checked={useUpscaler} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUseUpscaler(e.target.checked)} />
                                 <p className="text-xs text-gray-400 px-1 mt-1 leading-relaxed">Khi bật, ảnh AI tạo ra sẽ có kết quả <span className="font-bold text-cyan-400 neon-highlight">siêu nét</span>, chi tiết rõ ràng, và dung lượng ảnh cao hơn.</p>
                             </div>
                         </div>

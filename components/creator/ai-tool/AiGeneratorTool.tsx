@@ -1,21 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useImageGenerator } from '../../../hooks/useImageGenerator';
-import { useAuth } from '../../../contexts/AuthContext';
-import { DETAILED_AI_MODELS, STYLE_PRESETS_NEW } from '../../../constants/aiToolData';
-// @FIX: Import 'GalleryImage' type to resolve 'Cannot find name' error.
-import { AIModel, GalleryImage } from '../../../types';
+import { useImageGenerator } from '../../hooks/useImageGenerator';
+import { useAuth } from '../../contexts/AuthContext';
+import { DETAILED_AI_MODELS, STYLE_PRESETS_NEW } from '../../constants/aiToolData';
+import { AIModel, GalleryImage } from '../../types';
 
-// @FIX: Corrected import paths to point to shared ai-tool components.
 import SettingsBlock from '../../ai-tool/SettingsBlock';
 import ImageUploader from '../../ai-tool/ImageUploader';
 import ModelSelectionModal from '../../ai-tool/ModelSelectionModal';
-// @FIX: Corrected import paths to point to shared ai-tool components.
 import InstructionModal from '../../ai-tool/InstructionModal';
 import GenerationProgress from '../../ai-tool/GenerationProgress';
 import ConfirmationModal from '../../ConfirmationModal';
 import ImageModal from '../../common/ImageModal';
 import ToggleSwitch from '../../ai-tool/ToggleSwitch';
-import { resizeImage } from '../../../utils/imageUtils';
+import { resizeImage } from '../../utils/imageUtils';
 
 interface AiGeneratorToolProps {
     initialCharacterImage?: { url: string; file: File } | null;

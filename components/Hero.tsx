@@ -30,7 +30,7 @@ const Hero: React.FC<HeroProps> = ({ onCtaClick, onGoogleLoginClick }) => {
             <div className="flex flex-col sm:flex-row gap-4 justify-center animate-fade-in-up" style={{ animationDelay: '0.6s' }}>
                 <button 
                     onClick={onCtaClick}
-                    className="group relative px-8 py-4 font-bold text-lg text-white rounded-full bg-gradient-to-r from-blue-500 to-purple-600 transition-all duration-300 hover:shadow-[0_0_25px_rgba(88,101,242,0.8)] hover:scale-105"
+                    className="group relative px-8 py-4 font-bold text-lg text-white rounded-full bg-gradient-to-r from-blue-500 to-purple-600 transition-all duration-300 hover:shadow-[0_0_25px_rgba(88,101,242,0.8)] interactive-3d"
                 >
                     <div className="absolute -inset-0.5 bg-gradient-to-r from-purple-600 to-blue-500 rounded-full blur-md opacity-75 group-hover:opacity-100 transition duration-300"></div>
                     <span className="relative flex items-center justify-center gap-2">
@@ -40,7 +40,7 @@ const Hero: React.FC<HeroProps> = ({ onCtaClick, onGoogleLoginClick }) => {
                 </button>
                 <button
                     onClick={onGoogleLoginClick} 
-                    className="group relative px-8 py-4 font-bold text-lg text-white bg-white/5 backdrop-blur-sm border border-white/20 rounded-full transition-all duration-300 hover:border-white/50"
+                    className="group relative px-8 py-4 font-bold text-lg text-white bg-white/5 backdrop-blur-sm border border-white/20 rounded-full transition-all duration-300 hover:border-white/50 interactive-3d"
                 >
                      <div className="absolute -inset-px bg-gradient-to-r from-pink-500 to-purple-600 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300 blur-sm"></div>
                      <span className="relative">Đăng nhập Google</span>

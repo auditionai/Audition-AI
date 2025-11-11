@@ -37,7 +37,7 @@ const Community: React.FC<CommunityProps> = ({ images, onLoginClick, onImageClic
         <Gallery 
             images={images}
             onImageClick={onImageClick}
-            limit={6}
+            displayMode="slider"
             showSeeMore={true}
             onSeeMoreClick={onSeeMoreClick}
         />

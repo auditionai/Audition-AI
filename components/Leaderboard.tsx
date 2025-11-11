@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { LeaderboardUser } from '../types';
 import { useAuth } from '../contexts/AuthContext';
@@ -26,54 +25,105 @@ const Leaderboard: React.FC = () => {
         fetchLeaderboard();
     }, [showToast]);
 
-    const rankColors = [
-        'bg-gradient-to-br from-amber-400 to-yellow-500 text-black shadow-yellow-400/40', // 1st
-        'bg-gradient-to-br from-slate-300 to-gray-400 text-black shadow-gray-400/40',    // 2nd
-        'bg-gradient-to-br from-amber-600 to-yellow-700 text-white shadow-yellow-700/40' // 3rd
-    ];
+    const topThree = leaderboard.slice(0, 3);
+    const theRest = leaderboard.slice(3);
+
+    // Reorder topThree for podium display: [2nd, 1st, 3rd] if possible
+    const podiumOrder = topThree.length === 3 ? [topThree[1], topThree[0], topThree[2]] : topThree;
+
 
     if (isLoading) {
-        return <div className="text-center p-12">Đang tải bảng xếp hạng...</div>;
+        return (
+            <div className="text-center p-12">
+                <div className="w-8 h-8 border-4 border-t-pink-400 border-white/20 rounded-full animate-spin mx-auto"></div>
+                <p className="mt-4 text-gray-400">Đang tải bảng xếp hạng...</p>
+            </div>
+        );
     }
 
     return (
         <div className="container mx-auto px-4 py-8 animate-fade-in">
-            <div className="text-center max-w-2xl mx-auto mb-12">
-                <h1 className="text-4xl font-bold mb-4 bg-gradient-to-r from-yellow-400 via-amber-400 to-orange-500 text-transparent bg-clip-text">Bảng Xếp Hạng Sáng Tạo</h1>
-                <p className="text-lg text-gray-400">Vinh danh những nhà sáng tạo hàng đầu dựa trên số lượng tác phẩm đã tạo.</p>
+            <div className="themed-main-title-container text-center max-w-4xl mx-auto mb-12">
+                <h1 className="themed-main-title text-4xl md:text-5xl font-black mb-4 leading-tight">
+                    Bảng Xếp Hạng
+                </h1>
+                <p className="themed-main-subtitle text-lg md:text-xl max-w-2xl mx-auto">
+                    Vinh danh những nhà sáng tạo hàng đầu dựa trên cấp bậc và số lượng tác phẩm.
+                </p>
             </div>
 
-            <div className="max-w-4xl mx-auto">
+            <div className="max-w-5xl mx-auto">
                 {leaderboard.length === 0 ? (
-                    <div className="text-center py-16 bg-white/5 rounded-2xl">
+                    <div className="text-center py-16 bg-skin-fill-secondary rounded-2xl border border-skin-border">
                          <i className="ph-fill ph-trophy text-6xl text-gray-500"></i>
                         <h3 className="mt-4 text-2xl font-bold">Bảng xếp hạng trống</h3>
                         <p className="text-gray-400 mt-2">Hãy là người đầu tiên tạo ra tác phẩm và ghi danh!</p>
                     </div>
                 ) : (
-                    <div className="space-y-3">
-                        {leaderboard.map((user, index) => {
-                            const rank = getRankForLevel(user.level);
-                            return (
-                                <div key={user.id} className={`p-4 bg-[#12121A]/80 border rounded-xl shadow-lg flex items-center gap-4 transition-all duration-300 interactive-3d ${index < 3 ? 'border-yellow-500/30' : 'border-white/10'}`}>
-                                    <div className={`w-12 h-12 flex-shrink-0 flex items-center justify-center font-bold text-xl rounded-full ${rankColors[index] || 'bg-white/10'}`}>
-                                        {user.rank}
-                                    </div>
-                                    <img src={user.photo_url} alt={user.display_name} className="w-14 h-14 rounded-full flex-shrink-0 border-2 border-white/20"/>
-                                    <div className="flex-grow">
-                                        <p className={`font-bold text-lg truncate ${rank.color} neon-text-glow`}>{user.display_name}</p>
-                                        <div className="flex items-center gap-4 text-sm text-gray-400">
-                                            <span>Cấp {user.level}</span>
-                                            <span className="flex items-center gap-1.5"><i className="ph-fill ph-image text-pink-400"></i>{user.creations_count} tác phẩm</span>
+                    <>
+                        {/* Podium for Top 3 */}
+                        {topThree.length > 0 && (
+                            <div className="relative grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-8 items-end mb-16">
+                                {podiumOrder.map((user) => {
+                                    const rankDetails = getRankForLevel(user.level);
+                                    let rankClass = '';
+                                    let rankIcon = null;
+                                    let orderClass = '';
+
+                                    if (user.rank === 1) {
+                                        rankClass = 'podium-rank-1';
+                                        rankIcon = <i className="ph-fill ph-crown-simple text-5xl"></i>;
+                                        orderClass = 'md:order-2';
+                                    } else if (user.rank === 2) {
+                                        rankClass = 'podium-rank-2';
+                                        orderClass = 'md:order-1';
+                                    } else {
+                                        rankClass = 'podium-rank-3';
+                                        orderClass = 'md:order-3';
+                                    }
+
+                                    return (
+                                        <div key={user.id} className={`podium-card ${rankClass} ${orderClass}`}>
+                                            <div className="podium-rank-icon">{rankIcon}</div>
+                                            <div className="podium-rank-number">{user.rank}</div>
+                                            <img src={user.photo_url} alt={user.display_name} className="podium-avatar" />
+                                            <p className="podium-name">{user.display_name}</p>
+                                            <p className={`podium-level ${rankDetails.color}`}>{rankDetails.title} - Cấp {user.level}</p>
+                                            <div className="podium-stats">
+                                                <span><i className="ph-fill ph-image text-pink-400"></i> {user.creations_count}</span>
+                                                <span><i className="ph-fill ph-star text-cyan-400"></i> {user.xp.toLocaleString()} XP</span>
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div className="hidden md:block w-1/3">
-                                        <XPProgressBar currentXp={user.xp} currentLevel={user.level} />
-                                    </div>
-                                </div>
-                            )
-                        })}
-                    </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+
+                        {/* List for 4th onwards */}
+                        {theRest.length > 0 && (
+                            <div className="space-y-3">
+                                {theRest.map((user) => {
+                                    const rank = getRankForLevel(user.level);
+                                    return (
+                                        <div key={user.id} className="leaderboard-item">
+                                            <div className="leaderboard-rank">{user.rank}</div>
+                                            <img src={user.photo_url} alt={user.display_name} className="leaderboard-avatar"/>
+                                            <div className="flex-grow">
+                                                <p className={`font-bold text-lg truncate ${rank.color} neon-text-glow`}>{user.display_name}</p>
+                                                <div className="flex items-center gap-4 text-sm text-skin-muted">
+                                                    <span>Cấp {user.level}</span>
+                                                    <span className="flex items-center gap-1.5"><i className="ph-fill ph-image text-pink-400"></i>{user.creations_count} tác phẩm</span>
+                                                </div>
+                                            </div>
+                                            <div className="hidden md:block w-1/3">
+                                                <XPProgressBar currentXp={user.xp} currentLevel={user.level} />
+                                            </div>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        )}
+                    </>
                 )}
             </div>
         </div>

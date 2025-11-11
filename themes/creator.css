@@ -364,6 +364,9 @@
 }
 
 /* --- Base Styles --- */
+.themed-main-title-container { /* This is a new wrapper class */
+  position: relative;
+}
 .themed-main-title {
   position: relative;
   transition: all 0.3s ease;
@@ -396,7 +399,7 @@
 }
 [data-theme="cyber-punk"] .themed-main-title::before,
 [data-theme="cyber-punk"] .themed-main-title::after {
-  content: "Audition AI Studio";
+  content: attr(data-text); /* Use a data attribute for dynamic text */
   position: absolute;
   top: 0;
   left: 0;
@@ -405,12 +408,12 @@
   background: var(--color-fill);
   overflow: hidden;
 }
-[data-theme="cyber-punk"] .themed-main-title::before {
+[data-theme="cyber-punk"] .themed-main-title[data-text]::before {
   left: 2px;
   text-shadow: -2px 0 var(--color-accent-secondary);
   animation: glitch-anim 2.5s infinite linear alternate-reverse;
 }
-[data-theme="cyber-punk"] .themed-main-title::after {
+[data-theme="cyber-punk"] .themed-main-title[data-text]::after {
   left: -2px;
   text-shadow: -2px 0 rgb(var(--color-accent)), 2px 2px var(--color-accent-secondary);
   animation: glitch-anim 2s infinite linear alternate-reverse;
@@ -505,4 +508,157 @@
   color: rgb(var(--color-accent));
   transform: translateY(-2px);
   box-shadow: var(--shadow-accent);
+}
+
+/* ==========================================================================
+   5. LEADERBOARD STYLES
+   ========================================================================== */
+
+/* --- Podium Cards (Top 3) --- */
+.podium-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1.5rem 1rem;
+  background-color: var(--color-fill-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 1rem;
+  text-align: center;
+  transition: all 0.4s ease;
+  z-index: 1;
+}
+
+.podium-rank-icon {
+  position: absolute;
+  top: -1.5rem;
+  left: 50%;
+  transform: translateX(-50%) rotate(-10deg);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  filter: drop-shadow(0 4px 10px rgba(0,0,0,0.5));
+}
+
+.podium-rank-1 .podium-rank-icon {
+  color: #FFD700;
+  opacity: 1;
+}
+
+.podium-rank-number {
+  position: absolute;
+  top: 0.5rem;
+  left: 0.5rem;
+  width: 2.5rem;
+  height: 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  font-weight: 900;
+  border-radius: 9999px;
+  color: #000;
+}
+
+.podium-avatar {
+  width: 6rem;
+  height: 6rem;
+  border-radius: 9999px;
+  border: 4px solid;
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+  object-fit: cover;
+  box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+}
+
+.podium-name {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--color-text-base);
+  margin-bottom: 0.25rem;
+}
+
+.podium-level {
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+
+.podium-stats {
+  display: flex;
+  gap: 1.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+.podium-stats span {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+/* Rank-specific styling */
+.podium-rank-1 {
+  transform: translateY(-20px) scale(1.05);
+  border-color: rgba(255, 215, 0, 0.5);
+  box-shadow: 0 0 25px rgba(255, 215, 0, 0.3), 0 0 40px rgba(var(--color-accent), 0.2);
+  z-index: 2;
+}
+.podium-rank-1 .podium-rank-number { background: linear-gradient(135deg, #FFD700, #F0C000); }
+.podium-rank-1 .podium-avatar { border-color: #FFD700; }
+.podium-rank-1 .podium-name { color: #FFD700; text-shadow: 0 0 10px #FFD700; }
+
+.podium-rank-2 {
+  border-color: rgba(192, 192, 192, 0.5);
+  box-shadow: 0 0 20px rgba(192, 192, 192, 0.2);
+  margin-top: 20px;
+}
+.podium-rank-2 .podium-rank-number { background: linear-gradient(135deg, #C0C0C0, #A9A9A9); }
+.podium-rank-2 .podium-avatar { border-color: #C0C0C0; }
+.podium-rank-2 .podium-name { color: #E0E0E0; }
+
+.podium-rank-3 {
+  border-color: rgba(205, 127, 50, 0.5);
+  box-shadow: 0 0 20px rgba(205, 127, 50, 0.2);
+  margin-top: 20px;
+}
+.podium-rank-3 .podium-rank-number { background: linear-gradient(135deg, #CD7F32, #B8732E); }
+.podium-rank-3 .podium-avatar { border-color: #CD7F32; }
+.podium-rank-3 .podium-name { color: #E6A974; }
+
+/* --- List Items (4th onwards) --- */
+.leaderboard-item {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  background-color: var(--color-fill-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+  transition: all 0.3s ease;
+}
+.leaderboard-item:hover {
+  border-color: var(--color-border-accent);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-accent);
+}
+
+.leaderboard-rank {
+  flex-shrink: 0;
+  width: 2.5rem;
+  height: 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  border-radius: 9999px;
+  background-color: rgba(var(--color-accent), 0.1);
+  color: var(--color-text-base);
+}
+
+.leaderboard-avatar {
+  flex-shrink: 0;
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 9999px;
+  border: 2px solid var(--color-border);
 }

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useAuth } from './contexts/AuthContext';
 import { useTheme } from './contexts/ThemeContext';
 
@@ -16,6 +16,26 @@ const App: React.FC = () => {
     const { user, loading, route, toast, reward, clearReward } = useAuth();
     const { theme } = useTheme();
 
+    // CRITICAL FIX: Apply the theme to the body tag directly.
+    // This ensures that global CSS variables like --color-fill are applied
+    // to the entire page background, fixing the missing background issue.
+    useEffect(() => {
+        // Only apply themes to the body if it's a creator page to avoid affecting the landing page
+        const isCreatorInterface = ['tool', 'leaderboard', 'my-creations', 'settings', 'admin-gallery', 'buy-credits'].includes(route);
+        if (isCreatorInterface && user) {
+             document.body.setAttribute('data-theme', theme);
+        } else {
+            // Ensure landing page has no theme attribute on the body
+            document.body.removeAttribute('data-theme');
+        }
+        
+        // Cleanup function to remove the attribute when the component unmounts or route changes
+        return () => {
+             document.body.removeAttribute('data-theme');
+        };
+    }, [theme, route, user]);
+
+
     if (loading) {
         return (
             <div className="fixed inset-0 bg-[#0B0B0F] flex items-center justify-center z-[9999]">
@@ -25,9 +45,6 @@ const App: React.FC = () => {
     }
 
     const renderPage = () => {
-        let pageComponent;
-        const isCreatorInterface = ['tool', 'leaderboard', 'my-creations', 'settings', 'admin-gallery', 'buy-credits'].includes(route);
-
         // Determine which page component to render based on the route and user status
         switch (route) {
             case 'tool':
@@ -35,37 +52,24 @@ const App: React.FC = () => {
             case 'my-creations':
             case 'settings':
             case 'admin-gallery':
-                pageComponent = user ? <CreatorPage activeTab={route} /> : <HomePage />;
-                break;
+                return user ? <CreatorPage activeTab={route} /> : <HomePage />;
             case 'buy-credits':
-                pageComponent = user ? <BuyCreditsPage /> : <HomePage />;
-                break;
+                return user ? <BuyCreditsPage /> : <HomePage />;
             case 'gallery':
-                pageComponent = <GalleryPage />;
-                break;
+                return <GalleryPage />;
             case 'home':
             default:
-                pageComponent = <HomePage />;
+                return <HomePage />;
         }
-        
-        if (isCreatorInterface && user) {
-            // Wrapper for the creator app with themes and effects
-            return (
-                <div data-theme={theme} className="relative">
-                    <ThemeEffects />
-                    <div className="relative z-[1]">
-                        {pageComponent}
-                    </div>
-                </div>
-            );
-        }
-        
-        // For landing page and related pages, render without the theme wrapper
-        return pageComponent;
     };
+    
+    const isCreatorInterface = ['tool', 'leaderboard', 'my-creations', 'settings', 'admin-gallery', 'buy-credits'].includes(route);
 
     return (
         <>
+            {/* Conditionally render theme effects for creator pages */}
+            {isCreatorInterface && user && <ThemeEffects />}
+
             {renderPage()}
             
             {/* Global Toast Notification */}

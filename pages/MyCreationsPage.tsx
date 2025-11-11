@@ -5,7 +5,7 @@ import ImageModal from '../components/common/ImageModal';
 import ConfirmationModal from '../components/ConfirmationModal';
 
 const MyCreationsPage: React.FC = () => {
-    const { user, session, showToast, updateUserDiamonds } = useAuth();
+    const { session, showToast, updateUserDiamonds } = useAuth();
     const [images, setImages] = useState<GalleryImage[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [selectedImage, setSelectedImage] = useState<GalleryImage | null>(null);
@@ -101,8 +101,8 @@ const MyCreationsPage: React.FC = () => {
             <ImageModal isOpen={!!selectedImage} onClose={() => setSelectedImage(null)} image={selectedImage} />
             <div className="max-w-7xl mx-auto">
                  <div className="text-center mb-12">
-                    <h1 className="text-4xl md:text-5xl font-bold mb-4">
-                        <span className="bg-gradient-to-r from-blue-400 to-cyan-400 text-transparent bg-clip-text">Tác phẩm của tôi</span>
+                    <h1 className="text-4xl md:text-5xl font-bold mb-4 sharp-gradient-heading">
+                        Tác phẩm của tôi
                     </h1>
                     <p className="text-lg text-gray-400">
                         Nơi lưu giữ tất cả những sáng tạo độc đáo của bạn.

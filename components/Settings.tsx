@@ -6,8 +6,8 @@ import XPProgressBar from './common/XPProgressBar';
 import Modal from './common/Modal';
 import { RANKS } from '../constants/ranks';
 import Dashboard from './admin/Dashboard';
-import RedeemGiftCode from './user/RedeemGiftCode';
-import GiftCodeManager from './admin/GiftCodeManager';
+import RedeemGiftCode from '../user/RedeemGiftCode';
+import GiftCodeManager from '../admin/GiftCodeManager';
 
 // --- NEW ---
 interface CheckInReward {
@@ -617,7 +617,8 @@ const Settings: React.FC = () => {
                     <XPProgressBar currentXp={user.xp} currentLevel={user.level} />
                 </div>
             </div>
-
+            
+            <RedeemGiftCode />
             
             {/* How to Earn XP Section */}
             <div className="bg-[#12121A]/80 border border-cyan-500/20 rounded-2xl shadow-lg p-6 mb-8 relative overflow-hidden max-w-4xl mx-auto">
@@ -665,6 +666,7 @@ const Settings: React.FC = () => {
             {user.is_admin && (
                  <div className="space-y-8 mt-8 pt-8 border-t-2 border-dashed border-yellow-500/20">
                     
+                    <GiftCodeManager />
                     
                     <div className="bg-[#12121A]/80 border border-cyan-500/20 rounded-2xl shadow-lg p-6">
                         <h3 className="text-2xl font-bold mb-4 text-cyan-400 flex items-center gap-2"><i className="ph-fill ph-calendar-check"></i>Admin: Quản lý Thưởng Điểm Danh</h3>

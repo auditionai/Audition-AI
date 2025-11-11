@@ -44,7 +44,10 @@ const Leaderboard: React.FC = () => {
     return (
         <div className="container mx-auto px-4 py-8 animate-fade-in">
             <div className="themed-main-title-container text-center max-w-4xl mx-auto mb-12">
-                <h1 className="themed-main-title text-4xl md:text-5xl font-black mb-4 leading-tight">
+                <h1 
+                    className="themed-main-title text-4xl md:text-5xl font-black mb-4 leading-tight"
+                    data-text="Bảng Xếp Hạng"
+                >
                     Bảng Xếp Hạng
                 </h1>
                 <p className="themed-main-subtitle text-lg md:text-xl max-w-2xl mx-auto">

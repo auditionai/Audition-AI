@@ -33,7 +33,10 @@ const AITool: React.FC = () => {
                 onClose={() => setInstructionModalOpen(false)} 
             />
             <div className="themed-main-title-container text-center max-w-4xl mx-auto mb-12">
-                <h1 className="themed-main-title text-4xl md:text-5xl lg:text-6xl font-black mb-4 leading-tight">
+                <h1 
+                    className="themed-main-title text-4xl md:text-5xl lg:text-6xl font-black mb-4 leading-tight"
+                    data-text="Audition AI Studio"
+                >
                     Audition AI Studio
                 </h1>
                 <p className="themed-main-subtitle text-lg md:text-xl max-w-2xl mx-auto">

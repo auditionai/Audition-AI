@@ -1,21 +1,26 @@
 import React from 'react';
-import { useTheme } from '../../contexts/ThemeContext';
 
 interface LogoProps {
-    onClick: () => void;
+  onClick?: () => void;
 }
 
 const Logo: React.FC<LogoProps> = ({ onClick }) => {
-    const { theme } = useTheme();
-
-    return (
-        <div className="cursor-pointer logo-container" data-theme={theme} onClick={onClick}>
-             <h1 className="logo-text">
-                Audition AI
-             </h1>
-             <p className="logo-subtext">Sáng tạo không giới hạn</p>
-        </div>
-    );
+  return (
+    <div
+      onClick={onClick}
+      className="cursor-pointer group flex items-center gap-2"
+      aria-label="Audition AI Home"
+    >
+      <div className="relative w-10 h-10 flex items-center justify-center">
+        <div className="absolute inset-0 bg-gradient-to-br from-pink-500 to-fuchsia-600 rounded-full blur-sm opacity-60 group-hover:opacity-80 transition-opacity"></div>
+        <i className="ph-fill ph-shooting-star text-2xl text-white relative z-10"></i>
+      </div>
+      <h1 className="text-xl font-bold text-white tracking-wide group-hover:text-pink-300 transition-colors">
+        <span className="font-light">AUDITION</span>
+        <span className="bg-gradient-to-r from-pink-400 to-fuchsia-500 text-transparent bg-clip-text">AI</span>
+      </h1>
+    </div>
+  );
 };
 
 export default Logo;

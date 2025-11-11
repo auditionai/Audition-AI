@@ -6,17 +6,19 @@ const AITool: React.FC = () => {
     const [activeTool, setActiveTool] = useState<'generate' | 'removeBg'>('removeBg');
     
     // State to manage moving images from the remover to the generator
-    const [imageToMove, setImageToMove] = useState<{ url: string; file: File } | null>(null);
-    const [faceToMove, setFaceToMove] = useState<{ url: string; file: File } | null>(null);
+    const [imageToMove, setImageToMove] = useState<string | null>(null);
+    const [faceToMove, setFaceToMove] = useState<string | null>(null);
 
-    const handleMoveToGenerator = (image: { url: string; file: File }) => {
-        setImageToMove(image);
+    const handleMoveToGenerator = (imageUrl: string) => {
+        setImageToMove(imageUrl);
         setFaceToMove(null); // Clear face image if full image is moved
         setActiveTool('generate');
     };
     
-    const handleMoveFaceToGenerator = (image: { url: string; file: File }) => {
-        setFaceToMove(image);
+    const handleMoveFaceToGenerator = (croppedImage: { url: string; file: File }) => {
+        // This function now only moves the cropped face image URL as a string.
+        // The file object is no longer needed in the new architecture.
+        setFaceToMove(croppedImage.url);
         setImageToMove(null); // Clear full image if face is moved
         setActiveTool('generate');
     };

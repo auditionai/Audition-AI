@@ -7,8 +7,8 @@ import { resizeImage, base64ToFile } from '../../utils/imageUtils';
 import ProcessedImageModal from './ProcessedImageModal';
 
 interface BgRemoverToolProps {
-    onMoveToGenerator: (image: { url: string; file: File }) => void;
-    onMoveFaceToGenerator: (image: { url: string; file: File }) => void;
+    onMoveToGenerator: (imageUrl: string) => void;
+    onMoveFaceToGenerator: (croppedImageUrl: { url: string; file: File }) => void;
 }
 
 // Define a serializable structure for session storage
@@ -98,8 +98,7 @@ const BgRemoverTool: React.FC<BgRemoverToolProps> = ({ onMoveToGenerator, onMove
     };
 
     const handleUseInGenerator = (image: ProcessedImageData) => {
-        const file = base64ToFile(image.imageBase64, `processed_${image.fileName}`, image.mimeType);
-        onMoveToGenerator({ url: `data:${image.mimeType};base64,${image.imageBase64}`, file: file });
+        onMoveToGenerator(`data:${image.mimeType};base64,${image.imageBase64}`);
         setSelectedProcessedImage(null); // Close modal
         showToast('Đã chuyển ảnh sang trình tạo AI!', 'success');
     };

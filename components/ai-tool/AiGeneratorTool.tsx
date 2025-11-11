@@ -16,8 +16,8 @@ import { resizeImage } from '../../utils/imageUtils';
 import SignatureSettings from './SignatureSettings';
 
 interface AiGeneratorToolProps {
-    initialCharacterImage?: { url: string; file: File } | null;
-    initialFaceImage?: { url: string; file: File } | null;
+    initialCharacterImage?: string | null;
+    initialFaceImage?: string | null;
 }
 
 const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage, initialFaceImage }) => {
@@ -40,7 +40,6 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
 
     // --- CRITICAL FIX: Convert prompt input to a controlled component using useState ---
     const [prompt, setPrompt] = useState('');
-    // const promptRef = useRef<HTMLTextAreaElement>(null); // REMOVED
 
     const [selectedModel, setSelectedModel] = useState<AIModel>(DETAILED_AI_MODELS.find(m => m.recommended) || DETAILED_AI_MODELS[0]);
     const [selectedStyle, setSelectedStyle] = useState('none');
@@ -62,9 +61,9 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
     const styleDropdownRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        if (initialCharacterImage) setPoseImage(initialCharacterImage.url);
+        if (initialCharacterImage) setPoseImage(initialCharacterImage);
         if (initialFaceImage) {
-            setRawFaceImage(initialFaceImage.url);
+            setRawFaceImage(initialFaceImage);
             setProcessedFaceImage(null);
         }
     }, [initialCharacterImage, initialFaceImage]);

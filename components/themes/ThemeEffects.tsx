@@ -29,11 +29,29 @@ const Bubbles: React.FC = () => {
     return <div className="bubbles-container">{bubbles}</div>;
 };
 
+const FloatingHearts: React.FC = () => {
+    const hearts = Array.from({ length: 20 }).map((_, i) => {
+        const style = {
+            left: `${Math.random() * 100}%`,
+            animationDuration: `${Math.random() * 8 + 6}s`,
+            animationDelay: `${Math.random() * 8}s`,
+            fontSize: `${Math.random() * 16 + 10}px`,
+        };
+        return <div key={i} className="floating-heart" style={style}>♥</div>;
+    });
+    return <div className="hearts-container">{hearts}</div>;
+}
+
+
 const ShootingStars: React.FC = () => {
     return (
         <div className="shooting-stars-container">
-            {Array.from({ length: 10 }).map((_, i) => (
-                <div key={i} className="shooting-star"></div>
+            {Array.from({ length: 15 }).map((_, i) => (
+                 <div key={i} className="shooting-star" style={{
+                    top: `${Math.random() * 100}%`,
+                    left: `${Math.random() * 100}%`,
+                    animationDelay: `${Math.random() * 10}s`,
+                 }}></div>
             ))}
         </div>
     );
@@ -47,7 +65,7 @@ const ThemeEffects: React.FC = () => {
         <>
             {theme === 'magical-christmas' && <Snowfall />}
             {theme === 'crystal-palace' && <Bubbles />}
-            {theme === 'sweet-pastel' && <Bubbles />} 
+            {theme === 'sweet-pastel' && <FloatingHearts />} 
             {theme === 'dreamy-galaxy' && <ShootingStars />}
         </>
     );

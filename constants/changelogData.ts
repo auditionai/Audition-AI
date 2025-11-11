@@ -8,6 +8,13 @@ export interface ChangelogItem {
 
 export const CHANGELOG_DATA: ChangelogItem[] = [
   {
+    id: 6,
+    version: 'v1.6.0',
+    date: '13-11-2025',
+    title: 'Cuộc Cách Mạng Giao Diện',
+    description: 'Đại tu toàn bộ hệ thống giao diện! Mỗi theme có một bản sắc riêng biệt. Giao diện mặc định được thay thế bằng "Vũ Điệu Neon". Thêm tính năng tự động random giao diện mỗi khi truy cập để tạo sự mới mẻ.',
+  },
+  {
     id: 5,
     version: 'v1.5.0',
     date: '12-11-2025',

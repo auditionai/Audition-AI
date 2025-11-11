@@ -1,48 +1,49 @@
 /* --- THEME DEFINITIONS --- */
 
-:root, [data-theme="default"] {
+:root, [data-theme="cyber-dance"] {
   /* Colors */
-  --color-fill: #0B0B0F;
-  --color-fill-secondary: #12121A;
-  --color-fill-panel: #1a1a22;
-  --color-fill-modal: #12121A;
-  --color-text-base: #FFFFFF;
-  --color-text-muted: #9ca3af;
-  --color-accent: #F72585;
-  --color-accent-secondary: #CA27FF;
+  --color-fill: #0a0a0a;
+  --color-fill-secondary: #141414;
+  --color-fill-panel: rgba(10, 10, 10, 0.7);
+  --color-fill-modal: #101010;
+  --color-text-base: #e6e6e6;
+  --color-text-muted: #808080;
+  --color-accent: #ff003c;
+  --color-accent-secondary: #ff4d6d;
   --color-accent-text: #FFFFFF;
-  --color-border: rgba(247, 37, 133, 0.1);
-  --color-border-accent: rgba(247, 37, 133, 0.2);
-  --color-button-secondary-bg: rgba(255, 255, 255, 0.1);
-  --color-button-secondary-hover: rgba(255, 255, 255, 0.2);
+  --color-border: rgba(255, 0, 60, 0.3);
+  --color-border-accent: rgba(255, 0, 60, 0.5);
+  --color-button-secondary-bg: rgba(255, 0, 60, 0.1);
+  --color-button-secondary-hover: rgba(255, 0, 60, 0.2);
 
   /* Typography */
-  --font-heading: 'Be Vietnam Pro', sans-serif;
-  --font-body: 'Be Vietnam Pro', sans-serif;
+  --font-heading: 'Orbitron', sans-serif;
+  --font-body: 'Roboto', sans-serif;
 
   /* Sizing & Radius */
-  --radius-panel: 1rem; /* 16px */
-  --radius-button: 9999px; /* rounded-full */
-  --radius-input: 0.5rem; /* 8px */
+  --radius-panel: 0.25rem; /* 4px, sharp */
+  --radius-button: 0.25rem;
+  --radius-input: 0.25rem;
 
   /* Shadows & Effects */
-  --shadow-panel: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-  --shadow-accent: 0 0 15px rgba(247, 37, 133, 0.4), 0 0 5px rgba(247, 37, 133, 0.2);
-  --shadow-accent-lg: 0 10px 25px rgba(247, 37, 133, 0.4);
+  --shadow-panel: 0 0 15px rgba(255, 0, 60, 0.1);
+  --shadow-accent: 0 0 15px rgba(255, 0, 60, 0.5), 0 0 5px rgba(255, 0, 60, 0.3);
+  --shadow-accent-lg: 0 0 25px rgba(255, 0, 60, 0.5);
 }
+
 
 [data-theme="crystal-palace"] {
   --color-fill: #0a192f;
   --color-fill-secondary: #0f2142;
-  --color-fill-panel: rgba(15, 33, 66, 0.5); /* Semi-transparent for glass effect */
+  --color-fill-panel: rgba(15, 33, 66, 0.4); /* More transparent for glass effect */
   --color-fill-modal: #0f2142;
   --color-text-base: #e0f7fa;
-  --color-text-muted: #88c0d0;
+  --color-text-muted: #a8d8e8;
   --color-accent: #63d4ff;
   --color-accent-secondary: #a2eaff;
   --color-accent-text: #0a192f;
-  --color-border: rgba(99, 212, 255, 0.25);
-  --color-border-accent: rgba(99, 212, 255, 0.4);
+  --color-border: rgba(99, 212, 255, 0.35);
+  --color-border-accent: rgba(99, 212, 255, 0.6);
   --color-button-secondary-bg: rgba(99, 212, 255, 0.1);
   --color-button-secondary-hover: rgba(99, 212, 255, 0.2);
 
@@ -63,8 +64,8 @@
   --color-fill-secondary: #ffffff;
   --color-fill-panel: #f9eef3;
   --color-fill-modal: #ffffff;
-  --color-text-base: #6d4b5f;
-  --color-text-muted: #a48293;
+  --color-text-base: #5a3a4b; /* Darker for better contrast */
+  --color-text-muted: #8b6b7b; /* Darker for better contrast */
   --color-accent: #ffb8d2;
   --color-accent-secondary: #ffcce0;
   --color-accent-text: #8c4f6f;
@@ -161,9 +162,10 @@ body {
 }
 
 [data-theme="crystal-palace"] .themed-panel,
-[data-theme="magical-christmas"] .themed-panel {
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+[data-theme="magical-christmas"] .themed-panel,
+[data-theme="cyber-dance"] .themed-panel {
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 
 [data-theme="dreamy-galaxy"] .themed-panel {
@@ -171,6 +173,19 @@ body {
   background-size: 20px 20px;
   box-shadow: 0 0 10px var(--color-border-accent), inset 0 0 10px var(--color-border);
 }
+
+[data-theme="cyber-dance"] .themed-panel {
+  background-image: 
+    linear-gradient(var(--color-border) 1px, transparent 1px), 
+    linear-gradient(to right, var(--color-border) 1px, transparent 1px);
+  background-size: 30px 30px;
+  animation: scanlines 20s linear infinite;
+}
+@keyframes scanlines {
+  from { background-position: 0 0; }
+  to { background-position: 0 -60px; }
+}
+
 
 [data-theme="sweet-pastel"] .themed-panel {
   border: 1px solid #fff;
@@ -461,9 +476,17 @@ body {
 .logo-container .logo-text { font-family: var(--font-heading); font-size: 1.875rem; line-height: 2.25rem; font-weight: 700; transition: all 0.5s ease; }
 .logo-container .logo-subtext { font-family: var(--font-body); font-size: 0.75rem; line-height: 1rem; margin-top: -0.25rem; transition: all 0.5s ease; }
 
-/* Default Logo */
-[data-theme="default"] .logo-text { background-image: linear-gradient(to right, var(--color-accent), var(--color-accent-secondary)); -webkit-background-clip: text; background-clip: text; color: transparent; }
-[data-theme="default"] .logo-subtext { animation: neon-flow 5s linear infinite; background: linear-gradient(90deg, #d1c8ff, #ffffff, #ffd1f8, #d1c8ff); background-size: 250% auto; -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+/* Cyber Dance (Default) Logo */
+@keyframes glitch { 2%, 64% { transform: translate(2px, 0) skew(0deg); } 4%, 60% { transform: translate(-2px, 0) skew(0deg); } 62% { transform: translate(0, 0) skew(5deg); } }
+@keyframes glitch-top { 2%, 64% { transform: translate(2px, -2px); } 4%, 60% { transform: translate(-2px, 2px); } 62% { transform: translate(13px, -1px) skew(-13deg); } }
+@keyframes glitch-bottom { 2%, 64% { transform: translate(-2px, 0); } 4%, 60% { transform: translate(-2px, 0); } 62% { transform: translate(-22px, 5px) skew(21deg); } }
+
+[data-theme="cyber-dance"] .logo-text { color: var(--color-text-base); text-shadow: -1px 0 var(--color-accent); animation: glitch 1s linear infinite; }
+[data-theme="cyber-dance"] .logo-text::before, [data-theme="cyber-dance"] .logo-text::after { content: 'Audition AI'; position: absolute; left: 0; }
+[data-theme="cyber-dance"] .logo-text::before { animation: glitch-top 1s linear infinite; clip-path: polygon(0 0, 100% 0, 100% 33%, 0 33%); }
+[data-theme="cyber-dance"] .logo-text::after { animation: glitch-bottom 1.5s linear infinite; clip-path: polygon(0 67%, 100% 67%, 100% 100%, 0 100%); }
+[data-theme="cyber-dance"] .logo-subtext { color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.1em; }
+
 
 /* Crystal Palace Logo */
 [data-theme="crystal-palace"] .logo-text { color: var(--color-accent); text-shadow: 0 0 5px #fff, 0 0 10px var(--color-accent), 0 0 15px var(--color-accent); }
@@ -485,20 +508,12 @@ body {
 
 /* --- THEME-SPECIFIC PARTICLE & BACKGROUND EFFECTS --- */
 
-/* Sweet Pastel - Animated Gradient Mesh Background */
-[data-theme="sweet-pastel"]::before {
-  content: '';
-  position: fixed;
-  top: 0; left: 0;
-  width: 100%; height: 100%;
-  background: linear-gradient(315deg, #ffc3a0 0%, #ffafbd 74%);
-  animation: pastel-gradient 15s ease infinite;
-  z-index: -1;
-}
-@keyframes pastel-gradient {
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
+/* Sweet Pastel - Floating Hearts */
+.hearts-container { position: fixed; bottom: -150px; left: 0; width: 100%; height: calc(100% + 150px); pointer-events: none; z-index: 1000; }
+.floating-heart { position: absolute; bottom: 0; color: var(--color-accent); opacity: 0; animation: heart-rise linear infinite; }
+@keyframes heart-rise {
+  0% { transform: translateY(0) rotate(0deg); opacity: 0.7; }
+  100% { transform: translateY(-120vh) rotate(360deg); opacity: 0; }
 }
 
 
@@ -537,17 +552,18 @@ body {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 40' width='80' height='40'%3E%3Cpath fill='%2363d4ff' fill-opacity='0.1' d='M0 40a20 20 0 1 1 40 0h40V0H0v40z'/%3E%3C/svg%3E");
   animation: caustics 10s infinite linear;
   z-index: -1;
+  filter: blur(1px);
 }
 @keyframes caustics {
   0% { background-position: 0 0; }
-  100% { background-position: 80px 40px; }
+  100% { background-position: 160px 80px; }
 }
 .bubbles-container { position: fixed; bottom: -150px; left: 0; width: 100%; height: calc(100% + 150px); pointer-events: none; z-index: 1000; }
 .bubble { position: absolute; bottom: 0; border-radius: 50%; animation: bubble-rise linear infinite; }
 .bubble { background: radial-gradient(circle, rgba(99, 212, 255, 0.4) 0%, rgba(99, 212, 255, 0.1) 100%); border: 1px solid rgba(162, 234, 255, 0.3); }
 @keyframes bubble-rise {
   0% { transform: translateY(0); opacity: 0.8; }
-  100% { transform: translateY(-120vh); opacity: 0; }
+  100% { transform: translateY(-120vh) opacity: 0; }
 }
 
 /* Dreamy Galaxy - Parallax Stars & Shooting Stars */
@@ -577,24 +593,36 @@ body {
   to { transform: translateY(-200px); }
 }
 
-.shooting-stars-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1000; transform: rotateZ(45deg); }
-.shooting-star { position: absolute; left: 50%; top: 50%; height: 2px; background: linear-gradient(-45deg, #fff, rgba(0, 0, 255, 0)); border-radius: 999px; filter: drop-shadow(0 0 6px #fff); animation: shooting-star-anim 3s ease-in-out infinite; }
-.shooting-star::before, .shooting-star::after { content: ''; position: absolute; top: calc(50% - 1px); right: 0; height: 2px; background: linear-gradient(-45deg, rgba(0, 0, 255, 0), #fff, rgba(0, 0, 255, 0)); transform: translateX(50%) rotateZ(45deg); border-radius: 100%; animation: shooting-star-shining 3s ease-in-out infinite; }
-.shooting-star::after { transform: translateX(50%) rotateZ(-45deg); }
-@keyframes shooting-star-anim {
-  0% { transform: translateX(calc(var(--star-trail-length, 300px) * -1)); opacity: 1; }
-  70% { opacity: 1; }
-  100% { transform: translateX(calc(var(--star-trail-length, 300px))); opacity: 0; }
+.shooting-stars-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1000; }
+.shooting-star {
+  position: absolute;
+  height: 2px;
+  background: linear-gradient(-45deg, #fff, rgba(255, 255, 255, 0));
+  border-radius: 999px;
+  filter: drop-shadow(0 0 6px #fff);
+  animation: shooting-star-fall 3s linear infinite;
 }
-@keyframes shooting-star-shining {
-  0% { width: 0; }
-  50% { width: 30px; }
-  100% { width: 0; }
+@keyframes shooting-star-fall {
+  0% { transform: translateX(0vw) translateY(0vh); opacity: 1; width: 150px; }
+  100% { transform: translateX(-100vw) translateY(100vh); opacity: 0; width: 1px; }
 }
-.shooting-star:nth-child(1) { top: calc(50% - 200px); left: calc(50% - 400px); animation-delay: 1.5s; }
-.shooting-star:nth-child(2) { top: calc(50% - 100px); left: calc(50% - 200px); animation-delay: 3s; }
-.shooting-star:nth-child(3) { top: calc(50% - 50px); left: calc(50% - 100px); animation-delay: 5.2s; }
-.shooting-star:nth-child(4) { top: calc(50% - 0px); left: calc(50% - 0px); animation-delay: 0.8s; }
-.shooting-star:nth-child(5) { top: calc(50% + 50px); left: calc(50% + 100px); animation-delay: 2.3s; }
-.shooting-star:nth-child(6) { top: calc(50% + 100px); left: calc(50% + 200px); animation-delay: 4.1s; }
-.shooting-star:nth-child(7) { top: calc(50% + 200px); left: calc(50% + 400px); animation-delay: 6s; }
+
+/* Footer Theme Display Highlight */
+@keyframes theme-highlight-anim {
+  0% {
+    text-shadow: 0 0 4px var(--color-accent), 0 0 8px var(--color-accent);
+    opacity: 0.8;
+  }
+  50% {
+    text-shadow: 0 0 8px var(--color-accent), 0 0 16px var(--color-accent);
+    opacity: 1;
+    transform: scale(1.1);
+  }
+  100% {
+    text-shadow: 0 0 4px var(--color-accent), 0 0 8px var(--color-accent);
+    opacity: 0.8;
+  }
+}
+.theme-display-highlight {
+  animation: theme-highlight-anim 1.5s ease-in-out;
+}

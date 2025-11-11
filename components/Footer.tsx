@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import ThemeSwitcher from './common/ThemeSwitcher';
+import { useTheme, THEMES } from '../contexts/ThemeContext';
+
 
 interface FooterProps {
     onCtaClick: () => void;
@@ -40,6 +42,16 @@ const AnimatedStat: React.FC<{ value: number }> = ({ value }) => {
 
 
 const Footer: React.FC<FooterProps> = ({ onCtaClick, stats, onInfoLinkClick }) => {
+    const { theme } = useTheme();
+    const [highlight, setHighlight] = useState(false);
+    const currentThemeName = THEMES.find(t => t.id === theme)?.name || 'Mặc định';
+
+    useEffect(() => {
+        setHighlight(true);
+        const timer = setTimeout(() => setHighlight(false), 1500); // Duration of the animation
+        return () => clearTimeout(timer);
+    }, [theme]);
+    
     const statsData = [
         { label: 'Người dùng đã đăng ký', value: stats.users },
         { label: 'Lượt truy cập ứng dụng', value: stats.visits },
@@ -74,16 +86,22 @@ const Footer: React.FC<FooterProps> = ({ onCtaClick, stats, onInfoLinkClick }) =
             </button>
         </div>
         
-        <div className="flex flex-col md:flex-row justify-between items-center text-center md:text-left border-t border-gray-800 pt-8">
-          <p className="font-semibold text-base mb-4 md:mb-0 footer-neon-text">
-            &copy; {new Date().getFullYear()} AUDITION AI Studio.
-          </p>
-          <div className="flex gap-2 items-center text-skin-muted">
+        <div className="flex flex-col items-center border-t border-gray-800 pt-8">
+          <div className="mb-4 flex items-center gap-3">
+             <span className="text-sm font-semibold text-skin-muted">Giao diện:</span>
+             <span className={`text-sm font-bold text-skin-accent ${highlight ? 'theme-display-highlight' : ''}`}>
+                {currentThemeName}
+             </span>
+          </div>
+          <ThemeSwitcher />
+          <div className="flex gap-2 items-center text-skin-muted mt-6">
             <a onClick={() => onInfoLinkClick('terms')} className="px-4 py-2 rounded-full bg-white/5 hover:bg-skin-accent/10 text-skin-muted hover:text-skin-base border border-transparent hover:border-skin-border-accent transition-all duration-300 cursor-pointer text-sm font-semibold">Điều khoản</a>
             <a onClick={() => onInfoLinkClick('policy')} className="px-4 py-2 rounded-full bg-white/5 hover:bg-skin-accent/10 text-skin-muted hover:text-skin-base border border-transparent hover:border-skin-border-accent transition-all duration-300 cursor-pointer text-sm font-semibold">Chính sách</a>
             <a onClick={() => onInfoLinkClick('contact')} className="px-4 py-2 rounded-full bg-white/5 hover:bg-skin-accent/10 text-skin-muted hover:text-skin-base border border-transparent hover:border-skin-border-accent transition-all duration-300 cursor-pointer text-sm font-semibold">Liên hệ</a>
-            <ThemeSwitcher />
           </div>
+           <p className="font-semibold text-base my-6 footer-neon-text">
+            &copy; {new Date().getFullYear()} AUDITION AI Studio.
+          </p>
         </div>
          <div className="mt-8 text-center text-xs text-gray-500">
             <p className="font-semibold mb-2 flex items-center justify-center gap-2">

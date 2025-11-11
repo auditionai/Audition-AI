@@ -1,1 +1,618 @@
-full contents of themes/main.css
+/* ==========================================================================
+   1. Theme Variables & Base Styles
+   ========================================================================== */
+:root {
+  --font-heading: 'Be Vietnam Pro', sans-serif;
+  --font-body: 'Be Vietnam Pro', sans-serif;
+
+  /* Default Theme: Cyber Dance (Red/Black) */
+  --color-fill: #0D0D12;
+  --color-fill-secondary: #08080C;
+  --color-fill-modal: #100f14;
+  --color-text-base: #EAEAEA;
+  --color-text-muted: #8A8A93;
+  --color-accent: #FF1A4B;
+  --color-accent-secondary: #FF4D7D;
+  --color-accent-text: #FFFFFF;
+  --color-border: rgba(255, 26, 75, 0.2);
+  --color-border-accent: rgba(255, 26, 75, 0.4);
+  --shadow-accent: 0 0 15px rgba(255, 26, 75, 0.4);
+  --shadow-accent-lg: 0 0 25px rgba(255, 26, 75, 0.5);
+  --panel-radius: 0.5rem;
+  --panel-bg: rgba(16, 15, 20, 0.7);
+  --panel-border: 1px solid var(--color-border);
+  --panel-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  --button-radius: 9999px;
+  --button-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+}
+
+[data-theme="cyber-dance"] {
+  --font-heading: 'Orbitron', sans-serif;
+  --font-body: 'Roboto', sans-serif;
+  --color-fill: #0D0D12;
+  --color-fill-secondary: #08080C;
+  --color-fill-modal: #100f14;
+  --color-text-base: #EAEAEA;
+  --color-text-muted: #8A8A93;
+  --color-accent: #FF1A4B;
+  --color-accent-secondary: #FF4D7D;
+  --color-accent-text: #FFFFFF;
+  --color-border: rgba(255, 26, 75, 0.2);
+  --color-border-accent: rgba(255, 26, 75, 0.4);
+  --shadow-accent: 0 0 15px rgba(255, 26, 75, 0.4);
+  --shadow-accent-lg: 0 0 25px rgba(255, 26, 75, 0.5);
+  --panel-radius: 0rem; /* Sharp corners */
+  --panel-bg: rgba(16, 15, 20, 0.5);
+  --panel-border: 1px solid transparent; /* Border handled by ::before */
+  --panel-shadow: 0 0 20px rgba(255, 26, 75, 0.2);
+  --button-radius: 0.25rem;
+}
+
+[data-theme="crystal-palace"] {
+  --font-heading: 'Playfair Display', serif;
+  --font-body: 'Lato', sans-serif;
+  --color-fill: #0f172a; /* Deep blue */
+  --color-fill-secondary: #090f1a;
+  --color-fill-modal: #141f33;
+  --color-text-base: #E0F2FE; /* Icy blue text */
+  --color-text-muted: #94A3B8;
+  --color-accent: #38BDF8; /* Sky blue */
+  --color-accent-secondary: #7DD3FC;
+  --color-accent-text: #020617;
+  --color-border: rgba(56, 189, 248, 0.2);
+  --color-border-accent: rgba(56, 189, 248, 0.4);
+  --shadow-accent: 0 0 15px rgba(56, 189, 248, 0.4);
+  --shadow-accent-lg: 0 0 25px rgba(56, 189, 248, 0.5);
+  --panel-radius: 1rem;
+  --panel-bg: rgba(203, 213, 225, 0.1);
+  --panel-border: 1px solid rgba(255, 255, 255, 0.18);
+  --panel-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+  --button-radius: 0.75rem;
+}
+
+[data-theme="sweet-pastel"] {
+  --font-heading: 'Pacifico', cursive;
+  --font-body: 'Quicksand', sans-serif;
+  --color-fill: #FFF0F5; /* Lavender Blush */
+  --color-fill-secondary: #FAE8EF;
+  --color-fill-modal: #FFFFFF;
+  --color-text-base: #4A2A3A; /* Dark brown for contrast */
+  --color-text-muted: #8B6B7B;
+  --color-accent: #FF69B4; /* Hot Pink */
+  --color-accent-secondary: #FF85C1;
+  --color-accent-text: #FFFFFF;
+  --color-border: rgba(74, 42, 58, 0.1);
+  --color-border-accent: rgba(255, 105, 180, 0.4);
+  --shadow-accent: 0 0 15px rgba(255, 105, 180, 0.4);
+  --shadow-accent-lg: 0 0 25px rgba(255, 105, 180, 0.5);
+  --panel-radius: 1.5rem;
+  --panel-bg: #FFF0F5;
+  --panel-border: 1px solid transparent;
+  --panel-shadow: 8px 8px 16px #e6d8dd, -8px -8px 16px #ffffff;
+  --button-radius: 9999px;
+}
+
+[data-theme="magical-christmas"] {
+  --font-heading: 'Merriweather', serif;
+  --font-body: 'Lato', sans-serif;
+  --color-fill: #1A2E35; /* Dark Green-Blue */
+  --color-fill-secondary: #122025;
+  --color-fill-modal: #223a42;
+  --color-text-base: #F0E6D2; /* Creamy White */
+  --color-text-muted: #A09686;
+  --color-accent: #D4AF37; /* Gold */
+  --color-accent-secondary: #FFD700;
+  --color-accent-text: #1A2E35;
+  --color-border: rgba(212, 175, 55, 0.2);
+  --color-border-accent: rgba(212, 175, 55, 0.4);
+  --shadow-accent: 0 0 15px rgba(212, 175, 55, 0.4);
+  --shadow-accent-lg: 0 0 25px rgba(212, 175, 55, 0.5);
+  --panel-radius: 1rem;
+  --panel-bg: rgba(18, 32, 37, 0.7);
+  --panel-border: 1px solid var(--color-border);
+  --panel-shadow: 0 0 10px 2px rgba(212, 175, 55, 0.2);
+  --button-radius: 0.5rem;
+}
+
+[data-theme="dreamy-galaxy"] {
+  --font-heading: 'Josefin Sans', sans-serif;
+  --font-body: 'Quicksand', sans-serif;
+  --color-fill: #0c0a1a;
+  --color-fill-secondary: #06050e;
+  --color-fill-modal: #151226;
+  --color-text-base: #E0DFFD;
+  --color-text-muted: #908EAF;
+  --color-accent: #9f55ff;
+  --color-accent-secondary: #c298ff;
+  --color-accent-text: #FFFFFF;
+  --color-border: rgba(159, 85, 255, 0.2);
+  --color-border-accent: rgba(159, 85, 255, 0.4);
+  --shadow-accent: 0 0 15px rgba(159, 85, 255, 0.4);
+  --shadow-accent-lg: 0 0 25px rgba(159, 85, 255, 0.5);
+  --panel-radius: 0.75rem;
+  --panel-bg: rgba(21, 18, 38, 0.6);
+  --panel-border: 1px solid var(--color-border);
+  --panel-shadow: 0 0 10px var(--color-border);
+  --button-radius: 0.5rem;
+}
+
+body {
+  background-color: var(--color-fill);
+  color: var(--color-text-base);
+  font-family: var(--font-body);
+}
+
+.aurora-background {
+  background: radial-gradient(ellipse at 50% 50%, var(--color-accent) 0%, rgba(114,9,183,0) 100%);
+  opacity: 0.1;
+  filter: blur(120px);
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(255,255,255,0.2);
+  border-radius: 10px;
+}
+
+/* ==========================================================================
+   2. Themed Components
+   ========================================================================== */
+.themed-heading {
+  font-family: var(--font-heading);
+}
+
+.themed-panel {
+  background: var(--panel-bg);
+  backdrop-filter: blur(10px);
+  border: var(--panel-border);
+  border-radius: var(--panel-radius);
+  box-shadow: var(--panel-shadow);
+  transition: all 0.3s ease;
+}
+
+.themed-settings-block {
+  background: rgba(0,0,0,0.15);
+  padding: 1rem;
+  border-radius: var(--panel-radius);
+  border: 1px solid rgba(255,255,255,0.05);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+[data-theme="sweet-pastel"] .themed-settings-block {
+  background: rgba(0,0,0,0.03);
+  border-color: rgba(0,0,0,0.05);
+}
+
+.themed-button-primary {
+  background: linear-gradient(to right, var(--color-accent), var(--color-accent-secondary));
+  color: var(--color-accent-text);
+  border-radius: var(--button-radius);
+  box-shadow: var(--button-shadow), var(--shadow-accent);
+  transition: all 0.3s ease;
+}
+.themed-button-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--button-shadow), var(--shadow-accent-lg);
+}
+
+.themed-button-secondary {
+  background-color: rgba(255,255,255,0.1);
+  backdrop-filter: blur(5px);
+  border: 1px solid rgba(255,255,255,0.15);
+  color: var(--color-text-base);
+  border-radius: var(--button-radius);
+  transition: all 0.3s ease;
+}
+.themed-button-secondary:hover {
+  background-color: rgba(255,255,255,0.2);
+  border-color: rgba(255,255,255,0.25);
+}
+
+.auth-input {
+  background-color: rgba(0,0,0,0.2);
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+  color: var(--color-text-base);
+  width: 100%;
+  transition: all 0.3s ease;
+}
+.auth-input:focus {
+  outline: none;
+  border-color: var(--color-border-accent);
+  box-shadow: 0 0 10px var(--color-border);
+}
+
+/* ==========================================================================
+   3. Theme-Specific Overrides
+   ========================================================================== */
+
+/* --- Cyber Dance --- */
+[data-theme="cyber-dance"] .themed-panel {
+  position: relative;
+  background: repeating-linear-gradient(45deg, rgba(255,26,75,0.02), rgba(255,26,75,0.02) 2px, transparent 2px, transparent 10px);
+}
+[data-theme="cyber-dance"] .themed-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 1px solid var(--color-border);
+  clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+  pointer-events: none;
+}
+[data-theme="cyber-dance"] .themed-button-primary:hover,
+[data-theme="cyber-dance"] .themed-button-secondary:hover {
+  text-shadow: 0 0 5px var(--color-accent);
+}
+[data-theme="cyber-dance"] .admin-tab-active {
+  background-color: var(--color-accent); color: white;
+}
+[data-theme="cyber-dance"] .admin-tab {
+  background-color: rgba(255,26,75,0.1); color: var(--color-accent);
+}
+[data-theme="cyber-dance"] .admin-tab:hover {
+  background-color: rgba(255,26,75,0.2);
+}
+
+/* --- Crystal Palace --- */
+[data-theme="crystal-palace"] .themed-panel {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  position: relative;
+  overflow: hidden;
+}
+[data-theme="crystal-palace"] .themed-panel::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: var(--panel-radius);
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(255,255,255,0.3), rgba(255,255,255,0), rgba(255,255,255,0.3));
+  -webkit-mask:
+     linear-gradient(#fff 0 0) content-box,
+     linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+}
+
+/* --- Sweet Pastel (Neumorphism) --- */
+[data-theme="sweet-pastel"] .themed-panel {
+  box-shadow: var(--panel-shadow);
+  backdrop-filter: none;
+}
+[data-theme="sweet-pastel"] .themed-button-primary:active {
+  box-shadow: inset 4px 4px 8px #e6d8dd, inset -4px -4px 8px #ffffff;
+  transform: translateY(1px);
+}
+[data-theme="sweet-pastel"] .auth-input {
+  background: #FFF0F5;
+  border-radius: 12px;
+  box-shadow: inset 4px 4px 8px #e6d8dd, inset -4px -4px 8px #ffffff;
+  border: none;
+}
+[data-theme="sweet-pastel"] .auth-input:focus {
+   box-shadow: inset 2px 2px 4px #e6d8dd, inset -2px -2px 4px #ffffff, 0 0 5px var(--color-accent);
+}
+
+/* --- Magical Christmas --- */
+[data-theme="magical-christmas"] .themed-panel {
+  box-shadow: 0 0 10px 2px rgba(212, 175, 55, 0.2);
+}
+
+/* --- Dreamy Galaxy --- */
+[data-theme="dreamy-galaxy"] .themed-panel {
+  background: rgba(21, 18, 38, 0.6);
+  border: 1px solid var(--color-border);
+  clip-path: polygon(0 8px, 8px 0, calc(100% - 8px) 0, 100% 8px, 100% calc(100% - 8px), calc(100% - 8px) 100%, 8px 100%, 0 calc(100% - 8px));
+}
+
+/* ==========================================================================
+   4. Custom Select Dropdown
+   ========================================================================== */
+.custom-select-wrapper {
+  position: relative;
+}
+.custom-select-trigger {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem;
+  background-color: rgba(0,0,0,0.3);
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  color: var(--color-text-base);
+  transition: all 0.2s ease;
+}
+.custom-select-trigger:hover {
+  border-color: var(--color-border-accent);
+}
+.custom-select-options {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  width: 100%;
+  z-index: 10;
+  background-color: var(--color-fill-modal);
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.custom-select-option {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+.custom-select-option:hover {
+  background-color: rgba(255,255,255,0.05);
+  color: var(--color-text-base);
+}
+.custom-select-option.active {
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+/* ==========================================================================
+   5. Logo Styles
+   ========================================================================== */
+.logo-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.logo-text {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 1.75rem;
+  line-height: 1;
+  color: var(--color-text-base);
+  transition: all 0.3s ease;
+}
+.logo-subtext {
+  font-size: 0.65rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  letter-spacing: 0.05em;
+  margin-top: 2px;
+}
+
+[data-theme="sweet-pastel"] .logo-text { color: var(--color-accent); }
+[data-theme="cyber-dance"] .logo-text {
+  color: var(--color-accent);
+  text-shadow: 0 0 4px var(--color-accent), 0 0 10px var(--color-accent);
+}
+[data-theme="magical-christmas"] .logo-text {
+  font-family: 'Playfair Display', serif;
+  background: linear-gradient(135deg, #FFD700, #DAA520, #FFD700);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  animation: shimmer-text 5s infinite;
+}
+[data-theme="crystal-palace"] .logo-text {
+  opacity: 0.8;
+  color: transparent;
+  -webkit-text-stroke: 1px var(--color-accent);
+  text-shadow: 0 0 5px var(--color-accent);
+}
+[data-theme="dreamy-galaxy"] .logo-text {
+  background: linear-gradient(45deg, #a258ff, #6f89ff, #47d6ff);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+
+/* ==========================================================================
+   6. Animations
+   ========================================================================== */
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fade-in-up { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes fade-in-down { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
+.animate-fade-in { animation: fade-in 0.5s ease-out forwards; }
+.animate-fade-in-up { animation: fade-in-up 0.6s ease-out forwards; }
+.animate-fade-in-down { animation: fade-in-down 0.5s ease-out forwards; }
+
+@keyframes shimmer-text {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+.shimmer-text {
+  background-size: 200% 200%;
+  animation: shimmer-text 4s linear infinite;
+}
+
+.interactive-3d {
+  transform-style: preserve-3d;
+  transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+.interactive-3d:hover {
+  transform: perspective(1000px) rotateY(var(--rotate-y, 0)) rotateX(var(--rotate-x, 0)) scale3d(1.05, 1.05, 1.05);
+}
+
+@keyframes neon-text-flow {
+  0% { text-shadow: 0 0 5px var(--color-accent), 0 0 10px var(--color-accent); }
+  50% { text-shadow: 0 0 10px var(--color-accent-secondary), 0 0 20px var(--color-accent-secondary); }
+  100% { text-shadow: 0 0 5px var(--color-accent), 0 0 10px var(--color-accent); }
+}
+.neon-text-flow { animation: neon-text-flow 4s ease-in-out infinite; }
+
+@keyframes theme-display-highlight {
+  0% { text-shadow: none; }
+  50% { text-shadow: 0 0 10px var(--color-accent), 0 0 20px var(--color-accent); }
+  100% { text-shadow: none; }
+}
+.theme-display-highlight { animation: theme-display-highlight 1.5s ease-out; }
+
+/* ==========================================================================
+   7. Background Effects
+   ========================================================================== */
+/* --- Galaxy --- */
+@keyframes move-twink-back { from {background-position:0 0;} to {background-position:-10000px 5000px;} }
+.galaxy-bg {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  width: 100%; height: 100%;
+  display: block;
+}
+#stars, #stars2, #stars3 {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  width: 100%; height: 100%;
+  display: block;
+  background: transparent url('https://www.script-tutorials.com/demos/360/images/stars.png') repeat top center;
+  z-index: -10;
+  animation: move-twink-back 200s linear infinite;
+}
+#stars2 {
+  background-image: url('https://www.script-tutorials.com/demos/360/images/twinkling.png');
+  animation-duration: 150s;
+}
+#stars3 {
+  background-image: url('https://www.script-tutorials.com/demos/360/images/clouds.png');
+  animation-duration: 250s;
+}
+
+/* --- Christmas (Bokeh) --- */
+.bokeh-bg { position: absolute; inset: 0; overflow: hidden; }
+.bokeh-bg span {
+  position: absolute;
+  border-radius: 50%;
+  background-color: var(--color-accent);
+  animation: bokeh-rise 20s linear infinite;
+  opacity: 0;
+}
+@keyframes bokeh-rise {
+  0% { transform: translateY(100vh) scale(0.5); opacity: 0.1; }
+  50% { opacity: 0.5; }
+  100% { transform: translateY(-10vh) scale(1); opacity: 0; }
+}
+
+/* --- Crystal Palace (Bubbles & Caustics) --- */
+@keyframes bubble-rise {
+  0% { transform: translateY(100vh) scale(0); opacity: 0; }
+  50% { opacity: 0.8; }
+  100% { transform: translateY(-10vh) scale(1); opacity: 0; }
+}
+.bubble { animation: bubble-rise 25s linear infinite; }
+@keyframes caustics-move {
+  0% { transform: translate(0, 0); }
+  100% { transform: translate(-512px, -512px); }
+}
+.caustics-bg {
+  background-image: url(https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExYzY4YjNmMzMyZTIxMjk1Yjc2MmI4MjFmMzgyMDFhYWMyMmMyYjVjMSZlcD12MV9pbnRlcm5hbF9naWZzX2dpZklkJmN0PWc/3o7WTqAdu1gsS4Yvug/giphy.gif);
+  animation: caustics-move 10s linear infinite;
+}
+
+/* --- Sweet Pastel (Gradient & Hearts) --- */
+@keyframes pastel-gradient {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+.pastel-gradient-bg {
+  background: linear-gradient(-45deg, #ffc3a0, #ffafbd, #ffc3a0, #ffafbd);
+  background-size: 400% 400%;
+  animation: pastel-gradient 15s ease infinite;
+}
+@keyframes heart-rise {
+  0% { transform: translateY(100vh) rotate(0deg); opacity: 0; }
+  100% { transform: translateY(-10vh) rotate(720deg); opacity: 0.8; }
+}
+.heart { animation: heart-rise 15s linear infinite; }
+
+/* --- Cyber Dance (Grid & Glitch) --- */
+.grid-bg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    background-image:
+        linear-gradient(to right, rgba(255, 26, 75, 0.2) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 26, 75, 0.2) 1px, transparent 1px);
+    background-size: 40px 40px;
+    animation: grid-pan 10s linear infinite;
+    mask-image: radial-gradient(ellipse 80% 80% at 50% 50%, black 40%, transparent 100%);
+}
+@keyframes grid-pan {
+    from { background-position: 0 0; }
+    to { background-position: 40px 40px; }
+}
+.glitch-text { animation: glitch 1s linear infinite; }
+@keyframes glitch {
+  2%,64%{ transform: translate(2px,0) skew(0deg); }
+  4%,60%{ transform: translate(-2px,0) skew(0deg); }
+  62%{ transform: translate(0,0) skew(5deg); }
+}
+
+/* ==========================================================================
+   8. Misc Styles
+   ========================================================================== */
+.neon-glow {
+  box-shadow: 0 0 5px var(--color-accent), 0 0 10px var(--color-accent-secondary);
+}
+.neon-highlight {
+  text-shadow: 0 0 3px currentColor;
+}
+.footer-neon-text {
+  font-family: var(--font-heading);
+  color: var(--color-accent);
+  text-shadow: 0 0 3px var(--color-accent), 0 0 8px var(--color-accent);
+}
+.admin-tab { padding: 0.5rem 1rem; font-weight: 600; border-radius: 9999px; transition: all 0.2s ease; }
+.toggle-switch-dot { transition: transform 0.2s ease-in-out; }
+.selected-glow {
+    border-color: var(--color-accent);
+    background-color: var(--color-accent-secondary)/10;
+    box-shadow: 0 0 8px var(--color-accent);
+}
+.button-neon-glow {
+  box-shadow: var(--shadow-accent);
+  transition: all 0.3s ease;
+}
+.button-neon-glow:hover {
+  box-shadow: var(--shadow-accent-lg);
+}
+.subtle-pulse { animation: subtle-pulse 2.5s infinite; }
+@keyframes subtle-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.03); }
+}
+.glowing-border {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(135deg, var(--color-accent), transparent, var(--color-accent-secondary));
+    mask:
+       linear-gradient(#fff 0 0) content-box,
+       linear-gradient(#fff 0 0);
+    -webkit-mask:
+       linear-gradient(#fff 0 0) content-box,
+       linear-gradient(#fff 0 0);
+    mask-composite: exclude;
+    -webkit-mask-composite: xor;
+    opacity: 0.5;
+    transition: opacity 0.3s ease;
+}
+.interactive-3d:hover .glowing-border {
+  opacity: 1;
+}
+[data-theme="crystal-palace"] .glowing-border {
+    background: linear-gradient(135deg, rgba(255,255,255,0.3), rgba(255,255,255,0), rgba(255,255,255,0.3));
+}
+[data-theme="sweet-pastel"] .glowing-border {
+  display: none;
+}

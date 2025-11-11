@@ -3,7 +3,8 @@ import { GoogleGenAI, Modality } from "@google/genai";
 import { supabaseAdmin } from './utils/supabaseClient';
 import { Buffer } from 'buffer';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
-import Jimp from 'jimp';
+// Fix: Use `import = require()` for better CommonJS compatibility with the 'jimp' library.
+import Jimp = require('jimp');
 
 const COST_BASE = 1;
 const COST_UPSCALE = 1;
@@ -113,6 +114,13 @@ const handler: Handler = async (event: HandlerEvent) => {
         let finalImageMimeType: string;
         
         let fullPrompt = prompt;
+
+        // NEW: Add absolute instruction for Super Face Lock
+        if (faceReferenceImage) {
+            const faceLockInstruction = `(ABSOLUTE INSTRUCTION: The final image MUST use the exact face, including all features, details, and the complete facial expression, from the provided face reference image. Do NOT alter, modify, stylize, or change the expression of this face in any way. Ignore any conflicting instructions about facial expressions in the user's prompt. The face from the reference image must be perfectly preserved and transplanted onto the generated character.)\n\n`;
+            fullPrompt = faceLockInstruction + prompt;
+        }
+
         if (negativePrompt) {
             fullPrompt += ` --no ${negativePrompt}`;
         }
@@ -144,7 +152,7 @@ const handler: Handler = async (event: HandlerEvent) => {
                 processImageForGemini(faceReferenceImage, aspectRatio)
             ]);
             
-            // The text prompt is ALWAYS the first part. No modification needed.
+            // The text prompt is ALWAYS the first part.
             parts.push({ text: fullPrompt });
 
             // Helper to add processed image parts

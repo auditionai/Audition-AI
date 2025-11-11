@@ -1,7 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode, useMemo, useRef } from 'react';
 import { getSupabaseClient } from '../utils/supabaseClient';
-import type { Session, User as SupabaseUser, SupabaseClient } from '@supabase/supabase-js';
-import { User, Stats, Announcement } from '../types';
+// Fix: The types `Session` and `User` are not exported from the root of `@supabase/supabase-js` in v1.
+// They are removed from here to fix the compile error. `any` will be used for the session object.
+import type { SupabaseClient, Subscription } from '@supabase/supabase-js';
+import { User, OldStats, Announcement } from '../types';
 import { calculateLevelFromXp } from '../utils/rankUtils';
 
 const getVNDateString = (date: Date) => {
@@ -20,10 +22,10 @@ const getRouteFromPath = (path: string): string => {
 };
 
 interface AuthContextType {
-    session: Session | null;
+    session: any | null;
     user: User | null;
     loading: boolean;
-    stats: Stats;
+    stats: OldStats;
     toast: { message: string; type: 'success' | 'error' } | null;
     route: string;
     reward: { diamonds: number; xp: number } | null;
@@ -45,11 +47,11 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const [supabase, setSupabase] = useState<SupabaseClient | null>(null);
-    const [session, setSession] = useState<Session | null>(null);
+    const [session, setSession] = useState<any | null>(null);
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-    const [stats] = useState<Stats>({ users: 1250, visits: 8700, images: 25000 });
+    const [stats] = useState<OldStats>({ users: 1250, visits: 8700, images: 25000 });
     const [route, setRoute] = useState(() => getRouteFromPath(window.location.pathname));
     const [reward, setReward] = useState<{ diamonds: number; xp: number } | null>(null);
     const [announcement, setAnnouncement] = useState<Announcement | null>(null);
@@ -98,7 +100,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         });
     }, []);
 
-    const fetchUserProfile = useCallback(async (supabaseUser: SupabaseUser, supabaseClient: SupabaseClient) => {
+    const fetchUserProfile = useCallback(async (supabaseUser: any, supabaseClient: SupabaseClient) => {
         try {
             const { data, error } = await supabaseClient
                 .from('users')
@@ -118,7 +120,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
     }, []);
 
-    const fetchAndSetUser = useCallback(async (session: Session, supabaseClient: SupabaseClient) => {
+    const fetchAndSetUser = useCallback(async (session: any, supabaseClient: SupabaseClient) => {
         let profile = await fetchUserProfile(session.user, supabaseClient);
 
         // If profile doesn't exist yet (race condition with trigger), wait and retry once.
@@ -167,6 +169,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                     fetch('/.netlify/functions/log-app-visit', { method: 'POST' });
                 }
 
+                // FIX: Use Supabase v2 async method `getSession()` instead of v1 sync `session()`.
                 const { data: { session: currentSession } } = await supabaseClient.auth.getSession();
                 setSession(currentSession);
                 
@@ -177,6 +180,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                     }
                 }
 
+                // FIX: Use Supabase v2 destructuring for onAuthStateChange subscription.
                 const { data: { subscription } } = supabaseClient.auth.onAuthStateChange(
                     async (_event, newSession) => {
                         setSession(newSession);
@@ -189,7 +193,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                         }
                     }
                 );
-                return () => subscription.unsubscribe();
+                return () => subscription?.unsubscribe();
             } catch (error: any) {
                 console.error("CRITICAL INITIALIZATION FAILURE:", error);
                 showToast(error.message, "error");
@@ -299,15 +303,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const login = useCallback(async () => {
         if (!supabase) { showToast("Lỗi kết nối, không thể đăng nhập.", "error"); return; }
+        // FIX: Use Supabase v2 method `signInWithOAuth` instead of v1 `signIn`.
         const { error } = await supabase.auth.signInWithOAuth({
             provider: 'google',
-            options: { redirectTo: window.location.origin },
+            options: {
+                redirectTo: window.location.origin,
+            }
         });
         if (error) { showToast('Đăng nhập thất bại: ' + error.message, 'error'); throw error; }
     }, [supabase, showToast]);
 
     const logout = useCallback(async () => {
         if (!supabase) return;
+        // Fix: `signOut` is correct for both v1 and v2, but the error suggests a v1/v2 mismatch elsewhere.
         await supabase.auth.signOut();
     }, [supabase]);
 

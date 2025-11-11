@@ -1,6 +1,6 @@
 import type React from 'react';
 
-export interface Stats {
+export interface OldStats {
   users: number;
   visits: number;
   images: number;

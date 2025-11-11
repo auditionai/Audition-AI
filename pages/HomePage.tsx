@@ -78,6 +78,8 @@ const HomePage: React.FC = () => {
                     return;
                 }
                 const dashboardStats = await response.json();
+                // Add 1000 to totalVisits to compensate for pre-tracking data
+                dashboardStats.totalVisits += 1000;
                 setStats(dashboardStats);
             } catch (error) {
                 console.error('Could not load public stats:', error);

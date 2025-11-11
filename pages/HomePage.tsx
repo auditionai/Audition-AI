@@ -18,7 +18,7 @@ import AuthModal from '../components/AuthModal';
 import TopUpModal from '../components/TopUpModal';
 import InfoModal from '../components/InfoModal';
 import ImageModal from '../components/common/ImageModal';
-import DynamicBackground from '../components/common/DynamicBackground';
+import AuroraBackground from '../components/common/AuroraBackground'; // NEW
 import AnimatedSection from '../components/common/AnimatedSection';
 
 // Import types and data
@@ -40,9 +40,6 @@ const HomePage: React.FC = () => {
     const [isGalleryLoading, setIsGalleryLoading] = useState(true);
     const [stats, setStats] = useState<StatsType>({ users: 1250, visits: 8700, images: 25000 });
     
-    // State for dynamic background
-    const [activeSection, setActiveSection] = useState('hero');
-
     useEffect(() => {
         // Fetch featured packages
         const fetchPackages = async () => {
@@ -89,21 +86,6 @@ const HomePage: React.FC = () => {
         fetchStats();
     }, [showToast]);
 
-    // Intersection observer for dynamic background
-     useEffect(() => {
-        const sections = document.querySelectorAll('section[id]');
-        const observer = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
-                if (entry.isIntersecting && entry.intersectionRatio > 0.5) {
-                    setActiveSection(entry.target.id);
-                }
-            });
-        }, { threshold: 0.5 });
-
-        sections.forEach(section => observer.observe(section));
-        return () => sections.forEach(section => observer.unobserve(section));
-    }, []);
-
     const handleCtaClick = () => {
         if (user) {
             navigate('tool');
@@ -127,7 +109,7 @@ const HomePage: React.FC = () => {
 
     return (
         <div className="bg-skin-fill text-skin-base font-sans leading-normal tracking-normal">
-            <DynamicBackground activeSection={activeSection} />
+            <AuroraBackground />
 
             <LandingHeader 
                 user={user}

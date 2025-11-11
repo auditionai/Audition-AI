@@ -1,70 +1,461 @@
-import React, { useState, useEffect } from 'react';
+/* ---
+  AUDITION AI - MAIN THEME & STYLESHEET
+  This file contains the core theming variables and custom CSS for the entire application.
+--- */
 
-interface DynamicBackgroundProps {
-    activeSection: string;
+/* ==========================================================================
+   1. THEME SYSTEM: COLOR & SHADOW VARIABLES
+   ========================================================================== */
+/*
+  The application uses a CSS variable-based theming system.
+  The `data-theme` attribute is set on a top-level element.
+  This file defines the color palettes for each available theme.
+  The `tailwind.config.js` is configured to use these variables.
+*/
+
+/* --- THEME 1: Vũ Điệu Neon (Cyber Punk) --- */
+[data-theme="cyber-punk"] {
+  --color-fill: #0B0B0F;
+  --color-fill-secondary: #12121A;
+  --color-fill-modal: #1A1A24;
+  --color-text-base: #D1D5DB; /* Softer white (Tailwind gray-300) */
+  --color-text-muted: #9CA3AF; /* Cooler gray (Tailwind gray-400) */
+  --color-accent: 247, 37, 133; /* Pink */
+  --color-accent-secondary: #7209B7; /* Purple */
+  --color-accent-text: #FFFFFF;
+  --color-border: rgba(255, 255, 255, 0.1);
+  --color-border-accent: rgba(247, 37, 133, 0.4);
+  --shadow-accent: 0 0 15px rgba(247, 37, 133, 0.4);
+  --shadow-accent-lg: 0 0 25px rgba(247, 37, 133, 0.5);
 }
 
-const sectionPositions: { [key: string]: React.CSSProperties[] } = {
-    hero: [
-        { top: '-20%', left: '10%', transform: 'translate(-50%, -50%)', width: '800px', height: '800px' },
-        { top: '80%', left: '90%', transform: 'translate(-50%, -50%)', width: '700px', height: '700px' },
-        { top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '600px', height: '600px' },
-    ],
-    features: [
-        { top: '30%', left: '0%', transform: 'translate(-50%, -50%)', width: '700px', height: '700px' },
-        { top: '70%', left: '100%', transform: 'translate(-50%, -50%)', width: '800px', height: '800px' },
-        { top: '5%', left: '40%', transform: 'translate(-50%, -50%)', width: '500px', height: '500px' },
-    ],
-    'how-it-works': [
-        { top: '10%', left: '80%', transform: 'translate(-50%, -50%)', width: '700px', height: '700px' },
-        { top: '90%', left: '20%', transform: 'translate(-50%, -50%)', width: '900px', height: '900px' },
-        { top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '600px', height: '600px' },
-    ],
-    gallery: [
-        { top: '50%', left: '0%', transform: 'translate(-50%, -50%)', width: '800px', height: '800px' },
-        { top: '50%', left: '100%', transform: 'translate(-50%, -50%)', width: '800px', height: '800px' },
-        { top: '90%', left: '50%', transform: 'translate(-50%, -50%)', width: '700px', height: '700px' },
-    ],
-    pricing: [
-        { top: '80%', left: '10%', transform: 'translate(-50%, -50%)', width: '700px', height: '700px' },
-        { top: '20%', left: '90%', transform: 'translate(-50%, -50%)', width: '900px', height: '900px' },
-        { top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '600px', height: '600px' },
-    ],
-    faq: [
-        { top: '10%', left: '20%', transform: 'translate(-50%, -50%)', width: '800px', height: '800px' },
-        { top: '90%', left: '80%', transform: 'translate(-50%, -50%)', width: '700px', height: '700px' },
-        { top: '40%', left: '60%', transform: 'translate(-50%, -50%)', width: '500px', height: '500px' },
-    ],
-};
+/* --- THEME 2: Kẹo Ngọt Pastel (Solar Flare) --- */
+[data-theme="solar-flare"] {
+  --color-fill: #FFF8F0;
+  --color-fill-secondary: #FFFFFF;
+  --color-fill-modal: #FFFFFF;
+  --color-text-base: #5C3D2E;
+  --color-text-muted: #A88B79;
+  --color-accent: 255, 119, 119; /* Pastel Red */
+  --color-accent-secondary: #FFD6A5; /* Pastel Orange */
+  --color-accent-text: #5C3D2E;
+  --color-border: rgba(0, 0, 0, 0.1);
+  --color-border-accent: rgba(255, 119, 119, 0.4);
+  --shadow-accent: 0 4px 15px rgba(255, 119, 119, 0.2);
+  --shadow-accent-lg: 0 6px 25px rgba(255, 119, 119, 0.3);
+}
 
-const DynamicBackground: React.FC<DynamicBackgroundProps> = ({ activeSection }) => {
-    const [blobStyles, setBlobStyles] = useState(sectionPositions.hero);
+/* --- THEME 3: Dải Ngân Hà (Dreamy Galaxy) --- */
+[data-theme="dreamy-galaxy"] {
+  --color-fill: #0C0A1D;
+  --color-fill-secondary: #110E2A;
+  --color-fill-modal: #1A163D;
+  --color-text-base: #E6E6FA;
+  --color-text-muted: #A098D0;
+  --color-accent: 173, 95, 255; /* Bright Purple */
+  --color-accent-secondary: #00BFFF; /* Deep Sky Blue */
+  --color-accent-text: #FFFFFF;
+  --color-border: rgba(173, 95, 255, 0.2);
+  --color-border-accent: rgba(173, 95, 255, 0.5);
+  --shadow-accent: 0 0 15px rgba(173, 95, 255, 0.4);
+  --shadow-accent-lg: 0 0 25px rgba(173, 95, 255, 0.5);
+}
 
-    useEffect(() => {
-        setBlobStyles(sectionPositions[activeSection] || sectionPositions.hero);
-    }, [activeSection]);
+/* --- THEME 4: Giáng Sinh (Classic Dark) --- */
+[data-theme="classic-dark"] {
+  --color-fill: #1A2D27;
+  --color-fill-secondary: #243831;
+  --color-fill-modal: #2D423A;
+  --color-text-base: #F0E6D2;
+  --color-text-muted: #A89F8D;
+  --color-accent: 205, 53, 53; /* Deep Red */
+  --color-accent-secondary: #D4AF37; /* Gold */
+  --color-accent-text: #FFFFFF;
+  --color-border: rgba(212, 175, 55, 0.2);
+  --color-border-accent: rgba(205, 53, 53, 0.5);
+  --shadow-accent: 0 0 15px rgba(205, 53, 53, 0.4);
+  --shadow-accent-lg: 0 0 25px rgba(205, 53, 53, 0.5);
+}
 
-    const blobs = [
-        "radial-gradient(circle at center, rgba(247, 37, 133, 0.15) 0%, rgba(247, 37, 133, 0) 50%)",
-        "radial-gradient(circle at center, rgba(202, 39, 255, 0.12) 0%, rgba(202, 39, 255, 0) 50%)",
-        "radial-gradient(circle at center, rgba(114, 9, 183, 0.15) 0%, rgba(114, 9, 183, 0) 60%)",
-    ];
+/* --- THEME 5: Lâu Đài Pha Lê (Neon Vibe) --- */
+[data-theme="neon-vibe"] {
+  --color-fill: #E9F1F7;
+  --color-fill-secondary: #F4F8FA;
+  --color-fill-modal: #FFFFFF;
+  --color-text-base: #2C3E50;
+  --color-text-muted: #7F8C8D;
+  --color-accent: 52, 152, 219; /* Peter River Blue */
+  --color-accent-secondary: #1ABC9C; /* Turquoise */
+  --color-accent-text: #FFFFFF;
+  --color-border: rgba(44, 62, 80, 0.15);
+  --color-border-accent: rgba(52, 152, 219, 0.4);
+  --shadow-accent: 0 4px 15px rgba(52, 152, 219, 0.2);
+  --shadow-accent-lg: 0 6px 25px rgba(52, 152, 219, 0.3);
+}
 
-    return (
-        <div className="fixed inset-0 w-full h-full -z-10 overflow-hidden">
-            {blobs.map((bg, index) => (
-                <div
-                    key={index}
-                    className="absolute transition-all duration-1000 ease-in-out"
-                    style={{
-                        ...blobStyles[index],
-                        backgroundImage: bg,
-                        filter: 'blur(100px)',
-                    }}
-                />
-            ))}
-        </div>
-    );
-};
+/* ==========================================================================
+   2. GLOBAL STYLES & BASE DEFINITIONS
+   ========================================================================== */
+body {
+  font-family: 'Barlow', sans-serif; /* NEW professional body font */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--color-fill);
+  color: var(--color-text-base);
+}
 
-export default DynamicBackground;
+.font-orbitron {
+  font-family: 'Orbitron', sans-serif;
+}
+
+.font-poppins {
+  font-family: 'Poppins', sans-serif;
+}
+
+
+.themed-heading {
+  font-family: 'Montserrat', sans-serif; /* NEW strong heading font */
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(0,0,0,0.2);
+  border-radius: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(var(--color-accent), 0.5);
+  border-radius: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(var(--color-accent), 0.8);
+}
+
+/* ==========================================================================
+   3. THEME-AWARE COMPONENTS
+   ========================================================================== */
+.themed-button-primary {
+  background: linear-gradient(45deg, rgb(var(--color-accent)), var(--color-accent-secondary));
+  color: var(--color-accent-text);
+  border-radius: 9999px;
+  box-shadow: var(--shadow-accent-lg);
+  transition: all 0.3s ease;
+}
+.themed-button-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-accent-lg), 0 5px 15px rgba(0,0,0,0.2);
+}
+
+.themed-button-secondary {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: var(--color-text-base);
+  border: 1px solid var(--color-border);
+  border-radius: 9999px;
+  transition: all 0.3s ease;
+}
+.themed-button-secondary:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+  border-color: var(--color-border-accent);
+}
+
+.auth-input {
+    background-color: rgba(0,0,0,0.3);
+    border: 1px solid var(--color-border);
+    border-radius: 0.5rem;
+    padding: 0.75rem 1rem;
+    color: var(--color-text-base);
+    transition: all 0.2s ease-in-out;
+}
+.auth-input:focus {
+    outline: none;
+    border-color: rgba(var(--color-accent), 0.8);
+    box-shadow: 0 0 0 2px rgba(var(--color-accent), 0.3);
+}
+
+.admin-tab {
+    padding: 0.5rem 1rem;
+    border-radius: 9999px;
+    font-weight: 600;
+    font-size: 0.875rem;
+    background-color: rgba(255,255,255,0.05);
+    color: var(--color-text-muted);
+    transition: all 0.2s ease;
+}
+.admin-tab:hover {
+    background-color: rgba(255,255,255,0.1);
+    color: var(--color-text-base);
+}
+.admin-tab-active {
+    padding: 0.5rem 1rem;
+    border-radius: 9999px;
+    font-weight: 600;
+    font-size: 0.875rem;
+    background-color: rgb(var(--color-accent));
+    color: var(--color-accent-text);
+    box-shadow: var(--shadow-accent);
+}
+
+/* AI Tool Specific Styles */
+.themed-settings-block {
+    background-color: var(--color-fill);
+    border: 1px solid var(--color-border);
+    border-radius: 1rem;
+    padding: 1rem;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+.themed-panel {
+    background-color: var(--color-fill-secondary);
+    border: 1px solid var(--color-border);
+    border-radius: 1rem;
+}
+.toggle-switch-dot {
+    transition: transform 0.2s ease-in-out;
+}
+.selected-glow {
+    border-color: rgb(var(--color-accent));
+    background-color: rgba(var(--color-accent), 0.1);
+    color: rgb(var(--color-accent));
+    box-shadow: 0 0 8px rgba(var(--color-accent), 0.5);
+}
+
+.custom-select-wrapper .custom-select-trigger {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    padding: 0.5rem;
+    background-color: rgba(0,0,0,0.3);
+    border: 1px solid var(--color-border);
+    border-radius: 0.375rem;
+    transition: all 0.2s;
+}
+.custom-select-wrapper .custom-select-trigger:hover {
+    border-color: rgba(var(--color-accent), 0.6);
+}
+.custom-select-wrapper .custom-select-options {
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    right: 0;
+    margin-bottom: 0.5rem;
+    background-color: var(--color-fill-modal);
+    border: 1px solid var(--color-border-accent);
+    border-radius: 0.375rem;
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 10;
+    box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+}
+.custom-select-wrapper .custom-select-option {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+    font-size: 0.875rem;
+    transition: background-color 0.2s;
+}
+.custom-select-wrapper .custom-select-option:hover {
+    background-color: rgba(var(--color-accent), 0.1);
+}
+.custom-select-wrapper .custom-select-option.active {
+    background-color: rgba(var(--color-accent), 0.2);
+    color: rgb(var(--color-accent));
+    font-weight: 600;
+}
+
+/* ==========================================================================
+   4. ANIMATIONS & EFFECTS
+   ========================================================================== */
+
+/* --- Keyframe Animations --- */
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fade-in-up { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes fade-in-down { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes shimmer { 
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+@keyframes subtle-pulse-anim { 0%, 100% { transform: scale(1); box-shadow: 0 0 15px rgba(244, 114, 182, 0.4), 0 0 5px rgba(244, 114, 182, 0.6) inset; } 50% { transform: scale(1.05); box-shadow: 0 0 30px rgba(244, 114, 182, 0.6), 0 0 10px rgba(244, 114, 182, 0.8) inset; } }
+@keyframes animStar { from { transform: translateY(0px); } to { transform: translateY(-2000px); } }
+@keyframes scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@keyframes progress-flow { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+@keyframes theme-change-pop { 0% { transform: scale(1); } 50% { transform: scale(1.2); } 100% { transform: scale(1); } }
+@keyframes footer-flicker { 0%, 18%, 22%, 25%, 53%, 57%, 100% { text-shadow: 0 0 4px var(--color-accent), 0 0 11px var(--color-accent), 0 0 19px var(--color-accent), 0 0 40px var(--color-accent-secondary), 0 0 80px var(--color-accent-secondary), 0 0 90px var(--color-accent-secondary), 0 0 100px var(--color-accent-secondary), 0 0 150px var(--color-accent-secondary); } 20%, 24%, 55% { text-shadow: none; } }
+@keyframes reward-enter { from { opacity: 0; transform: scale(0.8) translateY(20px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+@keyframes reward-exit { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0.9); } }
+@keyframes reward-icon-pop { 0% { transform: scale(1); } 50% { transform: scale(1.2) rotate(-10deg); } 100% { transform: scale(1) rotate(0deg); } }
+@keyframes reward-item-enter { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes sparkle-move { from { background-position: 0 0; } to { background-position: -100px 100px; } }
+@keyframes fly-heart { to { transform: translateY(-105vh) rotate(360deg); opacity: 0; } }
+@keyframes aurora-move {
+    0% { transform: translate(-50%, -50%) rotate(0deg) scale(1); }
+    50% { transform: translate(-55%, -45%) rotate(180deg) scale(1.2); }
+    100% { transform: translate(-50%, -50%) rotate(360deg) scale(1); }
+}
+
+/* --- Animation Utility Classes --- */
+.animate-fade-in { animation: fade-in 0.6s ease-out forwards; }
+.animate-fade-in-up { animation: fade-in-up 0.6s ease-out forwards; }
+.animate-fade-in-down { animation: fade-in-down 0.6s ease-out forwards; }
+
+.shimmer-text {
+    background-image: linear-gradient(90deg, #fff 0%, #fff 40%, #f72585 50%, #fff 60%, #fff 100%);
+    background-size: 200% 100%;
+    color: transparent;
+    -webkit-background-clip: text;
+    background-clip: text;
+    animation: shimmer 4s linear infinite;
+}
+[data-theme="solar-flare"] .shimmer-text,
+[data-theme="neon-vibe"] .shimmer-text {
+    background-image: linear-gradient(90deg, #5C3D2E 0%, #5C3D2E 40%, #fff 50%, #5C3D2E 60%, #5C3D2E 100%);
+}
+
+
+.subtle-pulse { animation: subtle-pulse-anim 2.5s infinite ease-in-out; }
+
+.neon-text-glow { text-shadow: 0 0 5px currentColor, 0 0 10px currentColor; }
+.neon-highlight { text-shadow: 0 0 8px currentColor; }
+
+.button-neon-glow {
+  box-shadow: var(--shadow-accent-lg);
+  transition: box-shadow 0.3s ease-in-out;
+}
+.button-neon-glow:hover {
+  box-shadow: 0 0 16px rgba(var(--color-accent), 0.7), 0 0 32px rgba(var(--color-accent), 0.7);
+}
+
+.theme-display-highlight {
+    animation: theme-change-pop 0.5s ease-in-out;
+}
+
+.footer-neon-text {
+    color: var(--color-accent);
+    animation: footer-flicker 4s infinite alternate;
+}
+
+.reward-sparkles {
+    background-image: url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgdmlld0JveD0iMCAwIDEwMCAxMDAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iNTAiIGN5PSI1MCIgcj0iMiIgZmlsbD0iI2ZmZiIvPjxjaXJjbGUgY3g9IjEwIiBjeT0iMjAiIHI9IjEiIGZpbGw9IiNmZmYiLz48Y2lyY2xlIGN4PSI4MCIgY3k9IjMwIiByPSIxLjUiIGZpbGw9IiNmZmYiLz48Y2lyY2xlIGN4PSIyMCIgY3k9IjgwIiByPSIxIiBmaWxsPSIjZmZmIi8+PGNpcmNsZSBjeD0iOTAiIGN5PSI5MCIgcj0iMiIgZmlsbD0iI2ZmZiIvPjwvc3ZnPg==');
+    background-size: 100px 100px;
+    animation: sparkle-move 5s linear infinite;
+}
+
+
+/* --- Image Slider for Gallery --- */
+.image-slider-container {
+  width: 100%;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
+  mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
+}
+.image-slider-track {
+  display: flex;
+  width: fit-content;
+  animation: scroll 60s linear infinite;
+}
+.image-slider-container:hover .image-slider-track { animation-play-state: paused; }
+.slider-image-item {
+  width: 250px;
+  height: 333px;
+  margin: 0 10px;
+  flex-shrink: 0;
+}
+
+/* --- Interactive Card Effects --- */
+.interactive-3d {
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  will-change: transform;
+}
+.interactive-3d:hover {
+  transform: perspective(1000px) rotateX(5deg) rotateY(-5deg) scale(1.05);
+  box-shadow: 0 15px 30px rgba(0,0,0,0.3);
+}
+.glowing-border {
+  position: absolute;
+  inset: 0;
+  border-radius: 1rem;
+  padding: 2px;
+  background: linear-gradient(45deg, rgba(var(--color-accent), 0), rgba(var(--color-accent), 0.5), rgba(var(--color-accent), 0));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.group:hover .glowing-border { opacity: 1; }
+
+/* --- Special Effects (Galaxy Theme, Flying Hearts, etc.) --- */
+/* NEW Aurora Background Effect */
+.aurora-container {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    filter: blur(100px);
+    overflow: hidden;
+}
+.aurora-item {
+    position: absolute;
+    background-image: radial-gradient(circle, var(--aurora-color) 0%, transparent 60%);
+    border-radius: 50%;
+    animation: aurora-move linear infinite alternate;
+}
+.aurora-item:nth-child(2) { animation-direction: alternate-reverse; }
+.aurora-item:nth-child(3) { animation-duration: 30s !important; }
+.aurora-item:nth-child(4) { animation-duration: 35s !important; animation-direction: alternate-reverse; }
+
+
+/* Dreamy Galaxy Starfield Background */
+.galaxy-bg {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 100%;
+  height: 100%;
+  transform: translate(-50%, -50%);
+}
+#stars, #stars2, #stars3 {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  width: 100%; height: 100%;
+  display: block;
+}
+#stars {
+  background: transparent url('data:image/svg+xml;base64,PHN2ZyB2ZXJzaW9uPSIxLjEiIGlkPSJMYXllcl8xIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB4PSIwcHgiIHk9IjBweCIgdmlld0JveD0iMCAwIDUwIDUwIiBzdHlsZT0iZW5hYmxlLWJhY2tncm91bmQ6bmV3IDAgMCA1MCA1MDsiIHhtbDpzcGFjZT0icHJlc2VydmUiPjxyZWN0IGZpbGw9IiNGRkZGRkYiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiLz48L3N2Zz4=') repeat;
+  background-size: 1px 1px;
+  animation: animStar 50s linear infinite;
+}
+#stars2 {
+  background: transparent url('data:image/svg+xml;base64,PHN2ZyB2ZXJzaW9uPSIxLjEiIGlkPSJMYXllcl8xIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB4PSIwcHgiIHk9IjBweCIgdmlld0JveD0iMCAwIDUwIDUwIiBzdHlsZT0iZW5hYmxlLWJhY2tncm91bmQ6bmV3IDAgMCA1MCA1MDsiIHhtbDpzcGFjZT0icHJlc2VydmUiPjxyZWN0IGZpbGw9IiNGRkZGRkYiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiLz48L3N2Zz4=') repeat;
+  background-size: 2px 2px;
+  animation: animStar 100s linear infinite;
+}
+#stars3 {
+  background: transparent url('data:image/svg+xml;base64,PHN2ZyB2ZXJzaW9uPSIxLjEiIGlkPSJMYXllcl8xIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB4PSIwcHgiIHk9IjBweCIgdmlld0JveD0iMCAwIDUwIDUwIiBzdHlsZT0iZW5hYmxlLWJhY2tncm91bmQ6bmV3IDAgMCA1MCA1MDsiIHhtbDpzcGFjZT0icHJlc2VydmUiPjxyZWN0IGZpbGw9IiNGRkZGRkYiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiLz48L3N2Zz4=') repeat;
+  background-size: 3px 3px;
+  animation: animStar 150s linear infinite;
+}
+
+/* Flying Hearts (Example effect, can be triggered via JS) */
+.heart-container {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+.heart {
+  position: absolute;
+  bottom: -50px;
+  font-size: 2rem;
+  animation: fly-heart linear infinite;
+}

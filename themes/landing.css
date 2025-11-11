@@ -1,99 +1,59 @@
 /* 
 ============================================
-Landing Page Theme
+NEW Landing Page Theme (Gradient)
 ============================================
 */
 body[data-theme='landing'] {
-  --color-fill: #0B0B0F;
-  --color-fill-secondary: #12121A;
-  --color-text-base: #EAEAEA;
-  --color-text-muted: #A0A0A0;
+  --color-fill: #110D1F; /* Fallback */
+  --color-fill-secondary: #1C162E;
+  --color-text-base: #F0E8FF;
+  --color-text-muted: #A096B8;
   --color-border: rgba(255, 255, 255, 0.1);
-  --color-accent: 247, 37, 133; /* Use as rgb(var(--color-accent) / <alpha-value>) */
+  --color-accent: 231, 89, 219; /* Pink/Magenta */
 }
 
-/* Base Styles */
+/* NEW Gradient Background */
 body[data-theme='landing'] {
-  background-color: var(--color-fill);
+  background-color: #110D1F;
+  background-image: linear-gradient(135deg, #411236 0%, #110D1F 50%, #122A39 100%);
   color: var(--color-text-base);
   font-family: 'Poppins', sans-serif;
 }
 
-/*
-============================================
-3D Interactive Effect
-============================================
-*/
-.interactive-3d {
-  transform-style: preserve-3d;
-  transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+/* NEW Flat Card Style with Mouse-Following Light Effect */
+.landing-card {
+  background-color: rgba(28, 22, 46, 0.5); /* Semi-transparent dark purple */
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 1.5rem; /* 24px */
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
   position: relative;
-  z-index: 1;
+  overflow: hidden;
 }
 
-.interactive-3d:hover {
-  transform: scale(1.05) rotateX(10deg) rotateY(5deg);
-}
-
-
-/*
-============================================
-Glowing Border Effect for Cards
-============================================
-*/
-.interactive-3d::before {
+.landing-card::before {
   content: '';
   position: absolute;
-  left: 0;
   top: 0;
-  width: 100%;
-  height: 100%;
+  left: 0;
+  right: 0;
+  bottom: 0;
   border-radius: inherit;
-  /* Faint glow by default, more visible on hover */
-  box-shadow: 0 0 15px -5px rgba(var(--color-accent), 0.1);
-  opacity: 0.5;
-  transition: opacity 0.4s ease, box-shadow 0.4s ease;
-  z-index: -1;
+  pointer-events: none;
+  background-image: radial-gradient(800px circle at var(--mouse-x, -1000px) var(--mouse-y, -1000px), rgba(255, 255, 255, 0.06), transparent 40%);
+  opacity: 0;
+  transition: opacity 0.5s;
 }
 
-.interactive-3d:hover::before {
+.landing-card:hover::before {
   opacity: 1;
-  /* More intense glow on hover */
-  box-shadow: 0 0 40px -10px rgba(var(--color-accent), 0.8);
 }
 
-
-/*
-============================================
-Aurora Background Effect
-============================================
-*/
-.aurora-container {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  filter: blur(80px); /* Increased blur for softer edges */
-}
-
-.aurora-item {
-  position: absolute;
-  background-color: var(--aurora-color);
-  border-radius: 50%;
-  opacity: 0.8;
-  animation: move-aurora 20s infinite alternate ease-in-out;
-}
-
-@keyframes move-aurora {
-  0% {
-    transform: translate(0, 0) scale(1);
-  }
-  50% {
-    transform: translate(40px, 60px) scale(1.2);
-  }
-  100% {
-    transform: translate(-40px, -20px) scale(0.9);
-  }
+.landing-card:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-5px);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
 }
 
 /*
@@ -140,7 +100,7 @@ Sharp Gradient Heading
 ============================================
 */
 .sharp-gradient-heading {
-    background: linear-gradient(90deg, #f72585, #7209b7);
+    background: linear-gradient(90deg, #f72585, #b5179e);
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;

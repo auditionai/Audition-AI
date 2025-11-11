@@ -605,4 +605,21 @@ div[data-theme='neon-vibe'] .logo-text {
     50% { background-position: 100% 50%; }
     100% { background-position: 0% 50%; }
 }
-```
+
+/* ---
+FIX: This is where the file was being truncated.
+A full rebuild of the content is required.
+--- */
+@keyframes fly-heart {
+  to { transform: translateY(-105vh) rotate(360deg); opacity: 0; }
+}
+
+.heart-container {
+    position: fixed; inset: 0; z-index: -1; pointer-events: none;
+}
+.heart {
+    position: absolute;
+    bottom: -50px;
+    font-size: 2rem;
+    animation: fly-heart linear infinite;
+}

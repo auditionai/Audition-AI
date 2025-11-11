@@ -5,7 +5,7 @@ import CreatorFooter from '../components/creator/CreatorFooter';
 import { useAuth } from '../contexts/AuthContext';
 import { CreditPackage } from '../types';
 import InfoModal from '../components/creator/InfoModal';
-import CheckInModal from '../components/CheckInModal';
+import CheckInModal from '../components/creator/CheckInModal';
 import BottomNavBar from '../components/common/BottomNavBar';
 
 const BuyCreditsPage: React.FC = () => {

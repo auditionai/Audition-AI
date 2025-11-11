@@ -4,7 +4,6 @@ import { useAuth } from '../contexts/AuthContext';
 // The import is removed, and `any` will be used for the channel objects to fix the error.
 
 // Import Landing Page Sections
-// FIX: Corrected import paths for landing page components.
 import Hero from '../components/landing/Hero';
 import Features from '../components/landing/Features';
 import HowItWorks from '../components/landing/HowItWorks';

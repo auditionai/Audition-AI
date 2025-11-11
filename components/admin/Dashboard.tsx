@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import StatCard from '../common/StatCard';
+import StatCard from './StatCard';
 // Fix: The `RealtimeChannel` type is not exported in Supabase v1.
 // The import is removed, and `any` will be used for the channel objects to fix the error.
 import { DashboardStats } from '../../types'; // IMPORT from shared types

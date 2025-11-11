@@ -84,13 +84,12 @@ const handler: Handler = async (event: HandlerEvent) => {
         });
 
         const imagePartResponse = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-        const inlineData = imagePartResponse?.inlineData;
-        if (!inlineData?.data) {
+        if (!imagePartResponse?.inlineData) {
             throw new Error("AI không thể tách nền hình ảnh này.");
         }
         
-        const finalImageBase64 = inlineData.data;
-        const finalImageMimeType = inlineData.mimeType?.includes('png') ? 'image/png' : 'image/jpeg';
+        const finalImageBase64 = imagePartResponse.inlineData.data;
+        const finalImageMimeType = imagePartResponse.inlineData.mimeType.includes('png') ? 'image/png' : 'image/jpeg';
 
         // --- START OF R2 UPLOAD LOGIC ---
         const imageBuffer = Buffer.from(finalImageBase64, 'base64');

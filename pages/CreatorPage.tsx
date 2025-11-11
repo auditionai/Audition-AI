@@ -3,7 +3,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 
 // Import Creator-specific components
-// FIX: Corrected import paths for creator-specific components.
 import CreatorHeader from '../components/creator/CreatorHeader';
 import CreatorFooter from '../components/creator/CreatorFooter';
 import AITool from '../components/creator/AITool';
@@ -14,8 +13,8 @@ import AdminGalleryPage from './AdminGalleryPage';
 import BottomNavBar from '../components/common/BottomNavBar';
 import InfoModal from '../components/creator/InfoModal';
 import TopUpModal from '../components/creator/TopUpModal';
-import CheckInModal from '../components/CheckInModal';
-import AnnouncementModal from '../components/AnnouncementModal';
+import CheckInModal from '../components/creator/CheckInModal';
+import AnnouncementModal from '../components/creator/AnnouncementModal';
 import ThemeEffects from '../components/themes/ThemeEffects';
 
 // Define the possible tabs for type safety

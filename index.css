@@ -6,7 +6,7 @@
 
 /* Custom styles for react-image-crop to match the app's theme */
 .ReactCrop {
-  --ReactCrop-crop-selection-color: rgba(247, 37, 133, 0.4);
+  --ReactCrop-selection-color: rgba(247, 37, 133, 0.4);
   --ReactCrop-drag-handle-color: rgba(255, 255, 255, 0.8);
   --ReactCrop-rule-of-thirds-color: rgba(255, 255, 255, 0.4);
 }

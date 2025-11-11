@@ -50,7 +50,7 @@ const ImageModal: React.FC<ImageModalProps> = ({ isOpen, onClose, image, showInf
       onClick={onClose}
     >
       <div 
-        className="relative bg-[#12121A] border border-pink-500/20 rounded-2xl shadow-lg w-full max-w-5xl max-h-[90vh] flex flex-col lg:flex-row overflow-hidden animate-fade-in-up"
+        className="relative bg-[#12121A] border border-pink-500/20 rounded-2xl shadow-lg w-full max-w-4xl h-auto max-h-[85vh] lg:h-[700px] lg:max-h-none flex flex-col lg:flex-row overflow-hidden animate-fade-in-up"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Image Container */}

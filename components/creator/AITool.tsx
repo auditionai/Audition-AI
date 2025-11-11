@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import AiGeneratorTool from './ai-tool/AiGeneratorTool';
-import BgRemoverTool from './ai-tool/BgRemoverTool';
+import BgRemoverTool from '../ai-tool/BgRemoverTool';
 import InstructionModal from '../common/InstructionModal';
 
 type AIToolTab = 'generator' | 'utilities';

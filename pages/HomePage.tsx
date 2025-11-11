@@ -5,9 +5,11 @@ import { useAuth } from '../contexts/AuthContext';
 import Hero from '../components/Hero';
 import Features from '../components/Features';
 import HowItWorks from '../components/HowItWorks';
-import Gallery from '../components/Gallery';
+import Community from '../components/Community';
 import Pricing from '../components/Pricing';
 import FAQ from '../components/FAQ';
+import Stats from '../components/Stats';
+import Cta from '../components/Cta';
 
 // Import Common Components
 import LandingHeader from '../components/Header';
@@ -20,10 +22,10 @@ import DynamicBackground from '../components/common/DynamicBackground';
 import AnimatedSection from '../components/common/AnimatedSection';
 
 // Import types and data
-import { GalleryImage, CreditPackage } from '../types';
+import { GalleryImage, CreditPackage, Stats as StatsType } from '../types';
 
 const HomePage: React.FC = () => {
-    const { user, login, navigate, stats, showToast, updateUserDiamonds } = useAuth();
+    const { user, login, navigate, showToast, updateUserDiamonds } = useAuth();
     
     // State for Modals
     const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -36,6 +38,7 @@ const HomePage: React.FC = () => {
     const [isPackagesLoading, setIsPackagesLoading] = useState(true);
     const [publicGalleryImages, setPublicGalleryImages] = useState<GalleryImage[]>([]);
     const [isGalleryLoading, setIsGalleryLoading] = useState(true);
+    const [stats, setStats] = useState<StatsType>({ users: 1250, visits: 8700, images: 25000 });
     
     // State for dynamic background
     const [activeSection, setActiveSection] = useState('hero');
@@ -67,8 +70,23 @@ const HomePage: React.FC = () => {
             }
         };
 
+        // Fetch public stats for footer
+        const fetchStats = async () => {
+            try {
+                const response = await fetch('/.netlify/functions/public-stats');
+                if (!response.ok) {
+                    console.error('Could not load public stats.');
+                    return; // Silently fail and keep mock data
+                }
+                setStats(await response.json());
+            } catch (error) {
+                console.error('Could not load public stats:', error);
+            }
+        };
+
         fetchPackages();
         fetchPublicGallery();
+        fetchStats();
     }, [showToast]);
 
     // Intersection observer for dynamic background
@@ -131,29 +149,16 @@ const HomePage: React.FC = () => {
                 </AnimatedSection>
                 
                 <AnimatedSection id="gallery">
-                     <section className="py-16 sm:py-24 bg-transparent text-white w-full">
-                        <div className="container mx-auto px-4">
-                            <div className="text-center max-w-3xl mx-auto mb-16">
-                                <h2 className="text-3xl md:text-4xl font-bold mb-4">
-                                    <span className="bg-gradient-to-r from-pink-400 to-fuchsia-500 text-transparent bg-clip-text">Tác Phẩm Từ Cộng Đồng</span>
-                                </h2>
-                                <p className="text-lg text-gray-400">
-                                    Khám phá những sáng tạo độc đáo từ cộng đồng Audition AI.
-                                </p>
-                            </div>
-                            {isGalleryLoading ? (
-                                <div className="text-center p-12">Đang tải thư viện...</div>
-                            ) : (
-                                <Gallery 
-                                    images={publicGalleryImages} 
-                                    onImageClick={setSelectedImage} 
-                                    limit={8} 
-                                    showSeeMore={true}
-                                    onSeeMoreClick={() => navigate('gallery')}
-                                />
-                            )}
-                        </div>
-                    </section>
+                     {isGalleryLoading ? (
+                        <div className="text-center p-12 h-96"></div>
+                     ) : (
+                        <Community
+                            images={publicGalleryImages}
+                            onLoginClick={handleCtaClick}
+                            onImageClick={setSelectedImage}
+                            onSeeMoreClick={() => navigate('gallery')}
+                        />
+                     )}
                 </AnimatedSection>
 
                 <AnimatedSection id="pricing">
@@ -167,10 +172,17 @@ const HomePage: React.FC = () => {
                 <AnimatedSection id="faq">
                     <FAQ />
                 </AnimatedSection>
+
+                <AnimatedSection id="stats">
+                    <Stats stats={stats} />
+                </AnimatedSection>
+
+                <AnimatedSection id="cta">
+                    <Cta onCtaClick={handleCtaClick} />
+                </AnimatedSection>
             </main>
             
             <Footer 
-                stats={stats}
                 onInfoLinkClick={setInfoModalKey}
             />
             

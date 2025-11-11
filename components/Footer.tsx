@@ -1,45 +1,38 @@
 import React from 'react';
-import { Stats } from '../types';
-import Logo from './common/Logo';
 
 interface FooterProps {
-  stats: Stats;
   onInfoLinkClick: (key: 'terms' | 'policy' | 'contact') => void;
 }
 
-const Footer: React.FC<FooterProps> = ({ stats, onInfoLinkClick }) => {
+const Footer: React.FC<FooterProps> = ({ onInfoLinkClick }) => {
   return (
     <footer className="bg-skin-fill-secondary border-t border-skin-border text-skin-base relative z-10">
-      <div className="container mx-auto px-4 py-12">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-center md:text-left">
-          <div className="flex flex-col items-center md:items-start">
-            <Logo onClick={() => window.scrollTo(0, 0)} />
-            <p className="text-skin-muted mt-4 text-sm max-w-xs">
-              Nền tảng sáng tạo ảnh 3D AI theo phong cách Audition độc đáo.
-            </p>
-          </div>
-          
-          <div>
-            <h3 className="font-bold text-lg mb-4 text-skin-accent">Thông tin</h3>
-            <nav className="flex flex-col space-y-2 text-skin-muted">
-              <a onClick={() => onInfoLinkClick('terms')} className="hover:text-skin-base cursor-pointer transition">Chính sách Kim Cương</a>
-              <a onClick={() => onInfoLinkClick('policy')} className="hover:text-skin-base cursor-pointer transition">Chính sách Bảo mật</a>
-              <a onClick={() => onInfoLinkClick('contact')} className="hover:text-skin-base cursor-pointer transition">Liên hệ & Hỗ trợ</a>
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex flex-col sm:flex-row justify-between items-center text-center text-skin-muted text-sm gap-4">
+            <p>&copy; 2025 AUDITION AI Studio.</p>
+             <nav className="flex items-center space-x-4 text-skin-muted">
+              <a onClick={() => onInfoLinkClick('terms')} className="hover:text-skin-base cursor-pointer transition">Điều khoản</a>
+              <a onClick={() => onInfoLinkClick('policy')} className="hover:text-skin-base cursor-pointer transition">Chính sách</a>
+              <a onClick={() => onInfoLinkClick('contact')} className="hover:text-skin-base cursor-pointer transition">Liên hệ</a>
             </nav>
-          </div>
-
-          <div>
-            <h3 className="font-bold text-lg mb-4 text-skin-accent">Thống kê</h3>
-            <div className="space-y-2 text-skin-muted">
-              <p><strong>{stats.users.toLocaleString('vi-VN')}</strong> Người dùng</p>
-              <p><strong>{stats.visits.toLocaleString('vi-VN')}</strong> Lượt truy cập</p>
-              <p><strong>{stats.images.toLocaleString('vi-VN')}</strong> Tác phẩm được tạo</p>
-            </div>
-          </div>
         </div>
-
-        <div className="mt-12 pt-8 border-t border-skin-border text-center text-skin-muted text-sm">
-          <p>&copy; {new Date().getFullYear()} AUDITION AI Studio. Sáng tạo bởi Nguyễn Quốc Cường.</p>
+        <div className="text-center text-xs text-gray-600 mt-6 border-t border-skin-border pt-6">
+            <p><i className="ph-fill ph-warning-circle text-yellow-500"></i> Lưu ý pháp lý & an toàn.</p>
+            <p className="mt-2 max-w-2xl mx-auto">Nghiêm cấm nội dung vi phạm pháp luật, 18+, bạo lực, xúc phạm. Người dùng chịu trách nhiệm bản quyền với hình ảnh gốc tải lên.</p>
+        </div>
+        <div className="mt-8 flex flex-wrap justify-center items-center gap-4">
+            <a href="https://caulenhau.io.vn/" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-6 py-3 font-bold text-sm bg-white/10 backdrop-blur-sm border border-white/20 text-skin-base rounded-full transition-all duration-300 hover:bg-white/20 hover:shadow-lg hover:shadow-white/10 hover:-translate-y-1">
+                <i className="ph-fill ph-scroll text-lg text-yellow-300"></i>
+                Câu Lệnh AU
+            </a>
+            <a href="https://byvn.net/codycn-prompt" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-6 py-3 font-bold text-sm bg-white/10 backdrop-blur-sm border border-white/20 text-skin-base rounded-full transition-all duration-300 hover:bg-white/20 hover:shadow-lg hover:shadow-white/10 hover:-translate-y-1">
+                <i className="ph-fill ph-robot text-lg text-cyan-300"></i>
+                PROMPT GPT
+            </a>
+            <a href="https://m.me/cm/AbZT2-fW9wJlrX7M/" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-6 py-3 font-bold text-sm bg-white/10 backdrop-blur-sm border border-white/20 text-skin-base rounded-full transition-all duration-300 hover:bg-white/20 hover:shadow-lg hover:shadow-white/10 hover:-translate-y-1">
+                <i className="ph-fill ph-users-three text-lg text-pink-300"></i>
+                Cộng Đồng AU AI
+            </a>
         </div>
       </div>
     </footer>

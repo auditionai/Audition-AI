@@ -1,0 +1,148 @@
+/* 
+============================================
+Landing Page Theme
+============================================
+*/
+body[data-theme='landing'] {
+  --color-fill: #0B0B0F;
+  --color-fill-secondary: #12121A;
+  --color-text-base: #EAEAEA;
+  --color-text-muted: #A0A0A0;
+  --color-border: rgba(255, 255, 255, 0.1);
+  --color-accent: 247, 37, 133; /* Use as rgb(var(--color-accent) / <alpha-value>) */
+}
+
+/* Base Styles */
+body[data-theme='landing'] {
+  background-color: var(--color-fill);
+  color: var(--color-text-base);
+  font-family: 'Poppins', sans-serif;
+}
+
+/*
+============================================
+3D Interactive Effect
+============================================
+*/
+.interactive-3d {
+  transform-style: preserve-3d;
+  transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  position: relative;
+  z-index: 1;
+}
+
+.interactive-3d:hover {
+  transform: scale(1.05) rotateX(10deg) rotateY(5deg);
+}
+
+
+/*
+============================================
+Glowing Border Effect for Cards
+============================================
+*/
+.interactive-3d::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  /* Faint glow by default, more visible on hover */
+  box-shadow: 0 0 15px -5px rgba(var(--color-accent), 0.1);
+  opacity: 0.5;
+  transition: opacity 0.4s ease, box-shadow 0.4s ease;
+  z-index: -1;
+}
+
+.interactive-3d:hover::before {
+  opacity: 1;
+  /* More intense glow on hover */
+  box-shadow: 0 0 40px -10px rgba(var(--color-accent), 0.8);
+}
+
+
+/*
+============================================
+Aurora Background Effect
+============================================
+*/
+.aurora-container {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  filter: blur(80px); /* Increased blur for softer edges */
+}
+
+.aurora-item {
+  position: absolute;
+  background-color: var(--aurora-color);
+  border-radius: 50%;
+  opacity: 0.8;
+  animation: move-aurora 20s infinite alternate ease-in-out;
+}
+
+@keyframes move-aurora {
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(40px, 60px) scale(1.2);
+  }
+  100% {
+    transform: translate(-40px, -20px) scale(0.9);
+  }
+}
+
+/*
+============================================
+Image Slider (Community Section)
+============================================
+*/
+.image-slider-container {
+  width: 100%;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
+  mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
+}
+
+.image-slider-track {
+  display: flex;
+  width: fit-content;
+  animation: scroll-slider 60s linear infinite;
+}
+
+.image-slider-container:hover .image-slider-track {
+  animation-play-state: paused;
+}
+
+@keyframes scroll-slider {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.slider-image-item {
+  width: 250px; /* Adjust as needed */
+  margin: 0 1rem;
+  flex-shrink: 0;
+}
+
+
+/*
+============================================
+Sharp Gradient Heading
+============================================
+*/
+.sharp-gradient-heading {
+    background: linear-gradient(90deg, #f72585, #7209b7);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    filter: drop-shadow(0 2px 3px rgba(0,0,0,0.3));
+}

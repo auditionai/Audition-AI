@@ -16,17 +16,17 @@ const App: React.FC = () => {
     const { user, loading, route, toast, reward, clearReward } = useAuth();
     const { theme } = useTheme();
 
-    // CRITICAL FIX: Apply the theme to the body tag directly.
-    // The cleanup function was removed because it was too aggressive. It would remove
-    // the data-theme attribute on every re-render before the effect could re-apply it,
-    // causing a flicker or a permanent loss of the theme background. The effect's
-    // main logic is sufficient to add/remove the attribute as needed.
+    // CRITICAL FIX V2: Make theming explicit for all states.
+    // Instead of adding/removing the attribute, we now explicitly switch between
+    // a 'landing' theme and the user-selected creator 'theme'. This is more robust
+    // and avoids race conditions or CSS conflicts where :root styles might interfere.
     useEffect(() => {
         const isCreatorInterface = ['tool', 'leaderboard', 'my-creations', 'settings', 'admin-gallery', 'buy-credits'].includes(route);
         if (isCreatorInterface && user) {
              document.body.setAttribute('data-theme', theme);
         } else {
-            document.body.removeAttribute('data-theme');
+            // Apply a specific, explicit theme for the landing page.
+            document.body.setAttribute('data-theme', 'landing');
         }
     }, [theme, route, user]);
 

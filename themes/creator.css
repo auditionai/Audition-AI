@@ -815,3 +815,187 @@
 [data-theme="neon-vibe"] .themed-top-up-button__icon-wrapper { color: rgb(var(--color-accent)); }
 [data-theme="neon-vibe"] .themed-top-up-button__content-wrapper { color: var(--color-text-base); }
 [data-theme="neon-vibe"] .themed-top-up-button__action { border-color: rgba(44, 62, 80, 0.3); }
+
+
+/* ==========================================================================
+   7. THEMED BUY CREDITS PAGE
+   ========================================================================== */
+
+/* --- Info Box --- */
+.themed-info-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.625rem;
+  padding: 0.5rem;
+  border-radius: 0.5rem;
+  background-color: var(--color-fill-secondary);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  text-align: center;
+}
+.themed-info-box.is-link {
+  color: rgb(var(--color-accent));
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.themed-info-box.is-link:hover {
+  background-color: rgba(var(--color-accent), 0.1);
+  border-color: rgba(var(--color-accent), 0.3);
+}
+.themed-info-box strong {
+  color: var(--color-text-base);
+  font-weight: 700;
+}
+[data-theme="cyber-punk"] .themed-info-box i { color: rgb(var(--color-accent)); }
+[data-theme="solar-flare"] .themed-info-box { border-width: 2px; }
+[data-theme="neon-vibe"] .themed-info-box { box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+
+/* --- Credit Package Card --- */
+.themed-credit-package {
+  position: relative;
+  background-color: var(--color-fill-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 1.25rem;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+}
+.themed-credit-package__content {
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  text-align: center;
+  height: 100%;
+}
+.themed-credit-package__tag {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: linear-gradient(45deg, rgb(var(--color-accent)), var(--color-accent-secondary));
+  color: var(--color-accent-text);
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  text-transform: uppercase;
+  box-shadow: var(--shadow-accent-lg);
+}
+.themed-credit-package__amount {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  color: rgb(var(--color-accent));
+}
+.themed-credit-package__amount i { font-size: 2.25rem; }
+.themed-credit-package__amount p { font-size: 2.5rem; font-weight: 900; color: var(--color-text-base); }
+.themed-credit-package__label {
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+  margin-bottom: 1rem;
+}
+.themed-credit-package__bonus {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  opacity: 0.7;
+  margin-bottom: 1rem;
+}
+.themed-credit-package__price {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-text-base);
+  margin-bottom: 1.5rem;
+}
+.themed-credit-package__button {
+  width: 100%;
+  padding: 0.75rem;
+  font-weight: 700;
+  border-radius: 0.5rem;
+  transition: all 0.3s ease;
+  margin-top: auto;
+}
+.themed-credit-package__button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+.themed-credit-package__button:hover:not(:disabled) {
+  transform: translateY(-2px);
+}
+
+/* Theme-specific styles for credit packages */
+[data-theme="cyber-punk"] .themed-credit-package {
+  border-color: var(--color-border-accent);
+  box-shadow: var(--shadow-accent);
+}
+[data-theme="cyber-punk"] .themed-credit-package__button {
+  background: linear-gradient(45deg, rgb(var(--color-accent)), var(--color-accent-secondary));
+  color: var(--color-accent-text);
+  box-shadow: var(--shadow-accent-lg);
+}
+[data-theme="cyber-punk"] .themed-credit-package__button:hover:not(:disabled) {
+  box-shadow: var(--shadow-accent-lg), 0 0 15px var(--color-accent-secondary);
+}
+
+[data-theme="solar-flare"] .themed-credit-package {
+  border: 2px solid var(--color-text-base);
+  box-shadow: 6px 6px 0px var(--color-text-base);
+  transition: all 0.2s ease-out;
+}
+[data-theme="solar-flare"] .themed-credit-package.group:hover {
+  transform: translate(2px, 2px) !important;
+  box-shadow: 4px 4px 0px var(--color-text-base) !important;
+}
+[data-theme="solar-flare"] .themed-credit-package__amount p { color: var(--color-text-base); }
+[data-theme="solar-flare"] .themed-credit-package__price { color: var(--color-text-base); }
+[data-theme="solar-flare"] .themed-credit-package__button {
+  background-color: rgb(var(--color-accent));
+  color: var(--color-accent-text);
+  border: 2px solid var(--color-text-base);
+  box-shadow: 4px 4px 0 var(--color-text-base);
+}
+[data-theme="solar-flare"] .themed-credit-package__button:hover:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 var(--color-text-base);
+}
+
+[data-theme="dreamy-galaxy"] .themed-credit-package {
+  box-shadow: var(--shadow-accent);
+}
+[data-theme="dreamy-galaxy"] .themed-credit-package__amount i {
+  filter: drop-shadow(0 0 8px rgb(var(--color-accent)));
+}
+[data-theme="dreamy-galaxy"] .themed-credit-package__button {
+  background: linear-gradient(45deg, rgb(var(--color-accent)), var(--color-accent-secondary));
+  color: var(--color-accent-text);
+  box-shadow: var(--shadow-accent-lg);
+}
+
+[data-theme="classic-dark"] .themed-credit-package {
+  border-color: var(--color-accent-secondary);
+}
+[data-theme="classic-dark"] .themed-credit-package__tag {
+  background: var(--color-accent-secondary);
+  color: #1A2D27;
+}
+[data-theme="classic-dark"] .themed-credit-package__amount i { color: var(--color-accent-secondary); }
+[data-theme="classic-dark"] .themed-credit-package__button {
+  background-color: var(--color-accent-secondary);
+  color: #1A2D27;
+  font-weight: 900;
+}
+
+[data-theme="neon-vibe"] .themed-credit-package {
+  box-shadow: 0 10px 20px rgba(44, 62, 80, 0.1);
+}
+[data-theme="neon-vibe"] .themed-credit-package__button {
+  background-color: rgb(var(--color-accent));
+  color: var(--color-accent-text);
+}
+[data-theme="neon-vibe"] .themed-credit-package__button:hover:not(:disabled) {
+  box-shadow: var(--shadow-accent-lg);
+}
+[data-theme="neon-vibe"] .themed-credit-package__tag {
+    background: linear-gradient(45deg, var(--color-accent-secondary), rgb(var(--color-accent)));
+}

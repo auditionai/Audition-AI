@@ -1,9 +1,8 @@
-
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { TransactionLogEntry } from '../types';
 import XPProgressBar from './common/XPProgressBar';
-import RedeemGiftCode from '../user/RedeemGiftCode';
+import RedeemGiftCode from './user/RedeemGiftCode';
 import Dashboard from './admin/Dashboard';
 import GiftCodeManager from './admin/GiftCodeManager';
 

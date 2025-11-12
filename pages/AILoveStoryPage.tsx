@@ -14,7 +14,7 @@ const AILoveStoryPage: React.FC = () => {
     const [femaleChar, setFemaleChar] = useState<{ url: string; file: File } | null>(null);
     const [maleChar, setMaleChar] = useState<{ url: string; file: File } | null>(null);
 
-    const [scenarioId, setScenarioId] = useState<keyof typeof SCENARIOS>('school');
+    const [scenarioId] = useState<keyof typeof SCENARIOS>('school');
     const [currentNodeId, setCurrentNodeId] = useState<string>('start');
     const [generatedImages, setGeneratedImages] = useState<string[]>([]);
     const [isGenerating, setIsGenerating] = useState(false);
@@ -31,7 +31,7 @@ const AILoveStoryPage: React.FC = () => {
                 const newImage = { url: resizedDataUrl, file: resizedFile };
                 if (gender === 'female') setFemaleChar(newImage);
                 else setMaleChar(newImage);
-            }).catch(err => showToast('Lỗi xử lý ảnh.', 'error'));
+            }).catch(() => showToast('Lỗi xử lý ảnh.', 'error'));
         }
     };
     

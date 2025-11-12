@@ -5,7 +5,6 @@ import { useAuth } from '../../contexts/AuthContext';
 interface BottomNavBarProps {
   activeTab: CreatorTab | 'buy-credits';
   onTabChange: (tab: CreatorTab) => void;
-  onTopUpClick: () => void;
   onCheckInClick: () => void;
 }
 
@@ -22,7 +21,7 @@ const NavButton = ({ icon, label, isActive, onClick, hasNotification = false }: 
     </button>
 );
 
-const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeTab, onTabChange, onTopUpClick, onCheckInClick }) => {
+const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeTab, onTabChange, onCheckInClick }) => {
   const { hasCheckedInToday } = useAuth();
   return (
     <div className="fixed bottom-0 left-0 w-full h-16 bg-[#12121A]/80 backdrop-blur-lg border-t border-white/10 z-50 md:hidden">

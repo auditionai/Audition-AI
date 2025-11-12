@@ -8,6 +8,13 @@ export interface ChangelogItem {
 
 export const CHANGELOG_DATA: ChangelogItem[] = [
   {
+    id: 7,
+    version: 'v1.7.0',
+    date: '14-11-2025',
+    title: 'Nâng Cấp Toàn Diện Công Cụ Chữ Ký',
+    description: 'Sửa lỗi định vị chữ ký AI, bổ sung tùy chọn Font, kích thước, in đậm/nghiêng. Mở rộng kho hiệu ứng và thêm tính năng chọn màu tùy chỉnh, mang lại sự tự do sáng tạo tối đa.',
+  },
+  {
     id: 6,
     version: 'v1.6.0',
     date: '13-11-2025',

@@ -108,7 +108,7 @@ const ShootingStarEffect: React.FC = () => {
     );
 };
 
-// --- NEW: Gummy Candy Rain Effect ---
+// --- Gummy Candy Rain Effect ---
 const GummyCandyRainEffect: React.FC = () => {
     const candies = useMemo(() => {
         const candyArray = [];
@@ -172,6 +172,67 @@ const GummyCandyRainEffect: React.FC = () => {
 };
 
 
+// --- NEW: Caustic Effect ---
+const CausticEffect: React.FC = () => {
+    return (
+        <>
+            <style>{`
+                .caustic-container {
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    pointer-events: none;
+                    z-index: 0;
+                    overflow: hidden;
+                    background-color: transparent;
+                }
+                .caustic-layer {
+                    position: absolute;
+                    inset: -50%; /* Make it larger to avoid hard edges */
+                    opacity: 0.5;
+                    mix-blend-mode: overlay;
+                    filter: blur(40px) contrast(1.2);
+                    animation: caustic-move 25s infinite alternate ease-in-out;
+                }
+                .caustic-layer::before,
+                .caustic-layer::after {
+                    content: '';
+                    position: absolute;
+                    inset: 0;
+                    background-image: radial-gradient(circle at center, rgba(52, 152, 219, 0.2) 0%, rgba(72, 201, 176, 0.15) 30%, transparent 60%);
+                    animation: caustic-spin 35s infinite linear;
+                }
+                .caustic-layer::after {
+                    background-image: radial-gradient(ellipse 80% 120% at 20% 80%, rgba(155, 89, 182, 0.15) 0%, rgba(26, 188, 156, 0.1) 40%, transparent 70%);
+                    animation: caustic-spin 45s infinite linear reverse;
+                    animation-delay: -5s;
+                }
+                
+                @keyframes caustic-move {
+                    from { transform: translate(-10%, -10%) scale(1.2); }
+                    to { transform: translate(10%, 10%) scale(1.5); }
+                }
+                @keyframes caustic-spin {
+                    from { transform: rotate(0deg); }
+                    to { transform: rotate(360deg); }
+                }
+                /* Specific theme adjustments for the light background of 'neon-vibe' */
+                [data-theme='neon-vibe'] .caustic-layer {
+                     mix-blend-mode: multiply; /* Darkens the light background, creating a more realistic light pool effect */
+                     opacity: 0.7;
+                     filter: blur(50px) contrast(1.1);
+                }
+            `}</style>
+            <div className="caustic-container" aria-hidden="true">
+                <div className="caustic-layer"></div>
+            </div>
+        </>
+    );
+};
+
+
 // --- Main ThemeEffects Component ---
 // This component dynamically renders effects based on the selected theme.
 const ThemeEffects: React.FC = () => {
@@ -184,7 +245,8 @@ const ThemeEffects: React.FC = () => {
             return <ShootingStarEffect />;
         case 'solar-flare':
             return <GummyCandyRainEffect />;
-        // Other theme effects can be added here in the future
+        case 'neon-vibe':
+            return <CausticEffect />;
         default:
             return null;
     }

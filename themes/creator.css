@@ -119,8 +119,139 @@
 }
 
 .auth-input {
-    @apply w-full p-3 bg-skin-fill-secondary rounded-md border border-skin-border focus:border-skin-border-accent focus:ring-1 focus:ring-skin-border-accent transition text-skin-base;
+    @apply w-full p-3 bg-skin-input-bg rounded-md border border-skin-border focus:border-skin-border-accent focus:ring-1 focus:ring-skin-border-accent transition text-skin-base;
 }
+
+
+/* ==========================================================================
+   THEMED BACKGROUND EFFECTS
+   ========================================================================== */
+.themed-bg-effect {
+    pointer-events: none;
+    overflow: hidden;
+}
+
+/* 1. Cyber Punk Grid */
+@keyframes cyber-pan {
+    0% { transform: translate(0, 0); }
+    100% { transform: translate(-50px, -50px); }
+}
+.cyber-grid {
+    width: calc(100% + 50px);
+    height: calc(100% + 50px);
+    background-image:
+        linear-gradient(rgba(var(--color-accent), 0.2) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(var(--color-accent), 0.2) 1px, transparent 1px);
+    background-size: 50px 50px;
+    animation: cyber-pan 10s linear infinite;
+}
+
+/* 2. Solar Flare Bubbles */
+@keyframes bubble-rise {
+    0% { transform: translateY(0); opacity: 0; }
+    10% { opacity: 1; }
+    90% { opacity: 1; }
+    100% { transform: translateY(-100vh); opacity: 0; }
+}
+.bubbles {
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+.bubble {
+    position: absolute;
+    bottom: -50px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(var(--color-accent), 0.4) 0%, rgba(var(--color-accent-secondary), 0.2) 100%);
+    animation: bubble-rise 20s infinite ease-in;
+}
+.bubble:nth-child(1) { width: 40px; height: 40px; left: 10%; animation-duration: 15s; }
+.bubble:nth-child(2) { width: 20px; height: 20px; left: 20%; animation-duration: 25s; animation-delay: 2s; }
+.bubble:nth-child(3) { width: 50px; height: 50px; left: 35%; animation-duration: 18s; animation-delay: 4s; }
+.bubble:nth-child(4) { width: 30px; height: 30px; left: 50%; animation-duration: 22s; }
+.bubble:nth-child(5) { width: 15px; height: 15px; left: 55%; animation-duration: 28s; animation-delay: 1s; }
+.bubble:nth-child(6) { width: 45px; height: 45px; left: 65%; animation-duration: 16s; animation-delay: 3s; }
+.bubble:nth-child(7) { width: 25px; height: 25px; left: 75%; animation-duration: 19s; }
+.bubble:nth-child(8) { width: 35px; height: 35px; left: 90%; animation-duration: 24s; animation-delay: 2s; }
+
+/* 3. Dreamy Galaxy Stars & Meteors */
+@keyframes animStar { from { transform: translateY(0px); } to { transform: translateY(-2000px); } }
+@keyframes meteor-fall {
+    0% { transform: translateX(0) translateY(0); opacity: 1; }
+    100% { transform: translateX(-500px) translateY(500px); opacity: 0; }
+}
+.galaxy-bg {
+  width: 100%; height: 100%; position: absolute;
+  background: transparent;
+}
+#stars, #stars2, #stars3 {
+    width: 1px; height: 1px; background: transparent;
+    box-shadow: 0 0 1px rgba(255, 255, 255, 0.5); animation: animStar 50s linear infinite;
+}
+#stars2 {
+    box-shadow: 0 0 1px rgba(255, 255, 255, 0.7); animation: animStar 100s linear infinite;
+}
+#stars3 {
+    box-shadow: 0 0 1px rgba(255, 255, 255, 0.9); animation: animStar 150s linear infinite;
+}
+.meteors { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+.meteor {
+    position: absolute;
+    width: 2px;
+    height: 150px;
+    background: linear-gradient(to bottom, rgba(255, 255, 255, 0.7), transparent);
+    transform: rotate(45deg);
+    animation: meteor-fall 10s linear infinite;
+}
+.meteor:nth-child(1) { top: -10%; left: 30%; animation-delay: 2s; animation-duration: 8s; }
+.meteor:nth-child(2) { top: -15%; left: 70%; animation-delay: 5s; animation-duration: 12s; }
+.meteor:nth-child(3) { top: -5%; left: 90%; animation-delay: 0s; animation-duration: 7s; }
+.meteor:nth-child(4) { top: 0%; left: 10%; animation-delay: 8s; animation-duration: 15s; }
+
+/* 4. Classic Dark Snowfall */
+@keyframes snowfall {
+    0% { background-position: 0 0; }
+    100% { background-position: 50vw 50vh; }
+}
+.snowfall {
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><circle cx="5" cy="5" r="1" fill="white"/></svg>');
+    height: 100%;
+    left: 0;
+    position: absolute;
+    top: 0;
+    width: 100%;
+    animation: snowfall 20s linear infinite;
+    opacity: 0.5;
+}
+.snowfall.layer2 {
+    animation-duration: 15s;
+    animation-direction: reverse;
+    opacity: 0.7;
+}
+.snowfall.layer3 {
+    animation-duration: 10s;
+    opacity: 0.9;
+}
+
+/* 5. Neon Vibe Lines */
+@keyframes line-move {
+    from { transform: translateY(-100%) }
+    to { transform: translateY(100vh) }
+}
+.lines { position: absolute; top: 0; left: 0; right: 0; height: 100%; }
+.line {
+    position: absolute;
+    width: 1px;
+    height: 100%;
+    background: linear-gradient(to bottom, rgba(var(--color-accent), 0), rgb(var(--color-accent)), rgba(var(--color-accent), 0));
+    animation: line-move 20s -2s linear infinite;
+}
+.line:nth-child(1) { left: 10%; animation-delay: -5s; animation-duration: 25s; }
+.line:nth-child(2) { left: 30%; animation-delay: -10s; animation-duration: 18s; }
+.line:nth-child(3) { left: 50%; animation-delay: -15s; animation-duration: 22s; }
+.line:nth-child(4) { left: 70%; animation-delay: -20s; animation-duration: 16s; }
+.line:nth-child(5) { left: 90%; animation-delay: -25s; animation-duration: 30s; }
+
 
 /* ==========================================================================
    THEMED MAIN TITLE SECTION (AI TOOL, LEADERBOARD, ETC.)
@@ -171,7 +302,7 @@
 
 @keyframes bounce-in { 0% { transform: scale(0.8); opacity: 0; } 60% { transform: scale(1.1); opacity: 1; } 100% { transform: scale(1); } }
 [data-theme='solar-flare'] .themed-main-title {
-    font-family: 'Poppins', sans-serif;
+    font-family: 'Barlow', sans-serif;
     font-weight: 900;
     color: rgb(var(--color-accent));
     animation: bounce-in 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;

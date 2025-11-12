@@ -34,9 +34,6 @@ const App: React.FC = () => {
             case 'my-creations':
             case 'settings':
             case 'admin-gallery':
-                // These routes are for logged-in users.
-                // If the user is not logged in, AuthContext handles redirection,
-                // but we render HomePage as a safe fallback.
                 pageComponent = user ? <CreatorPage activeTab={route} /> : <HomePage />;
                 break;
             case 'buy-credits':
@@ -50,11 +47,13 @@ const App: React.FC = () => {
                 pageComponent = <HomePage />;
         }
         
-        // Apply the theme wrapper universally to all pages to fix rendering issues.
+        // The outer div sets the base background color.
+        // ThemeEffects is now a sibling, and the main content has a transparent background
+        // and a higher z-index, allowing the effects to be visible underneath.
         return (
-            <div data-theme={theme} className="relative">
+            <div data-theme={theme} className="relative bg-skin-fill">
                 <ThemeEffects />
-                <div className="relative z-[1]">
+                <div className="relative z-[1] bg-transparent">
                     {pageComponent}
                 </div>
             </div>

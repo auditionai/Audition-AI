@@ -16,9 +16,12 @@ const handler: Handler = async (event: HandlerEvent) => {
         const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
         if (authError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized: Invalid token.' }) };
 
-        const { image: imageDataUrl, text, aiStyle, aiColor, signaturePosition, cost } = JSON.parse(event.body || '{}');
+        const { 
+            image: imageDataUrl, text, aiStyle, aiColor, signaturePosition, cost,
+            aiFont, aiSize, aiIsBold, aiIsItalic, aiCustomColor 
+        } = JSON.parse(event.body || '{}');
 
-        if (!imageDataUrl || !text || !aiStyle || !aiColor || !signaturePosition || typeof cost !== 'number' || cost <= 0) {
+        if (!imageDataUrl || !text || !aiStyle || !aiColor || !signaturePosition || typeof cost !== 'number' || cost <= 0 || !aiFont || !aiSize || aiIsBold === undefined || aiIsItalic === undefined || !aiCustomColor) {
             return { statusCode: 400, body: JSON.stringify({ error: 'Missing required parameters for AI signature.' }) };
         }
         
@@ -33,7 +36,26 @@ const handler: Handler = async (event: HandlerEvent) => {
         const model = 'gemini-2.5-flash-image';
 
         // --- SERVER-SIDE PROMPT CONSTRUCTION ---
-        const aiPrompt = `Add the text "${text}" to the image. The text MUST be placed centered at the approximate coordinates (left: ${Math.round(signaturePosition.x * 100)}%, top: ${Math.round(signaturePosition.y * 100)}%). Style the text as ${aiStyle} with a ${aiColor} color scheme. It is crucial that the text is spelled correctly and is legible. Do not alter any other part of the original image.`;
+         let promptParts = [
+            "Your task is to add text to the provided image with precision. Follow these rules strictly:",
+            `1.  **Text Content:** Add the exact text: "${text}"`,
+            `2.  **Placement:** The text block's absolute center must be at this location: ${Math.round(signaturePosition.x * 100)}% from the left and ${Math.round(signaturePosition.y * 100)}% from the top. This is a critical placement requirement.`,
+            "3.  **Visual Style:",
+            `    *   **Overall Style:** Create a legible text with a style described as '${aiStyle}'.`,
+            `    *   **Font Family:** Use a font that visually resembles "${aiFont}".`,
+            `    *   **Font Attributes:** ${aiIsBold ? 'Bold weight' : 'Normal weight'}. ${aiIsItalic ? 'Italic style' : 'Upright style'}.`,
+            `    *   **Font Size:** The text height should be approximately ${aiSize} pixels relative to a 1024px tall image. Adjust size proportionally if the image is a different height.`,
+        ];
+
+        if (aiColor === 'custom') {
+            promptParts.push(`    *   **Coloring:** The text color MUST be this exact hex code: ${aiCustomColor}. Do not use any other colors or gradients.`);
+        } else {
+            promptParts.push(`    *   **Coloring:** The text must have a vibrant ${aiColor} color palette.`);
+        }
+
+        promptParts.push("4.  **Final Output:** Do not alter, crop, or change any other part of the original image. The output must be the original image with only the specified text added according to these rules.");
+
+        const aiPrompt = promptParts.join('\n');
         // --- END ---
 
         const parts: any[] = [];

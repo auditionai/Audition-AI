@@ -17,8 +17,9 @@ const FONTS = [
 ];
 
 type ToolMode = 'manual' | 'ai';
-type AiStyle = 'none' | 'neon' | '3d' | 'graffiti' | 'typography';
-type AiColor = 'custom' | 'rainbow' | 'fire' | 'ice' | 'gold';
+type AiStyle = 'neon' | '3d' | 'graffiti' | 'typography' | 'outline' | 'metallic' | 'glowing' | 'shadow';
+type AiColor = 'custom' | 'rainbow' | 'fire' | 'ice' | 'gold' | 'pastel' | 'vaporwave' | 'monochrome';
+
 
 interface SignatureToolProps {
     initialImage: string | null;
@@ -35,6 +36,11 @@ interface SignatureState {
     // AI
     aiStyle: AiStyle;
     aiColor: AiColor;
+    aiFont: string;
+    aiSize: number;
+    aiIsBold: boolean;
+    aiIsItalic: boolean;
+    aiCustomColor: string;
 }
 
 const SignatureTool: React.FC<SignatureToolProps> = ({ initialImage, onClearInitialImage }) => {
@@ -51,13 +57,18 @@ const SignatureTool: React.FC<SignatureToolProps> = ({ initialImage, onClearInit
     const [isDragging, setIsDragging] = useState(false);
 
     const [state, setState] = useState<SignatureState>({
-        mode: 'manual',
+        mode: 'ai',
         text: 'Audition AI',
         font: 'Poppins',
         size: 48,
         color: '#FFFFFF',
         aiStyle: 'neon',
         aiColor: 'rainbow',
+        aiFont: 'Orbitron',
+        aiSize: 64,
+        aiIsBold: true,
+        aiIsItalic: false,
+        aiCustomColor: '#FF007F',
     });
 
     useEffect(() => {
@@ -205,7 +216,12 @@ const SignatureTool: React.FC<SignatureToolProps> = ({ initialImage, onClearInit
                     aiStyle: state.aiStyle,
                     aiColor: state.aiColor,
                     signaturePosition,
-                    cost 
+                    cost,
+                    aiFont: state.aiFont,
+                    aiSize: state.aiSize,
+                    aiIsBold: state.aiIsBold,
+                    aiIsItalic: state.aiIsItalic,
+                    aiCustomColor: state.aiCustomColor
                 }),
             });
             const result = await res.json();
@@ -311,21 +327,44 @@ const SignatureTool: React.FC<SignatureToolProps> = ({ initialImage, onClearInit
                             </>
                         ) : (
                            <>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="text-sm font-semibold text-skin-base mb-1 block">Font chữ</label>
+                                        <select value={state.aiFont} onChange={e => updateState({ aiFont: e.target.value })} className="auth-input">
+                                            {FONTS.map(f => <option key={f.name} value={f.name}>{f.name}</option>)}
+                                        </select>
+                                    </div>
+                                    <div className="flex items-end gap-2">
+                                        <button onClick={() => updateState({ aiIsBold: !state.aiIsBold })} className={`flex-1 h-[46px] text-sm font-bold rounded-md border-2 ${state.aiIsBold ? 'border-skin-border-accent bg-skin-accent/10' : 'border-skin-border bg-skin-fill-secondary'}`}>B</button>
+                                        <button onClick={() => updateState({ aiIsItalic: !state.aiIsItalic })} className={`flex-1 h-[46px] text-sm font-bold italic rounded-md border-2 ${state.aiIsItalic ? 'border-skin-border-accent bg-skin-accent/10' : 'border-skin-border bg-skin-fill-secondary'}`}>I</button>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="text-sm font-semibold text-skin-base mb-1 block">Kích thước ({state.aiSize}px)</label>
+                                    <input type="range" min="16" max="256" value={state.aiSize} onChange={e => updateState({ aiSize: Number(e.target.value) })} className="w-full accent-skin-accent" />
+                                </div>
                                 <div>
                                     <label className="text-sm font-semibold text-skin-base mb-2 block">Phong cách GenZ</label>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        {(['neon', '3d', 'graffiti', 'typography'] as AiStyle[]).map(s => (
-                                            <button key={s} onClick={() => updateState({aiStyle: s})} className={`p-3 text-xs font-bold rounded-md border-2 transition ${state.aiStyle === s ? 'border-skin-border-accent bg-skin-accent/10' : 'border-skin-border bg-skin-fill-secondary'}`}>{s.toUpperCase()}</button>
+                                    <div className="grid grid-cols-4 gap-2">
+                                        {(['neon', '3d', 'graffiti', 'typography', 'outline', 'metallic', 'glowing', 'shadow'] as AiStyle[]).map(s => (
+                                            // FIX: This comparison was causing a type error because 'none' is not a valid AiStyle.
+                                            // The check is redundant as the mapped array does not contain 'none'.
+                                            <button key={s} onClick={() => updateState({aiStyle: s})} className={`p-2 text-xs font-bold rounded-md border-2 transition ${state.aiStyle === s ? 'border-skin-border-accent bg-skin-accent/10' : 'border-skin-border bg-skin-fill-secondary'}`}>{s.toUpperCase()}</button>
                                         ))}
                                     </div>
                                 </div>
                                 <div>
                                     <label className="text-sm font-semibold text-skin-base mb-2 block">Bảng màu</label>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        {(['rainbow', 'fire', 'ice', 'gold'] as AiColor[]).map(c => (
-                                            <button key={c} onClick={() => updateState({aiColor: c})} className={`p-3 text-xs font-bold rounded-md border-2 transition ${state.aiColor === c ? 'border-skin-border-accent bg-skin-accent/10' : 'border-skin-border bg-skin-fill-secondary'}`}>{c.toUpperCase()}</button>
+                                    <div className="grid grid-cols-4 gap-2">
+                                        {(['rainbow', 'fire', 'ice', 'gold', 'pastel', 'vaporwave', 'monochrome', 'custom'] as AiColor[]).map(c => (
+                                            <button key={c} onClick={() => updateState({aiColor: c})} className={`p-2 text-xs font-bold rounded-md border-2 transition ${state.aiColor === c ? 'border-skin-border-accent bg-skin-accent/10' : 'border-skin-border bg-skin-fill-secondary'}`}>{c.toUpperCase()}</button>
                                         ))}
                                     </div>
+                                     {state.aiColor === 'custom' && (
+                                        <div className="mt-2">
+                                            <input type="color" value={state.aiCustomColor} onChange={e => updateState({ aiCustomColor: e.target.value })} className="w-full h-[46px] bg-skin-fill-secondary rounded-md border border-skin-border cursor-pointer" />
+                                        </div>
+                                    )}
                                 </div>
                            </>
                         )}

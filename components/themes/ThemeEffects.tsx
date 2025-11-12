@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useEffect } from 'react';
+import React, { useMemo } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 
 // --- Snowfall Effect Component ---

@@ -20,7 +20,6 @@ import AuthModal from '../components/landing/AuthModal';
 import TopUpModal from '../components/landing/TopUpModal';
 import InfoModal from '../components/landing/InfoModal';
 import ImageModal from '../components/common/ImageModal';
-import AuroraBackground from '../components/common/AuroraBackground'; // NEW
 import AnimatedSection from '../components/common/AnimatedSection';
 
 // Import types and data
@@ -146,8 +145,7 @@ const HomePage: React.FC = () => {
     };
 
     return (
-        <div className="bg-transparent text-skin-base font-sans leading-normal tracking-normal">
-            <AuroraBackground />
+        <div className="bg-skin-fill text-skin-base font-sans leading-normal tracking-normal">
 
             <LandingHeader 
                 user={user}

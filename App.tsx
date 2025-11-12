@@ -10,7 +10,6 @@ import BuyCreditsPage from './pages/BuyCreditsPage';
 
 // Import Common Components
 import RewardNotification from './components/common/RewardNotification';
-import ThemeEffects from './components/themes/ThemeEffects';
 
 const App: React.FC = () => {
     const { user, loading, route, toast, reward, clearReward } = useAuth();
@@ -50,13 +49,10 @@ const App: React.FC = () => {
                 pageComponent = <HomePage />;
         }
         
-        // Apply the theme wrapper universally to all pages to fix rendering issues.
+        // Apply the theme wrapper universally to all pages.
         return (
-            <div data-theme={theme} className="relative">
-                <ThemeEffects />
-                <div className="relative z-[1]">
-                    {pageComponent}
-                </div>
+            <div data-theme={theme}>
+                {pageComponent}
             </div>
         );
     };

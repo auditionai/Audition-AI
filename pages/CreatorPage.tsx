@@ -15,7 +15,6 @@ import InfoModal from '../components/creator/InfoModal';
 import TopUpModal from '../components/creator/TopUpModal';
 import CheckInModal from '../components/CheckInModal';
 import AnnouncementModal from '../components/AnnouncementModal';
-import ThemeEffects from '../components/themes/ThemeEffects';
 
 // Define the possible tabs for type safety
 export type CreatorTab = 'tool' | 'leaderboard' | 'my-creations' | 'settings';
@@ -66,7 +65,6 @@ const CreatorPage: React.FC<CreatorPageProps> = ({ activeTab }) => {
 
     return (
         <div data-theme={theme} className="flex flex-col min-h-screen bg-skin-fill text-skin-base pb-16 md:pb-0">
-             <ThemeEffects />
              <CreatorHeader
                 onTopUpClick={handleTopUpClick}
                 activeTab={activeTab}

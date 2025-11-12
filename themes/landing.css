@@ -50,11 +50,6 @@ body {
 /* --- Keyframe Animations --- */
 @keyframes subtle-pulse-anim { 0%, 100% { transform: scale(1); box-shadow: 0 0 15px rgba(244, 114, 182, 0.4), 0 0 5px rgba(244, 114, 182, 0.6) inset; } 50% { transform: scale(1.05); box-shadow: 0 0 30px rgba(244, 114, 182, 0.6), 0 0 10px rgba(244, 114, 182, 0.8) inset; } }
 @keyframes scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
-@keyframes aurora-move {
-    0% { transform: translate(-50%, -50%) rotate(0deg) scale(1); }
-    50% { transform: translate(-55%, -45%) rotate(180deg) scale(1.2); }
-    100% { transform: translate(-50%, -50%) rotate(360deg) scale(1); }
-}
 
 /* --- Animation Utility Classes (fade-in* moved to index.css) --- */
 
@@ -119,23 +114,3 @@ body {
   opacity: 1;
   background: linear-gradient(45deg, rgba(247, 37, 133, 0), rgba(247, 37, 133, 0.5), rgba(247, 37, 133, 0));
 }
-
-/* --- Special Effects --- */
-/* Aurora Background Effect */
-.aurora-container {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    filter: blur(100px);
-    overflow: hidden;
-}
-.aurora-item {
-    position: absolute;
-    background-image: radial-gradient(circle, var(--aurora-color) 0%, transparent 60%);
-    border-radius: 50%;
-    animation: aurora-move linear infinite alternate;
-}
-.aurora-item:nth-child(2) { animation-direction: alternate-reverse; }
-.aurora-item:nth-child(3) { animation-duration: 30s !important; }
-.aurora-item:nth-child(4) { animation-duration: 35s !important; animation-direction: alternate-reverse; }

@@ -7,7 +7,6 @@ import InfoModal from '../components/creator/InfoModal';
 import CheckInModal from '../components/CheckInModal';
 import BottomNavBar from '../components/common/BottomNavBar';
 import { useTheme } from '../contexts/ThemeContext';
-import ThemeEffects from '../components/themes/ThemeEffects';
 
 const BuyCreditsPage: React.FC = () => {
     const { session, navigate, showToast } = useAuth();
@@ -80,7 +79,6 @@ const BuyCreditsPage: React.FC = () => {
 
     return (
         <div data-theme={theme} className="flex flex-col min-h-screen bg-skin-fill text-skin-base pb-16 md:pb-0">
-            <ThemeEffects />
             <CreatorHeader onTopUpClick={() => {}} activeTab={'tool'} onNavigate={navigate} onCheckInClick={() => setCheckInModalOpen(true)} />
             <main className="flex-grow pt-24 md:pt-28">
                 <div className="container mx-auto px-4">

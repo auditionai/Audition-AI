@@ -87,48 +87,39 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
           </div>
           
            <nav className="hidden md:flex items-center gap-2 absolute left-1/2 -translate-x-1/2">
-                <button 
-                  onClick={() => handleNavClick('leaderboard')} 
-                  className={`flex items-center gap-2 px-3 md:px-4 py-2 rounded-full text-sm font-bold transition-all duration-300 shadow-lg
-                    ${activeTab === 'leaderboard' 
-                      ? 'bg-yellow-400 text-black shadow-yellow-400/30' 
-                      : 'bg-yellow-400/20 text-yellow-300 hover:bg-yellow-400/30 hover:shadow-yellow-400/20'}`
-                  }>
+                <button
+                  onClick={() => handleNavClick('leaderboard')}
+                  className={`themed-nav-button leaderboard ${activeTab === 'leaderboard' ? 'is-active' : ''}`}
+                  >
                     <i className="ph-fill ph-crown-simple text-base"></i>
                     <span className="hidden md:inline">Bảng xếp hạng</span>
                 </button>
-                <button 
+                <button
                   onClick={onCheckInClick}
-                  className="relative flex items-center gap-2 px-3 md:px-4 py-2 rounded-full text-sm font-bold transition-all duration-300 shadow-lg bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 hover:shadow-cyan-400/20"
+                  className="themed-nav-button checkin"
                 >
                     {!hasCheckedInToday && (
                         <span className="absolute -top-0.5 -right-0.5 flex h-3 w-3">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-pink-400 opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-3 w-3 bg-pink-500 border-2 border-skin-fill"></span>
+                            <span className="notification-dot-ping animate-ping absolute inline-flex h-full w-full rounded-full opacity-75"></span>
+                            <span className="notification-dot relative inline-flex rounded-full h-3 w-3 border-2"></span>
                         </span>
                     )}
                     <i className="ph-fill ph-calendar-check text-base"></i>
                     <span className="hidden md:inline">Điểm danh</span>
                 </button>
-                <button 
-                  onClick={() => handleNavClick('my-creations')} 
-                  className={`flex items-center gap-2 px-3 md:px-4 py-2 rounded-full text-sm font-bold transition-all duration-300 shadow-lg
-                    ${activeTab === 'my-creations' 
-                      ? 'bg-blue-400 text-black shadow-blue-400/30' 
-                      : 'bg-blue-400/20 text-blue-300 hover:bg-blue-400/30 hover:shadow-blue-400/20'}`
-                  }>
+                <button
+                  onClick={() => handleNavClick('my-creations')}
+                  className={`themed-nav-button creations ${activeTab === 'my-creations' ? 'is-active' : ''}`}
+                  >
                     <i className="ph-fill ph-images text-base"></i>
                     <span className="hidden md:inline">Tác phẩm</span>
                 </button>
                 {/* Admin Gallery Button */}
                 {user.is_admin && (
-                    <button 
-                      onClick={() => handleNavClick('admin-gallery')} 
-                      className={`flex items-center gap-2 px-3 md:px-4 py-2 rounded-full text-sm font-bold transition-all duration-300 shadow-lg
-                        ${activeTab === 'admin-gallery' 
-                          ? 'bg-red-500 text-white shadow-red-500/30' 
-                          : 'bg-red-500/20 text-red-300 hover:bg-red-500/30 hover:shadow-red-400/20'}`
-                      }>
+                    <button
+                      onClick={() => handleNavClick('admin-gallery')}
+                      className={`themed-nav-button admin ${activeTab === 'admin-gallery' ? 'is-active' : ''}`}
+                      >
                         <i className="ph-fill ph-shield-check text-base"></i>
                         <span className="hidden md:inline">Quản lý Gallery</span>
                     </button>
@@ -150,13 +141,13 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
             <div className="relative" ref={notificationRef}>
                 <button
                   onClick={handleNotificationClick}
-                  className="p-2 rounded-full bg-white/10 text-gray-300 hover:text-white hover:bg-white/20 transition-colors"
+                  className="themed-notification-button"
                 >
                     <i className="ph-fill ph-bell text-xl"></i>
                     {hasUnread && (
                          <span className="absolute -top-0.5 -right-0.5 flex h-3 w-3">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-pink-400 opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-3 w-3 bg-pink-500 border-2 border-skin-fill"></span>
+                            <span className="notification-dot-ping animate-ping absolute inline-flex h-full w-full rounded-full opacity-75"></span>
+                            <span className="notification-dot relative inline-flex rounded-full h-3 w-3 border-2"></span>
                         </span>
                     )}
                 </button>

@@ -5,9 +5,8 @@ import InstructionModal from '../common/InstructionModal';
 import SignatureTool from './tools/SignatureTool';
 import { useAuth } from '../../contexts/AuthContext';
 import UtilInstructionModal from '../ai-tool/InstructionModal'; // Renamed to avoid confusion
-import AILoveStoryPage from '../../pages/AILoveStoryPage';
 
-type AIToolTab = 'generator' | 'love-story' | 'utilities';
+type AIToolTab = 'generator' | 'utilities';
 type UtilityTab = 'bg-remover' | 'signature';
 
 const AITool: React.FC = () => {
@@ -105,13 +104,6 @@ const AITool: React.FC = () => {
                         Trình Tạo Ảnh AI
                     </button>
                     <button
-                        onClick={() => setActiveTab('love-story')}
-                        className={`px-6 py-3 font-semibold transition-colors ${activeTab === 'love-story' ? 'text-pink-400 border-b-2 border-pink-400' : 'text-gray-400 hover:text-white'}`}
-                    >
-                       <i className="ph-fill ph-heart mr-2"></i>
-                        AI Love Story
-                    </button>
-                    <button
                         onClick={() => setActiveTab('utilities')}
                         className={`px-6 py-3 font-semibold transition-colors ${activeTab === 'utilities' ? 'text-pink-400 border-b-2 border-pink-400' : 'text-gray-400 hover:text-white'}`}
                     >
@@ -134,9 +126,6 @@ const AITool: React.FC = () => {
                            onStyleImageChange={setStyleImage}
                            onSendToSignatureTool={handleSendToSignatureTool}
                         />
-                    )}
-                    {activeTab === 'love-story' && (
-                        <AILoveStoryPage />
                     )}
                     {activeTab === 'utilities' && (
                         <div>

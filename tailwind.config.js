@@ -2,9 +2,7 @@
 export default {
   content: [
     "./index.html",
-    "./App.tsx",
-    "./index.tsx",
-    "./{components,pages,contexts,hooks,utils,constants,themes,netlify}/**/*.{js,ts,jsx,tsx}",
+    "./**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
     extend: {
@@ -15,7 +13,7 @@ export default {
           'fill-modal': 'var(--color-fill-modal)',
           'input-bg': 'var(--color-input-bg)',
           base: 'var(--color-text-base)',
-          muted: 'rgb(var(--color-text-muted-rgb) / <alpha-value>)',
+          muted: 'var(--color-text-muted)',
           accent: 'rgb(var(--color-accent) / <alpha-value>)',
           'accent-secondary': 'var(--color-accent-secondary)',
           'accent-text': 'var(--color-accent-text)',

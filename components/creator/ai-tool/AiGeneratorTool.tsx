@@ -14,12 +14,25 @@ import ImageModal from '../../common/ImageModal';
 import ToggleSwitch from '../../ai-tool/ToggleSwitch';
 import { resizeImage } from '../../../utils/imageUtils';
 
+type ImageState = { url: string; file: File } | null;
+
 interface AiGeneratorToolProps {
-    initialCharacterImage?: { url: string; file: File } | null;
-    initialFaceImage?: { url: string; file: File } | null;
+    poseImage: ImageState;
+    onPoseImageChange: (image: ImageState) => void;
+    rawFaceImage: ImageState;
+    onRawFaceImageChange: (image: ImageState) => void;
+    processedFaceImage: string | null;
+    onProcessedFaceImageChange: (image: string | null) => void;
+    styleImage: ImageState;
+    onStyleImageChange: (image: ImageState) => void;
 }
 
-const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage, initialFaceImage }) => {
+const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({
+    poseImage, onPoseImageChange,
+    rawFaceImage, onRawFaceImageChange,
+    processedFaceImage, onProcessedFaceImageChange,
+    styleImage, onStyleImageChange
+}) => {
     const { user, session, showToast, updateUserDiamonds } = useAuth();
     const { isGenerating, progress, generatedImage, error, generateImage, resetGenerator, cancelGeneration } = useImageGenerator();
 
@@ -30,13 +43,8 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
     const [isConfirmOpen, setConfirmOpen] = useState(false);
     const [isResultModalOpen, setIsResultModalOpen] = useState(false);
     
-    // Feature States
-    const [poseImage, setPoseImage] = useState<{ url: string; file: File } | null>(null);
-    const [rawFaceImage, setRawFaceImage] = useState<{ url: string; file: File } | null>(null);
-    const [processedFaceImage, setProcessedFaceImage] = useState<string | null>(null); // Stores base64 of processed face
-    const [styleImage, setStyleImage] = useState<{ url: string; file: File } | null>(null);
+    // Feature States (now only local UI state, image state is controlled by parent)
     const [isProcessingFace, setIsProcessingFace] = useState(false);
-
     const [prompt, setPrompt] = useState('');
     const [negativePrompt, setNegativePrompt] = useState('');
     const [selectedModel, setSelectedModel] = useState<AIModel>(DETAILED_AI_MODELS.find((m: AIModel) => m.recommended) || DETAILED_AI_MODELS[0]);
@@ -50,17 +58,6 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
     const [isStyleDropdownOpen, setIsStyleDropdownOpen] = useState(false);
     const styleDropdownRef = useRef<HTMLDivElement>(null);
 
-
-    useEffect(() => {
-        if (initialCharacterImage) {
-            setPoseImage(initialCharacterImage);
-        }
-        if (initialFaceImage) {
-            setRawFaceImage(initialFaceImage);
-            setProcessedFaceImage(null);
-        }
-    }, [initialCharacterImage, initialFaceImage]);
-    
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (styleDropdownRef.current && !styleDropdownRef.current.contains(event.target as Node)) {
@@ -77,12 +74,12 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
             resizeImage(file, 1024) // Resize to max 1024px
                 .then(({ file: resizedFile, dataUrl: resizedDataUrl }: { file: File, dataUrl: string }) => {
                     const newImage = { url: resizedDataUrl, file: resizedFile };
-                    if (type === 'pose') setPoseImage(newImage);
+                    if (type === 'pose') onPoseImageChange(newImage);
                     else if (type === 'face') {
-                        setRawFaceImage(newImage);
-                        setProcessedFaceImage(null); // Reset processed image if a new one is uploaded
+                        onRawFaceImageChange(newImage);
+                        onProcessedFaceImageChange(null); // Reset processed image if a new one is uploaded
                     }
-                    else if (type === 'style') setStyleImage(newImage);
+                    else if (type === 'style') onStyleImageChange(newImage);
                 })
                 .catch((err: any) => {
                     console.error("Error resizing image:", err);
@@ -92,12 +89,12 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
     };
 
     const handleRemoveImage = (type: 'pose' | 'face' | 'style') => {
-        if (type === 'pose') setPoseImage(null);
+        if (type === 'pose') onPoseImageChange(null);
         else if (type === 'face') {
-            setRawFaceImage(null);
-            setProcessedFaceImage(null);
+            onRawFaceImageChange(null);
+            onProcessedFaceImageChange(null);
         }
-        else if (type === 'style') setStyleImage(null);
+        else if (type === 'style') onStyleImageChange(null);
     }
     
     const handleProcessFace = async () => {
@@ -116,7 +113,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                 const result = await response.json();
                 if (!response.ok) throw new Error(result.error || 'Xử lý gương mặt thất bại.');
 
-                setProcessedFaceImage(result.processedImageBase64);
+                onProcessedFaceImageChange(result.processedImageBase64);
                 updateUserDiamonds(result.newDiamondCount);
                 showToast('Xử lý & Khóa gương mặt thành công!', 'success');
             };
@@ -126,7 +123,6 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
             setIsProcessingFace(false);
         }
     };
-
 
     const generationCost = 1 + (useUpscaler ? 1 : 0);
 
@@ -160,14 +156,11 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
     const handleDownloadResult = () => {
         if (!generatedImage) return;
         
-        // Create the proxied download URL
         const downloadUrl = `/.netlify/functions/download-image?url=${encodeURIComponent(generatedImage)}`;
-
-        // Use a temporary anchor element to trigger the download
         const a = document.createElement('a');
         a.style.display = 'none';
         a.href = downloadUrl;
-        a.download = `audition-ai-${Date.now()}.png`; // Fallback filename
+        a.download = `audition-ai-${Date.now()}.png`;
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -233,7 +226,6 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
         )
     }
 
-
     return (
         <>
             <ConfirmationModal isOpen={isConfirmOpen} onClose={() => setConfirmOpen(false)} onConfirm={handleConfirmGeneration} cost={generationCost} />
@@ -248,7 +240,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                             <ImageUploader onUpload={(e) => handleImageUpload(e, 'pose')} image={poseImage} onRemove={() => handleRemoveImage('pose')} text="Tư thế & Trang phục" disabled={isImageInputDisabled} />
                             <div className="mt-2 space-y-2">
                                 <ToggleSwitch label="Face Lock (70-80%)" checked={useBasicFaceLock} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUseBasicFaceLock(e.target.checked)} disabled={isImageInputDisabled || !poseImage} />
-                                <p className="text-xs text-gray-400 px-1 leading-relaxed">AI sẽ vẽ lại gương mặt dựa trên ảnh này. Để có độ chính xác <span className="font-bold text-yellow-400 neon-highlight"> 95%+</span>, hãy dùng <span className="font-bold text-pink-400">"Siêu Khóa Gương Mặt"</span>.</p>
+                                <p className="text-xs text-skin-muted px-1 leading-relaxed">AI sẽ vẽ lại gương mặt dựa trên ảnh này. Để có độ chính xác <span className="font-bold text-yellow-400 neon-highlight"> 95%+</span>, hãy dùng <span className="font-bold text-pink-400">"Siêu Khóa Gương Mặt"</span>.</p>
                             </div>
                         </SettingsBlock>
                          <SettingsBlock title="Siêu Khóa Gương Mặt" instructionKey="face" onInstructionClick={() => openInstructionModal('face')}>
@@ -264,13 +256,13 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                                         <i className="ph-fill ph-check-circle mr-1"></i> Gương mặt đã được khóa
                                     </div>
                                 )}
-                                <p className="text-xs text-gray-400 px-1 leading-relaxed">Tải ảnh chân dung rõ nét, sau đó <span className="font-bold text-cyan-400 neon-highlight">bắt buộc phải nhấn nút "Xử lý"</span> để AI làm nét và khóa gương mặt. Thao tác này tốn <span className="font-bold text-pink-400">1 kim cương</span>.</p>
+                                <p className="text-xs text-skin-muted px-1 leading-relaxed">Tải ảnh chân dung rõ nét, sau đó <span className="font-bold text-cyan-400 neon-highlight">bắt buộc phải nhấn nút "Xử lý"</span> để AI làm nét và khóa gương mặt. Thao tác này tốn <span className="font-bold text-pink-400">1 kim cương</span>.</p>
                             </div>
                         </SettingsBlock>
                          <SettingsBlock title="Ảnh Phong Cách" instructionKey="style" onInstructionClick={() => openInstructionModal('style')}>
                             <ImageUploader onUpload={(e) => handleImageUpload(e, 'style')} image={styleImage} onRemove={() => handleRemoveImage('style')} text="Style Reference" processType="style" disabled={isImageInputDisabled} />
                             <div className="mt-2 space-y-2">
-                                <p className="text-xs text-gray-400 px-1 leading-relaxed">AI sẽ <span className="font-bold text-cyan-400 neon-highlight">học hỏi</span> dải màu, ánh sáng và bố cục từ ảnh này để áp dụng vào tác phẩm của bạn.</p>
+                                <p className="text-xs text-skin-muted px-1 leading-relaxed">AI sẽ <span className="font-bold text-cyan-400 neon-highlight">học hỏi</span> dải màu, ánh sáng và bố cục từ ảnh này để áp dụng vào tác phẩm của bạn.</p>
                             </div>
                         </SettingsBlock>
                     </div>
@@ -285,14 +277,14 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                     <SettingsBlock title="Cài đặt Nâng cao" instructionKey="advanced" onInstructionClick={() => openInstructionModal('advanced')}>
                         <div className="space-y-4">
                             <div>
-                                <label className="text-sm font-semibold text-gray-300 mb-1 block">Mô hình AI</label>
+                                <label className="text-sm font-semibold text-skin-base mb-1 block">Mô hình AI</label>
                                 <button onClick={() => setModelModalOpen(true)} className="p-2 bg-black/30 rounded-md border border-gray-600 hover:border-pink-500 text-left w-full transition auth-input">
                                     <p className="font-semibold text-white truncate">{selectedModel.name}</p>
                                 </button>
                             </div>
                             
                             <div className="relative" ref={styleDropdownRef}>
-                                <label className="text-sm font-semibold text-gray-300 mb-1 block">Phong cách</label>
+                                <label className="text-sm font-semibold text-skin-base mb-1 block">Phong cách</label>
                                 <div className="custom-select-wrapper">
                                     <button onClick={() => setIsStyleDropdownOpen(!isStyleDropdownOpen)} className="custom-select-trigger">
                                         <span>{STYLE_PRESETS_NEW.find((p: StylePreset) => p.id === selectedStyle)?.name}</span>
@@ -312,22 +304,22 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                             </div>
 
                              <div>
-                                <label className="text-sm font-semibold text-gray-300 mb-1 block">Prompt Phủ định</label>
+                                <label className="text-sm font-semibold text-skin-base mb-1 block">Prompt Phủ định</label>
                                 <textarea value={negativePrompt} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNegativePrompt(e.target.value)} placeholder="VD: xấu, mờ, nhiều tay..." className="w-full p-2 bg-black/30 rounded-md border border-gray-600 focus:border-pink-500 transition text-sm text-white resize-none auth-input" rows={2} />
                             </div>
 
                              <div>
-                                <label className="text-sm font-semibold text-gray-300 mb-1 block">Seed</label>
+                                <label className="text-sm font-semibold text-skin-base mb-1 block">Seed</label>
                                  <input type="number" value={seed} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSeed(e.target.value === '' ? '' : parseInt(e.target.value, 10))} placeholder="Để trống để tạo ngẫu nhiên" className="w-full p-2 bg-black/30 rounded-md border border-gray-600 focus:border-pink-500 transition text-sm text-white auth-input" />
                             </div>
                             
                             <div>
-                                <label className="text-sm font-semibold text-gray-300 mb-2 block">Tỷ lệ khung hình</label>
+                                <label className="text-sm font-semibold text-skin-base mb-2 block">Tỷ lệ khung hình</label>
                                 <div className="grid grid-cols-5 gap-2">
                                     {(['3:4', '1:1', '4:3', '9:16', '16:9'] as const).map(ar => {
                                         const dims: { [key: string]: string } = { '3:4': 'w-3 h-4', '1:1': 'w-4 h-4', '4:3': 'w-4 h-3', '9:16': 'w-[1.125rem] h-5', '16:9': 'w-5 h-[1.125rem]' };
                                         return (
-                                            <button key={ar} onClick={() => setAspectRatio(ar)} className={`p-2 rounded-md flex flex-col items-center justify-center gap-1 border-2 transition ${aspectRatio === ar ? 'selected-glow' : 'border-gray-600 bg-white/5 hover:border-pink-500/50 text-gray-300'}`}>
+                                            <button key={ar} onClick={() => setAspectRatio(ar)} className={`p-2 rounded-md flex flex-col items-center justify-center gap-1 border-2 transition ${aspectRatio === ar ? 'selected-glow' : 'border-skin-border bg-skin-fill-secondary hover:border-pink-500/50 text-skin-base'}`}>
                                                 <div className={`${dims[ar]} bg-gray-500 rounded-sm`}/>
                                                 <span className="text-xs font-semibold">{ar}</span>
                                             </button>
@@ -338,15 +330,15 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                             
                             <div>
                                 <ToggleSwitch label="Làm Nét & Nâng Cấp (+1 💎)" checked={useUpscaler} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUseUpscaler(e.target.checked)} />
-                                <p className="text-xs text-gray-400 px-1 mt-1 leading-relaxed">Khi bật, ảnh AI tạo ra sẽ có kết quả <span className="font-bold text-cyan-400 neon-highlight">siêu nét</span>, chi tiết rõ ràng, và dung lượng ảnh cao hơn.</p>
+                                <p className="text-xs text-skin-muted px-1 mt-1 leading-relaxed">Khi bật, ảnh AI tạo ra sẽ có kết quả <span className="font-bold text-cyan-400 neon-highlight">siêu nét</span>, chi tiết rõ ràng, và dung lượng ảnh cao hơn.</p>
                             </div>
                         </div>
                     </SettingsBlock>
                     
                     <div className="mt-auto pt-6 space-y-4">
                         <div className="text-center text-sm p-3 bg-black/20 rounded-lg">
-                            <p className="text-gray-400">Chi phí: <span className="font-bold text-pink-400 flex items-center justify-center gap-1">{generationCost} <i className="ph-fill ph-diamonds-four"></i></span></p>
-                            <p className="text-gray-400">Hiện có: <span className="font-bold text-white">{user?.diamonds.toLocaleString() || 0} 💎</span></p>
+                            <p className="text-skin-muted">Chi phí: <span className="font-bold text-pink-400 flex items-center justify-center gap-1">{generationCost} <i className="ph-fill ph-diamonds-four"></i></span></p>
+                            <p className="text-skin-muted">Hiện có: <span className="font-bold text-white">{user?.diamonds.toLocaleString() || 0} 💎</span></p>
                         </div>
                         <button onClick={handleGenerateClick} disabled={isGenerating || !prompt.trim()} className="themed-button-primary w-full px-8 py-4 font-bold text-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
                             <i className="ph-fill ph-magic-wand"></i>

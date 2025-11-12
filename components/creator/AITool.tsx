@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import AiGeneratorTool from './ai-tool/AiGeneratorTool';
 import BgRemoverTool from '../ai-tool/BgRemoverTool';
 import InstructionModal from '../common/InstructionModal';
+import { AIModel } from '../../types';
 
 type AIToolTab = 'generator' | 'utilities';
 
@@ -10,19 +11,20 @@ const AITool: React.FC = () => {
     const [activeTab, setActiveTab] = useState<AIToolTab>('generator');
     const [isInstructionModalOpen, setInstructionModalOpen] = useState(false);
     
-    // State to pass images between tools
-    const [initialCharacterImage, setInitialCharacterImage] = useState<{ url: string; file: File } | null>(null);
-    const [initialFaceImage, setInitialFaceImage] = useState<{ url: string; file: File } | null>(null);
+    // State is now LIFTED to this parent component to persist across tabs
+    const [poseImage, setPoseImage] = useState<{ url: string; file: File } | null>(null);
+    const [rawFaceImage, setRawFaceImage] = useState<{ url: string; file: File } | null>(null);
+    const [processedFaceImage, setProcessedFaceImage] = useState<string | null>(null);
+    const [styleImage, setStyleImage] = useState<{ url: string; file: File } | null>(null);
 
     const handleMoveToGenerator = (image: { url: string; file: File }) => {
-        setInitialCharacterImage(image);
-        setInitialFaceImage(null); // Clear face image when a full character is moved
+        setPoseImage(image);
         setActiveTab('generator');
     };
     
     const handleMoveFaceToGenerator = (image: { url: string; file: File }) => {
-        setInitialFaceImage(image);
-        setInitialCharacterImage(null); // Clear character image when only a face is moved
+        setRawFaceImage(image);
+        setProcessedFaceImage(null); // Reset processed image when a new raw face is passed
         setActiveTab('generator');
     };
 
@@ -74,9 +76,15 @@ const AITool: React.FC = () => {
                 <div className="p-4 bg-skin-fill-secondary rounded-2xl border border-skin-border shadow-lg">
                     {activeTab === 'generator' && (
                         <AiGeneratorTool 
-                            key={`${initialCharacterImage?.url}-${initialFaceImage?.url}`} // Force re-mount when images are passed
-                            initialCharacterImage={initialCharacterImage} 
-                            initialFaceImage={initialFaceImage}
+                           // Pass all state and setters down as props
+                           poseImage={poseImage}
+                           onPoseImageChange={setPoseImage}
+                           rawFaceImage={rawFaceImage}
+                           onRawFaceImageChange={setRawFaceImage}
+                           processedFaceImage={processedFaceImage}
+                           onProcessedFaceImageChange={setProcessedFaceImage}
+                           styleImage={styleImage}
+                           onStyleImageChange={setStyleImage}
                         />
                     )}
                     {activeTab === 'utilities' && (

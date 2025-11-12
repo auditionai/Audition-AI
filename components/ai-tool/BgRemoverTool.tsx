@@ -147,7 +147,7 @@ const BgRemoverTool: React.FC<BgRemoverToolProps> = ({ onMoveToGenerator, onMove
             
                 {/* Left Column: Upload */}
                 <div className="flex flex-col">
-                    <h3 className="font-semibold mb-3 text-lg">1. Tải ảnh lên</h3>
+                    <h3 className="themed-heading text-lg font-bold themed-title-glow mb-3">1. Tải ảnh lên</h3>
                     <div className="p-4 bg-black/20 rounded-lg border border-white/10 flex-grow flex flex-col aspect-square">
                         <label className="relative w-full flex-grow min-h-[12rem] flex flex-col items-center justify-center text-center text-gray-400 rounded-lg border-2 border-dashed border-gray-600 hover:border-pink-500 cursor-pointer bg-black/20">
                             <i className="ph-fill ph-upload-simple text-4xl"></i>
@@ -179,8 +179,8 @@ const BgRemoverTool: React.FC<BgRemoverToolProps> = ({ onMoveToGenerator, onMove
         
                 {/* Right Column: Results */}
                 <div className="flex flex-col">
-                    <h3 className="font-semibold mb-3 text-lg">2. Kết quả (Lưu tạm)</h3>
-                    <p className="text-xs text-gray-500 -mt-2 mb-3">Lưu ý: Ảnh chỉ được lưu tạm thời. Tải lại trang sẽ làm mất ảnh.</p>
+                    <h3 className="themed-heading text-lg font-bold themed-title-glow mb-1">2. Kết quả (Lưu tạm)</h3>
+                    <p className="text-xs text-skin-muted mb-2">Lưu ý: Ảnh chỉ được lưu tạm thời. Tải lại trang sẽ làm mất ảnh.</p>
                     <div className="bg-black/20 rounded-lg border border-white/10 flex-grow p-4 aspect-square">
                         {processedImages.length === 0 && !isProcessing ? (
                             <div className="flex flex-col items-center justify-center h-full text-gray-500 text-center">

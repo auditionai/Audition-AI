@@ -172,7 +172,7 @@ const GummyCandyRainEffect: React.FC = () => {
 };
 
 
-// --- NEW: Caustic Effect ---
+// --- Caustic Effect ---
 const CausticEffect: React.FC = () => {
     return (
         <>
@@ -232,6 +232,59 @@ const CausticEffect: React.FC = () => {
     );
 };
 
+// --- Cyberpunk Aurora Effect Component ---
+const CyberpunkAuroraEffect: React.FC = () => {
+    return (
+        <>
+            <style>{`
+                .cyber-aurora-container {
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    pointer-events: none;
+                    z-index: 0;
+                    overflow: hidden;
+                }
+                .cyber-aurora-container::before,
+                .cyber-aurora-container::after {
+                    content: '';
+                    position: absolute;
+                    width: 150vw;
+                    height: 150vh;
+                    border-radius: 50%;
+                    opacity: 0.2;
+                    mix-blend-mode: screen;
+                    filter: blur(100px);
+                    will-change: transform, opacity;
+                }
+                .cyber-aurora-container::before {
+                    top: -50%;
+                    left: -50%;
+                    background: radial-gradient(circle at center, #ec4899, transparent 40%);
+                    animation: aurora-move-1 25s infinite alternate ease-in-out;
+                }
+                .cyber-aurora-container::after {
+                    bottom: -50%;
+                    right: -50%;
+                    background: radial-gradient(circle at center, #8b5cf6, transparent 40%);
+                    animation: aurora-move-2 30s infinite alternate ease-in-out;
+                }
+                @keyframes aurora-move-1 {
+                    from { transform: translate(0, 0) rotate(0deg); }
+                    to { transform: translate(20vw, 20vh) rotate(30deg); }
+                }
+                @keyframes aurora-move-2 {
+                    from { transform: translate(0, 0) rotate(0deg); }
+                    to { transform: translate(-20vw, -20vh) rotate(-30deg); }
+                }
+            `}</style>
+            <div className="cyber-aurora-container" aria-hidden="true"></div>
+        </>
+    );
+};
+
 
 // --- Main ThemeEffects Component ---
 // This component dynamically renders effects based on the selected theme.
@@ -239,6 +292,8 @@ const ThemeEffects: React.FC = () => {
     const { theme } = useTheme();
 
     switch (theme) {
+        case 'cyber-punk':
+            return <CyberpunkAuroraEffect />;
         case 'classic-dark':
             return <SnowfallEffect />;
         case 'dreamy-galaxy':

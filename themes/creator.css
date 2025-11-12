@@ -60,9 +60,9 @@
 
 /* 4. Giáng Sinh (Classic Dark) */
 [data-theme='classic-dark'] {
-    --color-fill: #1a202c;
-    --color-fill-secondary: rgba(45, 55, 72, 0.5);
-    --color-fill-modal: #2d3748;
+    --color-fill: #11231E; /* Christmas Tree Green */
+    --color-fill-secondary: rgba(23, 48, 41, 0.5);
+    --color-fill-modal: #143029;
     --color-text-base: #E2E8F0;
     --color-text-muted: #A0AEC0;
     --color-accent: 239, 68, 68; /* #EF4444 */

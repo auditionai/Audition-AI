@@ -3,7 +3,6 @@ import React, { useState } from 'react';
 import AiGeneratorTool from './ai-tool/AiGeneratorTool';
 import BgRemoverTool from '../ai-tool/BgRemoverTool';
 import InstructionModal from '../common/InstructionModal';
-import { AIModel } from '../../types';
 
 type AIToolTab = 'generator' | 'utilities';
 

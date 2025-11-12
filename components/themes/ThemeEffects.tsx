@@ -47,16 +47,19 @@ const SnowfallEffect: React.FC = () => {
     );
 };
 
-// --- NEW: Shooting Star Effect Component ---
+// --- UPDATED: Shooting Star Effect Component ---
 const ShootingStarEffect: React.FC = () => {
     const stars = useMemo(() => {
         const starArray = [];
-        const numStars = 20; // Density of shooting stars
+        const numStars = 10; // Reduced density
         for (let i = 0; i < numStars; i++) {
+            const isRtl = Math.random() < 0.5; // Randomize direction
             const style: React.CSSProperties = {
                 top: `${Math.random() * 100}%`,
-                animationDuration: `${Math.random() * 5 + 3}s`, // 3s to 8s
-                animationDelay: `${Math.random() * 10}s`,
+                animationName: isRtl ? 'shooting-star-anim-rtl' : 'shooting-star-anim-ltr',
+                animationDuration: `${Math.random() * 7 + 5}s`, // Slower: 5s to 12s
+                animationDelay: `${Math.random() * 20}s`, // Less frequent: 0s to 20s delay
+                ...(isRtl ? { right: '-200px' } : { left: '-200px' })
             };
             starArray.push(<div key={i} className="shooting-star" style={style} />);
         }
@@ -72,13 +75,12 @@ const ShootingStarEffect: React.FC = () => {
                 }
                 .shooting-star {
                     position: absolute;
-                    right: -200px; /* Start off-screen */
                     width: 2px;
                     height: 2px;
                     background-color: #fff;
                     border-radius: 50%;
-                    box-shadow: 0 0 6px #fff, 0 0 10px #BB86FC;
-                    animation-name: shooting-star-anim;
+                    /* Brighter, more sparkly glow */
+                    box-shadow: 0 0 8px #fff, 0 0 14px #BB86FC, 0 0 20px #8A2BE2;
                     animation-timing-function: linear;
                     animation-iteration-count: infinite;
                     will-change: transform;
@@ -89,17 +91,29 @@ const ShootingStarEffect: React.FC = () => {
                     top: 50%;
                     transform: translateY(-50%);
                     right: 1px;
-                    width: 150px;
+                    width: 200px; /* Longer tail */
                     height: 1px;
                     background: linear-gradient(to right, rgba(255, 255, 255, 0.8), transparent);
                 }
-                @keyframes shooting-star-anim {
+                /* Animation for Right-to-Left stars */
+                @keyframes shooting-star-anim-rtl {
                     from {
                         transform: translateX(0) translateY(0) rotate(-45deg);
                         opacity: 1;
                     }
                     to {
                         transform: translateX(-120vw) translateY(120vh) rotate(-45deg);
+                        opacity: 0;
+                    }
+                }
+                /* NEW Animation for Left-to-Right stars */
+                @keyframes shooting-star-anim-ltr {
+                    from {
+                        transform: translateX(0) translateY(0) rotate(45deg);
+                        opacity: 1;
+                    }
+                    to {
+                        transform: translateX(120vw) translateY(120vh) rotate(45deg);
                         opacity: 0;
                     }
                 }

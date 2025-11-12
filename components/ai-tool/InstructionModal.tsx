@@ -1,8 +1,7 @@
-// FIX: Create the content for the ai-tool InstructionModal component.
 import React from 'react';
 import Modal from '../common/Modal';
 
-type InstructionKey = 'character' | 'style' | 'prompt' | 'advanced' | 'face' | null;
+type InstructionKey = 'character' | 'style' | 'prompt' | 'advanced' | 'face' | 'bg-remover' | 'signature' | null;
 
 interface InstructionModalProps {
   isOpen: boolean;
@@ -84,6 +83,48 @@ const instructionContent = {
       </>
     ),
   },
+  'bg-remover': {
+    title: 'Hướng Dẫn: Tách Nền',
+    content: (
+      <>
+        <p>Công cụ này giúp bạn tự động xóa phông nền khỏi ảnh, chỉ giữ lại nhân vật chính.</p>
+        <p className="font-bold mt-2">Chi phí: <span className="text-pink-400">1 Kim cương</span> cho mỗi ảnh xử lý.</p>
+        <p className="font-bold mt-4">Các bước thực hiện:</p>
+        <ol className="list-decimal list-inside space-y-2 mt-2">
+            <li><strong>Tải ảnh:</strong> Nhấn hoặc kéo thả ảnh bạn muốn tách nền vào ô bên trái.</li>
+            <li><strong>Xử lý:</strong> Nhấn nút 'Tách nền'. Ảnh sẽ được xử lý và kết quả sẽ xuất hiện ở ô 'Kết quả' bên phải.</li>
+            <li><strong>Lưu ý:</strong> Ảnh kết quả chỉ được lưu tạm thời. Tải lại trang sẽ làm mất ảnh.</li>
+            <li><strong>Sử dụng:</strong> Nhấn vào ảnh kết quả để mở các tùy chọn:</li>
+        </ol>
+        <ul className="list-disc list-inside pl-8 space-y-1 mt-1">
+            <li><strong>Sử dụng ảnh này:</strong> Chuyển ảnh đã tách nền sang công cụ 'Tạo Ảnh AI' để làm 'Ảnh Nhân Vật'.</li>
+            <li><strong>Crop Gương Mặt:</strong> Cắt lấy phần gương mặt và chuyển sang mục 'Siêu Khóa Gương Mặt'.</li>
+            <li><strong>Tải xuống:</strong> Lưu ảnh đã tách nền về máy.</li>
+        </ul>
+      </>
+    )
+  },
+  'signature': {
+    title: 'Hướng Dẫn: Chèn Chữ Ký',
+    content: (
+       <>
+        <p>Công cụ này cho phép bạn thêm chữ ký hoặc văn bản vào ảnh của mình.</p>
+        <p className="font-bold mt-4">Hai chế độ sử dụng:</p>
+         <ul className="list-disc list-inside space-y-2 mt-2">
+            <li><strong>Thủ công (Miễn phí):</strong> Cung cấp các tùy chọn cơ bản như font chữ, kích thước, màu sắc. Thay đổi sẽ được xem trước ngay lập tức.</li>
+            <li><strong>AI Style (1 Kim cương):</strong> Sử dụng AI để tạo ra các kiểu chữ nghệ thuật độc đáo (Neon, 3D, Graffiti...) với hiệu ứng màu sắc ấn tượng.</li>
+        </ul>
+        <p className="font-bold mt-4">Các bước thực hiện:</p>
+        <ol className="list-decimal list-inside space-y-2 mt-2">
+            <li><strong>Tải ảnh:</strong> Tải lên ảnh của bạn, hoặc ảnh sẽ được tự động chuyển sang từ công cụ 'Tạo Ảnh AI'.</li>
+            <li><strong>Chọn vị trí:</strong> Kéo thả ô 'Vị trí' trên ảnh để xác định nơi bạn muốn đặt chữ ký.</li>
+            <li><strong>Tùy chỉnh:</strong> Nhập nội dung chữ ký và chọn các tùy chọn kiểu dáng, màu sắc mong muốn.</li>
+            <li><strong>Áp dụng:</strong> Nhấn nút 'Áp dụng'. Nếu dùng chế độ AI, hệ thống sẽ mất vài giây để xử lý.</li>
+            <li><strong>Tải về:</strong> Sau khi có kết quả, nhấn nút 'Tải ảnh' để lưu tác phẩm về máy.</li>
+        </ol>
+      </>
+    )
+  }
 };
 
 const InstructionModal: React.FC<InstructionModalProps> = ({ isOpen, onClose, instructionKey }) => {

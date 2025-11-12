@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
 import ConfirmationModal from '../../ConfirmationModal';
@@ -14,7 +12,13 @@ const FONTS = [
     { name: 'Montserrat', class: 'font-["Montserrat"]' },
     { name: 'Orbitron', class: 'font-["Orbitron"]' },
     { name: 'Playfair Display', class: 'font-["Playfair_Display"]' },
+    { name: 'Dancing Script', class: 'font-["Dancing_Script"]' },
+    { name: 'Lobster', class: 'font-["Lobster"]' },
+    { name: 'Pacifico', class: 'font-["Pacifico"]' },
+    { name: 'Caveat', class: 'font-["Caveat"]' },
+    { name: 'Bebas Neue', class: 'font-["Bebas_Neue"]' },
 ];
+
 
 type ToolMode = 'manual' | 'ai';
 type AiStyle = 'neon' | '3d' | 'graffiti' | 'typography' | 'outline' | 'metallic' | 'glowing' | 'shadow';
@@ -24,6 +28,7 @@ type AiColor = 'custom' | 'rainbow' | 'fire' | 'ice' | 'gold' | 'pastel' | 'vapo
 interface SignatureToolProps {
     initialImage: string | null;
     onClearInitialImage: () => void;
+    onInstructionClick: () => void;
 }
 
 interface SignatureState {
@@ -43,7 +48,7 @@ interface SignatureState {
     aiCustomColor: string;
 }
 
-const SignatureTool: React.FC<SignatureToolProps> = ({ initialImage, onClearInitialImage }) => {
+const SignatureTool: React.FC<SignatureToolProps> = ({ initialImage, onClearInitialImage, onInstructionClick }) => {
     const { user, session, showToast, updateUserProfile } = useAuth();
     const [isConfirmOpen, setConfirmOpen] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
@@ -250,6 +255,12 @@ const SignatureTool: React.FC<SignatureToolProps> = ({ initialImage, onClearInit
     return (
         <div className="h-full">
             <ConfirmationModal isOpen={isConfirmOpen} onClose={() => setConfirmOpen(false)} onConfirm={handleConfirmApplyAI} cost={cost} isLoading={isProcessing} />
+            <div className="flex justify-between items-center mb-4">
+                 <h3 className="themed-heading text-lg font-bold themed-title-glow">Công Cụ Chèn Chữ Ký</h3>
+                 <button onClick={onInstructionClick} className="flex items-center gap-1 text-xs text-skin-accent hover:opacity-80 transition-all px-2 py-1 rounded-md bg-skin-accent/10 border border-skin-border-accent hover:bg-skin-accent/20 shadow-accent hover:shadow-accent-lg flex-shrink-0">
+                    <i className="ph-fill ph-book-open"></i> Hướng Dẫn
+                </button>
+            </div>
             <div className="flex flex-col lg:flex-row gap-6">
                 <div className="w-full lg:w-2/3">
                     <div ref={imageContainerRef} className="relative w-full aspect-square bg-black/20 rounded-lg border border-skin-border flex items-center justify-center p-2">
@@ -347,8 +358,6 @@ const SignatureTool: React.FC<SignatureToolProps> = ({ initialImage, onClearInit
                                     <label className="text-sm font-semibold text-skin-base mb-2 block">Phong cách GenZ</label>
                                     <div className="grid grid-cols-4 gap-2">
                                         {(['neon', '3d', 'graffiti', 'typography', 'outline', 'metallic', 'glowing', 'shadow'] as AiStyle[]).map(s => (
-                                            // FIX: This comparison was causing a type error because 'none' is not a valid AiStyle.
-                                            // The check is redundant as the mapped array does not contain 'none'.
                                             <button key={s} onClick={() => updateState({aiStyle: s})} className={`p-2 text-xs font-bold rounded-md border-2 transition ${state.aiStyle === s ? 'border-skin-border-accent bg-skin-accent/10' : 'border-skin-border bg-skin-fill-secondary'}`}>{s.toUpperCase()}</button>
                                         ))}
                                     </div>

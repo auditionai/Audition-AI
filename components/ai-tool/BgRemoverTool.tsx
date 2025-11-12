@@ -9,6 +9,7 @@ import ProcessedImageModal from './ProcessedImageModal';
 interface BgRemoverToolProps {
     onMoveToGenerator: (image: { url: string; file: File }) => void;
     onMoveFaceToGenerator: (image: { url: string; file: File }) => void;
+    onInstructionClick: () => void;
 }
 
 // Define a serializable structure for session storage
@@ -21,7 +22,7 @@ interface ProcessedImageData {
     fileName: string;
 }
 
-const BgRemoverTool: React.FC<BgRemoverToolProps> = ({ onMoveToGenerator, onMoveFaceToGenerator }) => {
+const BgRemoverTool: React.FC<BgRemoverToolProps> = ({ onMoveToGenerator, onMoveFaceToGenerator, onInstructionClick }) => {
     const { user, showToast } = useAuth();
     const { isProcessing, removeBackground, COST_PER_REMOVAL } = useBackgroundRemover();
 
@@ -147,7 +148,12 @@ const BgRemoverTool: React.FC<BgRemoverToolProps> = ({ onMoveToGenerator, onMove
             
                 {/* Left Column: Upload */}
                 <div className="flex flex-col">
-                    <h3 className="themed-heading text-lg font-bold themed-title-glow mb-3">1. Tải ảnh lên</h3>
+                    <div className="flex justify-between items-center mb-3">
+                        <h3 className="themed-heading text-lg font-bold themed-title-glow">1. Tải ảnh lên</h3>
+                        <button onClick={onInstructionClick} className="flex items-center gap-1 text-xs text-skin-accent hover:opacity-80 transition-all px-2 py-1 rounded-md bg-skin-accent/10 border border-skin-border-accent hover:bg-skin-accent/20 shadow-accent hover:shadow-accent-lg flex-shrink-0">
+                            <i className="ph-fill ph-book-open"></i> Hướng Dẫn
+                        </button>
+                    </div>
                     <div className="p-4 bg-black/20 rounded-lg border border-white/10 flex-grow flex flex-col aspect-square">
                         <label className="relative w-full flex-grow min-h-[12rem] flex flex-col items-center justify-center text-center text-gray-400 rounded-lg border-2 border-dashed border-gray-600 hover:border-pink-500 cursor-pointer bg-black/20">
                             <i className="ph-fill ph-upload-simple text-4xl"></i>

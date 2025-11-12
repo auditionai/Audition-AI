@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-// FIX: Corrected import path to use the version of AiGeneratorTool within the creator folder.
 import AiGeneratorTool from './ai-tool/AiGeneratorTool';
 import BgRemoverTool from '../ai-tool/BgRemoverTool';
 import InstructionModal from '../common/InstructionModal';
 import SignatureTool from './tools/SignatureTool';
 import { useAuth } from '../../contexts/AuthContext';
+import UtilInstructionModal from '../ai-tool/InstructionModal'; // Renamed to avoid confusion
 
 type AIToolTab = 'generator' | 'utilities';
 type UtilityTab = 'bg-remover' | 'signature';
@@ -15,12 +15,20 @@ const AITool: React.FC = () => {
     const [activeUtility, setActiveUtility] = useState<UtilityTab>('bg-remover');
     const [isInstructionModalOpen, setInstructionModalOpen] = useState(false);
     
-    // State to manage images shared between components
+    // NEW: State for utility-specific instruction modal
+    const [isUtilHelpOpen, setUtilHelpOpen] = useState(false);
+    const [utilHelpKey, setUtilHelpKey] = useState<'bg-remover' | 'signature' | null>(null);
+
     const [poseImage, setPoseImage] = useState<{ url: string; file: File } | null>(null);
     const [rawFaceImage, setRawFaceImage] = useState<{ url: string; file: File } | null>(null);
     const [processedFaceImage, setProcessedFaceImage] = useState<string | null>(null);
     const [styleImage, setStyleImage] = useState<{ url: string; file: File } | null>(null);
     const [imageForUtility, setImageForUtility] = useState<string | null>(null);
+
+    const openUtilHelp = (key: 'bg-remover' | 'signature') => {
+        setUtilHelpKey(key);
+        setUtilHelpOpen(true);
+    };
 
     const handleMoveToGenerator = (image: { url: string; file: File }) => {
         setPoseImage(image);
@@ -35,7 +43,6 @@ const AITool: React.FC = () => {
 
     const handleSendToSignatureTool = async (imageUrl: string) => {
         try {
-            // Use the download proxy to get the image data and avoid CORS issues with canvas
             const response = await fetch(`/.netlify/functions/download-image?url=${encodeURIComponent(imageUrl)}`);
             if (!response.ok) throw new Error('Không thể tải ảnh đã tạo.');
             
@@ -61,6 +68,11 @@ const AITool: React.FC = () => {
             <InstructionModal 
                 isOpen={isInstructionModalOpen} 
                 onClose={() => setInstructionModalOpen(false)} 
+            />
+            <UtilInstructionModal
+                isOpen={isUtilHelpOpen}
+                onClose={() => setUtilHelpOpen(false)}
+                instructionKey={utilHelpKey}
             />
             <div className="themed-main-title-container text-center max-w-4xl mx-auto mb-12">
                 <h1 
@@ -131,12 +143,14 @@ const AITool: React.FC = () => {
                                 <BgRemoverTool 
                                     onMoveToGenerator={handleMoveToGenerator}
                                     onMoveFaceToGenerator={handleMoveFaceToGenerator}
+                                    onInstructionClick={() => openUtilHelp('bg-remover')}
                                 />
                             )}
                             {activeUtility === 'signature' && (
                                 <SignatureTool 
                                     initialImage={imageForUtility}
                                     onClearInitialImage={() => setImageForUtility(null)}
+                                    onInstructionClick={() => openUtilHelp('signature')}
                                 />
                             )}
                         </div>

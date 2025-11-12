@@ -1,109 +1,128 @@
 import type { Handler, HandlerEvent } from "@netlify/functions";
+import { GoogleGenAI, Modality } from "@google/genai";
 import { supabaseAdmin } from './utils/supabaseClient';
 import { Buffer } from 'buffer';
-import Jimp from 'jimp';
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 
-// Helper function to fetch an image and return a Jimp image object
-const fetchImage = async (url: string) => {
-    try {
-        const response = await fetch(url);
-        if (!response.ok) {
-            throw new Error(`Failed to fetch image from ${url}. Status: ${response.status}`);
-        }
-        const buffer = await response.arrayBuffer();
-        return (Jimp as any).read(Buffer.from(buffer));
-    } catch (error) {
-        console.error(`Error fetching or reading image: ${url}`, error);
-        // Return a placeholder image on error to prevent total failure
-        const errorImage = new (Jimp as any)(1024, 1024, '#555555');
-        const font = await (Jimp as any).loadFont((Jimp as any).FONT_SANS_32_WHITE);
-        errorImage.print(font, 0, 0, { text: 'Image load failed', alignmentX: (Jimp as any).HORIZONTAL_ALIGN_CENTER, alignmentY: (Jimp as any).VERTICAL_ALIGN_MIDDLE }, 1024, 1024);
-        return errorImage;
-    }
-};
+const COST_PER_IMAGE = 2;
+const XP_PER_GENERATION = 15; // More XP for a premium feature
 
 const handler: Handler = async (event: HandlerEvent) => {
+    const s3Client = new S3Client({
+        region: "auto",
+        endpoint: process.env.R2_ENDPOINT!,
+        credentials: {
+            accessKeyId: process.env.R2_ACCESS_KEY_ID!,
+            secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
+        },
+    });
+
     try {
         if (event.httpMethod !== 'POST') {
             return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
         }
         
-        // Authenticate user
         const authHeader = event.headers['authorization'];
-        const token = authHeader?.split(' ')[1];
-        if (!token) return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized' }) };
+        if (!authHeader) return { statusCode: 401, body: JSON.stringify({ error: 'Authorization header is required.' }) };
+        const token = authHeader.split(' ')[1];
+        if (!token) return { statusCode: 401, body: JSON.stringify({ error: 'Bearer token is missing.' }) };
 
         const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
-        if (authError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'Invalid token.' }) };
+        if (authError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized: Invalid token.' }) };
 
-        // Parse request body
-        const { imageUrls, title, endText } = JSON.parse(event.body || '{}');
-        if (!imageUrls || !Array.isArray(imageUrls) || imageUrls.length === 0 || !title || !endText) {
-            return { statusCode: 400, body: JSON.stringify({ error: 'Missing required parameters: imageUrls, title, endText' }) };
+        const { prompt, femaleImage, maleImage, femaleFaceImage, maleFaceImage } = JSON.parse(event.body || '{}');
+        if (!prompt || !femaleImage || !maleImage) {
+            return { statusCode: 400, body: JSON.stringify({ error: 'Prompt and both character images are required.' }) };
+        }
+        
+        const { data: userData, error: userError } = await supabaseAdmin.from('users').select('diamonds, xp').eq('id', user.id).single();
+        if (userError || !userData) return { statusCode: 404, body: JSON.stringify({ error: 'User not found.' }) };
+        if (userData.diamonds < COST_PER_IMAGE) return { statusCode: 402, body: JSON.stringify({ error: `Không đủ kim cương. Cần ${COST_PER_IMAGE}, bạn có ${userData.diamonds}.` }) };
+        
+        const { data: apiKeyData, error: apiKeyError } = await supabaseAdmin.from('api_keys').select('id, key_value').eq('status', 'active').order('usage_count', { ascending: true }).limit(1).single();
+        if (apiKeyError || !apiKeyData) return { statusCode: 503, body: JSON.stringify({ error: 'Hết tài nguyên AI. Vui lòng thử lại sau.' }) };
+        
+        const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
+        const apiModel = 'gemini-2.5-flash-image';
+        
+        let fullPrompt = `Create a scene based on the following instructions, featuring the female character from the first image and the male character from the second image. \n\nPROMPT: "${prompt}"`;
+        
+        if (femaleFaceImage) {
+            fullPrompt = `(ABSOLUTE INSTRUCTION for female character: The final image MUST use the exact face from the provided female face reference image. Do NOT alter this face.)\n` + fullPrompt;
+        }
+        if (maleFaceImage) {
+            fullPrompt = `(ABSOLUTE INSTRUCTION for male character: The final image MUST use the exact face from the provided male face reference image. Do NOT alter this face.)\n` + fullPrompt;
         }
 
-        // --- Image Composition Logic ---
-        const PADDING = 40;
-        const IMG_WIDTH = 1024; // Standard width for all images
-
-        const jimpImages = await Promise.all(imageUrls.map(fetchImage));
+        const parts: any[] = [{ text: fullPrompt }];
         
-        // Resize all images to a standard width, maintaining aspect ratio
-        jimpImages.forEach(img => img.resize(IMG_WIDTH, (Jimp as any).AUTO));
-
-        // Calculate total canvas height
-        const totalImageHeight = jimpImages.reduce((sum, img) => sum + img.getHeight(), 0);
-        const HEADER_HEIGHT = 200;
-        const FOOTER_HEIGHT = 150;
-        const totalHeight = HEADER_HEIGHT + totalImageHeight + (jimpImages.length * PADDING) + FOOTER_HEIGHT;
-
-        // Create the canvas
-        const canvas = new (Jimp as any)(IMG_WIDTH + (PADDING * 2), totalHeight, '#110C13');
-
-        // Load fonts
-        const fontTitle = await (Jimp as any).loadFont((Jimp as any).FONT_SANS_64_WHITE);
-        const fontFooter = await (Jimp as any).loadFont((Jimp as any).FONT_SANS_32_WHITE);
-
-        // --- Draw Header ---
-        canvas.print(fontTitle, 0, PADDING, {
-            text: `AI Love Story`,
-            alignmentX: (Jimp as any).HORIZONTAL_ALIGN_CENTER,
-        }, canvas.getWidth(), HEADER_HEIGHT);
-         canvas.print(fontFooter, 0, PADDING + 80, {
-            text: `"${title}"`,
-            alignmentX: (Jimp as any).HORIZONTAL_ALIGN_CENTER,
-        }, canvas.getWidth(), HEADER_HEIGHT);
-
-
-        // --- Draw Images ---
-        let currentY = HEADER_HEIGHT;
-        for (const img of jimpImages) {
-            canvas.composite(img, PADDING, currentY);
-            currentY += img.getHeight() + PADDING;
-        }
-
-        // --- Draw Footer ---
-        canvas.print(fontFooter, 0, currentY, {
-            text: `"${endText}"`,
-            alignmentX: (Jimp as any).HORIZONTAL_ALIGN_CENTER,
-        }, canvas.getWidth(), FOOTER_HEIGHT / 2);
-
-        canvas.print(fontFooter, 0, currentY + (FOOTER_HEIGHT / 2), {
-            text: 'Created with AUDITION AI',
-            alignmentX: (Jimp as any).HORIZONTAL_ALIGN_CENTER,
-        }, canvas.getWidth(), FOOTER_HEIGHT / 2);
+        const addImagePart = (imageDataUrl: string) => {
+            if (!imageDataUrl) return;
+            const [header, base64] = imageDataUrl.split(',');
+            const mimeType = header.match(/:(.*?);/)?.[1] || 'image/png';
+            parts.push({ inlineData: { data: base64, mimeType } });
+        };
         
-        // Get final image as base64
-        const albumImageBase64 = await canvas.getBase64Async((Jimp as any).MIME_PNG);
+        // Order is important for the prompt instructions
+        addImagePart(femaleImage);
+        addImagePart(maleImage);
+        if (femaleFaceImage) addImagePart(femaleFaceImage);
+        if (maleFaceImage) addImagePart(maleFaceImage);
+            
+        const response = await ai.models.generateContent({
+            model: apiModel,
+            contents: { parts: parts },
+            config: { responseModalities: [Modality.IMAGE] },
+        });
+
+        const imagePartResponse = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+        if (!imagePartResponse?.inlineData) throw new Error("AI không thể tạo hình ảnh từ mô tả này. Hãy thử lại.");
+
+        const finalImageBase64 = imagePartResponse.inlineData.data;
+        const finalImageMimeType = imagePartResponse.inlineData.mimeType;
+
+        const imageBuffer = Buffer.from(finalImageBase64, 'base64');
+        const fileExtension = finalImageMimeType.split('/')[1] || 'png';
+        const fileName = `${user.id}/love-story/${Date.now()}.${fileExtension}`;
+
+        const putCommand = new PutObjectCommand({
+            Bucket: process.env.R2_BUCKET_NAME!,
+            Key: fileName,
+            Body: imageBuffer,
+            ContentType: finalImageMimeType,
+        });
+        // FIX: Cast s3Client to 'any' to bypass a likely environment-specific TypeScript type resolution error for the 'send' method.
+        await (s3Client as any).send(putCommand);
+        const publicUrl = `${process.env.R2_PUBLIC_URL}/${fileName}`;
+
+        const newDiamondCount = userData.diamonds - COST_PER_IMAGE;
+        const newXp = userData.xp + XP_PER_GENERATION;
+        
+        await Promise.all([
+            supabaseAdmin.from('users').update({ diamonds: newDiamondCount, xp: newXp }).eq('id', user.id),
+            supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id }),
+            supabaseAdmin.from('generated_images').insert({
+                user_id: user.id,
+                prompt: `[AI Love Story] ${prompt}`,
+                image_url: publicUrl,
+                model_used: apiModel,
+            }),
+            supabaseAdmin.from('diamond_transactions_log').insert({
+                user_id: user.id,
+                amount: -COST_PER_IMAGE,
+                transaction_type: 'AI_LOVE_STORY',
+                description: 'Tạo ảnh cho AI Love Story'
+            })
+        ]);
 
         return {
             statusCode: 200,
-            body: JSON.stringify({ albumImageBase64: albumImageBase64.split(',')[1] }),
+            body: JSON.stringify({ imageUrl: publicUrl, newDiamondCount, newXp }),
         };
 
     } catch (error: any) {
-        console.error("Create story album function error:", error);
-        return { statusCode: 500, body: JSON.stringify({ error: error.message || 'An unknown server error occurred.' }) };
+        console.error("Generate love story image function error:", error);
+        return { statusCode: 500, body: JSON.stringify({ error: error.message || 'Lỗi không xác định từ máy chủ.' }) };
     }
 };
 

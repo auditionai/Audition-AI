@@ -1,272 +1,332 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { resizeImage } from '../utils/imageUtils';
-import { SCENARIOS, StoryNode } from '../constants/loveStoryData';
 import ConfirmationModal from '../components/ConfirmationModal';
+import ImageUploader from '../components/ai-tool/ImageUploader'; // Re-use the uploader
 
-type StoryStep = 'casting' | 'story' | 'generating' | 'choice' | 'end';
+type StoryStep = 'setup' | 'scripting' | 'review' | 'generating' | 'results';
 
-const determineStepForNode = (node: StoryNode): StoryStep => {
-    if (node.choices) {
-        return 'choice';
-    }
-    if (!node.next && !node.choices) { // This is an end node
-        return 'end';
-    }
-    // 'story' is the default step to show text, and will trigger generation via useEffect if needed
-    return 'story';
-};
+interface ScriptMoment {
+    description: string;
+    prompt: string;
+}
+
+interface ScriptScene {
+    title: string;
+    moments: ScriptMoment[];
+}
+
+interface GeneratedImage {
+    sceneTitle: string;
+    momentDescription: string;
+    imageUrl: string;
+}
 
 const AILoveStoryPage: React.FC = () => {
     const { user, session, showToast, updateUserProfile } = useAuth();
 
-    const [currentStep, setCurrentStep] = useState<StoryStep>('casting');
-
+    // --- State Management ---
+    const [step, setStep] = useState<StoryStep>('setup');
+    
+    // Setup State
     const [femaleChar, setFemaleChar] = useState<{ url: string; file: File } | null>(null);
     const [maleChar, setMaleChar] = useState<{ url: string; file: File } | null>(null);
+    const [faceLockFemale, setFaceLockFemale] = useState<{ url: string; file: File } | null>(null);
+    const [faceLockMale, setFaceLockMale] = useState<{ url: string; file: File } | null>(null);
+    const [userStory, setUserStory] = useState('');
 
-    const [scenarioId] = useState<keyof typeof SCENARIOS>('school');
-    const [currentNodeId, setCurrentNodeId] = useState<string>('start');
-    const [generatedImages, setGeneratedImages] = useState<string[]>([]);
+    // Scripting & Review State
+    const [script, setScript] = useState<ScriptScene[] | null>(null);
+
+    // Generating State
     const [isGenerating, setIsGenerating] = useState(false);
-    const [isConfirmOpen, setConfirmOpen] = useState(false);
+    const [generationProgress, setGenerationProgress] = useState({ current: 0, total: 0 });
     
-    // NEW states for album creation
+    // Results State
+    const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([]);
     const [albumImage, setAlbumImage] = useState<string | null>(null);
     const [isCreatingAlbum, setIsCreatingAlbum] = useState(false);
 
-    const scenario = SCENARIOS[scenarioId];
-    const currentNode: StoryNode = scenario.nodes[currentNodeId];
-    const COST_PER_IMAGE = 2;
-
-    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, gender: 'female' | 'male') => {
+    // --- Handlers ---
+    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'female' | 'male' | 'faceFemale' | 'faceMale') => {
         const file = e.target.files?.[0];
         if (file) {
             resizeImage(file, 1024).then(({ file: resizedFile, dataUrl: resizedDataUrl }) => {
                 const newImage = { url: resizedDataUrl, file: resizedFile };
-                if (gender === 'female') setFemaleChar(newImage);
-                else setMaleChar(newImage);
+                if (type === 'female') setFemaleChar(newImage);
+                else if (type === 'male') setMaleChar(newImage);
+                else if (type === 'faceFemale') setFaceLockFemale(newImage);
+                else if (type === 'faceMale') setFaceLockMale(newImage);
             }).catch(() => showToast('Lỗi xử lý ảnh.', 'error'));
         }
     };
     
-    const startStory = () => {
-        if (!femaleChar || !maleChar) {
-            showToast('Vui lòng tải lên ảnh cho cả hai nhân vật.', 'error');
+    const handleGenerateScript = async () => {
+        if (!femaleChar || !maleChar || !userStory.trim()) {
+            showToast('Vui lòng tải đủ 2 ảnh nhân vật và nhập vào câu chuyện của bạn.', 'error');
             return;
         }
-        setCurrentStep('story');
-        setCurrentNodeId(scenario.startNode);
-    };
-
-    const handleChoice = (nextNodeId: string) => {
-        const nextNode = scenario.nodes[nextNodeId];
-        if (!nextNode) {
-            showToast('Lỗi kịch bản.', 'error');
-            return;
+        setStep('scripting');
+        try {
+            const response = await fetch('/.netlify/functions/generate-love-story-script', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session!.access_token}` },
+                body: JSON.stringify({ story: userStory }),
+            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.error);
+            setScript(result.scenes);
+            setStep('review');
+        } catch (err: any) {
+            showToast(err.message, 'error');
+            setStep('setup');
         }
-        setCurrentNodeId(nextNodeId);
-        setCurrentStep(determineStepForNode(nextNode));
     };
     
-    const restartStory = () => {
-        setFemaleChar(null);
-        setMaleChar(null);
-        setGeneratedImages([]);
-        setCurrentNodeId('start');
-        setCurrentStep('casting');
-        setAlbumImage(null);
-        setIsCreatingAlbum(false);
-    }
+    const handleGenerateImages = async () => {
+        if (!script || !session) return;
+        
+        const totalImages = script.reduce((acc, scene) => acc + scene.moments.length, 0);
+        const totalCost = totalImages * 2; // Assuming 2 diamonds per image
+        if (user && user.diamonds < totalCost) {
+            showToast(`Bạn cần ${totalCost} kim cương để tạo ${totalImages} ảnh, nhưng chỉ có ${user.diamonds}.`, 'error');
+            return;
+        }
 
-    const generateStoryImage = async () => {
-        if (!currentNode.prompt || !session || !femaleChar || !maleChar) return;
         setIsGenerating(true);
-        setCurrentStep('generating');
+        setStep('generating');
+        setGenerationProgress({ current: 0, total: totalImages });
+
+        const newImages: GeneratedImage[] = [];
+
         try {
-             const [femaleB64, maleB64] = await Promise.all([
-                fileToBase64(femaleChar.file),
-                fileToBase64(maleChar.file),
+            const [femaleB64, maleB64, femaleFaceB64, maleFaceB64] = await Promise.all([
+                fileToBase64(femaleChar!.file),
+                fileToBase64(maleChar!.file),
+                faceLockFemale ? fileToBase64(faceLockFemale.file) : Promise.resolve(null),
+                faceLockMale ? fileToBase64(faceLockMale.file) : Promise.resolve(null),
             ]);
 
-            const response = await fetch('/.netlify/functions/generate-love-story-image', {
+            let imagesGeneratedCount = 0;
+            for (const scene of script) {
+                for (const moment of scene.moments) {
+                    imagesGeneratedCount++;
+                    setGenerationProgress({ current: imagesGeneratedCount, total: totalImages });
+
+                    const response = await fetch('/.netlify/functions/generate-love-story-image', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+                        body: JSON.stringify({
+                            prompt: moment.prompt,
+                            femaleImage: femaleB64,
+                            maleImage: maleB64,
+                            femaleFaceImage: femaleFaceB64,
+                            maleFaceImage: maleFaceB64,
+                        }),
+                    });
+                    const result = await response.json();
+                    if (!response.ok) throw new Error(result.error);
+                    
+                    newImages.push({
+                        sceneTitle: scene.title,
+                        momentDescription: moment.description,
+                        imageUrl: result.imageUrl
+                    });
+                    updateUserProfile({ diamonds: result.newDiamondCount });
+                }
+            }
+            setGeneratedImages(newImages);
+            setStep('results');
+
+        } catch (err: any) {
+            showToast(err.message, 'error');
+            setStep('review'); // Go back to review on error
+        } finally {
+            setIsGenerating(false);
+        }
+    };
+    
+     const handleCreateAlbum = async () => {
+        if (generatedImages.length === 0 || !session) return;
+        setIsCreatingAlbum(true);
+        try {
+            const panels = generatedImages.map(img => ({
+                imageUrl: img.imageUrl,
+                caption: img.momentDescription,
+            }));
+
+            const response = await fetch('/.netlify/functions/create-story-album', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-                body: JSON.stringify({
-                    prompt: currentNode.prompt("Nữ chính", "Nam chính"),
-                    femaleImage: femaleB64,
-                    maleImage: maleB64,
+                body: JSON.stringify({ 
+                    panels,
+                    title: "Our Love Story",
+                    endText: "Created with Audition AI"
                 }),
             });
             const result = await response.json();
             if (!response.ok) throw new Error(result.error);
+            const finalAlbum = `data:image/png;base64,${result.albumImageBase64}`;
+            setAlbumImage(finalAlbum);
             
-            setGeneratedImages(prev => [...prev, result.imageUrl]);
-            updateUserProfile({ diamonds: result.newDiamondCount });
-            
-            const nextNodeId = currentNode.next;
-            if (nextNodeId) {
-                const nextNode = scenario.nodes[nextNodeId];
-                setCurrentNodeId(nextNodeId);
-                setCurrentStep(determineStepForNode(nextNode));
-            } else if (currentNode.choices) {
-                 setCurrentStep('choice');
-            } else {
-                setCurrentStep('end');
-            }
+            // Trigger download
+            const link = document.createElement('a');
+            link.download = `audition-ai-story-album.png`;
+            link.href = finalAlbum;
+            link.click();
+            showToast('Album đã được tải xuống!', 'success');
 
         } catch (err: any) {
-            showToast(err.message, 'error');
-            setCurrentStep('story'); // Go back to story on error
+            showToast(err.message || 'Không thể tạo album kỷ niệm.', 'error');
         } finally {
-            setIsGenerating(false);
+            setIsCreatingAlbum(false);
         }
-    }
+    };
     
-     useEffect(() => {
-        if (currentStep === 'story' && currentNode.action === 'generate') {
-            if (user && user.diamonds < COST_PER_IMAGE) {
-                showToast(`Bạn cần ${COST_PER_IMAGE} kim cương để tiếp tục.`, 'error');
-                setCurrentStep('end'); // End story if not enough diamonds
-                return;
-            }
-            setConfirmOpen(true);
-        }
-    }, [currentStep, currentNode, user, showToast]);
-
-    // useEffect to create the album at the end of the story
-    useEffect(() => {
-        const createAlbum = async () => {
-            if (generatedImages.length === 0 || !session) return;
-            setIsCreatingAlbum(true);
-            try {
-                const response = await fetch('/.netlify/functions/create-story-album', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-                    body: JSON.stringify({
-                        imageUrls: generatedImages,
-                        title: scenario.title,
-                        endText: currentNode.text,
-                    }),
-                });
-                const result = await response.json();
-                if (!response.ok) throw new Error(result.error);
-                setAlbumImage(`data:image/png;base64,${result.albumImageBase64}`);
-            } catch (err: any) {
-                showToast(err.message || 'Không thể tạo album kỷ niệm.', 'error');
-            } finally {
-                setIsCreatingAlbum(false);
-            }
-        };
-
-        if (currentStep === 'end' && generatedImages.length > 0 && !albumImage && !isCreatingAlbum) {
-            createAlbum();
-        }
-    }, [currentStep, generatedImages, session, showToast, scenario.title, currentNode.text, albumImage, isCreatingAlbum]);
-    
-    const handleDownloadAlbum = () => {
-        if (!albumImage) return;
-        const link = document.createElement('a');
-        link.download = `audition-ai-love-story-${scenario.id}.png`;
-        link.href = albumImage;
-        link.click();
+    const restartStory = () => {
+        setFemaleChar(null); setMaleChar(null);
+        setFaceLockFemale(null); setFaceLockMale(null);
+        setUserStory(''); setScript(null);
+        setGeneratedImages([]); setAlbumImage(null);
+        setStep('setup');
     };
 
-
     const renderContent = () => {
-        const lastImage = generatedImages.length > 0 ? generatedImages[generatedImages.length - 1] : "https://images.unsplash.com/photo-1517486808906-6ca8b3f04846?q=80&w=1949&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D";
-
-        switch (currentStep) {
-            case 'casting':
+        switch (step) {
+            case 'setup':
                 return (
-                    <div className="max-w-4xl mx-auto p-8 bg-skin-fill-secondary rounded-2xl border border-skin-border shadow-lg animate-fade-in-up">
+                    <div className="max-w-6xl mx-auto p-8 bg-skin-fill-secondary rounded-2xl border border-skin-border shadow-lg animate-fade-in-up">
                         <div className="text-center mb-8">
-                            <h2 className="text-3xl font-bold text-pink-400">Tuyển chọn Diễn viên</h2>
-                            <p className="text-skin-muted mt-2">Tải lên ảnh nhân vật nam và nữ để bắt đầu câu chuyện của bạn.</p>
+                            <h2 className="text-3xl font-bold text-pink-400">Kể Câu Chuyện Của Bạn</h2>
+                            <p className="text-skin-muted mt-2">Tải ảnh, viết nên câu chuyện tình yêu, và để AI biến nó thành một cuốn truyện tranh độc đáo.</p>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                             {['female', 'male'].map(gender => (
-                                <div key={gender}>
-                                    <h3 className="font-semibold text-center mb-2">{gender === 'female' ? 'Nhân vật Nữ' : 'Nhân vật Nam'}</h3>
-                                    <label className="relative group w-full aspect-[3/4] rounded-lg border-2 border-dashed border-gray-600 flex items-center justify-center bg-black/20 hover:border-pink-500 transition-colors p-1 cursor-pointer">
-                                        {(gender === 'female' ? femaleChar : maleChar) ? (
-                                            <img src={(gender === 'female' ? femaleChar : maleChar)?.url} className="w-full h-full object-contain rounded-md"/>
-                                        ) : (
-                                            <div className="text-center text-gray-400 p-4">
-                                                <i className="ph-fill ph-upload-simple text-4xl mb-2"></i>
-                                                <p className="font-semibold">Tải ảnh lên</p>
-                                            </div>
-                                        )}
-                                        <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, gender as 'female' | 'male')} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
-                                    </label>
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-6">
+                             {/* Character Uploads */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <h3 className="font-semibold text-center mb-2">Nhân vật Nữ</h3>
+                                    <ImageUploader onUpload={(e) => handleImageUpload(e, 'female')} image={femaleChar} onRemove={() => setFemaleChar(null)} text="Ảnh Nhân vật" />
                                 </div>
-                            ))}
+                                <div>
+                                    <h3 className="font-semibold text-center mb-2">Nhân vật Nam</h3>
+                                    <ImageUploader onUpload={(e) => handleImageUpload(e, 'male')} image={maleChar} onRemove={() => setMaleChar(null)} text="Ảnh Nhân vật" />
+                                </div>
+                                 <div className="md:col-span-2 text-xs text-skin-muted text-center -mt-4">
+                                    Ảnh này sẽ được dùng để xác định trang phục và tư thế.
+                                </div>
+                                <div>
+                                    <h3 className="font-semibold text-center mb-2">Face ID Nữ (Tùy chọn)</h3>
+                                    <ImageUploader onUpload={(e) => handleImageUpload(e, 'faceFemale')} image={faceLockFemale} onRemove={() => setFaceLockFemale(null)} text="Khóa Gương Mặt" />
+                                </div>
+                                <div>
+                                    <h3 className="font-semibold text-center mb-2">Face ID Nam (Tùy chọn)</h3>
+                                    <ImageUploader onUpload={(e) => handleImageUpload(e, 'faceMale')} image={faceLockMale} onRemove={() => setFaceLockMale(null)} text="Khóa Gương Mặt" />
+                                </div>
+                                <div className="md:col-span-2 text-xs text-skin-muted text-center -mt-4">
+                                    Tải ảnh chân dung rõ nét để AI giữ lại 95% gương mặt.
+                                </div>
+                            </div>
+                            {/* Story Input */}
+                            <div>
+                                <h3 className="font-semibold mb-2">Câu chuyện tình yêu của bạn</h3>
+                                <textarea 
+                                    value={userStory}
+                                    onChange={(e) => setUserStory(e.target.value)}
+                                    placeholder="Viết hoặc dán câu chuyện tình yêu của bạn vào đây. Càng chi tiết, kịch bản AI tạo ra càng hấp dẫn. Ví dụ: 'Hôm ấy trời mưa, An vội vã chạy vào quán cafe thì va phải Bình. Ly cafe đổ hết lên áo cô...' "
+                                    className="w-full h-full min-h-[300px] p-4 bg-black/30 rounded-md border border-gray-600 focus:border-pink-500 transition text-base text-white auth-input"
+                                />
+                            </div>
                         </div>
                         <div className="text-center mt-8">
-                             <button onClick={startStory} disabled={!femaleChar || !maleChar} className="themed-button-primary px-12 py-4 text-lg">
-                                Bắt đầu Kịch bản
+                             <button onClick={handleGenerateScript} disabled={!femaleChar || !maleChar || !userStory} className="themed-button-primary px-12 py-4 text-lg">
+                                Nhờ AI Viết Kịch Bản
                             </button>
                         </div>
                     </div>
                 );
-            case 'generating':
-                 return (
-                    <div className="text-center p-12">
+             case 'scripting':
+                return (
+                     <div className="text-center p-12">
                          <div className="relative w-24 h-24 mx-auto mb-6">
                             <div className="absolute inset-0 border-4 border-pink-500/30 rounded-full animate-pulse"></div>
                             <div className="absolute inset-0 border-4 border-t-pink-500 rounded-full animate-spin"></div>
-                            <div className="absolute inset-0 flex items-center justify-center text-4xl text-pink-400"><i className="ph-fill ph-heartbeat"></i></div>
+                             <div className="absolute inset-0 flex items-center justify-center text-4xl text-pink-400"><i className="ph-fill ph-scroll"></i></div>
                         </div>
-                        <p className="text-lg text-gray-300 font-semibold animate-pulse">AI đang vẽ lại khoảnh khắc định mệnh...</p>
+                        <p className="text-lg text-gray-300 font-semibold animate-pulse">AI đang phân tích và viết kịch bản...</p>
                     </div>
                 );
-            case 'story':
-            case 'choice':
-            case 'end':
+            case 'review':
+                const totalImageCount = script ? script.reduce((sum, scene) => sum + scene.moments.length, 0) : 0;
+                const totalCost = totalImageCount * 2;
                 return (
-                    <div className="max-w-4xl mx-auto animate-fade-in relative aspect-[16/9] bg-black/50 rounded-lg overflow-hidden border border-skin-border">
-                        {lastImage && <img src={lastImage} className="absolute inset-0 w-full h-full object-cover opacity-30 blur-sm" />}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/50 to-transparent"></div>
-                        <div className="relative z-10 p-8 flex flex-col justify-end h-full text-white">
-                            {currentStep !== 'end' && <p className="text-lg leading-relaxed mb-6 p-4 bg-black/60 rounded-lg backdrop-blur-sm">{currentNode.text}</p>}
-                            
-                            {currentStep === 'choice' && currentNode.choices && (
-                                <div className="space-y-3">
-                                    {currentNode.choices.map((choice, index) => (
-                                        <button key={index} onClick={() => handleChoice(choice.next)} className="w-full text-left p-4 bg-white/10 hover:bg-white/20 rounded-lg transition">
-                                            {choice.text}
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-                            
-                            {currentStep === 'end' && (
-                                <div className="text-center p-8 bg-black/70 rounded-lg backdrop-blur-sm">
-                                    <h3 className="text-2xl font-bold mb-4 text-pink-400">Hết truyện</h3>
-                                    {isCreatingAlbum ? (
-                                        <div className="py-12">
-                                            <div className="w-12 h-12 border-4 border-t-pink-400 border-white/20 rounded-full animate-spin mx-auto"></div>
-                                            <p className="mt-6 text-lg text-gray-300 animate-pulse">Đang tạo Album Kỷ niệm...</p>
-                                        </div>
-                                    ) : albumImage ? (
-                                        <div className="animate-fade-in">
-                                            <h4 className="font-semibold mb-4">Album Kỷ Niệm của bạn</h4>
-                                            <img src={albumImage} alt="Album Kỷ Niệm" className="w-full max-w-sm mx-auto object-contain rounded-md border-2 border-white/50 mb-6"/>
-                                            <div className="flex justify-center gap-4">
-                                                <button onClick={restartStory} className="themed-button-secondary">Chơi lại từ đầu</button>
-                                                <button onClick={handleDownloadAlbum} className="themed-button-primary px-6">Tải Album</button>
+                     <div className="max-w-4xl mx-auto p-8 bg-skin-fill-secondary rounded-2xl border border-skin-border shadow-lg animate-fade-in-up">
+                         <h2 className="text-3xl font-bold text-pink-400 text-center mb-6">Kịch Bản Phân Cảnh</h2>
+                         <div className="space-y-6 max-h-[60vh] overflow-y-auto custom-scrollbar pr-4">
+                             {script?.map((scene, sceneIndex) => (
+                                 <div key={sceneIndex} className="p-4 bg-black/20 rounded-lg border border-white/10">
+                                     <h3 className="font-bold text-xl text-cyan-400 mb-3">🎬 Khung cảnh {sceneIndex + 1}: {scene.title}</h3>
+                                     <div className="space-y-2 pl-4 border-l-2 border-cyan-500/30">
+                                         {scene.moments.map((moment, momentIndex) => (
+                                            <div key={momentIndex} className="pb-2">
+                                                <p className="font-semibold text-white">✨ Khoảnh khắc {momentIndex + 1}:</p>
+                                                <p className="text-sm text-skin-muted italic">"{moment.description}"</p>
                                             </div>
-                                        </div>
-                                    ) : (
-                                        <div className="py-12">
-                                            <i className="ph-fill ph-warning-circle text-4xl text-yellow-400 mb-4"></i>
-                                            <p className="text-gray-400 mb-6">Đã xảy ra lỗi khi tạo album của bạn.</p>
-                                            <button onClick={restartStory} className="themed-button-secondary">Thử lại</button>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
+                                         ))}
+                                     </div>
+                                 </div>
+                             ))}
+                         </div>
+                         <div className="text-center mt-8 p-4 bg-black/30 rounded-lg">
+                            <p className="font-semibold text-lg">Tổng cộng: <span className="text-white">{totalImageCount} ảnh</span></p>
+                            <p className="text-skin-muted">Chi phí: <span className="font-bold text-pink-400">{totalCost} Kim cương</span></p>
+                         </div>
+                         <div className="flex gap-4 justify-center mt-6">
+                            <button onClick={() => setStep('setup')} className="themed-button-secondary">Chỉnh sửa kịch bản</button>
+                            <button onClick={handleGenerateImages} className="themed-button-primary px-8 py-3 text-lg">Tạo Toàn Bộ Ảnh</button>
+                         </div>
+                     </div>
+                );
+             case 'generating':
+                return (
+                     <div className="text-center p-12">
+                         <div className="relative w-24 h-24 mx-auto mb-6">
+                            <div className="absolute inset-0 border-4 border-pink-500/30 rounded-full"></div>
+                             <div className="absolute inset-0 border-8 border-t-pink-500 rounded-full animate-spin"></div>
+                             <div className="absolute inset-0 flex items-center justify-center text-4xl text-pink-400"><i className="ph-fill ph-paint-brush-broad"></i></div>
                         </div>
+                        <p className="text-xl text-gray-300 font-semibold animate-pulse mb-4">AI đang vẽ nên câu chuyện của bạn...</p>
+                        <p className="text-lg font-bold">{generationProgress.current} / {generationProgress.total}</p>
+                    </div>
+                );
+            case 'results':
+                const scenes = [...new Set(generatedImages.map(img => img.sceneTitle))];
+                return (
+                    <div className="max-w-7xl mx-auto p-8 bg-skin-fill-secondary rounded-2xl border border-skin-border shadow-lg animate-fade-in-up">
+                         <div className="flex justify-between items-center mb-6">
+                             <h2 className="text-3xl font-bold text-pink-400">Thành Quả</h2>
+                             <div className="flex gap-4">
+                                 <button onClick={restartStory} className="themed-button-secondary">Tạo truyện mới</button>
+                                 <button onClick={handleCreateAlbum} disabled={isCreatingAlbum} className="themed-button-primary">
+                                     {isCreatingAlbum ? 'Đang xử lý...' : 'Tạo & Tải Album'}
+                                </button>
+                             </div>
+                         </div>
+                         <div className="space-y-8 max-h-[70vh] overflow-y-auto custom-scrollbar pr-4">
+                            {scenes.map((sceneTitle, index) => (
+                                <div key={index}>
+                                    <h3 className="font-bold text-2xl text-cyan-400 mb-4">🎬 Khung cảnh {index + 1}: {sceneTitle}</h3>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        {generatedImages.filter(img => img.sceneTitle === sceneTitle).map((image, imgIdx) => (
+                                            <div key={imgIdx} className="group relative rounded-lg overflow-hidden border border-white/10">
+                                                <img src={image.imageUrl} alt={image.momentDescription} className="w-full h-full object-cover"/>
+                                                <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
+                                                <p className="absolute bottom-0 left-0 p-4 text-sm text-white italic">{image.momentDescription}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
+                         </div>
                     </div>
                 );
             default:
@@ -274,18 +334,7 @@ const AILoveStoryPage: React.FC = () => {
         }
     };
     
-    return (
-        <div className="w-full">
-            <ConfirmationModal
-                isOpen={isConfirmOpen}
-                onClose={() => setConfirmOpen(false)}
-                onConfirm={() => { setConfirmOpen(false); generateStoryImage(); }}
-                cost={COST_PER_IMAGE}
-                isLoading={isGenerating}
-            />
-            {renderContent()}
-        </div>
-    );
+    return <div className="w-full">{renderContent()}</div>;
 };
 
 const fileToBase64 = (file: File): Promise<string> => new Promise((resolve, reject) => {
@@ -294,6 +343,5 @@ const fileToBase64 = (file: File): Promise<string> => new Promise((resolve, reje
     reader.onerror = reject;
     reader.readAsDataURL(file);
 });
-
 
 export default AILoveStoryPage;

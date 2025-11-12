@@ -91,7 +91,6 @@ const SignatureTool: React.FC<SignatureToolProps> = ({ initialImage, onClearInit
         ctx.textAlign = 'left';
         ctx.textBaseline = 'top';
 
-        const textMetrics = ctx.measureText(state.text);
         const padding = state.size * 0.5;
         let x = 0, y = 0;
 

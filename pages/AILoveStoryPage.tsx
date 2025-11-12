@@ -6,6 +6,17 @@ import ConfirmationModal from '../components/ConfirmationModal';
 
 type StoryStep = 'casting' | 'story' | 'generating' | 'choice' | 'end';
 
+const determineStepForNode = (node: StoryNode): StoryStep => {
+    if (node.choices) {
+        return 'choice';
+    }
+    if (!node.next && !node.choices) { // This is an end node
+        return 'end';
+    }
+    // 'story' is the default step to show text, and will trigger generation via useEffect if needed
+    return 'story';
+};
+
 const AILoveStoryPage: React.FC = () => {
     const { user, session, showToast, updateUserProfile } = useAuth();
 
@@ -45,8 +56,13 @@ const AILoveStoryPage: React.FC = () => {
     };
 
     const handleChoice = (nextNodeId: string) => {
+        const nextNode = scenario.nodes[nextNodeId];
+        if (!nextNode) {
+            showToast('Lỗi kịch bản.', 'error');
+            return;
+        }
         setCurrentNodeId(nextNodeId);
-        setCurrentStep('story');
+        setCurrentStep(determineStepForNode(nextNode));
     };
     
     const restartStory = () => {
@@ -83,8 +99,7 @@ const AILoveStoryPage: React.FC = () => {
             updateUserProfile({ diamonds: result.newDiamondCount });
             
             if (currentNode.next) {
-                setCurrentNodeId(currentNode.next);
-                setCurrentStep('story');
+                handleChoice(currentNode.next);
             } else if (currentNode.choices) {
                  setCurrentStep('choice');
             } else {
@@ -159,7 +174,7 @@ const AILoveStoryPage: React.FC = () => {
             case 'story':
             case 'choice':
             case 'end':
-                const lastImage = generatedImages.length > 0 ? generatedImages[generatedImages.length - 1] : null;
+                const lastImage = generatedImages.length > 0 ? generatedImages[generatedImages.length - 1] : "https://images.unsplash.com/photo-1517486808906-6ca8b3f04846?q=80&w=1949&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D";
                 return (
                     <div className="max-w-4xl mx-auto animate-fade-in relative aspect-[16/9] bg-black/50 rounded-lg overflow-hidden border border-skin-border">
                         {lastImage && <img src={lastImage} className="absolute inset-0 w-full h-full object-cover opacity-30 blur-sm" />}

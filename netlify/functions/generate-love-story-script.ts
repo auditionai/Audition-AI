@@ -65,14 +65,35 @@ const handler: Handler = async (event: HandlerEvent) => {
             required: ["scenes"]
         };
 
-        const response = await ai.models.generateContent({
-           model: "gemini-2.5-pro",
-           contents: `Based on the following love story, create a screenplay with 3-5 scenes. For each scene, provide two key moments with detailed image generation prompts. Story: "${story}"`,
-           config: {
-             responseMimeType: "application/json",
-             responseSchema,
-           },
-        });
+        // NEW: Implement retry logic and switch to a more available model
+        const maxRetries = 3;
+        let response;
+
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                response = await ai.models.generateContent({
+                   model: "gemini-2.5-flash", // Changed from gemini-2.5-pro for better availability
+                   contents: `Based on the following love story, create a screenplay with 3-5 scenes. For each scene, provide two key moments with detailed image generation prompts. Story: "${story}"`,
+                   config: {
+                     responseMimeType: "application/json",
+                     responseSchema,
+                   },
+                });
+                break; // Success, exit loop
+            } catch (error: any) {
+                console.warn(`Attempt ${attempt} failed: ${error.message}`);
+                if (attempt === maxRetries) {
+                    // If this was the last attempt, re-throw a more user-friendly error
+                    throw new Error('Mô hình AI hiện đang quá tải sau nhiều lần thử. Vui lòng thử lại sau ít phút.');
+                }
+                // Wait before the next attempt (e.g., 1s, 2s)
+                await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+            }
+        }
+        
+        if (!response) {
+            throw new Error('AI không thể tạo phản hồi sau nhiều lần thử.');
+        }
 
         // Increment API key usage in the background
         supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id }).then();

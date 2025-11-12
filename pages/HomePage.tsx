@@ -146,7 +146,7 @@ const HomePage: React.FC = () => {
     };
 
     return (
-        <div className="bg-[#0B0B0F] text-gray-300 font-sans leading-normal tracking-normal">
+        <div className="text-gray-300 font-sans leading-normal tracking-normal">
             <AuroraBackground />
 
             <LandingHeader 

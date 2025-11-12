@@ -47,7 +47,7 @@ const GalleryPage: React.FC = () => {
                 onTopUpClick={() => user ? setIsTopUpModalOpen(true) : setIsAuthModalOpen(true)}
                 onScrollTo={(_id) => navigate('home')} // Navigate home on logo/nav clicks
             />
-            <main className="pt-24 bg-[#0B0B0F]">
+            <main className="pt-24">
                 <section id="full-gallery" className="py-12 sm:py-16">
                     <div className="container mx-auto px-4">
                     <div className="text-center max-w-3xl mx-auto mb-12 animate-fade-in-down">

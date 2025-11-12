@@ -4,7 +4,7 @@ import { Buffer } from 'buffer';
 import Jimp from 'jimp';
 
 // Helper function to fetch an image and return a Jimp image object
-const fetchImage = async (url: string) => {
+const fetchImage = async (url: string, errorFont: any) => {
     try {
         const response = await fetch(url);
         if (!response.ok) {
@@ -16,8 +16,7 @@ const fetchImage = async (url: string) => {
         console.error(`Error fetching or reading image: ${url}`, error);
         // Return a placeholder image on error to prevent total failure
         const errorImage = new (Jimp as any)(1024, 768, '#555555');
-        const font = await (Jimp as any).loadFont((Jimp as any).FONT_SANS_32_WHITE);
-        errorImage.print(font, 0, 0, { text: 'Image load failed', alignmentX: (Jimp as any).HORIZONTAL_ALIGN_CENTER, alignmentY: (Jimp as any).VERTICAL_ALIGN_MIDDLE }, 1024, 768);
+        errorImage.print(errorFont, 0, 0, { text: 'Tải ảnh thất bại', alignmentX: (Jimp as any).HORIZONTAL_ALIGN_CENTER, alignmentY: (Jimp as any).VERTICAL_ALIGN_MIDDLE }, 1024, 768);
         return errorImage;
     }
 };
@@ -49,7 +48,14 @@ const handler: Handler = async (event: HandlerEvent) => {
         const HEADER_HEIGHT = 200;
         const FOOTER_HEIGHT = 150;
 
-        const jimpImages = await Promise.all(panels.map((p: any) => fetchImage(p.imageUrl)));
+        // Load fonts from a reliable CDN to fix serverless path issues
+        const [fontTitle, fontCaption, fontFooter] = await Promise.all([
+            (Jimp as any).loadFont('https://cdn.jsdelivr.net/npm/@jimp/font-open-sans@1.0.15/fonts/open-sans-64-white/open-sans-64-white.fnt'),
+            (Jimp as any).loadFont('https://cdn.jsdelivr.net/npm/@jimp/font-open-sans@1.0.15/fonts/open-sans-32-white/open-sans-32-white.fnt'),
+            (Jimp as any).loadFont('https://cdn.jsdelivr.net/npm/@jimp/font-open-sans@1.0.15/fonts/open-sans-32-white/open-sans-32-white.fnt')
+        ]);
+
+        const jimpImages = await Promise.all(panels.map((p: any) => fetchImage(p.imageUrl, fontCaption)));
         
         // Resize all images to a standard width, maintaining aspect ratio
         jimpImages.forEach(img => img.resize(IMG_WIDTH, (Jimp as any).AUTO));
@@ -61,14 +67,9 @@ const handler: Handler = async (event: HandlerEvent) => {
         // Create the canvas
         const canvas = new (Jimp as any)(IMG_WIDTH + (PADDING * 2), totalHeight, '#110C13');
 
-        // Load fonts
-        const fontTitle = await (Jimp as any).loadFont((Jimp as any).FONT_SANS_64_WHITE);
-        const fontCaption = await (Jimp as any).loadFont((Jimp as any).FONT_SANS_32_WHITE);
-        const fontFooter = await (Jimp as any).loadFont((Jimp as any).FONT_SANS_32_WHITE);
-
         // --- Draw Header ---
         canvas.print(fontTitle, 0, PADDING, {
-            text: `AI Love Story`,
+            text: `Câu Chuyện Tình Yêu AI`,
             alignmentX: (Jimp as any).HORIZONTAL_ALIGN_CENTER,
         }, canvas.getWidth(), HEADER_HEIGHT);
          canvas.print(fontCaption, 0, PADDING + 80, {

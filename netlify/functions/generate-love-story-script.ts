@@ -31,27 +31,27 @@ const handler: Handler = async (event: HandlerEvent) => {
             properties: {
                 scenes: {
                     type: Type.ARRAY,
-                    description: "An array of 3 to 5 scenes that dramatize the user's story.",
+                    description: "Một mảng từ 3 đến 5 cảnh, kịch tính hóa câu chuyện của người dùng.",
                     items: {
                         type: Type.OBJECT,
                         properties: {
                             title: {
                                 type: Type.STRING,
-                                description: "A short, cinematic title for the scene (e.g., 'A Rainy Encounter')."
+                                description: "Tiêu đề ngắn, đậm chất điện ảnh cho cảnh (ví dụ: 'Cuộc Gặp Dưới Mưa'). Phải bằng tiếng Việt."
                             },
                             moments: {
                                 type: Type.ARRAY,
-                                description: "Exactly two distinct, visual moments from this scene.",
+                                description: "Chính xác hai khoảnh khắc trực quan, khác biệt trong cảnh này.",
                                 items: {
                                     type: Type.OBJECT,
                                     properties: {
                                         description: {
                                             type: Type.STRING,
-                                            description: "A one-sentence narrative description of the moment (e.g., 'Their hands touch as they reach for the same book.')."
+                                            description: "Mô tả tường thuật trong một câu về khoảnh khắc (ví dụ: 'Tay họ chạm nhau khi cùng vươn tới một cuốn sách.'). Phải bằng tiếng Việt."
                                         },
                                         prompt: {
                                             type: Type.STRING,
-                                            description: "A detailed, visually rich prompt for an AI image generator to create this moment. Use descriptive language about composition, lighting, character expressions, and setting. Refer to characters as 'the female character' and 'the male character'."
+                                            description: "Prompt chi tiết, giàu hình ảnh cho AI tạo ảnh để dựng lại khoảnh khắc này. Dùng ngôn ngữ mô tả về bố cục, ánh sáng, biểu cảm, bối cảnh. Phải bằng tiếng Việt. Dùng 'nhân vật nữ' và 'nhân vật nam' để chỉ các nhân vật."
                                         }
                                     },
                                     required: ["description", "prompt"]
@@ -73,7 +73,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             try {
                 response = await ai.models.generateContent({
                    model: "gemini-2.5-flash", // Changed from gemini-2.5-pro for better availability
-                   contents: `Based on the following love story, create a screenplay with 3-5 scenes. For each scene, provide two key moments with detailed image generation prompts. Story: "${story}"`,
+                   contents: `Dựa trên câu chuyện tình yêu sau, hãy tạo một kịch bản phân cảnh gồm 3-5 cảnh. Với mỗi cảnh, hãy cung cấp hai khoảnh khắc chính kèm theo prompt chi tiết để tạo hình ảnh. Toàn bộ kịch bản và prompt phải bằng tiếng Việt. Câu chuyện: "${story}"`,
                    config: {
                      responseMimeType: "application/json",
                      responseSchema,

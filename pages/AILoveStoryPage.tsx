@@ -154,8 +154,8 @@ const AILoveStoryPage: React.FC = () => {
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
                 body: JSON.stringify({ 
                     panels,
-                    title: "Our Love Story",
-                    endText: "Created with Audition AI"
+                    title: "Câu Chuyện Tình Yêu Của Chúng Ta",
+                    endText: "Tạo bởi Audition AI"
                 }),
             });
             const result = await response.json();
@@ -274,7 +274,7 @@ const AILoveStoryPage: React.FC = () => {
                             <p className="text-skin-muted">Chi phí: <span className="font-bold text-pink-400">{totalCost} Kim cương</span></p>
                          </div>
                          <div className="flex gap-4 justify-center mt-6">
-                            <button onClick={() => setStep('setup')} className="themed-button-secondary">Chỉnh sửa kịch bản</button>
+                            <button onClick={() => setStep('setup')} className="themed-button-secondary">Chỉnh sửa lại</button>
                             <button onClick={handleGenerateImages} className="themed-button-primary px-8 py-3 text-lg">Tạo Toàn Bộ Ảnh</button>
                          </div>
                      </div>

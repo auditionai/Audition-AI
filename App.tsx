@@ -1,6 +1,5 @@
 import React from 'react';
 import { useAuth } from './contexts/AuthContext';
-import { useTheme } from './contexts/ThemeContext';
 
 // Import Pages
 import HomePage from './pages/HomePage';
@@ -13,7 +12,6 @@ import RewardNotification from './components/common/RewardNotification';
 
 const App: React.FC = () => {
     const { user, loading, route, toast, reward, clearReward } = useAuth();
-    const { theme } = useTheme();
 
     if (loading) {
         return (

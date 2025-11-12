@@ -49,12 +49,9 @@ const App: React.FC = () => {
                 pageComponent = <HomePage />;
         }
         
-        // Apply the theme wrapper universally to all pages.
-        return (
-            <div data-theme={theme}>
-                {pageComponent}
-            </div>
-        );
+        // The data-theme attribute is now applied within each themed page (e.g., CreatorPage)
+        // instead of globally here, allowing the homepage to have a separate style.
+        return pageComponent;
     };
 
     return (

@@ -10,6 +10,7 @@ import ImageModal from '../components/common/ImageModal';
 import TopUpModal from '../components/landing/TopUpModal';
 import AuthModal from '../components/landing/AuthModal';
 import InfoModal from '../components/landing/InfoModal';
+import AuroraBackground from '../components/common/AuroraBackground';
 
 const GalleryPage: React.FC = () => {
     const { navigate, user, updateUserDiamonds, showToast } = useAuth();
@@ -40,6 +41,7 @@ const GalleryPage: React.FC = () => {
 
     return (
         <>
+            <AuroraBackground />
             <LandingHeader
                 user={user}
                 onTopUpClick={() => user ? setIsTopUpModalOpen(true) : setIsAuthModalOpen(true)}

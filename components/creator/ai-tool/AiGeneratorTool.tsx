@@ -25,13 +25,15 @@ interface AiGeneratorToolProps {
     onProcessedFaceImageChange: (image: string | null) => void;
     styleImage: ImageState;
     onStyleImageChange: (image: ImageState) => void;
+    onSendToSignatureTool: (imageUrl: string) => void;
 }
 
 const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({
     poseImage, onPoseImageChange,
     rawFaceImage, onRawFaceImageChange,
     processedFaceImage, onProcessedFaceImageChange,
-    styleImage, onStyleImageChange
+    styleImage, onStyleImageChange,
+    onSendToSignatureTool
 }) => {
     const { user, session, showToast, updateUserDiamonds } = useAuth();
     const { isGenerating, progress, generatedImage, error, generateImage, resetGenerator, cancelGeneration } = useImageGenerator();
@@ -152,19 +154,6 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({
             seed || undefined, useUpscaler
         );
     };
-
-    const handleDownloadResult = () => {
-        if (!generatedImage) return;
-        
-        const downloadUrl = `/.netlify/functions/download-image?url=${encodeURIComponent(generatedImage)}`;
-        const a = document.createElement('a');
-        a.style.display = 'none';
-        a.href = downloadUrl;
-        a.download = `audition-ai-${Date.now()}.png`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-    };
     
     const openInstructionModal = (key: 'character' | 'style' | 'prompt' | 'advanced' | 'face') => {
         setInstructionKey(key);
@@ -213,12 +202,18 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({
                             <i className="ph-fill ph-magnifying-glass-plus text-5xl text-white"></i>
                         </div>
                     </div>
-                    <div className="flex gap-4 mt-6 justify-center">
+                    <div className="flex flex-wrap gap-4 mt-6 justify-center">
                         <button onClick={resetGenerator} className="themed-button-secondary px-6 py-3 font-semibold">
                             <i className="ph-fill ph-arrow-counter-clockwise mr-2"></i>Tạo ảnh khác
                         </button>
-                        <button onClick={handleDownloadResult} className="themed-button-primary px-6 py-3 font-bold">
-                            <i className="ph-fill ph-download-simple mr-2"></i>Tải xuống
+                        <button 
+                            onClick={() => onSendToSignatureTool(generatedImage)} 
+                            className="themed-button-secondary px-6 py-3 font-semibold border-cyan-500/50 bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20"
+                        >
+                            <i className="ph-fill ph-pencil-simple-line mr-2"></i>Chèn chữ ký
+                        </button>
+                        <button onClick={() => setIsResultModalOpen(true)} className="themed-button-primary px-6 py-3 font-bold">
+                            <i className="ph-fill ph-download-simple mr-2"></i>Tải & Sao chép
                         </button>
                     </div>
                 </div>

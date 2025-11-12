@@ -3,18 +3,24 @@ import React, { useState } from 'react';
 import AiGeneratorTool from './ai-tool/AiGeneratorTool';
 import BgRemoverTool from '../ai-tool/BgRemoverTool';
 import InstructionModal from '../common/InstructionModal';
+import SignatureTool from './tools/SignatureTool';
+import { useAuth } from '../../contexts/AuthContext';
 
 type AIToolTab = 'generator' | 'utilities';
+type UtilityTab = 'bg-remover' | 'signature';
 
 const AITool: React.FC = () => {
+    const { showToast } = useAuth();
     const [activeTab, setActiveTab] = useState<AIToolTab>('generator');
+    const [activeUtility, setActiveUtility] = useState<UtilityTab>('bg-remover');
     const [isInstructionModalOpen, setInstructionModalOpen] = useState(false);
     
-    // State is now LIFTED to this parent component to persist across tabs
+    // State to manage images shared between components
     const [poseImage, setPoseImage] = useState<{ url: string; file: File } | null>(null);
     const [rawFaceImage, setRawFaceImage] = useState<{ url: string; file: File } | null>(null);
     const [processedFaceImage, setProcessedFaceImage] = useState<string | null>(null);
     const [styleImage, setStyleImage] = useState<{ url: string; file: File } | null>(null);
+    const [imageForUtility, setImageForUtility] = useState<string | null>(null);
 
     const handleMoveToGenerator = (image: { url: string; file: File }) => {
         setPoseImage(image);
@@ -23,8 +29,31 @@ const AITool: React.FC = () => {
     
     const handleMoveFaceToGenerator = (image: { url: string; file: File }) => {
         setRawFaceImage(image);
-        setProcessedFaceImage(null); // Reset processed image when a new raw face is passed
+        setProcessedFaceImage(null);
         setActiveTab('generator');
+    };
+
+    const handleSendToSignatureTool = async (imageUrl: string) => {
+        try {
+            // Use the download proxy to get the image data and avoid CORS issues with canvas
+            const response = await fetch(`/.netlify/functions/download-image?url=${encodeURIComponent(imageUrl)}`);
+            if (!response.ok) throw new Error('Không thể tải ảnh đã tạo.');
+            
+            const blob = await response.blob();
+            const reader = new FileReader();
+            
+            reader.onloadend = () => {
+                const base64data = reader.result as string;
+                setImageForUtility(base64data);
+                setActiveTab('utilities');
+                setActiveUtility('signature');
+                showToast('Đã chuyển ảnh sang công cụ Chèn Chữ Ký!', 'success');
+            };
+            
+            reader.readAsDataURL(blob);
+        } catch (error: any) {
+            showToast(error.message, 'error');
+        }
     };
 
     return (
@@ -53,7 +82,7 @@ const AITool: React.FC = () => {
             </div>
             
             <div className="max-w-7xl mx-auto">
-                {/* Tabs */}
+                {/* Main Tabs */}
                 <div className="flex justify-center border-b border-white/10 mb-6">
                     <button
                         onClick={() => setActiveTab('generator')}
@@ -75,7 +104,6 @@ const AITool: React.FC = () => {
                 <div className="p-4 bg-skin-fill-secondary rounded-2xl border border-skin-border shadow-lg">
                     {activeTab === 'generator' && (
                         <AiGeneratorTool 
-                           // Pass all state and setters down as props
                            poseImage={poseImage}
                            onPoseImageChange={setPoseImage}
                            rawFaceImage={rawFaceImage}
@@ -84,13 +112,34 @@ const AITool: React.FC = () => {
                            onProcessedFaceImageChange={setProcessedFaceImage}
                            styleImage={styleImage}
                            onStyleImageChange={setStyleImage}
+                           onSendToSignatureTool={handleSendToSignatureTool}
                         />
                     )}
                     {activeTab === 'utilities' && (
-                        <BgRemoverTool 
-                            onMoveToGenerator={handleMoveToGenerator}
-                            onMoveFaceToGenerator={handleMoveFaceToGenerator}
-                        />
+                        <div>
+                            {/* Utility Sub-tabs */}
+                            <div className="flex justify-center border-b border-white/10 mb-6">
+                                <button onClick={() => setActiveUtility('bg-remover')} className={`px-4 py-2 text-sm font-semibold transition-colors ${activeUtility === 'bg-remover' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400 hover:text-white'}`}>
+                                    <i className="ph-fill ph-scissors mr-2"></i>Tách nền
+                                </button>
+                                <button onClick={() => setActiveUtility('signature')} className={`px-4 py-2 text-sm font-semibold transition-colors ${activeUtility === 'signature' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400 hover:text-white'}`}>
+                                    <i className="ph-fill ph-pencil-simple-line mr-2"></i>Chèn chữ ký
+                                </button>
+                            </div>
+                            
+                            {activeUtility === 'bg-remover' && (
+                                <BgRemoverTool 
+                                    onMoveToGenerator={handleMoveToGenerator}
+                                    onMoveFaceToGenerator={handleMoveFaceToGenerator}
+                                />
+                            )}
+                            {activeUtility === 'signature' && (
+                                <SignatureTool 
+                                    initialImage={imageForUtility}
+                                    onClearInitialImage={() => setImageForUtility(null)}
+                                />
+                            )}
+                        </div>
                     )}
                 </div>
             </div>

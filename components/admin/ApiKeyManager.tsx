@@ -88,15 +88,21 @@ const ApiKeyManager: React.FC = () => {
                  <input type="password" placeholder="Giá trị khóa API" value={newKeyValue} onChange={e => setNewKeyValue(e.target.value)} className="auth-input col-span-6" required />
                  <button type="submit" disabled={isCreating} className="col-span-2 bg-green-600 hover:bg-green-700 text-white font-bold p-2 rounded-md disabled:opacity-50">Thêm</button>
             </form>
-            <div className="space-y-2">
+             <div className="grid grid-cols-12 gap-2 items-center p-2 text-xs font-bold text-gray-400 uppercase border-b border-white/10 mb-2">
+                <div className="col-span-3">Tên gợi nhớ</div>
+                <div className="col-span-4">Khóa API</div>
+                <div className="col-span-2">Chi phí</div>
+                <div className="col-span-3 text-right">Hành động</div>
+            </div>
+            <div className="space-y-2 max-h-80 overflow-y-auto custom-scrollbar pr-2">
                 {apiKeys.map(k => (
                     <div key={k.id} className="grid grid-cols-12 gap-2 items-center p-2 bg-white/5 rounded-lg text-sm">
                         <div className="col-span-3 font-semibold text-white">{k.name}</div>
                         <div className="col-span-4 font-mono text-gray-400">...{k.key_value.slice(-6)}</div>
-                        <div className="col-span-2 text-gray-300">Dùng: {k.usage_count}</div>
+                        <div className="col-span-2 text-yellow-300 font-semibold">{(k.usage_count * 1000).toLocaleString('vi-VN')}đ</div>
                         <div className="col-span-3 flex justify-end gap-2">
                              <button onClick={() => handleToggle(k)} className={`px-2 py-1 text-xs rounded-full ${k.status === 'active' ? 'bg-green-500/20 text-green-300' : 'bg-gray-500/20 text-gray-400'}`}>{k.status}</button>
-                             <button onClick={() => handleDelete(k.id)} className="text-red-400 hover:text-red-300">Xóa</button>
+                             <button onClick={() => handleDelete(k.id)} className="text-red-400 hover:text-red-300 text-xs">Xóa</button>
                         </div>
                     </div>
                 ))}

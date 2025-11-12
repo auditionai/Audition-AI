@@ -108,121 +108,65 @@ const ShootingStarEffect: React.FC = () => {
     );
 };
 
-// --- NEW: Digital Rain & Glitch Effect ---
-const DigitalRainEffect: React.FC = () => {
-    const canvasRef = useRef<HTMLCanvasElement>(null);
+// --- NEW: Gummy Candy Rain Effect ---
+const GummyCandyRainEffect: React.FC = () => {
+    const candies = useMemo(() => {
+        const candyArray = [];
+        const numCandies = 25;
+        const colors = ['#FFC1CC', '#FFD700', '#ADD8E6', '#98FB98', '#FFA07A'];
+        
+        const shapes = [
+            `data:image/svg+xml;base64,${btoa('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" fill="currentColor"/></svg>')}`,
+            `data:image/svg+xml;base64,${btoa('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" fill="currentColor"/></svg>')}`
+        ];
 
-    useEffect(() => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-
-        let animationFrameId: number;
-
-        const resizeCanvas = () => {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-        };
-        resizeCanvas();
-
-        const katakana = 'アァカサタナハマヤャラワガザダバパイィキシチニヒミリヰギジヂビピウゥクスツヌフムユュルグズブプエェケセテネヘメレヱゲゼデベペオォコソトノホモヨョロヲゴゾドボポヴッン';
-        const latin = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-        const nums = '0123456789';
-        const characters = katakana + latin + nums;
-
-        const fontSize = 16;
-        let columns = Math.floor(canvas.width / fontSize);
-        const drops: number[] = [];
-
-        for (let i = 0; i < columns; i++) {
-            drops[i] = 1;
+        for (let i = 0; i < numCandies; i++) {
+            const size = Math.random() * 20 + 15; // 15px to 35px
+            const color = colors[Math.floor(Math.random() * colors.length)];
+            const shape = shapes[Math.floor(Math.random() * shapes.length)];
+            const style: React.CSSProperties = {
+                width: `${size}px`,
+                height: `${size}px`,
+                left: `${Math.random() * 100}%`,
+                color: color,
+                backgroundImage: `url("${shape}")`,
+                animationDuration: `${Math.random() * 8 + 7}s`, // 7s to 15s
+                animationDelay: `${Math.random() * 15}s`,
+            };
+            candyArray.push(<div key={i} className="gummy-candy" style={style} />);
         }
-
-        const draw = () => {
-            ctx.fillStyle = 'rgba(17, 12, 19, 0.05)';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            
-            const colors = ['#ec4899', '#8B5CF6', '#00FFF9', '#F0F0F0'];
-            ctx.font = `${fontSize}px monospace`;
-
-            for (let i = 0; i < drops.length; i++) {
-                ctx.fillStyle = colors[Math.floor(Math.random() * colors.length)];
-                const text = characters.charAt(Math.floor(Math.random() * characters.length));
-                ctx.fillText(text, i * fontSize, drops[i] * fontSize);
-
-                if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) {
-                    drops[i] = 0;
-                }
-                drops[i]++;
-            }
-        };
-
-        let lastTime = 0;
-        const fps = 24;
-        const interval = 1000 / fps;
-
-        const render = (timestamp: number) => {
-            if (timestamp - lastTime >= interval) {
-                draw();
-                lastTime = timestamp;
-            }
-            animationFrameId = window.requestAnimationFrame(render);
-        };
-        render(0);
-
-        const handleResize = () => {
-            resizeCanvas();
-            columns = Math.floor(canvas.width / fontSize);
-            drops.length = 0;
-            for (let i = 0; i < columns; i++) {
-                drops[i] = 1;
-            }
-        };
-
-        window.addEventListener('resize', handleResize);
-
-        return () => {
-            window.removeEventListener('resize', handleResize);
-            window.cancelAnimationFrame(animationFrameId);
-        };
+        return candyArray;
     }, []);
 
     return (
         <>
             <style>{`
-                .digital-rain-container {
+                .gummy-candy-container {
                     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-                    pointer-events: none; z-index: -1;
-                    animation: glitch-anim 8s infinite steps(1);
-                    background: #110C13;
+                    pointer-events: none; z-index: 0; overflow: hidden;
                 }
-                .digital-rain-canvas { display: block; }
-                
-                @keyframes glitch-anim {
-                    0%, 100% { clip-path: inset(0 0 0 0); transform: translateX(0); }
-                    5% { clip-path: inset(10% 0 85% 0); }
-                    6% { clip-path: inset(0 0 0 0); }
-                    8% { clip-path: inset(90% 0 2% 0); }
-                    9% { clip-path: inset(0 0 0 0); }
-                    10% { transform: translateX(10px); }
-                    10.5% { transform: translateX(-10px); }
-                    11% { transform: translateX(0); }
-                    40% { clip-path: inset(40% 0 42% 0); }
-                    40.5% { clip-path: inset(0 0 0 0); }
-                }
-                .digital-rain-container::after {
-                    content: '';
+                .gummy-candy {
                     position: absolute;
-                    top: 0; left: 0; width: 100%; height: 100%;
-                    background: repeating-linear-gradient(0deg, rgba(255,255,255,0.02), rgba(255,255,255,0.02) 1px, transparent 1px, transparent 4px);
-                    pointer-events: none;
-                    opacity: 0.5;
+                    top: -10%;
+                    background-size: contain;
+                    background-repeat: no-repeat;
+                    background-position: center;
+                    opacity: 0.8;
+                    filter: blur(1px) drop-shadow(0 0 4px currentColor);
+                    animation-name: gummy-fall-anim;
+                    animation-timing-function: cubic-bezier(0.6, -0.28, 0.735, 0.045); /* easeInBack for fall */
+                    animation-iteration-count: infinite;
+                    will-change: transform, opacity;
+                }
+                @keyframes gummy-fall-anim {
+                    0% { transform: translateY(-10vh) rotate(0deg); opacity: 0; }
+                    10% { opacity: 0.7; }
+                    85% { animation-timing-function: cubic-bezier(0.215, 0.61, 0.355, 1); transform: translateY(101vh) rotate(360deg); opacity: 0.7; } /* easeOutCubic for bounce */
+                    92% { transform: translateY(97vh) rotate(370deg); opacity: 0.7; } /* Bounce up */
+                    100% { transform: translateY(101vh) rotate(380deg); opacity: 0; }
                 }
             `}</style>
-            <div className="digital-rain-container" aria-hidden="true">
-                <canvas ref={canvasRef} className="digital-rain-canvas" />
-            </div>
+            <div className="gummy-candy-container" aria-hidden="true">{candies}</div>
         </>
     );
 };
@@ -238,8 +182,8 @@ const ThemeEffects: React.FC = () => {
             return <SnowfallEffect />;
         case 'dreamy-galaxy':
             return <ShootingStarEffect />;
-        case 'cyber-punk':
-            return <DigitalRainEffect />;
+        case 'solar-flare':
+            return <GummyCandyRainEffect />;
         // Other theme effects can be added here in the future
         default:
             return null;

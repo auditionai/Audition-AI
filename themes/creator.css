@@ -28,6 +28,14 @@
     --color-nav-checkin-text: #22D3EE; --color-nav-checkin-bg: rgba(34,211,238,0.2); --color-nav-checkin-hover: rgba(34,211,238,0.3);
     --color-nav-creations-text: #60A5FA; --color-nav-creations-bg: rgba(96,165,250,0.2); --color-nav-creations-hover: rgba(96,165,250,0.3); --color-nav-creations-active: #60A5FA; --color-nav-creations-active-text: #1F2937;
     --color-nav-admin-text: #F87171; --color-nav-admin-bg: rgba(248,113,113,0.2); --color-nav-admin-hover: rgba(248,113,113,0.3); --color-nav-admin-active: #EF4444; --color-nav-admin-active-text: #fff;
+
+    /* Check-in Modal */
+    --color-streak-text: #22D3EE;
+    --color-checkin-day-bg: rgba(74, 222, 128, 0.2);
+    --color-checkin-icon: #4ADE80;
+    --color-reward-box-bg: rgba(251, 191, 36, 0.15);
+    --color-reward-box-border: rgba(251, 191, 36, 0.3);
+    --color-reward-box-text: #FBBF24;
 }
 
 /* 2. Kẹo Ngọt Pastel (Solar Flare) */
@@ -51,6 +59,14 @@
     --color-nav-checkin-text: #16A34A; --color-nav-checkin-bg: rgba(22,163,74,0.1); --color-nav-checkin-hover: rgba(22,163,74,0.2);
     --color-nav-creations-text: #0EA5E9; --color-nav-creations-bg: rgba(14,165,233,0.1); --color-nav-creations-hover: rgba(14,165,233,0.2); --color-nav-creations-active: #0EA5E9; --color-nav-creations-active-text: #fff;
     --color-nav-admin-text: #DC2626; --color-nav-admin-bg: rgba(220,38,38,0.1); --color-nav-admin-hover: rgba(220,38,38,0.2); --color-nav-admin-active: #DC2626; --color-nav-admin-active-text: #fff;
+
+    /* Check-in Modal */
+    --color-streak-text: #16A34A;
+    --color-checkin-day-bg: rgba(22, 163, 74, 0.15);
+    --color-checkin-icon: #16A34A;
+    --color-reward-box-bg: rgba(245, 158, 11, 0.1);
+    --color-reward-box-border: rgba(245, 158, 11, 0.3);
+    --color-reward-box-text: #D97706;
 }
 
 /* 3. Dải Ngân Hà (Dreamy Galaxy) */
@@ -74,6 +90,14 @@
     --color-nav-checkin-text: var(--color-accent-secondary); --color-nav-checkin-bg: rgba(3,218,198,0.15); --color-nav-checkin-hover: rgba(3,218,198,0.25);
     --color-nav-creations-text: #C4B5FD; --color-nav-creations-bg: rgba(196,181,253,0.15); --color-nav-creations-hover: rgba(196,181,253,0.25); --color-nav-creations-active: #C4B5FD; --color-nav-creations-active-text: #3730A3;
     --color-nav-admin-text: #F87171; --color-nav-admin-bg: rgba(248,113,113,0.2); --color-nav-admin-hover: rgba(248,113,113,0.3); --color-nav-admin-active: #EF4444; --color-nav-admin-active-text: #fff;
+
+    /* Check-in Modal */
+    --color-streak-text: #03DAC6;
+    --color-checkin-day-bg: rgba(3, 218, 198, 0.2);
+    --color-checkin-icon: #03DAC6;
+    --color-reward-box-bg: rgba(251, 207, 232, 0.1);
+    --color-reward-box-border: rgba(251, 207, 232, 0.3);
+    --color-reward-box-text: #FBCFE8;
 }
 
 /* 4. Giáng Sinh (Classic Dark) */
@@ -97,6 +121,14 @@
     --color-nav-checkin-text: #4ADE80; --color-nav-checkin-bg: rgba(74,222,128,0.2); --color-nav-checkin-hover: rgba(74,222,128,0.3);
     --color-nav-creations-text: #93C5FD; --color-nav-creations-bg: rgba(147,197,253,0.2); --color-nav-creations-hover: rgba(147,197,253,0.3); --color-nav-creations-active: #93C5FD; --color-nav-creations-active-text: #1E3A8A;
     --color-nav-admin-text: #FCA5A5; --color-nav-admin-bg: rgba(252,165,165,0.2); --color-nav-admin-hover: rgba(252,165,165,0.3); --color-nav-admin-active: rgb(var(--color-accent)); --color-nav-admin-active-text: #fff;
+
+    /* Check-in Modal */
+    --color-streak-text: #FBBF24;
+    --color-checkin-day-bg: rgba(74, 222, 128, 0.2);
+    --color-checkin-icon: #4ADE80;
+    --color-reward-box-bg: rgba(251, 191, 36, 0.1);
+    --color-reward-box-border: rgba(251, 191, 36, 0.3);
+    --color-reward-box-text: #FBBF24;
 }
 
 /* 5. Lâu Đài Pha Lê (Neon Vibe) */
@@ -120,6 +152,14 @@
     --color-nav-checkin-text: var(--color-accent-secondary); --color-nav-checkin-bg: rgba(72,201,176,0.1); --color-nav-checkin-hover: rgba(72,201,176,0.2);
     --color-nav-creations-text: rgb(var(--color-accent)); --color-nav-creations-bg: rgba(52,152,219,0.1); --color-nav-creations-hover: rgba(52,152,219,0.2); --color-nav-creations-active: rgb(var(--color-accent)); --color-nav-creations-active-text: #fff;
     --color-nav-admin-text: #EC4899; --color-nav-admin-bg: rgba(236,72,153,0.1); --color-nav-admin-hover: rgba(236,72,153,0.2); --color-nav-admin-active: #EC4899; --color-nav-admin-active-text: #fff;
+
+    /* Check-in Modal */
+    --color-streak-text: #48C9B0;
+    --color-checkin-day-bg: rgba(72, 201, 176, 0.15);
+    --color-checkin-icon: #48C9B0;
+    --color-reward-box-bg: rgba(167, 139, 250, 0.1);
+    --color-reward-box-border: rgba(167, 139, 250, 0.3);
+    --color-reward-box-text: #A78BFA;
 }
 
 [data-theme='solar-flare'] ::placeholder,
@@ -425,6 +465,62 @@
 }
 .themed-modal-button:hover {
     @apply opacity-90;
+}
+
+/* ==========================================================================
+   CHECK-IN MODAL STYLES
+   ========================================================================== */
+.themed-checkin-modal__streak-box {
+    @apply p-4 rounded-lg text-center mb-4;
+    background-color: var(--color-fill-secondary);
+}
+.themed-checkin-modal__streak-number {
+    @apply text-3xl font-bold;
+    color: var(--color-streak-text);
+    text-shadow: 0 0 10px var(--color-streak-text);
+}
+.themed-checkin-modal__calendar-bg {
+    @apply p-4 rounded-lg;
+    background-color: var(--color-fill);
+}
+.themed-checkin-modal__day {
+    @apply relative w-full aspect-square flex items-center justify-center rounded-lg text-sm;
+    background-color: var(--color-fill-secondary);
+}
+.themed-checkin-modal__day--checked-in {
+    background-color: var(--color-checkin-day-bg);
+}
+.themed-checkin-modal__day--checked-in .themed-checkin-modal__checkmark {
+    color: var(--color-checkin-icon);
+}
+.themed-checkin-modal__day--checked-in .themed-checkin-modal__day-number {
+    @apply font-bold text-skin-base;
+}
+
+.themed-checkin-modal__day--today {
+    @apply border-2;
+    background-color: rgba(var(--color-accent), 0.2);
+    border-color: rgba(var(--color-accent), 0.8);
+}
+.themed-checkin-modal__day--future {
+    @apply opacity-50;
+}
+.themed-checkin-modal__reward-box {
+    @apply p-2 rounded-lg text-center text-xs;
+    background-color: var(--color-reward-box-bg);
+    border: 1px solid var(--color-reward-box-border);
+    color: var(--color-reward-box-text);
+}
+.themed-checkin-modal__reward-box .icon {
+    @apply text-2xl mb-1;
+    color: var(--color-reward-box-text);
+}
+.themed-checkin-modal__reward-box .day {
+    @apply font-bold;
+    color: var(--color-text-base);
+}
+.themed-checkin-modal__reward-box .prize {
+    color: var(--color-text-muted);
 }
 
 /* ==========================================================================

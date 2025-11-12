@@ -71,21 +71,14 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
   return (
     <header className="fixed top-0 left-0 w-full z-40 bg-skin-fill/80 backdrop-blur-lg border-b border-skin-border">
       <div className="container mx-auto px-4">
-        <div className="flex justify-center md:justify-between items-center py-3 md:h-20">
+        <div className="flex justify-between items-center py-3 md:h-20 relative">
           
-          <div className="flex flex-col items-center md:items-start">
+          {/* Left: Logo */}
+          <div className="flex-shrink-0">
              <Logo onClick={() => handleNavClick('tool')} />
-            <div className="md:hidden mt-2">
-                <button
-                  onClick={onTopUpClick}
-                  className="flex items-center gap-2 px-4 py-2 rounded-full cursor-pointer transition-transform active:scale-95 bg-gradient-to-r from-skin-accent to-skin-accent-secondary text-skin-accent-text shadow-accent-lg button-neon-glow"
-                >
-                  <i className="ph-fill ph-diamonds-four text-lg"></i>
-                  <span className="font-bold text-sm">{user.diamonds} Kim cương</span>
-                </button>
-            </div>
           </div>
           
+          {/* Center: Desktop Navigation */}
            <nav className="hidden md:flex items-center gap-2 absolute left-1/2 -translate-x-1/2">
                 <button
                   onClick={() => handleNavClick('leaderboard')}
@@ -126,22 +119,35 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
                 )}
             </nav>
           
-          <div className="hidden md:flex items-center gap-4">
-            <button onClick={onTopUpClick} className="themed-top-up-button">
-                <div className="themed-top-up-button__icon-wrapper">
-                    <i className="ph-fill ph-diamonds-four"></i>
-                </div>
-                <div className="themed-top-up-button__content-wrapper">
-                    <span className="themed-top-up-button__amount">{user.diamonds.toLocaleString()}</span>
-                    <span className="themed-top-up-button__action">NẠP</span>
-                </div>
+          {/* Right: Actions */}
+          <div className="flex items-center gap-2 md:gap-4">
+            {/* Mobile Top Up */}
+            <button
+              onClick={onTopUpClick}
+              className="md:hidden flex items-center gap-1.5 px-3 py-1.5 rounded-full cursor-pointer transition-transform active:scale-95 bg-skin-fill-secondary border border-skin-border"
+            >
+              <i className="ph-fill ph-diamonds-four text-lg text-skin-accent"></i>
+              <span className="font-bold text-sm text-skin-base">{user.diamonds}</span>
             </button>
             
-            {/* Notification Bell */}
+            {/* Desktop Top Up */}
+            <div className="hidden md:block">
+              <button onClick={onTopUpClick} className="themed-top-up-button">
+                  <div className="themed-top-up-button__icon-wrapper">
+                      <i className="ph-fill ph-diamonds-four"></i>
+                  </div>
+                  <div className="themed-top-up-button__content-wrapper">
+                      <span className="themed-top-up-button__amount">{user.diamonds.toLocaleString()}</span>
+                      <span className="themed-top-up-button__action">NẠP</span>
+                  </div>
+              </button>
+            </div>
+            
+            {/* Notification Bell (All sizes) */}
             <div className="relative" ref={notificationRef}>
                 <button
                   onClick={handleNotificationClick}
-                  className="themed-notification-button"
+                  className="themed-notification-button p-2.5 md:p-2"
                 >
                     <i className="ph-fill ph-bell text-xl"></i>
                     {hasUnread && (
@@ -154,7 +160,8 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
                 {isNotificationOpen && <NotificationDropdown onClose={() => setNotificationOpen(false)} />}
             </div>
 
-            <div className="relative flex items-center gap-3" ref={dropdownRef}>
+            {/* Desktop User Dropdown */}
+            <div className="hidden md:flex relative items-center gap-3" ref={dropdownRef}>
                 <div className="hidden sm:flex items-center gap-2 text-right">
                     <span className="font-semibold text-skin-base">{user.display_name}</span>
                     <span className="text-xs text-skin-muted">{rank.title}</span>

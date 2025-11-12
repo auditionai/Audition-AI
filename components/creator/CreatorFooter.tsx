@@ -18,9 +18,9 @@ const CreatorFooter: React.FC<CreatorFooterProps> = ({ onInfoLinkClick }) => {
   }, [theme]);
 
   return (
-    <footer className="bg-transparent border-t border-skin-border text-skin-base hidden md:block">
+    <footer className="bg-transparent border-t border-skin-border text-skin-base">
       <div className="container mx-auto px-4 py-6">
-        <div className="flex flex-col md:flex-wrap items-center justify-center gap-y-6 gap-x-8 w-full">
+        <div className="flex flex-col md:flex-row items-center justify-center gap-y-6 gap-x-8 w-full">
             <div className="flex items-center gap-3">
                 <span className="text-sm font-semibold text-skin-muted">Giao diện:</span>
                 <span className={`text-sm font-bold text-skin-accent ${highlight ? 'theme-display-highlight' : ''}`}>

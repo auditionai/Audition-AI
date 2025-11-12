@@ -2,7 +2,9 @@
 export default {
   content: [
     "./index.html",
-    "./**/*.{js,ts,jsx,tsx}",
+    "./App.tsx",
+    "./index.tsx",
+    "./{components,pages,contexts,hooks,utils}/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
     extend: {

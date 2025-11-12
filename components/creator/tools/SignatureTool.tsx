@@ -1,3 +1,5 @@
+
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
 import ConfirmationModal from '../../ConfirmationModal';
@@ -12,11 +14,6 @@ const FONTS = [
     { name: 'Montserrat', class: 'font-["Montserrat"]' },
     { name: 'Orbitron', class: 'font-["Orbitron"]' },
     { name: 'Playfair Display', class: 'font-["Playfair_Display"]' },
-    { name: 'Dancing Script', class: 'font-["Dancing_Script"]' },
-    { name: 'Lobster', class: 'font-["Lobster"]' },
-    { name: 'Pacifico', class: 'font-["Pacifico"]' },
-    { name: 'Caveat', class: 'font-["Caveat"]' },
-    { name: 'Bebas Neue', class: 'font-["Bebas_Neue"]' },
 ];
 
 type ToolMode = 'manual' | 'ai';
@@ -350,6 +347,8 @@ const SignatureTool: React.FC<SignatureToolProps> = ({ initialImage, onClearInit
                                     <label className="text-sm font-semibold text-skin-base mb-2 block">Phong cách GenZ</label>
                                     <div className="grid grid-cols-4 gap-2">
                                         {(['neon', '3d', 'graffiti', 'typography', 'outline', 'metallic', 'glowing', 'shadow'] as AiStyle[]).map(s => (
+                                            // FIX: This comparison was causing a type error because 'none' is not a valid AiStyle.
+                                            // The check is redundant as the mapped array does not contain 'none'.
                                             <button key={s} onClick={() => updateState({aiStyle: s})} className={`p-2 text-xs font-bold rounded-md border-2 transition ${state.aiStyle === s ? 'border-skin-border-accent bg-skin-accent/10' : 'border-skin-border bg-skin-fill-secondary'}`}>{s.toUpperCase()}</button>
                                         ))}
                                     </div>

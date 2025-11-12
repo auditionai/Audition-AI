@@ -4,7 +4,7 @@ export default {
     "./index.html",
     "./App.tsx",
     "./index.tsx",
-    "./{components,pages,contexts,hooks,utils}/**/*.{js,ts,jsx,tsx}",
+    "./{components,pages,contexts,hooks,utils,constants,themes,netlify}/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
     extend: {

@@ -1,219 +1,239 @@
-import React, { useState, useEffect, useRef } from 'react';
-import LandingHeader from '../components/Header';
-import Hero from '../components/Hero';
-import Features from '../components/Features';
-import HowItWorks from '../components/HowItWorks';
-import Gallery from '../components/Gallery';
-import Pricing from '../components/Pricing';
-import FAQ from '../components/FAQ';
-import Footer from '../components/Footer';
-import AuthModal from '../components/AuthModal';
-import TopUpModal from '../components/TopUpModal';
-import InfoModal from '../components/InfoModal';
-import ImageModal from '../components/common/ImageModal';
-import DynamicBackground from '../components/common/DynamicBackground';
-import AnimatedSection from '../components/common/AnimatedSection';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { GalleryImage, CreditPackage } from '../types';
+// Fix: The `RealtimeChannel` type is not exported in Supabase v1.
+// The import is removed, and `any` will be used for the channel objects to fix the error.
+
+// Import Landing Page Sections
+import Hero from '../components/landing/Hero';
+import Features from '../components/landing/Features';
+import HowItWorks from '../components/landing/HowItWorks';
+import Community from '../components/landing/Community';
+import Pricing from '../components/landing/Pricing';
+import FAQ from '../components/landing/FAQ';
+import StatsDisplay from '../components/landing/Stats';
+import Cta from '../components/landing/Cta';
+
+// Import Common Components
+import LandingHeader from '../components/landing/Header';
+import Footer from '../components/landing/Footer';
+import AuthModal from '../components/landing/AuthModal';
+import TopUpModal from '../components/landing/TopUpModal';
+import InfoModal from '../components/landing/InfoModal';
+import ImageModal from '../components/common/ImageModal';
+import AnimatedSection from '../components/common/AnimatedSection';
+import AuroraBackground from '../components/common/AuroraBackground';
+
+// Import types and data
+import { GalleryImage, CreditPackage, DashboardStats } from '../types';
 
 const HomePage: React.FC = () => {
-  const { user, stats, navigate, updateUserDiamonds, showToast } = useAuth();
+    const { user, login, navigate, showToast, updateUserDiamonds, supabase } = useAuth();
+    
+    // State for Modals
+    const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+    const [isTopUpModalOpen, setIsTopUpModalOpen] = useState(false);
+    const [infoModalKey, setInfoModalKey] = useState<'terms' | 'policy' | 'contact' | null>(null);
+    const [selectedImage, setSelectedImage] = useState<GalleryImage | null>(null);
 
-  // Modal states
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const [isTopUpModalOpen, setIsTopUpModalOpen] = useState(false);
-  const [infoModalKey, setInfoModalKey] = useState<'terms' | 'policy' | 'contact' | null>(null);
-  const [selectedImage, setSelectedImage] = useState<GalleryImage | null>(null);
+    // State for Data
+    const [featuredPackages, setFeaturedPackages] = useState<CreditPackage[]>([]);
+    const [isPackagesLoading, setIsPackagesLoading] = useState(true);
+    const [publicGalleryImages, setPublicGalleryImages] = useState<GalleryImage[]>([]);
+    const [isGalleryLoading, setIsGalleryLoading] = useState(true);
+    const [stats, setStats] = useState<DashboardStats | null>(null);
+    
+    useEffect(() => {
+        // Fetch featured packages
+        const fetchPackages = async () => {
+            try {
+                const response = await fetch('/.netlify/functions/credit-packages?featured=true');
+                if (!response.ok) throw new Error('Could not load pricing plans.');
+                setFeaturedPackages(await response.json());
+            } catch (error: any) {
+                showToast(error.message, 'error');
+            } finally {
+                setIsPackagesLoading(false);
+            }
+        };
 
-  // Gallery images
-  const [publicGalleryImages, setPublicGalleryImages] = useState<GalleryImage[]>([]);
-  const [creditPackages, setCreditPackages] = useState<CreditPackage[]>([]);
-  const [isPackagesLoading, setIsPackagesLoading] = useState(true);
+        // Fetch public gallery images
+        const fetchPublicGallery = async () => {
+            try {
+                const response = await fetch('/.netlify/functions/public-gallery');
+                if (!response.ok) throw new Error('Could not load community gallery.');
+                setPublicGalleryImages(await response.json());
+            } catch (error: any) {
+                showToast(error.message, 'error');
+            } finally {
+                setIsGalleryLoading(false);
+            }
+        };
 
-  useEffect(() => {
-    const fetchPublicData = async () => {
-        try {
-            const [galleryRes, packagesRes] = await Promise.all([
-                fetch('/.netlify/functions/public-gallery'),
-                fetch('/.netlify/functions/credit-packages?featured=true') // Fetch only featured packages
-            ]);
-            
-            if (!galleryRes.ok) throw new Error('Không thể tải thư viện cộng đồng.');
-            setPublicGalleryImages(await galleryRes.json());
-            
-            if (!packagesRes.ok) throw new Error('Không thể tải các gói nạp.');
-            setCreditPackages(await packagesRes.json());
+        // Fetch public stats
+        const fetchStats = async () => {
+            try {
+                const response = await fetch('/.netlify/functions/admin-dashboard-stats');
+                if (!response.ok) {
+                    console.error('Could not load public stats.');
+                    return;
+                }
+                const dashboardStats = await response.json();
+                // Add 1000 to totalVisits to compensate for pre-tracking data
+                dashboardStats.totalVisits += 1000;
+                setStats(dashboardStats);
+            } catch (error) {
+                console.error('Could not load public stats:', error);
+            }
+        };
 
-        } catch (error: any) {
-            showToast(error.message, 'error');
-        } finally {
-            setIsPackagesLoading(false);
+        fetchPackages();
+        fetchPublicGallery();
+        fetchStats();
+    }, [showToast]);
+
+    // NEW: Real-time subscriptions for stats
+    useEffect(() => {
+        if (!supabase) return;
+
+        // Fix: Use `any[]` for the channels array as `RealtimeChannel` type is not available in Supabase v1 imports.
+        const channels: any[] = [];
+        const updateStat = (updater: (prev: DashboardStats) => DashboardStats) => {
+            setStats(currentStats => currentStats ? updater(currentStats) : null);
+        };
+
+        const visitsChannel = supabase.channel('public:daily_visits')
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'daily_visits' },
+                () => updateStat(s => ({ ...s, visitsToday: s.visitsToday + 1, totalVisits: s.totalVisits + 1 })))
+            .subscribe();
+        channels.push(visitsChannel);
+
+        const usersChannel = supabase.channel('public:users')
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'users' },
+                () => updateStat(s => ({ ...s, newUsersToday: s.newUsersToday + 1, totalUsers: s.totalUsers + 1 })))
+            .subscribe();
+        channels.push(usersChannel);
+
+        const imagesChannel = supabase.channel('public:generated_images')
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'generated_images' },
+                () => updateStat(s => ({ ...s, imagesToday: s.imagesToday + 1, totalImages: s.totalImages + 1 })))
+            .subscribe();
+        channels.push(imagesChannel);
+
+        return () => {
+            channels.forEach(channel => supabase.removeChannel(channel));
+        };
+    }, [supabase]);
+
+    const handleCtaClick = () => {
+        if (user) {
+            navigate('tool');
+        } else {
+            setIsAuthModalOpen(true);
         }
     };
-    fetchPublicData();
-  }, [showToast]);
 
-  const handleCtaClick = () => {
-      if (user) {
-          navigate('tool');
-      } else {
-          setIsAuthModalOpen(true);
-      }
-  };
-
-  const handleTopUpClick = () => {
-      if (user) {
-          navigate('buy-credits');
-      } else {
-          setIsAuthModalOpen(true);
-      }
-  };
-
-  const sectionRefs = {
-    hero: useRef<HTMLDivElement>(null),
-    features: useRef<HTMLDivElement>(null),
-    'how-it-works': useRef<HTMLDivElement>(null),
-    gallery: useRef<HTMLDivElement>(null),
-    pricing: useRef<HTMLDivElement>(null),
-    faq: useRef<HTMLDivElement>(null),
-  };
-
-  const [activeSection, setActiveSection] = useState('hero');
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            setActiveSection(entry.target.id);
-          }
-        });
-      },
-      { rootMargin: '-50% 0px -50% 0px' }
-    );
-
-    const refs = Object.values(sectionRefs);
-    refs.forEach((ref) => {
-      if (ref.current) {
-        observer.observe(ref.current);
-      }
-    });
-
-    return () => {
-      refs.forEach((ref) => {
-        if (ref.current) {
-          observer.unobserve(ref.current);
+    const handleTopUpClick = () => {
+        if (user) {
+            setIsTopUpModalOpen(true);
+        } else {
+            setIsAuthModalOpen(true);
         }
-      });
     };
-  }, []);
+    
+    const handleScrollTo = (id: 'hero' | 'features' | 'how-it-works' | 'pricing' | 'faq' | 'gallery') => {
+        const element = document.getElementById(id);
+        element?.scrollIntoView({ behavior: 'smooth' });
+    };
 
-  const handleScrollTo = (id: keyof typeof sectionRefs) => {
-    sectionRefs[id].current?.scrollIntoView({
-      behavior: 'smooth',
-      block: 'start',
-    });
-  };
+    return (
+        <div className="text-gray-300 font-sans leading-normal tracking-normal">
+            <AuroraBackground />
 
-  return (
-    <div className="bg-[#0B0B0F]">
-      <DynamicBackground activeSection={activeSection} />
-      <LandingHeader
-        user={user}
-        onTopUpClick={handleTopUpClick}
-        onScrollTo={handleScrollTo}
-      />
-      <main>
-        <div id="hero" ref={sectionRefs.hero}>
-          <Hero onCtaClick={handleCtaClick} onGoogleLoginClick={() => setIsAuthModalOpen(true)} />
-        </div>
-        <AnimatedSection className="relative z-10" id="features" >
-          <div ref={sectionRefs.features}><Features /></div>
-        </AnimatedSection>
-        <AnimatedSection className="relative z-10" id="how-it-works" >
-           <div ref={sectionRefs['how-it-works']}><HowItWorks /></div>
-        </AnimatedSection>
-        <AnimatedSection className="relative z-10" id="gallery">
-            <div ref={sectionRefs.gallery}>
-                <section className="py-16 sm:py-24 bg-[#12121A] text-white w-full">
-                    <div className="container mx-auto px-4">
-                         <div className="text-center max-w-3xl mx-auto mb-16">
-                            <h2 className="text-3xl md:text-4xl font-bold mb-4">
-                                <span className="bg-gradient-to-r from-pink-400 to-fuchsia-500 text-transparent bg-clip-text">Tỏa Sáng Cùng Cộng Đồng</span>
-                            </h2>
-                            <p className="text-lg text-gray-400">
-                                Chia sẻ những tác phẩm đẹp nhất của bạn ra thư viện chung để mọi người cùng chiêm ngưỡng. Chỉ tốn 1 kim cương cho mỗi lần chia sẻ!
-                            </p>
-                             <div className="mt-8">
-                                <button
-                                    onClick={() => user ? navigate('my-creations') : setIsAuthModalOpen(true)}
-                                    className="px-6 py-3 font-bold text-white bg-white/10 backdrop-blur-sm border border-white/20 rounded-full transition-all duration-300 hover:bg-white/20 hover:shadow-lg hover:shadow-white/10 hover:-translate-y-1"
-                                >
-                                    {user ? 'Đến Tác Phẩm Của Tôi' : 'Đăng nhập để bắt đầu'}
-                                    <i className="ph-fill ph-arrow-right ml-2"></i>
-                                </button>
-                            </div>
-                        </div>
-                        <h3 className="text-center text-3xl md:text-4xl font-bold mb-12 bg-gradient-to-r from-pink-400 to-fuchsia-500 text-transparent bg-clip-text">Tác Phẩm Nổi Bật</h3>
-                        <Gallery 
-                            images={publicGalleryImages} 
-                            onImageClick={setSelectedImage} 
-                            limit={12} 
-                            displayMode="slider"
-                            showSeeMore={true}
+            <LandingHeader 
+                user={user}
+                onTopUpClick={handleTopUpClick}
+                onScrollTo={handleScrollTo}
+            />
+            
+            <main>
+                <section id="hero">
+                    <Hero onCtaClick={handleCtaClick} onGoogleLoginClick={login} />
+                </section>
+                
+                <AnimatedSection id="features">
+                    <Features />
+                </AnimatedSection>
+                
+                <AnimatedSection id="how-it-works">
+                    <HowItWorks />
+                </AnimatedSection>
+                
+                <AnimatedSection id="gallery">
+                     {isGalleryLoading ? (
+                        <div className="text-center p-12 h-96"></div>
+                     ) : (
+                        <Community
+                            images={publicGalleryImages}
+                            onLoginClick={handleCtaClick}
+                            onImageClick={setSelectedImage}
                             onSeeMoreClick={() => navigate('gallery')}
                         />
-                    </div>
-                </section>
-            </div>
-        </AnimatedSection>
-        <AnimatedSection className="relative z-10" id="pricing">
-            <div ref={sectionRefs.pricing}>
-                <Pricing 
-                    onCtaClick={handleTopUpClick} 
-                    packages={creditPackages}
-                    isLoading={isPackagesLoading}
-                />
-            </div>
-        </AnimatedSection>
-        <AnimatedSection className="relative z-10" id="faq">
-           <div ref={sectionRefs.faq}><FAQ /></div>
-        </AnimatedSection>
-      </main>
-      <Footer
-        onCtaClick={handleCtaClick}
-        stats={stats}
-        onInfoLinkClick={setInfoModalKey}
-      />
+                     )}
+                </AnimatedSection>
 
-      {/* Modals */}
-      <AuthModal
-        isOpen={isAuthModalOpen}
-        onClose={() => setIsAuthModalOpen(false)}
-      />
-      <TopUpModal
-        isOpen={isTopUpModalOpen}
-        onClose={() => setIsTopUpModalOpen(false)}
-        onTopUpSuccess={(amount) => {
-            if (user) {
-                updateUserDiamonds(user.diamonds + amount);
-            }
-            setIsTopUpModalOpen(false);
-            showToast(`Nạp thành công ${amount} kim cương!`, 'success');
-        }}
-      />
-      <InfoModal
-        isOpen={!!infoModalKey}
-        onClose={() => setInfoModalKey(null)}
-        contentKey={infoModalKey}
-      />
-      <ImageModal
-        isOpen={!!selectedImage}
-        onClose={() => setSelectedImage(null)}
-        image={selectedImage}
-      />
-    </div>
-  );
+                <AnimatedSection id="pricing">
+                    <Pricing 
+                        onCtaClick={handleCtaClick} 
+                        packages={featuredPackages}
+                        isLoading={isPackagesLoading}
+                    />
+                </AnimatedSection>
+                
+                <AnimatedSection id="faq">
+                    <FAQ />
+                </AnimatedSection>
+
+                <AnimatedSection id="stats">
+                    <StatsDisplay stats={stats} />
+                </AnimatedSection>
+
+                <AnimatedSection id="cta">
+                    <Cta onCtaClick={handleCtaClick} />
+                </AnimatedSection>
+            </main>
+            
+            <Footer 
+                onInfoLinkClick={setInfoModalKey}
+            />
+            
+            {/* All Modals */}
+            <AuthModal 
+                isOpen={isAuthModalOpen}
+                onClose={() => setIsAuthModalOpen(false)}
+            />
+            <TopUpModal 
+                isOpen={isTopUpModalOpen}
+                onClose={() => setIsTopUpModalOpen(false)}
+                onTopUpSuccess={(amount) => {
+                    if (user) {
+                        updateUserDiamonds(user.diamonds + amount);
+                    }
+                    setIsTopUpModalOpen(false);
+                    showToast(`Nạp thành công ${amount} kim cương!`, 'success');
+                }}
+            />
+            <InfoModal 
+                isOpen={!!infoModalKey}
+                onClose={() => setInfoModalKey(null)}
+                contentKey={infoModalKey}
+            />
+            <ImageModal 
+                isOpen={!!selectedImage}
+                onClose={() => setSelectedImage(null)}
+                image={selectedImage}
+            />
+        </div>
+    );
 };
 
 export default HomePage;

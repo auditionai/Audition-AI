@@ -1,0 +1,116 @@
+/* ---
+  AUDITION AI - LANDING PAGE STYLESHEET
+  Contains styles exclusively for the public-facing homepage.
+--- */
+
+body {
+  font-family: 'Barlow', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #110C13; /* Fallback background */
+  color: #D1D5DB;
+}
+
+.font-orbitron {
+  font-family: 'Orbitron', sans-serif;
+}
+
+.font-poppins {
+  font-family: 'Poppins', sans-serif;
+}
+
+
+.themed-heading {
+  font-family: 'Montserrat', sans-serif;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(0,0,0,0.2);
+  border-radius: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(247, 37, 133, 0.5);
+  border-radius: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(247, 37, 133, 0.8);
+}
+
+
+/* ==========================================================================
+   ANIMATIONS & EFFECTS
+   ========================================================================== */
+
+/* --- Keyframe Animations --- */
+@keyframes subtle-pulse-anim { 0%, 100% { transform: scale(1); box-shadow: 0 0 15px rgba(244, 114, 182, 0.4), 0 0 5px rgba(244, 114, 182, 0.6) inset; } 50% { transform: scale(1.05); box-shadow: 0 0 30px rgba(244, 114, 182, 0.6), 0 0 10px rgba(244, 114, 182, 0.8) inset; } }
+@keyframes scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+
+/* --- Animation Utility Classes (fade-in* moved to index.css) --- */
+
+
+/* Neon text effect for main heading */
+.text-neon-pink {
+  color: #fdd0e7; /* Lighter pink for core text */
+  text-shadow:
+    0 0 4px #fff,
+    0 0 8px #f9a8d4,
+    0 0 12px #f472b6,
+    0 0 20px #ec4899,
+    0 0 35px #ec4899,
+    0 0 50px #ec4899;
+}
+
+.neon-text-glow { text-shadow: 0 0 5px currentColor, 0 0 10px currentColor; }
+
+/* --- Image Slider for Gallery --- */
+.image-slider-container {
+  width: 100%;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
+  mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
+}
+.image-slider-track {
+  display: flex;
+  width: fit-content;
+  animation: scroll 60s linear infinite;
+}
+.image-slider-container:hover .image-slider-track { animation-play-state: paused; }
+.slider-image-item {
+  width: 250px;
+  height: 333px;
+  margin: 0 10px;
+  flex-shrink: 0;
+}
+
+/* --- Interactive Card Effects --- */
+.interactive-3d {
+  transition: transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1), box-shadow 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+  will-change: transform;
+}
+.interactive-3d:hover {
+  transform: perspective(1200px) rotateX(7deg) rotateY(-8deg) scale(1.08);
+  box-shadow: 0 25px 50px rgba(0,0,0,0.5);
+}
+.glowing-border {
+  position: absolute;
+  inset: 0;
+  border-radius: 1rem;
+  padding: 2px;
+  background: linear-gradient(45deg, rgba(247, 37, 133, 0), rgba(247, 37, 133, 0.3), rgba(247, 37, 133, 0));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  opacity: 0.3;
+  transition: opacity 0.3s ease;
+}
+.group:hover .glowing-border, .interactive-3d:hover .glowing-border {
+  opacity: 1;
+  background: linear-gradient(45deg, rgba(247, 37, 133, 0), rgba(247, 37, 133, 0.5), rgba(247, 37, 133, 0));
+}

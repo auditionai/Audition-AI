@@ -76,26 +76,26 @@ const CheckInModal: React.FC<{ isOpen: boolean; onClose: () => void; }> = ({ isO
 
     return (
         <Modal isOpen={isOpen} onClose={onClose} title="Điểm Danh Hàng Ngày">
-            <div className="text-white max-h-[80vh] overflow-y-auto custom-scrollbar">
-                <div className="bg-white/5 p-4 rounded-lg text-center mb-4">
-                    <p className="text-gray-400">Chuỗi điểm danh liên tục của bạn</p>
-                    <p className="text-3xl font-bold text-cyan-400 neon-text-glow">{user?.consecutive_check_in_days || 0} ngày</p>
+            <div className="text-skin-base max-h-[80vh] overflow-y-auto custom-scrollbar">
+                <div className="themed-checkin-modal__streak-box">
+                    <p className="text-skin-muted">Chuỗi điểm danh liên tục của bạn</p>
+                    <p className="themed-checkin-modal__streak-number">{user?.consecutive_check_in_days || 0} ngày</p>
                 </div>
 
-                <div className="bg-black/20 p-4 rounded-lg">
+                <div className="themed-checkin-modal__calendar-bg">
                     <div className="flex justify-between items-center mb-4">
                         <button onClick={() => {
                             setCurrentMonth(m => m === 0 ? 11 : m - 1);
                             if (currentMonth === 0) setCurrentYear(y => y - 1);
-                        }} className="p-2 rounded-full hover:bg-white/10"><i className="ph-fill ph-caret-left"></i></button>
+                        }} className="p-2 rounded-full hover:bg-skin-fill-secondary"><i className="ph-fill ph-caret-left"></i></button>
                         <h3 className="font-bold text-lg">Tháng {currentMonth + 1}, {currentYear}</h3>
                         <button onClick={() => {
                             setCurrentMonth(m => m === 11 ? 0 : m + 1);
                             if (currentMonth === 11) setCurrentYear(y => y - 1);
-                        }} className="p-2 rounded-full hover:bg-white/10"><i className="ph-fill ph-caret-right"></i></button>
+                        }} className="p-2 rounded-full hover:bg-skin-fill-secondary"><i className="ph-fill ph-caret-right"></i></button>
                     </div>
 
-                    <div className="grid grid-cols-7 gap-1 text-center text-xs font-semibold text-gray-400 mb-2">
+                    <div className="grid grid-cols-7 gap-1 text-center text-xs font-semibold text-skin-muted mb-2">
                         {weekdays.map(day => <div key={day}>{day}</div>)}
                     </div>
 
@@ -107,14 +107,17 @@ const CheckInModal: React.FC<{ isOpen: boolean; onClose: () => void; }> = ({ isO
                             const isToday = dateStr === todayVnString;
                             const isFuture = new Date(dateStr) > today;
                             
+                            const dayClasses = `
+                                themed-checkin-modal__day
+                                ${isCheckedIn ? 'themed-checkin-modal__day--checked-in' : ''}
+                                ${isToday ? 'themed-checkin-modal__day--today' : ''}
+                                ${isFuture ? 'themed-checkin-modal__day--future' : ''}
+                            `;
+                            
                             return (
-                                <div key={day} className={`relative w-full aspect-square flex items-center justify-center rounded-lg text-sm
-                                    ${isToday ? 'bg-pink-500/30 border-2 border-pink-500' : ''}
-                                    ${isCheckedIn ? 'bg-green-500/20' : 'bg-white/5'}
-                                    ${isFuture ? 'opacity-50' : ''}
-                                `}>
-                                    <span className={isCheckedIn ? 'font-bold text-white' : 'text-gray-300'}>{day}</span>
-                                    {isCheckedIn && <i className="ph-fill ph-check-circle text-green-300 absolute bottom-1 right-1 text-xs"></i>}
+                                <div key={day} className={dayClasses.trim()}>
+                                    <span className={`themed-checkin-modal__day-number ${isCheckedIn ? '' : 'text-skin-muted'}`}>{day}</span>
+                                    {isCheckedIn && <i className="ph-fill ph-check-circle themed-checkin-modal__checkmark absolute bottom-1 right-1 text-xs"></i>}
                                 </div>
                             );
                         })}
@@ -123,12 +126,12 @@ const CheckInModal: React.FC<{ isOpen: boolean; onClose: () => void; }> = ({ isO
 
                 <div className="mt-4">
                     <h4 className="font-semibold mb-2">Các mốc thưởng</h4>
-                    <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                    <div className="grid grid-cols-3 gap-2">
                         {rewards.map(reward => (
-                             <div key={reward.day} className="bg-yellow-500/10 border border-yellow-500/30 p-2 rounded-lg">
-                                <i className={`ph-fill ${reward.icon} text-yellow-400 text-2xl mb-1`}></i>
-                                <p className="font-bold">Ngày {reward.day}</p>
-                                <p className="text-gray-300">{reward.prize}</p>
+                             <div key={reward.day} className="themed-checkin-modal__reward-box">
+                                <i className={`ph-fill ${reward.icon} icon`}></i>
+                                <p className="day">Ngày {reward.day}</p>
+                                <p className="prize">{reward.prize}</p>
                             </div>
                         ))}
                     </div>
@@ -138,7 +141,7 @@ const CheckInModal: React.FC<{ isOpen: boolean; onClose: () => void; }> = ({ isO
                     <button 
                         onClick={handleCheckIn}
                         disabled={hasCheckedInToday || isCheckingIn}
-                        className="w-full py-3 font-bold text-white bg-gradient-to-r from-pink-500 to-fuchsia-600 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90">
+                        className="w-full py-3 font-bold themed-button-primary disabled:cursor-not-allowed">
                         {isCheckingIn ? 'Đang xử lý...' : hasCheckedInToday ? 'Đã điểm danh hôm nay' : 'Điểm danh ngay'}
                     </button>
                 </div>

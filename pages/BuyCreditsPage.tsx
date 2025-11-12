@@ -1,17 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import CreatorHeader from '../components/CreatorHeader';
-import CreatorFooter from '../components/CreatorFooter';
+import CreatorHeader from '../components/creator/CreatorHeader';
+import CreatorFooter from '../components/creator/CreatorFooter';
 import { useAuth } from '../contexts/AuthContext';
 import { CreditPackage } from '../types';
-import InfoModal from '../components/InfoModal';
+import InfoModal from '../components/creator/InfoModal';
 import CheckInModal from '../components/CheckInModal';
 import BottomNavBar from '../components/common/BottomNavBar';
+import { useTheme } from '../contexts/ThemeContext';
+import ThemeEffects from '../components/themes/ThemeEffects';
 
 const BuyCreditsPage: React.FC = () => {
     const { session, navigate, showToast } = useAuth();
+    const { theme } = useTheme();
     const [packages, setPackages] = useState<CreditPackage[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [isProcessingPayment, setIsProcessingPayment] = useState<string | null>(null); // Store package ID being processed
+    const [isProcessingPayment, setIsProcessingPayment] = useState<string | null>(null);
     const [infoModalKey, setInfoModalKey] = useState<'terms' | 'policy' | 'contact' | null>(null);
     const [isCheckInModalOpen, setCheckInModalOpen] = useState(false);
 
@@ -49,7 +52,6 @@ const BuyCreditsPage: React.FC = () => {
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Không thể tạo liên kết thanh toán.');
             
-            // Redirect to PayOS checkout
             window.location.href = data.checkoutUrl;
 
         } catch (error: any) {
@@ -58,63 +60,57 @@ const BuyCreditsPage: React.FC = () => {
         }
     };
     
-    // Check for payment status from sessionStorage after redirect
     useEffect(() => {
         const paymentResultJSON = sessionStorage.getItem('payment_redirect_result');
         
         if (paymentResultJSON) {
-            // We have a result, so process it and then remove it to prevent re-processing.
             sessionStorage.removeItem('payment_redirect_result');
-
             try {
                 const { status, orderCode } = JSON.parse(paymentResultJSON);
-
                 if (status === 'PAID') {
                     showToast(`Thanh toán thành công! Giao dịch của bạn đang chờ quản trị viên phê duyệt.`, 'success');
                 } else if (status === 'CANCELLED') {
                     showToast(`Bạn đã hủy thanh toán cho đơn hàng #${orderCode}.`, 'error');
                 }
             } catch (e) {
-                console.error("Failed to parse payment redirect result from sessionStorage:", e);
+                console.error("Failed to parse payment redirect result:", e);
             }
         }
     }, [showToast]);
 
     return (
-        <div className="flex flex-col min-h-screen bg-[#0B0B0F] pb-16 md:pb-0">
+        <div data-theme={theme} className="flex flex-col min-h-screen bg-skin-fill text-skin-base pb-16 md:pb-0">
+            <ThemeEffects />
             <CreatorHeader onTopUpClick={() => {}} activeTab={'tool'} onNavigate={navigate} onCheckInClick={() => setCheckInModalOpen(true)} />
-            <main className="flex-grow pt-24 relative">
-                <div className="absolute inset-0 z-0 aurora-background opacity-70"></div>
-                <div className="container mx-auto px-4 relative z-10">
-                    <div className="max-w-4xl mx-auto text-center">
-                        <h1 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-pink-400 to-fuchsia-500 text-transparent bg-clip-text">Nạp Kim Cương</h1>
-                        
-                        <div className="max-w-3xl mx-auto mt-6 bg-black/30 border border-white/10 rounded-2xl p-4 text-sm shadow-lg">
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-y-3 md:gap-x-4">
-                                <div className="flex items-center justify-center gap-2.5 p-2 rounded-lg bg-white/5">
-                                    <i className="ph-fill ph-prohibit text-2xl text-red-400 neon-text-glow" style={{ color: '#f87171' }}></i>
-                                    <p className="text-gray-300">
-                                        <span className="font-bold text-white">Không</span> hoàn tiền &amp; chuyển nhượng.
-                                    </p>
-                                </div>
-                                
-                                <div className="flex items-center justify-center gap-2.5 p-2 rounded-lg bg-white/5">
-                                    <i className="ph-fill ph-calendar-x text-2xl text-yellow-400 neon-text-glow" style={{ color: '#facc15' }}></i>
-                                    <p className="text-gray-300">
-                                        Hạn sử dụng: <span className="font-bold text-white">2 năm</span>
-                                    </p>
-                                </div>
-                                
-                                <div className="flex items-center justify-center gap-2.5 p-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors">
-                                    <i className="ph-fill ph-book-open text-2xl text-cyan-400 neon-text-glow" style={{ color: '#22d3ee' }}></i>
-                                    <a onClick={() => setInfoModalKey('terms')} className="text-cyan-400 font-semibold hover:text-cyan-300 cursor-pointer">
-                                        Xem Chính Sách
-                                    </a>
-                                </div>
+            <main className="flex-grow pt-24 md:pt-28">
+                <div className="container mx-auto px-4">
+                    <div className="themed-main-title-container text-center max-w-4xl mx-auto mb-12">
+                         <h1 
+                            className="themed-main-title text-4xl md:text-5xl font-black mb-4 leading-tight"
+                            data-text="Nạp Kim Cương"
+                        >
+                            Nạp Kim Cương
+                        </h1>
+                        <p className="themed-main-subtitle text-lg md:text-xl max-w-3xl mx-auto">
+                           Đừng quên điểm danh hàng ngày để nhận <span className="font-bold text-pink-400">Kim Cương miễn phí</span> và các phần thưởng hấp dẫn khác!
+                        </p>
+                    </div>
+
+                    <div className="max-w-4xl mx-auto mb-12">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="themed-info-box">
+                                <i className="ph-fill ph-prohibit text-2xl"></i>
+                                <p><strong>Không</strong> hoàn tiền &amp; chuyển nhượng.</p>
+                            </div>
+                            <div className="themed-info-box">
+                                <i className="ph-fill ph-calendar-x text-2xl"></i>
+                                <p>Hạn sử dụng: <strong>2 năm</strong></p>
+                            </div>
+                            <div className="themed-info-box is-link" onClick={() => setInfoModalKey('terms')}>
+                                <i className="ph-fill ph-book-open text-2xl"></i>
+                                <a>Xem Chính Sách</a>
                             </div>
                         </div>
-
-                        <p className="text-sm text-gray-400 mt-4">Đừng quên điểm danh hàng ngày để nhận <span className="font-bold text-pink-400">Kim Cương miễn phí</span> và các phần thưởng hấp dẫn khác!</p>
                     </div>
 
                     {isLoading ? (
@@ -126,36 +122,32 @@ const BuyCreditsPage: React.FC = () => {
                             {packages.map(pkg => {
                                 const totalCredits = pkg.credits_amount + pkg.bonus_credits;
                                 return (
-                                <div key={pkg.id} className="relative bg-[#12121A]/80 border border-pink-500/20 rounded-2xl shadow-lg p-6 flex flex-col text-center interactive-3d group">
+                                <div key={pkg.id} className="themed-credit-package interactive-3d group">
                                     {pkg.tag && (
-                                        <div 
-                                            className="absolute top-0 -translate-y-1/2 left-1/2 -translate-x-1/2 bg-gradient-to-r from-yellow-400 to-amber-500 text-black text-xs font-bold px-3 py-1 rounded-full uppercase shadow-lg shadow-yellow-500/30"
-                                            style={{ animation: 'subtle-pulse 2s infinite' }}
-                                        >
-                                            {pkg.tag}
-                                        </div>
+                                        <div className="themed-credit-package__tag">{pkg.tag}</div>
                                     )}
-                                    <div className="glowing-border"></div>
-                                    <div className="flex-grow">
-                                        <div className="flex items-center justify-center gap-2 mb-2">
-                                            <i className="ph-fill ph-diamonds-four text-3xl text-pink-400"></i>
-                                            <p className="text-4xl font-extrabold text-white">{totalCredits.toLocaleString('vi-VN')}</p>
+                                    <div className="themed-credit-package__content">
+                                        <div className="flex-grow">
+                                            <div className="themed-credit-package__amount">
+                                                <i className="ph-fill ph-diamonds-four"></i>
+                                                <p>{totalCredits.toLocaleString('vi-VN')}</p>
+                                            </div>
+                                            <p className="themed-credit-package__label">Kim cương</p>
+                                            {pkg.bonus_credits > 0 && (
+                                                <p className="themed-credit-package__bonus">
+                                                    Tổng: {pkg.credits_amount.toLocaleString('vi-VN')} + {pkg.bonus_credits.toLocaleString('vi-VN')} Thưởng
+                                                </p>
+                                            )}
                                         </div>
-                                        <p className="text-gray-400 text-sm mb-4">Kim cương</p>
-                                        {pkg.bonus_credits > 0 && (
-                                            <p className="text-xs text-gray-500 mb-4">
-                                                Tổng: {pkg.credits_amount.toLocaleString('vi-VN')} + {pkg.bonus_credits.toLocaleString('vi-VN')} Thưởng
-                                            </p>
-                                        )}
+                                        <p className="themed-credit-package__price">{pkg.price_vnd.toLocaleString('vi-VN')} đ</p>
+                                        <button
+                                            onClick={() => handleBuyClick(pkg)}
+                                            disabled={isProcessingPayment === pkg.id}
+                                            className="themed-credit-package__button"
+                                        >
+                                            {isProcessingPayment === pkg.id ? 'Đang xử lý...' : 'Mua'}
+                                        </button>
                                     </div>
-                                    <p className="text-2xl font-bold text-white mb-6">{pkg.price_vnd.toLocaleString('vi-VN')} đ</p>
-                                    <button
-                                        onClick={() => handleBuyClick(pkg)}
-                                        disabled={isProcessingPayment === pkg.id}
-                                        className="w-full py-3 font-bold rounded-lg transition-all duration-300 bg-gradient-to-r from-[#F72585] to-[#CA27FF] text-white hover:shadow-lg hover:shadow-pink-500/30 hover:-translate-y-1 disabled:opacity-50 disabled:cursor-wait"
-                                    >
-                                        {isProcessingPayment === pkg.id ? 'Đang xử lý...' : 'Mua'}
-                                    </button>
                                 </div>
                             )})}
                         </div>

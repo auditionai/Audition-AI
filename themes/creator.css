@@ -568,3 +568,102 @@
         radial-gradient(circle at 50% 50%, rgba(255,255,255,0.2) 0px, transparent 1px);
     animation: sparkle 5s linear infinite;
 }
+
+/* ==========================================================================
+   SIGNATURE TOOL AI STYLES (NEW & CORRECTED)
+   ========================================================================== */
+
+/* --- Keyframe Animations for Signature --- */
+@keyframes signature-neon-flicker {
+  0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% {
+    text-shadow:
+      0 0 4px #fff, 0 0 10px #ff79c6, 0 0 18px #ff79c6,
+      0 0 38px #ff007f, 0 0 70px #ff007f;
+    color: #ffe6f2;
+  }
+  20%, 24%, 55% {
+    text-shadow: none;
+    color: #ffb3d9;
+  }
+}
+
+@keyframes signature-rainbow-flow {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes signature-fire-flicker {
+  0%, 100% { text-shadow: 0 0 4px #fff, 0 0 11px #f59e0b, 0 0 19px #f59e0b, 0 0 40px #ef4444, 0 0 80px #ef4444; }
+  50% { text-shadow: 0 0 4px #fff, 0 0 12px #facc15, 0 0 22px #facc15, 0 0 45px #f59e0b, 0 0 90px #f59e0b; }
+}
+
+@keyframes signature-ice-glow {
+  0%, 100% { text-shadow: 0 0 5px #fff, 0 0 10px #7dd3fc, 0 0 15px #7dd3fc, 0 0 20px #0ea5e9; }
+  50% { text-shadow: 0 0 6px #fff, 0 0 12px #a5f3fc, 0 0 18px #a5f3fc, 0 0 24px #38bdf8; }
+}
+
+/* --- Style Classes --- */
+.signature-style-neon, .signature-style-3d, .signature-style-graffiti, .signature-style-typography {
+    font-weight: 900;
+    -webkit-font-smoothing: antialiased;
+    display: inline-block;
+}
+
+.signature-style-neon {
+    animation: signature-neon-flicker 4s infinite alternate;
+}
+
+.signature-style-3d {
+    color: #e0e0e0;
+    text-shadow: 
+        1px -1px 0 #444, 2px -2px 0 #3c3c3c, 3px -3px 0 #333,
+        4px -4px 0 #2b2b2b, 5px -5px 10px rgba(0,0,0,0.5);
+}
+
+.signature-style-graffiti {
+    font-family: 'Orbitron', sans-serif !important;
+    transform: skew(-8deg);
+    text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 3px 3px 0 #000;
+}
+
+.signature-style-typography {
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: #fff;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+}
+
+/* --- Color Classes --- */
+.signature-color-rainbow {
+    background-image: linear-gradient(to right, #f87171, #f59e0b, #eab308, #84cc16, #22d3ee, #818cf8, #d946ef, #f87171);
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent !important;
+    animation: signature-rainbow-flow 8s linear infinite;
+}
+
+.signature-color-fire {
+    background-image: linear-gradient(to bottom, #fef08a, #f59e0b, #ef4444);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent !important;
+    animation: signature-fire-flicker 2s ease-in-out infinite alternate;
+}
+
+.signature-color-ice {
+    background-image: linear-gradient(to bottom, #e0f2fe, #7dd3fc, #0ea5e9);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent !important;
+    animation: signature-ice-glow 3s ease-in-out infinite alternate;
+}
+
+.signature-color-gold {
+    background-image: linear-gradient(to bottom, #fffad4, #fde047, #ca8a04);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent !important;
+    filter: drop-shadow(0px 2px 3px rgba(0,0,0,0.3));
+}

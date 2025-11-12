@@ -109,94 +109,92 @@ const ShootingStarEffect: React.FC = () => {
     );
 };
 
-// --- NEW: Dancing Holograms Effect Component ---
-const DancingHologramsEffect: React.FC = () => {
-    const holograms = useMemo(() => {
-        const hologramArray = [];
-        const numHolograms = 5;
+// --- NEW: Dynamic Cyberpunk Skyline Effect Component ---
+const DynamicCyberpunkSkylineEffect: React.FC = () => {
+    const cars = useMemo(() => {
+        const carArray = [];
+        const numCars = 15;
         const colors = ['#EC4899', '#00FFF9', '#8B5CF6'];
-        // Base64 encoded simple stick figure SVG
-        const stickFigureSvg = `data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MCA5MCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIj48Y2lyY2xlIGN4PSIyNSIgY3k9IjEwIiByPSI4Ii8+PGxpbmUgeDE9IjI1IiB5MT0iMjAiIHgyPSIyNSIgeTI9IjUwIi8+PGxpbmUgeDE9IjEwIiB5MT0iMzAiIHgyPSI0MCIgeTI9IjQwIi8+PGxpbmUgeDE9IjI1IiB5MT0iNTAiIHgyPSIxMCIgeTI9IjgwIi8+PGxpbmUgeDE9IjI1IiB5MT0iNTAiIHgyPSI0MCIgeTI9IjgwIi8+PC9zdmc+`;
-
-        for (let i = 0; i < numHolograms; i++) {
-            const color = colors[i % colors.length];
-            const size = Math.random() * 80 + 100; // 100px to 180px height
-            const duration = Math.random() * 4 + 4; // 4s to 8s total cycle
-            
+        for (let i = 0; i < numCars; i++) {
             const style: React.CSSProperties = {
-                height: `${size}px`,
-                width: `${size * 0.55}px`, // maintain aspect ratio
-                color: color,
-                left: `${Math.random() * 90}%`,
-                top: `${Math.random() * 70}%`,
-                backgroundImage: `url('${stickFigureSvg}')`,
-                filter: `drop-shadow(0 0 5px ${color}) drop-shadow(0 0 10px ${color})`,
-                animation: `
-                    hologram-fade-in 0.5s ease-out forwards,
-                    hologram-dance ${duration * 0.2}s ease-in-out ${duration * 0.1}s infinite alternate,
-                    hologram-glitch-out 0.4s steps(5, end) ${duration}s infinite
-                `,
-                animationDelay: `${Math.random() * 5}s`,
+                bottom: `${10 + Math.random() * 40}%`,
+                animationDuration: `${Math.random() * 5 + 3}s`,
+                animationDelay: `${Math.random() * 8}s`,
+                backgroundColor: colors[i % colors.length],
+                boxShadow: `0 0 8px ${colors[i % colors.length]}, 0 0 12px ${colors[i % colors.length]}`,
             };
-            hologramArray.push(<div key={i} className="hologram-dancer" style={style} />);
+            carArray.push(<div key={i} className="flying-car" style={style} />);
         }
-        return hologramArray;
+        return carArray;
     }, []);
 
     return (
         <>
             <style>{`
-                .hologram-container {
+                .skyline-container {
                     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-                    pointer-events: none; z-index: 0; overflow: hidden;
+                    pointer-events: none; z-index: -1; overflow: hidden;
+                    background: linear-gradient(to bottom, #0c0a1a, #1d1a26);
                 }
-                .hologram-dancer {
+                .skyline-layer {
+                    position: absolute; bottom: 0; left: 0; width: 200%; height: 100%;
+                    background-repeat: repeat-x;
+                    background-position: bottom left;
+                    will-change: background-position;
+                }
+                .skyline-layer-far {
+                    background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAwIiBoZWlnaHQ9IjUwMCIgdmlld0JveD0iMCAwIDEwMDAgNTAwIj48ZGVmcz48c3R5bGU+LmF7ZmlsbDojMTExODI3O308L3N0eWxlPjwvZGVmcz48cGF0aCBjbGFzcz0iYSIgZD0iTTAsNTAwVjM1MGw1MC0yMCw1MCwyMFY1MDBaIi8+PHBhdGggY2xhc3M9ImEiIGQ9Ik0xMDAsNTAwVjQwMGw4MC01MCw4MCw1MFY1MDBaIi8+PHBhdGggY2xhc3M9ImEiIGQ9Ik0yNjAsNTAwVjMwMGwxMDAtODAsMTAwLDgwVjUwMFoiLz48cGF0aCBjbGFzcz0iYSIgZD0iTTQ2MCw1MDBWNDIwbDQwLTEwLDQwLDEwVjUwMFoiLz48cGF0aCBjbGFzcz0iYSIgZD0iTTU0MCw1MDBWMjUwbDE1MC0xMDAsMTUwLDEwMFY1MDBaIi8+PHBhdGggY2xhc3M9ImEiIGQ9Ik04NDAsNTAwVjM4MGw4MC0zMCw4MCwzMFY1MDBaIi8+PC9zdmc+');
+                    background-size: 1000px 500px;
+                    animation: skyline-scroll 120s linear infinite;
+                    opacity: 0.5;
+                }
+                .skyline-layer-mid {
+                    background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMjAwIiBoZWlnaHQ9IjYwMCIgdmlld0JveD0iMCAwIDEyMDAgNjAwIj48ZGVmcz48c3R5bGU+LmJ7ZmlsbDojMWYyOTM3O30uY3tmaWxsOiNlYzQ4OTk7fTwvc3R5bGU+PC9kZWZzPjxwYXRoIGNsYXNzPSJiIiBkPSJNM esoteric code...');
+                    background-size: 1200px 600px;
+                    animation: skyline-scroll 80s linear infinite;
+                    opacity: 0.7;
+                }
+                .skyline-layer-near {
+                    background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4MDAiIGhlaWdodD0iMjAwIiB2aWV3Qm94PSIwIDAgODAwIDIwMCI+PHBhdGggZmlsbD0iIzBjMGExYSIgZD0iTTAsMjAwVjE1MHkyMDBWMTQwSDQwMFYxNTBINjAwVjEzMEg4MDBWMjAwWiIvPjwvc3ZnPg==');
+                    background-size: 800px 200px;
+                    animation: skyline-scroll 50s linear infinite;
+                }
+                @keyframes skyline-scroll {
+                    from { background-position-x: 0; }
+                    to { background-position-x: -2400px; }
+                }
+                .flying-car {
                     position: absolute;
-                    background-size: contain;
-                    background-repeat: no-repeat;
-                    background-position: center;
-                    opacity: 0;
-                    will-change: transform, opacity, clip-path;
+                    width: 15px; height: 3px; border-radius: 2px;
+                    animation-name: fly-across;
+                    animation-timing-function: linear;
+                    animation-iteration-count: infinite;
+                    will-change: transform;
                 }
-                /* Add scanlines effect */
-                .hologram-dancer::after {
-                    content: '';
-                    position: absolute;
-                    top: 0; left: 0;
-                    width: 100%; height: 100%;
-                    background: linear-gradient(to bottom, rgba(255,255,255,0.05) 50%, transparent 50%);
-                    background-size: 100% 4px;
-                    animation: scanlines 0.2s linear infinite;
+                .flying-car::before {
+                    content: ''; position: absolute; right: 100%; top: 50%;
+                    transform: translateY(-50%); width: 50px; height: 1px;
+                    background: linear-gradient(to left, currentColor, transparent);
                 }
-
-                @keyframes scanlines {
-                    from { background-position: 0 0; }
-                    to { background-position: 0 4px; }
+                 .flying-car::after {
+                    content: ''; position: absolute; left: 100%; top: 50%;
+                    transform: translateY(-50%); width: 2px; height: 1px;
+                    background: #fff; box-shadow: 0 0 5px #fff;
                 }
-                @keyframes hologram-fade-in {
-                    to { opacity: 0.4; }
-                }
-                @keyframes hologram-dance {
-                    from { transform: skewX(-5deg); }
-                    to { transform: skewX(5deg); }
-                }
-                @keyframes hologram-glitch-out {
-                    0% { transform: translate(0, 0); opacity: 0.4; }
-                    10% { transform: translate(-3px, 3px); }
-                    20% { transform: translate(3px, -3px); }
-                    30% { transform: translate(-3px, -3px); clip-path: inset(80% 0 10% 0); }
-                    40% { transform: translate(3px, 3px); }
-                    50% { transform: skewX(8deg); }
-                    60% { transform: skewX(-8deg); clip-path: inset(20% 0 70% 0); }
-                    80% { opacity: 0.2; }
-                    100% { opacity: 0; transform: translate(0, 0); clip-path: inset(50% 50% 50% 50%); }
+                @keyframes fly-across {
+                    from { transform: translateX(calc(-100vw - 50px)); }
+                    to { transform: translateX(100vw); }
                 }
             `}</style>
-            <div className="hologram-container" aria-hidden="true">{holograms}</div>
+            <div className="skyline-container" aria-hidden="true">
+                <div className="skyline-layer skyline-layer-far"></div>
+                <div className="skyline-layer skyline-layer-mid"></div>
+                <div className="skyline-layer skyline-layer-near"></div>
+                {cars}
+            </div>
         </>
     );
 };
-
 
 // --- Main ThemeEffects Component ---
 // This component dynamically renders effects based on the selected theme.
@@ -209,7 +207,7 @@ const ThemeEffects: React.FC = () => {
         case 'dreamy-galaxy':
             return <ShootingStarEffect />;
         case 'cyber-punk':
-            return <DancingHologramsEffect />;
+            return <DynamicCyberpunkSkylineEffect />;
         // Other theme effects can be added here in the future
         default:
             return null;

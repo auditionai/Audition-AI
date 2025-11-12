@@ -31,6 +31,10 @@ const AILoveStoryPage: React.FC = () => {
     const [isGenerating, setIsGenerating] = useState(false);
     const [isConfirmOpen, setConfirmOpen] = useState(false);
     
+    // NEW states for album creation
+    const [albumImage, setAlbumImage] = useState<string | null>(null);
+    const [isCreatingAlbum, setIsCreatingAlbum] = useState(false);
+
     const scenario = SCENARIOS[scenarioId];
     const currentNode: StoryNode = scenario.nodes[currentNodeId];
     const COST_PER_IMAGE = 2;
@@ -71,6 +75,8 @@ const AILoveStoryPage: React.FC = () => {
         setGeneratedImages([]);
         setCurrentNodeId('start');
         setCurrentStep('casting');
+        setAlbumImage(null);
+        setIsCreatingAlbum(false);
     }
 
     const generateStoryImage = async () => {
@@ -98,8 +104,11 @@ const AILoveStoryPage: React.FC = () => {
             setGeneratedImages(prev => [...prev, result.imageUrl]);
             updateUserProfile({ diamonds: result.newDiamondCount });
             
-            if (currentNode.next) {
-                handleChoice(currentNode.next);
+            const nextNodeId = currentNode.next;
+            if (nextNodeId) {
+                const nextNode = scenario.nodes[nextNodeId];
+                setCurrentNodeId(nextNodeId);
+                setCurrentStep(determineStepForNode(nextNode));
             } else if (currentNode.choices) {
                  setCurrentStep('choice');
             } else {
@@ -125,8 +134,48 @@ const AILoveStoryPage: React.FC = () => {
         }
     }, [currentStep, currentNode, user, showToast]);
 
+    // useEffect to create the album at the end of the story
+    useEffect(() => {
+        const createAlbum = async () => {
+            if (generatedImages.length === 0 || !session) return;
+            setIsCreatingAlbum(true);
+            try {
+                const response = await fetch('/.netlify/functions/create-story-album', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+                    body: JSON.stringify({
+                        imageUrls: generatedImages,
+                        title: scenario.title,
+                        endText: currentNode.text,
+                    }),
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.error);
+                setAlbumImage(`data:image/png;base64,${result.albumImageBase64}`);
+            } catch (err: any) {
+                showToast(err.message || 'Không thể tạo album kỷ niệm.', 'error');
+            } finally {
+                setIsCreatingAlbum(false);
+            }
+        };
+
+        if (currentStep === 'end' && generatedImages.length > 0 && !albumImage && !isCreatingAlbum) {
+            createAlbum();
+        }
+    }, [currentStep, generatedImages, session, showToast, scenario.title, currentNode.text, albumImage, isCreatingAlbum]);
+    
+    const handleDownloadAlbum = () => {
+        if (!albumImage) return;
+        const link = document.createElement('a');
+        link.download = `audition-ai-love-story-${scenario.id}.png`;
+        link.href = albumImage;
+        link.click();
+    };
+
 
     const renderContent = () => {
+        const lastImage = generatedImages.length > 0 ? generatedImages[generatedImages.length - 1] : "https://images.unsplash.com/photo-1517486808906-6ca8b3f04846?q=80&w=1949&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D";
+
         switch (currentStep) {
             case 'casting':
                 return (
@@ -174,13 +223,13 @@ const AILoveStoryPage: React.FC = () => {
             case 'story':
             case 'choice':
             case 'end':
-                const lastImage = generatedImages.length > 0 ? generatedImages[generatedImages.length - 1] : "https://images.unsplash.com/photo-1517486808906-6ca8b3f04846?q=80&w=1949&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D";
                 return (
                     <div className="max-w-4xl mx-auto animate-fade-in relative aspect-[16/9] bg-black/50 rounded-lg overflow-hidden border border-skin-border">
                         {lastImage && <img src={lastImage} className="absolute inset-0 w-full h-full object-cover opacity-30 blur-sm" />}
                         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/50 to-transparent"></div>
                         <div className="relative z-10 p-8 flex flex-col justify-end h-full text-white">
-                             <p className="text-lg leading-relaxed mb-6 p-4 bg-black/60 rounded-lg backdrop-blur-sm">{currentNode.text}</p>
+                            {currentStep !== 'end' && <p className="text-lg leading-relaxed mb-6 p-4 bg-black/60 rounded-lg backdrop-blur-sm">{currentNode.text}</p>}
+                            
                             {currentStep === 'choice' && currentNode.choices && (
                                 <div className="space-y-3">
                                     {currentNode.choices.map((choice, index) => (
@@ -190,14 +239,31 @@ const AILoveStoryPage: React.FC = () => {
                                     ))}
                                 </div>
                             )}
+                            
                             {currentStep === 'end' && (
-                                <div className="text-center p-8 bg-black/70 rounded-lg">
+                                <div className="text-center p-8 bg-black/70 rounded-lg backdrop-blur-sm">
                                     <h3 className="text-2xl font-bold mb-4 text-pink-400">Hết truyện</h3>
-                                    <h4 className="font-semibold mb-4">Album Kỷ Niệm</h4>
-                                    <div className="flex justify-center gap-4 mb-6">
-                                        {generatedImages.map((img, i) => <img key={i} src={img} className="w-24 h-24 object-cover rounded-md border-2 border-white/50"/>)}
-                                    </div>
-                                    <button onClick={restartStory} className="themed-button-secondary">Chơi lại từ đầu</button>
+                                    {isCreatingAlbum ? (
+                                        <div className="py-12">
+                                            <div className="w-12 h-12 border-4 border-t-pink-400 border-white/20 rounded-full animate-spin mx-auto"></div>
+                                            <p className="mt-6 text-lg text-gray-300 animate-pulse">Đang tạo Album Kỷ niệm...</p>
+                                        </div>
+                                    ) : albumImage ? (
+                                        <div className="animate-fade-in">
+                                            <h4 className="font-semibold mb-4">Album Kỷ Niệm của bạn</h4>
+                                            <img src={albumImage} alt="Album Kỷ Niệm" className="w-full max-w-sm mx-auto object-contain rounded-md border-2 border-white/50 mb-6"/>
+                                            <div className="flex justify-center gap-4">
+                                                <button onClick={restartStory} className="themed-button-secondary">Chơi lại từ đầu</button>
+                                                <button onClick={handleDownloadAlbum} className="themed-button-primary px-6">Tải Album</button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="py-12">
+                                            <i className="ph-fill ph-warning-circle text-4xl text-yellow-400 mb-4"></i>
+                                            <p className="text-gray-400 mb-6">Đã xảy ra lỗi khi tạo album của bạn.</p>
+                                            <button onClick={restartStory} className="themed-button-secondary">Thử lại</button>
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>

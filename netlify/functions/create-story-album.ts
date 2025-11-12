@@ -3,6 +3,8 @@ import { supabaseAdmin } from './utils/supabaseClient';
 import { Buffer } from 'buffer';
 import Jimp from 'jimp';
 
+const IMG_WIDTH = 768; // Standard width for all images, reduced from 1024 to save memory
+
 // Helper function to fetch an image and return a Jimp image object
 const fetchImage = async (url: string, errorFont: any) => {
     try {
@@ -15,8 +17,10 @@ const fetchImage = async (url: string, errorFont: any) => {
     } catch (error) {
         console.error(`Error fetching or reading image: ${url}`, error);
         // Return a placeholder image on error to prevent total failure
-        const errorImage = new (Jimp as any)(1024, 768, '#555555');
-        errorImage.print(errorFont, 0, 0, { text: 'Tải ảnh thất bại', alignmentX: (Jimp as any).HORIZONTAL_ALIGN_CENTER, alignmentY: (Jimp as any).VERTICAL_ALIGN_MIDDLE }, 1024, 768);
+        const placeholderWidth = IMG_WIDTH;
+        const placeholderHeight = Math.round(placeholderWidth * 3/4); // Maintain a common aspect ratio
+        const errorImage = new (Jimp as any)(placeholderWidth, placeholderHeight, '#555555');
+        errorImage.print(errorFont, 0, 0, { text: 'Tải ảnh thất bại', alignmentX: (Jimp as any).HORIZONTAL_ALIGN_CENTER, alignmentY: (Jimp as any).VERTICAL_ALIGN_MIDDLE }, placeholderWidth, placeholderHeight);
         return errorImage;
     }
 };
@@ -43,7 +47,6 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         // --- Image Composition Logic ---
         const PADDING = 50;
-        const IMG_WIDTH = 1024; // Standard width for all images
         const CAPTION_HEIGHT = 120; // Space reserved for caption under each image
         const HEADER_HEIGHT = 200;
         const FOOTER_HEIGHT = 150;

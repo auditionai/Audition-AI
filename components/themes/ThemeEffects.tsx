@@ -1,8 +1,7 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef, useEffect } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 
 // --- Snowfall Effect Component ---
-// This component and its styles are self-contained here to avoid creating new files.
 const SnowfallEffect: React.FC = () => {
     const snowflakes = useMemo(() => {
         const snowflakeArray = [];
@@ -109,92 +108,135 @@ const ShootingStarEffect: React.FC = () => {
     );
 };
 
-// --- NEW: Dynamic Cyberpunk Skyline Effect Component ---
-const DynamicCyberpunkSkylineEffect: React.FC = () => {
-    const cars = useMemo(() => {
-        const carArray = [];
-        const numCars = 15;
-        const colors = ['#EC4899', '#00FFF9', '#8B5CF6'];
-        for (let i = 0; i < numCars; i++) {
-            const style: React.CSSProperties = {
-                bottom: `${10 + Math.random() * 40}%`,
-                animationDuration: `${Math.random() * 5 + 3}s`,
-                animationDelay: `${Math.random() * 8}s`,
-                backgroundColor: colors[i % colors.length],
-                boxShadow: `0 0 8px ${colors[i % colors.length]}, 0 0 12px ${colors[i % colors.length]}`,
-            };
-            carArray.push(<div key={i} className="flying-car" style={style} />);
+// --- NEW: Endless Data Tunnel Effect ---
+const EndlessDataTunnelEffect: React.FC = () => {
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        let animationFrameId: number;
+        let particles: any[] = [];
+        const numParticles = 500;
+        const fov = 250;
+        const speed = 2;
+
+        const resizeCanvas = () => {
+            if(!canvas) return;
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        };
+
+        class Particle {
+            x: number;
+            y: number;
+            z: number;
+            px: number;
+            py: number;
+
+            constructor() {
+                this.x = (Math.random() - 0.5) * (canvas?.width || window.innerWidth);
+                this.y = (Math.random() - 0.5) * (canvas?.height || window.innerHeight);
+                this.z = Math.random() * 1000 + 500;
+                this.px = this.x;
+                this.py = this.y;
+            }
         }
-        return carArray;
+
+        const createParticles = () => {
+            particles = [];
+            for (let i = 0; i < numParticles; i++) {
+                particles.push(new Particle());
+            }
+        };
+
+        const render = () => {
+            if(!ctx || !canvas) return;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+
+            particles.forEach(p => {
+                p.z -= speed;
+
+                if (p.z <= 0) {
+                    p.x = (Math.random() - 0.5) * canvas.width;
+                    p.y = (Math.random() - 0.5) * canvas.height;
+                    p.z = 1000;
+                    p.px = p.x;
+                    p.py = p.y;
+                }
+
+                const scale = fov / (fov + p.z);
+                const x2d = p.x * scale + centerX;
+                const y2d = p.y * scale + centerY;
+                
+                const prevScale = fov / (fov + p.z + speed);
+                const prevX2d = p.px * prevScale + centerX;
+                const prevY2d = p.py * prevScale + centerY;
+
+                const alpha = (1 - p.z / 1000) * 0.8;
+
+                ctx.beginPath();
+                ctx.moveTo(prevX2d, prevY2d);
+                ctx.lineTo(x2d, y2d);
+                ctx.lineWidth = scale * 2;
+                ctx.strokeStyle = `rgba(0, 255, 249, ${alpha})`; // Cyan color
+                ctx.stroke();
+
+                p.px = p.x;
+                p.py = p.y;
+            });
+
+            animationFrameId = requestAnimationFrame(render);
+        };
+
+        const init = () => {
+            resizeCanvas();
+            createParticles();
+            render();
+        };
+
+        window.addEventListener('resize', resizeCanvas);
+        init();
+
+        return () => {
+            window.removeEventListener('resize', resizeCanvas);
+            cancelAnimationFrame(animationFrameId);
+        };
+
     }, []);
 
     return (
         <>
             <style>{`
-                .skyline-container {
-                    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-                    pointer-events: none; z-index: -1; overflow: hidden;
-                    background: linear-gradient(to bottom, #0c0a1a, #1d1a26);
+                .data-tunnel-container {
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    z-index: -1;
+                    pointer-events: none;
+                    background: #110C13;
                 }
-                .skyline-layer {
-                    position: absolute; bottom: 0; left: 0; width: 200%; height: 100%;
-                    background-repeat: repeat-x;
-                    background-position: bottom left;
-                    will-change: background-position;
-                }
-                .skyline-layer-far {
-                    background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAwIiBoZWlnaHQ9IjUwMCIgdmlld0JveD0iMCAwIDEwMDAgNTAwIj48ZGVmcz48c3R5bGU+LmF7ZmlsbDojMTExODI3O308L3N0eWxlPjwvZGVmcz48cGF0aCBjbGFzcz0iYSIgZD0iTTAsNTAwVjM1MGw1MC0yMCw1MCwyMFY1MDBaIi8+PHBhdGggY2xhc3M9ImEiIGQ9Ik0xMDAsNTAwVjQwMGw4MC01MCw4MCw1MFY1MDBaIi8+PHBhdGggY2xhc3M9ImEiIGQ9Ik0yNjAsNTAwVjMwMGwxMDAtODAsMTAwLDgwVjUwMFoiLz48cGF0aCBjbGFzcz0iYSIgZD0iTTQ2MCw1MDBWNDIwbDQwLTEwLDQwLDEwVjUwMFoiLz48cGF0aCBjbGFzcz0iYSIgZD0iTTU0MCw1MDBWMjUwbDE1MC0xMDAsMTUwLDEwMFY1MDBaIi8+PHBhdGggY2xhc3M9ImEiIGQ9Ik04NDAsNTAwVjM4MGw4MC0zMCw4MCwzMFY1MDBaIi8+PC9zdmc+');
-                    background-size: 1000px 500px;
-                    animation: skyline-scroll 120s linear infinite;
-                    opacity: 0.5;
-                }
-                .skyline-layer-mid {
-                    background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMjAwIiBoZWlnaHQ9IjYwMCIgdmlld0JveD0iMCAwIDEyMDAgNjAwIj48ZGVmcz48c3R5bGU+LmJ7ZmlsbDojMWYyOTM3O30uY3tmaWxsOiNlYzQ4OTk7fTwvc3R5bGU+PC9kZWZzPjxwYXRoIGNsYXNzPSJiIiBkPSJNM esoteric code...');
-                    background-size: 1200px 600px;
-                    animation: skyline-scroll 80s linear infinite;
-                    opacity: 0.7;
-                }
-                .skyline-layer-near {
-                    background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4MDAiIGhlaWdodD0iMjAwIiB2aWV3Qm94PSIwIDAgODAwIDIwMCI+PHBhdGggZmlsbD0iIzBjMGExYSIgZD0iTTAsMjAwVjE1MHkyMDBWMTQwSDQwMFYxNTBINjAwVjEzMEg4MDBWMjAwWiIvPjwvc3ZnPg==');
-                    background-size: 800px 200px;
-                    animation: skyline-scroll 50s linear infinite;
-                }
-                @keyframes skyline-scroll {
-                    from { background-position-x: 0; }
-                    to { background-position-x: -2400px; }
-                }
-                .flying-car {
-                    position: absolute;
-                    width: 15px; height: 3px; border-radius: 2px;
-                    animation-name: fly-across;
-                    animation-timing-function: linear;
-                    animation-iteration-count: infinite;
-                    will-change: transform;
-                }
-                .flying-car::before {
-                    content: ''; position: absolute; right: 100%; top: 50%;
-                    transform: translateY(-50%); width: 50px; height: 1px;
-                    background: linear-gradient(to left, currentColor, transparent);
-                }
-                 .flying-car::after {
-                    content: ''; position: absolute; left: 100%; top: 50%;
-                    transform: translateY(-50%); width: 2px; height: 1px;
-                    background: #fff; box-shadow: 0 0 5px #fff;
-                }
-                @keyframes fly-across {
-                    from { transform: translateX(calc(-100vw - 50px)); }
-                    to { transform: translateX(100vw); }
+                .data-tunnel-canvas {
+                    display: block;
+                    filter: drop-shadow(0 0 5px #00FFF9);
                 }
             `}</style>
-            <div className="skyline-container" aria-hidden="true">
-                <div className="skyline-layer skyline-layer-far"></div>
-                <div className="skyline-layer skyline-layer-mid"></div>
-                <div className="skyline-layer skyline-layer-near"></div>
-                {cars}
+            <div className="data-tunnel-container">
+                <canvas ref={canvasRef} className="data-tunnel-canvas" />
             </div>
         </>
     );
 };
+
 
 // --- Main ThemeEffects Component ---
 // This component dynamically renders effects based on the selected theme.
@@ -207,7 +249,7 @@ const ThemeEffects: React.FC = () => {
         case 'dreamy-galaxy':
             return <ShootingStarEffect />;
         case 'cyber-punk':
-            return <DynamicCyberpunkSkylineEffect />;
+            return <EndlessDataTunnelEffect />;
         // Other theme effects can be added here in the future
         default:
             return null;

@@ -14,7 +14,8 @@
   --color-fill-modal: #1e1b25;
   --color-input-bg: rgba(0, 0, 0, 0.3);
   --color-text-base: #D1D5DB;
-  --color-text-muted: #868194;
+  --color-text-muted-rgb: 134, 129, 148;
+  --color-text-muted: rgb(var(--color-text-muted-rgb));
   --color-accent: 236, 72, 153; /* pink-500 */
   --color-accent-secondary: #7C3AED; /* violet-600 */
   --color-accent-text: #FFFFFF;
@@ -30,7 +31,8 @@
   --color-fill-modal: #1e1b25;
   --color-input-bg: rgba(0, 0, 0, 0.3);
   --color-text-base: #D1D5DB;
-  --color-text-muted: #868194;
+  --color-text-muted-rgb: 134, 129, 148;
+  --color-text-muted: rgb(var(--color-text-muted-rgb));
   --color-accent: 236, 72, 153; /* pink-500 */
   --color-accent-secondary: #7C3AED; /* violet-600 */
   --color-accent-text: #FFFFFF;
@@ -46,7 +48,8 @@
   --color-fill-modal: #FFFFFF;
   --color-input-bg: rgba(0, 0, 0, 0.05);
   --color-text-base: #2C3E50; /* Dark blue-gray */
-  --color-text-muted: #7F8C8D; /* Muted gray */
+  --color-text-muted-rgb: 127, 140, 141;
+  --color-text-muted: rgb(var(--color-text-muted-rgb));
   --color-accent: 255, 165, 0; /* orange-400 */
   --color-accent-secondary: #FF6B6B; /* A coral red */
   --color-accent-text: #FFFFFF;
@@ -62,7 +65,8 @@
   --color-fill-modal: #1a162c;
   --color-input-bg: rgba(0, 0, 0, 0.2);
   --color-text-base: #E0E0FF;
-  --color-text-muted: #9490b4;
+  --color-text-muted-rgb: 148, 144, 180;
+  --color-text-muted: rgb(var(--color-text-muted-rgb));
   --color-accent: 191, 93, 255; /* purple-400 */
   --color-accent-secondary: #5EEAD4; /* teal-300 */
   --color-accent-text: #FFFFFF;
@@ -78,7 +82,8 @@
   --color-fill-modal: #2d3748;
   --color-input-bg: rgba(0, 0, 0, 0.2);
   --color-text-base: #E2E8F0;
-  --color-text-muted: #A0AEC0;
+  --color-text-muted-rgb: 160, 174, 192;
+  --color-text-muted: rgb(var(--color-text-muted-rgb));
   --color-accent: 212, 175, 55; /* gold */
   --color-accent-secondary: #E53E3E; /* red-600 */
   --color-accent-text: #1A202C;
@@ -94,7 +99,8 @@
   --color-fill-modal: #FFFFFF;
   --color-input-bg: rgba(0, 0, 0, 0.05);
   --color-text-base: #2C3E50; /* Dark blue-gray */
-  --color-text-muted: #7F8C8D; /* Muted gray */
+  --color-text-muted-rgb: 127, 140, 141;
+  --color-text-muted: rgb(var(--color-text-muted-rgb));
   --color-accent: 0, 191, 255; /* deepskyblue */
   --color-accent-secondary: #00A3E0;
   --color-accent-text: #FFFFFF;
@@ -429,10 +435,10 @@
    ========================================================================== */
 /* --- Cyber Grid (Cyber Punk) --- */
 @keyframes scroll-grid {
-    0% { background-position: 0 0; }
-    100% { background-position: 0 100px; }
+    from { transform: translateY(0); }
+    to { transform: translateY(-50px); }
 }
-.scanlines { /* Using scanlines as the name but implementing a grid */
+.scanlines {
     position: absolute;
     inset: 0;
     width: 100%;
@@ -441,7 +447,7 @@
         linear-gradient(rgba(236, 72, 153, 0.2) 1px, transparent 1px),
         linear-gradient(90deg, rgba(236, 72, 153, 0.2) 1px, transparent 1px);
     background-size: 50px 50px;
-    animation: scroll-grid 5s linear infinite;
+    animation: scroll-grid 3s linear infinite;
     opacity: 0.5;
 }
 
@@ -452,19 +458,16 @@
   border-radius: 50%;
   animation: bubble-rise 15s infinite ease-in;
   opacity: 0;
+  background-color: rgb(var(--color-accent));
 }
 @keyframes bubble-rise {
-  0% { transform: translateY(0); opacity: 0; }
-  10% { opacity: 0.7; }
-  90% { opacity: 0.7; }
-  100% { transform: translateY(-100vh); opacity: 0; }
+  0% { transform: translateY(0) scale(1); opacity: 0; }
+  10% { opacity: 0.4; }
+  90% { opacity: 0.4; }
+  100% { transform: translateY(-105vh) scale(0.5); opacity: 0; }
 }
 
 /* --- Galaxy Meteors (Dreamy Galaxy) --- */
-@keyframes anim-star {
-    from { transform: translateY(0px); }
-    to { transform: translateY(-2000px); }
-}
 .galaxy-stars, .galaxy-stars2, .galaxy-stars3 {
     position: absolute;
     top: 0;
@@ -474,12 +477,26 @@
     width: 100%;
     height: 100%;
     display: block;
-    background: transparent url('data:image/svg+xml;base64,PHN2ZyB2ZXJzaW9uPSIxLjEiIGlkPSJMYXllcl8xIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB4PSIwcHgiIHk9IjBweCIgdmlld0JveD0iMCAwIDEwMCAxMDAiIHN0eWxlPSJlbmFibGUtYmFja2dyb3VuZDpuZXcgMCAwIDEwMCAxMDA7IiB4bWw6c3BhY2U9InByZXNlcnZlIj48c3R5bGUgdHlwZT0idGV4dC9jc3MiPjwvc3R5bGU+PGNpcmNsZSBmaWxsPSIjRkZGRkZGIiBjeD0iNTAiIGN5PSI1MCIgcj0iMC41Ii8+PC9zdmc+') repeat top center;
-    background-size: 1600px 1600px;
-    animation: anim-star 200s linear infinite;
 }
-.galaxy-stars2 { background-size: 1000px 1000px; animation: anim-star 150s linear infinite; }
-.galaxy-stars3 { background-size: 600px 600px; animation: anim-star 100s linear infinite; }
+.galaxy-stars {
+    background: #000 url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAGVJREFUWAnNlOEKACAIA+3/f3Zi+kCrQYfI81vB2FFY2pPjD2A8+tNPP/30kw8/3w8QeP//5f/bYPbYx2r4Dfx6AfaPIt5/gP1j6Qd8/AAa/j1AfAOMP4LqX8c3wI8fagA3hY1p1r4AigAAAABJRU5ErkJggg==') repeat top center;
+    z-index: 0;
+    animation: move-twink-back 200s linear infinite;
+}
+.galaxy-stars2 {
+    background: transparent url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAGVJREFUWAnNlOEKACAIA+3/f3Zi+kCrQYfI81vB2FFY2pPjD2A8+tNPP/30kw8/3w8QeP//5f/bYPbYx2r4Dfx6AfaPIt5/gP1j6Qd8/AAa/j1AfAOMP4LqX8c3wI8fagA3hY1p1r4AigAAAABJRU5ErkJggg==') repeat top center;
+    z-index: 1;
+    animation: move-twink-back 150s linear infinite;
+}
+.galaxy-stars3 {
+    background: transparent url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAGVJREFUWAnNlOEKACAIA+3/f3Zi+kCrQYfI81vB2FFY2pPjD2A8+tNPP/30kw8/3w8QeP//5f/bYPbYx2r4Dfx6AfaPIt5/gP1j6Qd8/AAa/j1AfAOMP4LqX8c3wI8fagA3hY1p1r4AigAAAABJRU5ErkJggg==') repeat top center;
+    z-index: 1;
+    animation: move-twink-back 100s linear infinite;
+}
+@keyframes move-twink-back {
+    from {background-position:0 0;}
+    to {background-position:-10000px 5000px;}
+}
 
 /* --- Snowfall (Classic Dark) --- */
 .snowflakes {
@@ -488,11 +505,12 @@
 }
 .snowflake {
   width: 10px; height: 10px; background: white; border-radius: 50%;
-  position: absolute; top: -10px; animation: snowfall 10s linear infinite;
+  position: absolute; top: -20px;
+  animation: snowfall 10s linear infinite;
 }
 @keyframes snowfall {
-  0% { transform: translateY(0) translateX(0); }
-  100% { transform: translateY(105vh) translateX(50px); }
+  0% { transform: translateY(0vh) translateX(0vw); opacity: 1; }
+  100% { transform: translateY(105vh) translateX(10vw); opacity: 0; }
 }
 
 /* --- Crystal Lines (Neon Vibe) --- */
@@ -502,10 +520,11 @@
 .shard {
   position: absolute;
   width: 1px;
+  height: 50%;
   background: linear-gradient(to bottom, transparent, rgb(var(--color-accent) / 0.7), transparent);
   animation: shard-fall 15s linear infinite;
 }
 @keyframes shard-fall {
-  from { transform: translateY(-100%); }
-  to { transform: translateY(100%); }
+  from { transform: translateY(-100%) skewX(-15deg); }
+  to { transform: translateY(200%) skewX(-15deg); }
 }

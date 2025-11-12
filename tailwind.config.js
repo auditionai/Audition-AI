@@ -15,7 +15,7 @@ export default {
           'fill-modal': 'var(--color-fill-modal)',
           'input-bg': 'var(--color-input-bg)',
           base: 'var(--color-text-base)',
-          muted: 'var(--color-text-muted)',
+          muted: 'rgb(var(--color-text-muted-rgb) / <alpha-value>)',
           accent: 'rgb(var(--color-accent) / <alpha-value>)',
           'accent-secondary': 'var(--color-accent-secondary)',
           'accent-text': 'var(--color-accent-text)',

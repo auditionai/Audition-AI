@@ -1,100 +1,352 @@
 
-import type { Handler, HandlerEvent } from "@netlify/functions";
-import { GoogleGenAI, Modality } from "@google/genai";
-import { supabaseAdmin } from './utils/supabaseClient';
-import { Buffer } from 'buffer';
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 
-const handler: Handler = async (event: HandlerEvent) => {
-    const s3Client = new S3Client({
-        region: "auto",
-        endpoint: process.env.R2_ENDPOINT!,
-        credentials: {
-            accessKeyId: process.env.R2_ACCESS_KEY_ID!,
-            secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
-        },
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useAuth } from '../../../contexts/AuthContext';
+import ConfirmationModal from '../../ConfirmationModal';
+import { DiamondIcon } from '../../common/DiamondIcon';
+
+const COST_MANUAL = 0;
+const COST_AI = 1;
+
+const FONTS = [
+    { name: 'Poppins', class: 'font-["Poppins"]' },
+    { name: 'Barlow', class: 'font-["Barlow"]' },
+    { name: 'Montserrat', class: 'font-["Montserrat"]' },
+    { name: 'Orbitron', class: 'font-["Orbitron"]' },
+    { name: 'Playfair Display', class: 'font-["Playfair_Display"]' },
+];
+
+type ToolMode = 'manual' | 'ai';
+type AiStyle = 'none' | 'neon' | '3d' | 'graffiti' | 'typography';
+type AiColor = 'custom' | 'rainbow' | 'fire' | 'ice' | 'gold';
+
+interface SignatureToolProps {
+    initialImage: string | null;
+    onClearInitialImage: () => void;
+}
+
+interface SignatureState {
+    mode: ToolMode;
+    text: string;
+    // Manual
+    font: string;
+    size: number;
+    color: string;
+    // AI
+    aiStyle: AiStyle;
+    aiColor: AiColor;
+}
+
+const SignatureTool: React.FC<SignatureToolProps> = ({ initialImage, onClearInitialImage }) => {
+    const { user, session, showToast, updateUserProfile } = useAuth();
+    const [isConfirmOpen, setConfirmOpen] = useState(false);
+    const [isProcessing, setIsProcessing] = useState(false);
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const imageRef = useRef<HTMLImageElement | null>(null);
+    const imageContainerRef = useRef<HTMLDivElement>(null);
+
+    const [sourceImage, setSourceImage] = useState<string | null>(null);
+    const [resultImage, setResultImage] = useState<string | null>(null);
+    const [signaturePosition, setSignaturePosition] = useState({ x: 0.9, y: 0.9 }); // Percentages
+    const [isDragging, setIsDragging] = useState(false);
+
+    const [state, setState] = useState<SignatureState>({
+        mode: 'manual',
+        text: 'Audition AI',
+        font: 'Poppins',
+        size: 48,
+        color: '#FFFFFF',
+        aiStyle: 'neon',
+        aiColor: 'rainbow',
     });
 
-    try {
-        if (event.httpMethod !== 'POST') {
-            return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
+    useEffect(() => {
+        try {
+            const savedState = sessionStorage.getItem('signatureToolState');
+            if (savedState) setState(prev => ({ ...prev, ...JSON.parse(savedState) }));
+        } catch (e) { console.error("Failed to load state:", e); }
+    }, []);
+
+    useEffect(() => {
+        try {
+            sessionStorage.setItem('signatureToolState', JSON.stringify(state));
+        } catch (e) { console.error("Failed to save state:", e); }
+    }, [state]);
+
+    const updateState = (updates: Partial<SignatureState>) => {
+        setState(prev => ({ ...prev, ...updates }));
+        setResultImage(null); // Reset result on any change
+    };
+
+    const drawManualSignature = useCallback(() => {
+        const canvas = canvasRef.current;
+        const ctx = canvas?.getContext('2d');
+        const img = imageRef.current;
+        if (!canvas || !ctx || !img || !img.complete) return;
+
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        ctx.drawImage(img, 0, 0);
+
+        const x = canvas.width * signaturePosition.x;
+        const y = canvas.height * signaturePosition.y;
+
+        ctx.font = `${state.size}px "${state.font}"`;
+        ctx.fillStyle = state.color;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        
+        // Add a subtle shadow for better readability
+        ctx.shadowColor = 'rgba(0,0,0,0.7)';
+        ctx.shadowBlur = 5;
+        ctx.shadowOffsetX = 2;
+        ctx.shadowOffsetY = 2;
+
+        ctx.fillText(state.text, x, y);
+
+        setResultImage(canvas.toDataURL('image/png'));
+    }, [signaturePosition, state.size, state.font, state.color, state.text]);
+    
+    // --- Drag Handlers ---
+    const handleDragStart = (e: React.MouseEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        setIsDragging(true);
+    };
+
+    const handleDragMove = useCallback((e: MouseEvent) => {
+        if (!isDragging || !imageContainerRef.current) return;
+        const rect = imageContainerRef.current.getBoundingClientRect();
+        const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+        const y = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+        setSignaturePosition({ x, y });
+        setResultImage(null); // Reset result while dragging
+    }, [isDragging]);
+
+    const handleDragEnd = useCallback(() => {
+        setIsDragging(false);
+    }, []);
+
+    useEffect(() => {
+        if (isDragging) {
+            window.addEventListener('mousemove', handleDragMove);
+            window.addEventListener('mouseup', handleDragEnd);
         }
-
-        const authHeader = event.headers['authorization'];
-        if (!authHeader) return { statusCode: 401, body: JSON.stringify({ error: 'Authorization header is required.' }) };
-        const token = authHeader.split(' ')[1];
-        if (!token) return { statusCode: 401, body: JSON.stringify({ error: 'Bearer token is missing.' }) };
-
-        const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
-        if (authError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized: Invalid token.' }) };
-
-        const { image: imageDataUrl, prompt, cost } = JSON.parse(event.body || '{}');
-        if (!imageDataUrl || !prompt || typeof cost !== 'number' || cost <= 0) {
-            return { statusCode: 400, body: JSON.stringify({ error: 'Image, prompt, and cost are required.' }) };
-        }
-        
-        const { data: userData, error: userError } = await supabaseAdmin.from('users').select('diamonds').eq('id', user.id).single();
-        if (userError || !userData) return { statusCode: 404, body: JSON.stringify({ error: 'User not found.' }) };
-        if (userData.diamonds < cost) return { statusCode: 402, body: JSON.stringify({ error: `Không đủ kim cương. Cần ${cost}, bạn có ${userData.diamonds}.` }) };
-        
-        const { data: apiKeyData, error: apiKeyError } = await supabaseAdmin.from('api_keys').select('id, key_value').eq('status', 'active').order('usage_count', { ascending: true }).limit(1).single();
-        if (apiKeyError || !apiKeyData) return { statusCode: 503, body: JSON.stringify({ error: 'Hết tài nguyên AI. Vui lòng thử lại sau.' }) };
-        
-        const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
-        const model = 'gemini-2.5-flash-image';
-
-        const parts: any[] = [];
-        const [header, base64] = imageDataUrl.split(',');
-        const mimeType = header.match(/:(.*?);/)[1];
-        parts.push({ inlineData: { data: base64, mimeType } });
-        parts.push({ text: prompt });
-
-        const response = await ai.models.generateContent({
-            model,
-            contents: { parts },
-            config: { responseModalities: [Modality.IMAGE] },
-        });
-
-        const imagePartResponse = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-        if (!imagePartResponse?.inlineData) throw new Error("AI không thể chèn chữ ký vào ảnh này. Hãy thử lại.");
-
-        const finalImageBase64 = imagePartResponse.inlineData.data;
-        const finalImageMimeType = imagePartResponse.inlineData.mimeType.includes('png') ? 'image/png' : 'image/jpeg';
-
-        const imageBuffer = Buffer.from(finalImageBase64, 'base64');
-        const fileExtension = finalImageMimeType.split('/')[1] || 'png';
-        const fileName = `${user.id}/signed/${Date.now()}.${fileExtension}`;
-
-        await s3Client.send(new PutObjectCommand({
-            Bucket: process.env.R2_BUCKET_NAME!,
-            Key: fileName,
-            Body: imageBuffer,
-            ContentType: finalImageMimeType,
-        }));
-        const publicUrl = `${process.env.R2_PUBLIC_URL}/${fileName}`;
-
-        const newDiamondCount = userData.diamonds - cost;
-        
-        await Promise.all([
-            supabaseAdmin.from('users').update({ diamonds: newDiamondCount }).eq('id', user.id),
-            supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id }),
-            supabaseAdmin.from('diamond_transactions_log').insert({
-                user_id: user.id,
-                amount: -cost,
-                transaction_type: 'TOOL_USE',
-                description: 'Chèn chữ ký bằng AI'
-            })
-        ]);
-
-        return {
-            statusCode: 200,
-            body: JSON.stringify({ imageUrl: publicUrl, newDiamondCount }),
+        return () => {
+            window.removeEventListener('mousemove', handleDragMove);
+            window.removeEventListener('mouseup', handleDragEnd);
         };
+    }, [isDragging, handleDragMove, handleDragEnd]);
 
-    } catch (error: any) {
-        console.error("Add signature AI function error:", error);
-        return { statusCode: 500, body: JSON.stringify({ error: error.message || 'Lỗi không xác định từ máy chủ.' }) };
-    }
+
+    useEffect(() => {
+        if (sourceImage) {
+            const img = new Image();
+            img.crossOrigin = "anonymous";
+            img.onload = () => {
+                imageRef.current = img;
+                const canvas = canvasRef.current;
+                const ctx = canvas?.getContext('2d');
+                if (canvas && ctx) {
+                    canvas.width = img.naturalWidth;
+                    canvas.height = img.naturalHeight;
+                    ctx.drawImage(img, 0, 0);
+                }
+            };
+            img.src = sourceImage;
+        }
+    }, [sourceImage]);
+
+    useEffect(() => {
+        if (initialImage) {
+            setSourceImage(initialImage);
+            setResultImage(null);
+            onClearInitialImage();
+        }
+    }, [initialImage, onClearInitialImage]);
+
+    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                setSourceImage(event.target?.result as string);
+                setResultImage(null);
+            };
+            reader.readAsDataURL(file);
+        }
+        e.target.value = '';
+    };
+
+    const cost = state.mode === 'ai' ? COST_AI : COST_MANUAL;
+
+    const handleApplyClick = () => {
+        if (!sourceImage) return showToast('Vui lòng tải ảnh lên trước.', 'error');
+        if (cost > 0) {
+            if (user && user.diamonds < cost) return showToast(`Bạn cần ${cost} kim cương.`, 'error');
+            setConfirmOpen(true);
+        } else {
+            drawManualSignature();
+            showToast('Áp dụng chữ ký thành công!', 'success');
+        }
+    };
+
+    const handleConfirmApplyAI = async () => {
+        if (!sourceImage) return;
+        setConfirmOpen(false);
+        setIsProcessing(true);
+
+        try {
+            const res = await fetch('/.netlify/functions/add-signature-ai', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+                body: JSON.stringify({ 
+                    image: sourceImage, 
+                    text: state.text,
+                    aiStyle: state.aiStyle,
+                    aiColor: state.aiColor,
+                    signaturePosition,
+                    cost 
+                }),
+            });
+            const result = await res.json();
+            if (!res.ok) throw new Error(result.error);
+            
+            updateUserProfile({ diamonds: result.newDiamondCount });
+            setResultImage(`data:image/png;base64,${result.imageBase64}`);
+            showToast('AI đã chèn chữ ký thành công!', 'success');
+        } catch (err: any) {
+            showToast(err.message, 'error');
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    const handleDownload = () => {
+        if (!resultImage) return;
+        const link = document.createElement('a');
+        link.download = `audition-ai-signed-${Date.now()}.png`;
+        link.href = resultImage;
+        link.click();
+    };
+    
+    const displayImage = resultImage || sourceImage;
+
+    return (
+        <div className="h-full">
+            <ConfirmationModal isOpen={isConfirmOpen} onClose={() => setConfirmOpen(false)} onConfirm={handleConfirmApplyAI} cost={cost} isLoading={isProcessing} />
+            <div className="flex flex-col lg:flex-row gap-6">
+                <div className="w-full lg:w-2/3">
+                    <div ref={imageContainerRef} className="relative w-full aspect-square bg-black/20 rounded-lg border border-skin-border flex items-center justify-center p-2">
+                        {displayImage ? (
+                            <>
+                                <img src={displayImage} className="max-w-full max-h-full object-contain" alt="Preview"/>
+                                <div 
+                                    onMouseDown={handleDragStart}
+                                    style={{
+                                        left: `${signaturePosition.x * 100}%`,
+                                        top: `${signaturePosition.y * 100}%`,
+                                    }}
+                                    className="absolute -translate-x-1/2 -translate-y-1/2 w-20 h-20 border-2 border-dashed border-white/80 cursor-move bg-black/40 rounded-md flex items-center justify-center text-white text-xs font-bold shadow-lg"
+                                >
+                                    Vị trí
+                                </div>
+                            </>
+                        ) : (
+                             <label className="flex flex-col items-center justify-center text-center text-gray-400 cursor-pointer h-full w-full">
+                                <i className="ph-fill ph-upload-simple text-4xl"></i>
+                                <p className="font-semibold mt-2">Nhấn để chọn ảnh</p>
+                                <input type="file" accept="image/*" onChange={handleImageUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                            </label>
+                        )}
+                        <canvas ref={canvasRef} className="hidden" />
+                    </div>
+                </div>
+                <div className="w-full lg:w-1/3">
+                    <div className="grid grid-cols-2 gap-4 mb-4">
+                        <button
+                            onClick={() => updateState({ mode: 'manual'})}
+                            className={`w-full py-3 text-sm font-bold rounded-lg border-2 transition-all duration-200 flex items-center justify-center gap-2 ${
+                                state.mode === 'manual'
+                                    ? 'border-skin-border-accent bg-skin-accent/10 text-skin-base shadow-accent'
+                                    : 'border-skin-border bg-skin-fill-secondary text-skin-muted hover:border-skin-border-accent/50'
+                            }`}
+                        >
+                            Thủ công (Miễn phí)
+                        </button>
+                        <button
+                            onClick={() => updateState({ mode: 'ai'})}
+                            className={`w-full py-3 text-sm font-bold rounded-lg border-2 transition-all duration-200 flex items-center justify-center gap-2 ${
+                                state.mode === 'ai'
+                                    ? 'border-skin-border-accent bg-skin-accent/10 text-skin-base shadow-accent'
+                                    : 'border-skin-border bg-skin-fill-secondary text-skin-muted hover:border-skin-border-accent/50'
+                            }`}
+                        >
+                            AI Style <DiamondIcon className="w-4 h-4 inline-block ml-1" />
+                        </button>
+                    </div>
+
+                    <div className="space-y-4">
+                        <div>
+                            <label className="text-sm font-semibold text-skin-base mb-1 block">Nội dung Chữ ký</label>
+                            <input type="text" value={state.text} onChange={e => updateState({ text: e.target.value })} className="auth-input" />
+                        </div>
+                        {state.mode === 'manual' ? (
+                            <>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="text-sm font-semibold text-skin-base mb-1 block">Font chữ</label>
+                                        <select value={state.font} onChange={e => updateState({ font: e.target.value })} className="auth-input">
+                                            {FONTS.map(f => <option key={f.name} value={f.name}>{f.name}</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="text-sm font-semibold text-skin-base mb-1 block">Màu chữ</label>
+                                        <input type="color" value={state.color} onChange={e => updateState({ color: e.target.value })} className="w-full h-[46px] bg-skin-fill-secondary rounded-md border border-skin-border cursor-pointer" />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="text-sm font-semibold text-skin-base mb-1 block">Kích thước ({state.size}px)</label>
+                                    <input type="range" min="12" max="128" value={state.size} onChange={e => updateState({ size: Number(e.target.value) })} className="w-full accent-skin-accent" />
+                                </div>
+                            </>
+                        ) : (
+                           <>
+                                <div>
+                                    <label className="text-sm font-semibold text-skin-base mb-2 block">Phong cách GenZ</label>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {(['neon', '3d', 'graffiti', 'typography'] as AiStyle[]).map(s => (
+                                            <button key={s} onClick={() => updateState({aiStyle: s})} className={`p-3 text-xs font-bold rounded-md border-2 transition ${state.aiStyle === s ? 'border-skin-border-accent bg-skin-accent/10' : 'border-skin-border bg-skin-fill-secondary'}`}>{s.toUpperCase()}</button>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="text-sm font-semibold text-skin-base mb-2 block">Bảng màu</label>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {(['rainbow', 'fire', 'ice', 'gold'] as AiColor[]).map(c => (
+                                            <button key={c} onClick={() => updateState({aiColor: c})} className={`p-3 text-xs font-bold rounded-md border-2 transition ${state.aiColor === c ? 'border-skin-border-accent bg-skin-accent/10' : 'border-skin-border bg-skin-fill-secondary'}`}>{c.toUpperCase()}</button>
+                                        ))}
+                                    </div>
+                                </div>
+                           </>
+                        )}
+                         <p className="text-xs text-skin-muted p-2 bg-skin-fill rounded-md text-center">Kéo thả ô <span className="font-bold text-skin-base">'Vị trí'</span> trên ảnh để chọn nơi chèn chữ ký.</p>
+                    </div>
+                    <div className="mt-6 pt-6 border-t border-skin-border space-y-3">
+                         <button onClick={handleApplyClick} disabled={isProcessing || !sourceImage} className="w-full py-3 font-bold text-lg text-white bg-gradient-to-r from-pink-500 to-fuchsia-600 rounded-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                            {isProcessing ? <div className="w-6 h-6 border-2 border-white/50 border-t-white rounded-full animate-spin"></div> : <>
+                                {cost > 0 && <DiamondIcon className="w-6 h-6" />}
+                                <span>{state.mode === 'ai' ? `Áp dụng AI Style (${cost} 💎)` : 'Áp dụng Chữ ký'}</span>
+                            </>}
+                        </button>
+                        <button onClick={handleDownload} disabled={!resultImage} className="w-full py-3 font-bold bg-green-500/80 hover:bg-green-600 text-white rounded-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                            <i className="ph-fill ph-download-simple"></i>
+                            Tải ảnh
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
 };
 
-export { handler };
+export default SignatureTool;

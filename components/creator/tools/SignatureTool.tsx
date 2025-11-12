@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
 import ConfirmationModal from '../../ConfirmationModal';
@@ -13,12 +14,8 @@ const FONTS = [
     { name: 'Montserrat', class: 'font-["Montserrat"]' },
     { name: 'Orbitron', class: 'font-["Orbitron"]' },
     { name: 'Playfair Display', class: 'font-["Playfair_Display"]' },
-    { name: 'Be Vietnam Pro', class: 'font-["Be_Vietnam_Pro"]' },
-    { name: 'Inter', class: 'font-["Inter"]' },
-    { name: 'Roboto', class: 'font-["Roboto"]' },
 ];
 
-type Position = 'top-left' | 'top-center' | 'top-right' | 'middle-left' | 'middle-center' | 'middle-right' | 'bottom-left' | 'bottom-center' | 'bottom-right';
 type ToolMode = 'manual' | 'ai';
 type AiStyle = 'none' | 'neon' | '3d' | 'graffiti' | 'typography';
 type AiColor = 'custom' | 'rainbow' | 'fire' | 'ice' | 'gold';
@@ -38,8 +35,6 @@ interface SignatureState {
     // AI
     aiStyle: AiStyle;
     aiColor: AiColor;
-    // Common
-    position: Position;
 }
 
 const SignatureTool: React.FC<SignatureToolProps> = ({ initialImage, onClearInitialImage }) => {
@@ -48,9 +43,12 @@ const SignatureTool: React.FC<SignatureToolProps> = ({ initialImage, onClearInit
     const [isProcessing, setIsProcessing] = useState(false);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const imageRef = useRef<HTMLImageElement | null>(null);
+    const imageContainerRef = useRef<HTMLDivElement>(null);
 
     const [sourceImage, setSourceImage] = useState<string | null>(null);
     const [resultImage, setResultImage] = useState<string | null>(null);
+    const [signaturePosition, setSignaturePosition] = useState({ x: 0.9, y: 0.9 }); // Percentages
+    const [isDragging, setIsDragging] = useState(false);
 
     const [state, setState] = useState<SignatureState>({
         mode: 'manual',
@@ -60,7 +58,6 @@ const SignatureTool: React.FC<SignatureToolProps> = ({ initialImage, onClearInit
         color: '#FFFFFF',
         aiStyle: 'neon',
         aiColor: 'rainbow',
-        position: 'bottom-right',
     });
 
     useEffect(() => {
@@ -91,29 +88,55 @@ const SignatureTool: React.FC<SignatureToolProps> = ({ initialImage, onClearInit
         canvas.height = img.naturalHeight;
         ctx.drawImage(img, 0, 0);
 
-        const padding = state.size * 0.5;
-        let x = 0, y = 0;
-
-        if (state.position.includes('left')) { x = padding; }
-        else if (state.position.includes('center')) { x = canvas.width / 2; }
-        else if (state.position.includes('right')) { x = canvas.width - padding; }
-        
-        if (state.position.startsWith('top')) { y = padding; }
-        else if (state.position.startsWith('middle')) { y = canvas.height / 2; }
-        else if (state.position.startsWith('bottom')) { y = canvas.height - padding; }
+        const x = canvas.width * signaturePosition.x;
+        const y = canvas.height * signaturePosition.y;
 
         ctx.font = `${state.size}px "${state.font}"`;
         ctx.fillStyle = state.color;
-        if (state.position.includes('center')) ctx.textAlign = 'center';
-        else if (state.position.includes('right')) ctx.textAlign = 'right';
-        else ctx.textAlign = 'left';
-        if (state.position.startsWith('middle')) ctx.textBaseline = 'middle';
-        else if (state.position.startsWith('bottom')) ctx.textBaseline = 'bottom';
-        else ctx.textBaseline = 'top';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        
+        // Add a subtle shadow for better readability
+        ctx.shadowColor = 'rgba(0,0,0,0.7)';
+        ctx.shadowBlur = 5;
+        ctx.shadowOffsetX = 2;
+        ctx.shadowOffsetY = 2;
+
         ctx.fillText(state.text, x, y);
 
         setResultImage(canvas.toDataURL('image/png'));
-    }, [state.size, state.position, state.font, state.color, state.text]);
+    }, [signaturePosition, state.size, state.font, state.color, state.text]);
+    
+    // --- Drag Handlers ---
+    const handleDragStart = (e: React.MouseEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        setIsDragging(true);
+    };
+
+    const handleDragMove = useCallback((e: MouseEvent) => {
+        if (!isDragging || !imageContainerRef.current) return;
+        const rect = imageContainerRef.current.getBoundingClientRect();
+        const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+        const y = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+        setSignaturePosition({ x, y });
+        setResultImage(null); // Reset result while dragging
+    }, [isDragging]);
+
+    const handleDragEnd = useCallback(() => {
+        setIsDragging(false);
+    }, []);
+
+    useEffect(() => {
+        if (isDragging) {
+            window.addEventListener('mousemove', handleDragMove);
+            window.addEventListener('mouseup', handleDragEnd);
+        }
+        return () => {
+            window.removeEventListener('mousemove', handleDragMove);
+            window.removeEventListener('mouseup', handleDragEnd);
+        };
+    }, [isDragging, handleDragMove, handleDragEnd]);
+
 
     useEffect(() => {
         if (sourceImage) {
@@ -172,24 +195,24 @@ const SignatureTool: React.FC<SignatureToolProps> = ({ initialImage, onClearInit
         setConfirmOpen(false);
         setIsProcessing(true);
 
-        const positionMap = {
-            'top-left': 'in the top left corner', 'top-center': 'at the top center', 'top-right': 'in the top right corner',
-            'middle-left': 'on the middle left', 'middle-center': 'in the exact center', 'middle-right': 'on the middle right',
-            'bottom-left': 'in the bottom left corner', 'bottom-center': 'at the bottom center', 'bottom-right': 'in the bottom right corner',
-        };
-        const aiPrompt = `Add the text "${state.text}" to the image. The text MUST be placed ${positionMap[state.position]}. Style the text as ${state.aiStyle} with a ${state.aiColor} color scheme. It is crucial that the text is spelled correctly and is legible. Do not alter any other part of the original image.`;
-
         try {
             const res = await fetch('/.netlify/functions/add-signature-ai', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
-                body: JSON.stringify({ image: sourceImage, prompt: aiPrompt, cost }),
+                body: JSON.stringify({ 
+                    image: sourceImage, 
+                    text: state.text,
+                    aiStyle: state.aiStyle,
+                    aiColor: state.aiColor,
+                    signaturePosition,
+                    cost 
+                }),
             });
             const result = await res.json();
             if (!res.ok) throw new Error(result.error);
             
             updateUserProfile({ diamonds: result.newDiamondCount });
-            setResultImage(result.imageUrl);
+            setResultImage(`data:image/png;base64,${result.imageBase64}`);
             showToast('AI đã chèn chữ ký thành công!', 'success');
         } catch (err: any) {
             showToast(err.message, 'error');
@@ -213,9 +236,21 @@ const SignatureTool: React.FC<SignatureToolProps> = ({ initialImage, onClearInit
             <ConfirmationModal isOpen={isConfirmOpen} onClose={() => setConfirmOpen(false)} onConfirm={handleConfirmApplyAI} cost={cost} isLoading={isProcessing} />
             <div className="flex flex-col lg:flex-row gap-6">
                 <div className="w-full lg:w-2/3">
-                    <div className="relative w-full aspect-square bg-black/20 rounded-lg border border-skin-border flex items-center justify-center p-2">
+                    <div ref={imageContainerRef} className="relative w-full aspect-square bg-black/20 rounded-lg border border-skin-border flex items-center justify-center p-2">
                         {displayImage ? (
-                            <img ref={imageRef} src={displayImage} className="max-w-full max-h-full object-contain" alt="Preview"/>
+                            <>
+                                <img src={displayImage} className="max-w-full max-h-full object-contain" alt="Preview"/>
+                                <div 
+                                    onMouseDown={handleDragStart}
+                                    style={{
+                                        left: `${signaturePosition.x * 100}%`,
+                                        top: `${signaturePosition.y * 100}%`,
+                                    }}
+                                    className="absolute -translate-x-1/2 -translate-y-1/2 w-20 h-20 border-2 border-dashed border-white/80 cursor-move bg-black/40 rounded-md flex items-center justify-center text-white text-xs font-bold shadow-lg"
+                                >
+                                    Vị trí
+                                </div>
+                            </>
                         ) : (
                              <label className="flex flex-col items-center justify-center text-center text-gray-400 cursor-pointer h-full w-full">
                                 <i className="ph-fill ph-upload-simple text-4xl"></i>
@@ -227,9 +262,27 @@ const SignatureTool: React.FC<SignatureToolProps> = ({ initialImage, onClearInit
                     </div>
                 </div>
                 <div className="w-full lg:w-1/3">
-                    <div className="flex bg-skin-fill p-1 rounded-full border border-skin-border mb-4">
-                        <button onClick={() => updateState({ mode: 'manual'})} className={`flex-1 py-2 text-sm font-bold rounded-full transition ${state.mode === 'manual' ? 'bg-skin-accent text-skin-accent-text' : 'text-skin-muted'}`}>Thủ công (Miễn phí)</button>
-                        <button onClick={() => updateState({ mode: 'ai'})} className={`flex-1 py-2 text-sm font-bold rounded-full transition ${state.mode === 'ai' ? 'bg-skin-accent text-skin-accent-text' : 'text-skin-muted'}`}>AI Style (1 💎)</button>
+                    <div className="grid grid-cols-2 gap-4 mb-4">
+                        <button
+                            onClick={() => updateState({ mode: 'manual'})}
+                            className={`w-full py-3 text-sm font-bold rounded-lg border-2 transition-all duration-200 flex items-center justify-center gap-2 ${
+                                state.mode === 'manual'
+                                    ? 'border-skin-border-accent bg-skin-accent/10 text-skin-base shadow-accent'
+                                    : 'border-skin-border bg-skin-fill-secondary text-skin-muted hover:border-skin-border-accent/50'
+                            }`}
+                        >
+                            Thủ công (Miễn phí)
+                        </button>
+                        <button
+                            onClick={() => updateState({ mode: 'ai'})}
+                            className={`w-full py-3 text-sm font-bold rounded-lg border-2 transition-all duration-200 flex items-center justify-center gap-2 ${
+                                state.mode === 'ai'
+                                    ? 'border-skin-border-accent bg-skin-accent/10 text-skin-base shadow-accent'
+                                    : 'border-skin-border bg-skin-fill-secondary text-skin-muted hover:border-skin-border-accent/50'
+                            }`}
+                        >
+                            AI Style <DiamondIcon className="w-4 h-4 inline-block ml-1" />
+                        </button>
                     </div>
 
                     <div className="space-y-4">
@@ -276,20 +329,13 @@ const SignatureTool: React.FC<SignatureToolProps> = ({ initialImage, onClearInit
                                 </div>
                            </>
                         )}
-                        <div>
-                            <label className="text-sm font-semibold text-skin-base mb-2 block">Vị trí</label>
-                            <div className="grid grid-cols-3 gap-2">
-                                {(['top-left', 'top-center', 'top-right', 'middle-left', 'middle-center', 'middle-right', 'bottom-left', 'bottom-center', 'bottom-right'] as Position[]).map(p => (
-                                    <button key={p} onClick={() => updateState({ position: p })} className={`h-10 rounded-md border-2 transition ${state.position === p ? 'border-skin-border-accent bg-skin-accent/10' : 'border-skin-border bg-skin-fill-secondary hover:bg-white/5'}`}></button>
-                                ))}
-                            </div>
-                        </div>
+                         <p className="text-xs text-skin-muted p-2 bg-skin-fill rounded-md text-center">Kéo thả ô <span className="font-bold text-skin-base">'Vị trí'</span> trên ảnh để chọn nơi chèn chữ ký.</p>
                     </div>
                     <div className="mt-6 pt-6 border-t border-skin-border space-y-3">
                          <button onClick={handleApplyClick} disabled={isProcessing || !sourceImage} className="w-full py-3 font-bold text-lg text-white bg-gradient-to-r from-pink-500 to-fuchsia-600 rounded-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
                             {isProcessing ? <div className="w-6 h-6 border-2 border-white/50 border-t-white rounded-full animate-spin"></div> : <>
                                 {cost > 0 && <DiamondIcon className="w-6 h-6" />}
-                                <span>{state.mode === 'ai' ? `Áp dụng AI Style (${cost} 💎)` : 'Áp dụng Chữ ký (Miễn phí)'}</span>
+                                <span>{state.mode === 'ai' ? `Áp dụng AI Style (${cost} 💎)` : 'Áp dụng Chữ ký'}</span>
                             </>}
                         </button>
                         <button onClick={handleDownload} disabled={!resultImage} className="w-full py-3 font-bold bg-green-500/80 hover:bg-green-600 text-white rounded-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">

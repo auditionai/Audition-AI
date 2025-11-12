@@ -225,7 +225,7 @@
     content: attr(data-text);
     position: absolute;
     top: 0; left: 0; right: 0;
-    background: var(--color-fill);
+    background: transparent;
     overflow: hidden;
 }
 [data-theme='cyber-punk'] .themed-main-title::before {

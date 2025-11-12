@@ -1,7 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { resizeImage } from '../utils/imageUtils';
-import ConfirmationModal from '../components/ConfirmationModal';
 import ImageUploader from '../components/ai-tool/ImageUploader'; // Re-use the uploader
 
 type StoryStep = 'setup' | 'scripting' | 'review' | 'generating' | 'results';
@@ -39,12 +38,10 @@ const AILoveStoryPage: React.FC = () => {
     const [script, setScript] = useState<ScriptScene[] | null>(null);
 
     // Generating State
-    const [isGenerating, setIsGenerating] = useState(false);
     const [generationProgress, setGenerationProgress] = useState({ current: 0, total: 0 });
     
     // Results State
     const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([]);
-    const [albumImage, setAlbumImage] = useState<string | null>(null);
     const [isCreatingAlbum, setIsCreatingAlbum] = useState(false);
 
     // --- Handlers ---
@@ -93,7 +90,6 @@ const AILoveStoryPage: React.FC = () => {
             return;
         }
 
-        setIsGenerating(true);
         setStep('generating');
         setGenerationProgress({ current: 0, total: totalImages });
 
@@ -141,8 +137,6 @@ const AILoveStoryPage: React.FC = () => {
         } catch (err: any) {
             showToast(err.message, 'error');
             setStep('review'); // Go back to review on error
-        } finally {
-            setIsGenerating(false);
         }
     };
     
@@ -167,7 +161,6 @@ const AILoveStoryPage: React.FC = () => {
             const result = await response.json();
             if (!response.ok) throw new Error(result.error);
             const finalAlbum = `data:image/png;base64,${result.albumImageBase64}`;
-            setAlbumImage(finalAlbum);
             
             // Trigger download
             const link = document.createElement('a');
@@ -187,7 +180,7 @@ const AILoveStoryPage: React.FC = () => {
         setFemaleChar(null); setMaleChar(null);
         setFaceLockFemale(null); setFaceLockMale(null);
         setUserStory(''); setScript(null);
-        setGeneratedImages([]); setAlbumImage(null);
+        setGeneratedImages([]);
         setStep('setup');
     };
 

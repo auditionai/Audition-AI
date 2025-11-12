@@ -108,130 +108,120 @@ const ShootingStarEffect: React.FC = () => {
     );
 };
 
-// --- NEW: Endless Data Tunnel Effect ---
-const EndlessDataTunnelEffect: React.FC = () => {
+// --- NEW: Digital Rain & Glitch Effect ---
+const DigitalRainEffect: React.FC = () => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
 
     useEffect(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
-
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
 
         let animationFrameId: number;
-        let particles: any[] = [];
-        const numParticles = 500;
-        const fov = 250;
-        const speed = 2;
 
         const resizeCanvas = () => {
-            if(!canvas) return;
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
         };
+        resizeCanvas();
 
-        class Particle {
-            x: number;
-            y: number;
-            z: number;
-            px: number;
-            py: number;
+        const katakana = 'アァカサタナハマヤャラワガザダバパイィキシチニヒミリヰギジヂビピウゥクスツヌフムユュルグズブプエェケセテネヘメレヱゲゼデベペオォコソトノホモヨョロヲゴゾドボポヴッン';
+        const latin = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+        const nums = '0123456789';
+        const characters = katakana + latin + nums;
 
-            constructor() {
-                this.x = (Math.random() - 0.5) * (canvas?.width || window.innerWidth);
-                this.y = (Math.random() - 0.5) * (canvas?.height || window.innerHeight);
-                this.z = Math.random() * 1000 + 500;
-                this.px = this.x;
-                this.py = this.y;
-            }
+        const fontSize = 16;
+        let columns = Math.floor(canvas.width / fontSize);
+        const drops: number[] = [];
+
+        for (let i = 0; i < columns; i++) {
+            drops[i] = 1;
         }
 
-        const createParticles = () => {
-            particles = [];
-            for (let i = 0; i < numParticles; i++) {
-                particles.push(new Particle());
+        const draw = () => {
+            ctx.fillStyle = 'rgba(17, 12, 19, 0.05)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            const colors = ['#ec4899', '#8B5CF6', '#00FFF9', '#F0F0F0'];
+            ctx.font = `${fontSize}px monospace`;
+
+            for (let i = 0; i < drops.length; i++) {
+                ctx.fillStyle = colors[Math.floor(Math.random() * colors.length)];
+                const text = characters.charAt(Math.floor(Math.random() * characters.length));
+                ctx.fillText(text, i * fontSize, drops[i] * fontSize);
+
+                if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) {
+                    drops[i] = 0;
+                }
+                drops[i]++;
             }
         };
 
-        const render = () => {
-            if(!ctx || !canvas) return;
+        let lastTime = 0;
+        const fps = 24;
+        const interval = 1000 / fps;
 
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            const centerX = canvas.width / 2;
-            const centerY = canvas.height / 2;
-
-            particles.forEach(p => {
-                p.z -= speed;
-
-                if (p.z <= 0) {
-                    p.x = (Math.random() - 0.5) * canvas.width;
-                    p.y = (Math.random() - 0.5) * canvas.height;
-                    p.z = 1000;
-                    p.px = p.x;
-                    p.py = p.y;
-                }
-
-                const scale = fov / (fov + p.z);
-                const x2d = p.x * scale + centerX;
-                const y2d = p.y * scale + centerY;
-                
-                const prevScale = fov / (fov + p.z + speed);
-                const prevX2d = p.px * prevScale + centerX;
-                const prevY2d = p.py * prevScale + centerY;
-
-                const alpha = (1 - p.z / 1000) * 0.8;
-
-                ctx.beginPath();
-                ctx.moveTo(prevX2d, prevY2d);
-                ctx.lineTo(x2d, y2d);
-                ctx.lineWidth = scale * 2;
-                ctx.strokeStyle = `rgba(0, 255, 249, ${alpha})`; // Cyan color
-                ctx.stroke();
-
-                p.px = p.x;
-                p.py = p.y;
-            });
-
-            animationFrameId = requestAnimationFrame(render);
+        const render = (timestamp: number) => {
+            if (timestamp - lastTime >= interval) {
+                draw();
+                lastTime = timestamp;
+            }
+            animationFrameId = window.requestAnimationFrame(render);
         };
+        render(0);
 
-        const init = () => {
+        const handleResize = () => {
             resizeCanvas();
-            createParticles();
-            render();
+            columns = Math.floor(canvas.width / fontSize);
+            drops.length = 0;
+            for (let i = 0; i < columns; i++) {
+                drops[i] = 1;
+            }
         };
 
-        window.addEventListener('resize', resizeCanvas);
-        init();
+        window.addEventListener('resize', handleResize);
 
         return () => {
-            window.removeEventListener('resize', resizeCanvas);
-            cancelAnimationFrame(animationFrameId);
+            window.removeEventListener('resize', handleResize);
+            window.cancelAnimationFrame(animationFrameId);
         };
-
     }, []);
 
     return (
         <>
             <style>{`
-                .data-tunnel-container {
-                    position: fixed;
-                    top: 0;
-                    left: 0;
-                    width: 100%;
-                    height: 100%;
-                    z-index: -1;
-                    pointer-events: none;
+                .digital-rain-container {
+                    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+                    pointer-events: none; z-index: -1;
+                    animation: glitch-anim 8s infinite steps(1);
                     background: #110C13;
                 }
-                .data-tunnel-canvas {
-                    display: block;
-                    filter: drop-shadow(0 0 5px #00FFF9);
+                .digital-rain-canvas { display: block; }
+                
+                @keyframes glitch-anim {
+                    0%, 100% { clip-path: inset(0 0 0 0); transform: translateX(0); }
+                    5% { clip-path: inset(10% 0 85% 0); }
+                    6% { clip-path: inset(0 0 0 0); }
+                    8% { clip-path: inset(90% 0 2% 0); }
+                    9% { clip-path: inset(0 0 0 0); }
+                    10% { transform: translateX(10px); }
+                    10.5% { transform: translateX(-10px); }
+                    11% { transform: translateX(0); }
+                    40% { clip-path: inset(40% 0 42% 0); }
+                    40.5% { clip-path: inset(0 0 0 0); }
+                }
+                .digital-rain-container::after {
+                    content: '';
+                    position: absolute;
+                    top: 0; left: 0; width: 100%; height: 100%;
+                    background: repeating-linear-gradient(0deg, rgba(255,255,255,0.02), rgba(255,255,255,0.02) 1px, transparent 1px, transparent 4px);
+                    pointer-events: none;
+                    opacity: 0.5;
                 }
             `}</style>
-            <div className="data-tunnel-container">
-                <canvas ref={canvasRef} className="data-tunnel-canvas" />
+            <div className="digital-rain-container" aria-hidden="true">
+                <canvas ref={canvasRef} className="digital-rain-canvas" />
             </div>
         </>
     );
@@ -249,7 +239,7 @@ const ThemeEffects: React.FC = () => {
         case 'dreamy-galaxy':
             return <ShootingStarEffect />;
         case 'cyber-punk':
-            return <EndlessDataTunnelEffect />;
+            return <DigitalRainEffect />;
         // Other theme effects can be added here in the future
         default:
             return null;

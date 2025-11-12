@@ -54,12 +54,6 @@ const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeTab, onTabChange, onT
                 hasNotification={!hasCheckedInToday}
             />
             <NavButton 
-                icon="ph-diamonds-four"
-                label="Nạp"
-                isActive={activeTab === 'buy-credits'}
-                onClick={onTopUpClick}
-            />
-            <NavButton 
                 icon="ph-user-circle"
                 label="Tài khoản"
                 isActive={activeTab === 'settings'}

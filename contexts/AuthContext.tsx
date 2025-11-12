@@ -14,7 +14,7 @@ const getVNDateString = (date: Date) => {
 
 const getRouteFromPath = (path: string): string => {
     const pathSegment = path.split('/').filter(Boolean)[0];
-    const validRoutes = ['tool', 'leaderboard', 'my-creations', 'settings', 'buy-credits', 'gallery', 'admin-gallery'];
+    const validRoutes = ['tool', 'leaderboard', 'my-creations', 'settings', 'buy-credits', 'gallery', 'admin-gallery']; // REMOVED: 'ai-love-story'
     if (validRoutes.includes(pathSegment)) {
         return pathSegment;
     }

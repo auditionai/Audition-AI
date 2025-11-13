@@ -9,7 +9,7 @@ import ProcessedImagePickerModal from './ProcessedImagePickerModal';
 import GenerationProgress from '../../ai-tool/GenerationProgress';
 import ImageModal from '../../common/ImageModal';
 import ToggleSwitch from '../../ai-tool/ToggleSwitch';
-import ProcessedImageModal from './ProcessedImageModal';
+import ProcessedImageModal from '../../ai-tool/ProcessedImageModal';
 import SettingsBlock from '../../ai-tool/SettingsBlock';
 
 
@@ -406,7 +406,7 @@ const GroupGeneratorTool: React.FC = () => {
                     setImageToProcess(null);
                     setPickerTarget(null);
                 }}
-                onUseCropped={(croppedImage) => {
+                onUseCropped={(croppedImage: { url: string; file: File }) => {
                     if (!pickerTarget) return;
                     setCharacters(prev => prev.map((char, i) => {
                         if (i === pickerTarget.index) {

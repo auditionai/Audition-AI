@@ -10,8 +10,8 @@ import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 const XP_PER_CHARACTER = 5;
 
 // This is now the "worker" function.
-const handler = async (event: HandlerEvent) => {
-    if (event.httpMethod !== 'POST') return; 
+const handler: Handler = async (event: HandlerEvent) => {
+    if (event.httpMethod !== 'POST') return { statusCode: 405 }; 
 
     const { jobId } = JSON.parse(event.body || '{}');
 
@@ -20,7 +20,11 @@ const handler = async (event: HandlerEvent) => {
         await supabaseAdmin.from('generated_images').delete().eq('id', jobId);
     };
 
-    if (!jobId) { console.error("[WORKER] Job ID is missing."); return; }
+    if (!jobId) { 
+        console.error("[WORKER] Job ID is missing."); 
+        // Background functions should return a 200 to prevent retries
+        return { statusCode: 200, body: JSON.stringify({ error: "Job ID is missing." }) }; 
+    }
 
     try {
         const { data: jobData, error: fetchError } = await supabaseAdmin
@@ -40,7 +44,7 @@ const handler = async (event: HandlerEvent) => {
         const { data: apiKeyData, error: apiKeyError } = await supabaseAdmin.from('api_keys').select('id, key_value').eq('status', 'active').order('usage_count', { ascending: true }).limit(1).single();
         if (apiKeyError || !apiKeyData) {
             await failJob('Hết tài nguyên AI. Vui lòng thử lại sau.');
-            return;
+            return { statusCode: 200 };
         }
         
         const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
@@ -62,39 +66,44 @@ const handler = async (event: HandlerEvent) => {
         // Add all character and face images
         for (let i = 0; i < characters.length; i++) {
             const char = characters[i];
-            let charDescription = `- Character ${i + 1}:`;
+            let charDescription = `- **Character ${i + 1}:**`;
 
             if (char.poseImage) {
                 const [h, b] = char.poseImage.split(',');
                 parts.push({ inlineData: { data: b, mimeType: h.match(/:(.*?);/)?.[1] || 'image/png' } });
-                charDescription += `\n  - Their **OUTFIT, GENDER, and GENERAL APPEARANCE** are defined by Image ${imageInputIndex}.`;
+                charDescription += `\n  - **ABSOLUTE RULE:** Their **ENTIRE APPEARANCE** (outfit, all clothing, accessories, shoes, hair style, hair color, body shape) is **PERFECTLY PRESERVED** from Image ${imageInputIndex}. It is FORBIDDEN to alter, add, or remove any detail.`;
                 imageInputIndex++;
             }
             if (char.faceImage) {
                 const [h, b] = char.faceImage.split(',');
                 parts.push({ inlineData: { data: b, mimeType: h.match(/:(.*?);/)?.[1] || 'image/png' } });
-                charDescription += `\n  - **CRITICAL**: Their **FACE** must be an EXACT replica from Image ${imageInputIndex}.`;
+                charDescription += `\n  - **CRITICAL RULE:** Their **FACE** is **SACROSANCT**. It must be an EXACT, 100% replica from Image ${imageInputIndex}. Do not stylize or change it in any way.`;
                 imageInputIndex++;
             }
             characterDetailsLines.push(charDescription);
         }
 
         const megaPrompt = [
-            "You are a master film director and artist creating a high-quality group photo. Your primary goal is to intelligently recreate the scene from the first image provided (Image 1) using a new cast of characters.",
+            "You are a master film director and artist creating a high-quality group photo. Your primary goal is to intelligently and faithfully recreate the scene from the first image provided (Image 1) using a new cast of characters.",
             "\n--- CORE MISSION ---",
-            "1. **Analyze Image 1 (The Blueprint):** Deeply analyze the first image provided for its overall **composition, background environment, lighting, mood, and the specific poses and positions** of each person in it.",
-            "2. **Recast the Scene:** You will now replace the people in Image 1 with the new characters provided in the subsequent images.",
-            `3. **Generate a NEW Image:** Create a completely new, photorealistic, and coherent image. **DO NOT cut and paste**. You must redraw the entire scene, placing the new characters into the poses and positions from the blueprint image.`,
+            "1. **Analyze Image 1 (The Blueprint):** Deeply analyze the first image for its:",
+            "   - **Composition:** Poses, positions, and interactions of people.",
+            "   - **Environment:** Background, setting, mood, and lighting.",
+            "   - **Cinematography (CRITICAL):**",
+            "     - **Camera Framing:** Identify if it's a **close-up (headshot), medium shot (waist up), or full shot (full body)**. The final image MUST use the same framing.",
+            "     - **Camera Angle:** Identify if it's a **low angle, eye-level, or high angle** shot and replicate it precisely.",
+            "2. **Recast the Scene:** You will now replace the people in Image 1 with the new characters provided in the subsequent images, placing them into the EXACT poses and positions from the blueprint.",
+            "3. **Generate a NEW Image:** Create a completely new, photorealistic, and coherent image. **DO NOT cut and paste**. You must redraw the entire scene based on your analysis.",
 
-            "\n--- CHARACTER ASSIGNMENTS (STRICTLY FOLLOW) ---",
-            "Use the following images to define the new characters:",
+            "\n--- CHARACTER ASSIGNMENTS (NON-NEGOTIABLE RULES) ---",
+            "Use the following images to define the new characters. These rules are absolute:",
             ...characterDetailsLines,
             `There are a total of ${characters.length} new characters to place in the scene.`,
 
             "\n--- ARTISTIC & CONTEXTUAL GUIDELINES ---",
             `1. **Art Style:** The final image must have a '${style}' aesthetic.`,
             `2. **User Prompt:** Incorporate these additional details into the scene: "${prompt || 'Follow the reference image closely.'}"`,
-            "3. **Final Directives:** Ensure all characters are blended seamlessly into the background. Lighting, shadows, and perspective must be consistent and realistic. The final output must be a single, high-quality, anatomically correct image."
+            "3. **Final Directives:** Ensure all characters are blended seamlessly into the background. Lighting, shadows, and perspective must be consistent with the blueprint image. The final output must be a single, high-quality, anatomically correct image."
         ].join('\n');
         
         // Add the prompt as the first part.
@@ -140,10 +149,13 @@ const handler = async (event: HandlerEvent) => {
         }
 
         await supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id });
+        
+        return { statusCode: 200 };
 
     } catch (error: any) {
         console.error("[WORKER] Group image background function error:", error);
         await failJob(error.message || 'Lỗi không xác định từ máy chủ.');
+        return { statusCode: 200 }; // Always return 200 for background functions
     }
 };
 

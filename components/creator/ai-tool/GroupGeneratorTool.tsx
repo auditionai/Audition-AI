@@ -61,6 +61,7 @@ const GroupGeneratorTool: React.FC = () => {
     const [referenceImage, setReferenceImage] = useState<ImageState>(null);
     const [prompt, setPrompt] = useState('');
     const [selectedStyle, setSelectedStyle] = useState(MOCK_STYLES[0].id);
+    const [aspectRatio, setAspectRatio] = useState('3:4');
     
     // New states for generation flow
     const [isGenerating, setIsGenerating] = useState(false);
@@ -79,6 +80,12 @@ const GroupGeneratorTool: React.FC = () => {
             supabase?.removeAllChannels();
         };
     }, [supabase]);
+    
+    useEffect(() => {
+        if (numCharacters <= 2) setAspectRatio('3:4');
+        else if (numCharacters <= 4) setAspectRatio('1:1');
+        else setAspectRatio('16:9');
+    }, [numCharacters]);
 
 
     const handleNumCharactersSelect = (num: number) => {
@@ -251,7 +258,7 @@ const GroupGeneratorTool: React.FC = () => {
                                 referenceImage: referenceImage ? await fileToBase64(referenceImage.file) : null,
                                 prompt,
                                 style: selectedStyle,
-                                aspectRatio: getAspectRatio(), 
+                                aspectRatio: aspectRatio, 
                                 useUpscaler,
                             }),
                         });
@@ -317,12 +324,6 @@ const GroupGeneratorTool: React.FC = () => {
         a.click();
         a.remove();
     };
-
-    const getAspectRatio = () => {
-        if (numCharacters <= 2) return '3:4';
-        if (numCharacters <= 4) return '1:1';
-        return '16:9';
-    };
     
     const resultImageForModal = generatedImage ? {
         id: 'generated-group-result',
@@ -352,7 +353,7 @@ const GroupGeneratorTool: React.FC = () => {
                     <h3 className="themed-heading text-2xl font-bold mb-4 bg-gradient-to-r from-green-400 to-cyan-400 text-transparent bg-clip-text">Tạo ảnh nhóm thành công!</h3>
                     <div 
                         className="max-w-xl w-full mx-auto bg-black/20 rounded-lg overflow-hidden border-2 border-pink-500/30 group relative cursor-pointer"
-                        style={{ aspectRatio: getAspectRatio().replace(':', '/') }}
+                        style={{ aspectRatio: aspectRatio.replace(':', '/') }}
                         onClick={() => setIsResultModalOpen(true)}
                     >
                         <img src={generatedImage} alt="Generated result" className="w-full h-full object-contain" />
@@ -489,20 +490,28 @@ const GroupGeneratorTool: React.FC = () => {
                                     ))}
                                 </div>
                             </div>
+                            
+                            <div>
+                                <label className="text-sm font-semibold text-skin-base mb-2 block">5. Tỷ lệ khung hình</label>
+                                <div className="grid grid-cols-5 gap-2">
+                                    {(['3:4', '1:1', '4:3', '9:16', '16:9'] as const).map(ar => {
+                                        const dims: { [key: string]: string } = { '3:4': 'w-3 h-4', '1:1': 'w-4 h-4', '4:3': 'w-4 h-3', '9:16': 'w-[1.125rem] h-5', '16:9': 'w-5 h-[1.125rem]' };
+                                        return (
+                                            <button key={ar} onClick={() => setAspectRatio(ar)} className={`p-2 rounded-md flex flex-col items-center justify-center gap-1 border-2 transition ${aspectRatio === ar ? 'selected-glow' : 'border-skin-border bg-skin-fill-secondary hover:border-pink-500/50 text-skin-base'}`}>
+                                                <div className={`${dims[ar]} bg-gray-500 rounded-sm`}/>
+                                                <span className="text-xs font-semibold">{ar}</span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
                         </div>
                     </SettingsBlock>
 
                     <div className="mt-auto pt-6 space-y-4">
                         <ToggleSwitch label="Làm Nét & Nâng Cấp (+1 💎)" checked={useUpscaler} onChange={(e) => setUseUpscaler(e.target.checked)} />
-                        <div className="grid grid-cols-2 gap-4 text-center text-sm p-3 bg-black/20 rounded-lg">
-                            <div>
-                                <p className="text-skin-muted">Tỷ lệ (Tự động)</p>
-                                <p className="font-bold text-white">{getAspectRatio()}</p>
-                            </div>
-                            <div>
-                                <p className="text-skin-muted">Chi phí</p>
-                                <p className="font-bold text-pink-400 flex items-center justify-center gap-1">{totalCost} <i className="ph-fill ph-diamonds-four"></i></p>
-                            </div>
+                        <div className="text-center text-sm p-3 bg-black/20 rounded-lg">
+                            <p className="text-skin-muted">Chi phí: <span className="font-bold text-pink-400 flex items-center justify-center gap-1">{totalCost} <i className="ph-fill ph-diamonds-four"></i></span></p>
                         </div>
                         <button onClick={handleGenerateClick} className="themed-button-primary w-full px-8 py-4 font-bold text-lg flex items-center justify-center gap-2">
                             <i className="ph-fill ph-magic-wand"></i>

@@ -1,186 +1,528 @@
-// IMPORTANT: This file is now correctly named with a "-background" suffix for Netlify to treat it as a background function.
-// The client calls the endpoint WITHOUT the suffix: /.netlify/functions/generate-group-image
+// NEW: Create the content for the GroupGeneratorTool component.
+// FIX: Import 'useState' from 'react' to resolve 'Cannot find name' errors.
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../../../contexts/AuthContext';
+import ConfirmationModal from '../../ConfirmationModal';
+import ImageUploader from '../../ai-tool/ImageUploader';
+import { resizeImage, base64ToFile } from '../../../utils/imageUtils';
+import ProcessedImagePickerModal from './ProcessedImagePickerModal';
+import GenerationProgress from '../../ai-tool/GenerationProgress';
+import ImageModal from '../../common/ImageModal';
+import ToggleSwitch from '../../ai-tool/ToggleSwitch';
+import ProcessedImageModal from '../../ai-tool/ProcessedImageModal';
+import SettingsBlock from '../../ai-tool/SettingsBlock';
 
-import type { Handler, HandlerEvent } from "@netlify/functions";
-import { GoogleGenAI, Modality } from "@google/genai";
-import { supabaseAdmin } from './utils/supabaseClient';
-import { Buffer } from 'buffer';
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 
-const XP_PER_CHARACTER = 5;
+// Mock data for presets - in a real app, this would come from a database
+const MOCK_STYLES = [
+    { id: 'cinematic', name: 'Điện ảnh' },
+    { id: 'anime', name: 'Hoạt hình Anime' },
+    { id: '3d-render', name: 'Kết xuất 3D' },
+    { id: 'photographic', name: 'Nhiếp ảnh' },
+    { id: 'fantasy', name: 'Kỳ ảo' },
+    { id: 'oil-painting', name: 'Tranh sơn dầu' },
+];
 
-// This is now the "worker" function.
-const handler: Handler = async (event: HandlerEvent) => {
-    if (event.httpMethod !== 'POST') return { statusCode: 405 }; 
+type ImageState = { url: string; file: File } | null;
 
-    const { jobId } = JSON.parse(event.body || '{}');
+interface CharacterState {
+    poseImage: ImageState;
+    faceImage: ImageState;
+    processedFace: string | null;
+}
 
-    const failJob = async (reason: string) => {
-        console.error(`[WORKER] Failing job ${jobId}: ${reason}`);
-        await supabaseAdmin.from('generated_images').delete().eq('id', jobId);
+interface ProcessedImageData {
+    id: string;
+    imageBase64: string;
+    mimeType: string;
+    fileName: string;
+    // Add missing properties to match the type used in ProcessedImageModal
+    processedUrl: string;
+    originalUrl?: string;
+}
+
+const fileToBase64 = (file: File): Promise<string> => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+});
+
+// Main Component
+const GroupGeneratorTool: React.FC = () => {
+    // FIX: Add `updateUserDiamonds` to useAuth destructuring to fix 'Cannot find name' error.
+    const { user, session, showToast, supabase, updateUserDiamonds } = useAuth();
+    const [numCharacters, setNumCharacters] = useState<number>(0);
+    const [isConfirmOpen, setConfirmOpen] = useState(false);
+    
+    const [characters, setCharacters] = useState<CharacterState[]>([]);
+
+    // New state for reference image based generation
+    const [referenceImage, setReferenceImage] = useState<ImageState>(null);
+    const [prompt, setPrompt] = useState('');
+    const [selectedStyle, setSelectedStyle] = useState(MOCK_STYLES[0].id);
+    const [aspectRatio, setAspectRatio] = useState('3:4');
+    
+    // New states for generation flow
+    const [isGenerating, setIsGenerating] = useState(false);
+    const [generatedImage, setGeneratedImage] = useState<string | null>(null);
+    const [progress, setProgress] = useState(0);
+    const [processingFaceIndex, setProcessingFaceIndex] = useState<number | null>(null);
+    const [isPickerOpen, setIsPickerOpen] = useState(false);
+    const [pickerTarget, setPickerTarget] = useState<{ index: number; type: 'pose' | 'face' } | null>(null);
+    const [isResultModalOpen, setIsResultModalOpen] = useState(false);
+    const [useUpscaler, setUseUpscaler] = useState(false);
+    const [imageToProcess, setImageToProcess] = useState<ProcessedImageData | null>(null);
+
+    // Effect to clean up any dangling subscriptions on unmount
+    useEffect(() => {
+        return () => {
+            supabase?.removeAllChannels();
+        };
+    }, [supabase]);
+    
+    useEffect(() => {
+        if (numCharacters <= 2) setAspectRatio('3:4');
+        else if (numCharacters <= 4) setAspectRatio('1:1');
+        else setAspectRatio('16:9');
+    }, [numCharacters]);
+
+
+    const handleNumCharactersSelect = (num: number) => {
+        setNumCharacters(num);
+        // FIX: Use Array.from to create unique objects for each character slot,
+        // preventing state management issues where updating one character affects others.
+        setCharacters(Array.from({ length: num }, () => ({
+            poseImage: null,
+            faceImage: null,
+            processedFace: null
+        })));
     };
 
-    if (!jobId) { 
-        console.error("[WORKER] Job ID is missing."); 
-        // Background functions should return a 200 to prevent retries
-        return { statusCode: 200, body: JSON.stringify({ error: "Job ID is missing." }) }; 
-    }
+    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'pose' | 'face' | 'reference', index?: number) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
 
-    try {
-        const { data: jobData, error: fetchError } = await supabaseAdmin
-            .from('generated_images')
-            .select('prompt, user_id')
-            .eq('id', jobId)
-            .single();
+        resizeImage(file, 1024).then(({ file: resizedFile, dataUrl: resizedDataUrl }) => {
+            const newImage = { url: resizedDataUrl, file: resizedFile };
+            if (type === 'reference') {
+                setReferenceImage(newImage);
+            } else {
+                if (index === undefined) return;
+                setCharacters(prev => prev.map((char, i) => {
+                    if (i === index) {
+                        if (type === 'pose') return { ...char, poseImage: newImage };
+                        return { ...char, faceImage: newImage, processedFace: null };
+                    }
+                    return char;
+                }));
+            }
+        }).catch(() => showToast("Lỗi khi xử lý ảnh.", "error"));
+    };
 
-        if (fetchError || !jobData || !jobData.prompt) {
-            throw new Error(fetchError?.message || 'Job not found or payload is missing.');
-        }
-
-        const payload = JSON.parse(jobData.prompt);
-        const { characters, referenceImage, prompt, style, aspectRatio } = payload;
-        const userId = jobData.user_id;
-
-        const { data: apiKeyData, error: apiKeyError } = await supabaseAdmin.from('api_keys').select('id, key_value').eq('status', 'active').order('usage_count', { ascending: true }).limit(1).single();
-        if (apiKeyError || !apiKeyData) {
-            await failJob('Hết tài nguyên AI. Vui lòng thử lại sau.');
-            return { statusCode: 200 };
-        }
-        
-        const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
-
-        // --- NEW PROMPT ENGINEERING LOGIC ---
-        const parts: any[] = [];
-        const characterDetailsLines: string[] = [];
-        let imageInputIndex = 1;
-
-        if (referenceImage) {
-            const [h, b] = referenceImage.split(',');
-            parts.push({ inlineData: { data: b, mimeType: h.match(/:(.*?);/)?.[1] || 'image/png' } });
-            imageInputIndex++;
+    const handleRemoveImage = (type: 'pose' | 'face' | 'reference', index?: number) => {
+         if (type === 'reference') {
+            setReferenceImage(null);
         } else {
-             throw new Error('Reference image is missing from the payload.');
+            if (index === undefined) return;
+            setCharacters(prev => prev.map((char, i) => {
+                if (i === index) {
+                    if (type === 'pose') return { ...char, poseImage: null };
+                    return { ...char, faceImage: null, processedFace: null };
+                }
+                return char;
+            }));
         }
+    };
+    
+    const handleOpenPicker = (index: number, type: 'pose' | 'face') => {
+        setPickerTarget({ index, type });
+        setIsPickerOpen(true);
+    };
+
+    const handleImageSelectFromPicker = (imageData: ProcessedImageData) => {
+        setIsPickerOpen(false);
+        setImageToProcess(imageData);
+    };
+
+    const handleProcessFace = async (index: number) => {
+        const char = characters[index];
+        if (!char.faceImage || !session) return;
         
+        setProcessingFaceIndex(index);
+        try {
+            const reader = new FileReader();
+            reader.readAsDataURL(char.faceImage.file);
+            reader.onloadend = async () => {
+                const base64Image = reader.result;
+                const response = await fetch('/.netlify/functions/process-face', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+                    body: JSON.stringify({ image: base64Image }),
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.error || 'Xử lý gương mặt thất bại.');
+
+                setCharacters(prev => prev.map((c, i) => i === index ? { ...c, processedFace: result.processedImageBase64 } : c));
+                updateUserDiamonds(result.newDiamondCount);
+                showToast('Xử lý & Khóa gương mặt thành công!', 'success');
+            };
+        } catch (err: any) {
+            showToast(err.message, 'error');
+        } finally {
+            setProcessingFaceIndex(null);
+        }
+    };
+
+    const totalCost = numCharacters + (useUpscaler ? 1 : 0);
+
+    const handleGenerateClick = () => {
+        if (!referenceImage) {
+            showToast('Vui lòng tải lên "Ảnh Mẫu Tham Chiếu".', 'error');
+            return;
+        }
         for (let i = 0; i < characters.length; i++) {
-            const char = characters[i];
-            const charDescription = [
-                `<character id="${i + 1}">`,
-                `  <source_images>`
-            ];
-
-            if (char.poseImage) {
-                const [h, b] = char.poseImage.split(',');
-                parts.push({ inlineData: { data: b, mimeType: h.match(/:(.*?);/)?.[1] || 'image/png' } });
-                charDescription.push(`    <appearance_source image_index="${imageInputIndex}">This image defines the character's ENTIRE appearance: outfit, accessories, hair, and body. PRESERVE IT PERFECTLY.</appearance_source>`);
-                imageInputIndex++;
+            if (!characters[i].poseImage) {
+                showToast(`Vui lòng cung cấp "Ảnh nhân vật" cho Nhân vật ${i + 1}.`, 'error');
+                return;
             }
-            if (char.faceImage) {
-                const [h, b] = char.faceImage.split(',');
-                parts.push({ inlineData: { data: b, mimeType: h.match(/:(.*?);/)?.[1] || 'image/png' } });
-                charDescription.push(`    <face_source image_index="${imageInputIndex}">This image defines the character's FACE. REPLICATE IT EXACTLY. This is a non-negotiable, high-priority rule.</face_source>`);
-                imageInputIndex++;
-            }
-            charDescription.push(`  </source_images>`);
-            charDescription.push(`</character>`);
-            characterDetailsLines.push(charDescription.join('\n'));
         }
 
-        const megaPrompt = [
-            "<master_instructions>",
-            "  <task_overview>",
-            "    Your task is to generate a new group photo by perfectly recasting a scene from a reference image (Image 1) with a new set of characters. Adherence to character details is the highest and most critical priority.",
-            "  </task_overview>",
-            "",
-            "  <critical_rules>",
-            `    <rule id="1" priority="MAXIMUM">**CHARACTER COUNT:** The final image MUST contain EXACTLY ${characters.length} characters. Not more, not less. Before generating, you must count the characters to ensure 100% accuracy.</rule>`,
-            `    <rule id="2" priority="MAXIMUM">**CHARACTER FIDELITY:** You are ABSOLUTELY FORBIDDEN from altering any character's appearance, gender, or attributes.`,
-            "      - **DO NOT CHANGE GENDER.** If a character appears male, they MUST remain male. If female, they MUST remain female.",
-            "      - **DO NOT CHANGE OUTFITS.** The clothing, including all layers, accessories, and shoes, must be an EXACT replica.",
-            "      - **DO NOT CHANGE HAIRSTYLES or HAIR COLOR.**",
-            "      - The appearance derived from each character's source images is absolute and must be preserved with perfect fidelity.",
-            "    </rule>",
-            "  </critical_rules>",
-            "",
-            "  <scene_blueprint>",
-            "    Analyze **Image 1** for the overall scene:",
-            "    - **Composition & Poses:** Replicate the exact poses and character positions. Map the new characters to the old poses logically.",
-            "    - **Environment:** Recreate the background, setting, lighting, and mood.",
-            "    - **Camera:** Match the camera angle and framing (e.g., full shot, medium shot) precisely.",
-            "  </scene_blueprint>",
-            "",
-            "  <character_casting_sheet>",
-            "    Replace the original people with these new characters. These instructions are non-negotiable and override any other interpretation.",
-            ...characterDetailsLines,
-            "  </character_casting_sheet>",
-            "",
-            "  <artistic_direction>",
-            `    - **Art Style:** The final image must have a '${style}' aesthetic.`,
-            `    - **User Notes:** Incorporate these details into the scene: "${prompt || 'Follow the reference image closely.'}"`,
-            "  </artistic_direction>",
-            "",
-            "  <final_quality_check>",
-            "    Before finalizing, you MUST perform this checklist:",
-            `    1.  Is the character count in the generated image EXACTLY ${characters.length}? [YES/NO]`,
-            "    2.  Is every character's gender, outfit, hair, and face an EXACT replica from their source images? [YES/NO]",
-            "    3.  Are the poses and composition from Image 1 perfectly recreated? [YES/NO]",
-            "    **If any answer is NO, you MUST discard the result and start over to correct the mistake. Failure to follow these rules is a critical error.**",
-            "  </final_quality_check>",
-            "</master_instructions>"
-        ].join('\n');
-        
-        
-        parts.unshift({ text: megaPrompt });
-        
-        // 4. Call Gemini AI
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash-image',
-            contents: { parts },
-            config: { responseModalities: [Modality.IMAGE] },
-        });
+        if (user && user.diamonds < totalCost) {
+            showToast(`Bạn cần ${totalCost} kim cương, nhưng chỉ có ${user.diamonds}. Vui lòng nạp thêm.`, 'error');
+            return;
+        }
+        setConfirmOpen(true);
+    };
+    
+    const handleConfirmGeneration = async () => {
+        setConfirmOpen(false);
+        setIsGenerating(true);
+        setProgress(0);
 
-        const imagePartResponse = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-        if (!imagePartResponse?.inlineData) throw new Error("AI không thể tạo hình ảnh nhóm. Hãy thử thay đổi prompt hoặc ảnh tham chiếu.");
+        const jobId = crypto.randomUUID();
 
-        const finalImageBase64 = imagePartResponse.inlineData.data;
-        const finalImageMimeType = imagePartResponse.inlineData.mimeType;
+        if (!supabase || !session) {
+            showToast('Lỗi kết nối. Không thể bắt đầu tạo ảnh.', 'error');
+            setIsGenerating(false);
+            return;
+        }
 
-        // 5. Upload result to R2
-        const s3Client = new S3Client({ region: "auto", endpoint: process.env.R2_ENDPOINT!, credentials: { accessKeyId: process.env.R2_ACCESS_KEY_ID!, secretAccessKey: process.env.R2_SECRET_ACCESS_KEY! }});
-        const imageBuffer = Buffer.from(finalImageBase64, 'base64');
-        const fileName = `${userId}/group/${Date.now()}.${finalImageMimeType.split('/')[1] || 'png'}`;
-        
-        // FIX: Cast s3Client to 'any' to bypass a likely environment-specific TypeScript type resolution error.
-        await (s3Client as any).send(new PutObjectCommand({ Bucket: process.env.R2_BUCKET_NAME!, Key: fileName, Body: imageBuffer, ContentType: finalImageMimeType }));
-        const publicUrl = `${process.env.R2_PUBLIC_URL}/${fileName}`;
-        
-        const xpToAward = (characters.length || 0) * XP_PER_CHARACTER;
+        let progressInterval: ReturnType<typeof setInterval> | null = null;
+        const channel = supabase.channel(`group-job-${jobId}`);
 
-        const [updateJobResult, incrementXpResult] = await Promise.all([
-             supabaseAdmin.from('generated_images').update({
-                image_url: publicUrl,
-            }).eq('id', jobId),
+        const cleanup = () => {
+            if (progressInterval) clearInterval(progressInterval);
+            supabase.removeChannel(channel);
+        };
 
-            supabaseAdmin.rpc('increment_user_xp', {
-                user_id_param: userId,
-                xp_amount: xpToAward,
+        channel
+            .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
+                table: 'generated_images',
+                filter: `id=eq.${jobId}`
+            }, (payload) => {
+                if (payload.eventType === 'UPDATE') {
+                    const record = payload.new as any;
+                    if (record.image_url && record.image_url !== 'PENDING') {
+                        setProgress(10);
+                        setGeneratedImage(record.image_url);
+                        showToast('Tạo ảnh nhóm thành công!', 'success');
+                        // FIX: Set generating state to false to show the result.
+                        setIsGenerating(false);
+                        cleanup();
+                    }
+                } else if (payload.eventType === 'DELETE') {
+                    showToast('Tạo ảnh nhóm thất bại. Vui lòng thử lại.', 'error');
+                    setIsGenerating(false);
+                    setProgress(0);
+                    cleanup();
+                }
             })
-        ]);
+            .subscribe(async (status, err) => {
+                if (status === 'SUBSCRIBED') {
+                    try {
+                        // Step 1: Call the spawner function with the large payload to create the job.
+                        const charactersPayload = await Promise.all(characters.map(async char => ({
+                            poseImage: char.poseImage ? await fileToBase64(char.poseImage.file) : null,
+                            faceImage: char.processedFace ? `data:image/png;base64,${char.processedFace}` : (char.faceImage ? await fileToBase64(char.faceImage.file) : null),
+                        })));
+            
+                        const spawnerResponse = await fetch('/.netlify/functions/generate-group-image', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+                            body: JSON.stringify({
+                                jobId, 
+                                characters: charactersPayload,
+                                referenceImage: referenceImage ? await fileToBase64(referenceImage.file) : null,
+                                prompt,
+                                style: selectedStyle,
+                                aspectRatio: aspectRatio, 
+                                useUpscaler,
+                            }),
+                        });
 
-        if (updateJobResult.error) throw new Error(`Failed to update job status: ${updateJobResult.error.message}`);
-        if (incrementXpResult.error) {
-             console.error(`[WORKER] Failed to award XP for job ${jobId}:`, incrementXpResult.error.message);
-        }
+                        if (!spawnerResponse.ok) {
+                            let errorMessage = 'Không thể tạo tác vụ. Lỗi máy chủ.';
+                            try {
+                                const contentType = spawnerResponse.headers.get("content-type");
+                                if (contentType && contentType.indexOf("application/json") !== -1) {
+                                    const errorJson = await spawnerResponse.json();
+                                    errorMessage = errorJson.error || errorMessage;
+                                } else {
+                                    errorMessage = `Lỗi máy chủ (${spawnerResponse.status}). Vui lòng thử lại sau.`;
+                                }
+                            } catch (e) {
+                                errorMessage = `Lỗi máy chủ không xác định (${spawnerResponse.status}).`;
+                            }
+                            throw new Error(errorMessage);
+                        }
 
-        await supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id });
-        
-        return { statusCode: 200 };
+                        // Step 2: Call the background worker function with only the job ID to trigger processing.
+                        // We don't need to await this or handle its response; it's fire-and-forget.
+                        fetch('/.netlify/functions/generate-group-image-background', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ jobId }),
+                        });
 
-    } catch (error: any) {
-        console.error("[WORKER] Group image background function error:", error);
-        await failJob(error.message || 'Lỗi không xác định từ máy chủ.');
-        return { statusCode: 200 }; // Always return 200 for background functions
+                        // Start the visual progress timer.
+                        progressInterval = setInterval(() => {
+                            setProgress(prev => (prev < 9 ? prev + 1 : prev));
+                        }, 20000); 
+
+                    } catch (error: any) {
+                        showToast(error.message, 'error');
+                        setIsGenerating(false);
+                        setProgress(0);
+                        cleanup();
+                    }
+                }
+                if (status === 'CHANNEL_ERROR' || err) {
+                    showToast('Lỗi kết nối thời gian thực.', 'error');
+                    setIsGenerating(false);
+                    setProgress(0);
+                    cleanup();
+                }
+            });
+    };
+
+    const resetGenerator = () => {
+        setGeneratedImage(null);
+        setProgress(0);
+        handleNumCharactersSelect(numCharacters); 
+    };
+    
+    const handleDownloadResult = () => {
+        if (!generatedImage) return;
+        const downloadUrl = `/.netlify/functions/download-image?url=${encodeURIComponent(generatedImage)}`;
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = `audition-ai-group-${Date.now()}.png`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+    };
+    
+    const resultImageForModal = generatedImage ? {
+        id: 'generated-group-result',
+        image_url: generatedImage,
+        prompt: `Group Photo based on reference. Prompt: ${prompt}`,
+        creator: user ? { display_name: user.display_name, photo_url: user.photo_url, level: user.level } : { display_name: 'Bạn', photo_url: '', level: 1 },
+        created_at: new Date().toISOString(),
+        model_used: 'Group Studio',
+        user_id: user?.id || ''
+    } : null;
+
+
+    if (isGenerating) {
+        return <GenerationProgress currentStep={progress} onCancel={() => setIsGenerating(false)} />;
     }
+
+    if (generatedImage) {
+        return (
+            <>
+                <ImageModal 
+                    isOpen={isResultModalOpen}
+                    onClose={() => setIsResultModalOpen(false)}
+                    image={resultImageForModal}
+                    showInfoPanel={false}
+                />
+                <div className="text-center animate-fade-in w-full min-h-[70vh] flex flex-col items-center justify-center">
+                    <h3 className="themed-heading text-2xl font-bold mb-4 bg-gradient-to-r from-green-400 to-cyan-400 text-transparent bg-clip-text">Tạo ảnh nhóm thành công!</h3>
+                    <div 
+                        className="max-w-xl w-full mx-auto bg-black/20 rounded-lg overflow-hidden border-2 border-pink-500/30 group relative cursor-pointer"
+                        style={{ aspectRatio: aspectRatio.replace(':', '/') }}
+                        onClick={() => setIsResultModalOpen(true)}
+                    >
+                        <img src={generatedImage} alt="Generated result" className="w-full h-full object-contain" />
+                         <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                            <i className="ph-fill ph-magnifying-glass-plus text-5xl text-white"></i>
+                        </div>
+                    </div>
+                    <div className="flex gap-4 mt-6 justify-center">
+                        <button onClick={resetGenerator} className="themed-button-secondary px-6 py-3 font-semibold">
+                            <i className="ph-fill ph-arrow-counter-clockwise mr-2"></i>Tạo ảnh khác
+                        </button>
+                        <button onClick={() => setIsResultModalOpen(true)} className="themed-button-primary px-6 py-3 font-bold">
+                             <i className="ph-fill ph-download-simple mr-2"></i>Tải & Sao chép
+                        </button>
+                    </div>
+                </div>
+            </>
+        );
+    }
+
+
+    if (numCharacters === 0) {
+        return (
+            <div className="text-center p-8 min-h-[50vh] flex flex-col items-center justify-center animate-fade-in">
+                <h2 className="themed-heading text-2xl font-bold themed-title-glow mb-4">Bạn muốn tạo ảnh cho bao nhiêu người?</h2>
+                <p className="text-skin-muted mb-6">Chọn số lượng nhân vật để bắt đầu Studio.</p>
+                <div className="flex flex-wrap justify-center gap-4 mt-4">
+                    {[2, 3, 4, 5, 6].map(num => (
+                        <button 
+                            key={num} 
+                            onClick={() => handleNumCharactersSelect(num)} 
+                            className="w-28 h-28 bg-skin-fill-secondary border-2 border-skin-border rounded-lg text-5xl font-black text-skin-base transition-all duration-300 hover:scale-110 hover:border-skin-border-accent hover:text-skin-accent hover:shadow-accent"
+                        >
+                            {num}
+                        </button>
+                    ))}
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="animate-fade-in">
+             <ProcessedImagePickerModal isOpen={isPickerOpen} onClose={() => setIsPickerOpen(false)} onSelect={handleImageSelectFromPicker} />
+             <ProcessedImageModal
+                isOpen={!!imageToProcess}
+                onClose={() => { setImageToProcess(null); setPickerTarget(null); }}
+                image={imageToProcess}
+                onUseFull={() => {
+                    if (!imageToProcess || !pickerTarget) return;
+                    const { imageBase64, mimeType, fileName } = imageToProcess;
+                    const file = base64ToFile(imageBase64, `processed_${fileName}`, mimeType);
+                    const newImage = { url: `data:${mimeType};base64,${imageBase64}`, file };
+
+                    setCharacters(prev => prev.map((char, i) => {
+                        if (i === pickerTarget.index) {
+                            if (pickerTarget.type === 'pose') return { ...char, poseImage: newImage };
+                            return { ...char, faceImage: newImage, processedFace: null };
+                        }
+                        return char;
+                    }));
+                    setImageToProcess(null);
+                    setPickerTarget(null);
+                }}
+                onUseCropped={(croppedImage: { url: string; file: File }) => {
+                    if (!pickerTarget) return;
+                    setCharacters(prev => prev.map((char, i) => {
+                        if (i === pickerTarget.index) {
+                            if (pickerTarget.type === 'face') {
+                                return { ...char, faceImage: croppedImage, processedFace: null };
+                            }
+                            return { ...char, poseImage: croppedImage };
+                        }
+                        return char;
+                    }));
+                    setImageToProcess(null);
+                    setPickerTarget(null);
+                    showToast('Đã chuyển ảnh gương mặt sang trình tạo AI!', 'success');
+                }}
+                onDownload={() => {
+                    if (imageToProcess) handleDownloadResult();
+                }}
+            />
+            <ConfirmationModal isOpen={isConfirmOpen} onClose={() => setConfirmOpen(false)} onConfirm={handleConfirmGeneration} cost={totalCost} />
+            
+            <div className="flex flex-col lg:flex-row gap-6">
+                 {/* Left Column: Character Inputs */}
+                <div className="w-full lg:w-2/3">
+                    <div className="flex justify-between items-center mb-3">
+                        <h3 className="themed-heading text-lg font-bold themed-title-glow">1. Cung cấp thông tin nhân vật</h3>
+                        <button onClick={() => setNumCharacters(0)} className="text-xs text-skin-muted hover:text-skin-base">(Thay đổi số lượng)</button>
+                    </div>
+                    <div className={`grid grid-cols-2 ${numCharacters > 2 ? 'md:grid-cols-3' : ''} gap-4`}>
+                        {characters.map((char, index) => (
+                            <div key={index} className="bg-skin-fill p-3 rounded-xl border border-skin-border space-y-3">
+                                <h4 className="text-sm font-bold text-center text-skin-base">Nhân vật {index + 1}</h4>
+                                <ImageUploader onUpload={(e) => handleImageUpload(e, 'pose', index)} image={char.poseImage} onRemove={() => handleRemoveImage('pose', index)} text="Ảnh nhân vật (Lấy trang phục)" onPickFromProcessed={() => handleOpenPicker(index, 'pose')} />
+                                <ImageUploader onUpload={(e) => handleImageUpload(e, 'face', index)} image={char.faceImage} onRemove={() => handleRemoveImage('face', index)} text="Ảnh gương mặt (Face ID)" onPickFromProcessed={() => handleOpenPicker(index, 'face')} />
+                                <button 
+                                    onClick={() => handleProcessFace(index)}
+                                    disabled={processingFaceIndex === index || !char.faceImage || !!char.processedFace}
+                                    className={`w-full text-sm font-bold py-2 px-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-wait
+                                        ${char.processedFace ? 'bg-green-500/20 text-green-300' : 'bg-yellow-500/20 text-yellow-300 hover:bg-yellow-500/30'}`}
+                                >
+                                    {processingFaceIndex === index ? 'Đang xử lý...' : char.processedFace ? 'Gương mặt đã khóa' : 'Xử lý & Khóa Gương Mặt (-1 💎)'}
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Right Column: Settings */}
+                <div className="w-full lg:w-1/3 themed-panel p-4 flex flex-col">
+                     <SettingsBlock title="Cài đặt Nhóm" instructionKey="character" onInstructionClick={()=>{/* No-op for now */}}>
+                        <div className="space-y-4">
+                             <div>
+                                <label className="text-sm font-semibold text-skin-base mb-2 block">2. Ảnh Mẫu Tham Chiếu</label>
+                                <ImageUploader onUpload={(e) => handleImageUpload(e, 'reference')} image={referenceImage} onRemove={() => handleRemoveImage('reference')} text="Tải ảnh mẫu (Bố cục, tư thế...)" />
+                                <p className="text-xs text-skin-muted mt-2">AI sẽ "học" bố cục, tư thế, bối cảnh và phong cách từ ảnh này để tái tạo lại với nhân vật của bạn.</p>
+                            </div>
+
+                             <div>
+                                <label className="text-sm font-semibold text-skin-base mb-2 block">3. Câu Lệnh Mô Tả (Prompt)</label>
+                                <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Thêm chi tiết về bối cảnh, hành động..." className="w-full p-2 bg-skin-input-bg rounded-md border border-skin-border focus:border-skin-border-accent transition text-xs text-skin-base resize-none" rows={3}/>
+                            </div>
+
+                            <div>
+                                <label className="text-sm font-semibold text-skin-base mb-2 block">4. Phong cách nghệ thuật</label>
+                                <div className="grid grid-cols-2 gap-2">
+                                    {MOCK_STYLES.map(p => (
+                                        <button key={p.id} onClick={() => setSelectedStyle(p.id)} className={`p-2 text-xs font-semibold rounded-md border-2 transition text-center ${selectedStyle === p.id ? 'selected-glow' : 'border-skin-border bg-skin-fill-secondary hover:border-pink-500/50 text-skin-base'}`}>
+                                            {p.name}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <label className="text-sm font-semibold text-skin-base mb-2 block">5. Tỷ lệ khung hình</label>
+                                <div className="grid grid-cols-5 gap-2">
+                                    {(['3:4', '1:1', '4:3', '9:16', '16:9'] as const).map(ar => {
+                                        const dims: { [key: string]: string } = { '3:4': 'w-3 h-4', '1:1': 'w-4 h-4', '4:3': 'w-4 h-3', '9:16': 'w-[1.125rem] h-5', '16:9': 'w-5 h-[1.125rem]' };
+                                        return (
+                                            <button key={ar} onClick={() => setAspectRatio(ar)} className={`p-2 rounded-md flex flex-col items-center justify-center gap-1 border-2 transition ${aspectRatio === ar ? 'selected-glow' : 'border-skin-border bg-skin-fill-secondary hover:border-pink-500/50 text-skin-base'}`}>
+                                                <div className={`${dims[ar]} bg-gray-500 rounded-sm`}/>
+                                                <span className="text-xs font-semibold">{ar}</span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        </div>
+                    </SettingsBlock>
+
+                    <div className="mt-auto pt-6 space-y-4">
+                        <ToggleSwitch label="Làm Nét & Nâng Cấp (+1 💎)" checked={useUpscaler} onChange={(e) => setUseUpscaler(e.target.checked)} />
+                        <div className="text-center text-sm p-3 bg-black/20 rounded-lg">
+                            <p className="text-skin-muted">Chi phí: <span className="font-bold text-pink-400 flex items-center justify-center gap-1">{totalCost} <i className="ph-fill ph-diamonds-four"></i></span></p>
+                        </div>
+                        <button onClick={handleGenerateClick} className="themed-button-primary w-full px-8 py-4 font-bold text-lg flex items-center justify-center gap-2">
+                            <i className="ph-fill ph-magic-wand"></i>
+                            Tạo Ảnh Nhóm
+                        </button>
+                         <p className="text-xs text-center text-skin-muted">Thời gian tạo ảnh nhóm sẽ lâu hơn ảnh đơn.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
 };
 
-export { handler };
+export default GroupGeneratorTool;

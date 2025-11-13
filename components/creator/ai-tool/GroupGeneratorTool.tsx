@@ -6,8 +6,7 @@ import ConfirmationModal from '../../ConfirmationModal';
 import ImageUploader from '../../ai-tool/ImageUploader';
 import { resizeImage, base64ToFile } from '../../../utils/imageUtils';
 import ProcessedImagePickerModal from './ProcessedImagePickerModal';
-import GenerationProgress from './GenerationProgress';
-import { DiamondIcon } from '../../common/DiamondIcon';
+import GenerationProgress from '../../ai-tool/GenerationProgress';
 
 // Mock data for presets - in a real app, this would come from a database
 const MOCK_LAYOUTS = [

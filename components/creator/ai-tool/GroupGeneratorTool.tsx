@@ -257,8 +257,19 @@ const GroupGeneratorTool: React.FC = () => {
                         });
 
                         if (!spawnerResponse.ok) {
-                            const errorJson = await spawnerResponse.json();
-                            throw new Error(errorJson.error || 'Failed to create job record.');
+                            let errorMessage = 'Không thể tạo tác vụ. Lỗi máy chủ.';
+                            try {
+                                const contentType = spawnerResponse.headers.get("content-type");
+                                if (contentType && contentType.indexOf("application/json") !== -1) {
+                                    const errorJson = await spawnerResponse.json();
+                                    errorMessage = errorJson.error || errorMessage;
+                                } else {
+                                    errorMessage = `Lỗi máy chủ (${spawnerResponse.status}). Vui lòng thử lại sau.`;
+                                }
+                            } catch (e) {
+                                errorMessage = `Lỗi máy chủ không xác định (${spawnerResponse.status}).`;
+                            }
+                            throw new Error(errorMessage);
                         }
 
                         // Step 2: Call the background worker function with only the job ID to trigger processing.

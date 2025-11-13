@@ -48,14 +48,13 @@ const handler: Handler = async (event: HandlerEvent, context: HandlerContext) =>
         const newDiamondCount = userData.diamonds - totalCost;
 
         // Create the job record, storing the large payload in the 'prompt' column as a JSON string
-        // FIX: Use the client-generated 'jobId' as the primary key 'id' for the new record.
         const { error: insertError } = await supabaseAdmin.from('generated_images').insert({
             id: jobId,
             user_id: user.id,
             model_used: 'Group Studio',
             prompt: JSON.stringify(payload), // Store the whole payload
             is_public: false,
-            // image_url is null by default, which signifies 'pending'
+            image_url: 'PENDING', // Use a placeholder to satisfy NOT NULL constraint
         });
         
         if (insertError) {

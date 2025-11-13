@@ -216,12 +216,12 @@ const GroupGeneratorTool: React.FC = () => {
                 event: '*', // Listen for both UPDATE and DELETE
                 schema: 'public',
                 table: 'generated_images',
-                filter: `id=eq.${jobId}` // FIX: Filter by the primary key 'id'
+                filter: `id=eq.${jobId}`
             }, (payload) => {
                 if (payload.eventType === 'UPDATE') {
                     const record = payload.new as any;
-                    // Success is now signaled by the image_url being populated
-                    if (record.image_url) {
+                    // Success is signaled when image_url is updated from the placeholder
+                    if (record.image_url && record.image_url !== 'PENDING') {
                         setProgress(10);
                         setGeneratedImage(record.image_url);
                         showToast('Tạo ảnh nhóm thành công!', 'success');

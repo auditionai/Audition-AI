@@ -3,8 +3,52 @@ import { GoogleGenAI, Modality } from "@google/genai";
 import { supabaseAdmin } from './utils/supabaseClient';
 import { Buffer } from 'buffer';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import Jimp from 'jimp';
 
 const XP_PER_CHARACTER = 5;
+
+const processImageForGemini = async (imageDataUrl: string | null, targetAspectRatio: string): Promise<string | null> => {
+    if (!imageDataUrl) return null;
+
+    try {
+        const [header, base64] = imageDataUrl.split(',');
+        if (!base64) return null;
+
+        const imageBuffer = Buffer.from(base64, 'base64');
+        const image = await (Jimp as any).read(imageBuffer);
+        const originalWidth = image.getWidth();
+        const originalHeight = image.getHeight();
+
+        const [aspectW, aspectH] = targetAspectRatio.split(':').map(Number);
+        const targetRatio = aspectW / aspectH;
+        const originalRatio = originalWidth / originalHeight;
+
+        let newCanvasWidth: number, newCanvasHeight: number;
+
+        if (targetRatio > originalRatio) {
+            newCanvasHeight = originalHeight;
+            newCanvasWidth = Math.round(originalHeight * targetRatio);
+        } else {
+            newCanvasWidth = originalWidth;
+            newCanvasHeight = Math.round(originalWidth / targetRatio);
+        }
+        
+        const newCanvas = new (Jimp as any)(newCanvasWidth, newCanvasHeight, '#000000');
+        
+        const x = (newCanvasWidth - originalWidth) / 2;
+        const y = (newCanvasHeight - originalHeight) / 2;
+        
+        newCanvas.composite(image, x, y);
+
+        const mime = header.match(/:(.*?);/)?.[1] || (Jimp as any).MIME_PNG;
+        return newCanvas.getBase64Async(mime as any);
+
+    } catch (error) {
+        console.error("Error pre-processing image for Gemini:", error);
+        return imageDataUrl;
+    }
+};
+
 
 const handler: Handler = async (event: HandlerEvent) => {
     const s3Client = new S3Client({
@@ -30,14 +74,14 @@ const handler: Handler = async (event: HandlerEvent) => {
         if (authError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized: Invalid token.' }) };
 
         const { 
-            characters, layout, layoutPrompt, background, backgroundPrompt, style, stylePrompt, aspectRatio
+            characters, layout, layoutPrompt, background, backgroundPrompt, style, stylePrompt, aspectRatio, useUpscaler
         } = JSON.parse(event.body || '{}');
 
         if (!characters || characters.length === 0) {
             return { statusCode: 400, body: JSON.stringify({ error: 'Character information is required.' }) };
         }
         
-        const totalCost = characters.length; // 1 diamond per character
+        const totalCost = characters.length + (useUpscaler ? 1 : 0);
         const totalXpGain = characters.length * XP_PER_CHARACTER;
 
         const { data: userData, error: userError } = await supabaseAdmin.from('users').select('diamonds, xp').eq('id', user.id).single();
@@ -88,14 +132,15 @@ const handler: Handler = async (event: HandlerEvent) => {
         const finalPrompt = promptLines.join('\n');
         parts.push({ text: finalPrompt });
 
-        // Add all images to parts array
-        characters.forEach((char: any) => {
-            if (char.poseImage) {
-                const [header, base64] = char.poseImage.split(',');
-                parts.push({ inlineData: { data: base64, mimeType: header.match(/:(.*?);/)?.[1] || 'image/png' } });
-            }
-             if (char.faceImage) {
-                const [header, base64] = char.faceImage.split(',');
+        // Pre-process all images and add them to the parts array
+        const allImagesToProcess = characters.flatMap((char: any) => [char.poseImage, char.faceImage]).filter(Boolean);
+        const processedImages = await Promise.all(
+            allImagesToProcess.map(imgDataUrl => processImageForGemini(imgDataUrl, aspectRatio))
+        );
+
+        processedImages.forEach(processedDataUrl => {
+            if (processedDataUrl) {
+                const [header, base64] = processedDataUrl.split(',');
                 parts.push({ inlineData: { data: base64, mimeType: header.match(/:(.*?);/)?.[1] || 'image/png' } });
             }
         });
@@ -112,8 +157,12 @@ const handler: Handler = async (event: HandlerEvent) => {
         const imagePartResponse = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
         if (!imagePartResponse?.inlineData) throw new Error("AI không thể tạo hình ảnh nhóm từ mô tả này. Hãy thử thay đổi prompt hoặc ảnh tham chiếu.");
 
-        const finalImageBase64 = imagePartResponse.inlineData.data;
+        let finalImageBase64 = imagePartResponse.inlineData.data;
         const finalImageMimeType = imagePartResponse.inlineData.mimeType.includes('png') ? 'image/png' : 'image/jpeg';
+        
+        if (useUpscaler) {
+            console.log(`[UPSCALER] Upscaling GROUP image for user ${user.id}... (DEMO)`);
+        }
         
         const imageBuffer = Buffer.from(finalImageBase64, 'base64');
         const fileExtension = finalImageMimeType.split('/')[1] || 'png';
@@ -131,6 +180,11 @@ const handler: Handler = async (event: HandlerEvent) => {
         const newDiamondCount = userData.diamonds - totalCost;
         const newXp = userData.xp + totalXpGain;
         
+        let logDescription = `Tạo ảnh nhóm ${characters.length} người`;
+        if (useUpscaler) {
+            logDescription += " (Nâng cấp)";
+        }
+        
         await Promise.all([
             supabaseAdmin.from('users').update({ diamonds: newDiamondCount, xp: newXp }).eq('id', user.id),
             supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id }),
@@ -144,7 +198,7 @@ const handler: Handler = async (event: HandlerEvent) => {
                 user_id: user.id,
                 amount: -totalCost,
                 transaction_type: 'GROUP_IMAGE_GENERATION',
-                description: `Tạo ảnh nhóm ${characters.length} người`
+                description: logDescription
             })
         ]);
 

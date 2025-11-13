@@ -7,6 +7,10 @@ import ImageUploader from '../../ai-tool/ImageUploader';
 import { resizeImage, base64ToFile } from '../../../utils/imageUtils';
 import ProcessedImagePickerModal from './ProcessedImagePickerModal';
 import GenerationProgress from '../../ai-tool/GenerationProgress';
+import ImageModal from '../../common/ImageModal';
+import ToggleSwitch from '../../ai-tool/ToggleSwitch';
+import ProcessedImageModal from '../../ai-tool/ProcessedImageModal';
+
 
 // Mock data for presets - in a real app, this would come from a database
 const MOCK_LAYOUTS = [
@@ -43,6 +47,9 @@ interface ProcessedImageData {
     imageBase64: string;
     mimeType: string;
     fileName: string;
+    // Add missing properties to match the type used in ProcessedImageModal
+    processedUrl: string;
+    originalUrl?: string;
 }
 
 const fileToBase64 = (file: File): Promise<string> => new Promise((resolve, reject) => {
@@ -109,6 +116,9 @@ const GroupGeneratorTool: React.FC = () => {
     const [processingFaceIndex, setProcessingFaceIndex] = useState<number | null>(null);
     const [isPickerOpen, setIsPickerOpen] = useState(false);
     const [pickerTarget, setPickerTarget] = useState<{ index: number; type: 'pose' | 'face' } | null>(null);
+    const [isResultModalOpen, setIsResultModalOpen] = useState(false);
+    const [useUpscaler, setUseUpscaler] = useState(false);
+    const [imageToProcess, setImageToProcess] = useState<ProcessedImageData | null>(null);
 
 
     const handleNumCharactersSelect = (num: number) => {
@@ -152,22 +162,8 @@ const GroupGeneratorTool: React.FC = () => {
     };
 
     const handleImageSelectFromPicker = (imageData: ProcessedImageData) => {
-        if (!pickerTarget) return;
-
-        const { imageBase64, mimeType, fileName } = imageData;
-        const file = base64ToFile(imageBase64, `processed_${fileName}`, mimeType);
-        const newImage = { url: `data:${mimeType};base64,${imageBase64}`, file };
-
-        setCharacters(prev => prev.map((char, i) => {
-            if (i === pickerTarget.index) {
-                if (pickerTarget.type === 'pose') return { ...char, poseImage: newImage };
-                return { ...char, faceImage: newImage, processedFace: null };
-            }
-            return char;
-        }));
-        
         setIsPickerOpen(false);
-        setPickerTarget(null);
+        setImageToProcess(imageData);
     };
 
     const handleProcessFace = async (index: number) => {
@@ -199,7 +195,7 @@ const GroupGeneratorTool: React.FC = () => {
         }
     };
 
-    const totalCost = numCharacters; // 1 diamond per character for generation. Face processing is separate.
+    const totalCost = numCharacters + (useUpscaler ? 1 : 0);
 
     const handleGenerateClick = () => {
         if (user && user.diamonds < totalCost) {
@@ -244,6 +240,7 @@ const GroupGeneratorTool: React.FC = () => {
                     style: MOCK_STYLES.find(s => s.id === selectedStyle)?.name,
                     stylePrompt,
                     aspectRatio: getAspectRatio(),
+                    useUpscaler,
                 }),
             });
             
@@ -267,9 +264,8 @@ const GroupGeneratorTool: React.FC = () => {
         } catch (err: any) {
             clearInterval(interval);
             showToast(err.message || 'Tạo ảnh nhóm thất bại.', 'error');
+            setIsGenerating(false); // Make sure to stop generating on error
             setProgress(0);
-        } finally {
-            setIsGenerating(false);
         }
     };
 
@@ -295,6 +291,17 @@ const GroupGeneratorTool: React.FC = () => {
         if (numCharacters === 3) return '1:1';
         return '16:9';
     };
+    
+    const resultImageForModal = generatedImage ? {
+        id: 'generated-group-result',
+        image_url: generatedImage,
+        prompt: `Group Photo: ${layoutPrompt}, ${backgroundPrompt}, ${stylePrompt}`,
+        creator: user ? { display_name: user.display_name, photo_url: user.photo_url, level: user.level } : { display_name: 'Bạn', photo_url: '', level: 1 },
+        created_at: new Date().toISOString(),
+        model_used: 'Group Studio',
+        user_id: user?.id || ''
+    } : null;
+
 
     if (isGenerating) {
         return <GenerationProgress currentStep={progress} onCancel={() => setIsGenerating(false)} />;
@@ -302,23 +309,35 @@ const GroupGeneratorTool: React.FC = () => {
 
     if (generatedImage) {
         return (
-            <div className="text-center animate-fade-in w-full min-h-[70vh] flex flex-col items-center justify-center">
-                <h3 className="themed-heading text-2xl font-bold mb-4 bg-gradient-to-r from-green-400 to-cyan-400 text-transparent bg-clip-text">Tạo ảnh nhóm thành công!</h3>
-                <div 
-                    className="max-w-md w-full mx-auto bg-black/20 rounded-lg overflow-hidden border-2 border-pink-500/30 group relative"
-                    style={{ aspectRatio: getAspectRatio().replace(':', '/') }}
-                >
-                    <img src={generatedImage} alt="Generated result" className="w-full h-full object-contain" />
+            <>
+                <ImageModal 
+                    isOpen={isResultModalOpen}
+                    onClose={() => setIsResultModalOpen(false)}
+                    image={resultImageForModal}
+                    showInfoPanel={false}
+                />
+                <div className="text-center animate-fade-in w-full min-h-[70vh] flex flex-col items-center justify-center">
+                    <h3 className="themed-heading text-2xl font-bold mb-4 bg-gradient-to-r from-green-400 to-cyan-400 text-transparent bg-clip-text">Tạo ảnh nhóm thành công!</h3>
+                    <div 
+                        className="max-w-md w-full mx-auto bg-black/20 rounded-lg overflow-hidden border-2 border-pink-500/30 group relative cursor-pointer"
+                        style={{ aspectRatio: getAspectRatio().replace(':', '/') }}
+                        onClick={() => setIsResultModalOpen(true)}
+                    >
+                        <img src={generatedImage} alt="Generated result" className="w-full h-full object-contain" />
+                         <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                            <i className="ph-fill ph-magnifying-glass-plus text-5xl text-white"></i>
+                        </div>
+                    </div>
+                    <div className="flex gap-4 mt-6 justify-center">
+                        <button onClick={resetGenerator} className="themed-button-secondary px-6 py-3 font-semibold">
+                            <i className="ph-fill ph-arrow-counter-clockwise mr-2"></i>Tạo ảnh khác
+                        </button>
+                        <button onClick={() => setIsResultModalOpen(true)} className="themed-button-primary px-6 py-3 font-bold">
+                             <i className="ph-fill ph-download-simple mr-2"></i>Tải xuống
+                        </button>
+                    </div>
                 </div>
-                <div className="flex gap-4 mt-6 justify-center">
-                    <button onClick={resetGenerator} className="themed-button-secondary px-6 py-3 font-semibold">
-                        <i className="ph-fill ph-arrow-counter-clockwise mr-2"></i>Tạo ảnh khác
-                    </button>
-                    <button onClick={handleDownloadResult} className="themed-button-primary px-6 py-3 font-bold">
-                        <i className="ph-fill ph-download-simple mr-2"></i>Tải xuống
-                    </button>
-                </div>
-            </div>
+            </>
         );
     }
 
@@ -346,6 +365,45 @@ const GroupGeneratorTool: React.FC = () => {
     return (
         <div className="animate-fade-in">
             <ProcessedImagePickerModal isOpen={isPickerOpen} onClose={() => setIsPickerOpen(false)} onSelect={handleImageSelectFromPicker} />
+             <ProcessedImageModal
+                isOpen={!!imageToProcess}
+                onClose={() => { setImageToProcess(null); setPickerTarget(null); }}
+                image={imageToProcess}
+                onUseFull={() => {
+                    if (!imageToProcess || !pickerTarget) return;
+                    const { imageBase64, mimeType, fileName } = imageToProcess;
+                    const file = base64ToFile(imageBase64, `processed_${fileName}`, mimeType);
+                    const newImage = { url: `data:${mimeType};base64,${imageBase64}`, file };
+
+                    setCharacters(prev => prev.map((char, i) => {
+                        if (i === pickerTarget.index) {
+                            if (pickerTarget.type === 'pose') return { ...char, poseImage: newImage };
+                            return { ...char, faceImage: newImage, processedFace: null };
+                        }
+                        return char;
+                    }));
+                    setImageToProcess(null);
+                    setPickerTarget(null);
+                }}
+                onUseCropped={(croppedImage) => {
+                    if (!pickerTarget) return;
+                    setCharacters(prev => prev.map((char, i) => {
+                        if (i === pickerTarget.index) {
+                            if (pickerTarget.type === 'face') {
+                                return { ...char, faceImage: croppedImage, processedFace: null };
+                            }
+                            return { ...char, poseImage: croppedImage };
+                        }
+                        return char;
+                    }));
+                    setImageToProcess(null);
+                    setPickerTarget(null);
+                    showToast('Đã chuyển ảnh gương mặt sang trình tạo AI!', 'success');
+                }}
+                onDownload={() => {
+                    if (imageToProcess) handleDownloadResult();
+                }}
+            />
             <ConfirmationModal isOpen={isConfirmOpen} onClose={() => setConfirmOpen(false)} onConfirm={handleConfirmGeneration} cost={totalCost} />
             <div className="flex flex-col lg:flex-row gap-6">
                 {/* Left Column - Character Inputs */}
@@ -363,10 +421,10 @@ const GroupGeneratorTool: React.FC = () => {
                                  <button 
                                     onClick={() => handleProcessFace(index)}
                                     disabled={processingFaceIndex === index || !char.faceImage || !!char.processedFace}
-                                    className="w-full text-xs font-bold py-1.5 px-2 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed
-                                        ${char.processedFace ? 'bg-green-500/20 text-green-300' : 'bg-yellow-500/20 text-yellow-300 hover:bg-yellow-500/30'}"
+                                    className={`w-full text-sm font-bold py-2 px-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-wait
+                                        ${char.processedFace ? 'bg-green-500/20 text-green-300' : 'bg-yellow-500/20 text-yellow-300 hover:bg-yellow-500/30'}`}
                                 >
-                                    {processingFaceIndex === index ? 'Đang xử lý...' : char.processedFace ? 'Gương mặt đã khóa' : 'Xử lý Face ID (-1 💎)'}
+                                    {processingFaceIndex === index ? 'Đang xử lý...' : char.processedFace ? 'Gương mặt đã khóa' : 'Xử lý & Khóa Gương Mặt (-1 💎)'}
                                 </button>
                             </div>
                         ))}
@@ -380,6 +438,9 @@ const GroupGeneratorTool: React.FC = () => {
                     <PresetSelector title="4. Chọn Phong cách nghệ thuật" presets={MOCK_STYLES} selected={selectedStyle} onSelect={setSelectedStyle} prompt={stylePrompt} onPromptChange={setStylePrompt} promptPlaceholder="Thêm chi tiết về phong cách..." />
 
                      <div className="mt-auto pt-4 space-y-4">
+                        <div className="themed-settings-block p-4">
+                            <ToggleSwitch label="Làm Nét & Nâng Cấp (+1 💎)" checked={useUpscaler} onChange={(e) => setUseUpscaler(e.target.checked)} />
+                        </div>
                         <div className="grid grid-cols-2 gap-4 text-center text-sm p-3 bg-black/20 rounded-lg">
                             <div>
                                 <p className="text-skin-muted">Tỷ lệ khung hình (Tự động)</p>

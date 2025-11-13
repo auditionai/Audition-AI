@@ -25,22 +25,6 @@ const MOCK_STYLES = [
     { id: 'oil-painting', name: 'Tranh sơn dầu', img: 'https://picsum.photos/seed/style4/200/150' },
 ];
 
-
-const CharacterSlot: React.FC = () => {
-    // In a real implementation, this would connect to the parent's state
-    // and include ImageUploader components with the new `onPickFromProcessed` prop.
-    return (
-        <div className="bg-skin-fill p-3 rounded-lg border border-skin-border flex-shrink-0 w-64">
-            <h4 className="text-sm font-bold mb-2 text-center text-skin-base">Nhân vật 1</h4>
-            <div className="space-y-2">
-                 <div className="w-full h-32 bg-skin-input-bg rounded-md flex items-center justify-center text-skin-muted text-xs">Ảnh nhân vật</div>
-                 <div className="w-full h-32 bg-skin-input-bg rounded-md flex items-center justify-center text-skin-muted text-xs">Ảnh gương mặt</div>
-                 <button className="w-full text-xs font-bold py-1.5 px-2 bg-yellow-500/20 text-yellow-300 rounded-md">Xử lý Gương mặt (-1💎)</button>
-            </div>
-        </div>
-    );
-};
-
 const PresetSelector: React.FC<{ title: string, presets: any[], selected: string, onSelect: (id: string) => void }> = ({ title, presets, selected, onSelect }) => (
     <div>
         <h3 className="themed-heading text-lg font-bold themed-title-glow mb-3">{title}</h3>
@@ -58,7 +42,7 @@ const PresetSelector: React.FC<{ title: string, presets: any[], selected: string
 
 
 const GroupGeneratorTool: React.FC = () => {
-    const { user } = useAuth();
+    const { user, showToast } = useAuth();
     const [numCharacters, setNumCharacters] = useState<number>(0);
     const [isConfirmOpen, setConfirmOpen] = useState(false);
 
@@ -68,6 +52,14 @@ const GroupGeneratorTool: React.FC = () => {
     const [selectedStyle, setSelectedStyle] = useState(MOCK_STYLES[0].id);
     
     const totalCost = numCharacters * 2; // Example cost: 2 diamonds per character
+
+    const handleGenerateClick = () => {
+        if (user && user.diamonds < totalCost) {
+            showToast(`Bạn cần ${totalCost} kim cương, nhưng chỉ có ${user.diamonds}. Vui lòng nạp thêm.`, 'error');
+            return;
+        }
+        setConfirmOpen(true);
+    };
 
     const getAspectRatio = () => {
         if (numCharacters <= 2) return '3:4';
@@ -137,7 +129,7 @@ const GroupGeneratorTool: React.FC = () => {
                             <p className="font-bold text-pink-400 flex items-center justify-center gap-1">{totalCost} <i className="ph-fill ph-diamonds-four"></i></p>
                         </div>
                     </div>
-                    <button onClick={() => setConfirmOpen(true)} className="themed-button-primary w-full px-8 py-4 font-bold text-lg flex items-center justify-center gap-2">
+                    <button onClick={handleGenerateClick} className="themed-button-primary w-full px-8 py-4 font-bold text-lg flex items-center justify-center gap-2">
                         <i className="ph-fill ph-magic-wand"></i>
                         Tạo Ảnh Nhóm
                     </button>

@@ -6,10 +6,10 @@ import ConfirmationModal from '../../ConfirmationModal';
 import ImageUploader from '../../ai-tool/ImageUploader';
 import { resizeImage, base64ToFile } from '../../../utils/imageUtils';
 import ProcessedImagePickerModal from './ProcessedImagePickerModal';
-import GenerationProgress from '../../ai-tool/GenerationProgress';
+import GenerationProgress from './GenerationProgress';
 import ImageModal from '../../common/ImageModal';
 import ToggleSwitch from '../../ai-tool/ToggleSwitch';
-import ProcessedImageModal from '../../ai-tool/ProcessedImageModal';
+import ProcessedImageModal from './ProcessedImageModal';
 import SettingsBlock from '../../ai-tool/SettingsBlock';
 
 
@@ -97,11 +97,13 @@ const GroupGeneratorTool: React.FC = () => {
 
     const handleNumCharactersSelect = (num: number) => {
         setNumCharacters(num);
-        setCharacters(Array(num).fill({
+        // FIX: Use Array.from to create unique objects for each character slot,
+        // preventing state management issues where updating one character affects others.
+        setCharacters(Array.from({ length: num }, () => ({
             poseImage: null,
             faceImage: null,
             processedFace: null
-        }));
+        })));
     };
 
     const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, index: number, type: 'pose' | 'face') => {

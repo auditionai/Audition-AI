@@ -107,7 +107,7 @@ const GroupGeneratorTool: React.FC = () => {
                 }
                 return char;
             }));
-        }).catch(err => showToast("Lỗi khi xử lý ảnh.", "error"));
+        }).catch(() => showToast("Lỗi khi xử lý ảnh.", "error"));
     };
 
     const handleRemoveImage = (index: number, type: 'pose' | 'face') => {

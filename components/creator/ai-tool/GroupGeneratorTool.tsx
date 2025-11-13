@@ -194,99 +194,98 @@ const GroupGeneratorTool: React.FC = () => {
         setConfirmOpen(false);
         setIsGenerating(true);
         setProgress(0);
-    
+
         const jobId = crypto.randomUUID();
-    
+
         if (!supabase || !session) {
             showToast('Lỗi kết nối. Không thể bắt đầu tạo ảnh.', 'error');
             setIsGenerating(false);
             return;
         }
-    
+
         let progressInterval: ReturnType<typeof setInterval> | null = null;
-    
-        const cleanup = (channel: any) => {
+        const channel = supabase.channel(`group-job-${jobId}`);
+
+        const cleanup = () => {
             if (progressInterval) clearInterval(progressInterval);
             supabase.removeChannel(channel);
         };
-    
-        const channel = supabase
-            .channel(`group-job-${jobId}`)
+
+        channel
             .on('postgres_changes', {
-                event: '*', // Listen for both UPDATE and DELETE
+                event: '*',
                 schema: 'public',
                 table: 'generated_images',
                 filter: `id=eq.${jobId}`
             }, (payload) => {
                 if (payload.eventType === 'UPDATE') {
                     const record = payload.new as any;
-                    // Success is signaled when image_url is updated from the placeholder
                     if (record.image_url && record.image_url !== 'PENDING') {
                         setProgress(10);
                         setGeneratedImage(record.image_url);
                         showToast('Tạo ảnh nhóm thành công!', 'success');
-                        cleanup(channel);
+                        cleanup();
                     }
                 } else if (payload.eventType === 'DELETE') {
-                    // Failure is now signaled by the record being deleted
                     showToast('Tạo ảnh nhóm thất bại. Vui lòng thử lại.', 'error');
                     setIsGenerating(false);
                     setProgress(0);
-                    cleanup(channel);
+                    cleanup();
                 }
             })
             .subscribe(async (status, err) => {
                 if (status === 'SUBSCRIBED') {
-                    await makeApiCall(jobId, channel);
+                    try {
+                        // Step 1: Call the spawner function with the large payload to create the job.
+                        const charactersPayload = await Promise.all(characters.map(async char => ({
+                            poseImage: char.poseImage ? await fileToBase64(char.poseImage.file) : null,
+                            faceImage: char.processedFace ? `data:image/png;base64,${char.processedFace}` : (char.faceImage ? await fileToBase64(char.faceImage.file) : null),
+                        })));
+            
+                        const spawnerResponse = await fetch('/.netlify/functions/generate-group-image', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+                            body: JSON.stringify({
+                                jobId, characters: charactersPayload,
+                                layout: MOCK_LAYOUTS.find(l => l.id === selectedLayout)?.name,
+                                layoutPrompt, background: MOCK_BACKGROUNDS.find(b => b.id === selectedBg)?.name,
+                                backgroundPrompt, style: MOCK_STYLES.find(s => s.id === selectedStyle)?.name,
+                                stylePrompt, aspectRatio: getAspectRatio(), useUpscaler,
+                            }),
+                        });
+
+                        if (!spawnerResponse.ok) {
+                            const errorJson = await spawnerResponse.json();
+                            throw new Error(errorJson.error || 'Failed to create job record.');
+                        }
+
+                        // Step 2: Call the background worker function with only the job ID to trigger processing.
+                        // We don't need to await this or handle its response; it's fire-and-forget.
+                        fetch('/.netlify/functions/generate-group-image-background', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ jobId }),
+                        });
+
+                        // Start the visual progress timer.
+                        progressInterval = setInterval(() => {
+                            setProgress(prev => (prev < 9 ? prev + 1 : prev));
+                        }, 20000); 
+
+                    } catch (error: any) {
+                        showToast(error.message, 'error');
+                        setIsGenerating(false);
+                        setProgress(0);
+                        cleanup();
+                    }
                 }
                 if (status === 'CHANNEL_ERROR' || err) {
                     showToast('Lỗi kết nối thời gian thực.', 'error');
                     setIsGenerating(false);
                     setProgress(0);
-                    cleanup(channel);
+                    cleanup();
                 }
             });
-    
-        progressInterval = setInterval(() => {
-            setProgress(prev => (prev < 9 ? prev + 1 : prev));
-        }, 20000); // 20s per step
-    
-        const makeApiCall = async (jobId: string, channel: any) => {
-            try {
-                const charactersPayload = await Promise.all(characters.map(async char => ({
-                    poseImage: char.poseImage ? await fileToBase64(char.poseImage.file) : null,
-                    faceImage: char.processedFace ? `data:image/png;base64,${char.processedFace}` : (char.faceImage ? await fileToBase64(char.faceImage.file) : null),
-                })));
-    
-                const response = await fetch('/.netlify/functions/generate-group-image', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-                    body: JSON.stringify({
-                        jobId, characters: charactersPayload,
-                        layout: MOCK_LAYOUTS.find(l => l.id === selectedLayout)?.name,
-                        layoutPrompt, background: MOCK_BACKGROUNDS.find(b => b.id === selectedBg)?.name,
-                        backgroundPrompt, style: MOCK_STYLES.find(s => s.id === selectedStyle)?.name,
-                        stylePrompt, aspectRatio: getAspectRatio(), useUpscaler,
-                    }),
-                });
-    
-                if (response.status !== 202) {
-                    const errorText = await response.text();
-                    let errorMessage = 'Không thể bắt đầu tác vụ tạo ảnh nhóm.';
-                    try {
-                        const errorJson = JSON.parse(errorText);
-                        errorMessage = errorJson.error || errorMessage;
-                    } catch (e) { /* ignore parse error */ }
-                    throw new Error(errorMessage);
-                }
-                
-            } catch (error: any) {
-                showToast(error.message, 'error');
-                setIsGenerating(false);
-                setProgress(0);
-                cleanup(channel);
-            }
-        };
     };
 
     const resetGenerator = () => {

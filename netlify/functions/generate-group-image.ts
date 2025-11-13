@@ -1,16 +1,7 @@
-// FIX: Switched to the standard Netlify Functions `Handler` signature to make `context.invoke` available.
-import type { Handler, HandlerEvent, HandlerContext } from "@netlify/functions";
+import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
 
-const XP_PER_CHARACTER = 5;
-
-// This function now acts as a "spawner".
-// 1. It receives the large payload from the client.
-// 2. It performs auth and billing immediately.
-// 3. It creates the job record in the database.
-// 4. It invokes the background function with just the small job ID.
-// 5. It returns 202 Accepted to the client.
-const handler: Handler = async (event: HandlerEvent, context: HandlerContext) => {
+const handler: Handler = async (event: HandlerEvent) => {
     if (event.httpMethod !== 'POST') {
         return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
     }
@@ -49,7 +40,7 @@ const handler: Handler = async (event: HandlerEvent, context: HandlerContext) =>
             id: jobId,
             user_id: user.id,
             model_used: 'Group Studio',
-            prompt: JSON.stringify(payload),
+            prompt: JSON.stringify(payload), // Store the whole payload
             is_public: false,
             image_url: 'PENDING',
         });
@@ -70,14 +61,9 @@ const handler: Handler = async (event: HandlerEvent, context: HandlerContext) =>
             }),
         ]);
 
-        // This is now guaranteed to work with the new function signature.
-        context.invoke('generate-group-image-background', {
-            body: JSON.stringify({ jobId }),
-        });
-
         return {
-            statusCode: 202,
-            body: JSON.stringify({ message: 'Accepted: Group image generation task has started.' })
+            statusCode: 200, // Return 200 OK to signal the job was created.
+            body: JSON.stringify({ message: 'Job record created successfully.' })
         };
 
     } catch (error: any) {

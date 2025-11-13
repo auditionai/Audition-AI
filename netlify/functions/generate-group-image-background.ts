@@ -8,93 +8,54 @@ import { Buffer } from 'buffer';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import Jimp from 'jimp';
 
-const XP_PER_CHARACTER = 5;
-
-// Helper to pre-process images for Gemini, adding letter/pillarboxing to match a target aspect ratio.
-const processImageForGemini = async (imageDataUrl: string | null, targetAspectRatio: string): Promise<string | null> => {
-    if (!imageDataUrl) return null;
-    try {
-        const [header, base64] = imageDataUrl.split(',');
-        if (!base64) return null;
-
-        const imageBuffer = Buffer.from(base64, 'base64');
-        const image = await (Jimp as any).read(imageBuffer);
-        const [aspectW, aspectH] = targetAspectRatio.split(':').map(Number);
-        const targetRatio = aspectW / aspectH;
-        const originalRatio = image.getWidth() / image.getHeight();
-
-        let newCanvasWidth: number, newCanvasHeight: number;
-        if (targetRatio > originalRatio) {
-            newCanvasHeight = image.getHeight();
-            newCanvasWidth = Math.round(newCanvasHeight * targetRatio);
-        } else {
-            newCanvasWidth = image.getWidth();
-            newCanvasHeight = Math.round(newCanvasWidth / targetRatio);
-        }
-        
-        const newCanvas = new (Jimp as any)(newCanvasWidth, newCanvasHeight, '#000000');
-        const x = (newCanvasWidth - image.getWidth()) / 2;
-        const y = (newCanvasHeight - image.getHeight()) / 2;
-        newCanvas.composite(image, x, y);
-
-        const mime = header.match(/:(.*?);/)?.[1] || (Jimp as any).MIME_PNG;
-        return newCanvas.getBase64Async(mime as any);
-    } catch (error) {
-        console.error("Error pre-processing image for Gemini:", error);
-        return imageDataUrl; // Return original on failure
-    }
-};
-
+// This is now the "worker" function.
+// 1. It receives only a small payload with the job ID.
+// 2. It fetches the full job details from the database.
+// 3. It performs the long-running AI task.
+// 4. It uploads the result.
+// 5. It updates the job record in the database with the final status.
 const handler = async (event: HandlerEvent) => {
-    if (event.httpMethod !== 'POST') return; // Background functions don't return to client, but good practice.
+    if (event.httpMethod !== 'POST') return; 
 
-    const { jobId, characters, layout, layoutPrompt, background, backgroundPrompt, style, stylePrompt, aspectRatio, useUpscaler } = JSON.parse(event.body || '{}');
-    
-    // --- AUTHENTICATION & VALIDATION ---
-    const authHeader = event.headers['authorization'];
-    const token = authHeader?.split(' ')[1];
+    const { jobId } = JSON.parse(event.body || '{}');
 
     const failJob = async (reason: string) => {
         await supabaseAdmin.from('generated_images').update({ status: 'failed', error_message: reason }).eq('job_id', jobId);
     };
 
-    if (!jobId) { console.error("Job ID is missing."); return; }
-    if (!token) { await failJob('Unauthorized.'); return; }
-
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
-    if (authError || !user) { await failJob('Invalid token.'); return; }
-    if (!characters || characters.length === 0) { await failJob('Character data missing.'); return; }
+    if (!jobId) { console.error("[WORKER] Job ID is missing."); return; }
 
     try {
-        const totalCost = characters.length + (useUpscaler ? 1 : 0);
-        const { data: userData, error: userError } = await supabaseAdmin.from('users').select('diamonds, xp').eq('id', user.id).single();
-        if (userError || !userData) { await failJob('User not found.'); return; }
-        if (userData.diamonds < totalCost) { await failJob(`Không đủ kim cương. Cần ${totalCost}, bạn có ${userData.diamonds}.`); return; }
+        // 1. Fetch the full job details from the database
+        const { data: jobData, error: fetchError } = await supabaseAdmin
+            .from('generated_images')
+            .select('prompt, user_id') // The 'prompt' column contains the full payload
+            .eq('job_id', jobId)
+            .single();
 
-        const newDiamondCount = userData.diamonds - totalCost;
-        const newXp = (userData.xp || 0) + (characters.length * XP_PER_CHARACTER);
+        if (fetchError || !jobData || !jobData.prompt) {
+            throw new Error(fetchError?.message || 'Job not found or payload is missing.');
+        }
 
-        await Promise.all([
-            supabaseAdmin.from('users').update({ diamonds: newDiamondCount, xp: newXp }).eq('id', user.id),
-            supabaseAdmin.from('diamond_transactions_log').insert({
-                user_id: user.id,
-                amount: -totalCost,
-                transaction_type: 'GROUP_IMAGE_GENERATION',
-                description: `Tạo ảnh nhóm ${characters.length} người`,
-            }),
-        ]);
+        const payload = JSON.parse(jobData.prompt);
+        const { characters, layout, layoutPrompt, background, backgroundPrompt, style, stylePrompt, aspectRatio } = payload;
+        const userId = jobData.user_id;
 
+        // 2. Get API Key
         const { data: apiKeyData, error: apiKeyError } = await supabaseAdmin.from('api_keys').select('id, key_value').eq('status', 'active').order('usage_count', { ascending: true }).limit(1).single();
-        if (apiKeyError || !apiKeyData) { await failJob('Hết tài nguyên AI. Vui lòng thử lại sau.'); return; }
+        if (apiKeyError || !apiKeyData) {
+            await failJob('Hết tài nguyên AI. Vui lòng thử lại sau.');
+            return;
+        }
         
         const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
 
-        // --- INTELLIGENT PROMPT & ASSET CONSTRUCTION ---
+        // 3. Construct prompt and assets for Gemini
         const parts: any[] = [];
         const characterDetailsLines: string[] = [];
         let imageInputIndex = 1;
 
-        const finalPromptPlaceholder = "PROMPT_PLACEHOLDER";
+        const finalPromptPlaceholder = "PROMPT_PLACEHOLDER"; // Will be replaced later
         parts.push({ text: finalPromptPlaceholder });
 
         for (let i = 0; i < characters.length; i++) {
@@ -102,22 +63,17 @@ const handler = async (event: HandlerEvent) => {
             let charDescription = `- Character ${i + 1}:`;
 
             if (char.poseImage) {
-                const processed = await processImageForGemini(char.poseImage, aspectRatio);
-                if (processed) {
-                    const [h, b] = processed.split(',');
-                    parts.push({ inlineData: { data: b, mimeType: h.match(/:(.*?);/)?.[1] || 'image/png' } });
-                    charDescription += `\n  - Appearance (OUTFIT, POSE, GENDER, HAIRSTYLE) is defined by Image ${imageInputIndex}.`;
-                    imageInputIndex++;
-                }
+                // The image processor is no longer needed here as the AI model is robust enough.
+                const [h, b] = char.poseImage.split(',');
+                parts.push({ inlineData: { data: b, mimeType: h.match(/:(.*?);/)?.[1] || 'image/png' } });
+                charDescription += `\n  - Appearance (OUTFIT, POSE, GENDER, HAIRSTYLE) is defined by Image ${imageInputIndex}.`;
+                imageInputIndex++;
             }
             if (char.faceImage) {
-                const processed = await processImageForGemini(char.faceImage, '1:1');
-                if (processed) {
-                    const [h, b] = processed.split(',');
-                    parts.push({ inlineData: { data: b, mimeType: h.match(/:(.*?);/)?.[1] || 'image/png' } });
-                    charDescription += `\n  - **CRITICAL**: The FACE must be an EXACT replica from Image ${imageInputIndex}.`;
-                    imageInputIndex++;
-                }
+                const [h, b] = char.faceImage.split(',');
+                parts.push({ inlineData: { data: b, mimeType: h.match(/:(.*?);/)?.[1] || 'image/png' } });
+                charDescription += `\n  - **CRITICAL**: The FACE must be an EXACT replica from Image ${imageInputIndex}.`;
+                imageInputIndex++;
             }
             characterDetailsLines.push(charDescription);
         }
@@ -139,7 +95,7 @@ const handler = async (event: HandlerEvent) => {
         
         parts[0].text = megaPrompt;
         
-        // --- AI GENERATION ---
+        // 4. Call Gemini AI
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash-image',
             contents: { parts },
@@ -152,26 +108,24 @@ const handler = async (event: HandlerEvent) => {
         const finalImageBase64 = imagePartResponse.inlineData.data;
         const finalImageMimeType = imagePartResponse.inlineData.mimeType;
 
-        // --- UPLOAD & DB UPDATE ---
+        // 5. Upload result to R2
         const s3Client = new S3Client({ region: "auto", endpoint: process.env.R2_ENDPOINT!, credentials: { accessKeyId: process.env.R2_ACCESS_KEY_ID!, secretAccessKey: process.env.R2_SECRET_ACCESS_KEY! }});
         const imageBuffer = Buffer.from(finalImageBase64, 'base64');
-        const fileName = `${user.id}/group/${Date.now()}.${finalImageMimeType.split('/')[1] || 'png'}`;
+        const fileName = `${userId}/group/${Date.now()}.${finalImageMimeType.split('/')[1] || 'png'}`;
         
         await s3Client.send(new PutObjectCommand({ Bucket: process.env.R2_BUCKET_NAME!, Key: fileName, Body: imageBuffer, ContentType: finalImageMimeType }));
         const publicUrl = `${process.env.R2_PUBLIC_URL}/${fileName}`;
 
-        // --- FINAL DB UPDATE ON SUCCESS ---
+        // 6. Update DB record to 'completed'
         await supabaseAdmin.from('generated_images').update({
             image_url: publicUrl,
             status: 'completed',
-            model_used: 'Group Studio v2'
         }).eq('job_id', jobId);
 
-        // Increment API key usage
         await supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id });
 
     } catch (error: any) {
-        console.error("Group image background function error:", error);
+        console.error("[WORKER] Group image background function error:", error);
         await failJob(error.message || 'Lỗi không xác định từ máy chủ.');
     }
 };

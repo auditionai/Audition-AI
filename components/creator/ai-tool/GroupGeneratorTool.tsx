@@ -62,7 +62,8 @@ const fileToBase64 = (file: File): Promise<string> => new Promise((resolve, reje
 
 // Main Component
 const GroupGeneratorTool: React.FC = () => {
-    const { user, session, showToast, supabase, updateUserDiamonds } = useAuth();
+    // FIX: Add `updateUserDiamonds` to useAuth destructuring to fix 'Cannot find name' error.
+    const { user, session, showToast, supabase, updateUserProfile, updateUserDiamonds } = useAuth();
     const [numCharacters, setNumCharacters] = useState<number>(0);
     const [isConfirmOpen, setConfirmOpen] = useState(false);
     
@@ -218,6 +219,7 @@ const GroupGeneratorTool: React.FC = () => {
                 if (record.status === 'completed') {
                     setProgress(10);
                     setGeneratedImage(record.image_url);
+                    updateUserProfile({ diamonds: record.final_diamond_count, xp: record.final_xp });
                     showToast('Tạo ảnh nhóm thành công!', 'success');
                     cleanup(channel);
                 } else if (record.status === 'failed') {
@@ -250,7 +252,7 @@ const GroupGeneratorTool: React.FC = () => {
                     faceImage: char.processedFace ? `data:image/png;base64,${char.processedFace}` : (char.faceImage ? await fileToBase64(char.faceImage.file) : null),
                 })));
     
-                const response = await fetch('/.netlify/functions/generate-group-image-background', {
+                const response = await fetch('/.netlify/functions/generate-group-image', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
                     body: JSON.stringify({
@@ -397,7 +399,7 @@ const GroupGeneratorTool: React.FC = () => {
                     setImageToProcess(null);
                     setPickerTarget(null);
                 }}
-                onUseCropped={(croppedImage: { url: string; file: File }) => {
+                onUseCropped={(croppedImage) => {
                     if (!pickerTarget) return;
                     setCharacters(prev => prev.map((char, i) => {
                         if (i === pickerTarget.index) {

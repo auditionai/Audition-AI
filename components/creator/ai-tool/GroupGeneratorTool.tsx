@@ -63,7 +63,7 @@ const fileToBase64 = (file: File): Promise<string> => new Promise((resolve, reje
 // Main Component
 const GroupGeneratorTool: React.FC = () => {
     // FIX: Add 'updateUserDiamonds' to fix 'Cannot find name' errors.
-    const { user, session, showToast, updateUserProfile, supabase, updateUserDiamonds } = useAuth();
+    const { user, session, showToast, supabase, updateUserDiamonds } = useAuth();
     const [numCharacters, setNumCharacters] = useState<number>(0);
     const [isConfirmOpen, setConfirmOpen] = useState(false);
     

@@ -172,6 +172,14 @@ const GroupGeneratorTool: React.FC = () => {
     const totalCost = numCharacters + (useUpscaler ? 1 : 0);
 
     const handleGenerateClick = () => {
+        // NEW: Add validation check
+        for (let i = 0; i < characters.length; i++) {
+            if (!characters[i].poseImage) {
+                showToast(`Vui lòng cung cấp "Ảnh nhân vật" cho Nhân vật ${i + 1}.`, 'error');
+                return;
+            }
+        }
+
         if (user && user.diamonds < totalCost) {
             showToast(`Bạn cần ${totalCost} kim cương, nhưng chỉ có ${user.diamonds}. Vui lòng nạp thêm.`, 'error');
             return;

@@ -224,6 +224,8 @@ const GroupGeneratorTool: React.FC = () => {
                         setProgress(10);
                         setGeneratedImage(record.image_url);
                         showToast('Tạo ảnh nhóm thành công!', 'success');
+                        // FIX: Set generating state to false to show the result.
+                        setIsGenerating(false);
                         cleanup();
                     }
                 } else if (payload.eventType === 'DELETE') {

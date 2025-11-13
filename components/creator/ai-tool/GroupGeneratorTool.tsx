@@ -1,6 +1,6 @@
 // NEW: Create the content for the GroupGeneratorTool component.
 // FIX: Import 'useState' from 'react' to resolve 'Cannot find name' errors.
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
 import ConfirmationModal from '../../ConfirmationModal';
 import ImageUploader from '../../ai-tool/ImageUploader';
@@ -62,7 +62,8 @@ const fileToBase64 = (file: File): Promise<string> => new Promise((resolve, reje
 
 // Main Component
 const GroupGeneratorTool: React.FC = () => {
-    const { user, session, showToast, updateUserDiamonds } = useAuth();
+    // FIX: Add 'updateUserDiamonds' to fix 'Cannot find name' errors.
+    const { user, session, showToast, updateUserProfile, supabase, updateUserDiamonds } = useAuth();
     const [numCharacters, setNumCharacters] = useState<number>(0);
     const [isConfirmOpen, setConfirmOpen] = useState(false);
     
@@ -86,6 +87,13 @@ const GroupGeneratorTool: React.FC = () => {
     const [isResultModalOpen, setIsResultModalOpen] = useState(false);
     const [useUpscaler, setUseUpscaler] = useState(false);
     const [imageToProcess, setImageToProcess] = useState<ProcessedImageData | null>(null);
+
+    // Effect to clean up any dangling subscriptions on unmount
+    useEffect(() => {
+        return () => {
+            supabase?.removeAllChannels();
+        };
+    }, [supabase]);
 
 
     const handleNumCharactersSelect = (num: number) => {
@@ -175,65 +183,102 @@ const GroupGeneratorTool: React.FC = () => {
     const handleConfirmGeneration = async () => {
         setConfirmOpen(false);
         setIsGenerating(true);
-        setProgress(1);
+        setProgress(0);
     
-        const interval = setInterval(() => {
-            setProgress(prev => (prev < 9 ? prev + 1 : prev));
-        }, 2500); // Slower interval for a longer process
+        const jobId = crypto.randomUUID();
     
-        try {
-            const charactersPayload = await Promise.all(characters.map(async char => {
-                const poseImageBase64 = char.poseImage ? await fileToBase64(char.poseImage.file) : null;
-                // Face image is now only for reference, processed one takes precedence
-                const faceImageBase64 = char.faceImage ? await fileToBase64(char.faceImage.file) : null;
-                return {
-                    poseImage: poseImageBase64,
-                    faceImage: char.processedFace ? `data:image/png;base64,${char.processedFace}` : faceImageBase64,
-                };
-            }));
-    
-            const response = await fetch('/.netlify/functions/generate-group-image', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${session?.access_token}`,
-                },
-                body: JSON.stringify({
-                    characters: charactersPayload,
-                    layout: MOCK_LAYOUTS.find(l => l.id === selectedLayout)?.name,
-                    layoutPrompt,
-                    background: MOCK_BACKGROUNDS.find(b => b.id === selectedBg)?.name,
-                    backgroundPrompt,
-                    style: MOCK_STYLES.find(s => s.id === selectedStyle)?.name,
-                    stylePrompt,
-                    aspectRatio: getAspectRatio(),
-                    useUpscaler,
-                }),
-            });
-            
-            clearInterval(interval);
-            
-            if (!response.ok) {
-                const errorResult = await response.json();
-                throw new Error(errorResult.error || 'Lỗi không xác định từ máy chủ.');
-            }
-            
-            const result = await response.json();
-            
-            setProgress(9);
-            if (user) {
-                updateUserDiamonds(result.newDiamondCount);
-            }
-            setGeneratedImage(result.imageUrl);
-            showToast('Tạo ảnh nhóm thành công!', 'success');
-            setProgress(10);
-    
-        } catch (err: any) {
-            clearInterval(interval);
-            showToast(err.message || 'Tạo ảnh nhóm thất bại.', 'error');
-            setIsGenerating(false); // Make sure to stop generating on error
-            setProgress(0);
+        if (!supabase || !session) {
+            showToast('Lỗi kết nối. Không thể bắt đầu tạo ảnh.', 'error');
+            setIsGenerating(false);
+            return;
         }
+    
+        // FIX: Changed NodeJS.Timeout to standard ReturnType for browser compatibility
+        let progressInterval: ReturnType<typeof setInterval> | null = null;
+    
+        const cleanup = (channel: any) => {
+            if (progressInterval) clearInterval(progressInterval);
+            supabase.removeChannel(channel);
+        };
+    
+        const channel = supabase
+            .channel(`group-job-${jobId}`)
+            .on('postgres_changes', {
+                event: 'UPDATE', schema: 'public', table: 'generated_images', filter: `job_id=eq.${jobId}`
+            }, (payload) => {
+                const record = payload.new as any;
+                if (record.status === 'completed') {
+                    setProgress(10);
+                    setGeneratedImage(record.image_url);
+                    // The user's diamond count was already updated by the kicker function.
+                    showToast('Tạo ảnh nhóm thành công!', 'success');
+                    cleanup(channel);
+                } else if (record.status === 'failed') {
+                    showToast(record.error_message || 'Tạo ảnh nhóm thất bại. Vui lòng thử lại.', 'error');
+                    // Refund optimistic deduction on failure
+                    if (user) updateUserDiamonds(user.diamonds);
+                    setIsGenerating(false);
+                    setProgress(0);
+                    cleanup(channel);
+                }
+            })
+            .subscribe(async (status, err) => {
+                if (status === 'SUBSCRIBED') {
+                    await makeApiCall(jobId, channel);
+                }
+                if (status === 'CHANNEL_ERROR' || err) {
+                    showToast('Lỗi kết nối thời gian thực.', 'error');
+                    setIsGenerating(false);
+                    setProgress(0);
+                    cleanup(channel);
+                }
+            });
+    
+        progressInterval = setInterval(() => {
+            setProgress(prev => (prev < 9 ? prev + 1 : prev));
+        }, 20000); // 20s per step
+    
+        const makeApiCall = async (jobId: string, channel: any) => {
+            try {
+                // Optimistic UI update for diamond cost
+                if (user) {
+                    updateUserDiamonds(user.diamonds - totalCost);
+                }
+
+                const charactersPayload = await Promise.all(characters.map(async char => ({
+                    poseImage: char.poseImage ? await fileToBase64(char.poseImage.file) : null,
+                    faceImage: char.processedFace ? `data:image/png;base64,${char.processedFace}` : (char.faceImage ? await fileToBase64(char.faceImage.file) : null),
+                })));
+    
+                // FIX: Call the background function endpoint.
+                const response = await fetch('/.netlify/functions/generate-group-image-background', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+                    body: JSON.stringify({
+                        jobId, characters: charactersPayload,
+                        layout: MOCK_LAYOUTS.find(l => l.id === selectedLayout)?.name,
+                        layoutPrompt, background: MOCK_BACKGROUNDS.find(b => b.id === selectedBg)?.name,
+                        backgroundPrompt, style: MOCK_STYLES.find(s => s.id === selectedStyle)?.name,
+                        stylePrompt, aspectRatio: getAspectRatio(), useUpscaler,
+                    }),
+                });
+    
+                if (!response.ok) {
+                    // If function invocation fails, throw error to be caught below.
+                    throw new Error('Không thể bắt đầu tác vụ tạo ảnh nhóm.');
+                }
+                
+                // On successful invocation (202), we just wait for the websocket update.
+
+            } catch (error: any) {
+                showToast(error.message, 'error');
+                // Refund optimistic deduction on invocation failure
+                if (user) updateUserDiamonds(user.diamonds);
+                setIsGenerating(false);
+                setProgress(0);
+                cleanup(channel);
+            }
+        };
     };
 
     const resetGenerator = () => {

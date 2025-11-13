@@ -93,27 +93,23 @@ const handler: Handler = async (event: HandlerEvent) => {
         
         const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
 
-        // --- NEW PROMPT ENGINEERING LOGIC ---
+        // --- REVISED PROMPT ENGINEERING LOGIC ---
         const parts: any[] = [];
         const characterDetailsLines: string[] = [];
-        let imageInputIndex = 1;
+        let imageInputIndex = 1; // Image 1 is always the reference image
 
         const processedReferenceImage = await processImageForGemini(referenceImage, aspectRatio);
 
         if (processedReferenceImage) {
             const [h, b] = processedReferenceImage.split(',');
             parts.push({ inlineData: { data: b, mimeType: h.match(/:(.*?);/)?.[1] || 'image/png' } });
-            imageInputIndex++;
         } else {
              throw new Error('Reference image is missing or failed to process.');
         }
         
         for (let i = 0; i < characters.length; i++) {
             const char = characters[i];
-            const charDescription = [
-                `<character id="${i + 1}">`,
-                `  <source_images>`
-            ];
+            const charDescription: string[] = [`**Character ${i + 1}:**`];
             
             const [processedPoseImage, processedFaceImage] = await Promise.all([
                 processImageForGemini(char.poseImage, aspectRatio),
@@ -122,65 +118,48 @@ const handler: Handler = async (event: HandlerEvent) => {
 
 
             if (processedPoseImage) {
+                imageInputIndex++;
                 const [h, b] = processedPoseImage.split(',');
                 parts.push({ inlineData: { data: b, mimeType: h.match(/:(.*?);/)?.[1] || 'image/png' } });
-                charDescription.push(`    <appearance_source image_index="${imageInputIndex}">This image defines the character's ENTIRE appearance: outfit, accessories, hair, and body. PRESERVE IT PERFECTLY.</appearance_source>`);
-                imageInputIndex++;
+                charDescription.push(`*   **Appearance (Outfit/Hair/Body):** Use Image ${imageInputIndex}. This is a strict visual instruction. Replicate the outfit exactly.`);
             }
             if (processedFaceImage) {
+                imageInputIndex++;
                 const [h, b] = processedFaceImage.split(',');
                 parts.push({ inlineData: { data: b, mimeType: h.match(/:(.*?);/)?.[1] || 'image/png' } });
-                charDescription.push(`    <face_source image_index="${imageInputIndex}">This image defines the character's FACE. REPLICATE IT EXACTLY. This is a non-negotiable, high-priority rule.</face_source>`);
-                imageInputIndex++;
+                charDescription.push(`*   **Face:** Use Image ${imageInputIndex}. Replicate this face with 100% accuracy. This is the highest priority rule.`);
             }
-            charDescription.push(`  </source_images>`);
-            charDescription.push(`</character>`);
             characterDetailsLines.push(charDescription.join('\n'));
         }
+        
+        const characterAssignments = characterDetailsLines.join('\n\n');
 
         const megaPrompt = [
-            "<master_instructions>",
-            "  <task_overview>",
-            "    Your task is to generate a new group photo by perfectly recasting a scene from a reference image (Image 1) with a new set of characters. Adherence to character details is the highest and most critical priority.",
-            "  </task_overview>",
+            "**CRITICAL MISSION: Group Photo Recasting**",
             "",
-            "  <critical_rules>",
-            `    <rule id="1" priority="MAXIMUM">**CHARACTER COUNT:** The final image MUST contain EXACTLY ${characters.length} characters. Not more, not less. Before generating, you must count the characters to ensure 100% accuracy.</rule>`,
-            `    <rule id="2" priority="MAXIMUM">**CHARACTER FIDELITY:** You are ABSOLUTELY FORBIDDEN from altering any character's appearance, gender, or attributes.`,
-            "      - **DO NOT CHANGE GENDER.** If a character appears male, they MUST remain male. If female, they MUST remain female.",
-            "      - **DO NOT CHANGE OUTFITS.** The clothing, including all layers, accessories, and shoes, must be an EXACT replica.",
-            "      - **DO NOT CHANGE HAIRSTYLES or HAIR COLOR.**",
-            "      - The appearance derived from each character's source images is absolute and must be preserved with perfect fidelity.",
-            "    </rule>",
-            "  </critical_rules>",
+            "**PRIMARY OBJECTIVE:** Recreate the scene from Image 1, but replace the original people with the new characters provided. Character accuracy is the most important rule. You must follow all rules without fail.",
             "",
-            "  <scene_blueprint>",
-            "    Analyze **Image 1** for the overall scene:",
-            "    - **Composition & Poses:** Replicate the exact poses and character positions. Map the new characters to the old poses logically.",
-            "    - **Environment:** Recreate the background, setting, lighting, and mood.",
-            "    - **Camera:** Match the camera angle and framing (e.g., full shot, medium shot) precisely.",
-            "  </scene_blueprint>",
+            "**NON-NEGOTIABLE RULES:**",
+            `1.  **FINAL IMAGE MUST HAVE EXACTLY ${characters.length} PEOPLE.** Count them before you finish.`,
+            "2.  **YOU MUST NOT INVENT NEW CHARACTERS.** Every person in the final image must be a perfect copy of one of the provided characters. Do not add, remove, or change characters.",
+            "3.  **DO NOT CHANGE CHARACTER APPEARANCE.** The gender, clothing, hair, and face from the source images are absolute and must be preserved with 100% fidelity. This is the most critical instruction.",
             "",
-            "  <character_casting_sheet>",
-            "    Replace the original people with these new characters. These instructions are non-negotiable and override any other interpretation.",
-            ...characterDetailsLines,
-            "  </character_casting_sheet>",
+            "**SCENE BLUEPRINT (from Image 1):**",
+            "*   **Poses & Positions:** Replicate the exact poses and character positions from Image 1. Logically map the new characters to the old poses.",
+            "*   **Environment:** Recreate the background, lighting, and mood from Image 1.",
+            `*   **Style:** The final image should have a '${style}' aesthetic.`,
+            `*   **User Prompt:** Additionally, consider this request: "${prompt || 'Follow the reference image closely.'}"`,
             "",
-            "  <artistic_direction>",
-            `    - **Art Style:** The final image must have a '${style}' aesthetic.`,
-            `    - **User Notes:** Incorporate these details into the scene: "${prompt || 'Follow the reference image closely.'}"`,
-            "  </artistic_direction>",
+            "**CHARACTER ASSIGNMENTS:**",
+            "This is the casting sheet. Each character below must appear in the final image exactly as described by their source images.",
+            characterAssignments,
             "",
-            "  <final_quality_check>",
-            "    Before finalizing, you MUST perform this checklist:",
-            `    1.  Is the character count in the generated image EXACTLY ${characters.length}? [YES/NO]`,
-            "    2.  Is every character's gender, outfit, hair, and face an EXACT replica from their source images? [YES/NO]",
-            "    3.  Are the poses and composition from Image 1 perfectly recreated? [YES/NO]",
-            "    **If any answer is NO, you MUST discard the result and start over to correct the mistake. Failure to follow these rules is a critical error.**",
-            "  </final_quality_check>",
-            "</master_instructions>"
+            "**FINAL CHECKLIST (MANDATORY SELF-CORRECTION):**",
+            `1.  Did I generate EXACTLY ${characters.length} people? [YES/NO]`,
+            "2.  Is EVERY character a perfect match to their source images (outfit, face, hair, gender)? [YES/NO]",
+            "3.  Are the poses from Image 1 copied correctly? [YES/NO]",
+            "**If any answer is NO, you MUST discard your current attempt and regenerate the image correctly. This is not optional.**"
         ].join('\n');
-        
         
         parts.unshift({ text: megaPrompt });
         

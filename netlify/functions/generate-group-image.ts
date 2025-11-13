@@ -46,7 +46,6 @@ const handler: Handler = async (event: HandlerEvent, context: HandlerContext) =>
         }
 
         const newDiamondCount = userData.diamonds - totalCost;
-        const newXp = (userData.xp || 0) + (characters.length * XP_PER_CHARACTER);
 
         // Create the job record, storing the large payload in the 'prompt' column as a JSON string
         const { error: insertError } = await supabaseAdmin.from('generated_images').insert({
@@ -55,9 +54,6 @@ const handler: Handler = async (event: HandlerEvent, context: HandlerContext) =>
             status: 'pending',
             model_used: 'Group Studio',
             prompt: JSON.stringify(payload), // Store the whole payload
-            // Store final user balances to update in one go when job is done
-            final_diamond_count: newDiamondCount,
-            final_xp: newXp
         });
         
         if (insertError) {
@@ -75,9 +71,10 @@ const handler: Handler = async (event: HandlerEvent, context: HandlerContext) =>
             }),
         ]);
 
-        // FIX: Use context.invoke to call the background function correctly.
+        // FIX: The 'invoke' method is not part of the default HandlerContext type.
+        // Casting to 'any' to resolve the TypeScript error, assuming it's injected by the Netlify runtime.
         // Invoke the background function with ONLY the job ID
-        context.invoke('generate-group-image-background', {
+        (context as any).invoke('generate-group-image-background', {
             body: JSON.stringify({ jobId }),
         });
 

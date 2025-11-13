@@ -8,6 +8,8 @@ import { Buffer } from 'buffer';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import Jimp from 'jimp';
 
+const XP_PER_CHARACTER = 5;
+
 // This is now the "worker" function.
 // 1. It receives only a small payload with the job ID.
 // 2. It fetches the full job details from the database.
@@ -115,12 +117,27 @@ const handler = async (event: HandlerEvent) => {
         
         await s3Client.send(new PutObjectCommand({ Bucket: process.env.R2_BUCKET_NAME!, Key: fileName, Body: imageBuffer, ContentType: finalImageMimeType }));
         const publicUrl = `${process.env.R2_PUBLIC_URL}/${fileName}`;
+        
+        const xpToAward = (characters.length || 0) * XP_PER_CHARACTER;
 
-        // 6. Update DB record to 'completed'
-        await supabaseAdmin.from('generated_images').update({
-            image_url: publicUrl,
-            status: 'completed',
-        }).eq('job_id', jobId);
+        // 6. Update DB record to 'completed' and increment user XP
+        const [updateJobResult, incrementXpResult] = await Promise.all([
+             supabaseAdmin.from('generated_images').update({
+                image_url: publicUrl,
+                status: 'completed',
+            }).eq('job_id', jobId),
+
+            supabaseAdmin.rpc('increment_user_xp', {
+                user_id_param: userId,
+                xp_amount: xpToAward,
+            })
+        ]);
+
+        if (updateJobResult.error) throw new Error(`Failed to update job status: ${updateJobResult.error.message}`);
+        if (incrementXpResult.error) {
+             // Log the error but don't fail the entire job, as the image was created.
+             console.error(`[WORKER] Failed to award XP for job ${jobId}:`, incrementXpResult.error.message);
+        }
 
         await supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id });
 

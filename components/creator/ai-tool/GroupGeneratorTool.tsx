@@ -63,7 +63,7 @@ const fileToBase64 = (file: File): Promise<string> => new Promise((resolve, reje
 // Main Component
 const GroupGeneratorTool: React.FC = () => {
     // FIX: Add `updateUserDiamonds` to useAuth destructuring to fix 'Cannot find name' error.
-    const { user, session, showToast, supabase, updateUserProfile, updateUserDiamonds } = useAuth();
+    const { user, session, showToast, supabase, updateUserDiamonds } = useAuth();
     const [numCharacters, setNumCharacters] = useState<number>(0);
     const [isConfirmOpen, setConfirmOpen] = useState(false);
     
@@ -219,7 +219,6 @@ const GroupGeneratorTool: React.FC = () => {
                 if (record.status === 'completed') {
                     setProgress(10);
                     setGeneratedImage(record.image_url);
-                    updateUserProfile({ diamonds: record.final_diamond_count, xp: record.final_xp });
                     showToast('Tạo ảnh nhóm thành công!', 'success');
                     cleanup(channel);
                 } else if (record.status === 'failed') {

@@ -58,123 +58,99 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
         const model = 'gemini-2.5-flash-image';
-
+        
         // ====================================================================
-        // STEP 1: GENERATE THE BLUEPRINT IMAGE WITH MANNEQUINS
+        // CONSTRUCT THE "SUPER PROMPT"
         // ====================================================================
-        console.log(`[WORKER ${jobId}] Step 1: Generating blueprint...`);
+        console.log(`[WORKER ${jobId}] Constructing the Super Prompt...`);
 
-        const blueprintPrompt = `
-            **CRITICAL TASK: Scene Mannequin Blueprint**
-            Your only goal is to analyze the provided image (Image 1) and create a new image based on it.
-            
-            **RULES:**
-            1.  Recreate the background, lighting, and environment from Image 1 exactly.
-            2.  Identify all people in Image 1.
-            3.  In the new image, replace EVERY person with a featureless, matte gray, gender-neutral mannequin.
-            4.  The mannequins MUST be in the exact same poses and positions as the original people.
-            5.  The final image MUST contain EXACTLY ${numCharacters} mannequins. Do not add or remove any.
-            
-            Do not add any other details. The output must be a clean blueprint of the scene with mannequins.
-        `.trim();
+        const maleCount = characters.filter((c: any) => c.gender === 'male').length;
+        const femaleCount = characters.filter((c: any) => c.gender === 'female').length;
+
+        const promptParts: string[] = [
+            `**CRITICAL MISSION: Group Photo Generation**`,
+            `**Primary Objective:** Your task is to analyze the provided Reference Scene (Image 1) and create a new image featuring a group of characters. You must adhere to the following rules with 100% accuracy.`,
+            ``,
+            `**--- OVERALL SCENE REQUIREMENTS ---**`,
+            `1.  **Character Count:** The final image MUST contain EXACTLY ${numCharacters} people. This is a non-negotiable rule. The group consists of ${maleCount} male character(s) and ${femaleCount} female character(s).`,
+            `2.  **Scene Replication:** Recreate the background, lighting, environment, camera angle, and overall composition from the Reference Scene (Image 1).`,
+            `3.  **Pose & Placement:** Each character you generate MUST occupy the exact position and adopt the exact pose of one of the people in the Reference Scene (Image 1).`,
+            `4.  **Art Style:** The final image must have a cohesive '${style}' aesthetic.`,
+            `5.  **User Prompt:** Incorporate this user request into the scene: "${prompt || 'Follow the reference image closely.'}"`,
+            ``,
+            `**--- CHARACTER CASTING SHEET (MANDATORY) ---**`,
+            `This is your definitive guide for creating each character. You MUST use the specified source images for each person. Do NOT invent or alter details.`,
+        ];
+
+        const finalApiParts: any[] = [];
+        let imageInputIndex = 1; // Image 1 is always the reference scene
 
         const refImageProcessed = processDataUrl(referenceImage);
         if (!refImageProcessed) throw new Error('Reference image is invalid.');
-
-        const blueprintResponse = await ai.models.generateContent({
-            model,
-            contents: { parts: [
-                { text: blueprintPrompt },
-                { inlineData: { data: refImageProcessed.base64, mimeType: refImageProcessed.mimeType } }
-            ]},
-            config: { responseModalities: [Modality.IMAGE] },
-        });
-
-        const blueprintImagePart = blueprintResponse.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-        if (!blueprintImagePart?.inlineData) throw new Error("AI failed to create the initial scene blueprint.");
+        finalApiParts.push({ inlineData: { data: refImageProcessed.base64, mimeType: refImageProcessed.mimeType } });
         
-        const blueprintImageBase64 = blueprintImagePart.inlineData.data;
-        const blueprintImageMimeType = blueprintImagePart.inlineData.mimeType;
-        console.log(`[WORKER ${jobId}] Step 1: Blueprint generated successfully.`);
-
-        // ====================================================================
-        // STEP 2: "INPAINT" CHARACTERS ONTO THE BLUEPRINT
-        // ====================================================================
-        console.log(`[WORKER ${jobId}] Step 2: Inpainting characters...`);
-        
-        const inpaintingParts: any[] = [];
-        const characterDetailsLines: string[] = [];
-        let imageInputIndex = 1; // Image 1 is now the blueprint
-
-        // Add blueprint as the first image
-        inpaintingParts.push({ inlineData: { data: blueprintImageBase64, mimeType: blueprintImageMimeType } });
-
         for (let i = 0; i < characters.length; i++) {
             const char = characters[i];
-            const charDescription: string[] = [`**Character ${i + 1}:**`];
+            const charDescription: string[] = [`**Character ${i + 1} (Gender: ${char.gender === 'male' ? 'Male' : 'Female'}):**`];
 
             const poseImageProcessed = processDataUrl(char.poseImage);
             const faceImageProcessed = processDataUrl(char.faceImage);
 
             if (poseImageProcessed) {
                 imageInputIndex++;
-                inpaintingParts.push({ inlineData: { data: poseImageProcessed.base64, mimeType: poseImageProcessed.mimeType } });
-                charDescription.push(`*   **Appearance (Outfit/Hair/Body):** Use Image ${imageInputIndex}. Replicate the outfit exactly.`);
+                finalApiParts.push({ inlineData: { data: poseImageProcessed.base64, mimeType: poseImageProcessed.mimeType } });
+                charDescription.push(`*   **Appearance (Outfit/Hair/Body):** Use Image ${imageInputIndex}. Replicate the outfit and body type with 100% accuracy.`);
             }
             if (faceImageProcessed) {
                 imageInputIndex++;
-                inpaintingParts.push({ inlineData: { data: faceImageProcessed.base64, mimeType: faceImageProcessed.mimeType } });
-                charDescription.push(`*   **Face:** Use Image ${imageInputIndex}. Replicate this face with 100% accuracy. This is the highest priority rule.`);
+                finalApiParts.push({ inlineData: { data: faceImageProcessed.base64, mimeType: faceImageProcessed.mimeType } });
+                charDescription.push(`*   **Face:** Use Image ${imageInputIndex}. Replicate this face perfectly. This is the highest priority rule.`);
             }
-            characterDetailsLines.push(charDescription.join('\n'));
+            
+            // Add a check to ensure character is described
+            if (charDescription.length === 1) {
+                charDescription.push('* No specific appearance provided. Generate based on context and gender.');
+            }
+            
+            promptParts.push(charDescription.join('\n'));
         }
 
-        const characterAssignments = characterDetailsLines.join('\n\n');
+        promptParts.push(
+            ``,
+            `**--- FINAL CHECKLIST (MANDATORY SELF-CORRECTION) ---**`,
+            `Before you finish, answer these questions. If any answer is "NO," you MUST discard your work and start again.`,
+            `1.  Is the final character count EXACTLY ${numCharacters}? [YES/NO]`,
+            `2.  Is EVERY character a perfect visual match to their specified source images (outfit, face, gender)? [YES/NO]`,
+            `3.  Is the scene, background, and posing an exact match to the Reference Scene (Image 1)? [YES/NO]`,
+            `**FAILURE TO COMPLY WITH THESE RULES WILL RESULT IN A FAILED TASK.**`
+        );
+        
+        const superPrompt = promptParts.join('\n');
+        
+        // Add the prompt as the very first part
+        finalApiParts.unshift({ text: superPrompt });
 
-        const inpaintingPrompt = `
-            **CRITICAL MISSION: Character Inpainting**
-
-            **PRIMARY OBJECTIVE:** Your task is to edit Image 1 (the scene with gray mannequins). You must replace each mannequin with a detailed character based on the provided source images. Adherence to the source images is the most important rule.
-
-            **NON-NEGOTIABLE RULES:**
-            1.  **START WITH IMAGE 1.** Do not change the background, lighting, or any part of the scene that isn't a mannequin.
-            2.  **REPLACE, DO NOT ADD.** For each mannequin in Image 1, replace it with one of the characters defined below. The final image must have the same number of people as there are mannequins.
-            3.  **100% VISUAL ACCURACY.** The outfit, hair, gender, and face for each character MUST be a perfect copy from their source images. Do not invent or alter details.
-            4.  **LOGICAL MAPPING.** Intelligently map each Character described below to one of the mannequins in Image 1 based on pose and position.
-
-            **SCENE & STYLE:**
-            *   **Base Scene:** Use Image 1.
-            *   **Final Style:** The final image should have a '${style}' aesthetic.
-            *   **User Prompt:** Additionally, consider this request: "${prompt || 'Follow the reference image closely.'}"
-
-            **CHARACTER ASSIGNMENTS:**
-            This is your casting sheet. Replace the mannequins with these characters.
-            ${characterAssignments}
-
-            **FINAL CHECKLIST (MANDATORY SELF-CORRECTION):**
-            1.  Did I start with Image 1 and only replace the mannequins? [YES/NO]
-            2.  Is every character in the final image a perfect match to their source images (outfit AND face)? [YES/NO]
-            3.  Is the background from Image 1 preserved? [YES/NO]
-            **If any answer is NO, you MUST discard your attempt and start again correctly. Failure is not an option.**
-        `.trim();
-
-        inpaintingParts.unshift({ text: inpaintingPrompt });
+        console.log(`[WORKER ${jobId}] Super Prompt constructed. Making API call...`);
+        
+        // ====================================================================
+        // MAKE THE SINGLE API CALL
+        // ====================================================================
 
         const finalResponse = await ai.models.generateContent({
             model,
-            contents: { parts: inpaintingParts },
+            contents: { parts: finalApiParts },
             config: { responseModalities: [Modality.IMAGE] },
         });
 
         const finalImagePart = finalResponse.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-        if (!finalImagePart?.inlineData) throw new Error("AI failed to perform the final character inpainting step.");
+        if (!finalImagePart?.inlineData) throw new Error("AI không thể tạo ảnh nhóm với các chỉ dẫn được cung cấp.");
         
-        console.log(`[WORKER ${jobId}] Step 2: Inpainting successful.`);
+        console.log(`[WORKER ${jobId}] Image generated successfully.`);
 
         // ====================================================================
-        // STEP 3: UPLOAD AND FINALIZE JOB
+        // UPLOAD AND FINALIZE JOB
         // ====================================================================
-        console.log(`[WORKER ${jobId}] Step 3: Finalizing...`);
+        console.log(`[WORKER ${jobId}] Finalizing...`);
 
         const finalImageBase64 = finalImagePart.inlineData.data;
         const finalImageMimeType = finalImagePart.inlineData.mimeType;
@@ -198,13 +174,11 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         await supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id });
         
-        console.log(`[WORKER ${jobId}] Step 3: Job finalized successfully.`);
+        console.log(`[WORKER ${jobId}] Job finalized successfully.`);
         return { statusCode: 200 };
 
     } catch (error: any) {
-        // This will be caught by the outer try-catch and fail the job
         await failJob(jobId, error.message || 'Lỗi không xác định từ máy chủ.');
-        // Always return 200 for background functions to prevent retries from Netlify
         return { statusCode: 200 };
     }
 };

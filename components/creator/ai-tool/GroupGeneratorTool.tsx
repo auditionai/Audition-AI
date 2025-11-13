@@ -29,6 +29,7 @@ interface CharacterState {
     poseImage: ImageState;
     faceImage: ImageState;
     processedFace: string | null;
+    gender: 'male' | 'female' | null;
 }
 
 interface ProcessedImageData {
@@ -95,8 +96,18 @@ const GroupGeneratorTool: React.FC = () => {
         setCharacters(Array.from({ length: num }, () => ({
             poseImage: null,
             faceImage: null,
-            processedFace: null
+            processedFace: null,
+            gender: null
         })));
+    };
+
+    const handleGenderSelect = (index: number, gender: 'male' | 'female') => {
+        setCharacters(prev => prev.map((char, i) => {
+            if (i === index) {
+                return { ...char, gender };
+            }
+            return char;
+        }));
     };
 
     const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'pose' | 'face' | 'reference', index?: number) => {
@@ -186,6 +197,10 @@ const GroupGeneratorTool: React.FC = () => {
                 showToast(`Vui lòng cung cấp "Ảnh nhân vật" cho Nhân vật ${i + 1}.`, 'error');
                 return;
             }
+            if (!characters[i].gender) {
+                showToast(`Vui lòng chọn giới tính cho Nhân vật ${i + 1}.`, 'error');
+                return;
+            }
         }
 
         if (user && user.diamonds < totalCost) {
@@ -247,6 +262,7 @@ const GroupGeneratorTool: React.FC = () => {
                         const charactersPayload = await Promise.all(characters.map(async char => ({
                             poseImage: char.poseImage ? await fileToBase64(char.poseImage.file) : null,
                             faceImage: char.processedFace ? `data:image/png;base64,${char.processedFace}` : (char.faceImage ? await fileToBase64(char.faceImage.file) : null),
+                            gender: char.gender,
                         })));
             
                         const spawnerResponse = await fetch('/.netlify/functions/generate-group-image', {
@@ -452,6 +468,23 @@ const GroupGeneratorTool: React.FC = () => {
                                 <h4 className="text-sm font-bold text-center text-skin-base">Nhân vật {index + 1}</h4>
                                 <ImageUploader onUpload={(e) => handleImageUpload(e, 'pose', index)} image={char.poseImage} onRemove={() => handleRemoveImage('pose', index)} text="Ảnh nhân vật (Lấy trang phục)" onPickFromProcessed={() => handleOpenPicker(index, 'pose')} />
                                 <ImageUploader onUpload={(e) => handleImageUpload(e, 'face', index)} image={char.faceImage} onRemove={() => handleRemoveImage('face', index)} text="Ảnh gương mặt (Face ID)" onPickFromProcessed={() => handleOpenPicker(index, 'face')} />
+                                <div className="pt-2">
+                                    <p className="text-xs font-semibold text-center text-skin-muted mb-2">Giới tính (Bắt buộc)</p>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <button 
+                                            onClick={() => handleGenderSelect(index, 'male')}
+                                            className={`py-2 text-xs font-bold rounded-md border-2 transition flex items-center justify-center gap-1 ${char.gender === 'male' ? 'border-blue-500 bg-blue-500/10 text-blue-300' : 'border-skin-border bg-skin-fill-secondary text-skin-muted hover:border-blue-500/50'}`}
+                                        >
+                                            <i className="ph-fill ph-gender-male"></i> Nam
+                                        </button>
+                                        <button 
+                                            onClick={() => handleGenderSelect(index, 'female')}
+                                            className={`py-2 text-xs font-bold rounded-md border-2 transition flex items-center justify-center gap-1 ${char.gender === 'female' ? 'border-pink-500 bg-pink-500/10 text-pink-300' : 'border-skin-border bg-skin-fill-secondary text-skin-muted hover:border-pink-500/50'}`}
+                                        >
+                                            <i className="ph-fill ph-gender-female"></i> Nữ
+                                        </button>
+                                    </div>
+                                </div>
                                 <button 
                                     onClick={() => handleProcessFace(index)}
                                     disabled={processingFaceIndex === index || !char.faceImage || !!char.processedFace}

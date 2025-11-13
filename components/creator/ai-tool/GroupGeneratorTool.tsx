@@ -212,7 +212,6 @@ const GroupGeneratorTool: React.FC = () => {
                     cleanup(channel);
                 } else if (record.status === 'failed') {
                     showToast(record.error_message || 'Tạo ảnh nhóm thất bại. Vui lòng thử lại.', 'error');
-                    if (user) updateUserDiamonds(user.diamonds);
                     setIsGenerating(false);
                     setProgress(0);
                     cleanup(channel);
@@ -236,16 +235,12 @@ const GroupGeneratorTool: React.FC = () => {
     
         const makeApiCall = async (jobId: string, channel: any) => {
             try {
-                if (user) {
-                    updateUserDiamonds(user.diamonds - totalCost);
-                }
-
                 const charactersPayload = await Promise.all(characters.map(async char => ({
                     poseImage: char.poseImage ? await fileToBase64(char.poseImage.file) : null,
                     faceImage: char.processedFace ? `data:image/png;base64,${char.processedFace}` : (char.faceImage ? await fileToBase64(char.faceImage.file) : null),
                 })));
     
-                const response = await fetch('/.netlify/functions/generate-group-image', {
+                const response = await fetch('/.netlify/functions/generate-group-image-background', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
                     body: JSON.stringify({
@@ -257,13 +252,18 @@ const GroupGeneratorTool: React.FC = () => {
                     }),
                 });
     
-                if (!response.ok) {
-                    throw new Error('Không thể bắt đầu tác vụ tạo ảnh nhóm.');
+                if (response.status !== 202) {
+                    const errorText = await response.text();
+                    let errorMessage = 'Không thể bắt đầu tác vụ tạo ảnh nhóm.';
+                    try {
+                        const errorJson = JSON.parse(errorText);
+                        errorMessage = errorJson.error || errorMessage;
+                    } catch (e) { /* ignore parse error */ }
+                    throw new Error(errorMessage);
                 }
                 
             } catch (error: any) {
                 showToast(error.message, 'error');
-                if (user) updateUserDiamonds(user.diamonds);
                 setIsGenerating(false);
                 setProgress(0);
                 cleanup(channel);

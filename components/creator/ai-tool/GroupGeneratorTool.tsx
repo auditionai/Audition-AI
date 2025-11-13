@@ -348,7 +348,7 @@ const GroupGeneratorTool: React.FC = () => {
                 <h2 className="themed-heading text-2xl font-bold themed-title-glow mb-4">Bạn muốn tạo ảnh cho bao nhiêu người?</h2>
                 <p className="text-skin-muted mb-6">Chọn số lượng nhân vật để bắt đầu Studio.</p>
                 <div className="flex flex-wrap justify-center gap-4 mt-4">
-                    {[2, 3, 4, 5].map(num => (
+                    {[2, 3, 4, 5, 6].map(num => (
                         <button 
                             key={num} 
                             onClick={() => handleNumCharactersSelect(num)} 
@@ -363,7 +363,7 @@ const GroupGeneratorTool: React.FC = () => {
     }
 
     return (
-        <div className="animate-fade-in">
+        <div className="animate-fade-in flex flex-col gap-8">
             <ProcessedImagePickerModal isOpen={isPickerOpen} onClose={() => setIsPickerOpen(false)} onSelect={handleImageSelectFromPicker} />
              <ProcessedImageModal
                 isOpen={!!imageToProcess}
@@ -405,59 +405,59 @@ const GroupGeneratorTool: React.FC = () => {
                 }}
             />
             <ConfirmationModal isOpen={isConfirmOpen} onClose={() => setConfirmOpen(false)} onConfirm={handleConfirmGeneration} cost={totalCost} />
-            <div className="flex flex-col lg:flex-row gap-6">
-                {/* Left Column - Character Inputs */}
-                <div className="w-full lg:w-1/2">
-                     <div className="flex justify-between items-center mb-3">
-                         <h3 className="themed-heading text-lg font-bold themed-title-glow">1. Cung cấp thông tin nhân vật</h3>
-                         <button onClick={() => setNumCharacters(0)} className="text-xs text-skin-muted hover:text-skin-base">(Thay đổi số lượng)</button>
+            
+            {/* Section 1: Character Inputs */}
+            <div>
+                <div className="flex justify-between items-center mb-3">
+                    <h3 className="themed-heading text-lg font-bold themed-title-glow">1. Cung cấp thông tin nhân vật</h3>
+                    <button onClick={() => setNumCharacters(0)} className="text-xs text-skin-muted hover:text-skin-base">(Thay đổi số lượng)</button>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    {characters.map((char, index) => (
+                        <div key={index} className="bg-skin-fill p-3 rounded-xl border border-skin-border space-y-3">
+                            <h4 className="text-sm font-bold text-center text-skin-base">Nhân vật {index + 1}</h4>
+                            <ImageUploader onUpload={(e) => handleImageUpload(e, index, 'pose')} image={char.poseImage} onRemove={() => handleRemoveImage(index, 'pose')} text="Ảnh nhân vật (Lấy trang phục)" onPickFromProcessed={() => handleOpenPicker(index, 'pose')} />
+                            <ImageUploader onUpload={(e) => handleImageUpload(e, index, 'face')} image={char.faceImage} onRemove={() => handleRemoveImage(index, 'face')} text="Ảnh gương mặt (Face ID)" onPickFromProcessed={() => handleOpenPicker(index, 'face')} />
+                            <button 
+                                onClick={() => handleProcessFace(index)}
+                                disabled={processingFaceIndex === index || !char.faceImage || !!char.processedFace}
+                                className={`w-full text-sm font-bold py-2 px-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-wait
+                                    ${char.processedFace ? 'bg-green-500/20 text-green-300' : 'bg-yellow-500/20 text-yellow-300 hover:bg-yellow-500/30'}`}
+                            >
+                                {processingFaceIndex === index ? 'Đang xử lý...' : char.processedFace ? 'Gương mặt đã khóa' : 'Xử lý & Khóa Gương Mặt (-1 💎)'}
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* Section 2: Scene & Style Settings */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <PresetSelector title="2. Chọn Bố cục & Tư thế" presets={MOCK_LAYOUTS} selected={selectedLayout} onSelect={setSelectedLayout} prompt={layoutPrompt} onPromptChange={setLayoutPrompt} promptPlaceholder="Thêm chi tiết về bố cục..." />
+                <PresetSelector title="3. Chọn Bối cảnh" presets={MOCK_BACKGROUNDS} selected={selectedBg} onSelect={setSelectedBg} prompt={backgroundPrompt} onPromptChange={setBackgroundPrompt} promptPlaceholder="Thêm chi tiết về bối cảnh..." />
+                <PresetSelector title="4. Chọn Phong cách nghệ thuật" presets={MOCK_STYLES} selected={selectedStyle} onSelect={setSelectedStyle} prompt={stylePrompt} onPromptChange={setStylePrompt} promptPlaceholder="Thêm chi tiết về phong cách..." />
+            </div>
+
+            {/* Section 3: Finalization & Generation */}
+            <div className="mt-4 space-y-4 max-w-lg mx-auto w-full">
+                <div className="themed-settings-block p-4">
+                    <ToggleSwitch label="Làm Nét & Nâng Cấp (+1 💎)" checked={useUpscaler} onChange={(e) => setUseUpscaler(e.target.checked)} />
+                </div>
+                <div className="grid grid-cols-2 gap-4 text-center text-sm p-3 bg-black/20 rounded-lg">
+                    <div>
+                        <p className="text-skin-muted">Tỷ lệ khung hình (Tự động)</p>
+                        <p className="font-bold text-white">{getAspectRatio()}</p>
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {characters.map((char, index) => (
-                             <div key={index} className="bg-skin-fill p-3 rounded-xl border border-skin-border space-y-3">
-                                <h4 className="text-sm font-bold text-center text-skin-base">Nhân vật {index + 1}</h4>
-                                <ImageUploader onUpload={(e) => handleImageUpload(e, index, 'pose')} image={char.poseImage} onRemove={() => handleRemoveImage(index, 'pose')} text="Ảnh nhân vật (Lấy trang phục)" onPickFromProcessed={() => handleOpenPicker(index, 'pose')} />
-                                <ImageUploader onUpload={(e) => handleImageUpload(e, index, 'face')} image={char.faceImage} onRemove={() => handleRemoveImage(index, 'face')} text="Ảnh gương mặt (Face ID)" onPickFromProcessed={() => handleOpenPicker(index, 'face')} />
-                                 <button 
-                                    onClick={() => handleProcessFace(index)}
-                                    disabled={processingFaceIndex === index || !char.faceImage || !!char.processedFace}
-                                    className={`w-full text-sm font-bold py-2 px-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-wait
-                                        ${char.processedFace ? 'bg-green-500/20 text-green-300' : 'bg-yellow-500/20 text-yellow-300 hover:bg-yellow-500/30'}`}
-                                >
-                                    {processingFaceIndex === index ? 'Đang xử lý...' : char.processedFace ? 'Gương mặt đã khóa' : 'Xử lý & Khóa Gương Mặt (-1 💎)'}
-                                </button>
-                            </div>
-                        ))}
+                    <div>
+                        <p className="text-skin-muted">Chi phí dự kiến</p>
+                        <p className="font-bold text-pink-400 flex items-center justify-center gap-1">{totalCost} <i className="ph-fill ph-diamonds-four"></i></p>
                     </div>
                 </div>
-
-                {/* Right Column - Settings & Generation */}
-                <div className="w-full lg:w-1/2 flex flex-col gap-4">
-                    <PresetSelector title="2. Chọn Bố cục & Tư thế" presets={MOCK_LAYOUTS} selected={selectedLayout} onSelect={setSelectedLayout} prompt={layoutPrompt} onPromptChange={setLayoutPrompt} promptPlaceholder="Thêm chi tiết về bố cục..." />
-                    <PresetSelector title="3. Chọn Bối cảnh" presets={MOCK_BACKGROUNDS} selected={selectedBg} onSelect={setSelectedBg} prompt={backgroundPrompt} onPromptChange={setBackgroundPrompt} promptPlaceholder="Thêm chi tiết về bối cảnh..." />
-                    <PresetSelector title="4. Chọn Phong cách nghệ thuật" presets={MOCK_STYLES} selected={selectedStyle} onSelect={setSelectedStyle} prompt={stylePrompt} onPromptChange={setStylePrompt} promptPlaceholder="Thêm chi tiết về phong cách..." />
-
-                     <div className="mt-auto pt-4 space-y-4">
-                        <div className="themed-settings-block p-4">
-                            <ToggleSwitch label="Làm Nét & Nâng Cấp (+1 💎)" checked={useUpscaler} onChange={(e) => setUseUpscaler(e.target.checked)} />
-                        </div>
-                        <div className="grid grid-cols-2 gap-4 text-center text-sm p-3 bg-black/20 rounded-lg">
-                            <div>
-                                <p className="text-skin-muted">Tỷ lệ khung hình (Tự động)</p>
-                                <p className="font-bold text-white">{getAspectRatio()}</p>
-                            </div>
-                            <div>
-                                <p className="text-skin-muted">Chi phí dự kiến</p>
-                                <p className="font-bold text-pink-400 flex items-center justify-center gap-1">{totalCost} <i className="ph-fill ph-diamonds-four"></i></p>
-                            </div>
-                        </div>
-                        <button onClick={handleGenerateClick} className="themed-button-primary w-full px-8 py-4 font-bold text-lg flex items-center justify-center gap-2">
-                            <i className="ph-fill ph-magic-wand"></i>
-                            Tạo Ảnh Nhóm
-                        </button>
-                        <p className="text-xs text-center text-skin-muted">Lưu ý: Thời gian tạo ảnh nhóm sẽ lâu hơn đáng kể so với ảnh đơn.</p>
-                    </div>
-                </div>
+                <button onClick={handleGenerateClick} className="themed-button-primary w-full px-8 py-4 font-bold text-lg flex items-center justify-center gap-2">
+                    <i className="ph-fill ph-magic-wand"></i>
+                    Tạo Ảnh Nhóm
+                </button>
+                <p className="text-xs text-center text-skin-muted">Lưu ý: Thời gian tạo ảnh nhóm sẽ lâu hơn đáng kể so với ảnh đơn.</p>
             </div>
         </div>
     );

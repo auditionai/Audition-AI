@@ -23,8 +23,6 @@ const AITool: React.FC = () => {
     // State to pass images between tools
     const [poseImage, setPoseImage] = useState<{ url: string; file: File } | null>(null);
     const [rawFaceImage, setRawFaceImage] = useState<{ url: string; file: File } | null>(null);
-    const [processedFaceImage, setProcessedFaceImage] = useState<string | null>(null);
-    const [styleImage, setStyleImage] = useState<{ url: string; file: File } | null>(null);
     const [imageForUtility, setImageForUtility] = useState<string | null>(null);
 
     const openUtilHelp = (key: 'bg-remover' | 'signature') => {
@@ -39,7 +37,6 @@ const AITool: React.FC = () => {
     
     const handleMoveFaceToGenerator = (image: { url: string; file: File }) => {
         setRawFaceImage(image);
-        setProcessedFaceImage(null);
         setActiveTab('generator');
     };
 
@@ -125,14 +122,8 @@ const AITool: React.FC = () => {
                 <div className="p-4 bg-skin-fill-secondary rounded-2xl border border-skin-border shadow-lg">
                     {activeTab === 'generator' && (
                         <AiGeneratorTool 
-                           poseImage={poseImage}
-                           onPoseImageChange={setPoseImage}
-                           rawFaceImage={rawFaceImage}
-                           onRawFaceImageChange={setRawFaceImage}
-                           processedFaceImage={processedFaceImage}
-                           onProcessedFaceImageChange={setProcessedFaceImage}
-                           styleImage={styleImage}
-                           onStyleImageChange={setStyleImage}
+                           initialCharacterImage={poseImage}
+                           initialFaceImage={rawFaceImage}
                            onSendToSignatureTool={handleSendToSignatureTool}
                         />
                     )}

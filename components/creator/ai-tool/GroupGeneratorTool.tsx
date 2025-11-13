@@ -45,6 +45,14 @@ interface ProcessedImageData {
     fileName: string;
 }
 
+const fileToBase64 = (file: File): Promise<string> => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+});
+
+
 // Sub-component for Preset Selection
 const PresetSelector: React.FC<{
     title: string,
@@ -191,7 +199,7 @@ const GroupGeneratorTool: React.FC = () => {
         }
     };
 
-    const totalCost = numCharacters + characters.filter(c => c.faceImage && !c.processedFace).length;
+    const totalCost = numCharacters; // 1 diamond per character for generation. Face processing is separate.
 
     const handleGenerateClick = () => {
         if (user && user.diamonds < totalCost) {
@@ -205,28 +213,81 @@ const GroupGeneratorTool: React.FC = () => {
         setConfirmOpen(false);
         setIsGenerating(true);
         setProgress(1);
-
+    
         const interval = setInterval(() => {
             setProgress(prev => (prev < 9 ? prev + 1 : prev));
-        }, 1800);
-
-        setTimeout(() => {
+        }, 2500); // Slower interval for a longer process
+    
+        try {
+            const charactersPayload = await Promise.all(characters.map(async char => {
+                const poseImageBase64 = char.poseImage ? await fileToBase64(char.poseImage.file) : null;
+                // Face image is now only for reference, processed one takes precedence
+                const faceImageBase64 = char.faceImage ? await fileToBase64(char.faceImage.file) : null;
+                return {
+                    poseImage: poseImageBase64,
+                    faceImage: char.processedFace ? `data:image/png;base64,${char.processedFace}` : faceImageBase64,
+                };
+            }));
+    
+            const response = await fetch('/.netlify/functions/generate-group-image', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${session?.access_token}`,
+                },
+                body: JSON.stringify({
+                    characters: charactersPayload,
+                    layout: MOCK_LAYOUTS.find(l => l.id === selectedLayout)?.name,
+                    layoutPrompt,
+                    background: MOCK_BACKGROUNDS.find(b => b.id === selectedBg)?.name,
+                    backgroundPrompt,
+                    style: MOCK_STYLES.find(s => s.id === selectedStyle)?.name,
+                    stylePrompt,
+                    aspectRatio: getAspectRatio(),
+                }),
+            });
+            
             clearInterval(interval);
-            if (user) {
-                updateUserDiamonds(user.diamonds - totalCost);
+            
+            if (!response.ok) {
+                const errorResult = await response.json();
+                throw new Error(errorResult.error || 'Lỗi không xác định từ máy chủ.');
             }
-            setGeneratedImage('https://picsum.photos/seed/group-photo-result/600/800'); // Mock result image
+            
+            const result = await response.json();
+            
+            setProgress(9);
+            if (user) {
+                updateUserDiamonds(result.newDiamondCount);
+            }
+            setGeneratedImage(result.imageUrl);
+            showToast('Tạo ảnh nhóm thành công!', 'success');
             setProgress(10);
-            showToast('Tạo ảnh nhóm thành công! (Demo)', 'success');
+    
+        } catch (err: any) {
+            clearInterval(interval);
+            showToast(err.message || 'Tạo ảnh nhóm thất bại.', 'error');
+            setProgress(0);
+        } finally {
             setIsGenerating(false);
-        }, 1800 * 10);
+        }
     };
 
     const resetGenerator = () => {
         setGeneratedImage(null);
         setProgress(0);
-        // Optionally reset all inputs
         handleNumCharactersSelect(numCharacters); 
+    };
+    
+    const handleDownloadResult = () => {
+        if (!generatedImage) return;
+        const downloadUrl = `/.netlify/functions/download-image?url=${encodeURIComponent(generatedImage)}`;
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = `audition-ai-group-${Date.now()}.png`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
     };
 
     const getAspectRatio = () => {
@@ -253,9 +314,9 @@ const GroupGeneratorTool: React.FC = () => {
                     <button onClick={resetGenerator} className="themed-button-secondary px-6 py-3 font-semibold">
                         <i className="ph-fill ph-arrow-counter-clockwise mr-2"></i>Tạo ảnh khác
                     </button>
-                    <a href={generatedImage} download={`audition-ai-group-${Date.now()}.png`} className="themed-button-primary px-6 py-3 font-bold inline-block">
+                    <button onClick={handleDownloadResult} className="themed-button-primary px-6 py-3 font-bold">
                         <i className="ph-fill ph-download-simple mr-2"></i>Tải xuống
-                    </a>
+                    </button>
                 </div>
             </div>
         );

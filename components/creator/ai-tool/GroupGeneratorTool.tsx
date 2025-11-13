@@ -62,7 +62,6 @@ const fileToBase64 = (file: File): Promise<string> => new Promise((resolve, reje
 
 // Main Component
 const GroupGeneratorTool: React.FC = () => {
-    // FIX: Add 'updateUserDiamonds' to fix 'Cannot find name' errors.
     const { user, session, showToast, supabase, updateUserDiamonds } = useAuth();
     const [numCharacters, setNumCharacters] = useState<number>(0);
     const [isConfirmOpen, setConfirmOpen] = useState(false);
@@ -193,7 +192,6 @@ const GroupGeneratorTool: React.FC = () => {
             return;
         }
     
-        // FIX: Changed NodeJS.Timeout to standard ReturnType for browser compatibility
         let progressInterval: ReturnType<typeof setInterval> | null = null;
     
         const cleanup = (channel: any) => {
@@ -210,12 +208,10 @@ const GroupGeneratorTool: React.FC = () => {
                 if (record.status === 'completed') {
                     setProgress(10);
                     setGeneratedImage(record.image_url);
-                    // The user's diamond count was already updated by the kicker function.
                     showToast('Tạo ảnh nhóm thành công!', 'success');
                     cleanup(channel);
                 } else if (record.status === 'failed') {
                     showToast(record.error_message || 'Tạo ảnh nhóm thất bại. Vui lòng thử lại.', 'error');
-                    // Refund optimistic deduction on failure
                     if (user) updateUserDiamonds(user.diamonds);
                     setIsGenerating(false);
                     setProgress(0);
@@ -240,7 +236,6 @@ const GroupGeneratorTool: React.FC = () => {
     
         const makeApiCall = async (jobId: string, channel: any) => {
             try {
-                // Optimistic UI update for diamond cost
                 if (user) {
                     updateUserDiamonds(user.diamonds - totalCost);
                 }
@@ -250,8 +245,7 @@ const GroupGeneratorTool: React.FC = () => {
                     faceImage: char.processedFace ? `data:image/png;base64,${char.processedFace}` : (char.faceImage ? await fileToBase64(char.faceImage.file) : null),
                 })));
     
-                // FIX: Call the background function endpoint.
-                const response = await fetch('/.netlify/functions/generate-group-image-background', {
+                const response = await fetch('/.netlify/functions/generate-group-image', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
                     body: JSON.stringify({
@@ -264,15 +258,11 @@ const GroupGeneratorTool: React.FC = () => {
                 });
     
                 if (!response.ok) {
-                    // If function invocation fails, throw error to be caught below.
                     throw new Error('Không thể bắt đầu tác vụ tạo ảnh nhóm.');
                 }
                 
-                // On successful invocation (202), we just wait for the websocket update.
-
             } catch (error: any) {
                 showToast(error.message, 'error');
-                // Refund optimistic deduction on invocation failure
                 if (user) updateUserDiamonds(user.diamonds);
                 setIsGenerating(false);
                 setProgress(0);

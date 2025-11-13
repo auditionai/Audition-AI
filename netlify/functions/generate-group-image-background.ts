@@ -52,9 +52,8 @@ const handler: Handler = async (event: HandlerEvent) => {
         // --- NEW PROMPT ENGINEERING LOGIC ---
         const parts: any[] = [];
         const characterDetailsLines: string[] = [];
-        let imageInputIndex = 1; // Start counting from 1 for human-readable prompt
+        let imageInputIndex = 1;
 
-        // Add Reference Image first (this will be Image 1)
         if (referenceImage) {
             const [h, b] = referenceImage.split(',');
             parts.push({ inlineData: { data: b, mimeType: h.match(/:(.*?);/)?.[1] || 'image/png' } });
@@ -63,50 +62,74 @@ const handler: Handler = async (event: HandlerEvent) => {
              throw new Error('Reference image is missing from the payload.');
         }
         
-        // Add all character and face images
         for (let i = 0; i < characters.length; i++) {
             const char = characters[i];
-            let charDescription = `- **Character ${i + 1}:**`;
+            const charDescription = [
+                `<character id="${i + 1}">`,
+                `  <source_images>`
+            ];
 
             if (char.poseImage) {
                 const [h, b] = char.poseImage.split(',');
                 parts.push({ inlineData: { data: b, mimeType: h.match(/:(.*?);/)?.[1] || 'image/png' } });
-                charDescription += `\n  - **ABSOLUTE RULE:** Their **ENTIRE APPEARANCE** (outfit, all clothing, accessories, shoes, hair style, hair color, body shape) is **PERFECTLY PRESERVED** from Image ${imageInputIndex}. It is FORBIDDEN to alter, add, or remove any detail.`;
+                charDescription.push(`    <appearance_source image_index="${imageInputIndex}">This image defines the character's ENTIRE appearance: outfit, accessories, hair, and body. PRESERVE IT PERFECTLY.</appearance_source>`);
                 imageInputIndex++;
             }
             if (char.faceImage) {
                 const [h, b] = char.faceImage.split(',');
                 parts.push({ inlineData: { data: b, mimeType: h.match(/:(.*?);/)?.[1] || 'image/png' } });
-                charDescription += `\n  - **CRITICAL RULE:** Their **FACE** is **SACROSANCT**. It must be an EXACT, 100% replica from Image ${imageInputIndex}. Do not stylize or change it in any way.`;
+                charDescription.push(`    <face_source image_index="${imageInputIndex}">This image defines the character's FACE. REPLICATE IT EXACTLY. This is a non-negotiable, high-priority rule.</face_source>`);
                 imageInputIndex++;
             }
-            characterDetailsLines.push(charDescription);
+            charDescription.push(`  </source_images>`);
+            charDescription.push(`</character>`);
+            characterDetailsLines.push(charDescription.join('\n'));
         }
 
         const megaPrompt = [
-            "You are a master film director and artist creating a high-quality group photo. Your primary goal is to intelligently and faithfully recreate the scene from the first image provided (Image 1) using a new cast of characters.",
-            "\n--- CORE MISSION ---",
-            "1. **Analyze Image 1 (The Blueprint):** Deeply analyze the first image for its:",
-            "   - **Composition:** Poses, positions, and interactions of people.",
-            "   - **Environment:** Background, setting, mood, and lighting.",
-            "   - **Cinematography (CRITICAL):**",
-            "     - **Camera Framing:** Identify if it's a **close-up (headshot), medium shot (waist up), or full shot (full body)**. The final image MUST use the same framing.",
-            "     - **Camera Angle:** Identify if it's a **low angle, eye-level, or high angle** shot and replicate it precisely.",
-            "2. **Recast the Scene:** You will now replace the people in Image 1 with the new characters provided in the subsequent images, placing them into the EXACT poses and positions from the blueprint.",
-            "3. **Generate a NEW Image:** Create a completely new, photorealistic, and coherent image. **DO NOT cut and paste**. You must redraw the entire scene based on your analysis.",
-
-            "\n--- CHARACTER ASSIGNMENTS (NON-NEGOTIABLE RULES) ---",
-            "Use the following images to define the new characters. These rules are absolute:",
+            "<master_instructions>",
+            "  <task_overview>",
+            "    Your task is to generate a new group photo by perfectly recasting a scene from a reference image (Image 1) with a new set of characters. Adherence to character details is the highest and most critical priority.",
+            "  </task_overview>",
+            "",
+            "  <critical_rules>",
+            `    <rule id="1" priority="MAXIMUM">**CHARACTER COUNT:** The final image MUST contain EXACTLY ${characters.length} characters. Not more, not less. Before generating, you must count the characters to ensure 100% accuracy.</rule>`,
+            `    <rule id="2" priority="MAXIMUM">**CHARACTER FIDELITY:** You are ABSOLUTELY FORBIDDEN from altering any character's appearance, gender, or attributes.`,
+            "      - **DO NOT CHANGE GENDER.** If a character appears male, they MUST remain male. If female, they MUST remain female.",
+            "      - **DO NOT CHANGE OUTFITS.** The clothing, including all layers, accessories, and shoes, must be an EXACT replica.",
+            "      - **DO NOT CHANGE HAIRSTYLES or HAIR COLOR.**",
+            "      - The appearance derived from each character's source images is absolute and must be preserved with perfect fidelity.",
+            "    </rule>",
+            "  </critical_rules>",
+            "",
+            "  <scene_blueprint>",
+            "    Analyze **Image 1** for the overall scene:",
+            "    - **Composition & Poses:** Replicate the exact poses and character positions. Map the new characters to the old poses logically.",
+            "    - **Environment:** Recreate the background, setting, lighting, and mood.",
+            "    - **Camera:** Match the camera angle and framing (e.g., full shot, medium shot) precisely.",
+            "  </scene_blueprint>",
+            "",
+            "  <character_casting_sheet>",
+            "    Replace the original people with these new characters. These instructions are non-negotiable and override any other interpretation.",
             ...characterDetailsLines,
-            `There are a total of ${characters.length} new characters to place in the scene.`,
-
-            "\n--- ARTISTIC & CONTEXTUAL GUIDELINES ---",
-            `1. **Art Style:** The final image must have a '${style}' aesthetic.`,
-            `2. **User Prompt:** Incorporate these additional details into the scene: "${prompt || 'Follow the reference image closely.'}"`,
-            "3. **Final Directives:** Ensure all characters are blended seamlessly into the background. Lighting, shadows, and perspective must be consistent with the blueprint image. The final output must be a single, high-quality, anatomically correct image."
+            "  </character_casting_sheet>",
+            "",
+            "  <artistic_direction>",
+            `    - **Art Style:** The final image must have a '${style}' aesthetic.`,
+            `    - **User Notes:** Incorporate these details into the scene: "${prompt || 'Follow the reference image closely.'}"`,
+            "  </artistic_direction>",
+            "",
+            "  <final_quality_check>",
+            "    Before finalizing, you MUST perform this checklist:",
+            `    1.  Is the character count in the generated image EXACTLY ${characters.length}? [YES/NO]`,
+            "    2.  Is every character's gender, outfit, hair, and face an EXACT replica from their source images? [YES/NO]",
+            "    3.  Are the poses and composition from Image 1 perfectly recreated? [YES/NO]",
+            "    **If any answer is NO, you MUST discard the result and start over to correct the mistake. Failure to follow these rules is a critical error.**",
+            "  </final_quality_check>",
+            "</master_instructions>"
         ].join('\n');
         
-        // Add the prompt as the first part.
+        
         parts.unshift({ text: megaPrompt });
         
         // 4. Call Gemini AI
@@ -127,7 +150,8 @@ const handler: Handler = async (event: HandlerEvent) => {
         const imageBuffer = Buffer.from(finalImageBase64, 'base64');
         const fileName = `${userId}/group/${Date.now()}.${finalImageMimeType.split('/')[1] || 'png'}`;
         
-        await s3Client.send(new PutObjectCommand({ Bucket: process.env.R2_BUCKET_NAME!, Key: fileName, Body: imageBuffer, ContentType: finalImageMimeType }));
+        // FIX: Cast s3Client to 'any' to bypass a likely environment-specific TypeScript type resolution error.
+        await (s3Client as any).send(new PutObjectCommand({ Bucket: process.env.R2_BUCKET_NAME!, Key: fileName, Body: imageBuffer, ContentType: finalImageMimeType }));
         const publicUrl = `${process.env.R2_PUBLIC_URL}/${fileName}`;
         
         const xpToAward = (characters.length || 0) * XP_PER_CHARACTER;

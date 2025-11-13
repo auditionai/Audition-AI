@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import AiGeneratorTool from './ai-tool/AiGeneratorTool';
+import GroupGeneratorTool from './ai-tool/GroupGeneratorTool'; // NEW: Import the new group tool
 import BgRemoverTool from '../ai-tool/BgRemoverTool';
 import InstructionModal from '../common/InstructionModal';
 import SignatureTool from './tools/SignatureTool';
 import { useAuth } from '../../contexts/AuthContext';
 import UtilInstructionModal from '../ai-tool/InstructionModal'; // Renamed to avoid confusion
 
-type AIToolTab = 'generator' | 'utilities';
+type AIToolTab = 'generator' | 'group-studio' | 'utilities'; // NEW: Add 'group-studio'
 type UtilityTab = 'bg-remover' | 'signature';
 
 const AITool: React.FC = () => {
@@ -19,6 +20,7 @@ const AITool: React.FC = () => {
     const [isUtilHelpOpen, setUtilHelpOpen] = useState(false);
     const [utilHelpKey, setUtilHelpKey] = useState<'bg-remover' | 'signature' | null>(null);
 
+    // State to pass images between tools
     const [poseImage, setPoseImage] = useState<{ url: string; file: File } | null>(null);
     const [rawFaceImage, setRawFaceImage] = useState<{ url: string; file: File } | null>(null);
     const [processedFaceImage, setProcessedFaceImage] = useState<string | null>(null);
@@ -101,7 +103,14 @@ const AITool: React.FC = () => {
                         className={`px-6 py-3 font-semibold transition-colors ${activeTab === 'generator' ? 'text-pink-400 border-b-2 border-pink-400' : 'text-gray-400 hover:text-white'}`}
                     >
                        <i className="ph-fill ph-magic-wand mr-2"></i>
-                        Trình Tạo Ảnh AI
+                        Tạo Ảnh Đơn
+                    </button>
+                     <button
+                        onClick={() => setActiveTab('group-studio')}
+                        className={`px-6 py-3 font-semibold transition-colors ${activeTab === 'group-studio' ? 'text-pink-400 border-b-2 border-pink-400' : 'text-gray-400 hover:text-white'}`}
+                    >
+                        <i className="ph-fill ph-users-three mr-2"></i>
+                        Studio Nhóm
                     </button>
                     <button
                         onClick={() => setActiveTab('utilities')}
@@ -126,6 +135,9 @@ const AITool: React.FC = () => {
                            onStyleImageChange={setStyleImage}
                            onSendToSignatureTool={handleSendToSignatureTool}
                         />
+                    )}
+                    {activeTab === 'group-studio' && (
+                        <GroupGeneratorTool />
                     )}
                     {activeTab === 'utilities' && (
                         <div>

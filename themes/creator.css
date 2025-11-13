@@ -189,7 +189,7 @@
 }
 
 .auth-input {
-    @apply w-full p-3 bg-skin-fill-secondary rounded-md border border-skin-border focus:border-skin-border-accent focus:ring-1 focus:ring-skin-border-accent transition text-skin-base;
+    @apply w-full p-3 bg-skin-input-bg rounded-md border border-skin-border focus:border-skin-border-accent focus:ring-1 focus:ring-skin-border-accent transition text-skin-base;
 }
 
 /* ==========================================================================

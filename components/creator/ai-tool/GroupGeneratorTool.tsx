@@ -213,16 +213,23 @@ const GroupGeneratorTool: React.FC = () => {
         const channel = supabase
             .channel(`group-job-${jobId}`)
             .on('postgres_changes', {
-                event: 'UPDATE', schema: 'public', table: 'generated_images', filter: `job_id=eq.${jobId}`
+                event: '*', // Listen for both UPDATE and DELETE
+                schema: 'public',
+                table: 'generated_images',
+                filter: `id=eq.${jobId}` // FIX: Filter by the primary key 'id'
             }, (payload) => {
-                const record = payload.new as any;
-                if (record.status === 'completed') {
-                    setProgress(10);
-                    setGeneratedImage(record.image_url);
-                    showToast('Tạo ảnh nhóm thành công!', 'success');
-                    cleanup(channel);
-                } else if (record.status === 'failed') {
-                    showToast(record.error_message || 'Tạo ảnh nhóm thất bại. Vui lòng thử lại.', 'error');
+                if (payload.eventType === 'UPDATE') {
+                    const record = payload.new as any;
+                    // Success is now signaled by the image_url being populated
+                    if (record.image_url) {
+                        setProgress(10);
+                        setGeneratedImage(record.image_url);
+                        showToast('Tạo ảnh nhóm thành công!', 'success');
+                        cleanup(channel);
+                    }
+                } else if (payload.eventType === 'DELETE') {
+                    // Failure is now signaled by the record being deleted
+                    showToast('Tạo ảnh nhóm thất bại. Vui lòng thử lại.', 'error');
                     setIsGenerating(false);
                     setProgress(0);
                     cleanup(channel);

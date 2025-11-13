@@ -48,16 +48,23 @@ const handler: Handler = async (event: HandlerEvent, context: HandlerContext) =>
         const newDiamondCount = userData.diamonds - totalCost;
 
         // Create the job record, storing the large payload in the 'prompt' column as a JSON string
+        // FIX: Use the client-generated 'jobId' as the primary key 'id' for the new record.
         const { error: insertError } = await supabaseAdmin.from('generated_images').insert({
-            job_id: jobId,
+            id: jobId,
             user_id: user.id,
-            status: 'pending',
             model_used: 'Group Studio',
             prompt: JSON.stringify(payload), // Store the whole payload
+            is_public: false,
+            // image_url is null by default, which signifies 'pending'
         });
         
         if (insertError) {
-            throw new Error(`Failed to create job record: ${insertError.message}`);
+            // Check for unique constraint violation, which can happen with retries, but treat other errors seriously.
+            if (insertError.code === '23505') { // unique_violation
+                 console.warn(`Job record with ID ${jobId} already exists. Proceeding as if it were a retry.`);
+            } else {
+                throw new Error(`Failed to create job record: ${insertError.message}`);
+            }
         }
 
         // Now, deduct diamonds and log the transaction synchronously

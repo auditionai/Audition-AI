@@ -21,18 +21,21 @@ const handler = async (event: HandlerEvent) => {
 
     const { jobId } = JSON.parse(event.body || '{}');
 
+    // FIX: This function now deletes the placeholder record on failure.
     const failJob = async (reason: string) => {
-        await supabaseAdmin.from('generated_images').update({ status: 'failed', error_message: reason }).eq('job_id', jobId);
+        console.error(`[WORKER] Failing job ${jobId}: ${reason}`);
+        await supabaseAdmin.from('generated_images').delete().eq('id', jobId);
     };
 
     if (!jobId) { console.error("[WORKER] Job ID is missing."); return; }
 
     try {
         // 1. Fetch the full job details from the database
+        // FIX: Query using the 'id' column instead of the non-existent 'job_id' column.
         const { data: jobData, error: fetchError } = await supabaseAdmin
             .from('generated_images')
             .select('prompt, user_id') // The 'prompt' column contains the full payload
-            .eq('job_id', jobId)
+            .eq('id', jobId)
             .single();
 
         if (fetchError || !jobData || !jobData.prompt) {
@@ -121,11 +124,11 @@ const handler = async (event: HandlerEvent) => {
         const xpToAward = (characters.length || 0) * XP_PER_CHARACTER;
 
         // 6. Update DB record to 'completed' and increment user XP
+        // FIX: Update using 'id' instead of 'job_id' and remove non-existent 'status' column.
         const [updateJobResult, incrementXpResult] = await Promise.all([
              supabaseAdmin.from('generated_images').update({
                 image_url: publicUrl,
-                status: 'completed',
-            }).eq('job_id', jobId),
+            }).eq('id', jobId),
 
             supabaseAdmin.rpc('increment_user_xp', {
                 user_id_param: userId,

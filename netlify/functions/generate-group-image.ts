@@ -93,46 +93,42 @@ const handler: Handler = async (event: HandlerEvent) => {
         
         const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
 
-        // --- CONSTRUCT MEGA PROMPT ---
-        const promptLines = [
-            `Create a single, high-quality image with the following detailed specifications. The final image must contain exactly ${characters.length} characters.`,
-            "\n--- OVERALL SCENE ---",
-            `- Style: A '${style}' look. ${stylePrompt}`,
-            `- Background: The setting is '${background}'. ${backgroundPrompt}`,
-            `- Composition: The group is arranged in a '${layout}' pose. ${layoutPrompt}`,
-            "\n--- CHARACTER DETAILS ---",
-            "Each character MUST be distinct and based ONLY on their corresponding reference images. Do NOT mix outfits or faces between characters.",
-        ];
-
+        // --- CONSTRUCT MEGA PROMPT (REVISED) ---
         const parts: any[] = [];
-        characters.forEach((char: any, index: number) => {
-            promptLines.push(`- Character ${index + 1}:`);
-            let hasPose = false;
-            let hasFace = false;
+        const characterDetailsLines = [];
+        let imageIndex = 1;
 
+        for (let i = 0; i < characters.length; i++) {
+            const char = characters[i];
+            characterDetailsLines.push(`- Character ${i + 1}:`);
             if (char.poseImage) {
-                promptLines.push("  - Wears the outfit and has the body shape from the provided reference image.");
-                hasPose = true;
+                characterDetailsLines.push(`  - The outfit, gender, and pose for this character MUST be taken from the upcoming reference Image ${imageIndex}.`);
+                imageIndex++;
             }
             if (char.faceImage) {
-                promptLines.push("  - Has the exact facial features, identity, and expression from the provided face reference image. This is a critical instruction.");
-                hasFace = true;
+                characterDetailsLines.push(`  - **CRITICAL**: The face for this character MUST be an EXACT, pixel-perfect copy from the upcoming reference Image ${imageIndex}. Do NOT alter facial features, makeup, accessories, gender, or expression. It must be a perfect replication transplanted onto the character.`);
+                imageIndex++;
             }
-            if (!hasPose && !hasFace) {
-                promptLines.push("  - A character with a style matching the overall theme.");
-            }
-        });
+        }
 
-        promptLines.push("\n--- FINAL INSTRUCTIONS ---",
-            "- Ensure all characters are fully visible and anatomically correct.",
-            "- The lighting on all characters must be consistent and match the background.",
-            "- The final image must be cohesive and look like a single photograph or artwork."
-        );
-        
-        const finalPrompt = promptLines.join('\n');
+        const finalPrompt = [
+            `Generate a single, cohesive, high-quality image featuring exactly ${characters.length} distinct human characters. Follow all instructions precisely.`,
+            "\n--- SCENE DEFINITION ---",
+            `1.  **Style:** The image must have an overall aesthetic of '${style}'. Additional style notes: ${stylePrompt || 'None'}.`,
+            `2.  **Background:** The setting is '${background}'. Additional background details: ${backgroundPrompt || 'None'}.`,
+            `3.  **Composition:** Arrange the characters in a '${layout}' formation. Additional layout details: ${layoutPrompt || 'None'}. Make the characters' poses look natural and interactive for a group photo, while retaining the core elements from their reference images.`,
+            "\n--- CHARACTER SPECIFICATIONS (MANDATORY) ---",
+            "Adhere strictly to these image-to-character assignments. Do NOT mix or swap references.",
+            ...characterDetailsLines,
+            "\n--- ABSOLUTE FINAL RULES ---",
+            "1.  **Identity Preservation:** You MUST preserve the gender, face, and clothing for EACH character as specified by their dedicated reference images.",
+            "2.  **Consistency:** Lighting and shadows must be consistent across all characters and the background.",
+            "3.  **Quality:** The final image must be anatomically correct, free of artifacts, and look like a single, unified piece of artwork.",
+        ].join('\n');
+
         parts.push({ text: finalPrompt });
 
-        // Pre-process all images and add them to the parts array
+        // This order is critical for the prompt indexing to work
         const allImagesToProcess = characters.flatMap((char: any) => [char.poseImage, char.faceImage]).filter(Boolean);
         const processedImages = await Promise.all(
             allImagesToProcess.map(imgDataUrl => processImageForGemini(imgDataUrl, aspectRatio))

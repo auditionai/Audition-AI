@@ -412,7 +412,7 @@ const GroupGeneratorTool: React.FC = () => {
                          <h3 className="themed-heading text-lg font-bold themed-title-glow">1. Cung cấp thông tin nhân vật</h3>
                          <button onClick={() => setNumCharacters(0)} className="text-xs text-skin-muted hover:text-skin-base">(Thay đổi số lượng)</button>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                         {characters.map((char, index) => (
                              <div key={index} className="bg-skin-fill p-3 rounded-xl border border-skin-border space-y-3">
                                 <h4 className="text-sm font-bold text-center text-skin-base">Nhân vật {index + 1}</h4>

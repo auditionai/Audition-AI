@@ -6,6 +6,7 @@ import { GoogleGenAI, Modality } from "@google/genai";
 import { supabaseAdmin } from './utils/supabaseClient';
 import { Buffer } from 'buffer';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import Jimp from 'jimp';
 
 const XP_PER_CHARACTER = 5;
 
@@ -21,6 +22,46 @@ const processDataUrl = (dataUrl: string | null) => {
     if (!base64) return null;
     const mimeType = header.match(/:(.*?);/)?.[1] || 'image/png';
     return { base64, mimeType };
+};
+
+const processImageForGemini = async (imageDataUrl: string | null, targetAspectRatio: string): Promise<string | null> => {
+    if (!imageDataUrl) return null;
+
+    try {
+        const [header, base64] = imageDataUrl.split(',');
+        if (!base64) return null;
+
+        const imageBuffer = Buffer.from(base64, 'base64');
+        const image = await (Jimp as any).read(imageBuffer);
+        const originalWidth = image.getWidth();
+        const originalHeight = image.getHeight();
+
+        const [aspectW, aspectH] = targetAspectRatio.split(':').map(Number);
+        const targetRatio = aspectW / aspectH;
+        const originalRatio = originalWidth / originalHeight;
+
+        let newCanvasWidth: number, newCanvasHeight: number;
+
+        if (targetRatio > originalRatio) {
+            newCanvasHeight = originalHeight;
+            newCanvasWidth = Math.round(originalHeight * targetRatio);
+        } else {
+            newCanvasWidth = originalWidth;
+            newCanvasHeight = Math.round(originalWidth / targetRatio);
+        }
+        
+        const newCanvas = new (Jimp as any)(newCanvasWidth, newCanvasHeight, '#000000');
+        const x = (newCanvasWidth - originalWidth) / 2;
+        const y = (newCanvasHeight - originalHeight) / 2;
+        newCanvas.composite(image, x, y);
+
+        const mime = header.match(/:(.*?);/)?.[1] || (Jimp as any).MIME_PNG;
+        return newCanvas.getBase64Async(mime as any);
+
+    } catch (error) {
+        console.error("Error pre-processing image for Gemini:", error);
+        return imageDataUrl;
+    }
 };
 
 
@@ -47,7 +88,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         }
 
         const payload = JSON.parse(jobData.prompt);
-        const { characters, referenceImage, prompt, style } = payload;
+        const { characters, referenceImage, prompt, style, aspectRatio } = payload;
         const userId = jobData.user_id;
         const numCharacters = characters.length;
 
@@ -58,6 +99,27 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
         const model = 'gemini-2.5-flash-image';
+        
+        // ====================================================================
+        // PRE-PROCESS IMAGES FOR ASPECT RATIO
+        // ====================================================================
+        console.log(`[WORKER ${jobId}] Pre-processing images for ${aspectRatio} aspect ratio...`);
+        const [
+            processedReferenceImage,
+            ...processedCharacterImages
+        ] = await Promise.all([
+            processImageForGemini(referenceImage, aspectRatio),
+            ...characters.flatMap((char: any) => [
+                processImageForGemini(char.poseImage, aspectRatio),
+                processImageForGemini(char.faceImage, aspectRatio)
+            ])
+        ]);
+
+        const processedCharacters = characters.map((char: any, index: number) => ({
+            ...char,
+            poseImage: processedCharacterImages[index * 2],
+            faceImage: processedCharacterImages[index * 2 + 1]
+        }));
         
         // ====================================================================
         // CONSTRUCT THE "SUPER PROMPT"
@@ -72,11 +134,12 @@ const handler: Handler = async (event: HandlerEvent) => {
             `**Primary Objective:** Your task is to analyze the provided Reference Scene (Image 1) and create a new image featuring a group of characters. You must adhere to the following rules with 100% accuracy.`,
             ``,
             `**--- OVERALL SCENE REQUIREMENTS ---**`,
-            `1.  **Character Count:** The final image MUST contain EXACTLY ${numCharacters} people. This is a non-negotiable rule. The group consists of ${maleCount} male character(s) and ${femaleCount} female character(s).`,
-            `2.  **Scene Replication:** Recreate the background, lighting, environment, camera angle, and overall composition from the Reference Scene (Image 1).`,
-            `3.  **Pose & Placement:** Each character you generate MUST occupy the exact position and adopt the exact pose of one of the people in the Reference Scene (Image 1).`,
-            `4.  **Art Style:** The final image must have a cohesive '${style}' aesthetic.`,
-            `5.  **User Prompt:** Incorporate this user request into the scene: "${prompt || 'Follow the reference image closely.'}"`,
+            `1.  **Output Aspect Ratio:** The final image MUST have an aspect ratio of ${aspectRatio}. Adhere to this strictly, ignoring the aspect ratio of any input images.`,
+            `2.  **Character Count:** The final image MUST contain EXACTLY ${numCharacters} people. This is a non-negotiable rule. The group consists of ${maleCount} male character(s) and ${femaleCount} female character(s).`,
+            `3.  **Scene Replication:** From the Reference Scene (Image 1), replicate the background, lighting, environment, camera angle, and overall composition.`,
+            `4.  **Pose & Placement:** Each character you generate MUST occupy the exact position and adopt the exact pose of one of the people in the Reference Scene (Image 1).`,
+            `5.  **Art Style:** The final image must have a cohesive '${style}' aesthetic.`,
+            `6.  **User Prompt:** Incorporate this user request into the scene: "${prompt || 'Follow the reference image closely.'}"`,
             ``,
             `**--- CHARACTER CASTING SHEET (MANDATORY) ---**`,
             `This is your definitive guide for creating each character. You MUST use the specified source images for each person. Do NOT invent or alter details.`,
@@ -85,12 +148,12 @@ const handler: Handler = async (event: HandlerEvent) => {
         const finalApiParts: any[] = [];
         let imageInputIndex = 1; // Image 1 is always the reference scene
 
-        const refImageProcessed = processDataUrl(referenceImage);
+        const refImageProcessed = processDataUrl(processedReferenceImage);
         if (!refImageProcessed) throw new Error('Reference image is invalid.');
         finalApiParts.push({ inlineData: { data: refImageProcessed.base64, mimeType: refImageProcessed.mimeType } });
         
-        for (let i = 0; i < characters.length; i++) {
-            const char = characters[i];
+        for (let i = 0; i < processedCharacters.length; i++) {
+            const char = processedCharacters[i];
             const charDescription: string[] = [`**Character ${i + 1} (Gender: ${char.gender === 'male' ? 'Male' : 'Female'}):**`];
 
             const poseImageProcessed = processDataUrl(char.poseImage);
@@ -99,12 +162,12 @@ const handler: Handler = async (event: HandlerEvent) => {
             if (poseImageProcessed) {
                 imageInputIndex++;
                 finalApiParts.push({ inlineData: { data: poseImageProcessed.base64, mimeType: poseImageProcessed.mimeType } });
-                charDescription.push(`*   **Appearance (Outfit/Hair/Body):** Use Image ${imageInputIndex}. Replicate the outfit and body type with 100% accuracy.`);
+                charDescription.push(`*   **Appearance (Outfit/Hair/Body):** Use Image ${imageInputIndex}. (ABSOLUTE RULE: The outfit, hair, and body type MUST be a perfect, unaltered copy from this image. Do not change colors, styles, or shapes.)`);
             }
             if (faceImageProcessed) {
                 imageInputIndex++;
                 finalApiParts.push({ inlineData: { data: faceImageProcessed.base64, mimeType: faceImageProcessed.mimeType } });
-                charDescription.push(`*   **Face:** Use Image ${imageInputIndex}. Replicate this face perfectly. This is the highest priority rule.`);
+                charDescription.push(`*   **Face:** Use Image ${imageInputIndex}. (ABSOLUTE RULE: The face MUST be a perfect, unaltered transplant from this image. Preserve all features, expression, and details. This is the most critical rule.)`);
             }
             
             // Add a check to ensure character is described

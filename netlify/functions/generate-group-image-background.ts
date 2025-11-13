@@ -6,22 +6,15 @@ import { GoogleGenAI, Modality } from "@google/genai";
 import { supabaseAdmin } from './utils/supabaseClient';
 import { Buffer } from 'buffer';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
-import Jimp from 'jimp';
 
 const XP_PER_CHARACTER = 5;
 
 // This is now the "worker" function.
-// 1. It receives only a small payload with the job ID.
-// 2. It fetches the full job details from the database.
-// 3. It performs the long-running AI task.
-// 4. It uploads the result.
-// 5. It updates the job record in the database with the final status.
 const handler = async (event: HandlerEvent) => {
     if (event.httpMethod !== 'POST') return; 
 
     const { jobId } = JSON.parse(event.body || '{}');
 
-    // FIX: This function now deletes the placeholder record on failure.
     const failJob = async (reason: string) => {
         console.error(`[WORKER] Failing job ${jobId}: ${reason}`);
         await supabaseAdmin.from('generated_images').delete().eq('id', jobId);
@@ -30,11 +23,9 @@ const handler = async (event: HandlerEvent) => {
     if (!jobId) { console.error("[WORKER] Job ID is missing."); return; }
 
     try {
-        // 1. Fetch the full job details from the database
-        // FIX: Query using the 'id' column instead of the non-existent 'job_id' column.
         const { data: jobData, error: fetchError } = await supabaseAdmin
             .from('generated_images')
-            .select('prompt, user_id') // The 'prompt' column contains the full payload
+            .select('prompt, user_id')
             .eq('id', jobId)
             .single();
 
@@ -43,10 +34,9 @@ const handler = async (event: HandlerEvent) => {
         }
 
         const payload = JSON.parse(jobData.prompt);
-        const { characters, layout, layoutPrompt, background, backgroundPrompt, style, stylePrompt, aspectRatio } = payload;
+        const { characters, referenceImage, prompt, style, aspectRatio } = payload;
         const userId = jobData.user_id;
 
-        // 2. Get API Key
         const { data: apiKeyData, error: apiKeyError } = await supabaseAdmin.from('api_keys').select('id, key_value').eq('status', 'active').order('usage_count', { ascending: true }).limit(1).single();
         if (apiKeyError || !apiKeyData) {
             await failJob('Hết tài nguyên AI. Vui lòng thử lại sau.');
@@ -55,50 +45,60 @@ const handler = async (event: HandlerEvent) => {
         
         const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
 
-        // 3. Construct prompt and assets for Gemini
+        // --- NEW PROMPT ENGINEERING LOGIC ---
         const parts: any[] = [];
         const characterDetailsLines: string[] = [];
-        let imageInputIndex = 1;
+        let imageInputIndex = 1; // Start counting from 1 for human-readable prompt
 
-        const finalPromptPlaceholder = "PROMPT_PLACEHOLDER"; // Will be replaced later
-        parts.push({ text: finalPromptPlaceholder });
-
+        // Add Reference Image first (this will be Image 1)
+        if (referenceImage) {
+            const [h, b] = referenceImage.split(',');
+            parts.push({ inlineData: { data: b, mimeType: h.match(/:(.*?);/)?.[1] || 'image/png' } });
+            imageInputIndex++;
+        } else {
+             throw new Error('Reference image is missing from the payload.');
+        }
+        
+        // Add all character and face images
         for (let i = 0; i < characters.length; i++) {
             const char = characters[i];
             let charDescription = `- Character ${i + 1}:`;
 
             if (char.poseImage) {
-                // The image processor is no longer needed here as the AI model is robust enough.
                 const [h, b] = char.poseImage.split(',');
                 parts.push({ inlineData: { data: b, mimeType: h.match(/:(.*?);/)?.[1] || 'image/png' } });
-                charDescription += `\n  - Appearance (OUTFIT, POSE, GENDER, HAIRSTYLE) is defined by Image ${imageInputIndex}.`;
+                charDescription += `\n  - Their **OUTFIT, GENDER, and GENERAL APPEARANCE** are defined by Image ${imageInputIndex}.`;
                 imageInputIndex++;
             }
             if (char.faceImage) {
                 const [h, b] = char.faceImage.split(',');
                 parts.push({ inlineData: { data: b, mimeType: h.match(/:(.*?);/)?.[1] || 'image/png' } });
-                charDescription += `\n  - **CRITICAL**: The FACE must be an EXACT replica from Image ${imageInputIndex}.`;
+                charDescription += `\n  - **CRITICAL**: Their **FACE** must be an EXACT replica from Image ${imageInputIndex}.`;
                 imageInputIndex++;
             }
             characterDetailsLines.push(charDescription);
         }
-        
+
         const megaPrompt = [
-            `You are a master digital artist creating a group photo of ${characters.length} characters.`,
-            "\n--- SCENE ---",
-            `1. **Style:** '${style}'. Details: ${stylePrompt || 'None'}.`,
-            `2. **Background:** '${background}'. Details: ${backgroundPrompt || 'None'}.`,
-            `3. **Composition:** '${layout}'. Details: ${layoutPrompt || 'Arrange them naturally.'}.`,
-            "\n--- CHARACTER BLUEPRINTS (MANDATORY) ---",
-            "Follow these assignments with extreme precision. Images are provided sequentially after this prompt.",
+            "You are a master film director and artist creating a high-quality group photo. Your primary goal is to intelligently recreate the scene from the first image provided (Image 1) using a new cast of characters.",
+            "\n--- CORE MISSION ---",
+            "1. **Analyze Image 1 (The Blueprint):** Deeply analyze the first image provided for its overall **composition, background environment, lighting, mood, and the specific poses and positions** of each person in it.",
+            "2. **Recast the Scene:** You will now replace the people in Image 1 with the new characters provided in the subsequent images.",
+            `3. **Generate a NEW Image:** Create a completely new, photorealistic, and coherent image. **DO NOT cut and paste**. You must redraw the entire scene, placing the new characters into the poses and positions from the blueprint image.`,
+
+            "\n--- CHARACTER ASSIGNMENTS (STRICTLY FOLLOW) ---",
+            "Use the following images to define the new characters:",
             ...characterDetailsLines,
-            "\n--- FINAL DIRECTIVES ---",
-            "1. **Strict Adherence:** Use the specified images for each character. Do not mix them up.",
-            "2. **Harmonization:** Blend all characters seamlessly. Ensure lighting and shadows are consistent.",
-            "3. **Quality:** Output a single, high-quality, anatomically correct image."
+            `There are a total of ${characters.length} new characters to place in the scene.`,
+
+            "\n--- ARTISTIC & CONTEXTUAL GUIDELINES ---",
+            `1. **Art Style:** The final image must have a '${style}' aesthetic.`,
+            `2. **User Prompt:** Incorporate these additional details into the scene: "${prompt || 'Follow the reference image closely.'}"`,
+            "3. **Final Directives:** Ensure all characters are blended seamlessly into the background. Lighting, shadows, and perspective must be consistent and realistic. The final output must be a single, high-quality, anatomically correct image."
         ].join('\n');
         
-        parts[0].text = megaPrompt;
+        // Add the prompt as the first part.
+        parts.unshift({ text: megaPrompt });
         
         // 4. Call Gemini AI
         const response = await ai.models.generateContent({
@@ -123,8 +123,6 @@ const handler = async (event: HandlerEvent) => {
         
         const xpToAward = (characters.length || 0) * XP_PER_CHARACTER;
 
-        // 6. Update DB record to 'completed' and increment user XP
-        // FIX: Update using 'id' instead of 'job_id' and remove non-existent 'status' column.
         const [updateJobResult, incrementXpResult] = await Promise.all([
              supabaseAdmin.from('generated_images').update({
                 image_url: publicUrl,
@@ -138,7 +136,6 @@ const handler = async (event: HandlerEvent) => {
 
         if (updateJobResult.error) throw new Error(`Failed to update job status: ${updateJobResult.error.message}`);
         if (incrementXpResult.error) {
-             // Log the error but don't fail the entire job, as the image was created.
              console.error(`[WORKER] Failed to award XP for job ${jobId}:`, incrementXpResult.error.message);
         }
 

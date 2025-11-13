@@ -9,29 +9,17 @@ import ProcessedImagePickerModal from './ProcessedImagePickerModal';
 import GenerationProgress from '../../ai-tool/GenerationProgress';
 import ImageModal from '../../common/ImageModal';
 import ToggleSwitch from '../../ai-tool/ToggleSwitch';
-import ProcessedImageModal from '../../ai-tool/ProcessedImageModal';
+import ProcessedImageModal from './ProcessedImageModal';
 import SettingsBlock from '../../ai-tool/SettingsBlock';
 
 
 // Mock data for presets - in a real app, this would come from a database
-const MOCK_LAYOUTS = [
-    { id: 'cool-squad', name: 'Đội hình Cool Ngầu' },
-    { id: 'birthday-party', name: 'Tiệc Sinh nhật' },
-    { id: 'selfie-group', name: 'Tự sướng Nhóm' },
-    { id: 'dance-battle', name: 'So tài vũ đạo' },
-];
-
-const MOCK_BACKGROUNDS = [
-    { id: 'audition-stage', name: 'Sàn nhảy Audition' },
-    { id: 'tokyo-street', name: 'Phố Tokyo Neon' },
-    { id: 'beach-sunset', name: 'Biển Hoàng hôn' },
-    { id: 'fantasy-castle', name: 'Lâu đài Kỳ ảo' },
-];
-
 const MOCK_STYLES = [
     { id: 'cinematic', name: 'Điện ảnh' },
     { id: 'anime', name: 'Hoạt hình Anime' },
     { id: '3d-render', name: 'Kết xuất 3D' },
+    { id: 'photographic', name: 'Nhiếp ảnh' },
+    { id: 'fantasy', name: 'Kỳ ảo' },
     { id: 'oil-painting', name: 'Tranh sơn dầu' },
 ];
 
@@ -69,13 +57,10 @@ const GroupGeneratorTool: React.FC = () => {
     
     const [characters, setCharacters] = useState<CharacterState[]>([]);
 
-    // Selections state
-    const [selectedLayout, setSelectedLayout] = useState(MOCK_LAYOUTS[0].id);
-    const [layoutPrompt, setLayoutPrompt] = useState('');
-    const [selectedBg, setSelectedBg] = useState(MOCK_BACKGROUNDS[0].id);
-    const [backgroundPrompt, setBackgroundPrompt] = useState('');
+    // New state for reference image based generation
+    const [referenceImage, setReferenceImage] = useState<ImageState>(null);
+    const [prompt, setPrompt] = useState('');
     const [selectedStyle, setSelectedStyle] = useState(MOCK_STYLES[0].id);
-    const [stylePrompt, setStylePrompt] = useState('');
     
     // New states for generation flow
     const [isGenerating, setIsGenerating] = useState(false);
@@ -107,30 +92,40 @@ const GroupGeneratorTool: React.FC = () => {
         })));
     };
 
-    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, index: number, type: 'pose' | 'face') => {
+    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'pose' | 'face' | 'reference', index?: number) => {
         const file = e.target.files?.[0];
         if (!file) return;
 
         resizeImage(file, 1024).then(({ file: resizedFile, dataUrl: resizedDataUrl }) => {
             const newImage = { url: resizedDataUrl, file: resizedFile };
-            setCharacters(prev => prev.map((char, i) => {
-                if (i === index) {
-                    if (type === 'pose') return { ...char, poseImage: newImage };
-                    return { ...char, faceImage: newImage, processedFace: null };
-                }
-                return char;
-            }));
+            if (type === 'reference') {
+                setReferenceImage(newImage);
+            } else {
+                if (index === undefined) return;
+                setCharacters(prev => prev.map((char, i) => {
+                    if (i === index) {
+                        if (type === 'pose') return { ...char, poseImage: newImage };
+                        return { ...char, faceImage: newImage, processedFace: null };
+                    }
+                    return char;
+                }));
+            }
         }).catch(() => showToast("Lỗi khi xử lý ảnh.", "error"));
     };
 
-    const handleRemoveImage = (index: number, type: 'pose' | 'face') => {
-        setCharacters(prev => prev.map((char, i) => {
-            if (i === index) {
-                if (type === 'pose') return { ...char, poseImage: null };
-                return { ...char, faceImage: null, processedFace: null };
-            }
-            return char;
-        }));
+    const handleRemoveImage = (type: 'pose' | 'face' | 'reference', index?: number) => {
+         if (type === 'reference') {
+            setReferenceImage(null);
+        } else {
+            if (index === undefined) return;
+            setCharacters(prev => prev.map((char, i) => {
+                if (i === index) {
+                    if (type === 'pose') return { ...char, poseImage: null };
+                    return { ...char, faceImage: null, processedFace: null };
+                }
+                return char;
+            }));
+        }
     };
     
     const handleOpenPicker = (index: number, type: 'pose' | 'face') => {
@@ -175,7 +170,10 @@ const GroupGeneratorTool: React.FC = () => {
     const totalCost = numCharacters + (useUpscaler ? 1 : 0);
 
     const handleGenerateClick = () => {
-        // NEW: Add validation check
+        if (!referenceImage) {
+            showToast('Vui lòng tải lên "Ảnh Mẫu Tham Chiếu".', 'error');
+            return;
+        }
         for (let i = 0; i < characters.length; i++) {
             if (!characters[i].poseImage) {
                 showToast(`Vui lòng cung cấp "Ảnh nhân vật" cho Nhân vật ${i + 1}.`, 'error');
@@ -248,11 +246,13 @@ const GroupGeneratorTool: React.FC = () => {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
                             body: JSON.stringify({
-                                jobId, characters: charactersPayload,
-                                layout: MOCK_LAYOUTS.find(l => l.id === selectedLayout)?.name,
-                                layoutPrompt, background: MOCK_BACKGROUNDS.find(b => b.id === selectedBg)?.name,
-                                backgroundPrompt, style: MOCK_STYLES.find(s => s.id === selectedStyle)?.name,
-                                stylePrompt, aspectRatio: getAspectRatio(), useUpscaler,
+                                jobId, 
+                                characters: charactersPayload,
+                                referenceImage: referenceImage ? await fileToBase64(referenceImage.file) : null,
+                                prompt,
+                                style: selectedStyle,
+                                aspectRatio: getAspectRatio(), 
+                                useUpscaler,
                             }),
                         });
 
@@ -316,7 +316,7 @@ const GroupGeneratorTool: React.FC = () => {
     const resultImageForModal = generatedImage ? {
         id: 'generated-group-result',
         image_url: generatedImage,
-        prompt: `Group Photo: ${layoutPrompt}, ${backgroundPrompt}, ${stylePrompt}`,
+        prompt: `Group Photo based on reference. Prompt: ${prompt}`,
         creator: user ? { display_name: user.display_name, photo_url: user.photo_url, level: user.level } : { display_name: 'Bạn', photo_url: '', level: 1 },
         created_at: new Date().toISOString(),
         model_used: 'Group Studio',
@@ -438,8 +438,8 @@ const GroupGeneratorTool: React.FC = () => {
                         {characters.map((char, index) => (
                             <div key={index} className="bg-skin-fill p-3 rounded-xl border border-skin-border space-y-3">
                                 <h4 className="text-sm font-bold text-center text-skin-base">Nhân vật {index + 1}</h4>
-                                <ImageUploader onUpload={(e) => handleImageUpload(e, index, 'pose')} image={char.poseImage} onRemove={() => handleRemoveImage(index, 'pose')} text="Ảnh nhân vật (Lấy trang phục)" onPickFromProcessed={() => handleOpenPicker(index, 'pose')} />
-                                <ImageUploader onUpload={(e) => handleImageUpload(e, index, 'face')} image={char.faceImage} onRemove={() => handleRemoveImage(index, 'face')} text="Ảnh gương mặt (Face ID)" onPickFromProcessed={() => handleOpenPicker(index, 'face')} />
+                                <ImageUploader onUpload={(e) => handleImageUpload(e, 'pose', index)} image={char.poseImage} onRemove={() => handleRemoveImage('pose', index)} text="Ảnh nhân vật (Lấy trang phục)" onPickFromProcessed={() => handleOpenPicker(index, 'pose')} />
+                                <ImageUploader onUpload={(e) => handleImageUpload(e, 'face', index)} image={char.faceImage} onRemove={() => handleRemoveImage('face', index)} text="Ảnh gương mặt (Face ID)" onPickFromProcessed={() => handleOpenPicker(index, 'face')} />
                                 <button 
                                     onClick={() => handleProcessFace(index)}
                                     disabled={processingFaceIndex === index || !char.faceImage || !!char.processedFace}
@@ -457,33 +457,17 @@ const GroupGeneratorTool: React.FC = () => {
                 <div className="w-full lg:w-1/3 themed-panel p-4 flex flex-col">
                      <SettingsBlock title="Cài đặt Nhóm" instructionKey="character" onInstructionClick={()=>{/* No-op for now */}}>
                         <div className="space-y-4">
-                            {/* Layout Selector */}
-                            <div>
-                                <label className="text-sm font-semibold text-skin-base mb-2 block">2. Bố cục & Tư thế</label>
-                                <div className="grid grid-cols-2 gap-2">
-                                    {MOCK_LAYOUTS.map(p => (
-                                        <button key={p.id} onClick={() => setSelectedLayout(p.id)} className={`p-2 text-xs font-semibold rounded-md border-2 transition text-center ${selectedLayout === p.id ? 'selected-glow' : 'border-skin-border bg-skin-fill-secondary hover:border-pink-500/50 text-skin-base'}`}>
-                                            {p.name}
-                                        </button>
-                                    ))}
-                                </div>
-                                <textarea value={layoutPrompt} onChange={(e) => setLayoutPrompt(e.target.value)} placeholder="Thêm chi tiết về bố cục..." className="w-full mt-2 p-2 bg-skin-input-bg rounded-md border border-skin-border focus:border-skin-border-accent transition text-xs text-skin-base resize-none" rows={2}/>
+                             <div>
+                                <label className="text-sm font-semibold text-skin-base mb-2 block">2. Ảnh Mẫu Tham Chiếu</label>
+                                <ImageUploader onUpload={(e) => handleImageUpload(e, 'reference')} image={referenceImage} onRemove={() => handleRemoveImage('reference')} text="Tải ảnh mẫu (Bố cục, tư thế...)" />
+                                <p className="text-xs text-skin-muted mt-2">AI sẽ "học" bố cục, tư thế, bối cảnh và phong cách từ ảnh này để tái tạo lại với nhân vật của bạn.</p>
                             </div>
 
-                            {/* Background Selector */}
-                            <div>
-                                <label className="text-sm font-semibold text-skin-base mb-2 block">3. Bối cảnh</label>
-                                <div className="grid grid-cols-2 gap-2">
-                                    {MOCK_BACKGROUNDS.map(p => (
-                                        <button key={p.id} onClick={() => setSelectedBg(p.id)} className={`p-2 text-xs font-semibold rounded-md border-2 transition text-center ${selectedBg === p.id ? 'selected-glow' : 'border-skin-border bg-skin-fill-secondary hover:border-pink-500/50 text-skin-base'}`}>
-                                            {p.name}
-                                        </button>
-                                    ))}
-                                </div>
-                                <textarea value={backgroundPrompt} onChange={(e) => setBackgroundPrompt(e.target.value)} placeholder="Thêm chi tiết về bối cảnh..." className="w-full mt-2 p-2 bg-skin-input-bg rounded-md border border-skin-border focus:border-skin-border-accent transition text-xs text-skin-base resize-none" rows={2}/>
+                             <div>
+                                <label className="text-sm font-semibold text-skin-base mb-2 block">3. Câu Lệnh Mô Tả (Prompt)</label>
+                                <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Thêm chi tiết về bối cảnh, hành động..." className="w-full p-2 bg-skin-input-bg rounded-md border border-skin-border focus:border-skin-border-accent transition text-xs text-skin-base resize-none" rows={3}/>
                             </div>
 
-                            {/* Style Selector */}
                             <div>
                                 <label className="text-sm font-semibold text-skin-base mb-2 block">4. Phong cách nghệ thuật</label>
                                 <div className="grid grid-cols-2 gap-2">
@@ -493,7 +477,6 @@ const GroupGeneratorTool: React.FC = () => {
                                         </button>
                                     ))}
                                 </div>
-                                <textarea value={stylePrompt} onChange={(e) => setStylePrompt(e.target.value)} placeholder="Thêm chi tiết về phong cách..." className="w-full mt-2 p-2 bg-skin-input-bg rounded-md border border-skin-border focus:border-skin-border-accent transition text-xs text-skin-base resize-none" rows={2}/>
                             </div>
                         </div>
                     </SettingsBlock>

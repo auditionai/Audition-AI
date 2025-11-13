@@ -18,10 +18,10 @@ const handler: Handler = async (event: HandlerEvent) => {
         }
         
         const payload = JSON.parse(event.body || '{}');
-        const { jobId, characters, useUpscaler } = payload;
+        const { jobId, characters, useUpscaler, referenceImage } = payload;
         
-        if (!jobId || !characters || !Array.isArray(characters) || characters.length === 0) {
-            return { statusCode: 400, body: JSON.stringify({ error: 'Job ID and character data are required.' }) };
+        if (!jobId || !characters || !Array.isArray(characters) || characters.length === 0 || !referenceImage) {
+            return { statusCode: 400, body: JSON.stringify({ error: 'Job ID, reference image, and character data are required.' }) };
         }
 
         const totalCost = characters.length + (useUpscaler ? 1 : 0);
@@ -44,6 +44,9 @@ const handler: Handler = async (event: HandlerEvent) => {
             is_public: false,
             image_url: 'PENDING',
         });
+        
+
+
         
         if (insertError) {
             if (insertError.code !== '23505') { // Ignore unique_violation for retries

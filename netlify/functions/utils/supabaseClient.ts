@@ -10,4 +10,9 @@ if (!supabaseUrl || !supabaseServiceKey) {
     throw new Error("Supabase server environment variables are not set.");
 }
 
-export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+    auth: {
+        autoRefreshToken: false,
+        persistSession: false
+    }
+});

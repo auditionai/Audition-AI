@@ -30,24 +30,22 @@ const handler: Handler = async (event: HandlerEvent) => {
         const from = (page - 1) * IMAGES_PER_PAGE;
         const to = from + IMAGES_PER_PAGE - 1;
 
-        // OPTIMIZATION: Use a single query with a JOIN to fetch images and creator data together.
-        // This is much more efficient than the previous Promise.all approach and prevents timeouts.
+        // --- OPTIMIZATION: AVOID JOIN TO PREVENT DATABASE LOCKS ---
+        // 1. Fetch user data once. This is a very fast query.
+        const { data: creatorData, error: creatorError } = await supabaseAdmin
+            .from('users')
+            .select('display_name, photo_url, xp')
+            .eq('id', user.id)
+            .single();
+
+        if (creatorError || !creatorData) {
+            throw new Error(`Could not fetch creator profile: ${creatorError?.message}`);
+        }
+
+        // 2. Fetch the paginated images without joining the (potentially locked) users table.
         const { data: images, error: imagesError } = await supabaseAdmin
             .from('generated_images')
-            .select(`
-                id,
-                user_id,
-                prompt,
-                image_url,
-                model_used,
-                created_at,
-                is_public,
-                creator:users (
-                    display_name,
-                    photo_url,
-                    xp
-                )
-            `)
+            .select('id, user_id, prompt, image_url, model_used, created_at, is_public')
             .eq('user_id', user.id)
             .order('created_at', { ascending: false })
             .range(from, to);
@@ -56,32 +54,17 @@ const handler: Handler = async (event: HandlerEvent) => {
             throw new Error(`Database query failed for images: ${imagesError.message}`);
         }
         
-        // Process the data to calculate the level for the creator.
-        const processedData = (images || []).map(image => {
-            // FIX: Supabase might return an array for a joined table. Safely handle both object and array cases.
-            const creatorData = Array.isArray(image.creator) ? image.creator[0] : image.creator;
+        // 3. Combine the data in memory. This is much faster and safer than a JOIN in this context.
+        const creatorInfo = {
+            display_name: creatorData.display_name,
+            photo_url: creatorData.photo_url,
+            level: calculateLevelFromXp(creatorData.xp || 0),
+        };
 
-            if (!creatorData) {
-                // This case is unlikely but handled for safety.
-                return {
-                    ...image,
-                    creator: {
-                        display_name: 'Vô danh',
-                        photo_url: '',
-                        level: 1,
-                    }
-                }
-            }
-            
-            return {
-                ...image,
-                creator: {
-                    display_name: creatorData.display_name,
-                    photo_url: creatorData.photo_url,
-                    level: calculateLevelFromXp(creatorData.xp || 0),
-                }
-            };
-        });
+        const processedData = (images || []).map(image => ({
+            ...image,
+            creator: creatorInfo, // Attach the same creator info to every image
+        }));
 
         return {
             statusCode: 200,

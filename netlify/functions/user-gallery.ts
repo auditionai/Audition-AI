@@ -7,6 +7,8 @@ const calculateLevelFromXp = (xp: number): number => {
     return Math.floor(xp / 100) + 1;
 };
 
+const IMAGES_PER_PAGE = 20; // Define a limit for pagination
+
 const handler: Handler = async (event: HandlerEvent) => {
     try {
         if (event.httpMethod !== 'GET') {
@@ -19,21 +21,25 @@ const handler: Handler = async (event: HandlerEvent) => {
             return { statusCode: 401, body: JSON.stringify({ error: 'Token is missing.' }) };
         }
 
-        // 1. Authenticate the user (simplified destructuring to fix build error)
-        const userResponse = await supabaseAdmin.auth.getUser(token);
-        if (userResponse.error || !userResponse.data.user) {
+        const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+        if (authError || !user) {
             return { statusCode: 401, body: JSON.stringify({ error: 'Invalid token.' }) };
         }
-        const user = userResponse.data.user;
 
+        // --- PAGINATION LOGIC ---
+        const page = parseInt(event.queryStringParameters?.page || '1', 10);
+        const from = (page - 1) * IMAGES_PER_PAGE;
+        const to = from + IMAGES_PER_PAGE - 1;
+        // --- END PAGINATION LOGIC ---
 
         // 2. Fetch user's images and their profile in parallel for efficiency.
         const [imagesResponse, userProfileResponse] = await Promise.all([
             supabaseAdmin
                 .from('generated_images')
-                .select('id, user_id, prompt, image_url, model_used, created_at, is_public')
+                .select('id, user_id, prompt, image_url, model_used, created_at, is_public', { count: 'exact' }) // Add count option
                 .eq('user_id', user.id)
-                .order('created_at', { ascending: false }),
+                .order('created_at', { ascending: false })
+                .range(from, to), // Apply range for pagination
             supabaseAdmin
                 .from('users')
                 .select('display_name, photo_url, xp')
@@ -41,7 +47,7 @@ const handler: Handler = async (event: HandlerEvent) => {
                 .single()
         ]);
 
-        const { data: images, error: imagesError } = imagesResponse;
+        const { data: images, error: imagesError, count: totalCount } = imagesResponse;
         const { data: userProfile, error: userProfileError } = userProfileResponse;
         
         if (imagesError) {
@@ -68,7 +74,10 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         return {
             statusCode: 200,
-            body: JSON.stringify(processedData),
+            body: JSON.stringify({
+                images: processedData,
+                total: totalCount || 0,
+            }),
         };
 
     } catch (error: any) {

@@ -13,26 +13,64 @@ const MyCreationsPage: React.FC = () => {
     const [imageToShare, setImageToShare] = useState<GalleryImage | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
 
-    const fetchUserGallery = useCallback(async () => {
+    // --- PAGINATION STATE ---
+    const [currentPage, setCurrentPage] = useState(1);
+    const [hasMore, setHasMore] = useState(true);
+    const [isLoadingMore, setIsLoadingMore] = useState(false);
+    // --- END PAGINATION STATE ---
+
+    const fetchUserGallery = useCallback(async (page: number) => {
         if (!session) return;
-        setIsLoading(true);
+        
+        if (page === 1) setIsLoading(true);
+        else setIsLoadingMore(true);
+
         try {
-            const response = await fetch('/.netlify/functions/user-gallery', {
+            const response = await fetch(`/.netlify/functions/user-gallery?page=${page}`, { // Add page param
                 headers: { Authorization: `Bearer ${session.access_token}` },
             });
-            if (!response.ok) throw new Error('Không thể tải các tác phẩm của bạn.');
-            const data = await response.json();
-            setImages(data);
+            if (!response.ok) {
+                // If timeout or other server error, show a more helpful message
+                if (response.status === 502 || response.status === 504) {
+                    throw new Error('Máy chủ đang bận, không thể tải tác phẩm. Vui lòng thử lại sau.');
+                }
+                throw new Error('Không thể tải các tác phẩm của bạn.');
+            }
+            
+            const data = await response.json(); // { images: [], total: number }
+            
+            if (page === 1) {
+                setImages(data.images);
+            } else {
+                setImages(prev => [...prev, ...data.images]);
+            }
+
+            // Check if there are more images to load
+            const totalLoaded = page * 20; // Backend returns 20 per page
+            setHasMore(totalLoaded < data.total);
+            setCurrentPage(page);
+
         } catch (error: any) {
             showToast(error.message, 'error');
+            // If the first page fails, we want to stop the main loading spinner
+            if (page === 1) setIsLoading(false);
         } finally {
-            setIsLoading(false);
+            if (page === 1) setIsLoading(false);
+            setIsLoadingMore(false);
         }
     }, [session, showToast]);
 
+
     useEffect(() => {
-        fetchUserGallery();
-    }, [fetchUserGallery]);
+        fetchUserGallery(1); // Fetch first page on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [session]); // Only re-run when session changes
+
+    const handleLoadMore = () => {
+        if (!isLoadingMore && hasMore) {
+            fetchUserGallery(currentPage + 1);
+        }
+    };
     
     const handleDeleteImage = async () => {
         if (!imageToDelete || !session) return;
@@ -87,7 +125,12 @@ const MyCreationsPage: React.FC = () => {
     };
 
     if (isLoading) {
-        return <div className="text-center p-12">Đang tải các tác phẩm của bạn...</div>;
+        return (
+            <div className="text-center p-12">
+                <div className="w-8 h-8 border-4 border-t-pink-400 border-white/20 rounded-full animate-spin mx-auto"></div>
+                <p className="mt-4 text-gray-400">Đang tải các tác phẩm của bạn...</p>
+            </div>
+        );
     }
     
     return (
@@ -141,36 +184,50 @@ const MyCreationsPage: React.FC = () => {
                     <p className="text-gray-400 mt-2">Hãy vào mục "Tạo ảnh" và bắt đầu sáng tạo ngay!</p>
                 </div>
             ) : (
-                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                    {images.map(image => (
-                        <div 
-                            key={image.id} 
-                            className="group relative rounded-xl overflow-hidden cursor-pointer interactive-3d aspect-[3/4]"
-                            onClick={() => setSelectedImage(image)}
-                        >
-                            <img 
-                                src={image.image_url} 
-                                alt={image.prompt || 'User creation'}
-                                className="w-full h-full object-cover transition-transform duration-500 ease-in-out group-hover:scale-110"
-                            />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent"></div>
-                             {image.is_public && (
-                                <div className="absolute top-2 right-2 bg-blue-500/80 text-white text-xs font-bold px-2 py-1 rounded-full flex items-center gap-1">
-                                    <i className="ph-fill ph-globe"></i>
-                                    <span>Công khai</span>
-                                </div>
-                            )}
-                            <div className="absolute inset-0 p-3 w-full opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end justify-center">
-                                <div className="flex items-center gap-4 justify-center">
-                                    <button onClick={(e) => { e.stopPropagation(); setImageToDelete(image); }} className="p-3 bg-red-500/80 rounded-full text-white hover:bg-red-600 transition-colors"><i className="ph-fill ph-trash text-xl"></i></button>
-                                     {!image.is_public && (
-                                        <button onClick={(e) => { e.stopPropagation(); setImageToShare(image); }} className="p-3 bg-green-500/80 rounded-full text-white hover:bg-green-600 transition-colors"><i className="ph-fill ph-share-network text-xl"></i></button>
-                                    )}
+                <>
+                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                        {images.map(image => (
+                            <div 
+                                key={image.id} 
+                                className="group relative rounded-xl overflow-hidden cursor-pointer interactive-3d aspect-[3/4]"
+                                onClick={() => setSelectedImage(image)}
+                            >
+                                <img 
+                                    src={image.image_url} 
+                                    alt={image.prompt || 'User creation'}
+                                    className="w-full h-full object-cover transition-transform duration-500 ease-in-out group-hover:scale-110"
+                                />
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent"></div>
+                                {image.is_public && (
+                                    <div className="absolute top-2 right-2 bg-blue-500/80 text-white text-xs font-bold px-2 py-1 rounded-full flex items-center gap-1">
+                                        <i className="ph-fill ph-globe"></i>
+                                        <span>Công khai</span>
+                                    </div>
+                                )}
+                                <div className="absolute inset-0 p-3 w-full opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end justify-center">
+                                    <div className="flex items-center gap-4 justify-center">
+                                        <button onClick={(e) => { e.stopPropagation(); setImageToDelete(image); }} className="p-3 bg-red-500/80 rounded-full text-white hover:bg-red-600 transition-colors"><i className="ph-fill ph-trash text-xl"></i></button>
+                                        {!image.is_public && (
+                                            <button onClick={(e) => { e.stopPropagation(); setImageToShare(image); }} className="p-3 bg-green-500/80 rounded-full text-white hover:bg-green-600 transition-colors"><i className="ph-fill ph-share-network text-xl"></i></button>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
+                        ))}
+                    </div>
+                     {/* --- LOAD MORE BUTTON --- */}
+                    {hasMore && (
+                        <div className="text-center mt-12">
+                            <button
+                                onClick={handleLoadMore}
+                                disabled={isLoadingMore}
+                                className="themed-button-secondary px-8 py-3 font-bold disabled:opacity-50"
+                            >
+                                {isLoadingMore ? 'Đang tải...' : 'Tải thêm'}
+                            </button>
                         </div>
-                    ))}
-                </div>
+                    )}
+                </>
             )}
         </div>
     );

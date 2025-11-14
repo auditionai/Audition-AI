@@ -1,85 +1,117 @@
 import React, { useState } from 'react';
-import CreatorHeader from '../components/CreatorHeader';
-import CreatorFooter from '../components/CreatorFooter';
-import AITool from '../components/AITool';
 import { useAuth } from '../contexts/AuthContext';
-import Leaderboard from '../components/Leaderboard';
-import Settings from '../components/Settings';
-import InfoModal from '../components/InfoModal';
-import BottomNavBar from '../components/common/BottomNavBar';
-import CheckInModal from '../components/CheckInModal'; // Import the new modal
-import MyCreationsPage from './MyCreationsPage'; // Import the new page
-import AnnouncementModal from '../components/AnnouncementModal';
+import { useTheme } from '../contexts/ThemeContext';
 
-export type CreatorTab = 'tool' | 'leaderboard' | 'settings' | 'my-creations';
+// Import Creator-specific components
+import CreatorHeader from '../components/creator/CreatorHeader';
+import CreatorFooter from '../components/creator/CreatorFooter';
+import AITool from '../components/creator/AITool';
+import Leaderboard from '../components/Leaderboard';
+import MyCreationsPage from './MyCreationsPage';
+import Settings from '../components/Settings';
+import AdminGalleryPage from './AdminGalleryPage';
+import BottomNavBar from '../components/common/BottomNavBar';
+import InfoModal from '../components/creator/InfoModal';
+import TopUpModal from '../components/creator/TopUpModal';
+import CheckInModal from '../components/CheckInModal';
+import AnnouncementModal from '../components/AnnouncementModal';
+import ThemeEffects from '../components/themes/ThemeEffects';
+
+// Define the possible tabs for type safety
+export type CreatorTab = 'tool' | 'leaderboard' | 'my-creations' | 'settings';
 
 interface CreatorPageProps {
-    activeTab: CreatorTab;
+  activeTab: CreatorTab | 'admin-gallery'; // Include admin tab here
 }
 
 const CreatorPage: React.FC<CreatorPageProps> = ({ activeTab }) => {
-    const { navigate, announcement, showAnnouncementModal, markAnnouncementAsRead } = useAuth();
-    const [infoModalKey, setInfoModalKey] = useState<'terms' | 'policy' | 'contact' | null>(null);
-    const [isCheckInModalOpen, setCheckInModalOpen] = useState(false); // State for the new modal
+    const { user, navigate, showToast, updateUserDiamonds, announcement, showAnnouncementModal, markAnnouncementAsRead } = useAuth();
+    const { theme } = useTheme();
 
-    const handleOpenInfoModal = (key: 'terms' | 'policy' | 'contact') => {
-        setInfoModalKey(key);
+    // State for modals
+    const [isTopUpModalOpen, setIsTopUpModalOpen] = useState(false);
+    const [infoModalKey, setInfoModalKey] = useState<'terms' | 'policy' | 'contact' | null>(null);
+    const [isCheckInModalOpen, setCheckInModalOpen] = useState(false);
+
+    if (!user) {
+        // This should ideally not happen if routing is correct, but as a safeguard:
+        navigate('home');
+        return null; 
+    }
+    
+    const handleTopUpClick = () => {
+        // This is now handled by the BuyCreditsPage, but the modal can be a quick-access point.
+        navigate('buy-credits');
     };
 
-    const renderContent = () => {
+    const handleCheckIn = async () => {
+        setCheckInModalOpen(true);
+    };
+
+    const renderActiveTab = () => {
         switch (activeTab) {
-            case 'tool':
-                return <AITool />;
             case 'leaderboard':
                 return <Leaderboard />;
             case 'my-creations':
                 return <MyCreationsPage />;
             case 'settings':
                 return <Settings />;
+            case 'admin-gallery':
+                return user.is_admin ? <AdminGalleryPage /> : <AITool />; // Fallback for non-admins
+            case 'tool':
             default:
                 return <AITool />;
         }
-    }
-    
+    };
+
     return (
-        <div className="flex flex-col min-h-screen bg-[#0B0B0F] pb-16 md:pb-0">
-            <CreatorHeader 
-                onTopUpClick={() => navigate('buy-credits')}
+        <div data-theme={theme} className="flex flex-col min-h-screen bg-skin-fill text-skin-base pb-16 md:pb-0">
+             <ThemeEffects />
+             <CreatorHeader
+                onTopUpClick={handleTopUpClick}
                 activeTab={activeTab}
                 onNavigate={navigate}
-                onCheckInClick={() => setCheckInModalOpen(true)} // Add click handler
+                onCheckInClick={handleCheckIn}
             />
-            <main className="flex-grow pt-20 relative">
-                 <div className="absolute inset-0 z-0 aurora-background opacity-70"></div>
-                 <div className="relative z-10">
-                    {renderContent()}
-                </div>
+            
+            <main className="flex-grow pt-24 md:pt-28">
+                {renderActiveTab()}
             </main>
-            <CreatorFooter onInfoLinkClick={handleOpenInfoModal} />
 
+            <CreatorFooter onInfoLinkClick={setInfoModalKey} />
 
             <BottomNavBar
-                activeTab={activeTab}
+                activeTab={activeTab === 'admin-gallery' ? 'tool' : activeTab} // Highlight 'tool' for admin gallery for now
                 onTabChange={navigate}
-                onTopUpClick={() => navigate('buy-credits')}
-                onCheckInClick={() => setCheckInModalOpen(true)}
+                onTopUpClick={handleTopUpClick}
+                onCheckInClick={handleCheckIn}
             />
 
-            <CheckInModal 
+            {/* Global Modals for Creator Page */}
+            <TopUpModal
+                isOpen={isTopUpModalOpen}
+                onClose={() => setIsTopUpModalOpen(false)}
+                 onTopUpSuccess={(amount) => {
+                    if (user) {
+                      updateUserDiamonds(user.diamonds + amount);
+                    }
+                    setIsTopUpModalOpen(false);
+                    showToast(`Nạp thành công ${amount} kim cương!`, 'success');
+                }}
+            />
+             <InfoModal
+                isOpen={!!infoModalKey}
+                onClose={() => setInfoModalKey(null)}
+                contentKey={infoModalKey}
+            />
+             <CheckInModal
                 isOpen={isCheckInModalOpen}
                 onClose={() => setCheckInModalOpen(false)}
             />
-
             <AnnouncementModal
                 isOpen={showAnnouncementModal}
                 onClose={markAnnouncementAsRead}
                 announcement={announcement}
-            />
-
-            <InfoModal
-                isOpen={!!infoModalKey}
-                onClose={() => setInfoModalKey(null)}
-                contentKey={infoModalKey}
             />
         </div>
     );

@@ -9,64 +9,72 @@ const calculateLevelFromXp = (xp: number): number => {
 
 const handler: Handler = async () => {
     try {
-        // 1. Get all image records to count creations per user.
-        // For performance on very large tables, an RPC function would be better,
-        // but this approach works well without database modifications.
-        const { data: images, error: imagesError } = await supabaseAdmin
-            .from('generated_images')
-            .select('user_id');
+        // --- TỐI ƯU HÓA TRIỆT ĐỂ ---
+        // 1. Sử dụng một RPC function (hoặc query trực tiếp) để database tự đếm và sắp xếp.
+        // Điều này hiệu quả hơn rất nhiều so với việc tải toàn bộ bảng về để xử lý.
+        const { data: topUsers, error: rpcError } = await supabaseAdmin.rpc('get_top_creators', { limit_count: 10 });
 
-        if (imagesError) throw imagesError;
+        if (rpcError) {
+            // Nếu RPC chưa được tạo, chạy query dự phòng (vẫn tối ưu hơn)
+            if (rpcError.code === '42883') {
+                console.warn("RPC function 'get_top_creators' not found. Falling back to direct query.");
+                
+                // FIX: Refactored the convoluted promise chain into a more readable async/await flow.
+                // This resolves the error where the code was trying to destructure 'data' and 'error' from an array.
+                const { data: imagesData, error: imagesError } = await supabaseAdmin
+                    .from('generated_images')
+                    .select('user_id')
+                    .limit(10000); // A reasonable limit to avoid function timeouts.
 
-        // 2. Count creations for each user in memory.
-        const countMap = (images || []).reduce((acc, image) => {
-            acc.set(image.user_id, (acc.get(image.user_id) || 0) + 1);
-            return acc;
-        }, new Map<string, number>());
-        
-        // 3. Sort users by creation count and get the top 10 user IDs.
-        const sortedUserIds = Array.from(countMap.entries())
-            .sort((a, b) => b[1] - a[1]) // Sort descending by count
-            .slice(0, 10) // Limit to top 10
-            .map(entry => entry[0]); // Get just the user IDs
+                if (imagesError) throw imagesError;
 
-        // Handle case where there are no images created yet.
-        if (sortedUserIds.length === 0) {
-            return {
-                statusCode: 200,
-                body: JSON.stringify([]),
-            };
+                const counts = (imagesData || []).reduce((acc, { user_id }) => {
+                    if (user_id) {
+                        acc[user_id] = (acc[user_id] || 0) + 1;
+                    }
+                    return acc;
+                }, {} as Record<string, number>);
+
+                const sortedUserIds = Object.keys(counts).sort((a, b) => counts[b] - counts[a]).slice(0, 10);
+                
+                const { data: directQueryUsers, error: directQueryError } = await supabaseAdmin
+                    .from('users')
+                    .select('id, display_name, photo_url, xp')
+                    .in('id', sortedUserIds);
+                
+                if (directQueryError) throw directQueryError;
+
+                const combinedUsers = (directQueryUsers || [])
+                    .map(u => ({ ...u, creations_count: counts[u.id] }))
+                    .sort((a, b) => b.creations_count - a.creations_count);
+
+                const leaderboard = combinedUsers.map((user, index) => ({
+                    ...user,
+                    rank: index + 1,
+                    level: calculateLevelFromXp(user.xp),
+                }));
+                 return { statusCode: 200, body: JSON.stringify(leaderboard) };
+            }
+            throw rpcError;
         }
 
-        // 4. Fetch the profiles for the top 10 users.
-        const { data: users, error: usersError } = await supabaseAdmin
-            .from('users')
-            .select('id, display_name, photo_url, xp')
-            .in('id', sortedUserIds);
-
-        if (usersError) throw usersError;
-
-        // 5. Combine user data with creation counts and re-sort to ensure correct order.
-        const leaderboardData = users
-            .map(user => ({
-                ...user,
-                creations_count: countMap.get(user.id) || 0,
-            }))
-            .sort((a, b) => b.creations_count - a.creations_count);
-
-        // 6. Assign final rank and calculate level.
-        const leaderboard = leaderboardData.map((user, index) => ({
-            ...user,
+        // 2. Nếu RPC thành công, xử lý dữ liệu trả về
+        const leaderboardData = (topUsers || []).map((user, index) => ({
+            id: user.user_id,
             rank: index + 1,
+            display_name: user.display_name,
+            photo_url: user.photo_url,
             level: calculateLevelFromXp(user.xp),
+            xp: user.xp,
+            creations_count: user.creations_count,
         }));
-
 
         return {
             statusCode: 200,
-            body: JSON.stringify(leaderboard),
+            body: JSON.stringify(leaderboardData),
         };
     } catch (error: any) {
+        console.error("Leaderboard function error:", error);
         return {
             statusCode: 500,
             body: JSON.stringify({ error: error.message }),

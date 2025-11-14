@@ -73,7 +73,10 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         const parts: any[] = [];
         const [header, base64] = imageDataUrl.split(',');
-        const mimeType = header.match(/:(.*?);/)[1];
+        const mimeType = header.match(/:(.*?);/)?.[1];
+        if (!mimeType) {
+            throw new Error("Could not determine image MIME type from data URL.");
+        }
         parts.push({ inlineData: { data: base64, mimeType } });
         parts.push({ text: "isolate the main subject with a solid black background" });
 
@@ -84,12 +87,13 @@ const handler: Handler = async (event: HandlerEvent) => {
         });
 
         const imagePartResponse = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-        if (!imagePartResponse?.inlineData) {
+        if (!imagePartResponse?.inlineData?.data || !imagePartResponse.inlineData.mimeType) {
             throw new Error("AI không thể tách nền hình ảnh này.");
         }
         
         const finalImageBase64 = imagePartResponse.inlineData.data;
-        const finalImageMimeType = imagePartResponse.inlineData.mimeType.includes('png') ? 'image/png' : 'image/jpeg';
+        const responseMimeType = imagePartResponse.inlineData.mimeType;
+        const finalImageMimeType = responseMimeType.includes('png') ? 'image/png' : 'image/jpeg';
 
         // --- START OF R2 UPLOAD LOGIC ---
         const imageBuffer = Buffer.from(finalImageBase64, 'base64');

@@ -206,7 +206,9 @@ const handler: Handler = async (event: HandlerEvent) => {
         });
 
         const finalImagePart = finalResponse.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-        if (!finalImagePart?.inlineData) throw new Error("AI không thể tạo ảnh nhóm với các chỉ dẫn được cung cấp.");
+        if (!finalImagePart?.inlineData?.data || !finalImagePart.inlineData.mimeType) {
+            throw new Error("AI không thể tạo ảnh nhóm với các chỉ dẫn được cung cấp.");
+        }
         
         console.log(`[WORKER ${jobId}] Image generated successfully.`);
 

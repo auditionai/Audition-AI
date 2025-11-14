@@ -140,7 +140,11 @@ const handler: Handler = async (event: HandlerEvent) => {
                     seed: seed ? Number(seed) : undefined,
                 },
             });
-            finalImageBase64 = response.generatedImages[0].image.imageBytes;
+            const imageBytes = response.generatedImages?.[0]?.image?.imageBytes;
+            if (!imageBytes) {
+                throw new Error("AI (Imagen) không thể tạo hình ảnh từ mô tả này.");
+            }
+            finalImageBase64 = imageBytes;
             finalImageMimeType = 'image/png';
         } else { // Assuming gemini-flash-image
             const parts: any[] = [];
@@ -182,10 +186,13 @@ const handler: Handler = async (event: HandlerEvent) => {
             });
 
             const imagePartResponse = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-            if (!imagePartResponse?.inlineData) throw new Error("AI không thể tạo hình ảnh từ mô tả này. Hãy thử thay đổi prompt hoặc ảnh tham chiếu.");
+            if (!imagePartResponse?.inlineData?.data || !imagePartResponse.inlineData.mimeType) {
+                throw new Error("AI không thể tạo hình ảnh từ mô tả này. Hãy thử thay đổi prompt hoặc ảnh tham chiếu.");
+            }
 
             finalImageBase64 = imagePartResponse.inlineData.data;
-            finalImageMimeType = imagePartResponse.inlineData.mimeType.includes('png') ? 'image/png' : 'image/jpeg';
+            const mimeType = imagePartResponse.inlineData.mimeType;
+            finalImageMimeType = mimeType.includes('png') ? 'image/png' : 'image/jpeg';
         }
 
         // --- Placeholder for Upscaler Logic ---

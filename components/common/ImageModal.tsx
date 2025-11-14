@@ -11,22 +11,6 @@ interface ImageModalProps {
   onShare?: (image: GalleryImage) => void;
 }
 
-const getFileExtensionFromUrl = (url: string): string => {
-    try {
-        const path = new URL(url).pathname;
-        const parts = path.split('.');
-        if (parts.length > 1) {
-            // Take the last part and remove any query parameters
-            return (parts.pop() || 'png').split('?')[0];
-        }
-    } catch (e) {
-        // Ignore URL parsing errors for malformed URLs
-    }
-    // Fallback if no extension is found
-    return 'png'; 
-};
-
-
 const ImageModal: React.FC<ImageModalProps> = ({ isOpen, onClose, image, showInfoPanel = true, onShare }) => {
   const { showToast } = useAuth();
   const [isCopied, setIsCopied] = useState(false);
@@ -43,43 +27,19 @@ const ImageModal: React.FC<ImageModalProps> = ({ isOpen, onClose, image, showInf
     }, 2000);
   };
 
-  const handleDownload = async (e: React.MouseEvent) => {
+  const handleDownload = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!image?.image_url) return;
-    
-    showToast('Đang chuẩn bị tệp tải xuống...', 'success');
 
-    try {
-        // ROBUST DOWNLOAD: Fetch the image directly from its public R2 URL.
-        // This avoids the Netlify function proxy, which has a 6MB payload size limit
-        // that causes downloads for larger images to fail.
-        const response = await fetch(image.image_url);
+    const downloadUrl = `/.netlify/functions/download-image?url=${encodeURIComponent(image.image_url)}`;
 
-        if (!response.ok) {
-            throw new Error(`Lỗi tải ảnh: Máy chủ trả về mã lỗi ${response.status}.`);
-        }
-
-        const blob = await response.blob();
-        const blobUrl = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.style.display = 'none';
-        a.href = blobUrl;
-
-        const extension = getFileExtensionFromUrl(image.image_url);
-        a.download = `audition-ai-${image.id}.${extension}`; 
-
-        document.body.appendChild(a);
-        a.click();
-        
-        // Cleanup
-        a.remove();
-        window.URL.revokeObjectURL(blobUrl);
-
-    } catch (error: any) {
-        // This will catch network errors or CORS issues if R2 is not configured correctly.
-        showToast(error.message || 'Lỗi khi tải ảnh. Vui lòng kiểm tra kết nối mạng.', 'error');
-        console.error('Download failed:', error);
-    }
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = downloadUrl;
+    a.download = `audition-ai-${image.id}.png`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
   };
   
   const rank = image.creator ? getRankForLevel(image.creator.level) : getRankForLevel(1);

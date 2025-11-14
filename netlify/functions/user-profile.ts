@@ -46,17 +46,18 @@ const handler: Handler = async (event: HandlerEvent) => {
                 console.warn(`[CLEANUP] Found stale profile for email ${authUser.email} with old ID ${staleProfile.id}. Deleting it now.`);
                 
                 // Use the master admin function to delete the user from the entire system.
-                // This triggers cascading deletes (ON DELETE CASCADE) for all tables
-                // that reference the user ID (e.g., daily_active_users, generated_images),
-                // which is exactly what's needed to resolve the foreign key error.
                 const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(staleProfile.id);
                 
                 if (deleteError && deleteError.message !== 'User not found') {
-                    // Log the error but proceed. The subsequent insert might still fail, but this is our best bet.
                     console.error(`[CLEANUP] Error deleting stale user ${staleProfile.id} from auth:`, deleteError.message);
                 } else {
-                    console.log(`[CLEANUP] Successfully deleted stale user ${staleProfile.id} and all associated data.`);
+                    console.log(`[CLEANUP] Successfully initiated deletion for stale user ${staleProfile.id}.`);
                 }
+
+                // CRITICAL FIX: Add a delay to allow the asynchronous cascade delete to complete in the database.
+                // This prevents a race condition where the subsequent insert fails due to the old record still existing.
+                console.log('[CLEANUP] Waiting for 2 seconds for DB cascade to complete...');
+                await new Promise(resolve => setTimeout(resolve, 2000));
             }
 
             // Step 4: Create the new, correct user profile.
@@ -75,8 +76,6 @@ const handler: Handler = async (event: HandlerEvent) => {
                 .single();
 
             if (insertError) {
-                 // If an error still occurs here (e.g., duplicate email), it points to a deeper race condition
-                 // or a failure in the cascade delete. This logic is the most robust fix possible at the function level.
                  throw new Error(`Failed to create new profile after cleanup: ${insertError.message}`);
             }
 

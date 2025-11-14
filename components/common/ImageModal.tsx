@@ -11,6 +11,20 @@ interface ImageModalProps {
   onShare?: (image: GalleryImage) => void;
 }
 
+const getFileExtensionFromUrl = (url: string): string => {
+    try {
+        const path = new URL(url).pathname;
+        const parts = path.split('.');
+        if (parts.length > 1) {
+            return parts.pop() || 'png';
+        }
+    } catch (e) {
+        // Ignore URL parsing errors
+    }
+    return 'png'; // Default to png
+};
+
+
 const ImageModal: React.FC<ImageModalProps> = ({ isOpen, onClose, image, showInfoPanel = true, onShare }) => {
   const { showToast } = useAuth();
   const [isCopied, setIsCopied] = useState(false);
@@ -27,19 +41,43 @@ const ImageModal: React.FC<ImageModalProps> = ({ isOpen, onClose, image, showInf
     }, 2000);
   };
 
-  const handleDownload = (e: React.MouseEvent) => {
+  const handleDownload = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!image?.image_url) return;
+    
+    showToast('Đang chuẩn bị tệp tải xuống...', 'success');
 
-    const downloadUrl = `/.netlify/functions/download-image?url=${encodeURIComponent(image.image_url)}`;
+    try {
+        const response = await fetch(`/.netlify/functions/download-image?url=${encodeURIComponent(image.image_url)}`);
 
-    const a = document.createElement('a');
-    a.style.display = 'none';
-    a.href = downloadUrl;
-    a.download = `audition-ai-${image.id}.png`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+        if (!response.ok) {
+            let errorMsg = `Lỗi tải ảnh: ${response.statusText}`;
+            try {
+                const errorJson = await response.json();
+                errorMsg = errorJson.error || errorMsg;
+            } catch {}
+            throw new Error(errorMsg);
+        }
+
+        const blob = await response.blob();
+        const blobUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = blobUrl;
+
+        const extension = getFileExtensionFromUrl(image.image_url);
+        a.download = `audition-ai-${image.id}.${extension}`; 
+
+        document.body.appendChild(a);
+        a.click();
+        
+        a.remove();
+        window.URL.revokeObjectURL(blobUrl);
+
+    } catch (error: any) {
+        showToast(error.message, 'error');
+        console.error('Download failed:', error);
+    }
   };
   
   const rank = image.creator ? getRankForLevel(image.creator.level) : getRankForLevel(1);

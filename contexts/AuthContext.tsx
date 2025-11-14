@@ -6,6 +6,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { User, Announcement } from '../types';
 import { calculateLevelFromXp } from '../utils/rankUtils';
 
+declare const google: any; // Declare the google object for Google Identity Services
+
 const getVNDateString = (date: Date) => {
     // UTC+7
     const vietnamTime = new Date(date.getTime() + 7 * 3600 * 1000);
@@ -14,7 +16,7 @@ const getVNDateString = (date: Date) => {
 
 const getRouteFromPath = (path: string): string => {
     const pathSegment = path.split('/').filter(Boolean)[0];
-    const validRoutes = ['tool', 'leaderboard', 'my-creations', 'settings', 'buy-credits', 'gallery', 'admin-gallery'];
+    const validRoutes = ['tool', 'leaderboard', 'my-creations', 'settings', 'buy-credits', 'gallery', 'admin-gallery']; // REMOVED: 'ai-love-story'
     if (validRoutes.includes(pathSegment)) {
         return pathSegment;
     }
@@ -167,7 +169,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                     fetch('/.netlify/functions/log-app-visit', { method: 'POST' });
                 }
 
-                // FIX: Use Supabase v2 async method `getSession()` instead of v1 sync `session()`.
                 const { data: { session: currentSession } } = await supabaseClient.auth.getSession();
                 setSession(currentSession);
                 
@@ -178,7 +179,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                     }
                 }
 
-                // FIX: Use Supabase v2 destructuring for onAuthStateChange subscription.
                 const { data: { subscription } } = supabaseClient.auth.onAuthStateChange(
                     async (_event, newSession) => {
                         setSession(newSession);
@@ -203,6 +203,45 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         initialize();
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+    
+    // NEW: Initialize Google Identity Services client
+    useEffect(() => {
+        if (loading || !supabase) return;
+
+        const handleCredentialResponse = async (response: any) => {
+            if (!response.credential) {
+                showToast('Không nhận được thông tin đăng nhập từ Google.', 'error');
+                return;
+            }
+
+            try {
+                const { error } = await supabase.auth.signInWithIdToken({
+                    provider: 'google',
+                    token: response.credential,
+                });
+
+                if (error) throw error;
+                // Auth state change will handle navigation and user profile fetching.
+            } catch (error: any) {
+                showToast(`Đăng nhập thất bại: ${error.message}`, 'error');
+            }
+        };
+        
+        const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+
+        if (googleClientId && typeof google !== 'undefined') {
+            try {
+                google.accounts.id.initialize({
+                    client_id: googleClientId,
+                    callback: handleCredentialResponse,
+                });
+            } catch (error) {
+                console.error("Google accounts.id.initialize failed:", error);
+            }
+        } else if (!googleClientId) {
+            console.error("VITE_GOOGLE_CLIENT_ID is not configured.");
+        }
+    }, [loading, supabase, showToast]);
 
     // Effect to check for new announcements when user logs in or data changes
     useEffect(() => {
@@ -299,21 +338,23 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return getVNDateString(new Date()) === getVNDateString(new Date(user.last_check_in_at));
     }, [user?.last_check_in_at]);
 
+    // NEW: Use Google One Tap prompt for login
     const login = useCallback(async () => {
-        if (!supabase) { showToast("Lỗi kết nối, không thể đăng nhập.", "error"); return; }
-        // FIX: Use Supabase v2 method `signInWithOAuth` instead of v1 `signIn`.
-        const { error } = await supabase.auth.signInWithOAuth({
-            provider: 'google',
-            options: {
-                redirectTo: window.location.origin,
-            }
-        });
-        if (error) { showToast('Đăng nhập thất bại: ' + error.message, 'error'); throw error; }
-    }, [supabase, showToast]);
+        const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+        if (!googleClientId || typeof google === 'undefined') {
+            showToast("Chức năng đăng nhập chưa được cấu hình. Vui lòng liên hệ quản trị viên.", "error");
+            return;
+        }
+        try {
+            google.accounts.id.prompt();
+        } catch (error: any) {
+            console.error("Google One Tap prompt error:", error);
+            showToast("Không thể hiển thị cửa sổ đăng nhập. Vui lòng thử lại.", "error");
+        }
+    }, [showToast]);
 
     const logout = useCallback(async () => {
         if (!supabase) return;
-        // Fix: `signOut` is correct for both v1 and v2, but the error suggests a v1/v2 mismatch elsewhere.
         await supabase.auth.signOut();
     }, [supabase]);
 

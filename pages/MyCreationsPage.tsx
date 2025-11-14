@@ -4,6 +4,8 @@ import { GalleryImage } from '../types';
 import ImageModal from '../components/common/ImageModal';
 import ConfirmationModal from '../components/ConfirmationModal';
 
+const IMAGES_PER_PAGE = 20;
+
 const MyCreationsPage: React.FC = () => {
     const { session, showToast, updateUserDiamonds } = useAuth();
     const [images, setImages] = useState<GalleryImage[]>([]);
@@ -26,33 +28,31 @@ const MyCreationsPage: React.FC = () => {
         else setIsLoadingMore(true);
 
         try {
-            const response = await fetch(`/.netlify/functions/user-gallery?page=${page}`, { // Add page param
+            const response = await fetch(`/.netlify/functions/user-gallery?page=${page}`, {
                 headers: { Authorization: `Bearer ${session.access_token}` },
             });
             if (!response.ok) {
-                // If timeout or other server error, show a more helpful message
                 if (response.status === 502 || response.status === 504) {
                     throw new Error('Máy chủ đang bận, không thể tải tác phẩm. Vui lòng thử lại sau.');
                 }
                 throw new Error('Không thể tải các tác phẩm của bạn.');
             }
             
-            const data = await response.json(); // { images: [], total: number }
+            const data = await response.json(); // API now returns { images: [...] }
+            const fetchedImages = data.images || [];
             
             if (page === 1) {
-                setImages(data.images);
+                setImages(fetchedImages);
             } else {
-                setImages(prev => [...prev, ...data.images]);
+                setImages(prev => [...prev, ...fetchedImages]);
             }
 
-            // Check if there are more images to load
-            const totalLoaded = page * 20; // Backend returns 20 per page
-            setHasMore(totalLoaded < data.total);
+            // NEW: Infer if there are more pages by checking if a full page was returned.
+            setHasMore(fetchedImages.length === IMAGES_PER_PAGE);
             setCurrentPage(page);
 
         } catch (error: any) {
             showToast(error.message, 'error');
-            // If the first page fails, we want to stop the main loading spinner
             if (page === 1) setIsLoading(false);
         } finally {
             if (page === 1) setIsLoading(false);

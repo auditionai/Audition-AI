@@ -33,13 +33,14 @@ const handler: Handler = async (event: HandlerEvent) => {
         // --- END PAGINATION LOGIC ---
 
         // 2. Fetch user's images and their profile in parallel for efficiency.
+        // We remove the `count` operation to prevent timeouts on large user galleries.
         const [imagesResponse, userProfileResponse] = await Promise.all([
             supabaseAdmin
                 .from('generated_images')
-                .select('id, user_id, prompt, image_url, model_used, created_at, is_public', { count: 'exact' }) // Add count option
+                .select('id, user_id, prompt, image_url, model_used, created_at, is_public')
                 .eq('user_id', user.id)
                 .order('created_at', { ascending: false })
-                .range(from, to), // Apply range for pagination
+                .range(from, to),
             supabaseAdmin
                 .from('users')
                 .select('display_name, photo_url, xp')
@@ -47,14 +48,13 @@ const handler: Handler = async (event: HandlerEvent) => {
                 .single()
         ]);
 
-        const { data: images, error: imagesError, count: totalCount } = imagesResponse;
+        const { data: images, error: imagesError } = imagesResponse;
         const { data: userProfile, error: userProfileError } = userProfileResponse;
         
         if (imagesError) {
             throw new Error(`Database query failed for images: ${imagesError.message}`);
         }
         if (userProfileError) {
-            // This is a critical error if the user exists in auth but not in our public users table.
             console.error(`Could not fetch user profile for ${user.id}:`, userProfileError);
             throw new Error(`Database query failed for user profile: ${userProfileError.message}`);
         }
@@ -72,11 +72,11 @@ const handler: Handler = async (event: HandlerEvent) => {
             creator: creatorInfo,
         }));
 
+        // The response body now only contains the images array. The client will infer if there are more pages.
         return {
             statusCode: 200,
             body: JSON.stringify({
                 images: processedData,
-                total: totalCount || 0,
             }),
         };
 

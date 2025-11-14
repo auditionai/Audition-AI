@@ -58,8 +58,8 @@ const handler: Handler = async (event: HandlerEvent) => {
         
         // Process the data to calculate the level for the creator.
         const processedData = (images || []).map(image => {
-            // Supabase returns the joined 'creator' as an object because it's a to-one relationship.
-            const creatorData = image.creator; 
+            // FIX: Supabase might return an array for a joined table. Safely handle both object and array cases.
+            const creatorData = Array.isArray(image.creator) ? image.creator[0] : image.creator;
 
             if (!creatorData) {
                 // This case is unlikely but handled for safety.

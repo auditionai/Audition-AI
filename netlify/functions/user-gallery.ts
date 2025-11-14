@@ -7,7 +7,7 @@ const calculateLevelFromXp = (xp: number): number => {
     return Math.floor(xp / 100) + 1;
 };
 
-const IMAGES_PER_PAGE = 20; // Define a limit for pagination
+const IMAGES_PER_PAGE = 20;
 
 const handler: Handler = async (event: HandlerEvent) => {
     try {
@@ -26,53 +26,63 @@ const handler: Handler = async (event: HandlerEvent) => {
             return { statusCode: 401, body: JSON.stringify({ error: 'Invalid token.' }) };
         }
 
-        // --- PAGINATION LOGIC ---
         const page = parseInt(event.queryStringParameters?.page || '1', 10);
         const from = (page - 1) * IMAGES_PER_PAGE;
         const to = from + IMAGES_PER_PAGE - 1;
-        // --- END PAGINATION LOGIC ---
 
-        // 2. Fetch user's images and their profile in parallel for efficiency.
-        // We remove the `count` operation to prevent timeouts on large user galleries.
-        const [imagesResponse, userProfileResponse] = await Promise.all([
-            supabaseAdmin
-                .from('generated_images')
-                .select('id, user_id, prompt, image_url, model_used, created_at, is_public')
-                .eq('user_id', user.id)
-                .order('created_at', { ascending: false })
-                .range(from, to),
-            supabaseAdmin
-                .from('users')
-                .select('display_name, photo_url, xp')
-                .eq('id', user.id)
-                .single()
-        ]);
+        // OPTIMIZATION: Use a single query with a JOIN to fetch images and creator data together.
+        // This is much more efficient than the previous Promise.all approach and prevents timeouts.
+        const { data: images, error: imagesError } = await supabaseAdmin
+            .from('generated_images')
+            .select(`
+                id,
+                user_id,
+                prompt,
+                image_url,
+                model_used,
+                created_at,
+                is_public,
+                creator:users (
+                    display_name,
+                    photo_url,
+                    xp
+                )
+            `)
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false })
+            .range(from, to);
 
-        const { data: images, error: imagesError } = imagesResponse;
-        const { data: userProfile, error: userProfileError } = userProfileResponse;
-        
         if (imagesError) {
             throw new Error(`Database query failed for images: ${imagesError.message}`);
         }
-        if (userProfileError) {
-            console.error(`Could not fetch user profile for ${user.id}:`, userProfileError);
-            throw new Error(`Database query failed for user profile: ${userProfileError.message}`);
-        }
         
-        // 3. Create a reliable creator object from the fetched profile.
-        const creatorInfo = {
-            display_name: userProfile.display_name,
-            photo_url: userProfile.photo_url,
-            level: calculateLevelFromXp(userProfile.xp || 0),
-        };
+        // Process the data to calculate the level for the creator.
+        const processedData = (images || []).map(image => {
+            // Supabase returns the joined 'creator' as an object because it's a to-one relationship.
+            const creatorData = image.creator; 
 
-        // 4. Combine each image with the same creator info.
-        const processedData = (images || []).map(image => ({
-            ...image,
-            creator: creatorInfo,
-        }));
+            if (!creatorData) {
+                // This case is unlikely but handled for safety.
+                return {
+                    ...image,
+                    creator: {
+                        display_name: 'Vô danh',
+                        photo_url: '',
+                        level: 1,
+                    }
+                }
+            }
+            
+            return {
+                ...image,
+                creator: {
+                    display_name: creatorData.display_name,
+                    photo_url: creatorData.photo_url,
+                    level: calculateLevelFromXp(creatorData.xp || 0),
+                }
+            };
+        });
 
-        // The response body now only contains the images array. The client will infer if there are more pages.
         return {
             statusCode: 200,
             body: JSON.stringify({

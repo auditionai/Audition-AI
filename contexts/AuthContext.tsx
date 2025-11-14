@@ -100,7 +100,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         });
     }, []);
 
-    const fetchUserProfile = useCallback(async (session: any) => { // Now takes the whole session for the token
+    const fetchUserProfile = useCallback(async (session: any) => {
         if (!session?.access_token) return null;
         try {
             const response = await fetch('/.netlify/functions/user-profile', {
@@ -108,14 +108,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                     Authorization: `Bearer ${session.access_token}`,
                 },
             });
+            
+            // Any non-OK response from the now-robust server function is a genuine error.
             if (!response.ok) {
-                // If the profile doesn't exist yet (e.g., trigger lag), the function might return 500.
-                // This isn't a fatal error in that case. We just return null.
-                if (response.status === 404 || response.status === 500) {
-                     console.warn(`User profile not found or function error (${response.status}), will retry.`);
-                     return null;
-                }
-                // For other errors like 401, throw to be caught below.
                 const errorData = await response.json();
                 throw new Error(errorData.error || `Server responded with ${response.status}`);
             }
@@ -128,40 +123,29 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 return profile;
             }
             return null;
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error fetching user profile via function:', error);
-            // Do not show a toast here as it can be annoying during login retries
+            // This toast is now shown only on a definitive failure from the server.
+            showToast(error.message || "Không thể tải hồ sơ người dùng. Vui lòng thử đăng nhập lại.", "error");
             return null;
         }
-    }, []);
+    }, [showToast]);
 
     const fetchAndSetUser = useCallback(async (session: any) => {
-        let profile = null;
-        const MAX_RETRIES = 5;
-        let delay = 1000; // start with 1 second
-
-        for (let i = 0; i < MAX_RETRIES; i++) {
-            profile = await fetchUserProfile(session);
-            if (profile) {
-                break; // Profile found, exit loop
-            }
-            if (i < MAX_RETRIES - 1) {
-                console.log(`Profile fetch attempt ${i + 1} failed. Retrying in ${delay}ms...`);
-                await new Promise(resolve => setTimeout(resolve, delay));
-                delay *= 2; // Exponential backoff
-            }
-        }
+        // The server-side function now handles retries, so we just call it once.
+        const profile = await fetchUserProfile(session);
         
         if (!profile) {
-            console.error("CRITICAL: Failed to fetch user profile after multiple retries.");
-            showToast("Không thể tải hồ sơ người dùng. Vui lòng thử đăng nhập lại.", "error");
-            // Setting user to null will prevent entering the main app
+            // The error toast is already shown inside fetchUserProfile on failure.
+            console.error("CRITICAL: Server function failed to return a user profile.");
             setUser(null);
             return;
         }
         
+        let finalProfile = { ...profile };
+
         // If it's a new user (diamonds is at default 25), call function to update to 10
-        if (profile && profile.diamonds === 25) {
+        if (finalProfile.diamonds === 25) {
              try {
                 const response = await fetch('/.netlify/functions/set-initial-diamonds', {
                     method: 'POST',
@@ -171,15 +155,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                     const data = await response.json();
                     if (data.diamonds !== undefined) {
                         // Mutate the profile object before setting state to prevent UI flicker
-                        profile.diamonds = data.diamonds;
+                        finalProfile.diamonds = data.diamonds;
                     }
                 }
              } catch(e) {
                 console.error("Non-critical: Failed to update initial diamonds.", e);
              }
         }
-        setUser(profile);
-    }, [fetchUserProfile, showToast]);
+        setUser(finalProfile);
+    }, [fetchUserProfile]);
     
     useEffect(() => {
         if (initStarted.current) return;

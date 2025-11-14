@@ -1,6 +1,9 @@
 import { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
 
+const MAX_RETRIES = 4;
+const RETRY_DELAY = 500; // ms
+
 const handler: Handler = async (event: HandlerEvent) => {
     const authHeader = event.headers['authorization'];
     if (!authHeader) {
@@ -18,42 +21,74 @@ const handler: Handler = async (event: HandlerEvent) => {
         }
 
         if (event.httpMethod === 'GET') {
-            // This function now ensures a profile exists and returns it.
-            // It uses `upsert` to atomically handle creation or updates, avoiding race conditions.
-            
-            const userProfileData = {
-                id: user.id,
-                email: user.email || `${user.id}@auditionai.placeholder`,
-                display_name: user.user_metadata?.full_name || 'Tân Binh',
-                photo_url: user.user_metadata?.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${user.id}`,
-            };
+            let userProfile = null;
 
-            // Use `upsert`. This will INSERT if the user doesn't exist, or UPDATE if they do.
-            // This is atomic and prevents race conditions with the database trigger.
-            const { error: upsertError } = await supabaseAdmin
-                .from('users')
-                .upsert(userProfileData);
+            // 1. Poll for the user profile, expecting the DB trigger to create it.
+            for (let i = 0; i < MAX_RETRIES; i++) {
+                const { data, error } = await supabaseAdmin
+                    .from('users')
+                    .select('*')
+                    .eq('id', user.id)
+                    .single();
 
-            if (upsertError) {
-                // If the upsert fails, something is seriously wrong with the DB connection or schema.
-                console.error(`[user-profile] CRITICAL UPSERT FAILED for user ${user.id}:`, upsertError);
-                throw new Error(`Database operation failed: ${upsertError.message}`);
+                if (error && error.code !== 'PGRST116') { // PGRST116 = "No rows found"
+                    throw error; // A real database error occurred
+                }
+
+                if (data) {
+                    userProfile = data;
+                    break; // Profile found, exit loop
+                }
+
+                // Profile not found, wait and retry with increasing delay
+                await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * (i + 1)));
             }
 
-            // After ensuring the profile exists, fetch the complete and current profile.
-            // This guarantees we return the full profile with all default values (diamonds, xp, etc.).
-            const { data: finalProfile, error: fetchError } = await supabaseAdmin
-                .from('users')
-                .select('*')
-                .eq('id', user.id)
-                .single();
+            // 2. If polling fails, the trigger likely failed. Attempt a manual insert as a fallback.
+            if (!userProfile) {
+                console.warn(`[user-profile] Profile for ${user.id} not found after polling. DB trigger may have failed. Attempting manual insert.`);
+
+                const fallbackProfileData = {
+                    id: user.id,
+                    email: user.email || `${user.id}@auditionai.placeholder`,
+                    display_name: user.user_metadata?.full_name || 'Tân Binh',
+                    photo_url: user.user_metadata?.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${user.id}`,
+                };
+
+                const { data: insertedProfile, error: insertError } = await supabaseAdmin
+                    .from('users')
+                    .insert(fallbackProfileData)
+                    .select()
+                    .single();
+
+                if (insertError) {
+                    // It might fail with a unique constraint violation if the trigger finally ran.
+                    // In that case, we can try one last fetch.
+                    if (insertError.code === '23505') { // unique_violation
+                        console.log(`[user-profile] Manual insert failed due to race condition. Retrying final fetch.`);
+                        const { data: finalAttemptProfile, error: finalFetchError } = await supabaseAdmin
+                            .from('users')
+                            .select('*')
+                            .eq('id', user.id)
+                            .single();
+                        
+                        if (finalFetchError) throw finalFetchError;
+                        userProfile = finalAttemptProfile;
+                    } else {
+                        // A different error occurred during insert
+                        throw insertError;
+                    }
+                } else {
+                    userProfile = insertedProfile;
+                }
+            }
             
-            if (fetchError || !finalProfile) {
-                console.error(`[user-profile] FAILED TO FETCH profile for user ${user.id} AFTER upsert:`, fetchError);
-                throw new Error(`Could not retrieve user profile after creation/update.`);
+            // 3. If after all attempts we still don't have a profile, it's a critical failure.
+            if (!userProfile) {
+                 throw new Error(`CRITICAL: Unable to fetch or create profile for user ${user.id}.`);
             }
 
-            return { statusCode: 200, body: JSON.stringify(finalProfile) };
+            return { statusCode: 200, body: JSON.stringify(userProfile) };
         }
         
         if (event.httpMethod === 'PUT') {

@@ -100,17 +100,28 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         });
     }, []);
 
-    const fetchUserProfile = useCallback(async (supabaseUser: any, supabaseClient: SupabaseClient) => {
+    const fetchUserProfile = useCallback(async (session: any) => { // Now takes the whole session for the token
+        if (!session?.access_token) return null;
         try {
-            // ULTIMATE FIX: Use select('*') which is more resilient to RLS issues.
-            // It fetches all columns the user has read access to, preventing 406 errors
-            // if a specific column in a long select list is restricted.
-            const { data, error } = await supabaseClient
-                .from('users')
-                .select('*')
-                .eq('id', supabaseUser.id)
-                .single();
-            if (error && error.code !== 'PGRST116') throw error; // PGRST116 is "exact one row not found", which is a valid state.
+            const response = await fetch('/.netlify/functions/user-profile', {
+                headers: {
+                    Authorization: `Bearer ${session.access_token}`,
+                },
+            });
+            if (!response.ok) {
+                // If the profile doesn't exist yet (e.g., trigger lag), the function might return 500.
+                // This isn't a fatal error in that case. We just return null.
+                if (response.status === 404 || response.status === 500) {
+                     console.warn(`User profile not found or function error (${response.status}), will retry.`);
+                     return null;
+                }
+                // For other errors like 401, throw to be caught below.
+                const errorData = await response.json();
+                throw new Error(errorData.error || `Server responded with ${response.status}`);
+            }
+            
+            const data = await response.json();
+            
             if (data) {
                 const profile = data as User;
                 profile.level = calculateLevelFromXp(profile.xp ?? 0);
@@ -118,18 +129,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             }
             return null;
         } catch (error) {
-            console.error('Error fetching user profile:', error);
+            console.error('Error fetching user profile via function:', error);
+            // Do not show a toast here as it can be annoying during login retries
             return null;
         }
     }, []);
 
-    const fetchAndSetUser = useCallback(async (session: any, supabaseClient: SupabaseClient) => {
-        let profile = await fetchUserProfile(session.user, supabaseClient);
+    const fetchAndSetUser = useCallback(async (session: any) => { // No longer needs supabaseClient
+        let profile = await fetchUserProfile(session); // Takes the whole session
 
         // If profile doesn't exist yet (race condition with trigger), wait and retry once.
         if (!profile) {
             await new Promise(resolve => setTimeout(resolve, 1500));
-            profile = await fetchUserProfile(session.user, supabaseClient);
+            profile = await fetchUserProfile(session);
         }
         
         // If it's a new user (diamonds is at default 25), call function to update to 10
@@ -176,7 +188,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 setSession(currentSession);
                 
                 if (currentSession) {
-                    await fetchAndSetUser(currentSession, supabaseClient);
+                    await fetchAndSetUser(currentSession);
                     if (getRouteFromPath(window.location.pathname) === 'home') {
                         navigate('tool');
                     }
@@ -186,7 +198,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                     async (_event, newSession) => {
                         setSession(newSession);
                         if (newSession?.user) {
-                            await fetchAndSetUser(newSession, supabaseClient);
+                            await fetchAndSetUser(newSession);
                             if (_event === 'SIGNED_IN') navigate('tool');
                         } else {
                             setUser(null);

@@ -102,6 +102,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const fetchUserProfile = useCallback(async (supabaseUser: any, supabaseClient: SupabaseClient) => {
         try {
+            // FIX: The query to 'users' after login is failing with a 406 error, likely due to a restrictive
+            // RLS policy in the new Supabase project that doesn't grant SELECT permission on all columns.
+            // By reducing the query to a core set of columns, we increase the chance of success and allow login to complete.
             const { data, error } = await supabaseClient
                 .from('users')
                 .select('id, display_name, email, photo_url, diamonds, xp, is_admin, last_check_in_at, consecutive_check_in_days, last_announcement_seen_id')

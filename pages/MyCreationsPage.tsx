@@ -15,20 +15,24 @@ const MyCreationsPage: React.FC = () => {
     const [imageToShare, setImageToShare] = useState<GalleryImage | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
 
-    // --- PAGINATION STATE ---
-    const [currentPage, setCurrentPage] = useState(1);
+    // --- CURSOR PAGINATION STATE ---
     const [hasMore, setHasMore] = useState(true);
     const [isLoadingMore, setIsLoadingMore] = useState(false);
     // --- END PAGINATION STATE ---
 
-    const fetchUserGallery = useCallback(async (page: number) => {
+    const fetchUserGallery = useCallback(async (cursor: string | null) => {
         if (!session || !user) return;
         
-        if (page === 1) setIsLoading(true);
+        const isInitialLoad = cursor === null;
+        if (isInitialLoad) setIsLoading(true);
         else setIsLoadingMore(true);
 
         try {
-            const response = await fetch(`/.netlify/functions/user-gallery?page=${page}`, {
+            const url = isInitialLoad
+                ? `/.netlify/functions/user-gallery`
+                : `/.netlify/functions/user-gallery?cursor=${encodeURIComponent(cursor)}`;
+
+            const response = await fetch(url, {
                 headers: { Authorization: `Bearer ${session.access_token}` },
             });
             if (!response.ok) {
@@ -41,7 +45,7 @@ const MyCreationsPage: React.FC = () => {
             const data = await response.json();
             const fetchedImages: Omit<GalleryImage, 'creator'>[] = data.images || [];
             
-            // NEW: Use the local user object to construct creator info, avoiding backend joins.
+            // Use the local user object to construct creator info, avoiding backend joins.
             const creatorInfo = {
                 display_name: user.display_name,
                 photo_url: user.photo_url,
@@ -53,33 +57,34 @@ const MyCreationsPage: React.FC = () => {
                 creator: creatorInfo,
             }));
 
-            if (page === 1) {
+            if (isInitialLoad) {
                 setImages(imagesWithCreator);
             } else {
                 setImages(prev => [...prev, ...imagesWithCreator]);
             }
 
             setHasMore(imagesWithCreator.length === IMAGES_PER_PAGE);
-            setCurrentPage(page);
 
         } catch (error: any) {
             showToast(error.message, 'error');
-            if (page === 1) setIsLoading(false);
         } finally {
-            if (page === 1) setIsLoading(false);
+            setIsLoading(false);
             setIsLoadingMore(false);
         }
     }, [session, showToast, user]);
 
 
     useEffect(() => {
-        fetchUserGallery(1); // Fetch first page on mount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [session, user]); // Re-run if user object becomes available
+        // The dependency array ensures this only runs once when the user session becomes available.
+        if (session && user) {
+            fetchUserGallery(null); // Fetch first page on mount
+        }
+    }, [session, user, fetchUserGallery]);
 
     const handleLoadMore = () => {
-        if (!isLoadingMore && hasMore) {
-            fetchUserGallery(currentPage + 1);
+        if (!isLoadingMore && hasMore && images.length > 0) {
+            const nextCursor = images[images.length - 1].created_at;
+            fetchUserGallery(nextCursor);
         }
     };
     

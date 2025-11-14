@@ -20,19 +20,24 @@ const handler: Handler = async (event: HandlerEvent) => {
             return { statusCode: 401, body: JSON.stringify({ error: 'Invalid token.' }) };
         }
 
-        const page = parseInt(event.queryStringParameters?.page || '1', 10);
-        const from = (page - 1) * IMAGES_PER_PAGE;
-        const to = from + IMAGES_PER_PAGE - 1;
+        const cursor = event.queryStringParameters?.cursor;
 
-        // --- THE ULTIMATE OPTIMIZATION: ONLY FETCH IMAGES ---
-        // The client already has the user's data. We avoid touching the 'users' table entirely
-        // to prevent any possibility of a row lock from the XP update function causing a timeout.
-        const { data: images, error: imagesError } = await supabaseAdmin
+        // --- HIGH-PERFORMANCE CURSOR PAGINATION ---
+        // Instead of using page numbers and offsets which are slow on large tables,
+        // we use keyset pagination (a "cursor") based on the `created_at` timestamp.
+        let query = supabaseAdmin
             .from('generated_images')
             .select('id, user_id, prompt, image_url, model_used, created_at, is_public')
             .eq('user_id', user.id)
             .order('created_at', { ascending: false })
-            .range(from, to);
+            .limit(IMAGES_PER_PAGE);
+
+        // If a cursor is provided, fetch items created *before* the cursor's timestamp.
+        if (cursor) {
+            query = query.lt('created_at', cursor);
+        }
+
+        const { data: images, error: imagesError } = await query;
 
         if (imagesError) {
             throw new Error(`Database query failed for images: ${imagesError.message}`);

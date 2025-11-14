@@ -1,8 +1,6 @@
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
 
-const IMAGES_PER_PAGE = 20;
-
 const handler: Handler = async (event: HandlerEvent) => {
     try {
         if (event.httpMethod !== 'GET') {
@@ -15,39 +13,42 @@ const handler: Handler = async (event: HandlerEvent) => {
             return { statusCode: 401, body: JSON.stringify({ error: 'Token is missing.' }) };
         }
 
+        // 1. Authenticate the user
+        // FIX: Use Supabase v2 method `getUser` instead of v1 `api.getUser`.
         const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
         if (authError || !user) {
             return { statusCode: 401, body: JSON.stringify({ error: 'Invalid token.' }) };
         }
 
-        // --- CURSOR-BASED PAGINATION ---
-        // This is a "smarter" and more scalable approach than offset-based pagination.
-        // It avoids slow database queries for users with many images.
-        const cursor = event.queryStringParameters?.cursor;
-
-        let query = supabaseAdmin
+        // 2. Fetch all images created by this user, NOW including the is_public status.
+        const { data: images, error: imagesError } = await supabaseAdmin
             .from('generated_images')
             .select('id, user_id, prompt, image_url, model_used, created_at, is_public')
             .eq('user_id', user.id)
-            .order('created_at', { ascending: false })
-            .limit(IMAGES_PER_PAGE);
-        
-        // If a cursor is provided, fetch images older than the cursor
-        if (cursor) {
-            query = query.lt('created_at', cursor);
-        }
-
-        const { data: images, error: imagesError } = await query;
+            .order('created_at', { ascending: false });
 
         if (imagesError) {
-            throw new Error(`Database query failed for images: ${imagesError.message}`);
+            // This error might be triggered if the column wasn't added correctly.
+            throw new Error(`Database query failed: ${imagesError.message}`);
         }
         
+        // 3. Create a creator object using GUARANTEED available data from the auth token.
+        // This avoids querying the 'users' table, which was the source of previous 500 errors.
+        const creatorInfo = {
+            display_name: user.user_metadata?.full_name || 'Bạn',
+            photo_url: user.user_metadata?.avatar_url || 'https://i.pravatar.cc/150',
+            level: 1, // Using a default level is acceptable to ensure the gallery loads.
+        };
+
+        // 4. Combine images with the reliable creator info.
+        const processedData = (images || []).map(image => ({
+            ...image,
+            creator: creatorInfo,
+        }));
+
         return {
             statusCode: 200,
-            body: JSON.stringify({
-                images: images || [],
-            }),
+            body: JSON.stringify(processedData),
         };
 
     } catch (error: any) {

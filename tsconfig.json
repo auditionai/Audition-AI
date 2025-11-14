@@ -26,7 +26,8 @@
     "dist",
     "vite.config.ts",
     "tailwind.config.js",
-    "postcss.config.js"
+    "postcss.config.js",
+    "netlify"
   ],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

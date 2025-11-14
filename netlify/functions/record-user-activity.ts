@@ -20,6 +20,26 @@ const handler: Handler = async (event: HandlerEvent) => {
     }
 
     try {
+        // SAFEGUARD: Check if the user profile exists before proceeding.
+        // This prevents errors if this function is called before the profile is created.
+        const { count, error: countError } = await supabaseAdmin
+            .from('users')
+            .select('*', { count: 'exact', head: true })
+            .eq('id', user.id);
+
+        if (countError) {
+            throw countError; // A real DB error happened
+        }
+
+        // If no profile exists, exit gracefully. The profile will be created soon.
+        if (count === 0) {
+            console.warn(`[record-user-activity] User profile for ${user.id} not found. Skipping activity log for now.`);
+            return {
+                statusCode: 200,
+                body: JSON.stringify({ success: true, message: 'User profile not yet available, skipping.' }),
+            };
+        }
+        
         // Use Promise.all to run both operations in parallel for efficiency
         const [xpResult, activityResult] = await Promise.all([
             // 1. Increment user XP

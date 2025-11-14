@@ -7,7 +7,7 @@ import ConfirmationModal from '../components/ConfirmationModal';
 const IMAGES_PER_PAGE = 20;
 
 const MyCreationsPage: React.FC = () => {
-    const { session, showToast, updateUserDiamonds } = useAuth();
+    const { session, showToast, updateUserDiamonds, user } = useAuth();
     const [images, setImages] = useState<GalleryImage[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [selectedImage, setSelectedImage] = useState<GalleryImage | null>(null);
@@ -22,7 +22,7 @@ const MyCreationsPage: React.FC = () => {
     // --- END PAGINATION STATE ---
 
     const fetchUserGallery = useCallback(async (page: number) => {
-        if (!session) return;
+        if (!session || !user) return;
         
         if (page === 1) setIsLoading(true);
         else setIsLoadingMore(true);
@@ -38,17 +38,28 @@ const MyCreationsPage: React.FC = () => {
                 throw new Error('Không thể tải các tác phẩm của bạn.');
             }
             
-            const data = await response.json(); // API now returns { images: [...] }
-            const fetchedImages = data.images || [];
+            const data = await response.json();
+            const fetchedImages: Omit<GalleryImage, 'creator'>[] = data.images || [];
             
+            // NEW: Use the local user object to construct creator info, avoiding backend joins.
+            const creatorInfo = {
+                display_name: user.display_name,
+                photo_url: user.photo_url,
+                level: user.level,
+            };
+
+            const imagesWithCreator: GalleryImage[] = fetchedImages.map(img => ({
+                ...img,
+                creator: creatorInfo,
+            }));
+
             if (page === 1) {
-                setImages(fetchedImages);
+                setImages(imagesWithCreator);
             } else {
-                setImages(prev => [...prev, ...fetchedImages]);
+                setImages(prev => [...prev, ...imagesWithCreator]);
             }
 
-            // NEW: Infer if there are more pages by checking if a full page was returned.
-            setHasMore(fetchedImages.length === IMAGES_PER_PAGE);
+            setHasMore(imagesWithCreator.length === IMAGES_PER_PAGE);
             setCurrentPage(page);
 
         } catch (error: any) {
@@ -58,13 +69,13 @@ const MyCreationsPage: React.FC = () => {
             if (page === 1) setIsLoading(false);
             setIsLoadingMore(false);
         }
-    }, [session, showToast]);
+    }, [session, showToast, user]);
 
 
     useEffect(() => {
         fetchUserGallery(1); // Fetch first page on mount
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [session]); // Only re-run when session changes
+    }, [session, user]); // Re-run if user object becomes available
 
     const handleLoadMore = () => {
         if (!isLoadingMore && hasMore) {

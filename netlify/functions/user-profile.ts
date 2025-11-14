@@ -1,17 +1,15 @@
 import { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
 
-const MAX_RETRIES = 4;
-const RETRY_DELAY = 500; // ms
-
 const handler: Handler = async (event: HandlerEvent) => {
+    // 1. Authenticate user
     const authHeader = event.headers['authorization'];
     if (!authHeader) {
-        return { statusCode: 401, body: JSON.stringify({ error: 'Authorization header is required.' }) };
+        return { statusCode: 401, body: JSON.stringify({ error: 'Authorization header required.' }) };
     }
     const token = authHeader.split(' ')[1];
     if (!token) {
-        return { statusCode: 401, body: JSON.stringify({ error: 'Bearer token is missing.' }) };
+        return { statusCode: 401, body: JSON.stringify({ error: 'Bearer token missing.' }) };
     }
 
     try {
@@ -20,77 +18,52 @@ const handler: Handler = async (event: HandlerEvent) => {
             return { statusCode: 401, body: JSON.stringify({ error: `Unauthorized: ${authError?.message || 'Invalid token.'}` }) };
         }
 
+        // --- GET Method: Get or Create User Profile ---
         if (event.httpMethod === 'GET') {
-            let userProfile = null;
+            // 2. Prepare profile data with safe defaults for the upsert operation.
+            const profileToUpsert = {
+                id: user.id,
+                email: user.email || `${user.id}@auditionai.placeholder`,
+                display_name: user.user_metadata?.full_name || 'Tân Binh',
+                photo_url: user.user_metadata?.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${user.id}`,
+            };
 
-            // 1. Poll for the user profile, expecting the DB trigger to create it.
-            for (let i = 0; i < MAX_RETRIES; i++) {
-                const { data, error } = await supabaseAdmin
-                    .from('users')
-                    .select('*')
-                    .eq('id', user.id)
-                    .single();
+            // 3. Perform an atomic UPSERT.
+            // This inserts the user if they don't exist, or does nothing if they do (based on primary key `id`).
+            // This completely prevents race conditions.
+            const { error: upsertError } = await supabaseAdmin
+                .from('users')
+                .upsert(profileToUpsert);
 
-                if (error && error.code !== 'PGRST116') { // PGRST116 = "No rows found"
-                    throw error; // A real database error occurred
-                }
-
-                if (data) {
-                    userProfile = data;
-                    break; // Profile found, exit loop
-                }
-
-                // Profile not found, wait and retry with increasing delay
-                await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * (i + 1)));
+            if (upsertError) {
+                console.error('[user-profile] Upsert failed:', upsertError);
+                throw new Error(`Database error during profile creation: ${upsertError.message}`);
             }
 
-            // 2. If polling fails, the trigger likely failed. Attempt a manual insert as a fallback.
-            if (!userProfile) {
-                console.warn(`[user-profile] Profile for ${user.id} not found after polling. DB trigger may have failed. Attempting manual insert.`);
+            // 4. Fetch the complete profile. It is now GUARANTEED to exist.
+            // CRITICAL FIX: Do NOT use .single(). Fetch as an array and take the first element.
+            // This makes the function resilient to pre-existing duplicate user entries.
+            const { data: userProfiles, error: fetchError } = await supabaseAdmin
+                .from('users')
+                .select('*')
+                .eq('id', user.id);
 
-                const fallbackProfileData = {
-                    id: user.id,
-                    email: user.email || `${user.id}@auditionai.placeholder`,
-                    display_name: user.user_metadata?.full_name || 'Tân Binh',
-                    photo_url: user.user_metadata?.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${user.id}`,
-                };
+            if (fetchError) {
+                throw new Error(`Database error fetching profile: ${fetchError.message}`);
+            }
 
-                const { data: insertedProfile, error: insertError } = await supabaseAdmin
-                    .from('users')
-                    .insert(fallbackProfileData)
-                    .select()
-                    .single();
-
-                if (insertError) {
-                    // It might fail with a unique constraint violation if the trigger finally ran.
-                    // In that case, we can try one last fetch.
-                    if (insertError.code === '23505') { // unique_violation
-                        console.log(`[user-profile] Manual insert failed due to race condition. Retrying final fetch.`);
-                        const { data: finalAttemptProfile, error: finalFetchError } = await supabaseAdmin
-                            .from('users')
-                            .select('*')
-                            .eq('id', user.id)
-                            .single();
-                        
-                        if (finalFetchError) throw finalFetchError;
-                        userProfile = finalAttemptProfile;
-                    } else {
-                        // A different error occurred during insert
-                        throw insertError;
-                    }
-                } else {
-                    userProfile = insertedProfile;
-                }
+            if (!userProfiles || userProfiles.length === 0) {
+                 // This case should be virtually impossible after a successful upsert.
+                throw new Error(`CRITICAL: Profile for user ${user.id} not found after successful upsert.`);
             }
             
-            // 3. If after all attempts we still don't have a profile, it's a critical failure.
-            if (!userProfile) {
-                 throw new Error(`CRITICAL: Unable to fetch or create profile for user ${user.id}.`);
-            }
+            // Return the first profile found, ignoring potential duplicates.
+            const userProfile = userProfiles[0];
 
             return { statusCode: 200, body: JSON.stringify(userProfile) };
         }
         
+        // --- PUT Method: Update User Profile ---
         if (event.httpMethod === 'PUT') {
             const { display_name } = JSON.parse(event.body || '{}');
 
@@ -106,7 +79,6 @@ const handler: Handler = async (event: HandlerEvent) => {
                 .single();
 
             if (error) {
-                // Let the main catch block handle this for consistent error logging
                 throw error;
             }
             return { statusCode: 200, body: JSON.stringify(data) };

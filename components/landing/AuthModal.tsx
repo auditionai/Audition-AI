@@ -13,12 +13,14 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
 
     const handleGoogleLogin = async () => {
         setIsLoading(true);
-        try {
-            await login();
-            // Auth state change will handle closing the modal on success
-        } catch {
-            setIsLoading(false); // Only stop loading on error
+        const success = await login();
+        if (!success) {
+            // If the login prompt failed to start (e.g., missing client_id),
+            // reset the loading state so the user isn't stuck.
+            setIsLoading(false);
         }
+        // If login() was successful, isLoading remains true, and we wait for the
+        // Google callback and Supabase auth state change to navigate away or close the modal.
     }
     
     // Reset loading state when modal is closed

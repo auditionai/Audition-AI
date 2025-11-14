@@ -34,7 +34,7 @@ interface AuthContextType {
     announcement: Announcement | null;
     showAnnouncementModal: boolean;
     supabase: SupabaseClient | null; // Expose supabase client
-    login: () => Promise<void>;
+    login: () => Promise<boolean>;
     logout: () => Promise<void>;
     updateUserDiamonds: (newAmount: number) => void;
     updateUserProfile: (updates: Partial<User>) => void;
@@ -342,17 +342,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }, [user?.last_check_in_at]);
 
     // NEW: Use Google One Tap prompt for login
-    const login = useCallback(async () => {
+    const login = useCallback(async (): Promise<boolean> => {
         const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
         if (!googleClientId || typeof google === 'undefined') {
             showToast("Chức năng đăng nhập chưa được cấu hình. Vui lòng liên hệ quản trị viên.", "error");
-            return;
+            return false;
         }
         try {
             google.accounts.id.prompt();
+            return true;
         } catch (error: any) {
             console.error("Google One Tap prompt error:", error);
             showToast("Không thể hiển thị cửa sổ đăng nhập. Vui lòng thử lại.", "error");
+            return false;
         }
     }, [showToast]);
 

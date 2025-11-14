@@ -135,13 +135,29 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
     }, []);
 
-    const fetchAndSetUser = useCallback(async (session: any) => { // No longer needs supabaseClient
-        let profile = await fetchUserProfile(session); // Takes the whole session
+    const fetchAndSetUser = useCallback(async (session: any) => {
+        let profile = null;
+        const MAX_RETRIES = 5;
+        let delay = 1000; // start with 1 second
 
-        // If profile doesn't exist yet (race condition with trigger), wait and retry once.
-        if (!profile) {
-            await new Promise(resolve => setTimeout(resolve, 1500));
+        for (let i = 0; i < MAX_RETRIES; i++) {
             profile = await fetchUserProfile(session);
+            if (profile) {
+                break; // Profile found, exit loop
+            }
+            if (i < MAX_RETRIES - 1) {
+                console.log(`Profile fetch attempt ${i + 1} failed. Retrying in ${delay}ms...`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+                delay *= 2; // Exponential backoff
+            }
+        }
+        
+        if (!profile) {
+            console.error("CRITICAL: Failed to fetch user profile after multiple retries.");
+            showToast("Không thể tải hồ sơ người dùng. Vui lòng thử đăng nhập lại.", "error");
+            // Setting user to null will prevent entering the main app
+            setUser(null);
+            return;
         }
         
         // If it's a new user (diamonds is at default 25), call function to update to 10
@@ -163,7 +179,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
              }
         }
         setUser(profile);
-    }, [fetchUserProfile]);
+    }, [fetchUserProfile, showToast]);
     
     useEffect(() => {
         if (initStarted.current) return;

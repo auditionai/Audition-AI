@@ -11,7 +11,6 @@ const handler: Handler = async (event: HandlerEvent) => {
         return { statusCode: 401, body: JSON.stringify({ error: 'Bearer token is missing.' }) };
     }
 
-    // FIX: Use Supabase v2 method `getUser` instead of v1 `api.getUser`.
     const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
 
     if (authError || !user) {
@@ -20,16 +19,29 @@ const handler: Handler = async (event: HandlerEvent) => {
 
     switch (event.httpMethod) {
         case 'GET': {
-            const { data, error } = await supabaseAdmin
+            const { data: profile, error: fetchError } = await supabaseAdmin
                 .from('users')
                 .select('*')
                 .eq('id', user.id)
                 .single();
 
-            if (error) {
-                return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
+            if (fetchError) {
+                // If the error code indicates "No rows found", this is expected if the DB trigger is slow.
+                // Return a 404, and the client-side logic will handle the retry.
+                if (fetchError.code === 'PGRST116') {
+                    return { statusCode: 404, body: JSON.stringify({ error: 'User profile not found. Client should retry.' }) };
+                }
+                // For any other unexpected database error, it's a 500.
+                console.error(`Database error fetching profile for ${user.id}:`, fetchError);
+                return { statusCode: 500, body: JSON.stringify({ error: `Database error: ${fetchError.message}` }) };
             }
-            return { statusCode: 200, body: JSON.stringify(data) };
+
+            if (profile) {
+                return { statusCode: 200, body: JSON.stringify(profile) };
+            }
+            
+            // Fallback case, should be covered by PGRST116.
+            return { statusCode: 404, body: JSON.stringify({ error: 'User profile not found.' }) };
         }
 
         case 'PUT': {

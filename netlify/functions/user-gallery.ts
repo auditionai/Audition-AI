@@ -20,19 +20,22 @@ const handler: Handler = async (event: HandlerEvent) => {
             return { statusCode: 401, body: JSON.stringify({ error: 'Invalid token.' }) };
         }
 
-        // --- REVERT TO OFFSET-BASED PAGINATION ---
-        // The cursor-based method caused severe timeouts, likely due to a missing index.
-        // Reverting to offset pagination is safer and prevents system-wide hangs.
-        const page = event.queryStringParameters?.page ? parseInt(event.queryStringParameters.page, 10) : 1;
-        const from = (page - 1) * IMAGES_PER_PAGE;
-        const to = from + IMAGES_PER_PAGE - 1;
+        // --- CURSOR-BASED PAGINATION ---
+        // This is a "smarter" and more scalable approach than offset-based pagination.
+        // It avoids slow database queries for users with many images.
+        const cursor = event.queryStringParameters?.cursor;
 
         let query = supabaseAdmin
             .from('generated_images')
             .select('id, user_id, prompt, image_url, model_used, created_at, is_public')
             .eq('user_id', user.id)
             .order('created_at', { ascending: false })
-            .range(from, to);
+            .limit(IMAGES_PER_PAGE);
+        
+        // If a cursor is provided, fetch images older than the cursor
+        if (cursor) {
+            query = query.lt('created_at', cursor);
+        }
 
         const { data: images, error: imagesError } = await query;
 
@@ -43,7 +46,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         return {
             statusCode: 200,
             body: JSON.stringify({
-                images: images || [], // Return just the images, client will add creator info
+                images: images || [],
             }),
         };
 

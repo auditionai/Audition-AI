@@ -15,22 +15,24 @@ const MyCreationsPage: React.FC = () => {
     const [imageToShare, setImageToShare] = useState<GalleryImage | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
 
-    // --- PAGE-BASED PAGINATION STATE ---
-    const [currentPage, setCurrentPage] = useState(1);
+    // --- CURSOR-BASED PAGINATION STATE ---
+    const [cursor, setCursor] = useState<string | null>(null);
     const [hasMore, setHasMore] = useState(true);
     const [isLoadingMore, setIsLoadingMore] = useState(false);
-    const initialFetchDone = useRef(false); // CRITICAL FIX: Prevents refetching on user object changes (e.g., XP updates)
-    // --- END PAGINATION STATE ---
+    const initialFetchDone = useRef(false);
 
-    const fetchUserGallery = useCallback(async (page: number) => {
+    const fetchUserGallery = useCallback(async (currentCursor: string | null) => {
         if (!session || !user) return;
         
-        const isInitialLoad = page === 1;
+        const isInitialLoad = !currentCursor;
         if (isInitialLoad) setIsLoading(true);
         else setIsLoadingMore(true);
 
         try {
-            const url = `/.netlify/functions/user-gallery?page=${page}`;
+            let url = `/.netlify/functions/user-gallery`;
+            if (currentCursor) {
+                url += `?cursor=${encodeURIComponent(currentCursor)}`;
+            }
 
             const response = await fetch(url, {
                 headers: { Authorization: `Bearer ${session.access_token}` },
@@ -45,7 +47,6 @@ const MyCreationsPage: React.FC = () => {
             const data = await response.json();
             const fetchedImages: Omit<GalleryImage, 'creator'>[] = data.images || [];
             
-            // Use the local user object to construct creator info, avoiding backend joins.
             const creatorInfo = {
                 display_name: user.display_name,
                 photo_url: user.photo_url,
@@ -63,10 +64,16 @@ const MyCreationsPage: React.FC = () => {
                 setImages(prev => [...prev, ...imagesWithCreator]);
             }
 
-            setHasMore(imagesWithCreator.length === IMAGES_PER_PAGE);
+            if (fetchedImages.length < IMAGES_PER_PAGE) {
+                setHasMore(false);
+            } else {
+                const lastImage = fetchedImages[fetchedImages.length - 1];
+                setCursor(lastImage.created_at);
+            }
 
         } catch (error: any) {
             showToast(error.message, 'error');
+            setHasMore(false); // Stop trying to load more on error
         } finally {
             setIsLoading(false);
             setIsLoadingMore(false);
@@ -75,20 +82,15 @@ const MyCreationsPage: React.FC = () => {
 
 
     useEffect(() => {
-        // CRITICAL FIX: The `initialFetchDone` ref ensures this effect's logic runs only ONCE,
-        // even if the `user` object in the dependency array changes frequently (e.g., from XP updates).
-        // This prevents the constant, expensive refetching that was causing system-wide timeouts.
         if (session && user && !initialFetchDone.current) {
             initialFetchDone.current = true;
-            fetchUserGallery(1);
+            fetchUserGallery(null); // Initial fetch with a null cursor
         }
     }, [session, user, fetchUserGallery]);
 
     const handleLoadMore = () => {
         if (!isLoadingMore && hasMore) {
-            const nextPage = currentPage + 1;
-            setCurrentPage(nextPage);
-            fetchUserGallery(nextPage);
+            fetchUserGallery(cursor);
         }
     };
     
@@ -235,7 +237,6 @@ const MyCreationsPage: React.FC = () => {
                             </div>
                         ))}
                     </div>
-                     {/* --- LOAD MORE BUTTON --- */}
                     {hasMore && (
                         <div className="text-center mt-12">
                             <button

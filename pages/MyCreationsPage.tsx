@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { GalleryImage } from '../types';
 import ImageModal from '../components/common/ImageModal';
@@ -15,22 +15,22 @@ const MyCreationsPage: React.FC = () => {
     const [imageToShare, setImageToShare] = useState<GalleryImage | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
 
-    // --- CURSOR PAGINATION STATE ---
+    // --- PAGE-BASED PAGINATION STATE ---
+    const [currentPage, setCurrentPage] = useState(1);
     const [hasMore, setHasMore] = useState(true);
     const [isLoadingMore, setIsLoadingMore] = useState(false);
+    const initialFetchDone = useRef(false); // CRITICAL FIX: Prevents refetching on user object changes (e.g., XP updates)
     // --- END PAGINATION STATE ---
 
-    const fetchUserGallery = useCallback(async (cursor: string | null) => {
+    const fetchUserGallery = useCallback(async (page: number) => {
         if (!session || !user) return;
         
-        const isInitialLoad = cursor === null;
+        const isInitialLoad = page === 1;
         if (isInitialLoad) setIsLoading(true);
         else setIsLoadingMore(true);
 
         try {
-            const url = isInitialLoad
-                ? `/.netlify/functions/user-gallery`
-                : `/.netlify/functions/user-gallery?cursor=${encodeURIComponent(cursor)}`;
+            const url = `/.netlify/functions/user-gallery?page=${page}`;
 
             const response = await fetch(url, {
                 headers: { Authorization: `Bearer ${session.access_token}` },
@@ -75,16 +75,20 @@ const MyCreationsPage: React.FC = () => {
 
 
     useEffect(() => {
-        // The dependency array ensures this only runs once when the user session becomes available.
-        if (session && user) {
-            fetchUserGallery(null); // Fetch first page on mount
+        // CRITICAL FIX: The `initialFetchDone` ref ensures this effect's logic runs only ONCE,
+        // even if the `user` object in the dependency array changes frequently (e.g., from XP updates).
+        // This prevents the constant, expensive refetching that was causing system-wide timeouts.
+        if (session && user && !initialFetchDone.current) {
+            initialFetchDone.current = true;
+            fetchUserGallery(1);
         }
     }, [session, user, fetchUserGallery]);
 
     const handleLoadMore = () => {
-        if (!isLoadingMore && hasMore && images.length > 0) {
-            const nextCursor = images[images.length - 1].created_at;
-            fetchUserGallery(nextCursor);
+        if (!isLoadingMore && hasMore) {
+            const nextPage = currentPage + 1;
+            setCurrentPage(nextPage);
+            fetchUserGallery(nextPage);
         }
     };
     

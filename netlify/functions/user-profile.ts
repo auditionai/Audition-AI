@@ -20,47 +20,45 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         // --- GET Method: Get or Create User Profile ---
         if (event.httpMethod === 'GET') {
-            // 2. Prepare profile data with safe defaults for the upsert operation.
-            const profileToUpsert = {
-                id: user.id,
-                email: user.email || `${user.id}@auditionai.placeholder`,
+            // Step 1: Prepare the profile data with safe defaults.
+            const profileData = {
+                id: user.id, // The NEW, correct ID from auth.users
+                email: user.email!, // The email that might be causing a conflict
                 display_name: user.user_metadata?.full_name || 'Tân Binh',
                 photo_url: user.user_metadata?.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${user.id}`,
             };
 
-            // 3. Perform an atomic UPSERT.
-            // This inserts the user if they don't exist, or does nothing if they do (based on primary key `id`).
-            // This completely prevents race conditions.
+            if (!profileData.email) {
+                throw new Error("User email is missing from JWT, cannot create profile.");
+            }
+
+            // Step 2: Perform an atomic UPSERT using the 'email' column for conflict resolution.
+            // If a user with this email exists, it will UPDATE the row with the new data (including the new ID).
+            // If not, it will INSERT a new row. This permanently fixes the "orphan profile" issue.
             const { error: upsertError } = await supabaseAdmin
                 .from('users')
-                .upsert(profileToUpsert);
-
+                .upsert(profileData, {
+                    onConflict: 'email',
+                });
+            
             if (upsertError) {
-                console.error('[user-profile] Upsert failed:', upsertError);
+                // This will now only trigger on a real database issue, not a simple duplicate.
                 throw new Error(`Database error during profile creation: ${upsertError.message}`);
             }
 
-            // 4. Fetch the complete profile. It is now GUARANTEED to exist.
-            // CRITICAL FIX: Do NOT use .single(). Fetch as an array and take the first element.
-            // This makes the function resilient to pre-existing duplicate user entries.
-            const { data: userProfiles, error: fetchError } = await supabaseAdmin
+            // Step 3: Now that the profile is guaranteed to exist and have the correct ID, fetch it.
+            const { data: finalProfile, error: fetchError } = await supabaseAdmin
                 .from('users')
                 .select('*')
-                .eq('id', user.id);
+                .eq('id', user.id)
+                .single(); // We can safely use single() because the ID is now unique and correct.
 
             if (fetchError) {
-                throw new Error(`Database error fetching profile: ${fetchError.message}`);
+                // This would be an unexpected error after a successful upsert.
+                throw new Error(`Failed to fetch profile after upsert: ${fetchError.message}`);
             }
 
-            if (!userProfiles || userProfiles.length === 0) {
-                 // This case should be virtually impossible after a successful upsert.
-                throw new Error(`CRITICAL: Profile for user ${user.id} not found after successful upsert.`);
-            }
-            
-            // Return the first profile found, ignoring potential duplicates.
-            const userProfile = userProfiles[0];
-
-            return { statusCode: 200, body: JSON.stringify(userProfile) };
+            return { statusCode: 200, body: JSON.stringify(finalProfile) };
         }
         
         // --- PUT Method: Update User Profile ---

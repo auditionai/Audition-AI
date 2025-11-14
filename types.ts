@@ -1,15 +1,10 @@
-import type React from 'react';
+import React from 'react';
 
-// NEW: Shared type for detailed dashboard statistics
-export interface DashboardStats {
-    visitsToday: number;
-    totalVisits: number;
-    newUsersToday: number;
-    totalUsers: number;
-    imagesToday: number;
-    totalImages: number;
+export interface Stats {
+  users: number;
+  visits: number;
+  images: number;
 }
-
 
 export interface Feature {
   icon: React.ReactNode;
@@ -185,18 +180,6 @@ export interface CheckInReward {
     consecutive_days: number;
     diamond_reward: number;
     xp_reward: number;
-    is_active: boolean;
-    created_at: string;
-}
-
-// FIX: Add missing GiftCode type definition
-// For Admin Gift Code Management
-export interface GiftCode {
-    id: string;
-    code: string;
-    diamond_reward: number;
-    usage_limit: number;
-    usage_count: number;
     is_active: boolean;
     created_at: string;
 }

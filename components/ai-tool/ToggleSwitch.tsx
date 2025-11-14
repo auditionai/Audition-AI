@@ -9,7 +9,7 @@ interface ToggleSwitchProps {
 
 const ToggleSwitch: React.FC<ToggleSwitchProps> = ({ label, checked, onChange, disabled = false }) => (
     <label className={`flex items-center justify-between py-2 ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
-        <span className="text-sm text-skin-base">{label}</span>
+        <span className="text-gray-300 text-sm">{label}</span>
         <div className="relative">
             <input type="checkbox" className="sr-only" checked={checked} onChange={onChange} disabled={disabled} />
             <div className={`block w-10 h-5 rounded-full transition ${checked ? 'bg-pink-600' : 'bg-gray-600'}`}></div>

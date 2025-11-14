@@ -1,19 +1,16 @@
 import React, { useState, useEffect } from 'react';
-// FIX: Corrected import paths for components.
-import LandingHeader from '../components/landing/Header';
-import Footer from '../components/landing/Footer';
-import Gallery from '../components/landing/Gallery';
+import LandingHeader from '../components/Header';
+import Footer from '../components/Footer';
+import Gallery from '../components/Gallery';
 import { useAuth } from '../contexts/AuthContext';
 import { GalleryImage } from '../types';
 import ImageModal from '../components/common/ImageModal';
-// FIX: Corrected import paths for components.
-import TopUpModal from '../components/landing/TopUpModal';
-import AuthModal from '../components/landing/AuthModal';
-import InfoModal from '../components/landing/InfoModal';
-import AuroraBackground from '../components/common/AuroraBackground';
+import TopUpModal from '../components/TopUpModal';
+import AuthModal from '../components/AuthModal';
+import InfoModal from '../components/InfoModal';
 
 const GalleryPage: React.FC = () => {
-    const { navigate, user, updateUserDiamonds, showToast } = useAuth();
+    const { navigate, stats, user, updateUserDiamonds, showToast } = useAuth();
     const [selectedImage, setSelectedImage] = useState<GalleryImage | null>(null);
     const [publicGalleryImages, setPublicGalleryImages] = useState<GalleryImage[]>([]);
     const [isGalleryLoading, setIsGalleryLoading] = useState(true);
@@ -41,13 +38,12 @@ const GalleryPage: React.FC = () => {
 
     return (
         <>
-            <AuroraBackground />
             <LandingHeader
                 user={user}
                 onTopUpClick={() => user ? setIsTopUpModalOpen(true) : setIsAuthModalOpen(true)}
                 onScrollTo={(_id) => navigate('home')} // Navigate home on logo/nav clicks
             />
-            <main className="pt-24">
+            <main className="pt-24 bg-[#0B0B0F]">
                 <section id="full-gallery" className="py-12 sm:py-16">
                     <div className="container mx-auto px-4">
                     <div className="text-center max-w-3xl mx-auto mb-12 animate-fade-in-down">
@@ -71,6 +67,8 @@ const GalleryPage: React.FC = () => {
                 </section>
             </main>
             <Footer 
+                onCtaClick={() => setIsAuthModalOpen(true)} 
+                stats={stats} 
                 onInfoLinkClick={setInfoModalKey}
             />
             

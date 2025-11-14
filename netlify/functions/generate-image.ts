@@ -3,7 +3,6 @@ import { GoogleGenAI, Modality } from "@google/genai";
 import { supabaseAdmin } from './utils/supabaseClient';
 import { Buffer } from 'buffer';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
-// Fix: Use a standard ES module import for 'jimp' as the project is targeting ECMAScript modules.
 import Jimp from 'jimp';
 
 const COST_BASE = 1;
@@ -26,8 +25,7 @@ const processImageForGemini = async (imageDataUrl: string | null, targetAspectRa
         if (!base64) return null;
 
         const imageBuffer = Buffer.from(base64, 'base64');
-        // FIX: The type definitions for 'jimp' may not align with its ESM module exports. Casting to 'any' bypasses the TypeScript error for `read`, assuming the method exists at runtime.
-        const image = await (Jimp as any).read(imageBuffer);
+        const image = await Jimp.read(imageBuffer);
         const originalWidth = image.getWidth();
         const originalHeight = image.getHeight();
 
@@ -49,8 +47,7 @@ const processImageForGemini = async (imageDataUrl: string | null, targetAspectRa
         }
         
         // Create a new black canvas with the target dimensions
-        // FIX: The 'jimp' constructor is not constructable on the imported type. Using `new (Jimp as any)` bypasses the strict type check.
-        const newCanvas = new (Jimp as any)(newCanvasWidth, newCanvasHeight, '#000000');
+        const newCanvas = new Jimp(newCanvasWidth, newCanvasHeight, '#000000');
         
         // Calculate position to center the original image
         const x = (newCanvasWidth - originalWidth) / 2;
@@ -59,8 +56,7 @@ const processImageForGemini = async (imageDataUrl: string | null, targetAspectRa
         // Composite the original image onto the new canvas
         newCanvas.composite(image, x, y);
 
-        // FIX: The type definitions for 'jimp' may not align with its ESM module exports. Casting to 'any' bypasses the TypeScript error for the MIME_PNG constant.
-        const mime = header.match(/:(.*?);/)?.[1] || (Jimp as any).MIME_PNG;
+        const mime = header.match(/:(.*?);/)?.[1] || Jimp.MIME_PNG;
         return newCanvas.getBase64Async(mime as any);
 
     } catch (error) {
@@ -92,7 +88,6 @@ const handler: Handler = async (event: HandlerEvent) => {
         const token = authHeader.split(' ')[1];
         if (!token) return { statusCode: 401, body: JSON.stringify({ error: 'Bearer token is missing.' }) };
 
-        // FIX: Use Supabase v2 method `getUser` instead of v1 `api.getUser`.
         const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
         if (authError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized: Invalid token.' }) };
 
@@ -118,13 +113,6 @@ const handler: Handler = async (event: HandlerEvent) => {
         let finalImageMimeType: string;
         
         let fullPrompt = prompt;
-
-        // NEW: Add absolute instruction for Super Face Lock
-        if (faceReferenceImage) {
-            const faceLockInstruction = `(ABSOLUTE INSTRUCTION: The final image MUST use the exact face, including all features, details, and the complete facial expression, from the provided face reference image. Do NOT alter, modify, stylize, or change the expression of this face in any way. Ignore any conflicting instructions about facial expressions in the user's prompt. The face from the reference image must be perfectly preserved and transplanted onto the generated character.)\n\n`;
-            fullPrompt = faceLockInstruction + prompt;
-        }
-
         if (negativePrompt) {
             fullPrompt += ` --no ${negativePrompt}`;
         }
@@ -156,7 +144,7 @@ const handler: Handler = async (event: HandlerEvent) => {
                 processImageForGemini(faceReferenceImage, aspectRatio)
             ]);
             
-            // The text prompt is ALWAYS the first part.
+            // The text prompt is ALWAYS the first part. No modification needed.
             parts.push({ text: fullPrompt });
 
             // Helper to add processed image parts

@@ -7,7 +7,6 @@ interface ImageUploaderProps {
     text: string;
     processType?: 'style';
     disabled?: boolean;
-    onPickFromProcessed?: () => void; // NEW: Callback to open the processed image picker
 }
 
 const StyleProcessOverlay: React.FC = () => (
@@ -25,8 +24,8 @@ const StyleProcessOverlay: React.FC = () => (
     </div>
 );
 
-const ImageUploader: React.FC<ImageUploaderProps> = ({ onUpload, image, onRemove, text, processType, disabled = false, onPickFromProcessed }) => (
-    <div className={`relative group w-full aspect-square min-h-48 rounded-lg border-2 border-dashed border-gray-600 flex flex-col items-center justify-center bg-black/20 ${!disabled ? 'hover:border-pink-500' : ''} transition-colors p-1 ${disabled ? 'group-disabled' : ''}`}>
+const ImageUploader: React.FC<ImageUploaderProps> = ({ onUpload, image, onRemove, text, processType, disabled = false }) => (
+    <div className={`relative group w-full aspect-square min-h-48 rounded-lg border-2 border-dashed border-gray-600 flex items-center justify-center bg-black/20 ${!disabled ? 'hover:border-pink-500' : ''} transition-colors p-1 ${disabled ? 'group-disabled' : ''}`}>
         {image && !disabled ? (
             <>
                 <img src={image.url} alt="Uploaded" className={`w-full h-full object-contain rounded-md`}/>
@@ -50,20 +49,6 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({ onUpload, image, onRemove
             </div>
         )}
          <input type="file" accept="image/*" onChange={onUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" disabled={disabled}/>
-         {onPickFromProcessed && !disabled && (
-            <button 
-                onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    onPickFromProcessed();
-                }}
-                className="absolute bottom-2 right-2 bg-cyan-500/20 text-cyan-300 rounded-md px-2 py-1 text-xs font-bold hover:bg-cyan-500/30 transition-colors z-10 flex items-center gap-1.5"
-                title="Chọn ảnh đã xử lý"
-            >
-                <i className="ph-fill ph-archive-box"></i>
-                Chọn
-            </button>
-        )}
     </div>
 );
 

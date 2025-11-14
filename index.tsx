@@ -1,11 +1,10 @@
-// Triggering a rebuild for the 'develop' branch.
+// Triggering a rebuild to test environment variables.
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import { AuthProvider } from './contexts/AuthContext';
 // import './utils/supabaseClient'; // REMOVED: Initialization is now handled lazily and safely in AuthProvider
 import './index.css'; // Import Tailwind CSS
-import { ThemeProvider } from './contexts/ThemeContext';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -15,10 +14,8 @@ if (!rootElement) {
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
-    <ThemeProvider>
-      <AuthProvider>
-        <App />
-      </AuthProvider>
-    </ThemeProvider>
+    <AuthProvider>
+      <App />
+    </AuthProvider>
   </React.StrictMode>
 );

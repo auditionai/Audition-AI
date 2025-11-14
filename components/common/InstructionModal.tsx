@@ -1,4 +1,3 @@
-// FIX: Create the content for the common InstructionModal component.
 import React from 'react';
 import Modal from './Modal';
 
@@ -8,49 +7,46 @@ interface InstructionModalProps {
 }
 
 const InstructionModal: React.FC<InstructionModalProps> = ({ isOpen, onClose }) => {
-  const steps = [
-    {
-      title: 'Tải Ảnh Nhân Vật',
-      description: 'Tải lên ảnh nhân vật Audition của bạn để AI có thể giữ lại trang phục và tư thế.',
-      icon: 'ph-user-focus',
-    },
-    {
-      title: 'Khóa Gương Mặt (Tùy chọn)',
-      description: 'Sử dụng ảnh chân dung của bạn và tính năng "Siêu Khóa Gương Mặt" để AI giữ lại 95%+ đường nét của bạn.',
-      icon: 'ph-face-mask',
-    },
-    {
-      title: 'Nhập Mô Tả (Prompt)',
-      description: 'Mô tả chi tiết bối cảnh, hành động bạn muốn AI tạo ra. Càng chi tiết, ảnh càng đẹp và đúng ý.',
-      icon: 'ph-pencil-line',
-    },
-    {
-      title: 'Tùy Chỉnh Nâng Cao',
-      description: 'Chọn mô hình AI, tỷ lệ khung hình, và các tùy chọn khác để tinh chỉnh kết quả cuối cùng.',
-      icon: 'ph-sliders-horizontal',
-    },
-  ];
-
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Hướng Dẫn Nhanh">
-      <div className="space-y-4">
-        {steps.map((step, index) => (
-          <div key={index} className="flex items-start gap-4 p-3 bg-skin-fill-secondary rounded-lg">
-            <div className="flex-shrink-0 bg-skin-accent/10 text-skin-accent w-10 h-10 flex items-center justify-center rounded-full">
-              <i className={`ph-fill ${step.icon} text-xl`}></i>
-            </div>
-            <div>
-              <h4 className="font-bold text-skin-base">{step.title}</h4>
-              <p className="text-sm text-skin-muted">{step.description}</p>
-            </div>
-          </div>
-        ))}
-        <button
-          onClick={onClose}
-          className="w-full mt-4 py-3 font-bold themed-button-primary"
-        >
-          Tôi đã hiểu
-        </button>
+    <Modal isOpen={isOpen} onClose={onClose} title="Hướng dẫn sử dụng">
+      <div className="space-y-4 text-gray-300">
+        <p>Chào mừng bạn đến với Audition AI Studio! Để có được những bức ảnh 3D đẹp nhất, hãy làm theo các bước sau:</p>
+        
+        <div>
+          <h4 className="font-bold text-pink-400">1. Tải ảnh gốc chất lượng cao:</h4>
+          <ul className="list-disc list-inside pl-4 text-sm">
+            <li>Chọn ảnh chân dung, chụp thẳng mặt, rõ nét.</li>
+            <li>Tránh ảnh bị mờ, ánh sáng yếu, hoặc mặt bị che khuất.</li>
+            <li>AI sẽ giữ lại các đường nét trên khuôn mặt của bạn.</li>
+          </ul>
+        </div>
+        
+        <div>
+          <h4 className="font-bold text-pink-400">2. Viết mô tả (Prompt) chi tiết:</h4>
+          <ul className="list-disc list-inside pl-4 text-sm">
+            <li>Đây là bước quan trọng nhất! Càng chi tiết, ảnh càng đúng ý.</li>
+            <li>Mô tả về: trang phục, màu sắc, kiểu tóc, hành động, bối cảnh, cảm xúc...</li>
+            <li><strong>Ví dụ tốt:</strong> "Một cô gái xinh đẹp với mái tóc bạch kim dài, mặc váy dạ hội màu xanh lấp lánh, đang khiêu vũ dưới bầu trời đầy sao."</li>
+            <li><strong>Ví dụ chưa tốt:</strong> "cô gái nhảy"</li>
+          </ul>
+        </div>
+
+        <div>
+          <h4 className="font-bold text-pink-400">3. Chọn Phong cách và Mô hình:</h4>
+          <ul className="list-disc list-inside pl-4 text-sm">
+            <li>Các phong cách có sẵn sẽ giúp định hình ảnh của bạn theo chủ đề Audition.</li>
+            <li>Mô hình Imagen 4.0 cho chất lượng cao nhất, trong khi Gemini Flash nhanh hơn.</li>
+          </ul>
+        </div>
+
+        <div className="pt-4 border-t border-gray-700">
+            <button
+                onClick={onClose}
+                className="w-full py-3 font-bold text-white bg-gradient-to-r from-pink-500 to-fuchsia-600 rounded-lg hover:opacity-90 transition"
+            >
+                Tôi đã hiểu, bắt đầu thôi!
+            </button>
+        </div>
       </div>
     </Modal>
   );

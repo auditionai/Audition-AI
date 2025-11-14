@@ -1,6 +1,6 @@
-// FIX: Create the content for the ConfirmationModal component.
 import React from 'react';
 import Modal from './common/Modal';
+import { DiamondIcon } from './common/DiamondIcon';
 
 interface ConfirmationModalProps {
   isOpen: boolean;
@@ -10,50 +10,34 @@ interface ConfirmationModalProps {
   isLoading?: boolean;
 }
 
-const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
-  isOpen,
-  onClose,
-  onConfirm,
-  cost,
-  isLoading = false,
-}) => {
-  const title = cost > 0 ? 'Xác nhận hành động' : 'Bạn chắc chắn chứ?';
-  
-  let description;
-  if (cost > 0) {
-    description = `Hành động này sẽ tiêu tốn ${cost.toLocaleString()} kim cương. Bạn có muốn tiếp tục?`;
-  } else {
-    description = 'Hành động này không thể hoàn tác. Bạn có chắc chắn muốn tiếp tục?';
-  }
-
+const ConfirmationModal: React.FC<ConfirmationModalProps> = ({ isOpen, onClose, onConfirm, cost, isLoading = false }) => {
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={title}>
+    <Modal isOpen={isOpen} onClose={onClose} title="Xác nhận thao tác">
       <div className="text-center">
-        <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-yellow-500/10 mb-4">
-          <i className="ph-fill ph-warning-circle text-3xl text-yellow-400"></i>
+        <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-pink-500/10 mb-4">
+          <DiamondIcon className="h-8 w-8 text-pink-400" />
         </div>
-        <p className="text-skin-muted mb-6">{description}</p>
-        <div className="flex justify-center gap-4">
+        <p className="text-lg text-gray-300 mb-2">
+          Thao tác này sẽ tốn
+        </p>
+        <p className="text-3xl font-bold mb-6 flex items-center justify-center gap-2">
+           {cost} <span className="text-pink-400">Kim cương</span>
+        </p>
+
+        <div className="flex gap-4">
           <button
             onClick={onClose}
             disabled={isLoading}
-            className="px-6 py-2 font-semibold bg-white/10 text-white rounded-lg hover:bg-white/20 transition disabled:opacity-50"
+            className="flex-1 py-3 font-semibold bg-white/10 text-white rounded-lg hover:bg-white/20 transition disabled:opacity-50"
           >
             Hủy
           </button>
           <button
             onClick={onConfirm}
             disabled={isLoading}
-            className="px-6 py-2 font-bold text-white bg-gradient-to-r from-pink-500 to-fuchsia-600 rounded-lg hover:opacity-90 transition disabled:opacity-50 flex items-center justify-center gap-2"
+            className="flex-1 py-3 font-bold text-white bg-gradient-to-r from-pink-500 to-fuchsia-600 rounded-lg hover:opacity-90 transition disabled:opacity-50 disabled:cursor-wait"
           >
-            {isLoading ? (
-                <>
-                    <div className="w-5 h-5 border-2 border-white/50 border-t-white rounded-full animate-spin"></div>
-                    <span>Đang xử lý...</span>
-                </>
-            ) : (
-              'Xác nhận'
-            )}
+            {isLoading ? 'Đang xử lý...' : 'Xác nhận'}
           </button>
         </div>
       </div>

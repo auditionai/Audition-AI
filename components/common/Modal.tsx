@@ -1,46 +1,32 @@
-// FIX: Create the content for the common Modal component.
-import React, { useEffect } from 'react';
+
+import React from 'react';
 
 interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
-  title: string;
   children: React.ReactNode;
+  title: string;
 }
 
-const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }) => {
-  useEffect(() => {
-    const handleEsc = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleEsc);
-    return () => {
-      window.removeEventListener('keydown', handleEsc);
-    };
-  }, [onClose]);
-
+const Modal: React.FC<ModalProps> = ({ isOpen, onClose, children, title }) => {
   if (!isOpen) return null;
 
   return (
-    <div
-      className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center z-[1000] p-4 animate-fade-in"
+    <div 
+      className="fixed inset-0 bg-black bg-opacity-70 backdrop-blur-sm flex justify-center items-center z-50 p-4"
       onClick={onClose}
     >
-      <div
-        className="relative bg-skin-fill-modal border border-skin-border rounded-2xl shadow-lg w-full max-w-lg animate-fade-in-up"
+      <div 
+        className="relative bg-[#12121A] border border-pink-500/30 rounded-2xl shadow-lg shadow-pink-500/20 w-full max-w-md max-h-[90vh] overflow-y-auto p-6 text-white animate-fade-in-up"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex justify-between items-center p-4 border-b border-skin-border">
-          <h2 className="text-xl font-bold text-skin-base">{title}</h2>
-          <button onClick={onClose} className="text-skin-muted hover:text-skin-base transition-colors">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-2xl font-bold bg-gradient-to-r from-pink-400 to-fuchsia-500 text-transparent bg-clip-text">{title}</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors">
             <i className="ph-fill ph-x text-2xl"></i>
           </button>
         </div>
-        <div className="p-6">
-          {children}
-        </div>
+        {children}
       </div>
     </div>
   );

@@ -18,56 +18,76 @@ const handler: Handler = async (event: HandlerEvent) => {
             return { statusCode: 401, body: JSON.stringify({ error: `Unauthorized: ${authError?.message || 'Invalid token.'}` }) };
         }
 
-        // --- GET Method: The Definitive "Upsert" User Profile Logic ---
         if (event.httpMethod === 'GET') {
-            
-            // Prepare the data for the user profile. This data will be used for both
-            // creating a new profile and updating an existing one (if the ID is stale).
-            const profileData = {
-                id: authUser.id,
-                email: authUser.email!,
-                display_name: authUser.user_metadata?.full_name || 'Tân Binh',
-                photo_url: authUser.user_metadata?.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${authUser.id}`,
-            };
+            // --- THE DEFINITIVE "CLEANUP AND CREATE" LOGIC ---
 
-            // Perform the UPSERT operation.
-            // This tells the database: "Try to INSERT this profileData. If a row
-            // with this `email` already exists (onConflict), then UPDATE that
-            // existing row with this new `profileData` instead of throwing an error."
-            // This is an atomic operation, completely eliminating race conditions.
-            const { data: upsertedProfile, error: upsertError } = await supabaseAdmin
+            // 1. Detect Conflict: Check for an orphaned profile (same email, different ID)
+            const { data: orphanedProfile, error: orphanCheckError } = await supabaseAdmin
                 .from('users')
-                .upsert(profileData, { onConflict: 'email' })
-                .select()
+                .select('id')
+                .eq('email', authUser.email!)
+                .neq('id', authUser.id)
                 .single();
 
-            if (upsertError) {
-                console.error('[UPSERT FAILED]', upsertError);
-                throw new Error(`Database error during profile creation: ${upsertError.message}`);
+            if (orphanCheckError && orphanCheckError.code !== 'PGRST116') { // PGRST116 = no rows found
+                throw new Error(`Orphan check failed: ${orphanCheckError.message}`);
+            }
+
+            // 2. Cleanup: If an orphaned profile exists, delete it completely
+            if (orphanedProfile) {
+                console.log(`[CLEANUP] Found orphaned profile for ${authUser.email} with old ID ${orphanedProfile.id}. Deleting...`);
+                
+                // This is the safest way to delete a user and all their associated data
+                // as it triggers all database cascade deletes.
+                const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(orphanedProfile.id);
+
+                if (deleteError) {
+                    // Log the error but proceed, as the insert might still work if the user was partially deleted.
+                    console.error(`[CLEANUP_ERROR] Failed to delete orphaned user ${orphanedProfile.id}:`, deleteError.message);
+                } else {
+                    console.log(`[CLEANUP_SUCCESS] Successfully deleted orphaned user ${orphanedProfile.id}.`);
+                }
+            }
+
+            // 3. Create or Fetch: Now, try to get the correct profile. If it doesn't exist, create it.
+            let { data: finalProfile, error: finalProfileError } = await supabaseAdmin
+                .from('users')
+                .select('*')
+                .eq('id', authUser.id)
+                .single();
+
+            if (!finalProfile) { // Profile for the NEW ID doesn't exist, so create it.
+                console.log(`[CREATE] No profile found for new ID ${authUser.id}. Creating new profile...`);
+                const { data: newProfile, error: insertError } = await supabaseAdmin
+                    .from('users')
+                    .insert({
+                        id: authUser.id,
+                        email: authUser.email!,
+                        display_name: authUser.user_metadata?.full_name || 'Tân Binh',
+                        photo_url: authUser.user_metadata?.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${authUser.id}`,
+                    })
+                    .select()
+                    .single();
+                
+                if (insertError) {
+                    console.error('[CREATE FAILED]', insertError);
+                    throw new Error(`Failed to create new profile after cleanup: ${insertError.message}`);
+                }
+                finalProfile = newProfile;
             }
             
             console.log(`[SUCCESS] Profile for ${authUser.email} is ensured to be correct.`);
-            return { statusCode: 200, body: JSON.stringify(upsertedProfile) };
+            return { statusCode: 200, body: JSON.stringify(finalProfile) };
         }
         
         // --- PUT Method: Update User Profile (unchanged) ---
         if (event.httpMethod === 'PUT') {
             const { display_name } = JSON.parse(event.body || '{}');
-
             if (!display_name || typeof display_name !== 'string' || display_name.length > 50) {
                 return { statusCode: 400, body: JSON.stringify({ error: 'Invalid display name.' }) };
             }
-
-            const { data, error } = await supabaseAdmin
-                .from('users')
-                .update({ display_name: display_name.trim() })
-                .eq('id', authUser.id)
-                .select('display_name')
-                .single();
-
-            if (error) {
-                throw error;
-            }
+            const { data, error } = await supabaseAdmin.from('users').update({ display_name: display_name.trim() }).eq('id', authUser.id).select('display_name').single();
+            if (error) throw error;
             return { statusCode: 200, body: JSON.stringify(data) };
         }
 

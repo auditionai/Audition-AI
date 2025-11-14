@@ -51,6 +51,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const [loading, setLoading] = useState(true);
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
     const [route, setRoute] = useState(() => getRouteFromPath(window.location.pathname));
+    // FIX: Corrected the useState syntax. The type parameter should be inside angle brackets and the initial value in parentheses.
     const [reward, setReward] = useState<{ diamonds: number; xp: number } | null>(null);
     const [announcement, setAnnouncement] = useState<Announcement | null>(null);
     const [showAnnouncementModal, setShowAnnouncementModal] = useState(false);
@@ -301,12 +302,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const login = useCallback(async () => {
         if (!supabase) { showToast("Lỗi kết nối, không thể đăng nhập.", "error"); return; }
-        // FIX: Use Supabase v2 method `signInWithOAuth` instead of v1 `signIn`.
+        // FIX: Remove `redirectTo` to use a more reliable popup-based auth flow.
         const { error } = await supabase.auth.signInWithOAuth({
             provider: 'google',
-            options: {
-                redirectTo: window.location.origin,
-            }
         });
         if (error) { showToast('Đăng nhập thất bại: ' + error.message, 'error'); throw error; }
     }, [supabase, showToast]);

@@ -302,11 +302,34 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const login = useCallback(async () => {
         if (!supabase) { showToast("Lỗi kết nối, không thể đăng nhập.", "error"); return; }
-        // FIX: Remove `redirectTo` to use a more reliable popup-based auth flow.
-        const { error } = await supabase.auth.signInWithOAuth({
+        
+        // FIX: The standard redirect-based OAuth flow is failing due to sandbox restrictions
+        // and network issues (522 error). This is replaced with a manual popup flow.
+        // We get the sign-in URL from Supabase and open it in a new window.
+        // The existing onAuthStateChange listener will automatically detect the new session
+        // once the popup completes authentication and writes to localStorage.
+        const { data, error } = await supabase.auth.signInWithOAuth({
             provider: 'google',
+            options: {
+                skipBrowserRedirect: true,
+            }
         });
-        if (error) { showToast('Đăng nhập thất bại: ' + error.message, 'error'); throw error; }
+
+        if (error || !data.url) {
+            showToast(`Không thể lấy URL đăng nhập: ${error?.message || 'Lỗi không xác định.'}`, 'error');
+            return;
+        }
+
+        // Open the URL in a popup
+        const popup = window.open(data.url, 'oauthWindow', 'width=500,height=650,status=no,scrollbars=yes,resizable=yes');
+        
+        // A simple polling mechanism to check if the popup has been closed.
+        const timer = setInterval(() => {
+            if (!popup || popup.closed) {
+                clearInterval(timer);
+                // The onAuthStateChange handler will take care of the rest.
+            }
+        }, 500);
     }, [supabase, showToast]);
 
     const logout = useCallback(async () => {

@@ -16,12 +16,14 @@ const getFileExtensionFromUrl = (url: string): string => {
         const path = new URL(url).pathname;
         const parts = path.split('.');
         if (parts.length > 1) {
-            return parts.pop() || 'png';
+            // Take the last part and remove any query parameters
+            return (parts.pop() || 'png').split('?')[0];
         }
     } catch (e) {
-        // Ignore URL parsing errors
+        // Ignore URL parsing errors for malformed URLs
     }
-    return 'png'; // Default to png
+    // Fallback if no extension is found
+    return 'png'; 
 };
 
 
@@ -48,15 +50,13 @@ const ImageModal: React.FC<ImageModalProps> = ({ isOpen, onClose, image, showInf
     showToast('Đang chuẩn bị tệp tải xuống...', 'success');
 
     try {
-        const response = await fetch(`/.netlify/functions/download-image?url=${encodeURIComponent(image.image_url)}`);
+        // ROBUST DOWNLOAD: Fetch the image directly from its public R2 URL.
+        // This avoids the Netlify function proxy, which has a 6MB payload size limit
+        // that causes downloads for larger images to fail.
+        const response = await fetch(image.image_url);
 
         if (!response.ok) {
-            let errorMsg = `Lỗi tải ảnh: ${response.statusText}`;
-            try {
-                const errorJson = await response.json();
-                errorMsg = errorJson.error || errorMsg;
-            } catch {}
-            throw new Error(errorMsg);
+            throw new Error(`Lỗi tải ảnh: Máy chủ trả về mã lỗi ${response.status}.`);
         }
 
         const blob = await response.blob();
@@ -71,11 +71,13 @@ const ImageModal: React.FC<ImageModalProps> = ({ isOpen, onClose, image, showInf
         document.body.appendChild(a);
         a.click();
         
+        // Cleanup
         a.remove();
         window.URL.revokeObjectURL(blobUrl);
 
     } catch (error: any) {
-        showToast(error.message, 'error');
+        // This will catch network errors or CORS issues if R2 is not configured correctly.
+        showToast(error.message || 'Lỗi khi tải ảnh. Vui lòng kiểm tra kết nối mạng.', 'error');
         console.error('Download failed:', error);
     }
   };

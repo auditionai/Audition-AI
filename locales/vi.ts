@@ -523,11 +523,12 @@ export const vi = {
   modals: {
     promptLibrary: {
       title: 'Thư viện Prompt',
-      button: 'Thư viện',
+      button: 'Sử dụng PROMPT có sẵn',
       buttonTooltip: 'Sử dụng prompt có sẵn từ caulenhau.io.vn',
       empty: 'Không tìm thấy prompt nào cho chuyên mục này.',
       error: 'Không thể tải thư viện prompt.',
       usePrompt: 'Dùng',
+      loadMore: 'Tải thêm',
     },
     auth: {
       title: 'Đăng nhập / Đăng ký',

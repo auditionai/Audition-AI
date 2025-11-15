@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Modal from '../../common/Modal';
 import { useTranslation } from '../../../hooks/useTranslation';
 import { PromptLibraryItem } from '../../../types';
@@ -16,10 +16,9 @@ const PromptLibraryModal: React.FC<PromptLibraryModalProps> = ({ isOpen, onClose
     const [isLoading, setIsLoading] = useState(false);
     const [page, setPage] = useState(1);
     const [hasMore, setHasMore] = useState(true);
-    const loaderRef = useRef(null);
 
     const fetchPrompts = useCallback(async (pageNum: number) => {
-        if (isLoading || !hasMore) return;
+        if (isLoading) return;
         setIsLoading(true);
         try {
             const res = await fetch(`/.netlify/functions/fetch-prompts?category=${category}&page=${pageNum}&limit=20`);
@@ -34,39 +33,18 @@ const PromptLibraryModal: React.FC<PromptLibraryModalProps> = ({ isOpen, onClose
         } finally {
             setIsLoading(false);
         }
-    }, [category, isLoading, hasMore, t]);
+    }, [category, isLoading, t]);
 
     useEffect(() => {
         if (isOpen) {
+            // Reset state when modal is opened
             setPrompts([]);
             setPage(1);
             setHasMore(true);
+            // Fetch initial data
             fetchPrompts(1);
         }
-    }, [isOpen]);
-
-    // Infinite scroll observer
-    useEffect(() => {
-        const observer = new IntersectionObserver(
-            entries => {
-                if (entries[0].isIntersecting && hasMore && !isLoading && isOpen) {
-                    fetchPrompts(page);
-                }
-            },
-            { threshold: 1.0 }
-        );
-
-        const currentLoader = loaderRef.current;
-        if (currentLoader) {
-            observer.observe(currentLoader);
-        }
-
-        return () => {
-            if (currentLoader) {
-                observer.unobserve(currentLoader);
-            }
-        };
-    }, [loaderRef, fetchPrompts, hasMore, isLoading, page, isOpen]);
+    }, [isOpen]); // Dependency array simplified
 
     const handleSelect = (prompt: string) => {
         onSelectPrompt(prompt);
@@ -99,8 +77,17 @@ const PromptLibraryModal: React.FC<PromptLibraryModalProps> = ({ isOpen, onClose
                         </div>
                     ))}
                 </div>
-                <div ref={loaderRef} className="h-10 flex justify-center items-center">
-                    {isLoading && <div className="w-6 h-6 border-2 border-skin-border border-t-skin-accent rounded-full animate-spin"></div>}
+                <div className="mt-6 text-center">
+                    {isLoading && (
+                         <div className="h-10 flex justify-center items-center">
+                            <div className="w-6 h-6 border-2 border-skin-border border-t-skin-accent rounded-full animate-spin"></div>
+                        </div>
+                    )}
+                    {!isLoading && hasMore && (
+                        <button onClick={() => fetchPrompts(page)} className="themed-button-secondary px-6 py-2">
+                            {t('modals.promptLibrary.loadMore')}
+                        </button>
+                    )}
                 </div>
             </div>
         </Modal>

@@ -523,11 +523,12 @@ export const en = {
   modals: {
     promptLibrary: {
       title: 'Prompt Library',
-      button: 'Library',
+      button: 'Use Available PROMPT',
       buttonTooltip: 'Use available prompts from caulenhau.io.vn',
       empty: 'No prompts found for this category.',
       error: 'Could not load the prompt library.',
       usePrompt: 'Use',
+      loadMore: 'Load More',
     },
     auth: {
       title: 'Sign In / Sign Up',

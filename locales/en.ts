@@ -249,6 +249,26 @@ export const en = {
           noImage: 'Please upload an image first.',
           noCredits: 'You need {{cost}} diamonds.',
         },
+        styles: {
+          neon: 'NEON',
+          '3d': '3D',
+          graffiti: 'GRAFFITI',
+          typography: 'TYPO',
+          outline: 'OUTLINE',
+          metallic: 'METALLIC',
+          glowing: 'GLOWING',
+          shadow: 'SHADOW',
+        },
+        colors: {
+          custom: 'CUSTOM',
+          rainbow: 'RAINBOW',
+          fire: 'FIRE',
+          ice: 'ICE',
+          gold: 'GOLD',
+          pastel: 'PASTEL',
+          vaporwave: 'VAPORWAVE',
+          monochrome: 'MONO',
+        }
       }
     },
     leaderboard: {
@@ -666,14 +686,14 @@ export const en = {
       },
     },
     picker: {
-      title: 'Select from processed images',
+      title: 'Select from Processed Images',
       empty: 'No images in temporary storage.',
       empty_desc: 'Use the Background Remover tool to add images here.',
     },
     processedImage: {
-      title: 'View background-removed image',
+      title: 'View Background-Removed Image',
       title_crop: 'Crop Face',
-      use_full: 'Use this image',
+      use_full: 'Use This Image',
       use_cropped: 'Use Cropped Image',
       crop_face: 'Crop Face',
       cancel_crop: 'Cancel Crop',

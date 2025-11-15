@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Modal from '../../common/Modal';
+import { useTranslation } from '../../../hooks/useTranslation';
 
 interface ProcessedImageData {
     id: string;
@@ -17,6 +18,7 @@ interface ProcessedImagePickerModalProps {
 }
 
 const ProcessedImagePickerModal: React.FC<ProcessedImagePickerModalProps> = ({ isOpen, onClose, onSelect }) => {
+    const { t } = useTranslation();
     const [processedImages, setProcessedImages] = useState<ProcessedImageData[]>([]);
 
     useEffect(() => {
@@ -36,12 +38,12 @@ const ProcessedImagePickerModal: React.FC<ProcessedImagePickerModalProps> = ({ i
     }, [isOpen]);
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title="Chọn từ kho ảnh đã xử lý">
+        <Modal isOpen={isOpen} onClose={onClose} title={t('modals.picker.title')}>
             {processedImages.length === 0 ? (
                 <div className="text-center py-8 text-skin-muted">
                     <i className="ph-fill ph-archive-box text-5xl mb-4"></i>
-                    <p>Không có ảnh nào trong kho lưu trữ tạm thời.</p>
-                    <p className="text-xs mt-2">Hãy dùng công cụ Tách Nền để thêm ảnh vào đây.</p>
+                    <p>{t('modals.picker.empty')}</p>
+                    <p className="text-xs mt-2">{t('modals.picker.empty_desc')}</p>
                 </div>
             ) : (
                 <div className="grid grid-cols-3 md:grid-cols-4 gap-4 max-h-[60vh] overflow-y-auto custom-scrollbar pr-2">

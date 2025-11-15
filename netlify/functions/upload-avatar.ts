@@ -25,7 +25,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         return { statusCode: 401, body: JSON.stringify({ error: 'Bearer token is missing.' }) };
     }
 
-    // FIX: Use Supabase v2 method `getUser` instead of v1 `api.getUser`.
+    // FIX: Use Supabase v2 `auth.getUser` as `auth.api` is from v1.
     const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
     
     if (authError || !user) {

@@ -5,6 +5,7 @@ import { DiamondIcon } from '../common/DiamondIcon';
 import ConfirmationModal from '../ConfirmationModal';
 import { resizeImage, base64ToFile } from '../../utils/imageUtils';
 import ProcessedImageModal from './ProcessedImageModal';
+import { useTranslation } from '../../hooks/useTranslation';
 
 interface BgRemoverToolProps {
     onMoveToGenerator: (image: { url: string; file: File }) => void;
@@ -24,6 +25,7 @@ interface ProcessedImageData {
 
 const BgRemoverTool: React.FC<BgRemoverToolProps> = ({ onMoveToGenerator, onMoveFaceToGenerator, onInstructionClick }) => {
     const { user, showToast } = useAuth();
+    const { t } = useTranslation();
     const { isProcessing, removeBackground, COST_PER_REMOVAL } = useBackgroundRemover();
 
     const [imagesForBgRemoval, setImagesForBgRemoval] = useState<Array<{id: string, url: string, file: File}>>([]);
@@ -58,7 +60,7 @@ const BgRemoverTool: React.FC<BgRemoverToolProps> = ({ onMoveToGenerator, onMove
                 setImagesForBgRemoval(prev => [...prev, newImage]);
             }).catch((err: any) => {
                 console.error("Error resizing image for background removal:", err);
-                showToast("Lỗi khi xử lý ảnh.", "error");
+                showToast(t('creator.aiTool.common.errorProcessImage'), "error");
             });
         });
         e.target.value = '';
@@ -102,7 +104,7 @@ const BgRemoverTool: React.FC<BgRemoverToolProps> = ({ onMoveToGenerator, onMove
         const file = base64ToFile(image.imageBase64, `processed_${image.fileName}`, image.mimeType);
         onMoveToGenerator({ url: `data:${image.mimeType};base64,${image.imageBase64}`, file: file });
         setSelectedProcessedImage(null); // Close modal
-        showToast('Đã chuyển ảnh sang trình tạo AI!', 'success');
+        showToast(t('modals.processedImage.success.full'), 'success');
     };
 
     const handleDownload = (imageUrl: string, fileName: string) => {
@@ -138,7 +140,7 @@ const BgRemoverTool: React.FC<BgRemoverToolProps> = ({ onMoveToGenerator, onMove
                 onUseCropped={(croppedImage) => {
                     onMoveFaceToGenerator(croppedImage);
                     setSelectedProcessedImage(null);
-                    showToast('Đã chuyển ảnh gương mặt sang trình tạo AI!', 'success');
+                    showToast(t('modals.processedImage.success.cropped'), 'success');
                 }}
                 onDownload={() => {
                     if (selectedProcessedImage) handleDownload(selectedProcessedImage.processedUrl, selectedProcessedImage.fileName);
@@ -149,21 +151,21 @@ const BgRemoverTool: React.FC<BgRemoverToolProps> = ({ onMoveToGenerator, onMove
                 {/* Left Column: Upload */}
                 <div className="flex flex-col">
                     <div className="flex justify-between items-center mb-3">
-                        <h3 className="themed-heading text-lg font-bold themed-title-glow">1. Tải ảnh lên</h3>
+                        <h3 className="themed-heading text-lg font-bold themed-title-glow">{t('creator.aiTool.bgRemover.uploadTitle')}</h3>
                         <button onClick={onInstructionClick} className="flex items-center gap-1 text-xs text-skin-accent hover:opacity-80 transition-all px-2 py-1 rounded-md bg-skin-accent/10 border border-skin-border-accent hover:bg-skin-accent/20 shadow-accent hover:shadow-accent-lg flex-shrink-0">
-                            <i className="ph-fill ph-book-open"></i> Hướng Dẫn
+                            <i className="ph-fill ph-book-open"></i> {t('creator.aiTool.common.help')}
                         </button>
                     </div>
                     <div className="p-4 bg-black/20 rounded-lg border border-white/10 flex-grow flex flex-col aspect-square">
                         <label className="relative w-full flex-grow min-h-[12rem] flex flex-col items-center justify-center text-center text-gray-400 rounded-lg border-2 border-dashed border-gray-600 hover:border-pink-500 cursor-pointer bg-black/20">
                             <i className="ph-fill ph-upload-simple text-4xl"></i>
-                            <p className="font-semibold mt-2">Nhấn để chọn hoặc kéo thả</p>
-                            <p className="text-xs">Có thể chọn nhiều ảnh</p>
+                            <p className="font-semibold mt-2">{t('creator.aiTool.bgRemover.uploadButton')}</p>
+                            <p className="text-xs">{t('creator.aiTool.bgRemover.uploadDesc')}</p>
                             <input type="file" multiple accept="image/*" onChange={handleBgRemovalImageUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
                         </label>
                         {imagesForBgRemoval.length > 0 && (
                             <div className="mt-4">
-                            <h4 className="text-sm font-semibold mb-2 text-gray-300">Sẵn sàng xử lý: {imagesForBgRemoval.length} ảnh</h4>
+                            <h4 className="text-sm font-semibold mb-2 text-gray-300">{t('creator.aiTool.bgRemover.readyToProcess', { count: imagesForBgRemoval.length })}</h4>
                             <div className="flex items-center gap-2 overflow-x-auto pb-2">
                                 {imagesForBgRemoval.map(img => (
                                 <div key={img.id} className="relative flex-shrink-0 w-20 h-20 rounded-md">
@@ -177,7 +179,7 @@ const BgRemoverTool: React.FC<BgRemoverToolProps> = ({ onMoveToGenerator, onMove
                         <button onClick={handleProcessClick} disabled={isProcessing || imagesForBgRemoval.length === 0} className="w-full mt-4 py-3 font-bold text-lg text-white bg-gradient-to-r from-pink-500 to-fuchsia-600 rounded-full flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
                             {isProcessing ? <div className="w-6 h-6 border-2 border-white/50 border-t-white rounded-full animate-spin"></div> : <>
                                 <DiamondIcon className="w-6 h-6" />
-                                <span>Tách nền ({totalCost} 💎)</span>
+                                <span>{t('creator.aiTool.bgRemover.processButton', { cost: totalCost })}</span>
                             </>}
                         </button>
                     </div>
@@ -185,13 +187,13 @@ const BgRemoverTool: React.FC<BgRemoverToolProps> = ({ onMoveToGenerator, onMove
         
                 {/* Right Column: Results */}
                 <div className="flex flex-col">
-                    <h3 className="themed-heading text-lg font-bold themed-title-glow mb-1">2. Kết quả (Lưu tạm)</h3>
-                    <p className="text-xs text-skin-muted mb-2">Lưu ý: Ảnh chỉ được lưu tạm thời. Tải lại trang sẽ làm mất ảnh.</p>
+                    <h3 className="themed-heading text-lg font-bold themed-title-glow mb-1">{t('creator.aiTool.bgRemover.resultTitle')}</h3>
+                    <p className="text-xs text-skin-muted mb-2">{t('creator.aiTool.bgRemover.resultDesc')}</p>
                     <div className="bg-black/20 rounded-lg border border-white/10 flex-grow p-4 aspect-square">
                         {processedImages.length === 0 && !isProcessing ? (
                             <div className="flex flex-col items-center justify-center h-full text-gray-500 text-center">
                             <i className="ph-fill ph-image text-5xl"></i>
-                            <p className="mt-2">Ảnh sau khi xử lý sẽ hiện ở đây</p>
+                            <p className="mt-2">{t('creator.aiTool.bgRemover.placeholder')}</p>
                             </div>
                         ) : (
                             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-3 gap-4 h-full overflow-y-auto custom-scrollbar">
@@ -204,7 +206,7 @@ const BgRemoverTool: React.FC<BgRemoverToolProps> = ({ onMoveToGenerator, onMove
                                     <img src={img.processedUrl} alt="Processed" className="w-full h-full object-cover rounded-md" />
                                     <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center p-2 text-center">
                                         <i className="ph-fill ph-eye text-3xl text-white"></i>
-                                        <p className="text-xs text-white mt-1">Xem chi tiết</p>
+                                        <p className="text-xs text-white mt-1">{t('creator.aiTool.bgRemover.viewDetails')}</p>
                                     </div>
                                 </div>
                             ))}

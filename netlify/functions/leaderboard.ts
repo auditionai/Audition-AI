@@ -9,64 +9,34 @@ const calculateLevelFromXp = (xp: number): number => {
 
 const handler: Handler = async () => {
     try {
-        // 1. Get all image records to count creations per user.
-        // For performance on very large tables, an RPC function would be better,
-        // but this approach works well without database modifications.
-        const { data: images, error: imagesError } = await supabaseAdmin
-            .from('generated_images')
-            .select('user_id');
+        // TỐI ƯU HÓA: Gọi một hàm RPC duy nhất để database tự thực hiện
+        // tất cả các công việc nặng nhọc: đếm, nhóm, sắp xếp và kết nối bảng.
+        const { data: topUsers, error: rpcError } = await supabaseAdmin.rpc('get_leaderboard');
 
-        if (imagesError) throw imagesError;
-
-        // 2. Count creations for each user in memory.
-        const countMap = (images || []).reduce((acc, image) => {
-            acc.set(image.user_id, (acc.get(image.user_id) || 0) + 1);
-            return acc;
-        }, new Map<string, number>());
-        
-        // 3. Sort users by creation count and get the top 10 user IDs.
-        const sortedUserIds = Array.from(countMap.entries())
-            .sort((a, b) => b[1] - a[1]) // Sort descending by count
-            .slice(0, 10) // Limit to top 10
-            .map(entry => entry[0]); // Get just the user IDs
-
-        // Handle case where there are no images created yet.
-        if (sortedUserIds.length === 0) {
-            return {
-                statusCode: 200,
-                body: JSON.stringify([]),
-            };
+        if (rpcError) {
+            // If the RPC fails, it is a critical error (e.g., function not created).
+            // Guide the developer on how to fix it in the error message.
+            throw new Error(`Database RPC error: ${rpcError.message}. Please ensure the 'get_leaderboard' function exists in your Supabase SQL Editor.`);
         }
 
-        // 4. Fetch the profiles for the top 10 users.
-        const { data: users, error: usersError } = await supabaseAdmin
-            .from('users')
-            .select('id, display_name, photo_url, xp')
-            .in('id', sortedUserIds);
-
-        if (usersError) throw usersError;
-
-        // 5. Combine user data with creation counts and re-sort to ensure correct order.
-        const leaderboardData = users
-            .map(user => ({
-                ...user,
-                creations_count: countMap.get(user.id) || 0,
-            }))
-            .sort((a, b) => b.creations_count - a.creations_count);
-
-        // 6. Assign final rank and calculate level.
-        const leaderboard = leaderboardData.map((user, index) => ({
-            ...user,
+        // Dữ liệu trả về từ RPC đã được xử lý sẵn.
+        // Chỉ cần định dạng lại một chút cho client.
+        const leaderboardData = (topUsers || []).map((user, index) => ({
+            id: user.user_id,
             rank: index + 1,
+            display_name: user.display_name,
+            photo_url: user.photo_url,
             level: calculateLevelFromXp(user.xp),
+            xp: user.xp,
+            creations_count: Number(user.creations_count), // Đảm bảo kiểu dữ liệu là number
         }));
-
 
         return {
             statusCode: 200,
-            body: JSON.stringify(leaderboard),
+            body: JSON.stringify(leaderboardData),
         };
     } catch (error: any) {
+        console.error("Leaderboard function error:", error);
         return {
             statusCode: 500,
             body: JSON.stringify({ error: error.message }),

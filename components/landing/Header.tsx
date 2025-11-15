@@ -1,6 +1,8 @@
 import React from 'react';
 import { User } from '../../types';
 import Logo from '../common/Logo';
+import { useTranslation } from '../../hooks/useTranslation';
+import LanguageSwitcher from '../common/LanguageSwitcher';
 
 interface LandingHeaderProps {
   user: User | null;
@@ -9,6 +11,7 @@ interface LandingHeaderProps {
 }
 
 const LandingHeader: React.FC<LandingHeaderProps> = ({ user, onTopUpClick, onScrollTo }) => {
+  const { t } = useTranslation();
   const [isScrolled, setIsScrolled] = React.useState(false);
 
   React.useEffect(() => {
@@ -23,14 +26,19 @@ const LandingHeader: React.FC<LandingHeaderProps> = ({ user, onTopUpClick, onScr
     <header className={`fixed top-0 left-0 w-full z-40 transition-all duration-300 ${isScrolled ? 'bg-skin-fill/80 backdrop-blur-lg border-b border-skin-border' : 'bg-transparent'}`}>
       <div className="container mx-auto px-4">
         <div className="flex justify-between items-center h-20">
-          <Logo onClick={() => onScrollTo('hero')} />
+          <div>
+            <Logo onClick={() => onScrollTo('hero')} />
+          </div>
+          
           <nav className="hidden md:flex items-center gap-2">
-            <a onClick={() => onScrollTo('features')} className="px-4 py-2 rounded-full bg-white/5 hover:bg-skin-accent/10 text-skin-muted hover:text-skin-base border border-transparent hover:border-skin-border-accent transition-all duration-300 cursor-pointer text-sm">Tính năng</a>
-            <a onClick={() => onScrollTo('how-it-works')} className="px-4 py-2 rounded-full bg-white/5 hover:bg-skin-accent/10 text-skin-muted hover:text-skin-base border border-transparent hover:border-skin-border-accent transition-all duration-300 cursor-pointer text-sm">Cách hoạt động</a>
-            <a onClick={() => onScrollTo('pricing')} className="px-4 py-2 rounded-full bg-white/5 hover:bg-skin-accent/10 text-skin-muted hover:text-skin-base border border-transparent hover:border-skin-border-accent transition-all duration-300 cursor-pointer text-sm">Bảng giá</a>
-            <a onClick={() => onScrollTo('faq')} className="px-4 py-2 rounded-full bg-white/5 hover:bg-skin-accent/10 text-skin-muted hover:text-skin-base border border-transparent hover:border-skin-border-accent transition-all duration-300 cursor-pointer text-sm">FAQ</a>
+            <a onClick={() => onScrollTo('features')} className="px-4 py-2 rounded-full bg-white/5 hover:bg-skin-accent/10 text-skin-muted hover:text-skin-base border border-transparent hover:border-skin-border-accent transition-all duration-300 cursor-pointer text-sm">{t('landing.header.features')}</a>
+            <a onClick={() => onScrollTo('how-it-works')} className="px-4 py-2 rounded-full bg-white/5 hover:bg-skin-accent/10 text-skin-muted hover:text-skin-base border border-transparent hover:border-skin-border-accent transition-all duration-300 cursor-pointer text-sm">{t('landing.header.howItWorks')}</a>
+            <a onClick={() => onScrollTo('pricing')} className="px-4 py-2 rounded-full bg-white/5 hover:bg-skin-accent/10 text-skin-muted hover:text-skin-base border border-transparent hover:border-skin-border-accent transition-all duration-300 cursor-pointer text-sm">{t('landing.header.pricing')}</a>
+            <a onClick={() => onScrollTo('faq')} className="px-4 py-2 rounded-full bg-white/5 hover:bg-skin-accent/10 text-skin-muted hover:text-skin-base border border-transparent hover:border-skin-border-accent transition-all duration-300 cursor-pointer text-sm">{t('landing.header.faq')}</a>
           </nav>
+          
           <div className="flex items-center gap-4">
+            <LanguageSwitcher />
             {user ? (
               <div className="flex items-center gap-4">
                 <div 

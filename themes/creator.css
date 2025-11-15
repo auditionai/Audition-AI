@@ -189,7 +189,7 @@
 }
 
 .auth-input {
-    @apply w-full p-3 bg-skin-fill-secondary rounded-md border border-skin-border focus:border-skin-border-accent focus:ring-1 focus:ring-skin-border-accent transition text-skin-base;
+    @apply w-full p-3 bg-skin-input-bg rounded-md border border-skin-border focus:border-skin-border-accent focus:ring-1 focus:ring-skin-border-accent transition text-skin-base;
 }
 
 /* ==========================================================================
@@ -316,6 +316,13 @@
     box-shadow: 0 0 10px rgba(var(--color-accent), 0.5);
 }
 
+.group-disabled .group-disabled\:opacity-50 {
+    opacity: 0.5;
+}
+.group-disabled .group-disabled\:cursor-not-allowed {
+    cursor: not-allowed;
+}
+
 /* ==========================================================================
    LEADERBOARD PAGE STYLES
    ========================================================================== */
@@ -370,7 +377,7 @@
    ========================================================================== */
 
 /* Themed Nav Buttons (NEW) */
-.themed-nav-button { @apply relative flex items-center gap-2 px-3 md:px-4 py-2 rounded-full text-sm font-bold transition-all duration-300 shadow-lg; }
+.themed-nav-button { @apply relative flex items-center gap-2 px-3 md:px-4 py-2 rounded-full text-sm font-bold transition-all duration-300 shadow-lg whitespace-nowrap; }
 
 .themed-nav-button.leaderboard { background-color: var(--color-nav-leaderboard-bg); color: var(--color-nav-leaderboard-text); box-shadow: 0 4px 10px -1px var(--color-nav-leaderboard-bg); }
 .themed-nav-button.leaderboard:hover { background-color: var(--color-nav-leaderboard-hover); box-shadow: 0 6px 15px -1px var(--color-nav-leaderboard-bg); }

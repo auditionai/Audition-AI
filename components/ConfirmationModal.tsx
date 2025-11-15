@@ -1,6 +1,7 @@
 // FIX: Create the content for the ConfirmationModal component.
 import React from 'react';
 import Modal from './common/Modal';
+import { useTranslation } from '../hooks/useTranslation';
 
 interface ConfirmationModalProps {
   isOpen: boolean;
@@ -17,13 +18,14 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
   cost,
   isLoading = false,
 }) => {
-  const title = cost > 0 ? 'Xác nhận hành động' : 'Bạn chắc chắn chứ?';
+  const { t } = useTranslation();
+  const title = cost > 0 ? t('modals.confirmation.titleCost') : t('modals.confirmation.titleNoCost');
   
   let description;
   if (cost > 0) {
-    description = `Hành động này sẽ tiêu tốn ${cost.toLocaleString()} kim cương. Bạn có muốn tiếp tục?`;
+    description = t('modals.confirmation.descCost', { cost: cost.toLocaleString() });
   } else {
-    description = 'Hành động này không thể hoàn tác. Bạn có chắc chắn muốn tiếp tục?';
+    description = t('modals.confirmation.descNoCost');
   }
 
   return (
@@ -39,7 +41,7 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
             disabled={isLoading}
             className="px-6 py-2 font-semibold bg-white/10 text-white rounded-lg hover:bg-white/20 transition disabled:opacity-50"
           >
-            Hủy
+            {t('modals.confirmation.cancel')}
           </button>
           <button
             onClick={onConfirm}
@@ -49,10 +51,10 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
             {isLoading ? (
                 <>
                     <div className="w-5 h-5 border-2 border-white/50 border-t-white rounded-full animate-spin"></div>
-                    <span>Đang xử lý...</span>
+                    <span>{t('modals.confirmation.processing')}</span>
                 </>
             ) : (
-              'Xác nhận'
+              t('modals.confirmation.confirm')
             )}
           </button>
         </div>

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
 import ConfirmationModal from '../../ConfirmationModal';
 import { DiamondIcon } from '../../common/DiamondIcon';
+import { useTranslation } from '../../../hooks/useTranslation';
 
 const COST_MANUAL = 0;
 const COST_AI = 1;
@@ -50,6 +51,7 @@ interface SignatureState {
 
 const SignatureTool: React.FC<SignatureToolProps> = ({ initialImage, onClearInitialImage, onInstructionClick }) => {
     const { user, session, showToast, updateUserProfile } = useAuth();
+    const { t } = useTranslation();
     const [isConfirmOpen, setConfirmOpen] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -196,9 +198,9 @@ const SignatureTool: React.FC<SignatureToolProps> = ({ initialImage, onClearInit
     const cost = state.mode === 'ai' ? COST_AI : COST_MANUAL;
 
     const handleApplyClick = () => {
-        if (!sourceImage) return showToast('Vui lòng tải ảnh lên trước.', 'error');
+        if (!sourceImage) return showToast(t('creator.aiTool.signature.error.noImage'), 'error');
         if (cost > 0) {
-            if (user && user.diamonds < cost) return showToast(`Bạn cần ${cost} kim cương.`, 'error');
+            if (user && user.diamonds < cost) return showToast(t('creator.aiTool.signature.error.noCredits', { cost }), 'error');
             setConfirmOpen(true);
         } else {
             drawManualSignature();
@@ -256,9 +258,9 @@ const SignatureTool: React.FC<SignatureToolProps> = ({ initialImage, onClearInit
         <div className="h-full">
             <ConfirmationModal isOpen={isConfirmOpen} onClose={() => setConfirmOpen(false)} onConfirm={handleConfirmApplyAI} cost={cost} isLoading={isProcessing} />
             <div className="flex justify-between items-center mb-4">
-                 <h3 className="themed-heading text-lg font-bold themed-title-glow">Công Cụ Chèn Chữ Ký</h3>
+                 <h3 className="themed-heading text-lg font-bold themed-title-glow">{t('creator.aiTool.signature.title')}</h3>
                  <button onClick={onInstructionClick} className="flex items-center gap-1 text-xs text-skin-accent hover:opacity-80 transition-all px-2 py-1 rounded-md bg-skin-accent/10 border border-skin-border-accent hover:bg-skin-accent/20 shadow-accent hover:shadow-accent-lg flex-shrink-0">
-                    <i className="ph-fill ph-book-open"></i> Hướng Dẫn
+                    <i className="ph-fill ph-book-open"></i> {t('creator.aiTool.common.help')}
                 </button>
             </div>
             <div className="flex flex-col lg:flex-row gap-6">
@@ -275,13 +277,13 @@ const SignatureTool: React.FC<SignatureToolProps> = ({ initialImage, onClearInit
                                     }}
                                     className="absolute -translate-x-1/2 -translate-y-1/2 w-20 h-20 border-2 border-dashed border-white/80 cursor-move bg-black/40 rounded-md flex items-center justify-center text-white text-xs font-bold shadow-lg"
                                 >
-                                    Vị trí
+                                    {t('creator.aiTool.signature.position')}
                                 </div>
                             </>
                         ) : (
                              <label className="flex flex-col items-center justify-center text-center text-gray-400 cursor-pointer h-full w-full">
                                 <i className="ph-fill ph-upload-simple text-4xl"></i>
-                                <p className="font-semibold mt-2">Nhấn để chọn ảnh</p>
+                                <p className="font-semibold mt-2">{t('creator.aiTool.signature.uploadPlaceholder')}</p>
                                 <input type="file" accept="image/*" onChange={handleImageUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
                             </label>
                         )}
@@ -298,7 +300,7 @@ const SignatureTool: React.FC<SignatureToolProps> = ({ initialImage, onClearInit
                                     : 'border-skin-border bg-skin-fill-secondary text-skin-muted hover:border-skin-border-accent/50'
                             }`}
                         >
-                            Thủ công (Miễn phí)
+                            {t('creator.aiTool.signature.manualMode')}
                         </button>
                         <button
                             onClick={() => updateState({ mode: 'ai'})}
@@ -308,31 +310,31 @@ const SignatureTool: React.FC<SignatureToolProps> = ({ initialImage, onClearInit
                                     : 'border-skin-border bg-skin-fill-secondary text-skin-muted hover:border-skin-border-accent/50'
                             }`}
                         >
-                            AI Style <DiamondIcon className="w-4 h-4 inline-block ml-1" />
+                            {t('creator.aiTool.signature.aiMode')} <DiamondIcon className="w-4 h-4 inline-block ml-1" />
                         </button>
                     </div>
 
                     <div className="space-y-4">
                         <div>
-                            <label className="text-sm font-semibold text-skin-base mb-1 block">Nội dung Chữ ký</label>
+                            <label className="text-sm font-semibold text-skin-base mb-1 block">{t('creator.aiTool.signature.textLabel')}</label>
                             <input type="text" value={state.text} onChange={e => updateState({ text: e.target.value })} className="auth-input" />
                         </div>
                         {state.mode === 'manual' ? (
                             <>
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
-                                        <label className="text-sm font-semibold text-skin-base mb-1 block">Font chữ</label>
+                                        <label className="text-sm font-semibold text-skin-base mb-1 block">{t('creator.aiTool.signature.fontLabel')}</label>
                                         <select value={state.font} onChange={e => updateState({ font: e.target.value })} className="auth-input">
                                             {FONTS.map(f => <option key={f.name} value={f.name}>{f.name}</option>)}
                                         </select>
                                     </div>
                                     <div>
-                                        <label className="text-sm font-semibold text-skin-base mb-1 block">Màu chữ</label>
+                                        <label className="text-sm font-semibold text-skin-base mb-1 block">{t('creator.aiTool.signature.colorLabel')}</label>
                                         <input type="color" value={state.color} onChange={e => updateState({ color: e.target.value })} className="w-full h-[46px] bg-skin-fill-secondary rounded-md border border-skin-border cursor-pointer" />
                                     </div>
                                 </div>
                                 <div>
-                                    <label className="text-sm font-semibold text-skin-base mb-1 block">Kích thước ({state.size}px)</label>
+                                    <label className="text-sm font-semibold text-skin-base mb-1 block">{t('creator.aiTool.signature.sizeLabel', { size: state.size })}</label>
                                     <input type="range" min="12" max="128" value={state.size} onChange={e => updateState({ size: Number(e.target.value) })} className="w-full accent-skin-accent" />
                                 </div>
                             </>
@@ -340,7 +342,7 @@ const SignatureTool: React.FC<SignatureToolProps> = ({ initialImage, onClearInit
                            <>
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
-                                        <label className="text-sm font-semibold text-skin-base mb-1 block">Font chữ</label>
+                                        <label className="text-sm font-semibold text-skin-base mb-1 block">{t('creator.aiTool.signature.fontLabel')}</label>
                                         <select value={state.aiFont} onChange={e => updateState({ aiFont: e.target.value })} className="auth-input">
                                             {FONTS.map(f => <option key={f.name} value={f.name}>{f.name}</option>)}
                                         </select>
@@ -351,22 +353,22 @@ const SignatureTool: React.FC<SignatureToolProps> = ({ initialImage, onClearInit
                                     </div>
                                 </div>
                                 <div>
-                                    <label className="text-sm font-semibold text-skin-base mb-1 block">Kích thước ({state.aiSize}px)</label>
+                                    <label className="text-sm font-semibold text-skin-base mb-1 block">{t('creator.aiTool.signature.sizeLabel', { size: state.aiSize })}</label>
                                     <input type="range" min="16" max="256" value={state.aiSize} onChange={e => updateState({ aiSize: Number(e.target.value) })} className="w-full accent-skin-accent" />
                                 </div>
                                 <div>
-                                    <label className="text-sm font-semibold text-skin-base mb-2 block">Phong cách GenZ</label>
+                                    <label className="text-sm font-semibold text-skin-base mb-2 block">{t('creator.aiTool.signature.aiStyleLabel')}</label>
                                     <div className="grid grid-cols-4 gap-2">
                                         {(['neon', '3d', 'graffiti', 'typography', 'outline', 'metallic', 'glowing', 'shadow'] as AiStyle[]).map(s => (
-                                            <button key={s} onClick={() => updateState({aiStyle: s})} className={`p-2 text-xs font-bold rounded-md border-2 transition ${state.aiStyle === s ? 'border-skin-border-accent bg-skin-accent/10' : 'border-skin-border bg-skin-fill-secondary'}`}>{s.toUpperCase()}</button>
+                                            <button key={s} onClick={() => updateState({aiStyle: s})} className={`p-2 text-xs font-bold rounded-md border-2 transition ${state.aiStyle === s ? 'border-skin-border-accent bg-skin-accent/10' : 'border-skin-border bg-skin-fill-secondary'}`}>{t(`creator.aiTool.signature.styles.${s}`)}</button>
                                         ))}
                                     </div>
                                 </div>
                                 <div>
-                                    <label className="text-sm font-semibold text-skin-base mb-2 block">Bảng màu</label>
+                                    <label className="text-sm font-semibold text-skin-base mb-2 block">{t('creator.aiTool.signature.aiColorLabel')}</label>
                                     <div className="grid grid-cols-4 gap-2">
                                         {(['rainbow', 'fire', 'ice', 'gold', 'pastel', 'vaporwave', 'monochrome', 'custom'] as AiColor[]).map(c => (
-                                            <button key={c} onClick={() => updateState({aiColor: c})} className={`p-2 text-xs font-bold rounded-md border-2 transition ${state.aiColor === c ? 'border-skin-border-accent bg-skin-accent/10' : 'border-skin-border bg-skin-fill-secondary'}`}>{c.toUpperCase()}</button>
+                                            <button key={c} onClick={() => updateState({aiColor: c})} className={`p-2 text-xs font-bold rounded-md border-2 transition ${state.aiColor === c ? 'border-skin-border-accent bg-skin-accent/10' : 'border-skin-border bg-skin-fill-secondary'}`}>{t(`creator.aiTool.signature.colors.${c}`)}</button>
                                         ))}
                                     </div>
                                      {state.aiColor === 'custom' && (
@@ -377,18 +379,18 @@ const SignatureTool: React.FC<SignatureToolProps> = ({ initialImage, onClearInit
                                 </div>
                            </>
                         )}
-                         <p className="text-xs text-skin-muted p-2 bg-skin-fill rounded-md text-center">Kéo thả ô <span className="font-bold text-skin-base">'Vị trí'</span> trên ảnh để chọn nơi chèn chữ ký.</p>
+                         <p className="text-xs text-skin-muted p-2 bg-skin-fill rounded-md text-center">{t('creator.aiTool.signature.positionHelp')}</p>
                     </div>
                     <div className="mt-6 pt-6 border-t border-skin-border space-y-3">
                          <button onClick={handleApplyClick} disabled={isProcessing || !sourceImage} className="w-full py-3 font-bold text-lg text-white bg-gradient-to-r from-pink-500 to-fuchsia-600 rounded-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
                             {isProcessing ? <div className="w-6 h-6 border-2 border-white/50 border-t-white rounded-full animate-spin"></div> : <>
                                 {cost > 0 && <DiamondIcon className="w-6 h-6" />}
-                                <span>{state.mode === 'ai' ? `Áp dụng AI Style (${cost} 💎)` : 'Áp dụng Chữ ký'}</span>
+                                <span>{state.mode === 'ai' ? t('creator.aiTool.signature.applyAiButton', { cost }) : t('creator.aiTool.signature.applyButton')}</span>
                             </>}
                         </button>
                         <button onClick={handleDownload} disabled={!resultImage} className="w-full py-3 font-bold bg-green-500/80 hover:bg-green-600 text-white rounded-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
                             <i className="ph-fill ph-download-simple"></i>
-                            Tải ảnh
+                            {t('creator.aiTool.signature.downloadButton')}
                         </button>
                     </div>
                 </div>

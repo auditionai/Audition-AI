@@ -6,6 +6,8 @@ import XPProgressBar from '../common/XPProgressBar';
 import NotificationDropdown from './NotificationDropdown';
 import { CHANGELOG_DATA } from '../../constants/changelogData';
 import Logo from '../common/Logo';
+import { useTranslation } from '../../hooks/useTranslation';
+import LanguageSwitcher from '../common/LanguageSwitcher';
 
 interface CreatorHeaderProps {
   onTopUpClick: () => void;
@@ -16,6 +18,7 @@ interface CreatorHeaderProps {
 
 const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, onNavigate, onCheckInClick }) => {
   const { user, logout, hasCheckedInToday } = useAuth();
+  const { t } = useTranslation();
   const [isDropdownOpen, setDropdownOpen] = useState(false);
   const [isNotificationOpen, setNotificationOpen] = useState(false);
   const [hasUnread, setHasUnread] = useState(false);
@@ -71,21 +74,21 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
   return (
     <header className="fixed top-0 left-0 w-full z-40 bg-skin-fill/80 backdrop-blur-lg border-b border-skin-border">
       <div className="container mx-auto px-4">
-        <div className="flex justify-between items-center py-3 md:h-20 relative">
+        <div className="flex justify-between items-center h-20">
           
           {/* Left: Logo */}
-          <div className="flex-shrink-0">
+          <div>
              <Logo onClick={() => handleNavClick('tool')} />
           </div>
           
           {/* Center: Desktop Navigation */}
-           <nav className="hidden md:flex items-center gap-2 absolute left-1/2 -translate-x-1/2">
+           <nav className="hidden md:flex items-center gap-2">
                 <button
                   onClick={() => handleNavClick('leaderboard')}
                   className={`themed-nav-button leaderboard ${activeTab === 'leaderboard' ? 'is-active' : ''}`}
                   >
                     <i className="ph-fill ph-crown-simple text-base"></i>
-                    <span className="hidden md:inline">Bảng xếp hạng</span>
+                    <span className="hidden md:inline">{t('creator.header.nav.leaderboard')}</span>
                 </button>
                 <button
                   onClick={onCheckInClick}
@@ -98,14 +101,14 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
                         </span>
                     )}
                     <i className="ph-fill ph-calendar-check text-base"></i>
-                    <span className="hidden md:inline">Điểm danh</span>
+                    <span className="hidden md:inline">{t('creator.header.nav.checkIn')}</span>
                 </button>
                 <button
                   onClick={() => handleNavClick('my-creations')}
                   className={`themed-nav-button creations ${activeTab === 'my-creations' ? 'is-active' : ''}`}
                   >
                     <i className="ph-fill ph-images text-base"></i>
-                    <span className="hidden md:inline">Tác phẩm</span>
+                    <span className="hidden md:inline">{t('creator.header.nav.myCreations')}</span>
                 </button>
                 {/* Admin Gallery Button */}
                 {user.is_admin && (
@@ -114,13 +117,18 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
                       className={`themed-nav-button admin ${activeTab === 'admin-gallery' ? 'is-active' : ''}`}
                       >
                         <i className="ph-fill ph-shield-check text-base"></i>
-                        <span className="hidden md:inline">Quản lý Gallery</span>
+                        <span className="hidden md:inline">{t('creator.header.nav.adminGallery')}</span>
                     </button>
                 )}
             </nav>
           
           {/* Right: Actions */}
           <div className="flex items-center gap-2 md:gap-4">
+            {/* Language Switcher */}
+            <div className="hidden md:block">
+                <LanguageSwitcher />
+            </div>
+
             {/* Mobile Top Up */}
             <button
               onClick={onTopUpClick}
@@ -138,7 +146,7 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
                   </div>
                   <div className="themed-top-up-button__content-wrapper">
                       <span className="themed-top-up-button__amount">{user.diamonds.toLocaleString()}</span>
-                      <span className="themed-top-up-button__action">NẠP</span>
+                      <span className="themed-top-up-button__action">{t('creator.header.topUp.action')}</span>
                   </div>
               </button>
             </div>
@@ -180,7 +188,7 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
                            <span className="text-2xl">{rank.icon}</span>
                            <div>
                                <p className="font-semibold text-sm text-skin-base">{user.display_name}</p>
-                               <p className="text-xs text-skin-muted truncate">{rank.title} - Cấp {user.level}</p>
+                               <p className="text-xs text-skin-muted truncate">{rank.title} - {t('creator.header.level')} {user.level}</p>
                            </div>
                         </div>
                         <div className="mt-3">
@@ -190,18 +198,21 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
                      <div className="py-1 mt-1">
                         <button onClick={() => handleNavClick('settings')} className={`flex items-center gap-3 w-full text-left px-2 py-2 text-sm rounded-md cursor-pointer ${activeTab === 'settings' ? 'bg-skin-accent/20 text-skin-base' : 'text-skin-muted hover:bg-white/10'}`}>
                             <i className="ph-fill ph-gear"></i>
-                            Cài đặt tài khoản
+                            {t('creator.header.userMenu.settings')}
                         </button>
                      </div>
                      <div className="py-1 border-t border-skin-border mt-1">
                         <button onClick={handleLogout} className="flex items-center gap-3 w-full text-left px-2 py-2 text-sm text-skin-muted rounded-md hover:bg-red-500/20 hover:text-red-400 transition-colors cursor-pointer">
                           <i className="ph-fill ph-sign-out"></i>
-                          Đăng xuất
+                          {t('creator.header.userMenu.logout')}
                         </button>
                      </div>
                   </div>
                 </div>
               )}
+            </div>
+             <div className="md:hidden">
+                 <LanguageSwitcher />
             </div>
           </div>
         </div>

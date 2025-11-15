@@ -1,16 +1,19 @@
 import React from 'react';
 import { HOW_IT_WORKS } from '../../constants/landingPageData';
+import { useTranslation } from '../../hooks/useTranslation';
 
 const HowItWorks: React.FC = () => {
+  const { t } = useTranslation();
+
   return (
     <section id="how-it-works" className="py-16 sm:py-24 text-white w-full">
       <div className="container mx-auto px-4">
         <div className="text-center max-w-3xl mx-auto mb-16">
           <h2 className="text-3xl md:text-4xl font-bold mb-4">
-            <span className="bg-gradient-to-r from-pink-400 to-fuchsia-500 text-transparent bg-clip-text">4 Bước Đơn Giản Để Có Ảnh Cực Chất</span>
+            <span className="bg-gradient-to-r from-pink-400 to-fuchsia-500 text-transparent bg-clip-text">{t('landing.howItWorks.title')}</span>
           </h2>
           <p className="text-lg text-gray-400">
-            Chỉ vài cú nhấp chuột, bạn đã có ngay một tác phẩm nghệ thuật đậm chất Audition.
+            {t('landing.howItWorks.description')}
           </p>
         </div>
 
@@ -25,9 +28,9 @@ const HowItWorks: React.FC = () => {
                     <div className="bg-gradient-to-br from-pink-500 to-fuchsia-600 w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-xl flex-shrink-0">
                       {item.step}
                     </div>
-                    <h3 className="text-2xl font-bold text-white">{item.title}</h3>
+                    <h3 className="text-2xl font-bold text-white">{t(`landing.howItWorks.steps.${index}.title`)}</h3>
                   </div>
-                  <p className="text-gray-400">{item.description}</p>
+                  <p className="text-gray-400">{t(`landing.howItWorks.steps.${index}.description`)}</p>
                 </div>
               </div>
               <div className="hidden md:flex flex-shrink-0 w-1/2 justify-center items-center">

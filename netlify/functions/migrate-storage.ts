@@ -1,113 +1,82 @@
-
-
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
-import { Buffer } from 'buffer';
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 
-// Hằng số bảo mật, bạn sẽ cần tạo biến này trên Netlify
-const MIGRATION_SECRET = process.env.MIGRATION_SECRET;
+const COST_PER_FACE_PROCESS = 1;
 
 const handler: Handler = async (event: HandlerEvent) => {
-    // --- BẢO MẬT: Chỉ chạy khi có secret key đúng ---
-    const { secret } = event.queryStringParameters || {};
-    if (!MIGRATION_SECRET || secret !== MIGRATION_SECRET) {
-        return { statusCode: 403, body: JSON.stringify({ error: 'Forbidden: Invalid secret.' }) };
+    if (event.httpMethod !== 'POST') {
+        return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
     }
-    console.log("--- [START] Storage Migration Script ---");
 
-    // Khởi tạo các client cần thiết
-    const s3Client = new S3Client({
-        region: "auto",
-        endpoint: process.env.R2_ENDPOINT!,
-        credentials: {
-            accessKeyId: process.env.R2_ACCESS_KEY_ID!,
-            secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
-        },
-    });
+    // 1. Authenticate user
+    const authHeader = event.headers['authorization'];
+    const token = authHeader?.split(' ')[1];
+    if (!token) {
+        return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized' }) };
+    }
+    // FIX: Use Supabase v1 `api.getUser(token)` instead of v2 `auth.getUser(token)` and correct the destructuring.
+    const { user, error: authError } = await supabaseAdmin.auth.api.getUser(token);
+    if (authError || !user) {
+        return { statusCode: 401, body: JSON.stringify({ error: 'Invalid token' }) };
+    }
 
     try {
-        // 1. Tìm tất cả các ảnh có URL vẫn còn trỏ đến Supabase Storage
-        // Chúng ta giới hạn 50 ảnh mỗi lần chạy để tránh timeout
-        const { data: oldImages, error: fetchError } = await supabaseAdmin
-            .from('generated_images')
-            .select('id, image_url, user_id')
-            .like('image_url', `%${process.env.VITE_SUPABASE_URL}%`)
-            .limit(50);
-
-        if (fetchError) throw new Error(`Error fetching old images: ${fetchError.message}`);
-
-        if (oldImages.length === 0) {
-            console.log("--- [INFO] No more images found on Supabase Storage. Migration complete. ---");
-            return { statusCode: 200, body: JSON.stringify({ message: "Migration complete. No images on Supabase Storage found." }) };
+        // 2. Validate input and user balance
+        const { image: imageDataUrl } = JSON.parse(event.body || '{}');
+        if (!imageDataUrl || !imageDataUrl.startsWith('data:image/')) {
+            return { statusCode: 400, body: JSON.stringify({ error: 'Invalid image data.' }) };
         }
 
-        console.log(`--- [INFO] Found ${oldImages.length} images to migrate. Starting process... ---`);
-        let migratedCount = 0;
-
-        // 2. Lặp qua từng ảnh để di chuyển
-        for (const image of oldImages) {
-            try {
-                // a. Tải file từ Supabase Storage
-                // Lấy đường dẫn file từ URL, ví dụ: 'public/generated_images/user-id/12345.png' -> 'user-id/12345.png'
-                const filePath = image.image_url.split('/generated_images/')[1];
-                if (!filePath) {
-                    console.warn(`[WARN] Skipping image ID ${image.id}: Could not parse file path from URL ${image.image_url}`);
-                    continue;
-                }
-
-                console.log(`[PROCESS] Downloading: ${filePath}`);
-                const { data: blob, error: downloadError } = await supabaseAdmin.storage
-                    .from('generated_images')
-                    .download(filePath);
-
-                if (downloadError) throw new Error(`Failed to download ${filePath}: ${downloadError.message}`);
-                
-                const buffer = Buffer.from(await blob.arrayBuffer());
-                const mimeType = blob.type;
-
-                // b. Tải file lên Cloudflare R2
-                const newFileName = `${image.user_id}/${Date.now()}_migrated.${mimeType.split('/')[1] || 'png'}`;
-                console.log(`[PROCESS] Uploading to R2 as: ${newFileName}`);
-
-                const putCommand = new PutObjectCommand({
-                    Bucket: process.env.R2_BUCKET_NAME!,
-                    Key: newFileName,
-                    Body: buffer,
-                    ContentType: mimeType,
-                });
-                // FIX: Cast s3Client to 'any' to bypass a likely environment-specific TypeScript type resolution error.
-                await (s3Client as any).send(putCommand);
-
-                // c. Cập nhật URL trong CSDL
-                const publicUrl = `${process.env.R2_PUBLIC_URL}/${newFileName}`;
-                console.log(`[PROCESS] Updating DB for image ID ${image.id} with new URL: ${publicUrl}`);
-
-                const { error: updateError } = await supabaseAdmin
-                    .from('generated_images')
-                    .update({ image_url: publicUrl })
-                    .eq('id', image.id);
-                
-                if (updateError) throw new Error(`Failed to update DB for image ${image.id}: ${updateError.message}`);
-                
-                console.log(`[SUCCESS] Migrated image ID ${image.id}`);
-                migratedCount++;
-
-            } catch (imageError: any) {
-                console.error(`[ERROR] Failed to migrate image ID ${image.id}. Reason: ${imageError.message}. Skipping to next image.`);
-                // Tiếp tục với ảnh tiếp theo thay vì dừng toàn bộ kịch bản
-            }
+        const { data: userData, error: userError } = await supabaseAdmin
+            .from('users')
+            .select('diamonds')
+            .eq('id', user.id)
+            .single();
+        
+        if (userError || !userData) {
+            return { statusCode: 404, body: JSON.stringify({ error: 'User not found.' }) };
+        }
+        if (userData.diamonds < COST_PER_FACE_PROCESS) {
+            return { statusCode: 402, body: JSON.stringify({ error: 'Không đủ kim cương để xử lý gương mặt.' }) };
         }
 
-        console.log(`--- [END] Finished migration batch. Migrated ${migratedCount} of ${oldImages.length} images. ---`);
+        // 3. Simulate AI processing (crop, sharpen)
+        // In a real app, you would call a dedicated AI service here (e.g., Google Vision API, or another Gemini call).
+        // For this demo, we'll just return the original image's base64 data to prove the workflow.
+        console.log(`[FACE PROCESS] Simulating AI face crop/sharpen for user ${user.id}...`);
+        await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate processing time
+        const [_header, base64] = imageDataUrl.split(',');
+        const processedImageBase64 = base64; // Placeholder
+
+        // 4. Deduct cost and log transaction
+        const newDiamondCount = userData.diamonds - COST_PER_FACE_PROCESS;
+        const [userUpdateResult, logResult] = await Promise.all([
+            supabaseAdmin.from('users').update({ diamonds: newDiamondCount }).eq('id', user.id),
+            supabaseAdmin.from('diamond_transactions_log').insert({
+                user_id: user.id,
+                amount: -COST_PER_FACE_PROCESS,
+                transaction_type: 'FACE_ID_PROCESS',
+                description: 'Xử lý & Khóa Gương Mặt'
+            })
+        ]);
+
+        if (userUpdateResult.error) throw userUpdateResult.error;
+        if (logResult.error) throw logResult.error;
+        
+        // 5. Return success response with processed data
         return {
             statusCode: 200,
-            body: JSON.stringify({ message: `Successfully migrated ${migratedCount} images in this batch. Run again if more images need migration.` }),
+            body: JSON.stringify({ 
+                success: true,
+                message: "Xử lý gương mặt thành công!",
+                processedImageBase64,
+                newDiamondCount
+            }),
         };
 
     } catch (error: any) {
-        console.error("--- [FATAL] A critical error occurred during migration ---", error);
-        return { statusCode: 500, body: JSON.stringify({ error: `Migration failed: ${error.message}` }) };
+        console.error("Process face function error:", error);
+        return { statusCode: 500, body: JSON.stringify({ error: error.message || 'Lỗi máy chủ khi xử lý gương mặt.' }) };
     }
 };
 

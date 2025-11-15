@@ -3,9 +3,11 @@ import { useAuth } from '../contexts/AuthContext';
 import { GalleryImage } from '../types';
 import ImageModal from '../components/common/ImageModal';
 import ConfirmationModal from '../components/ConfirmationModal';
+import { useTranslation } from '../hooks/useTranslation';
 
 const MyCreationsPage: React.FC = () => {
     const { session, showToast, updateUserDiamonds } = useAuth();
+    const { t } = useTranslation();
     const [images, setImages] = useState<GalleryImage[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [selectedImage, setSelectedImage] = useState<GalleryImage | null>(null);
@@ -20,7 +22,7 @@ const MyCreationsPage: React.FC = () => {
             const response = await fetch('/.netlify/functions/user-gallery', {
                 headers: { Authorization: `Bearer ${session.access_token}` },
             });
-            if (!response.ok) throw new Error('Không thể tải các tác phẩm của bạn.');
+            if (!response.ok) throw new Error(t('creator.myCreations.loading'));
             const data = await response.json();
             setImages(data);
         } catch (error: any) {
@@ -28,7 +30,7 @@ const MyCreationsPage: React.FC = () => {
         } finally {
             setIsLoading(false);
         }
-    }, [session, showToast]);
+    }, [session, showToast, t]);
 
     useEffect(() => {
         fetchUserGallery();
@@ -47,10 +49,10 @@ const MyCreationsPage: React.FC = () => {
                 body: JSON.stringify({ imageId: imageToDelete.id }),
             });
             const result = await response.json();
-            if (!response.ok) throw new Error(result.error || 'Xóa ảnh thất bại.');
+            if (!response.ok) throw new Error(result.error || t('creator.myCreations.delete.error'));
 
             setImages(prev => prev.filter(img => img.id !== imageToDelete.id));
-            showToast('Đã xóa tác phẩm thành công!', 'success');
+            showToast(t('creator.myCreations.delete.success'), 'success');
         } catch (error: any) {
             showToast(error.message, 'error');
         } finally {
@@ -72,11 +74,11 @@ const MyCreationsPage: React.FC = () => {
                 body: JSON.stringify({ imageId: imageToShare.id }),
             });
             const result = await response.json();
-            if (!response.ok) throw new Error(result.error || 'Chia sẻ ảnh thất bại.');
+            if (!response.ok) throw new Error(result.error || t('creator.myCreations.shareAction.error'));
 
             updateUserDiamonds(result.newDiamondCount);
             setImages(prev => prev.map(img => img.id === imageToShare.id ? { ...img, is_public: true } : img));
-            showToast('Đã chia sẻ tác phẩm lên thư viện cộng đồng!', 'success');
+            showToast(t('creator.myCreations.shareAction.success'), 'success');
 
         } catch (error: any) {
             showToast(error.message, 'error');
@@ -87,7 +89,7 @@ const MyCreationsPage: React.FC = () => {
     };
 
     if (isLoading) {
-        return <div className="text-center p-12">Đang tải các tác phẩm của bạn...</div>;
+        return <div className="text-center p-12">{t('creator.myCreations.loading')}</div>;
     }
     
     return (
@@ -120,25 +122,25 @@ const MyCreationsPage: React.FC = () => {
             <div className="bg-yellow-500/10 border border-yellow-500/30 text-yellow-300 p-4 rounded-lg mb-8 flex items-start gap-4">
                 <i className="ph-fill ph-warning-circle text-2xl text-yellow-400 mt-1 flex-shrink-0"></i>
                 <div>
-                    <h4 className="font-bold text-yellow-200">Lưu ý quan trọng về lưu trữ ảnh</h4>
+                    <h4 className="font-bold text-yellow-200">{t('creator.myCreations.storageWarning.title')}</h4>
                     <p className="text-sm mt-1 leading-relaxed">
-                        Để đảm bảo hiệu suất và duy trì chi phí hoạt động, các tác phẩm của bạn sẽ chỉ được lưu trữ trên hệ thống trong vòng <strong>tối đa 7 ngày</strong> kể từ ngày tạo. Vui lòng <strong>tải xuống</strong> những hình ảnh bạn yêu thích trước khi chúng bị hệ thống tự động xóa vĩnh viễn.
+                        {t('creator.myCreations.storageWarning.description')}
                     </p>
                 </div>
             </div>
             <div className="text-center max-w-2xl mx-auto mb-12">
-                <h1 className="text-4xl font-bold mb-4 bg-gradient-to-r from-blue-400 via-cyan-400 to-blue-500 text-transparent bg-clip-text">Tác Phẩm Của Tôi</h1>
-                <p className="text-lg text-gray-400">Quản lý tất cả các hình ảnh bạn đã tạo bằng Audition AI.</p>
+                <h1 className="text-4xl font-bold mb-4 bg-gradient-to-r from-blue-400 via-cyan-400 to-blue-500 text-transparent bg-clip-text">{t('creator.myCreations.title')}</h1>
+                <p className="text-lg text-gray-400">{t('creator.myCreations.description')}</p>
                 <p className="mt-4 text-cyan-300 bg-cyan-500/10 p-3 rounded-lg border border-cyan-500/20 text-sm">
-                    ✨ Nhấn vào một tác phẩm và chọn nút <span className="font-bold">Chia sẻ</span> để đưa tác phẩm đẹp nhất của bạn ra Thư viện Cộng đồng! (Chi phí: 1 💎)
+                    {t('creator.myCreations.shareTip')}
                 </p>
             </div>
 
             {images.length === 0 ? (
                 <div className="text-center py-16 bg-white/5 rounded-2xl">
                     <i className="ph-fill ph-image-square text-6xl text-gray-500"></i>
-                    <h3 className="mt-4 text-2xl font-bold">Bạn chưa có tác phẩm nào</h3>
-                    <p className="text-gray-400 mt-2">Hãy vào mục "Tạo ảnh" và bắt đầu sáng tạo ngay!</p>
+                    <h3 className="mt-4 text-2xl font-bold">{t('creator.myCreations.empty.title')}</h3>
+                    <p className="text-gray-400 mt-2">{t('creator.myCreations.empty.description')}</p>
                 </div>
             ) : (
                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
@@ -157,7 +159,7 @@ const MyCreationsPage: React.FC = () => {
                              {image.is_public && (
                                 <div className="absolute top-2 right-2 bg-blue-500/80 text-white text-xs font-bold px-2 py-1 rounded-full flex items-center gap-1">
                                     <i className="ph-fill ph-globe"></i>
-                                    <span>Công khai</span>
+                                    <span>{t('creator.myCreations.public')}</span>
                                 </div>
                             )}
                             <div className="absolute inset-0 p-3 w-full opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end justify-center">

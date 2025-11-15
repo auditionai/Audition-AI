@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { AdminTransaction } from '../../types';
+import { useTranslation } from '../../hooks/useTranslation';
 
 const TransactionManager: React.FC = () => {
     const { session, showToast } = useAuth();
+    const { t } = useTranslation();
     const [transactions, setTransactions] = useState<AdminTransaction[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isProcessing, setIsProcessing] = useState<string | null>(null);
@@ -15,14 +17,14 @@ const TransactionManager: React.FC = () => {
             const res = await fetch('/.netlify/functions/admin-transactions', {
                 headers: { Authorization: `Bearer ${session.access_token}` },
             });
-            if (!res.ok) throw new Error('Không thể tải các giao dịch chờ duyệt.');
+            if (!res.ok) throw new Error(t('creator.settings.admin.transactions.error'));
             setTransactions(await res.json());
         } catch (e: any) {
             showToast(e.message, 'error');
         } finally {
             setIsLoading(false);
         }
-    }, [session, showToast]);
+    }, [session, showToast, t]);
 
     useEffect(() => {
         fetchTransactions();
@@ -42,7 +44,8 @@ const TransactionManager: React.FC = () => {
             const result = await res.json();
             if (!res.ok) throw new Error(result.error);
 
-            showToast(`Giao dịch đã được ${action === 'approve' ? 'phê duyệt' : 'từ chối'}.`, 'success');
+            const actionText = action === 'approve' ? t('creator.settings.admin.transactions.approved') : t('creator.settings.admin.transactions.rejected');
+            showToast(t('creator.settings.admin.transactions.success', { action: actionText }), 'success');
             setTransactions(prev => prev.filter(t => t.id !== transactionId));
         } catch (e: any) {
             showToast(e.message, 'error');
@@ -51,11 +54,11 @@ const TransactionManager: React.FC = () => {
         }
     };
 
-    if (isLoading) return <p className="text-center text-gray-400 p-8">Đang tải giao dịch chờ duyệt...</p>;
+    if (isLoading) return <p className="text-center text-gray-400 p-8">{t('creator.settings.admin.transactions.loading')}</p>;
 
     return (
         <div className="bg-[#12121A]/80 border border-blue-500/20 rounded-2xl shadow-lg p-6">
-            <h3 className="text-2xl font-bold mb-4 text-blue-400">Duyệt Giao Dịch Nạp Kim Cương</h3>
+            <h3 className="text-2xl font-bold mb-4 text-blue-400">{t('creator.settings.admin.transactions.title')}</h3>
             {transactions.length > 0 ? (
                 <div className="space-y-3 max-h-96 overflow-y-auto custom-scrollbar pr-2">
                     {transactions.map(tx => (
@@ -80,21 +83,21 @@ const TransactionManager: React.FC = () => {
                                     disabled={isProcessing === tx.id}
                                     className="px-3 py-1 text-xs font-semibold rounded-md bg-green-500/80 hover:bg-green-600 text-white disabled:opacity-50"
                                 >
-                                    Duyệt
+                                    {t('creator.settings.admin.transactions.approve')}
                                 </button>
                                 <button
                                     onClick={() => handleAction(tx.id, 'reject')}
                                     disabled={isProcessing === tx.id}
                                     className="px-3 py-1 text-xs font-semibold rounded-md bg-red-500/80 hover:bg-red-600 text-white disabled:opacity-50"
                                 >
-                                    Từ chối
+                                    {t('creator.settings.admin.transactions.reject')}
                                 </button>
                             </div>
                         </div>
                     ))}
                 </div>
             ) : (
-                <p className="text-center text-gray-500 py-8">Không có giao dịch nào đang chờ duyệt.</p>
+                <p className="text-center text-gray-500 py-8">{t('creator.settings.admin.transactions.empty')}</p>
             )}
         </div>
     );

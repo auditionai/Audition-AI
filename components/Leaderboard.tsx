@@ -3,17 +3,19 @@ import { LeaderboardUser } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { getRankForLevel } from '../utils/rankUtils';
 import XPProgressBar from './common/XPProgressBar';
+import { useTranslation } from '../hooks/useTranslation';
 
 const Leaderboard: React.FC = () => {
     const [leaderboard, setLeaderboard] = useState<LeaderboardUser[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const { showToast } = useAuth();
+    const { t } = useTranslation();
 
     useEffect(() => {
         const fetchLeaderboard = async () => {
             try {
                 const response = await fetch('/.netlify/functions/leaderboard');
-                if (!response.ok) throw new Error('Không thể tải bảng xếp hạng.');
+                if (!response.ok) throw new Error(t('creator.leaderboard.error.load'));
                 const data = await response.json();
                 setLeaderboard(data);
             } catch (error: any) {
@@ -23,7 +25,7 @@ const Leaderboard: React.FC = () => {
             }
         };
         fetchLeaderboard();
-    }, [showToast]);
+    }, [showToast, t]);
 
     const topThree = leaderboard.slice(0, 3);
     const theRest = leaderboard.slice(3);
@@ -36,7 +38,7 @@ const Leaderboard: React.FC = () => {
         return (
             <div className="text-center p-12">
                 <div className="w-8 h-8 border-4 border-t-pink-400 border-white/20 rounded-full animate-spin mx-auto"></div>
-                <p className="mt-4 text-gray-400">Đang tải bảng xếp hạng...</p>
+                <p className="mt-4 text-gray-400">{t('creator.leaderboard.loading')}</p>
             </div>
         );
     }
@@ -46,12 +48,12 @@ const Leaderboard: React.FC = () => {
             <div className="themed-main-title-container text-center max-w-4xl mx-auto mb-12">
                 <h1 
                     className="themed-main-title text-4xl md:text-5xl font-black mb-4 leading-tight"
-                    data-text="Bảng Xếp Hạng"
+                    data-text={t('creator.leaderboard.title')}
                 >
-                    Bảng Xếp Hạng
+                    {t('creator.leaderboard.title')}
                 </h1>
                 <p className="themed-main-subtitle text-lg md:text-xl max-w-2xl mx-auto">
-                    Vinh danh những nhà sáng tạo hàng đầu dựa trên cấp bậc và số lượng tác phẩm.
+                    {t('creator.leaderboard.description')}
                 </p>
             </div>
 
@@ -59,8 +61,8 @@ const Leaderboard: React.FC = () => {
                 {leaderboard.length === 0 ? (
                     <div className="text-center py-16 bg-skin-fill-secondary rounded-2xl border border-skin-border">
                          <i className="ph-fill ph-trophy text-6xl text-gray-500"></i>
-                        <h3 className="mt-4 text-2xl font-bold">Bảng xếp hạng trống</h3>
-                        <p className="text-gray-400 mt-2">Hãy là người đầu tiên tạo ra tác phẩm và ghi danh!</p>
+                        <h3 className="mt-4 text-2xl font-bold">{t('creator.leaderboard.empty.title')}</h3>
+                        <p className="text-gray-400 mt-2">{t('creator.leaderboard.empty.description')}</p>
                     </div>
                 ) : (
                     <>
@@ -91,7 +93,7 @@ const Leaderboard: React.FC = () => {
                                             <div className="podium-rank-number">{user.rank}</div>
                                             <img src={user.photo_url} alt={user.display_name} className="podium-avatar" />
                                             <p className="podium-name">{user.display_name}</p>
-                                            <p className={`podium-level ${rankDetails.color}`}>{rankDetails.title} - Cấp {user.level}</p>
+                                            <p className={`podium-level ${rankDetails.color}`}>{rankDetails.title} - {t('common.level')} {user.level}</p>
                                             <div className="podium-stats">
                                                 <span><i className="ph-fill ph-image text-pink-400"></i> {user.creations_count}</span>
                                                 <span><i className="ph-fill ph-star text-cyan-400"></i> {user.xp.toLocaleString()} XP</span>
@@ -114,8 +116,8 @@ const Leaderboard: React.FC = () => {
                                             <div className="flex-grow">
                                                 <p className={`font-bold text-lg truncate ${rank.color} neon-text-glow`}>{user.display_name}</p>
                                                 <div className="flex items-center gap-4 text-sm text-skin-muted">
-                                                    <span>Cấp {user.level}</span>
-                                                    <span className="flex items-center gap-1.5"><i className="ph-fill ph-image text-pink-400"></i>{user.creations_count} tác phẩm</span>
+                                                    <span>{t('common.level')} {user.level}</span>
+                                                    <span className="flex items-center gap-1.5"><i className="ph-fill ph-image text-pink-400"></i>{user.creations_count} {t('creator.leaderboard.creations')}</span>
                                                 </div>
                                             </div>
                                             <div className="hidden md:block w-1/3">

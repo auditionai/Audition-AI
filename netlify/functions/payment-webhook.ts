@@ -1,77 +1,118 @@
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
-import crypto from 'crypto';
 
-const PAYOS_CHECKSUM_KEY = process.env.PAYOS_CHECKSUM_KEY;
-
-const createSignature = (data: Record<string, any>, checksumKey: string): string => {
-    const sortedKeys = Object.keys(data).sort();
-    const dataString = sortedKeys.map(key => `${key}=${data[key]}`).join('&');
-    return crypto.createHmac('sha256', checksumKey).update(dataString).digest('hex');
-};
+const getVNDate = (date: Date) => new Date(date.getTime() + 7 * 60 * 60 * 1000);
+const getVNDateString = (date: Date) => getVNDate(date).toISOString().split('T')[0];
 
 const handler: Handler = async (event: HandlerEvent) => {
-    console.log("--- [START] PayOS Webhook Received (Manual Approval Flow) ---");
-
     if (event.httpMethod !== 'POST') {
         return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
     }
-    
-    if (!PAYOS_CHECKSUM_KEY) {
-        console.error('[FATAL] PAYOS_CHECKSUM_KEY is not set.');
-        return { statusCode: 500, body: JSON.stringify({ error: 'Webhook configuration error.' }) };
+
+    const authHeader = event.headers['authorization'];
+    const token = authHeader?.split(' ')[1];
+    if (!token) {
+        return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized' }) };
     }
-    
+    // FIX: Use Supabase v1 `api.getUser(token)` instead of v2 `auth.getUser(token)` and correct the destructuring.
+    const { user, error: authError } = await supabaseAdmin.auth.api.getUser(token);
+    if (authError || !user) {
+        return { statusCode: 401, body: JSON.stringify({ error: 'Invalid token' }) };
+    }
+
     try {
-        const signatureFromHeader = event.headers['x-payos-signature'];
-        const body = JSON.parse(event.body || '{}');
-        const webhookData = body.data;
+        const { data: userProfile, error: profileError } = await supabaseAdmin
+            .from('users')
+            .select('diamonds, xp, last_check_in_at, consecutive_check_in_days')
+            .eq('id', user.id)
+            .single();
 
-        if (!webhookData || !signatureFromHeader) {
-            console.error("[VALIDATION_ERROR] Missing 'data' or 'signature' header.");
-            return { statusCode: 400, body: JSON.stringify({ error: 'Missing webhook data or signature.' }) };
-        }
+        if (profileError) throw profileError;
         
-        const calculatedSignature = createSignature(webhookData, PAYOS_CHECKSUM_KEY);
-        if (calculatedSignature !== signatureFromHeader) {
-            console.warn(`[SECURITY_WARNING] Invalid signature.`);
-            return { statusCode: 401, body: JSON.stringify({ error: 'Invalid signature.' }) };
-        }
-        console.log("[INFO] Signature validated successfully.");
+        const now = new Date();
+        const todayVnString = getVNDateString(now);
 
-        const { orderCode, status } = webhookData;
-        const numericOrderCode = Number(orderCode);
-        if (isNaN(numericOrderCode)) {
-            return { statusCode: 400, body: JSON.stringify({ error: 'Invalid orderCode format.' }) };
+        const lastCheckInDate = userProfile.last_check_in_at ? new Date(userProfile.last_check_in_at) : null;
+        const lastCheckInVnString = lastCheckInDate ? getVNDateString(lastCheckInDate) : null;
+
+        if (lastCheckInVnString === todayVnString) {
+            return {
+                statusCode: 200,
+                body: JSON.stringify({ message: 'Bạn đã điểm danh hôm nay rồi.', checkedIn: true })
+            };
         }
+
+        const yesterday = new Date();
+        yesterday.setDate(now.getDate() - 1);
+        const yesterdayVnString = getVNDateString(yesterday);
         
-        const isSuccess = status?.toUpperCase() === 'PAID';
-        const isFailure = status?.toUpperCase() === 'CANCELLED' || status?.toUpperCase() === 'FAILED';
-
-        if (isSuccess) {
-            // Với quy trình thủ công, chúng ta không cần làm gì ở đây.
-            // Giao dịch sẽ giữ nguyên trạng thái 'pending' để admin phê duyệt.
-            console.log(`[INFO] Order ${numericOrderCode} is PAID. Leaving status as 'pending' for admin approval.`);
-
-        } else if (isFailure) {
-            const dbStatus = status.toUpperCase() === 'CANCELLED' ? 'canceled' : 'failed';
-            // Cập nhật trạng thái cho các giao dịch thất bại hoặc bị hủy
-            await supabaseAdmin
-               .from('transactions')
-               .update({ status: dbStatus, updated_at: new Date().toISOString() })
-               .eq('order_code', numericOrderCode)
-               .eq('status', 'pending');
-            console.log(`[INFO] Order ${numericOrderCode} marked as '${dbStatus}'.`);
+        let newConsecutiveDays = 1;
+        if (lastCheckInVnString === yesterdayVnString) {
+            newConsecutiveDays = (userProfile.consecutive_check_in_days || 0) + 1;
         }
+
+        // Fetch the highest applicable reward from the database
+        // Fix: Changed const to let to allow reassignment for fallback reward.
+        let { data: rewardData, error: rewardError } = await supabaseAdmin
+            .from('check_in_rewards')
+            .select('diamond_reward, xp_reward')
+            .eq('is_active', true)
+            .lte('consecutive_days', newConsecutiveDays)
+            .order('consecutive_days', { ascending: false })
+            .limit(1)
+            .single();
+
+        if (rewardError || !rewardData) {
+            // Fallback to a default reward if none is configured
+            console.error("Could not find a valid check-in reward, using fallback.", rewardError);
+            rewardData = { diamond_reward: 1, xp_reward: 10 };
+        }
+
+        const { diamond_reward: diamondReward, xp_reward: xpReward } = rewardData;
+
+        let message = `Điểm danh thành công! Bạn nhận được ${diamondReward} Kim cương và ${xpReward} XP.`;
+
+        const newTotalDiamonds = userProfile.diamonds + diamondReward;
+        const newTotalXp = userProfile.xp + xpReward;
+
+        // Perform updates
+        const { error: userUpdateError } = await supabaseAdmin
+            .from('users')
+            .update({
+                diamonds: newTotalDiamonds,
+                xp: newTotalXp,
+                last_check_in_at: now.toISOString(),
+                consecutive_check_in_days: newConsecutiveDays,
+            })
+            .eq('id', user.id);
+
+        if (userUpdateError) throw userUpdateError;
+
+        await Promise.all([
+             supabaseAdmin.from('daily_check_ins').insert({ user_id: user.id, check_in_date: todayVnString }),
+             supabaseAdmin.from('diamond_transactions_log').insert({
+                user_id: user.id,
+                amount: diamondReward,
+                transaction_type: 'DAILY_CHECK_IN',
+                description: `Điểm danh chuỗi ${newConsecutiveDays} ngày`
+             })
+        ]);
+
+        return {
+            statusCode: 200,
+            body: JSON.stringify({
+                message,
+                newTotalDiamonds,
+                newTotalXp,
+                consecutiveDays: newConsecutiveDays,
+                checkedIn: true
+            }),
+        };
 
     } catch (error: any) {
-        console.error(`[FATAL] Unhandled error in webhook:`, error.message);
-        return { statusCode: 500, body: JSON.stringify({ error: 'Internal server error.' }) };
+        console.error("Daily check-in failed:", error);
+        return { statusCode: 500, body: JSON.stringify({ error: error.message || 'Server error during check-in.' }) };
     }
-
-    console.log("--- [END] Webhook Processed Successfully (Manual Approval Flow) ---");
-    // Luôn trả về 200 OK cho PayOS để tránh họ gửi lại yêu cầu
-    return { statusCode: 200, body: JSON.stringify({ message: 'Webhook received.' }) };
 };
 
 export { handler };

@@ -1,10 +1,10 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode, useMemo, useRef } from 'react';
 import { getSupabaseClient } from '../utils/supabaseClient';
-// Fix: The types `Session` and `User` are not exported from the root of `@supabase/supabase-js` in v1.
-// They are removed from here to fix the compile error. `any` will be used for the session object.
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { SupabaseClient, Session } from '@supabase/supabase-js';
 import { User, Announcement } from '../types';
 import { calculateLevelFromXp } from '../utils/rankUtils';
+
+declare const google: any; // Declare the google object for Google Identity Services
 
 const getVNDateString = (date: Date) => {
     // UTC+7
@@ -14,7 +14,7 @@ const getVNDateString = (date: Date) => {
 
 const getRouteFromPath = (path: string): string => {
     const pathSegment = path.split('/').filter(Boolean)[0];
-    const validRoutes = ['tool', 'leaderboard', 'my-creations', 'settings', 'buy-credits', 'gallery', 'admin-gallery'];
+    const validRoutes = ['tool', 'leaderboard', 'my-creations', 'settings', 'buy-credits', 'gallery', 'admin-gallery']; // REMOVED: 'ai-love-story'
     if (validRoutes.includes(pathSegment)) {
         return pathSegment;
     }
@@ -22,7 +22,7 @@ const getRouteFromPath = (path: string): string => {
 };
 
 interface AuthContextType {
-    session: any | null;
+    session: Session | null;
     user: User | null;
     loading: boolean;
     toast: { message: string; type: 'success' | 'error' } | null;
@@ -32,7 +32,7 @@ interface AuthContextType {
     announcement: Announcement | null;
     showAnnouncementModal: boolean;
     supabase: SupabaseClient | null; // Expose supabase client
-    login: () => Promise<void>;
+    login: () => Promise<boolean>;
     logout: () => Promise<void>;
     updateUserDiamonds: (newAmount: number) => void;
     updateUserProfile: (updates: Partial<User>) => void;
@@ -46,7 +46,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const [supabase, setSupabase] = useState<SupabaseClient | null>(null);
-    const [session, setSession] = useState<any | null>(null);
+    const [session, setSession] = useState<Session | null>(null);
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -98,37 +98,52 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         });
     }, []);
 
-    const fetchUserProfile = useCallback(async (supabaseUser: any, supabaseClient: SupabaseClient) => {
+    const fetchUserProfile = useCallback(async (session: Session) => {
+        if (!session?.access_token) return null;
         try {
-            const { data, error } = await supabaseClient
-                .from('users')
-                .select('id, display_name, email, photo_url, diamonds, xp, is_admin, last_check_in_at, consecutive_check_in_days, last_announcement_seen_id')
-                .eq('id', supabaseUser.id)
-                .single();
-            if (error && error.code !== 'PGRST116') throw error;
+            const response = await fetch('/.netlify/functions/user-profile', {
+                headers: {
+                    Authorization: `Bearer ${session.access_token}`,
+                },
+            });
+            
+            // Any non-OK response from the now-robust server function is a genuine error.
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || `Server responded with ${response.status}`);
+            }
+            
+            const data = await response.json();
+            
             if (data) {
                 const profile = data as User;
                 profile.level = calculateLevelFromXp(profile.xp ?? 0);
                 return profile;
             }
             return null;
-        } catch (error) {
-            console.error('Error fetching user profile:', error);
+        } catch (error: any) {
+            console.error('Error fetching user profile via function:', error);
+            // This toast is now shown only on a definitive failure from the server.
+            showToast(error.message || "Không thể tải hồ sơ người dùng. Vui lòng thử đăng nhập lại.", "error");
             return null;
         }
-    }, []);
+    }, [showToast]);
 
-    const fetchAndSetUser = useCallback(async (session: any, supabaseClient: SupabaseClient) => {
-        let profile = await fetchUserProfile(session.user, supabaseClient);
-
-        // If profile doesn't exist yet (race condition with trigger), wait and retry once.
+    const fetchAndSetUser = useCallback(async (session: Session) => {
+        // The server-side function now handles retries, so we just call it once.
+        const profile = await fetchUserProfile(session);
+        
         if (!profile) {
-            await new Promise(resolve => setTimeout(resolve, 1500));
-            profile = await fetchUserProfile(session.user, supabaseClient);
+            // The error toast is already shown inside fetchUserProfile on failure.
+            console.error("CRITICAL: Server function failed to return a user profile.");
+            setUser(null);
+            return;
         }
         
+        let finalProfile = { ...profile };
+
         // If it's a new user (diamonds is at default 25), call function to update to 10
-        if (profile && profile.diamonds === 25) {
+        if (finalProfile.diamonds === 25) {
              try {
                 const response = await fetch('/.netlify/functions/set-initial-diamonds', {
                     method: 'POST',
@@ -138,14 +153,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                     const data = await response.json();
                     if (data.diamonds !== undefined) {
                         // Mutate the profile object before setting state to prevent UI flicker
-                        profile.diamonds = data.diamonds;
+                        finalProfile.diamonds = data.diamonds;
                     }
                 }
              } catch(e) {
                 console.error("Non-critical: Failed to update initial diamonds.", e);
              }
         }
-        setUser(profile);
+        setUser(finalProfile);
     }, [fetchUserProfile]);
     
     useEffect(() => {
@@ -167,23 +182,23 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                     fetch('/.netlify/functions/log-app-visit', { method: 'POST' });
                 }
 
-                // FIX: Use Supabase v2 async method `getSession()` instead of v1 sync `session()`.
+                // FIX: Use Supabase v2 async method `getSession()`.
                 const { data: { session: currentSession } } = await supabaseClient.auth.getSession();
                 setSession(currentSession);
                 
                 if (currentSession) {
-                    await fetchAndSetUser(currentSession, supabaseClient);
+                    await fetchAndSetUser(currentSession);
                     if (getRouteFromPath(window.location.pathname) === 'home') {
                         navigate('tool');
                     }
                 }
 
-                // FIX: Use Supabase v2 destructuring for onAuthStateChange subscription.
+                // FIX: Use Supabase v2 destructuring for onAuthStateChange.
                 const { data: { subscription } } = supabaseClient.auth.onAuthStateChange(
                     async (_event, newSession) => {
                         setSession(newSession);
                         if (newSession?.user) {
-                            await fetchAndSetUser(newSession, supabaseClient);
+                            await fetchAndSetUser(newSession);
                             if (_event === 'SIGNED_IN') navigate('tool');
                         } else {
                             setUser(null);
@@ -203,7 +218,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         initialize();
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
-
+    
     // Effect to check for new announcements when user logs in or data changes
     useEffect(() => {
         const checkAnnouncement = async () => {
@@ -299,21 +314,48 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return getVNDateString(new Date()) === getVNDateString(new Date(user.last_check_in_at));
     }, [user?.last_check_in_at]);
 
-    const login = useCallback(async () => {
-        if (!supabase) { showToast("Lỗi kết nối, không thể đăng nhập.", "error"); return; }
-        // FIX: Use Supabase v2 method `signInWithOAuth` instead of v1 `signIn`.
-        const { error } = await supabase.auth.signInWithOAuth({
-            provider: 'google',
-            options: {
-                redirectTo: window.location.origin,
+    const login = useCallback(async (): Promise<boolean> => {
+        const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+        if (!supabase || !googleClientId || typeof google === 'undefined') {
+            showToast("Chức năng đăng nhập chưa được cấu hình. Vui lòng liên hệ quản trị viên.", "error");
+            return false;
+        }
+
+        const handleCredentialResponse = async (response: any) => {
+            if (!response.credential) {
+                showToast('Không nhận được thông tin đăng nhập từ Google.', 'error');
+                return;
             }
-        });
-        if (error) { showToast('Đăng nhập thất bại: ' + error.message, 'error'); throw error; }
+            try {
+                // FIX: Use Supabase v2 method `signInWithIdToken`.
+                const { error } = await supabase.auth.signInWithIdToken({
+                    provider: 'google',
+                    token: response.credential,
+                });
+                if (error) throw error;
+                // Auth state change will handle navigation and user profile fetching.
+            } catch (error: any) {
+                showToast(`Đăng nhập thất bại: ${error.message}`, 'error');
+            }
+        };
+        
+        try {
+            google.accounts.id.initialize({
+                client_id: googleClientId,
+                callback: handleCredentialResponse,
+            });
+            google.accounts.id.prompt();
+            return true;
+        } catch (error: any) {
+            console.error("Google One Tap prompt error:", error);
+            showToast("Không thể hiển thị cửa sổ đăng nhập. Vui lòng thử lại.", "error");
+            return false;
+        }
     }, [supabase, showToast]);
 
     const logout = useCallback(async () => {
         if (!supabase) return;
-        // Fix: `signOut` is correct for both v1 and v2, but the error suggests a v1/v2 mismatch elsewhere.
+        // The `signOut` method is correct for v2.
         await supabase.auth.signOut();
     }, [supabase]);
 

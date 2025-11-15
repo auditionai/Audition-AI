@@ -1,33 +1,40 @@
 import React, { useState } from 'react';
 import AiGeneratorTool from './ai-tool/AiGeneratorTool';
+import GroupGeneratorTool from './ai-tool/GroupGeneratorTool'; // NEW: Import the new group tool
 import BgRemoverTool from '../ai-tool/BgRemoverTool';
 import InstructionModal from '../common/InstructionModal';
 import SignatureTool from './tools/SignatureTool';
 import { useAuth } from '../../contexts/AuthContext';
 import UtilInstructionModal from '../ai-tool/InstructionModal'; // Renamed to avoid confusion
+import { useTranslation } from '../../hooks/useTranslation';
 
-type AIToolTab = 'generator' | 'utilities';
+type AIToolTab = 'generator' | 'group-studio' | 'utilities'; // NEW: Add 'group-studio'
 type UtilityTab = 'bg-remover' | 'signature';
 
 const AITool: React.FC = () => {
     const { showToast } = useAuth();
+    const { t } = useTranslation();
     const [activeTab, setActiveTab] = useState<AIToolTab>('generator');
     const [activeUtility, setActiveUtility] = useState<UtilityTab>('bg-remover');
     const [isInstructionModalOpen, setInstructionModalOpen] = useState(false);
     
     // NEW: State for utility-specific instruction modal
     const [isUtilHelpOpen, setUtilHelpOpen] = useState(false);
-    const [utilHelpKey, setUtilHelpKey] = useState<'bg-remover' | 'signature' | null>(null);
+    const [utilHelpKey, setUtilHelpKey] = useState<'bg-remover' | 'signature' | 'group-studio' | null>(null);
 
+    // State to pass images between tools
     const [poseImage, setPoseImage] = useState<{ url: string; file: File } | null>(null);
     const [rawFaceImage, setRawFaceImage] = useState<{ url: string; file: File } | null>(null);
-    const [processedFaceImage, setProcessedFaceImage] = useState<string | null>(null);
-    const [styleImage, setStyleImage] = useState<{ url: string; file: File } | null>(null);
     const [imageForUtility, setImageForUtility] = useState<string | null>(null);
 
-    const openUtilHelp = (key: 'bg-remover' | 'signature') => {
+    const openUtilHelp = (key: 'bg-remover' | 'signature' | 'group-studio') => {
         setUtilHelpKey(key);
         setUtilHelpOpen(true);
+    };
+    
+    const handleSwitchToUtility = (utility: UtilityTab) => {
+        setActiveTab('utilities');
+        setActiveUtility(utility);
     };
 
     const handleMoveToGenerator = (image: { url: string; file: File }) => {
@@ -37,7 +44,6 @@ const AITool: React.FC = () => {
     
     const handleMoveFaceToGenerator = (image: { url: string; file: File }) => {
         setRawFaceImage(image);
-        setProcessedFaceImage(null);
         setActiveTab('generator');
     };
 
@@ -77,19 +83,19 @@ const AITool: React.FC = () => {
             <div className="themed-main-title-container text-center max-w-4xl mx-auto mb-12">
                 <h1 
                     className="themed-main-title text-4xl md:text-5xl lg:text-6xl font-black mb-4 leading-tight"
-                    data-text="Audition AI Studio"
+                    data-text={t('creator.aiTool.title')}
                 >
-                    Audition AI Studio
+                    {t('creator.aiTool.title')}
                 </h1>
                 <p className="themed-main-subtitle text-lg md:text-xl max-w-2xl mx-auto">
-                    Nền tảng sáng tạo ảnh 3D AI theo phong cách Audition độc đáo.
+                    {t('creator.aiTool.description')}
                 </p>
                 <button
                     onClick={() => setInstructionModalOpen(true)}
                     className="themed-guide-button"
                 >
                     <i className="ph-fill ph-book-open"></i>
-                    <span>Xem Hướng Dẫn Nhanh</span>
+                    <span>{t('creator.aiTool.quickGuide')}</span>
                 </button>
             </div>
             
@@ -101,14 +107,21 @@ const AITool: React.FC = () => {
                         className={`px-6 py-3 font-semibold transition-colors ${activeTab === 'generator' ? 'text-pink-400 border-b-2 border-pink-400' : 'text-gray-400 hover:text-white'}`}
                     >
                        <i className="ph-fill ph-magic-wand mr-2"></i>
-                        Trình Tạo Ảnh AI
+                        {t('creator.aiTool.tabs.single')}
+                    </button>
+                     <button
+                        onClick={() => setActiveTab('group-studio')}
+                        className={`px-6 py-3 font-semibold transition-colors ${activeTab === 'group-studio' ? 'text-pink-400 border-b-2 border-pink-400' : 'text-gray-400 hover:text-white'}`}
+                    >
+                        <i className="ph-fill ph-users-three mr-2"></i>
+                        {t('creator.aiTool.tabs.group')}
                     </button>
                     <button
                         onClick={() => setActiveTab('utilities')}
                         className={`px-6 py-3 font-semibold transition-colors ${activeTab === 'utilities' ? 'text-pink-400 border-b-2 border-pink-400' : 'text-gray-400 hover:text-white'}`}
                     >
                         <i className="ph-fill ph-wrench mr-2"></i>
-                        Công Cụ Hỗ Trợ
+                        {t('creator.aiTool.tabs.utilities')}
                     </button>
                 </div>
 
@@ -116,15 +129,16 @@ const AITool: React.FC = () => {
                 <div className="p-4 bg-skin-fill-secondary rounded-2xl border border-skin-border shadow-lg">
                     {activeTab === 'generator' && (
                         <AiGeneratorTool 
-                           poseImage={poseImage}
-                           onPoseImageChange={setPoseImage}
-                           rawFaceImage={rawFaceImage}
-                           onRawFaceImageChange={setRawFaceImage}
-                           processedFaceImage={processedFaceImage}
-                           onProcessedFaceImageChange={setProcessedFaceImage}
-                           styleImage={styleImage}
-                           onStyleImageChange={setStyleImage}
+                           initialCharacterImage={poseImage}
+                           initialFaceImage={rawFaceImage}
                            onSendToSignatureTool={handleSendToSignatureTool}
+                           onSwitchToUtility={() => handleSwitchToUtility('bg-remover')}
+                        />
+                    )}
+                    {activeTab === 'group-studio' && (
+                        <GroupGeneratorTool 
+                            onSwitchToUtility={() => handleSwitchToUtility('bg-remover')} 
+                            onInstructionClick={() => openUtilHelp('group-studio')}
                         />
                     )}
                     {activeTab === 'utilities' && (
@@ -132,10 +146,10 @@ const AITool: React.FC = () => {
                             {/* Utility Sub-tabs */}
                             <div className="flex justify-center border-b border-white/10 mb-6">
                                 <button onClick={() => setActiveUtility('bg-remover')} className={`px-4 py-2 text-sm font-semibold transition-colors ${activeUtility === 'bg-remover' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400 hover:text-white'}`}>
-                                    <i className="ph-fill ph-scissors mr-2"></i>Tách nền
+                                    <i className="ph-fill ph-scissors mr-2"></i>{t('creator.aiTool.utils.bgRemover')}
                                 </button>
                                 <button onClick={() => setActiveUtility('signature')} className={`px-4 py-2 text-sm font-semibold transition-colors ${activeUtility === 'signature' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400 hover:text-white'}`}>
-                                    <i className="ph-fill ph-pencil-simple-line mr-2"></i>Chèn chữ ký
+                                    <i className="ph-fill ph-pencil-simple-line mr-2"></i>{t('creator.aiTool.utils.signature')}
                                 </button>
                             </div>
                             

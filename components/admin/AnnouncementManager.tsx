@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { Announcement } from '../../types';
+import { useTranslation } from '../../hooks/useTranslation';
 
 const AnnouncementManager: React.FC = () => {
     const { session, showToast } = useAuth();
+    const { t } = useTranslation();
     const [announcement, setAnnouncement] = useState<Partial<Announcement> | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
@@ -14,7 +16,7 @@ const AnnouncementManager: React.FC = () => {
             const res = await fetch('/.netlify/functions/announcements', {
                 headers: { Authorization: `Bearer ${session?.access_token}` },
             });
-            if (!res.ok) throw new Error('Không thể tải thông báo.');
+            if (!res.ok) throw new Error(t('creator.settings.admin.announcements.error.load'));
             const data = await res.json();
             setAnnouncement(data || { title: '', content: '', is_active: false });
         } catch (e: any) {
@@ -22,7 +24,7 @@ const AnnouncementManager: React.FC = () => {
         } finally {
             setIsLoading(false);
         }
-    }, [session, showToast]);
+    }, [session, showToast, t]);
 
     useEffect(() => {
         fetchAnnouncement();
@@ -40,7 +42,7 @@ const AnnouncementManager: React.FC = () => {
             const savedData = await res.json();
             if (!res.ok) throw new Error(savedData.error);
             setAnnouncement(savedData);
-            showToast('Cập nhật thông báo thành công!', 'success');
+            showToast(t('creator.settings.admin.announcements.success'), 'success');
         } catch (e: any) {
             showToast(e.message, 'error');
         } finally {
@@ -48,21 +50,21 @@ const AnnouncementManager: React.FC = () => {
         }
     };
     
-    if (isLoading || !announcement) return <p className="text-center text-gray-400 p-8">Đang tải...</p>;
+    if (isLoading || !announcement) return <p className="text-center text-gray-400 p-8">{t('creator.settings.admin.announcements.loading')}</p>;
 
     return (
         <div className="bg-[#12121A]/80 border border-orange-500/20 rounded-2xl shadow-lg p-6">
-            <h3 className="text-2xl font-bold mb-4 text-orange-400">Quản Lý Thông Báo</h3>
+            <h3 className="text-2xl font-bold mb-4 text-orange-400">{t('creator.settings.admin.announcements.title')}</h3>
             <div className="space-y-4">
                 <input
                     type="text"
-                    placeholder="Tiêu đề thông báo"
+                    placeholder={t('creator.settings.admin.announcements.form.title')}
                     value={announcement.title || ''}
                     onChange={e => setAnnouncement({ ...announcement, title: e.target.value })}
                     className="auth-input"
                 />
                 <textarea
-                    placeholder="Nội dung thông báo"
+                    placeholder={t('creator.settings.admin.announcements.form.content')}
                     value={announcement.content || ''}
                     onChange={e => setAnnouncement({ ...announcement, content: e.target.value })}
                     className="auth-input min-h-[120px]"
@@ -70,9 +72,9 @@ const AnnouncementManager: React.FC = () => {
                 <div className="flex items-center justify-between">
                     <div className="flex items-center">
                         <input id="is_active_ann" type="checkbox" checked={announcement.is_active} onChange={e => setAnnouncement({ ...announcement, is_active: e.target.checked })} className="h-4 w-4 rounded border-gray-600 bg-gray-700 text-pink-500 focus:ring-pink-500" />
-                        <label htmlFor="is_active_ann" className="ml-2 block text-sm text-gray-300">Kích hoạt thông báo này?</label>
+                        <label htmlFor="is_active_ann" className="ml-2 block text-sm text-gray-300">{t('creator.settings.admin.announcements.form.isActive')}</label>
                     </div>
-                    <button onClick={handleSave} disabled={isSaving} className="themed-button-primary">{isSaving ? 'Đang lưu...' : 'Lưu Thông Báo'}</button>
+                    <button onClick={handleSave} disabled={isSaving} className="themed-button-primary">{isSaving ? t('common.saving') : t('common.save')}</button>
                 </div>
             </div>
         </div>

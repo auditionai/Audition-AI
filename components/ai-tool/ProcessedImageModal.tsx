@@ -2,6 +2,7 @@ import React, { useState, useRef, useCallback } from 'react';
 import Modal from '../common/Modal';
 import { base64ToFile } from '../../utils/imageUtils';
 import { ReactCrop, centerCrop, makeAspectCrop, type Crop, type PixelCrop } from 'react-image-crop';
+import { useTranslation } from '../../hooks/useTranslation';
 
 interface ProcessedImage {
     processedUrl: string;
@@ -20,6 +21,7 @@ interface ProcessedImageModalProps {
 }
 
 const ProcessedImageModal: React.FC<ProcessedImageModalProps> = ({ isOpen, onClose, image, onUseFull, onUseCropped, onDownload }) => {
+  const { t } = useTranslation();
   const [isCropping, setIsCropping] = useState(false);
   const [crop, setCrop] = useState<Crop>();
   const [completedCrop, setCompletedCrop] = useState<PixelCrop | null>(null);
@@ -80,7 +82,7 @@ const ProcessedImageModal: React.FC<ProcessedImageModalProps> = ({ isOpen, onClo
   if (!isOpen || !image) return null;
   
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title={isCropping ? "Crop Gương Mặt" : "Xem ảnh đã tách nền"}>
+    <Modal isOpen={isOpen} onClose={handleClose} title={isCropping ? t('modals.processedImage.title_crop') : t('modals.processedImage.title')}>
         <div className="flex flex-col items-center">
             <div className="w-full max-w-md bg-black/30 rounded-lg p-2 mb-6 relative">
                  {isCropping ? (
@@ -111,22 +113,22 @@ const ProcessedImageModal: React.FC<ProcessedImageModalProps> = ({ isOpen, onClo
             {isCropping ? (
                 <div className="w-full flex flex-col sm:flex-row gap-4">
                     <button onClick={() => setIsCropping(false)} className="flex-1 py-3 font-semibold bg-white/10 text-white rounded-lg hover:bg-white/20 transition flex items-center justify-center gap-2">
-                         <i className="ph-fill ph-x text-xl"></i> Hủy Crop
+                         <i className="ph-fill ph-x text-xl"></i> {t('modals.processedImage.cancel_crop')}
                     </button>
                     <button onClick={getCroppedImg} disabled={!completedCrop} className="flex-1 py-3 font-bold text-white bg-gradient-to-r from-pink-500 to-fuchsia-600 rounded-lg hover:opacity-90 transition flex items-center justify-center gap-2 disabled:opacity-50">
-                        <i className="ph-fill ph-check text-xl"></i> Sử dụng ảnh đã Crop
+                        <i className="ph-fill ph-check text-xl"></i> {t('modals.processedImage.use_cropped')}
                     </button>
                 </div>
             ) : (
                 <div className="w-full flex flex-col sm:flex-row gap-4">
                     <button onClick={onDownload} className="flex-1 py-3 font-bold text-white bg-green-500/80 hover:bg-green-600 rounded-lg transition-colors flex items-center justify-center gap-2">
-                        <i className="ph-fill ph-download-simple text-xl"></i> Tải xuống
+                        <i className="ph-fill ph-download-simple text-xl"></i> {t('common.download')}
                     </button>
                      <button onClick={() => setIsCropping(true)} className="flex-1 py-3 font-bold text-white bg-cyan-500/80 hover:bg-cyan-600 rounded-lg transition-colors flex items-center justify-center gap-2">
-                        <i className="ph-fill ph-crop text-xl"></i> Crop Gương Mặt
+                        <i className="ph-fill ph-crop text-xl"></i> {t('modals.processedImage.crop_face')}
                     </button>
                     <button onClick={onUseFull} className="flex-1 py-3 font-bold text-white bg-gradient-to-r from-pink-500 to-fuchsia-600 rounded-lg hover:opacity-90 transition flex items-center justify-center gap-2">
-                        <i className="ph-fill ph-magic-wand text-xl"></i> Sử dụng ảnh này
+                        <i className="ph-fill ph-magic-wand text-xl"></i> {t('modals.processedImage.use_full')}
                     </button>
                 </div>
             )}

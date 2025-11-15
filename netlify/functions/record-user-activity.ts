@@ -13,13 +13,33 @@ const handler: Handler = async (event: HandlerEvent) => {
     if (!token) {
         return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized' }) };
     }
-    // FIX: Use Supabase v2 method `getUser` instead of v1 `api.getUser`.
+    // FIX: Use Supabase v2 `auth.getUser` as `auth.api` is from v1.
     const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
     if (authError || !user) {
         return { statusCode: 401, body: JSON.stringify({ error: 'Invalid token' }) };
     }
 
     try {
+        // SAFEGUARD: Check if the user profile exists before proceeding.
+        // This prevents errors if this function is called before the profile is created.
+        const { count, error: countError } = await supabaseAdmin
+            .from('users')
+            .select('*', { count: 'exact', head: true })
+            .eq('id', user.id);
+
+        if (countError) {
+            throw countError; // A real DB error happened
+        }
+
+        // If no profile exists, exit gracefully. The profile will be created soon.
+        if (count === 0) {
+            console.warn(`[record-user-activity] User profile for ${user.id} not found. Skipping activity log for now.`);
+            return {
+                statusCode: 200,
+                body: JSON.stringify({ success: true, message: 'User profile not yet available, skipping.' }),
+            };
+        }
+        
         // Use Promise.all to run both operations in parallel for efficiency
         const [xpResult, activityResult] = await Promise.all([
             // 1. Increment user XP

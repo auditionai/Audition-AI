@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { GalleryImage } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { getRankForLevel } from '../../utils/rankUtils';
+import { useTranslation } from '../../hooks/useTranslation';
 
 interface ImageModalProps {
   isOpen: boolean;
@@ -13,6 +14,7 @@ interface ImageModalProps {
 
 const ImageModal: React.FC<ImageModalProps> = ({ isOpen, onClose, image, showInfoPanel = true, onShare }) => {
   const { showToast } = useAuth();
+  const { t } = useTranslation();
   const [isCopied, setIsCopied] = useState(false);
 
   if (!isOpen || !image) return null;
@@ -20,7 +22,7 @@ const ImageModal: React.FC<ImageModalProps> = ({ isOpen, onClose, image, showInf
   const handleCopyPrompt = () => {
     if (!image.prompt) return;
     navigator.clipboard.writeText(image.prompt);
-    showToast('Đã sao chép prompt!', 'success');
+    showToast(t('modals.image.copied'), 'success');
     setIsCopied(true);
     setTimeout(() => {
         setIsCopied(false);
@@ -80,7 +82,7 @@ const ImageModal: React.FC<ImageModalProps> = ({ isOpen, onClose, image, showInf
                 <div>
                     <h4 className="font-semibold text-pink-400 mb-2 flex items-center gap-2">
                         <i className="ph-fill ph-quotes"></i>
-                        Câu lệnh (Prompt)
+                        {t('modals.image.prompt')}
                     </h4>
                     <p className="text-sm text-gray-300 italic bg-white/5 p-3 rounded-md max-h-40 overflow-y-auto custom-scrollbar">
                         "{image.prompt}"
@@ -95,14 +97,14 @@ const ImageModal: React.FC<ImageModalProps> = ({ isOpen, onClose, image, showInf
                     className={`w-full px-4 py-2 text-sm font-semibold rounded-lg flex items-center justify-center gap-2 transition-all duration-300 ${isCopied ? 'bg-green-500/20 text-green-300' : 'bg-pink-500/20 text-pink-300 hover:bg-pink-500/30'}`}
                 >
                     <i className={`ph-fill ${isCopied ? 'ph-check-circle' : 'ph-copy'}`}></i>
-                    {isCopied ? 'Đã sao chép!' : 'Sao chép Prompt'}
+                    {isCopied ? t('modals.image.copied') : t('modals.image.copy')}
                 </button>
                 <button 
                     onClick={handleDownload}
                     className="w-full px-4 py-2 text-sm font-semibold rounded-lg flex items-center justify-center gap-2 transition-all duration-300 bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30"
                 >
                     <i className="ph-fill ph-download-simple"></i>
-                    <span>Tải xuống</span>
+                    <span>{t('modals.image.download')}</span>
                 </button>
                  
                  {/* Share button for "My Creations" */}
@@ -115,12 +117,12 @@ const ImageModal: React.FC<ImageModalProps> = ({ isOpen, onClose, image, showInf
                         className="w-full px-4 py-2 text-sm font-semibold rounded-lg flex items-center justify-center gap-2 transition-all duration-300 bg-green-500/20 text-green-300 hover:bg-green-500/30"
                     >
                         <i className="ph-fill ph-share-network"></i>
-                        Chia sẻ (1 💎)
+                        {t('modals.image.share')}
                     </button>
                  )}
                  {onShare && image.is_public && (
                     <div className="text-center text-xs font-semibold text-green-400 bg-green-500/10 py-2 rounded-lg">
-                        Đã chia sẻ công khai
+                        {t('modals.image.shared')}
                     </div>
                  )}
             </div>

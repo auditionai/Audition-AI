@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
 import { FAQ_DATA } from '../../constants/landingPageData';
+import { useTranslation } from '../../hooks/useTranslation';
 
-const FAQItem: React.FC<{ item: typeof FAQ_DATA[0]; isOpen: boolean; onClick: () => void }> = ({ item, isOpen, onClick }) => {
+const FAQItem: React.FC<{ isOpen: boolean; onClick: () => void; index: number }> = ({ isOpen, onClick, index }) => {
+  const { t } = useTranslation();
   return (
     <div className="border-b border-pink-500/20 py-6">
       <button
         onClick={onClick}
         className="w-full flex justify-between items-center text-left text-lg font-semibold text-white"
       >
-        <span>{item.question}</span>
+        <span>{t(`landing.faq.items.${index}.question`)}</span>
         <i className={`ph-fill ph-caret-down transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}></i>
       </button>
       <div
@@ -16,7 +18,7 @@ const FAQItem: React.FC<{ item: typeof FAQ_DATA[0]; isOpen: boolean; onClick: ()
       >
         <div className="overflow-hidden">
           <p className="text-gray-400">
-            {item.answer}
+            {t(`landing.faq.items.${index}.answer`)}
           </p>
         </div>
       </div>
@@ -25,6 +27,7 @@ const FAQItem: React.FC<{ item: typeof FAQ_DATA[0]; isOpen: boolean; onClick: ()
 };
 
 const FAQ: React.FC = () => {
+  const { t } = useTranslation();
   const [openIndex, setOpenIndex] = useState<number | null>(0);
 
   const handleToggle = (index: number) => {
@@ -36,19 +39,19 @@ const FAQ: React.FC = () => {
       <div className="container mx-auto px-4">
         <div className="text-center max-w-3xl mx-auto mb-16">
           <h2 className="text-3xl md:text-4xl font-bold mb-4">
-            <span className="bg-gradient-to-r from-pink-400 to-fuchsia-500 text-transparent bg-clip-text">Câu Hỏi Thường Gặp</span>
+            <span className="bg-gradient-to-r from-pink-400 to-fuchsia-500 text-transparent bg-clip-text">{t('landing.faq.title')}</span>
           </h2>
           <p className="text-lg text-gray-400">
-            Tất cả những gì bạn cần biết để bắt đầu với Audition AI.
+            {t('landing.faq.description')}
           </p>
         </div>
         <div className="max-w-3xl mx-auto">
-          {FAQ_DATA.map((item, index) => (
+          {FAQ_DATA.map((_, index) => (
             <FAQItem
               key={index}
-              item={item}
               isOpen={openIndex === index}
               onClick={() => handleToggle(index)}
+              index={index}
             />
           ))}
         </div>

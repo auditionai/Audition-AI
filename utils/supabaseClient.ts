@@ -16,9 +16,11 @@ export const getSupabaseClient = async (): Promise<SupabaseClient | null> => {
     }
 
     try {
-        // Dynamically import the createClient function.
-        // This is the CRITICAL change: the module is only loaded and executed when this function is called.
-        const { createClient } = await import('@supabase/supabase-js');
+        // TRICK: Use a variable to hold the package name to prevent bundlers like Vite
+        // from statically analyzing and trying to bundle this dynamic import.
+        // This forces the browser to resolve it via the import map at runtime, fixing the fetch error.
+        const supabasePackageName = '@supabase/supabase-js';
+        const { createClient } = await import(supabasePackageName);
         
         const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
         const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;

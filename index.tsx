@@ -6,6 +6,7 @@ import { AuthProvider } from './contexts/AuthContext';
 // import './utils/supabaseClient'; // REMOVED: Initialization is now handled lazily and safely in AuthProvider
 import './index.css'; // Import Tailwind CSS
 import { ThemeProvider } from './contexts/ThemeContext';
+import { LanguageProvider } from './contexts/LanguageContext';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -16,9 +17,11 @@ const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
     <ThemeProvider>
-      <AuthProvider>
-        <App />
-      </AuthProvider>
+      <LanguageProvider>
+        <AuthProvider>
+          <App />
+        </AuthProvider>
+      </LanguageProvider>
     </ThemeProvider>
   </React.StrictMode>
 );

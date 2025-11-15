@@ -11,7 +11,8 @@ const CreatorFooter: React.FC<CreatorFooterProps> = ({ onInfoLinkClick }) => {
   const { theme } = useTheme();
   const { t } = useTranslation();
   const [highlight, setHighlight] = useState(false);
-  const currentThemeName = THEMES.find(t => t.id === theme)?.name || 'Mặc định';
+  const currentThemeNameKey = THEMES.find(t => t.id === theme)?.name || 'themes.cyber-punk';
+  const currentThemeName = t(currentThemeNameKey);
 
   useEffect(() => {
       setHighlight(true);

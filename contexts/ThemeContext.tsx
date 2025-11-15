@@ -10,11 +10,11 @@ export interface ThemeOption {
 }
 
 export const THEMES: ThemeOption[] = [
-    { id: 'cyber-punk', name: 'Vũ Điệu Neon', icon: 'ph-skull' },
-    { id: 'solar-flare', name: 'Kẹo Ngọt Pastel', icon: 'ph-sun' },
-    { id: 'classic-dark', name: 'Giáng Sinh', icon: 'ph-tree' },
-    { id: 'dreamy-galaxy', name: 'Dải Ngân Hà', icon: 'ph-planet' },
-    { id: 'neon-vibe', name: 'Lâu Đài Pha Lê', icon: 'ph-diamond' },
+    { id: 'cyber-punk', name: 'themes.cyber-punk', icon: 'ph-skull' },
+    { id: 'solar-flare', name: 'themes.solar-flare', icon: 'ph-sun' },
+    { id: 'classic-dark', name: 'themes.classic-dark', icon: 'ph-tree' },
+    { id: 'dreamy-galaxy', name: 'themes.dreamy-galaxy', icon: 'ph-planet' },
+    { id: 'neon-vibe', name: 'themes.neon-vibe', icon: 'ph-diamond' },
 ];
 
 interface ThemeContextType {

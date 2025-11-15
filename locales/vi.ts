@@ -831,5 +831,12 @@ export const vi = {
     copied: 'Copied!',
     level: 'Level',
     creator: 'Creator',
+  },
+  themes: {
+    'cyber-punk': 'Vũ Điệu Neon',
+    'solar-flare': 'Kẹo Ngọt Pastel',
+    'classic-dark': 'Giáng Sinh',
+    'dreamy-galaxy': 'Dải Ngân Hà',
+    'neon-vibe': 'Lâu Đài Pha Lê',
   }
 };

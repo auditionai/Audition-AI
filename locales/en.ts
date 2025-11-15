@@ -831,5 +831,12 @@ export const en = {
     copied: 'Copied!',
     level: 'Level',
     creator: 'Creator',
+  },
+  themes: {
+    'cyber-punk': 'Neon Dance',
+    'solar-flare': 'Pastel Candy',
+    'classic-dark': 'Christmas',
+    'dreamy-galaxy': 'Dreamy Galaxy',
+    'neon-vibe': 'Crystal Palace',
   }
 };

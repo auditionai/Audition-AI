@@ -14,6 +14,7 @@ import ImageModal from '../../common/ImageModal';
 import ToggleSwitch from '../../ai-tool/ToggleSwitch';
 import { resizeImage } from '../../../utils/imageUtils';
 import { useTranslation } from '../../../hooks/useTranslation';
+import PromptLibraryModal from './PromptLibraryModal';
 
 interface AiGeneratorToolProps {
     initialCharacterImage?: { url: string; file: File } | null;
@@ -33,6 +34,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
     const [instructionKey, setInstructionKey] = useState<'character' | 'style' | 'prompt' | 'advanced' | 'face' | null>(null);
     const [isConfirmOpen, setConfirmOpen] = useState(false);
     const [isResultModalOpen, setIsResultModalOpen] = useState(false);
+    const [isPromptLibraryOpen, setIsPromptLibraryOpen] = useState(false);
     
     // Feature States
     const [poseImage, setPoseImage] = useState<{ url: string; file: File } | null>(null);
@@ -252,6 +254,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
             <ConfirmationModal isOpen={isConfirmOpen} onClose={() => setConfirmOpen(false)} onConfirm={handleConfirmGeneration} cost={generationCost} />
             <ModelSelectionModal isOpen={isModelModalOpen} onClose={() => setModelModalOpen(false)} selectedModelId={selectedModel.id} onSelectModel={(id: string) => setSelectedModel(DETAILED_AI_MODELS.find((m: AIModel) => m.id === id) || selectedModel)} characterImage={!!poseImage} />
             <InstructionModal isOpen={isInstructionModalOpen} onClose={() => setInstructionModalOpen(false)} instructionKey={instructionKey} />
+            <PromptLibraryModal isOpen={isPromptLibraryOpen} onClose={() => setIsPromptLibraryOpen(false)} onSelectPrompt={(p) => setPrompt(p)} category="single-photo" />
 
             <div className="flex flex-col lg:flex-row gap-6">
                 {/* Main Content Area (Left) */}
@@ -296,7 +299,17 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                     </div>
                     
                     <SettingsBlock title={t('creator.aiTool.singlePhoto.promptTitle')} instructionKey="prompt" onInstructionClick={() => openInstructionModal('prompt')}>
-                        <textarea value={prompt} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setPrompt(e.target.value)} placeholder={t('creator.aiTool.singlePhoto.promptPlaceholder')} className="w-full p-3 bg-black/30 rounded-md border border-gray-600 focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition text-base text-white flex-grow resize-none min-h-[150px] auth-input" />
+                        <div className="relative">
+                            <textarea value={prompt} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setPrompt(e.target.value)} placeholder={t('creator.aiTool.singlePhoto.promptPlaceholder')} className="w-full p-3 bg-black/30 rounded-md border border-gray-600 focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition text-base text-white flex-grow resize-none min-h-[150px] auth-input" />
+                            <button
+                                onClick={() => setIsPromptLibraryOpen(true)}
+                                className="absolute top-2 right-2 flex items-center gap-1.5 text-xs text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 rounded-full px-3 py-1.5 font-semibold transition"
+                                title={t('modals.promptLibrary.buttonTooltip')}
+                            >
+                                <i className="ph-fill ph-scroll"></i>
+                                {t('modals.promptLibrary.button')}
+                            </button>
+                        </div>
                     </SettingsBlock>
                 </div>
 

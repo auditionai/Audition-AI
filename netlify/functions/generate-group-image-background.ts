@@ -99,20 +99,35 @@ const handler: Handler = async (event: HandlerEvent) => {
                     ? 'cool ngầu, nam tính, và mạnh mẽ' 
                     : 'quyến rũ, cá tính, và xinh đẹp';
 
+                const faceReferenceExists = !!char.faceImage;
+
                 const charPrompt = [
-                    `**MỆNH LỆNH TUYỆT ĐỐI: BẠN PHẢI TẠO RA MỘT NHÂN VẬT ${char.gender === 'male' ? 'NAM' : 'NỮ'}.**`,
-                    `Đây là yêu cầu quan trọng nhất. Hãy **bỏ qua hoàn toàn** giới tính của bất kỳ ai trong các ảnh tham chiếu.`,
+                    `**DEFINITIONS:**`,
+                    `- IMAGE 1 = "THE POSE REFERENCE" (The group photo)`,
+                    `- IMAGE 2 = "THE OUTFIT SOURCE" (The Audition character photo)`,
+                    faceReferenceExists ? `- IMAGE 3 = "THE FACE SOURCE" (The user's face photo)` : '',
                     `---`,
-                    `**QUY TRÌNH (TRÊN NỀN ĐEN TUYỀN):**`,
-                    `1. **SÁNG TẠO TƯ THẾ:**`,
-                    `   a. Nhìn vào **Ảnh Mẫu Tham Chiếu**, xác định người ở vị trí thứ ${i + 1} từ trái sang.`,
-                    `   b. Lấy tư thế của họ làm **CẢM HỨNG**, không sao chép máy móc.`,
-                    `   c. **SÁNG TẠO** một tư thế mới tự nhiên, sống động, phù hợp với một nhân vật **${char.gender === 'male' ? 'NAM' : 'NỮ'}**. Tư thế nên thể hiện sự ${genderKeywords}.`,
-                    `   d. **CẤM TUYỆT ĐỐI:** Không được lấy tư thế đứng thẳng, cứng đơ từ **Ảnh Nhân Vật Audition**. Phải tạo dáng mới.`,
-                    `2. **MẶC ĐỒ:** Nhìn vào **Ảnh Nhân Vật Audition** và **BÊ NGUYÊN** trang phục. **CẤM** thay đổi.`,
-                    `3. **LẤY MẶT:** Nếu có **Ảnh Gương Mặt**, hãy dùng chính xác mặt đó.`,
-                    `4. **KIỂM TRA LẠI:** Đảm bảo nhân vật cuối cùng chắc chắn là **${char.gender === 'male' ? 'NAM' : 'NỮ'}** với tư thế đã được sáng tạo.`,
-                ].join('\n');
+                    `**ABSOLUTE COMMAND: CREATE A ${char.gender === 'male' ? 'MALE' : 'FEMALE'} CHARACTER.**`,
+                    `This is the most important rule. IGNORE the gender of any person in the reference images.`,
+                    `---`,
+                    `**WORKFLOW (ON A SOLID BLACK BACKGROUND):**`,
+                    `1. **POSE CREATION (UNIQUE & DYNAMIC):**`,
+                    `   a. Look at **IMAGE 1 ("THE POSE REFERENCE")** and identify the person at position #${i + 1} (from left).`,
+                    `   b. Use their pose ONLY as **inspiration**.`,
+                    `   c. **CREATE A NEW, UNIQUE POSE** that is natural, dynamic, and suitable for a ${char.gender === 'male' ? 'MALE' : 'FEMALE'} character. This new pose MUST be **different** from the pose in the reference image and different from any other characters you may have generated. Make it ${genderKeywords}.`,
+                    `   d. **FORBIDDEN:** DO NOT use the stiff, default standing pose from **IMAGE 2 ("THE OUTFIT SOURCE")**.`,
+                    `2. **OUTFIT TRANSFER (PRECISE):**`,
+                    `   a. Look ONLY at **IMAGE 2 ("THE OUTFIT SOURCE")**.`,
+                    `   b. Take 100% of the outfit, including all clothes, accessories, hair style, and hair color, from this image.`,
+                    `   c. **ABSOLUTE RULE:** DO NOT take clothing, hair, or accessories from any other image.`,
+                    `3. **FACE APPLICATION (EXACT):**`,
+                    `   a. If **IMAGE 3 ("THE FACE SOURCE")** is provided, use that exact face.`,
+                    `4. **FINAL CHECK:**`,
+                    `   a. Is the final character a ${char.gender === 'male' ? 'MALE' : 'FEMALE'}?`,
+                    `   b. Is the pose new, unique, and not stiff?`,
+                    `   c. Is the outfit EXACTLY from **IMAGE 2**?`,
+                ].filter(Boolean).join('\n');
+
 
                 const poseData = processDataUrl(char.poseImage);
                 const faceData = processDataUrl(char.faceImage);

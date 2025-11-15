@@ -9,56 +9,18 @@ const calculateLevelFromXp = (xp: number): number => {
 
 const handler: Handler = async () => {
     try {
-        // --- TỐI ƯU HÓA TRIỆT ĐỂ ---
-        // 1. Sử dụng một RPC function (hoặc query trực tiếp) để database tự đếm và sắp xếp.
-        // Điều này hiệu quả hơn rất nhiều so với việc tải toàn bộ bảng về để xử lý.
-        const { data: topUsers, error: rpcError } = await supabaseAdmin.rpc('get_top_creators', { limit_count: 10 });
+        // TỐI ƯU HÓA: Gọi một hàm RPC duy nhất để database tự thực hiện
+        // tất cả các công việc nặng nhọc: đếm, nhóm, sắp xếp và kết nối bảng.
+        const { data: topUsers, error: rpcError } = await supabaseAdmin.rpc('get_leaderboard');
 
         if (rpcError) {
-            // Nếu RPC chưa được tạo, chạy query dự phòng (vẫn tối ưu hơn)
-            if (rpcError.code === '42883') {
-                console.warn("RPC function 'get_top_creators' not found. Falling back to direct query.");
-                
-                // FIX: Refactored the convoluted promise chain into a more readable async/await flow.
-                // This resolves the error where the code was trying to destructure 'data' and 'error' from an array.
-                const { data: imagesData, error: imagesError } = await supabaseAdmin
-                    .from('generated_images')
-                    .select('user_id')
-                    .limit(10000); // A reasonable limit to avoid function timeouts.
-
-                if (imagesError) throw imagesError;
-
-                const counts = (imagesData || []).reduce((acc, { user_id }) => {
-                    if (user_id) {
-                        acc[user_id] = (acc[user_id] || 0) + 1;
-                    }
-                    return acc;
-                }, {} as Record<string, number>);
-
-                const sortedUserIds = Object.keys(counts).sort((a, b) => counts[b] - counts[a]).slice(0, 10);
-                
-                const { data: directQueryUsers, error: directQueryError } = await supabaseAdmin
-                    .from('users')
-                    .select('id, display_name, photo_url, xp')
-                    .in('id', sortedUserIds);
-                
-                if (directQueryError) throw directQueryError;
-
-                const combinedUsers = (directQueryUsers || [])
-                    .map(u => ({ ...u, creations_count: counts[u.id] }))
-                    .sort((a, b) => b.creations_count - a.creations_count);
-
-                const leaderboard = combinedUsers.map((user, index) => ({
-                    ...user,
-                    rank: index + 1,
-                    level: calculateLevelFromXp(user.xp),
-                }));
-                 return { statusCode: 200, body: JSON.stringify(leaderboard) };
-            }
-            throw rpcError;
+            // Nếu RPC thất bại, đó là một lỗi nghiêm trọng (ví dụ: hàm chưa được tạo).
+            // Hướng dẫn người dùng cách khắc phục trong thông báo lỗi.
+            throw new Error(`Lỗi Database RPC: ${rpcError.message}. Vui lòng đảm bảo hàm 'get_leaderboard' đã được tạo trong Supabase SQL Editor của bạn.`);
         }
 
-        // 2. Nếu RPC thành công, xử lý dữ liệu trả về
+        // Dữ liệu trả về từ RPC đã được xử lý sẵn.
+        // Chỉ cần định dạng lại một chút cho client.
         const leaderboardData = (topUsers || []).map((user, index) => ({
             id: user.user_id,
             rank: index + 1,
@@ -66,7 +28,7 @@ const handler: Handler = async () => {
             photo_url: user.photo_url,
             level: calculateLevelFromXp(user.xp),
             xp: user.xp,
-            creations_count: user.creations_count,
+            creations_count: Number(user.creations_count), // Đảm bảo kiểu dữ liệu là number
         }));
 
         return {

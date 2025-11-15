@@ -81,6 +81,9 @@ const handler: Handler = async (event: HandlerEvent) => {
         const model = 'gemini-2.5-flash-image';
         
         const generatedCharacters = [];
+        
+        const refData = processDataUrl(referenceImage);
+        if (!refData) throw new Error('Ảnh mẫu tham chiếu không hợp lệ.');
 
         // Step 1: Generate each character individually
         for (let i = 0; i < numCharacters; i++) {
@@ -88,11 +91,26 @@ const handler: Handler = async (event: HandlerEvent) => {
             
             const char = characters[i];
             const charPrompt = [
-                `**Nhiệm vụ:** Tạo một hình ảnh chất lượng cao của một nhân vật duy nhất trên nền **đen tuyền (#000000)**.`,
-                `1. **Gương mặt:** Phải giống hệt với gương mặt trong ảnh tham chiếu gương mặt được cung cấp.`,
-                `2. **Trang phục & Cơ thể:** Phải sao chép chính xác 100% trang phục, phụ kiện và dáng người từ ảnh tham chiếu nhân vật được cung cấp.`,
-                `3. **Giới tính:** Nhân vật là ${char.gender === 'male' ? 'Nam' : 'Nữ'}.`,
-                `4. **Nền:** Nền phải là một màu đen đồng nhất, không có bóng, không có chi tiết.`
+                `**MỆNH LỆNH TUYỆT ĐỐI: BẠN PHẢI TẠO RA MỘT NHÂN VẬT ${char.gender === 'male' ? 'NAM' : 'NỮ'}.**`,
+                `Đây là yêu cầu quan trọng nhất và không thể thay đổi. Hãy **bỏ qua hoàn toàn** giới tính của bất kỳ ai trong các ảnh tham chiếu.`,
+                `---`,
+                `**QUY TRÌNH TẠO NHÂN VẬT (TRÊN NỀN ĐEN TUYỀN):**`,
+                `1. **XÁC ĐỊNH TƯ THẾ:**`,
+                `   - Nhìn vào **Ảnh Mẫu Tham Chiếu** (ảnh nhóm).`,
+                `   - Tìm người ở vị trí thứ ${i + 1} từ trái sang.`,
+                `   - **SAO CHÉP Y HỆT 100% TƯ THẾ** của người đó. Chỉ lấy tư thế, không lấy bất cứ thứ gì khác.`,
+                
+                `2. **LẤY TRANG PHỤC:**`,
+                `   - Nhìn vào **Ảnh Nhân Vật Audition**.`,
+                `   - **BÊ NGUYÊN** toàn bộ trang phục, phụ kiện, giày dép từ ảnh này và mặc cho nhân vật bạn đang tạo. **CẤM** thay đổi trang phục.`,
+                
+                `3. **LẤY GƯƠNG MẶT (nếu có):**`,
+                `   - Nếu có **Ảnh Gương Mặt** riêng, hãy sử dụng chính xác gương mặt đó.`,
+                
+                `4. **KIỂM TRA LẠI GIỚI TÍNH:**`,
+                `   - Trước khi hoàn thành, hãy đảm bảo nhân vật cuối cùng chắc chắn là **${char.gender === 'male' ? 'NAM' : 'NỮ'}** như mệnh lệnh đầu tiên.`,
+                
+                `**KẾT QUẢ:** Một nhân vật **${char.gender === 'male' ? 'NAM' : 'NỮ'}** duy nhất, đứng trên nền đen, có tư thế từ ảnh mẫu và trang phục từ ảnh nhân vật Audition.`,
             ].join('\n');
 
             const poseData = processDataUrl(char.poseImage);
@@ -102,9 +120,14 @@ const handler: Handler = async (event: HandlerEvent) => {
 
             const parts = [
                 { text: charPrompt },
-                { inlineData: { data: poseData.base64, mimeType: poseData.mimeType } }
+                // Image order is important for the AI's understanding.
+                // 1. Reference image (for context and pose)
+                { inlineData: { data: refData.base64, mimeType: refData.mimeType } },
+                // 2. Character image (for outfit)
+                { inlineData: { data: poseData.base64, mimeType: poseData.mimeType } },
             ];
             if (faceData) {
+                // 3. Face image
                 parts.push({ inlineData: { data: faceData.base64, mimeType: faceData.mimeType } });
             }
 
@@ -132,9 +155,6 @@ const handler: Handler = async (event: HandlerEvent) => {
             `3. **Hòa trộn:** Điều chỉnh ánh sáng và bóng đổ trên các nhân vật để họ hòa hợp một cách tự nhiên với bối cảnh.`,
             `4. **Yêu cầu bổ sung:** ${prompt || `Giữ nguyên phong cách của ảnh bối cảnh.`}`
         ].join('\n');
-
-        const refData = processDataUrl(referenceImage);
-        if (!refData) throw new Error('Ảnh mẫu tham chiếu không hợp lệ.');
         
         const finalParts = [
             { text: compositePrompt },

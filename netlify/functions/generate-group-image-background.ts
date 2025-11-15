@@ -36,6 +36,13 @@ const processDataUrl = (dataUrl: string | null) => {
     return { base64, mimeType };
 };
 
+// WORKAROUND HELPER: Update progress by rewriting the 'prompt' column.
+const updateJobProgress = async (jobId: string, currentPromptData: any, progressMessage: string) => {
+    const newProgressData = { ...currentPromptData, progress: progressMessage };
+    await supabaseAdmin.from('generated_images').update({ prompt: JSON.stringify(newProgressData) }).eq('id', jobId);
+};
+
+
 const handler: Handler = async (event: HandlerEvent) => {
     if (event.httpMethod !== 'POST') return { statusCode: 200 };
 
@@ -45,7 +52,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         return { statusCode: 200 };
     }
 
-    let payload, userId, totalCost = 0;
+    let jobPromptData, payload, userId, totalCost = 0;
 
     try {
         const { data: jobData, error: fetchError } = await supabaseAdmin
@@ -58,7 +65,9 @@ const handler: Handler = async (event: HandlerEvent) => {
             throw new Error(fetchError?.message || 'Job not found or payload is missing.');
         }
 
-        payload = JSON.parse(jobData.prompt);
+        // WORKAROUND: Parse the structured data from the 'prompt' column.
+        jobPromptData = JSON.parse(jobData.prompt);
+        payload = jobPromptData.payload; // Extract original payload
         userId = jobData.user_id;
         totalCost = (payload.characters?.length || 0) + 1;
 
@@ -75,7 +84,7 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         // Step 1: Generate each character individually
         for (let i = 0; i < numCharacters; i++) {
-            await supabaseAdmin.from('generated_images').update({ progress_text: `Đang xử lý nhân vật ${i + 1}/${numCharacters}...` }).eq('id', jobId);
+            await updateJobProgress(jobId, jobPromptData, `Đang xử lý nhân vật ${i + 1}/${numCharacters}...`);
             
             const char = characters[i];
             const charPrompt = [
@@ -114,7 +123,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         }
 
         // Step 2: Composite all characters onto the reference background
-        await supabaseAdmin.from('generated_images').update({ progress_text: 'Đang tổng hợp ảnh cuối cùng...' }).eq('id', jobId);
+        await updateJobProgress(jobId, jobPromptData, 'Đang tổng hợp ảnh cuối cùng...');
 
         const compositePrompt = [
             `**Nhiệm vụ:** Ghép các nhân vật đã được tạo sẵn vào ảnh bối cảnh.`,
@@ -156,7 +165,8 @@ const handler: Handler = async (event: HandlerEvent) => {
         const xpToAward = numCharacters * XP_PER_CHARACTER;
 
         await Promise.all([
-             supabaseAdmin.from('generated_images').update({ image_url: publicUrl, prompt: prompt, progress_text: null }).eq('id', jobId),
+             // WORKAROUND: Clean up the 'prompt' column by setting it to the user's text prompt.
+             supabaseAdmin.from('generated_images').update({ image_url: publicUrl, prompt: payload.prompt }).eq('id', jobId),
              supabaseAdmin.rpc('increment_user_xp', { user_id_param: userId, xp_amount: xpToAward }),
              supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id })
         ]);

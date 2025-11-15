@@ -253,9 +253,20 @@ const GroupGeneratorTool: React.FC = () => {
                 filter: `id=eq.${jobId}`
             }, (payload) => {
                 const record = payload.new as any;
-                 if (record.progress_text) {
-                    setProgressText(record.progress_text);
+
+                // WORKAROUND: Read progress from the 'prompt' field.
+                if (record.prompt) {
+                    try {
+                        const jobData = JSON.parse(record.prompt);
+                        if (jobData && jobData.progress) {
+                            setProgressText(jobData.progress);
+                        }
+                    } catch (e) {
+                        // This may fail if the prompt has been updated to the final plain text.
+                        // It's not an error, so we can ignore it.
+                    }
                 }
+
                 if (record.image_url && record.image_url !== 'PENDING') {
                     setGeneratedImage(record.image_url);
                     showToast('Tạo ảnh nhóm thành công!', 'success');

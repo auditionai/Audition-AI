@@ -41,14 +41,19 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         const newDiamondCount = userData.diamonds - totalCost;
 
+        // WORKAROUND: Store progress and payload in the 'prompt' column to avoid schema cache issues with 'progress_text'.
+        const initialJobData = {
+            payload: payload,
+            progress: 'Đang khởi tạo tác vụ...'
+        };
+
         const { error: insertError } = await supabaseAdmin.from('generated_images').insert({
             id: jobId,
             user_id: user.id,
             model_used: 'Group Studio',
-            prompt: rawPayload, 
+            prompt: JSON.stringify(initialJobData), // Store structured data here
             is_public: false,
             image_url: 'PENDING',
-            progress_text: 'Đang khởi tạo tác vụ...',
         });
         
         if (insertError) {

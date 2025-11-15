@@ -83,7 +83,6 @@ const CreatorPage: React.FC<CreatorPageProps> = ({ activeTab }) => {
             <BottomNavBar
                 activeTab={activeTab === 'admin-gallery' ? 'tool' : activeTab} // Highlight 'tool' for admin gallery for now
                 onTabChange={navigate}
-                onTopUpClick={handleTopUpClick}
                 onCheckInClick={handleCheckIn}
             />
 

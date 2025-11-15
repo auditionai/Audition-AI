@@ -158,7 +158,6 @@ const BuyCreditsPage: React.FC = () => {
             <BottomNavBar
                 activeTab="buy-credits"
                 onTabChange={navigate}
-                onTopUpClick={() => {}}
                 onCheckInClick={() => setCheckInModalOpen(true)}
             />
             <InfoModal isOpen={!!infoModalKey} onClose={() => setInfoModalKey(null)} contentKey={infoModalKey} />

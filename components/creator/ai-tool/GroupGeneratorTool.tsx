@@ -368,7 +368,7 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
         id: 'generated-group-result',
         image_url: generatedImage,
         prompt: `Group Photo based on reference. Prompt: ${prompt}`,
-        creator: user ? { display_name: user.display_name, photo_url: user.photo_url, level: user.level } : { display_name: 'Bạn', photo_url: '', level: 1 },
+        creator: user ? { display_name: user.display_name, photo_url: user.photo_url, level: user.level } : { display_name: t('common.creator'), photo_url: '', level: 1 },
         created_at: new Date().toISOString(),
         model_used: 'Group Studio',
         user_id: user?.id || ''

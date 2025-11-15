@@ -66,7 +66,7 @@ const CheckInModal: React.FC<{ isOpen: boolean; onClose: () => void; }> = ({ isO
     const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
     const dayBlanks = Array(firstDayOfMonth).fill(null);
     const dayCells = Array.from({ length: daysInMonth }, (_, i) => i + 1);
-    const weekdays = t('modals.checkIn.weekdays');
+    const weekdays: string[] = t('modals.checkIn.weekdays');
     
     const hasCheckedInToday = checkIns.has(todayVnString) || (user?.last_check_in_at && getVNDateString(new Date(user.last_check_in_at)) === todayVnString);
 
@@ -98,7 +98,7 @@ const CheckInModal: React.FC<{ isOpen: boolean; onClose: () => void; }> = ({ isO
                     </div>
 
                     <div className="grid grid-cols-7 gap-1 text-center text-xs font-semibold text-skin-muted mb-2">
-                        {weekdays.map(day => <div key={day}>{day}</div>)}
+                        {weekdays.map((day: string) => <div key={day}>{day}</div>)}
                     </div>
 
                     <div className="grid grid-cols-7 gap-1">

@@ -49,7 +49,9 @@ const handler: Handler = async (event: HandlerEvent) => {
             .single();
 
         if (imageError || !imageData) {
-            return { statusCode: 404, body: JSON.stringify({ error: 'Image not found.' }) };
+            // If the image record doesn't exist, we can't do anything.
+            // But we can return success to clear the UI if the client-side logic is optimistic.
+            return { statusCode: 404, body: JSON.stringify({ error: 'Image not found in database.' }) };
         }
 
         // --- MODIFICATION: Allow deletion if user is owner OR is an admin ---
@@ -57,26 +59,31 @@ const handler: Handler = async (event: HandlerEvent) => {
             return { statusCode: 403, body: JSON.stringify({ error: 'You do not have permission to delete this image.' }) };
         }
 
-        // 5. Delete image from R2 storage, if it exists
+        // 5. Attempt to delete image from R2 storage, but don't fail if it's already gone.
         const imageUrl = imageData.image_url;
         if (imageUrl) {
-            const key = imageUrl.replace(`${process.env.R2_PUBLIC_URL}/`, '');
-            
-            const deleteCommand = new DeleteObjectCommand({
-                Bucket: process.env.R2_BUCKET_NAME!,
-                Key: key,
-            });
-
-            await (s3Client as any).send(deleteCommand);
+            try {
+                const key = imageUrl.replace(`${process.env.R2_PUBLIC_URL}/`, '');
+                const deleteCommand = new DeleteObjectCommand({
+                    Bucket: process.env.R2_BUCKET_NAME!,
+                    Key: key,
+                });
+                await (s3Client as any).send(deleteCommand);
+                console.log(`[delete-image] Successfully deleted ${key} from R2.`);
+            } catch (r2Error: any) {
+                // Log the error but do not stop the function. This is key to fixing the bug.
+                console.warn(`[delete-image] Could not delete image from R2 (it might already be gone). Image ID: ${imageId}. Error: ${r2Error.message}`);
+            }
         }
 
-        // 6. Update image record in Supabase to set URL to null instead of deleting
+        // 6. ALWAYS update image record in Supabase to set URL to null. This is the crucial step.
         const { error: updateDbError } = await supabaseAdmin
             .from('generated_images')
             .update({ image_url: null })
             .eq('id', imageId);
 
         if (updateDbError) {
+            // This is a more critical error, so we should throw.
             throw new Error(`Failed to update database record: ${updateDbError.message}`);
         }
 

@@ -8,7 +8,6 @@ import { resizeImage, base64ToFile } from '../../../utils/imageUtils';
 import ProcessedImagePickerModal from './ProcessedImagePickerModal';
 import GenerationProgress from '../../ai-tool/GenerationProgress';
 import ImageModal from '../../common/ImageModal';
-import ToggleSwitch from '../../ai-tool/ToggleSwitch';
 import ProcessedImageModal from '../../ai-tool/ProcessedImageModal';
 import SettingsBlock from '../../ai-tool/SettingsBlock';
 import InstructionModal from '../../ai-tool/InstructionModal';

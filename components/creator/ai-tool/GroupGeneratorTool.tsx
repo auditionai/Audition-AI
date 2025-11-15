@@ -10,6 +10,7 @@ import GenerationProgress from '../../ai-tool/GenerationProgress';
 import ImageModal from '../../common/ImageModal';
 import ProcessedImageModal from '../../ai-tool/ProcessedImageModal';
 import SettingsBlock from '../../ai-tool/SettingsBlock';
+import { useTranslation } from '../../../hooks/useTranslation';
 
 
 // Mock data for presets - in a real app, this would come from a database
@@ -57,6 +58,7 @@ const fileToBase64 = (file: File): Promise<string> => new Promise((resolve, reje
 // Main Component
 const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtility, onInstructionClick }) => {
     const { user, session, showToast, supabase, updateUserDiamonds } = useAuth();
+    const { t } = useTranslation();
     const [numCharacters, setNumCharacters] = useState<number>(0);
     const [isConfirmOpen, setConfirmOpen] = useState(false);
     
@@ -95,16 +97,15 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
         if (!isGenerating) return 0;
         if (generatedImage) return 100;
 
-        const match = progressText.match(/Đang xử lý nhân vật (\d+)\/(\d+)/);
+        const match = progressText.match(/(\d+)\/(\d+)/);
         if (match) {
             const current = parseInt(match[1], 10);
             const total = parseInt(match[2], 10);
-            // Allocate 80% of the progress to character generation
-            return 10 + ((current -1) / total) * 80;
+            return 10 + ((current - 1) / total) * 80;
         }
-        if (progressText.includes('tổng hợp') || progressText.includes('tạo bối cảnh')) return 95;
-        if (progressText.includes('khởi tạo')) return 5;
-        return 10; // Default progress after init
+        if (progressText.includes('tổng hợp') || progressText.includes('compositing')) return 95;
+        if (progressText.includes('khởi tạo') || progressText.includes('initializing')) return 5;
+        return 10;
     }, [isGenerating, generatedImage, progressText]);
 
 
@@ -145,7 +146,7 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                     return char;
                 }));
             }
-        }).catch(() => showToast("Lỗi khi xử lý ảnh.", "error"));
+        }).catch(() => showToast(t('creator.aiTool.common.errorProcessImage'), "error"));
     };
 
     const handleRemoveImage = (type: 'pose' | 'face' | 'reference', index?: number) => {
@@ -189,11 +190,11 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                     body: JSON.stringify({ image: base64Image }),
                 });
                 const result = await response.json();
-                if (!response.ok) throw new Error(result.error || 'Xử lý gương mặt thất bại.');
+                if (!response.ok) throw new Error(result.error || t('creator.aiTool.singlePhoto.superFaceLockProcessing'));
 
                 setCharacters(prev => prev.map((c, i) => i === index ? { ...c, processedFace: result.processedImageBase64 } : c));
                 updateUserDiamonds(result.newDiamondCount);
-                showToast('Xử lý & Khóa gương mặt thành công!', 'success');
+                showToast(t('creator.aiTool.singlePhoto.superFaceLockProcessed'), 'success');
             };
         } catch (err: any) {
             showToast(err.message, 'error');
@@ -206,22 +207,22 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
 
     const handleGenerateClick = () => {
         if (!referenceImage && !prompt.trim()) {
-            showToast('Vui lòng tải "Ảnh Mẫu Tham Chiếu" hoặc nhập "Prompt".', 'error');
+            showToast(t('creator.aiTool.groupStudio.errorRefOrPrompt'), 'error');
             return;
         }
         for (let i = 0; i < characters.length; i++) {
             if (!characters[i].poseImage) {
-                showToast(`Vui lòng cung cấp "Ảnh nhân vật" cho Nhân vật ${i + 1}.`, 'error');
+                showToast(t('creator.aiTool.groupStudio.errorPoseImage', { index: i + 1 }), 'error');
                 return;
             }
             if (!characters[i].gender) {
-                showToast(`Vui lòng chọn giới tính cho Nhân vật ${i + 1}.`, 'error');
+                showToast(t('creator.aiTool.groupStudio.errorGender', { index: i + 1 }), 'error');
                 return;
             }
         }
 
         if (user && user.diamonds < totalCost) {
-            showToast(`Bạn cần ${totalCost} kim cương, nhưng chỉ có ${user.diamonds}. Vui lòng nạp thêm.`, 'error');
+            showToast(t('creator.aiTool.common.errorCredits', { cost: totalCost, balance: user.diamonds }), 'error');
             return;
         }
         setConfirmOpen(true);
@@ -230,7 +231,7 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
     const handleConfirmGeneration = async () => {
         setConfirmOpen(false);
         setIsGenerating(true);
-        setProgressText('Đang khởi tạo tác vụ...');
+        setProgressText(t('creator.aiTool.common.initializing'));
 
         const jobId = crypto.randomUUID();
 
@@ -258,21 +259,30 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
             }, (payload) => {
                 const record = payload.new as any;
                 
-                // Robustly parse progress from the 'prompt' field.
                 if (record.prompt && record.prompt.startsWith('{')) {
                     try {
                         const jobData = JSON.parse(record.prompt);
                         if (jobData && jobData.progress) {
-                            setProgressText(jobData.progress);
+                            const progressMsg = jobData.progress;
+                            const match = progressMsg.match(/(\d+)\/(\d+)/);
+                            if (match) {
+                                setProgressText(t('creator.aiTool.groupStudio.progress', { current: match[1], total: match[2] }));
+                            } else if (progressMsg.includes('compositing')) {
+                                setProgressText(t('creator.aiTool.groupStudio.progressCompositing'));
+                            } else if (progressMsg.includes('background')) {
+                                setProgressText(t('creator.aiTool.groupStudio.progressCreatingBg'));
+                            } else {
+                                setProgressText(progressMsg);
+                            }
                         }
                     } catch (e) {
-                       // Ignore parsing errors if the field is updated to non-JSON
+                       // Ignore parsing errors
                     }
                 }
 
                 if (record.image_url && record.image_url !== 'PENDING') {
                     setGeneratedImage(record.image_url);
-                    showToast('Tạo ảnh nhóm thành công!', 'success');
+                    showToast(t('creator.aiTool.common.success'), 'success');
                     setIsGenerating(false);
                     cleanup();
                 }
@@ -379,7 +389,7 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                     showInfoPanel={false}
                 />
                 <div className="text-center animate-fade-in w-full min-h-[70vh] flex flex-col items-center justify-center">
-                    <h3 className="themed-heading text-2xl font-bold mb-4 bg-gradient-to-r from-green-400 to-cyan-400 text-transparent bg-clip-text">Tạo ảnh nhóm thành công!</h3>
+                    <h3 className="themed-heading text-2xl font-bold mb-4 bg-gradient-to-r from-green-400 to-cyan-400 text-transparent bg-clip-text">{t('creator.aiTool.common.success')}</h3>
                     <div 
                         className="max-w-xl w-full mx-auto bg-black/20 rounded-lg overflow-hidden border-2 border-pink-500/30 group relative cursor-pointer"
                         style={{ aspectRatio: aspectRatio.replace(':', '/') }}
@@ -392,10 +402,10 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                     </div>
                     <div className="flex gap-4 mt-6 justify-center">
                         <button onClick={resetGenerator} className="themed-button-secondary px-6 py-3 font-semibold">
-                            <i className="ph-fill ph-arrow-counter-clockwise mr-2"></i>Tạo ảnh khác
+                            <i className="ph-fill ph-arrow-counter-clockwise mr-2"></i>{t('creator.aiTool.common.createAnother')}
                         </button>
                         <button onClick={() => setIsResultModalOpen(true)} className="themed-button-primary px-6 py-3 font-bold">
-                             <i className="ph-fill ph-download-simple mr-2"></i>Tải & Sao chép
+                             <i className="ph-fill ph-download-simple mr-2"></i>{t('creator.aiTool.common.downloadAndCopy')}
                         </button>
                     </div>
                 </div>
@@ -407,8 +417,8 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
     if (numCharacters === 0) {
         return (
             <div className="text-center p-8 min-h-[50vh] flex flex-col items-center justify-center animate-fade-in">
-                <h2 className="themed-heading text-2xl font-bold themed-title-glow mb-4">Bạn muốn tạo ảnh cho bao nhiêu người?</h2>
-                <p className="text-skin-muted mb-6">Chọn số lượng nhân vật để bắt đầu Studio.</p>
+                <h2 className="themed-heading text-2xl font-bold themed-title-glow mb-4">{t('creator.aiTool.groupStudio.introTitle')}</h2>
+                <p className="text-skin-muted mb-6">{t('creator.aiTool.groupStudio.introDesc')}</p>
                 <div className="flex flex-wrap justify-center gap-4 mt-4">
                     {[2, 3, 4, 5, 6].map(num => (
                         <button 
@@ -460,7 +470,7 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                     }));
                     setImageToProcess(null);
                     setPickerTarget(null);
-                    showToast('Đã chuyển ảnh gương mặt sang trình tạo AI!', 'success');
+                    showToast(t('modals.processedImage.success.cropped'), 'success');
                 }}
                 onDownload={() => {
                     if (imageToProcess) handleDownloadResult();
@@ -471,8 +481,8 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
              <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 text-yellow-300 rounded-lg text-sm flex items-start gap-3 mb-6">
                 <i className="ph-fill ph-info text-2xl flex-shrink-0"></i>
                 <div>
-                    <span className="font-bold">Mẹo:</span> Để có chất lượng ảnh tốt nhất, vui lòng sử dụng ảnh nhân vật đã được tách nền.
-                    <button onClick={onSwitchToUtility} className="font-bold underline ml-2 hover:text-white">Chuyển đến công cụ tách nền</button>
+                    <span className="font-bold">{t('langName') === 'English' ? 'Tip:' : 'Mẹo:'}</span> {t('creator.aiTool.singlePhoto.bgRemoverTip')}
+                    <button onClick={onSwitchToUtility} className="font-bold underline ml-2 hover:text-white">{t('creator.aiTool.singlePhoto.switchToBgRemover')}</button>
                 </div>
             </div>
 
@@ -480,29 +490,29 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                  {/* Left Column: Character Inputs */}
                 <div className="w-full lg:w-2/3">
                     <div className="flex justify-between items-center mb-3">
-                        <h3 className="themed-heading text-lg font-bold themed-title-glow">1. Cung cấp thông tin nhân vật</h3>
-                        <button onClick={() => setNumCharacters(0)} className="text-xs text-skin-muted hover:text-skin-base">(Thay đổi số lượng)</button>
+                        <h3 className="themed-heading text-lg font-bold themed-title-glow">{t('creator.aiTool.groupStudio.characterInfoTitle')}</h3>
+                        <button onClick={() => setNumCharacters(0)} className="text-xs text-skin-muted hover:text-skin-base">{t('creator.aiTool.groupStudio.changeAmount')}</button>
                     </div>
                     <div className={`grid grid-cols-2 ${numCharacters > 2 ? 'md:grid-cols-3' : ''} gap-4`}>
                         {characters.map((char, index) => (
                             <div key={index} className="bg-skin-fill p-3 rounded-xl border border-skin-border space-y-3">
-                                <h4 className="text-sm font-bold text-center text-skin-base">Nhân vật {index + 1}</h4>
-                                <ImageUploader onUpload={(e) => handleImageUpload(e, 'pose', index)} image={char.poseImage} onRemove={() => handleRemoveImage('pose', index)} text="Ảnh nhân vật (Lấy trang phục)" onPickFromProcessed={() => handleOpenPicker(index, 'pose')} />
-                                <ImageUploader onUpload={(e) => handleImageUpload(e, 'face', index)} image={char.faceImage} onRemove={() => handleRemoveImage('face', index)} text="Ảnh gương mặt (Face ID)" onPickFromProcessed={() => handleOpenPicker(index, 'face')} />
+                                <h4 className="text-sm font-bold text-center text-skin-base">{t('creator.aiTool.groupStudio.character')} {index + 1}</h4>
+                                <ImageUploader onUpload={(e) => handleImageUpload(e, 'pose', index)} image={char.poseImage} onRemove={() => handleRemoveImage('pose', index)} text={t('creator.aiTool.groupStudio.poseImageText')} onPickFromProcessed={() => handleOpenPicker(index, 'pose')} />
+                                <ImageUploader onUpload={(e) => handleImageUpload(e, 'face', index)} image={char.faceImage} onRemove={() => handleRemoveImage('face', index)} text={t('creator.aiTool.groupStudio.faceImageText')} onPickFromProcessed={() => handleOpenPicker(index, 'face')} />
                                 <div className="pt-2">
-                                    <p className="text-xs font-semibold text-center text-skin-muted mb-2">Giới tính (Bắt buộc)</p>
+                                    <p className="text-xs font-semibold text-center text-skin-muted mb-2">{t('creator.aiTool.groupStudio.genderLabel')}</p>
                                     <div className="grid grid-cols-2 gap-2">
                                         <button 
                                             onClick={() => handleGenderSelect(index, 'male')}
                                             className={`py-2 text-xs font-bold rounded-md border-2 transition flex items-center justify-center gap-1 ${char.gender === 'male' ? 'border-blue-500 bg-blue-500/10 text-blue-300' : 'border-skin-border bg-skin-fill-secondary text-skin-muted hover:border-blue-500/50'}`}
                                         >
-                                            <i className="ph-fill ph-gender-male"></i> Nam
+                                            <i className="ph-fill ph-gender-male"></i> {t('creator.aiTool.groupStudio.male')}
                                         </button>
                                         <button 
                                             onClick={() => handleGenderSelect(index, 'female')}
                                             className={`py-2 text-xs font-bold rounded-md border-2 transition flex items-center justify-center gap-1 ${char.gender === 'female' ? 'border-pink-500 bg-pink-500/10 text-pink-300' : 'border-skin-border bg-skin-fill-secondary text-skin-muted hover:border-pink-500/50'}`}
                                         >
-                                            <i className="ph-fill ph-gender-female"></i> Nữ
+                                            <i className="ph-fill ph-gender-female"></i> {t('creator.aiTool.groupStudio.female')}
                                         </button>
                                     </div>
                                 </div>
@@ -512,7 +522,7 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                                     className={`w-full text-sm font-bold py-2 px-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-wait
                                         ${char.processedFace ? 'bg-green-500/20 text-green-300' : 'bg-yellow-500/20 text-yellow-300 hover:bg-yellow-500/30'}`}
                                 >
-                                    {processingFaceIndex === index ? 'Đang xử lý...' : char.processedFace ? 'Gương mặt đã khóa' : 'Xử lý & Khóa Gương Mặt (-1 💎)'}
+                                    {processingFaceIndex === index ? t('creator.aiTool.singlePhoto.superFaceLockProcessing') : char.processedFace ? t('creator.aiTool.singlePhoto.superFaceLockProcessed') : t('creator.aiTool.singlePhoto.superFaceLockProcess')}
                                 </button>
                             </div>
                         ))}
@@ -521,21 +531,21 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
 
                 {/* Right Column: Settings */}
                 <div className="w-full lg:w-1/3 themed-panel p-4 flex flex-col">
-                     <SettingsBlock title="Cài đặt Nhóm" instructionKey="group-studio" onInstructionClick={onInstructionClick}>
+                     <SettingsBlock title={t('creator.aiTool.groupStudio.settingsTitle')} instructionKey="group-studio" onInstructionClick={onInstructionClick}>
                         <div className="space-y-4">
                              <div>
-                                <label className="text-sm font-semibold text-skin-base mb-2 block">2. Ảnh Mẫu Tham Chiếu (Tuỳ chọn)</label>
-                                <ImageUploader onUpload={(e) => handleImageUpload(e, 'reference')} image={referenceImage} onRemove={() => handleRemoveImage('reference')} text="Tải ảnh mẫu (Bố cục, tư thế...)" />
-                                <p className="text-xs text-skin-muted mt-2">AI sẽ "học" bố cục, tư thế, bối cảnh và phong cách từ ảnh này. Có thể bỏ qua nếu bạn muốn AI tự tạo bối cảnh từ prompt.</p>
+                                <label className="text-sm font-semibold text-skin-base mb-2 block">{t('creator.aiTool.groupStudio.refImageTitle')}</label>
+                                <ImageUploader onUpload={(e) => handleImageUpload(e, 'reference')} image={referenceImage} onRemove={() => handleRemoveImage('reference')} text={t('creator.aiTool.groupStudio.refImageUploadText')} />
+                                <p className="text-xs text-skin-muted mt-2">{t('creator.aiTool.groupStudio.refImageDesc')}</p>
                             </div>
 
                              <div>
-                                <label className="text-sm font-semibold text-skin-base mb-2 block">3. Câu Lệnh Mô Tả (Prompt)</label>
-                                <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Thêm chi tiết về bối cảnh, hành động..." className="w-full p-2 bg-skin-input-bg rounded-md border border-skin-border focus:border-skin-border-accent transition text-xs text-skin-base resize-none" rows={3}/>
+                                <label className="text-sm font-semibold text-skin-base mb-2 block">{t('creator.aiTool.groupStudio.promptTitle')}</label>
+                                <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder={t('creator.aiTool.groupStudio.promptPlaceholder')} className="w-full p-2 bg-skin-input-bg rounded-md border border-skin-border focus:border-skin-border-accent transition text-xs text-skin-base resize-none" rows={3}/>
                             </div>
 
                             <div>
-                                <label className="text-sm font-semibold text-skin-base mb-2 block">4. Phong cách nghệ thuật</label>
+                                <label className="text-sm font-semibold text-skin-base mb-2 block">{t('creator.aiTool.groupStudio.styleTitle')}</label>
                                 <div className="grid grid-cols-2 gap-2">
                                     {MOCK_STYLES.map(p => (
                                         <button key={p.id} onClick={() => setSelectedStyle(p.id)} className={`p-2 text-xs font-semibold rounded-md border-2 transition text-center ${selectedStyle === p.id ? 'selected-glow' : 'border-skin-border bg-skin-fill-secondary hover:border-pink-500/50 text-skin-base'}`}>
@@ -546,7 +556,7 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                             </div>
                             
                             <div>
-                                <label className="text-sm font-semibold text-skin-base mb-2 block">5. Tỷ lệ khung hình</label>
+                                <label className="text-sm font-semibold text-skin-base mb-2 block">{t('creator.aiTool.groupStudio.aspectRatioTitle')}</label>
                                 <div className="grid grid-cols-5 gap-2">
                                     {(['3:4', '1:1', '4:3', '9:16', '16:9'] as const).map(ar => {
                                         const dims: { [key: string]: string } = { '3:4': 'w-3 h-4', '1:1': 'w-4 h-4', '4:3': 'w-4 h-3', '9:16': 'w-[1.125rem] h-5', '16:9': 'w-5 h-[1.125rem]' };
@@ -564,13 +574,13 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
 
                     <div className="mt-auto pt-6 space-y-4">
                         <div className="text-center text-sm p-3 bg-black/20 rounded-lg">
-                            <p className="text-skin-muted">Chi phí: <span className="font-bold text-pink-400 flex items-center justify-center gap-1">{totalCost} <i className="ph-fill ph-diamonds-four"></i></span></p>
+                            <p className="text-skin-muted">{t('creator.aiTool.common.cost')}: <span className="font-bold text-pink-400 flex items-center justify-center gap-1">{totalCost} <i className="ph-fill ph-diamonds-four"></i></span></p>
                         </div>
                         <button onClick={handleGenerateClick} className="themed-button-primary w-full px-8 py-4 font-bold text-lg flex items-center justify-center gap-2">
                             <i className="ph-fill ph-magic-wand"></i>
-                            Tạo Ảnh Nhóm
+                            {t('creator.aiTool.groupStudio.generateButton')}
                         </button>
-                         <p className="text-xs text-center text-skin-muted">Thời gian tạo ảnh nhóm sẽ lâu hơn ảnh đơn.</p>
+                         <p className="text-xs text-center text-skin-muted">{t('creator.aiTool.groupStudio.generateTimeWarning')}</p>
                     </div>
                 </div>
             </div>

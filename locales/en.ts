@@ -159,7 +159,7 @@ export const en = {
       },
       singlePhoto: {
         bgRemoverTip: 'Tip: For the best quality, please use character images with the background removed.',
-        switchToBgRemover: 'Go to the background removal tool',
+        switchToBgRemover: 'Go to background remover tool',
         characterTitle: 'Character Image',
         characterUploadText: 'Pose & Outfit',
         faceLockLabel: 'Face Lock (70-80%)',
@@ -172,7 +172,7 @@ export const en = {
         superFaceLockDesc: 'Upload a clear portrait, then you must press the "Process" button for the AI to enhance and lock the face. This costs 1 diamond.',
         styleTitle: 'Style Image',
         styleUploadText: 'Style Reference',
-        styleDesc: 'The AI will "learn" the color palette, lighting, and composition from this image to apply to your creation.',
+        styleDesc: 'The AI will learn the color palette, lighting, and composition from this image to apply to your creation.',
         promptTitle: 'Prompt',
         promptPlaceholder: 'Describe the image you want to create in detail, e.g., \'a girl with long pink hair, wearing a sparkling princess dress, dancing in a magnificent crystal palace\'...',
         advancedSettingsTitle: 'Advanced Settings',

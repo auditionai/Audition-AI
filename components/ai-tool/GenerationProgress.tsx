@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from '../../hooks/useTranslation';
 
 interface GenerationProgressProps {
   progressText: string;
@@ -7,6 +8,7 @@ interface GenerationProgressProps {
 }
 
 const GenerationProgress: React.FC<GenerationProgressProps> = ({ progressText, progressPercentage, onCancel }) => {
+    const { t } = useTranslation();
     return (
         <div className="w-full h-full flex flex-col items-center justify-center p-4 text-white animate-fade-in">
             <div className="relative w-32 h-32 mx-auto mb-8">
@@ -17,7 +19,7 @@ const GenerationProgress: React.FC<GenerationProgressProps> = ({ progressText, p
               </div>
             </div>
 
-            <h2 className="text-2xl font-bold mb-3 animate-pulse">{progressText || 'Đang chờ...'}</h2>
+            <h2 className="text-2xl font-bold mb-3 animate-pulse">{progressText || t('creator.aiTool.common.waiting')}</h2>
             
             <div className="w-full max-w-lg bg-black/30 rounded-full h-4 mb-2 overflow-hidden border border-white/10">
                 <div 
@@ -38,7 +40,7 @@ const GenerationProgress: React.FC<GenerationProgressProps> = ({ progressText, p
                 onClick={onCancel} 
                 className="mt-6 px-6 py-2 font-semibold bg-red-500/20 text-red-300 rounded-lg hover:bg-red-500/40 hover:text-red-200 transition"
             >
-                Hủy bỏ
+                {t('creator.aiTool.common.cancel')}
             </button>
         </div>
     );

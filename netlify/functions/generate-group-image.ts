@@ -22,15 +22,14 @@ const handler: Handler = async (event: HandlerEvent) => {
             return { statusCode: 400, body: JSON.stringify({ error: 'Request body is missing.' }) };
         }
         
-        // Parse once for validation but store the raw string to save memory and processing time.
         const payload = JSON.parse(rawPayload);
-        const { jobId, characters, useUpscaler, referenceImage } = payload;
+        const { jobId, characters, referenceImage } = payload;
         
         if (!jobId || !characters || !Array.isArray(characters) || characters.length === 0 || !referenceImage) {
             return { statusCode: 400, body: JSON.stringify({ error: 'Job ID, reference image, and character data are required.' }) };
         }
 
-        const totalCost = characters.length + (useUpscaler ? 1 : 0);
+        const totalCost = characters.length + 1;
 
         const { data: userData, error: userError } = await supabaseAdmin.from('users').select('diamonds, xp').eq('id', user.id).single();
         if (userError || !userData) {
@@ -46,13 +45,11 @@ const handler: Handler = async (event: HandlerEvent) => {
             id: jobId,
             user_id: user.id,
             model_used: 'Group Studio',
-            prompt: rawPayload, // Store the raw payload string directly
+            prompt: rawPayload, 
             is_public: false,
             image_url: 'PENDING',
+            progress_text: 'Đang khởi tạo tác vụ...',
         });
-        
-
-
         
         if (insertError) {
             if (insertError.code !== '23505') { // Ignore unique_violation for retries
@@ -71,8 +68,8 @@ const handler: Handler = async (event: HandlerEvent) => {
         ]);
 
         return {
-            statusCode: 200, // Return 200 OK to signal the job was created.
-            body: JSON.stringify({ message: 'Job record created successfully.' })
+            statusCode: 200,
+            body: JSON.stringify({ message: 'Job record created successfully.', newDiamondCount })
         };
 
     } catch (error: any) {

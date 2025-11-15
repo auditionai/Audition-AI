@@ -1,6 +1,6 @@
 // NEW: Create the content for the GroupGeneratorTool component.
 // FIX: Import 'useState' from 'react' to resolve 'Cannot find name' errors.
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
 import ConfirmationModal from '../../ConfirmationModal';
 import ImageUploader from '../../ai-tool/ImageUploader';
@@ -52,7 +52,6 @@ const fileToBase64 = (file: File): Promise<string> => new Promise((resolve, reje
 
 // Main Component
 const GroupGeneratorTool: React.FC = () => {
-    // FIX: Add `updateUserDiamonds` to useAuth destructuring to fix 'Cannot find name' error.
     const { user, session, showToast, supabase, updateUserDiamonds } = useAuth();
     const [numCharacters, setNumCharacters] = useState<number>(0);
     const [isConfirmOpen, setConfirmOpen] = useState(false);
@@ -68,12 +67,11 @@ const GroupGeneratorTool: React.FC = () => {
     // New states for generation flow
     const [isGenerating, setIsGenerating] = useState(false);
     const [generatedImage, setGeneratedImage] = useState<string | null>(null);
-    const [progress, setProgress] = useState(0);
+    const [progressText, setProgressText] = useState('');
     const [processingFaceIndex, setProcessingFaceIndex] = useState<number | null>(null);
     const [isPickerOpen, setIsPickerOpen] = useState(false);
     const [pickerTarget, setPickerTarget] = useState<{ index: number; type: 'pose' | 'face' } | null>(null);
     const [isResultModalOpen, setIsResultModalOpen] = useState(false);
-    const [useUpscaler, setUseUpscaler] = useState(false);
     const [imageToProcess, setImageToProcess] = useState<ProcessedImageData | null>(null);
     const [isInstructionModalOpen, setInstructionModalOpen] = useState(false);
 
@@ -90,11 +88,25 @@ const GroupGeneratorTool: React.FC = () => {
         else setAspectRatio('16:9');
     }, [numCharacters]);
 
+    const progressPercentage = useMemo(() => {
+        if (!isGenerating) return 0;
+        if (generatedImage) return 100;
+
+        const match = progressText.match(/Đang xử lý nhân vật (\d+)\/(\d+)/);
+        if (match) {
+            const current = parseInt(match[1], 10);
+            const total = parseInt(match[2], 10);
+            // Allocate 80% of the progress to character generation
+            return 10 + ((current -1) / total) * 80;
+        }
+        if (progressText.includes('tổng hợp')) return 95;
+        if (progressText.includes('khởi tạo')) return 5;
+        return 10; // Default progress after init
+    }, [isGenerating, generatedImage, progressText]);
+
 
     const handleNumCharactersSelect = (num: number) => {
         setNumCharacters(num);
-        // FIX: Use Array.from to create unique objects for each character slot,
-        // preventing state management issues where updating one character affects others.
         setCharacters(Array.from({ length: num }, () => ({
             poseImage: null,
             faceImage: null,
@@ -187,7 +199,7 @@ const GroupGeneratorTool: React.FC = () => {
         }
     };
 
-    const totalCost = numCharacters + (useUpscaler ? 1 : 0);
+    const totalCost = numCharacters + 1;
 
     const handleGenerateClick = () => {
         if (!referenceImage) {
@@ -215,7 +227,7 @@ const GroupGeneratorTool: React.FC = () => {
     const handleConfirmGeneration = async () => {
         setConfirmOpen(false);
         setIsGenerating(true);
-        setProgress(0);
+        setProgressText('Đang khởi tạo tác vụ...');
 
         const jobId = crypto.randomUUID();
 
@@ -225,42 +237,46 @@ const GroupGeneratorTool: React.FC = () => {
             return;
         }
 
-        let progressInterval: ReturnType<typeof setInterval> | null = null;
-        const channel = supabase.channel(`group-job-${jobId}`);
+        let channel = supabase.channel(`group-job-${jobId}`);
 
         const cleanup = () => {
-            if (progressInterval) clearInterval(progressInterval);
-            supabase.removeChannel(channel);
+             if (channel) {
+                supabase.removeChannel(channel);
+                channel = null as any;
+            }
         };
 
         channel
             .on('postgres_changes', {
-                event: '*',
+                event: 'UPDATE',
                 schema: 'public',
                 table: 'generated_images',
                 filter: `id=eq.${jobId}`
             }, (payload) => {
-                if (payload.eventType === 'UPDATE') {
-                    const record = payload.new as any;
-                    if (record.image_url && record.image_url !== 'PENDING') {
-                        setProgress(10);
-                        setGeneratedImage(record.image_url);
-                        showToast('Tạo ảnh nhóm thành công!', 'success');
-                        // FIX: Set generating state to false to show the result.
-                        setIsGenerating(false);
-                        cleanup();
-                    }
-                } else if (payload.eventType === 'DELETE') {
-                    showToast('Tạo ảnh nhóm thất bại. Vui lòng thử lại.', 'error');
+                const record = payload.new as any;
+                 if (record.progress_text) {
+                    setProgressText(record.progress_text);
+                }
+                if (record.image_url && record.image_url !== 'PENDING') {
+                    setGeneratedImage(record.image_url);
+                    showToast('Tạo ảnh nhóm thành công!', 'success');
                     setIsGenerating(false);
-                    setProgress(0);
                     cleanup();
                 }
+            })
+            .on('postgres_changes', {
+                 event: 'DELETE',
+                 schema: 'public',
+                 table: 'generated_images',
+                 filter: `id=eq.${jobId}`
+            }, () => {
+                 showToast('Tạo ảnh nhóm thất bại do lỗi xử lý. Kim cương đã được hoàn lại.', 'error');
+                 setIsGenerating(false);
+                 cleanup();
             })
             .subscribe(async (status, err) => {
                 if (status === 'SUBSCRIBED') {
                     try {
-                        // Step 1: Call the spawner function with the large payload to create the job.
                         const charactersPayload = await Promise.all(characters.map(async char => ({
                             poseImage: char.poseImage ? await fileToBase64(char.poseImage.file) : null,
                             faceImage: char.processedFace ? `data:image/png;base64,${char.processedFace}` : (char.faceImage ? await fileToBase64(char.faceImage.file) : null),
@@ -276,51 +292,33 @@ const GroupGeneratorTool: React.FC = () => {
                                 referenceImage: referenceImage ? await fileToBase64(referenceImage.file) : null,
                                 prompt,
                                 style: selectedStyle,
-                                aspectRatio: aspectRatio, 
-                                useUpscaler,
+                                aspectRatio: aspectRatio,
                             }),
                         });
 
                         if (!spawnerResponse.ok) {
-                            let errorMessage = 'Không thể tạo tác vụ. Lỗi máy chủ.';
-                            try {
-                                const contentType = spawnerResponse.headers.get("content-type");
-                                if (contentType && contentType.indexOf("application/json") !== -1) {
-                                    const errorJson = await spawnerResponse.json();
-                                    errorMessage = errorJson.error || errorMessage;
-                                } else {
-                                    errorMessage = `Lỗi máy chủ (${spawnerResponse.status}). Vui lòng thử lại sau.`;
-                                }
-                            } catch (e) {
-                                errorMessage = `Lỗi máy chủ không xác định (${spawnerResponse.status}).`;
-                            }
-                            throw new Error(errorMessage);
+                            const errorJson = await spawnerResponse.json();
+                            throw new Error(errorJson.error || 'Không thể tạo tác vụ.');
                         }
+                        
+                        const spawnerResult = await spawnerResponse.json();
+                        updateUserDiamonds(spawnerResult.newDiamondCount);
 
-                        // Step 2: Call the background worker function with only the job ID to trigger processing.
-                        // We don't need to await this or handle its response; it's fire-and-forget.
                         fetch('/.netlify/functions/generate-group-image-background', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ jobId }),
                         });
 
-                        // Start the visual progress timer.
-                        progressInterval = setInterval(() => {
-                            setProgress(prev => (prev < 9 ? prev + 1 : prev));
-                        }, 20000); 
-
                     } catch (error: any) {
                         showToast(error.message, 'error');
                         setIsGenerating(false);
-                        setProgress(0);
                         cleanup();
                     }
                 }
                 if (status === 'CHANNEL_ERROR' || err) {
                     showToast('Lỗi kết nối thời gian thực.', 'error');
                     setIsGenerating(false);
-                    setProgress(0);
                     cleanup();
                 }
             });
@@ -328,7 +326,7 @@ const GroupGeneratorTool: React.FC = () => {
 
     const resetGenerator = () => {
         setGeneratedImage(null);
-        setProgress(0);
+        setProgressText('');
         handleNumCharactersSelect(numCharacters); 
     };
     
@@ -355,7 +353,7 @@ const GroupGeneratorTool: React.FC = () => {
 
 
     if (isGenerating) {
-        return <GenerationProgress currentStep={progress} onCancel={() => setIsGenerating(false)} />;
+        return <GenerationProgress progressText={progressText} onCancel={() => setIsGenerating(false)} progressPercentage={progressPercentage} />;
     }
 
     if (generatedImage) {
@@ -549,7 +547,6 @@ const GroupGeneratorTool: React.FC = () => {
                     </SettingsBlock>
 
                     <div className="mt-auto pt-6 space-y-4">
-                        <ToggleSwitch label="Làm Nét & Nâng Cấp (+1 💎)" checked={useUpscaler} onChange={(e) => setUseUpscaler(e.target.checked)} />
                         <div className="text-center text-sm p-3 bg-black/20 rounded-lg">
                             <p className="text-skin-muted">Chi phí: <span className="font-bold text-pink-400 flex items-center justify-center gap-1">{totalCost} <i className="ph-fill ph-diamonds-four"></i></span></p>
                         </div>

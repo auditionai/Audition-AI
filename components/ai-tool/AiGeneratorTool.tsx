@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useImageGenerator } from '../../hooks/useImageGenerator';
 import { useAuth } from '../../contexts/AuthContext';
 import { DETAILED_AI_MODELS, STYLE_PRESETS_NEW } from '../../constants/aiToolData';
@@ -190,10 +190,31 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
         user_id: user?.id || ''
     } : null;
 
+    // FIX: Add useMemo to calculate progress text and percentage for the GenerationProgress component.
+    const { progressText, progressPercentage } = useMemo(() => {
+        if (!isGenerating) {
+            return { progressText: '', progressPercentage: 0 };
+        }
+
+        const percentage = Math.min(progress * 10, 99); // Cap at 99% until complete
+        let text = 'Đang chờ...';
+        if (progress > 0 && progress < 3) {
+            text = 'Đang khởi tạo tác vụ...';
+        } else if (progress >= 3 && progress < 9) {
+            text = 'AI đang vẽ, vui lòng chờ...';
+        } else if (progress >= 9) {
+            text = 'Sắp hoàn tất...';
+        }
+        
+        return { progressText: text, progressPercentage: percentage };
+
+    }, [isGenerating, progress]);
+
     if (isGenerating) {
         return (
             <div className="bg-black/30 p-4 rounded-lg flex flex-col items-center justify-center min-h-[70vh]">
-                <GenerationProgress currentStep={progress} onCancel={cancelGeneration} />
+                {/* FIX: Replaced 'currentStep' with 'progressText' and 'progressPercentage' to match the component's props. */}
+                <GenerationProgress progressText={progressText} progressPercentage={progressPercentage} onCancel={cancelGeneration} />
                 {error && <p className="mt-4 text-red-400 text-center">{error}</p>}
             </div>
         );

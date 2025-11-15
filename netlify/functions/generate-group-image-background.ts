@@ -1,21 +1,33 @@
-// IMPORTANT: This file is now correctly named with a "-background" suffix for Netlify to treat it as a background function.
-// The client calls the endpoint WITHOUT the suffix: /.netlify/functions/generate-group-image
-
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { GoogleGenAI, Modality } from "@google/genai";
 import { supabaseAdmin } from './utils/supabaseClient';
 import { Buffer } from 'buffer';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
-import Jimp from 'jimp';
 
 const XP_PER_CHARACTER = 5;
 
-const failJob = async (jobId: string, reason: string) => {
+// Helper to fail the job and notify the user by deleting the record.
+const failJob = async (jobId: string, reason: string, userId: string, cost: number) => {
     console.error(`[WORKER] Failing job ${jobId}: ${reason}`);
-    await supabaseAdmin.from('generated_images').delete().eq('id', jobId);
+    try {
+        await Promise.all([
+            // Delete the record, which triggers the frontend to stop waiting
+            supabaseAdmin.from('generated_images').delete().eq('id', jobId),
+            // Refund the user
+            supabaseAdmin.rpc('increment_user_diamonds', { user_id_param: userId, diamond_amount: cost }),
+            // Log the refund
+            supabaseAdmin.from('diamond_transactions_log').insert({
+                user_id: userId,
+                amount: cost,
+                transaction_type: 'REFUND',
+                description: `Hoàn tiền tạo ảnh nhóm thất bại (Lỗi: ${reason.substring(0, 50)})`,
+            })
+        ]);
+    } catch (e) {
+        console.error(`[WORKER] CRITICAL: Failed to clean up or refund for job ${jobId}`, e);
+    }
 };
 
-// Helper to extract base64 and mimeType from data URL
 const processDataUrl = (dataUrl: string | null) => {
     if (!dataUrl) return null;
     const [header, base64] = dataUrl.split(',');
@@ -24,68 +36,16 @@ const processDataUrl = (dataUrl: string | null) => {
     return { base64, mimeType };
 };
 
-const processImageForGemini = async (imageDataUrl: string | null, targetAspectRatio: string): Promise<string | null> => {
-    if (!imageDataUrl) return null;
-
-    try {
-        const [header, base64] = imageDataUrl.split(',');
-        if (!base64) return null;
-
-        const imageBuffer = Buffer.from(base64, 'base64');
-        const image = await (Jimp as any).read(imageBuffer);
-        const originalWidth = image.getWidth();
-        const originalHeight = image.getHeight();
-
-        const [aspectW, aspectH] = targetAspectRatio.split(':').map(Number);
-        const targetRatio = aspectW / aspectH;
-        const originalRatio = originalWidth / originalHeight;
-
-        let newCanvasWidth: number, newCanvasHeight: number;
-
-        if (targetRatio > originalRatio) {
-            newCanvasHeight = originalHeight;
-            newCanvasWidth = Math.round(originalHeight * targetRatio);
-        } else {
-            newCanvasWidth = originalWidth;
-            newCanvasHeight = Math.round(originalWidth / targetRatio);
-        }
-        
-        const newCanvas = new (Jimp as any)(newCanvasWidth, newCanvasHeight, '#000000');
-        const x = (newCanvasWidth - originalWidth) / 2;
-        const y = (newCanvasHeight - originalHeight) / 2;
-        newCanvas.composite(image, x, y);
-
-        const mime = header.match(/:(.*?);/)?.[1] || (Jimp as any).MIME_PNG;
-        return newCanvas.getBase64Async(mime as any);
-
-    } catch (error) {
-        console.error("Error pre-processing image for Gemini:", error);
-        return imageDataUrl;
-    }
-};
-
-const getPositionalDescription = (index: number, total: number): string => {
-    const positions: { [key: number]: string[] } = {
-        2: ["trên bên trái", "trên bên phải"],
-        3: ["bên trái", "ở giữa", "bên phải"],
-        4: ["ngoài cùng bên trái", "thứ hai từ trái sang", "thứ hai từ phải sang", "ngoài cùng bên phải"],
-        5: ["ngoài cùng bên trái", "thứ hai từ trái sang", "ở giữa", "thứ hai từ phải sang", "ngoài cùng bên phải"],
-        6: ["thứ nhất từ trái sang", "thứ hai từ trái sang", "thứ ba từ trái sang", "thứ ba từ phải sang", "thứ hai từ phải sang", "thứ nhất từ phải sang"]
-    };
-    return (positions[total] && positions[total][index]) || `thứ ${index + 1}`;
-};
-
-
-// This is now the "worker" function.
 const handler: Handler = async (event: HandlerEvent) => {
-    if (event.httpMethod !== 'POST') return { statusCode: 405 }; 
+    if (event.httpMethod !== 'POST') return { statusCode: 200 };
 
     const { jobId } = JSON.parse(event.body || '{}');
-    if (!jobId) { 
-        console.error("[WORKER] Job ID is missing."); 
-        // Background functions should return a 200 to prevent retries
-        return { statusCode: 200, body: JSON.stringify({ error: "Job ID is missing." }) }; 
+    if (!jobId) {
+        console.error("[WORKER] Job ID is missing.");
+        return { statusCode: 200 };
     }
+
+    let payload, userId, totalCost = 0;
 
     try {
         const { data: jobData, error: fetchError } = await supabaseAdmin
@@ -98,127 +58,91 @@ const handler: Handler = async (event: HandlerEvent) => {
             throw new Error(fetchError?.message || 'Job not found or payload is missing.');
         }
 
-        const payload = JSON.parse(jobData.prompt);
+        payload = JSON.parse(jobData.prompt);
+        userId = jobData.user_id;
+        totalCost = (payload.characters?.length || 0) + 1;
+
         const { characters, referenceImage, prompt, style, aspectRatio } = payload;
-        const userId = jobData.user_id;
         const numCharacters = characters.length;
 
         const { data: apiKeyData, error: apiKeyError } = await supabaseAdmin.from('api_keys').select('id, key_value').eq('status', 'active').order('usage_count', { ascending: true }).limit(1).single();
-        if (apiKeyError || !apiKeyData) {
-            throw new Error('Hết tài nguyên AI. Vui lòng thử lại sau.');
-        }
-
+        if (apiKeyError || !apiKeyData) throw new Error('Hết tài nguyên AI. Vui lòng thử lại sau.');
+        
         const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
         const model = 'gemini-2.5-flash-image';
         
-        console.log(`[WORKER ${jobId}] Pre-processing images for ${aspectRatio} aspect ratio...`);
-        const [
-            processedReferenceImage,
-            ...processedCharacterImages
-        ] = await Promise.all([
-            processImageForGemini(referenceImage, aspectRatio),
-            ...characters.flatMap((char: any) => [
-                processImageForGemini(char.poseImage, aspectRatio),
-                processImageForGemini(char.faceImage, aspectRatio)
-            ])
-        ]);
+        const generatedCharacters = [];
 
-        const processedCharacters = characters.map((char: any, index: number) => ({
-            ...char,
-            poseImage: processedCharacterImages[index * 2],
-            faceImage: processedCharacterImages[index * 2 + 1]
-        }));
-        
-        console.log(`[WORKER ${jobId}] Constructing the Super Prompt...`);
+        // Step 1: Generate each character individually
+        for (let i = 0; i < numCharacters; i++) {
+            await supabaseAdmin.from('generated_images').update({ progress_text: `Đang xử lý nhân vật ${i + 1}/${numCharacters}...` }).eq('id', jobId);
+            
+            const char = characters[i];
+            const charPrompt = [
+                `**Nhiệm vụ:** Tạo một hình ảnh chất lượng cao của một nhân vật duy nhất trên nền **đen tuyền (#000000)**.`,
+                `1. **Gương mặt:** Phải giống hệt với gương mặt trong ảnh tham chiếu gương mặt được cung cấp.`,
+                `2. **Trang phục & Cơ thể:** Phải sao chép chính xác 100% trang phục, phụ kiện và dáng người từ ảnh tham chiếu nhân vật được cung cấp.`,
+                `3. **Giới tính:** Nhân vật là ${char.gender === 'male' ? 'Nam' : 'Nữ'}.`,
+                `4. **Nền:** Nền phải là một màu đen đồng nhất, không có bóng, không có chi tiết.`
+            ].join('\n');
 
-        const maleCount = characters.filter((c: any) => c.gender === 'male').length;
-        const femaleCount = characters.filter((c: any) => c.gender === 'female').length;
+            const poseData = processDataUrl(char.poseImage);
+            const faceData = processDataUrl(char.faceImage);
 
-        const promptParts: string[] = [
-            `**Nhiệm vụ Tối quan trọng: Tái tạo Ảnh Nhóm Hoàn hảo**`,
-            `**Mục tiêu chính:** Nhiệm vụ của bạn là tái tạo một cách hoàn hảo **Ảnh Mẫu Tham Chiếu (Ảnh 1)** được cung cấp, nhưng thay thế các nhân vật gốc bằng một dàn nhân vật mới. Bạn phải tuân thủ mọi quy tắc dưới đây một cách tuyệt đối.`,
-            ``,
-            `**--- CHỈ THỊ TOÀN CỤC (Áp dụng cho toàn bộ ảnh) ---**`,
-            `1.  **BẢN VẼ TỔNG THỂ:** **Ảnh Mẫu Tham Chiếu (Ảnh 1)** là bản thiết kế cuối cùng của bạn. Ảnh kết quả phải sao chép **giống hệt 100%** về **bối cảnh, môi trường, ánh sáng, bóng đổ, góc máy, và không khí chung** của Ảnh 1.`,
-            `2.  **SỐ LƯỢNG NHÂN VẬT:** Ảnh kết quả phải có **chính xác ${numCharacters} người**. Không hơn, không kém. Nhóm này bao gồm ${maleCount} nam và ${femaleCount} nữ.`,
-            `3.  **PHONG CÁCH NGHỆ THUẬT:** Toàn bộ ảnh phải có phong cách nghệ thuật đồng nhất là '${style}'.`,
-            `4.  **MÔ TẢ NGƯỜI DÙNG (Thứ yếu):** Nếu có thể, hãy lồng ghép chủ đề này vào ảnh: "${prompt || 'Bám sát ảnh mẫu tham chiếu.'}" Tuy nhiên, không được để yêu cầu này ghi đè lên bất kỳ quy tắc nào khác.`,
-            ``,
-            `**--- QUY TRÌNH THAY THẾ NHÂN VẬT (Bắt buộc thực hiện từng bước) ---**`,
-            `Bây giờ, bạn sẽ thay thế từng người trong Ảnh Mẫu Tham Chiếu (Ảnh 1) bằng một nhân vật mới được chỉ định. Việc ánh xạ này là rõ ràng và bắt buộc.`,
-        ];
+            if (!poseData) throw new Error(`Ảnh nhân vật ${i+1} không hợp lệ.`);
 
-        const finalApiParts: any[] = [];
-        let imageInputIndex = 1;
-
-        const refImageProcessed = processDataUrl(processedReferenceImage);
-        if (!refImageProcessed) throw new Error('Ảnh Mẫu Tham Chiếu không hợp lệ.');
-        finalApiParts.push({ inlineData: { data: refImageProcessed.base64, mimeType: refImageProcessed.mimeType } });
-        
-        for (let i = 0; i < processedCharacters.length; i++) {
-            const char = processedCharacters[i];
-            const charDescription: string[] = [
-                ``,
-                `**MỤC TIÊU THAY THẾ ${i + 1}:**`,
-                `*   **XÁC ĐỊNH:** Người đang đứng ở vị trí **${getPositionalDescription(i, numCharacters)}** trong Ảnh Mẫu Tham Chiếu (Ảnh 1).`,
-                `*   **THAY THẾ BẰNG:** Nhân vật ${i + 1} (Giới tính: ${char.gender === 'male' ? 'Nam' : 'Nữ'}).`,
+            const parts = [
+                { text: charPrompt },
+                { inlineData: { data: poseData.base64, mimeType: poseData.mimeType } }
             ];
-
-            const poseImageProcessed = processDataUrl(char.poseImage);
-            const faceImageProcessed = processDataUrl(char.faceImage);
-
-            if (poseImageProcessed) {
-                imageInputIndex++;
-                finalApiParts.push({ inlineData: { data: poseImageProcessed.base64, mimeType: poseImageProcessed.mimeType } });
-                const clothingInstruction = [
-                    `*   **DIỆN MẠO (Trang phục/Cơ thể):** Sử dụng **Ảnh ${imageInputIndex}**. (QUY TẮC TUYỆT ĐỐI & QUAN TRỌNG NHẤT VỀ TRANG PHỤC): Nhiệm vụ của bạn là "lột" toàn bộ bộ trang phục từ nhân vật trong ảnh này và "mặc" nó cho nhân vật mới.`,
-                    `    *   **BẮT BUỘC GIỮ LẠI:** Mọi chi tiết của quần áo, phụ kiện, màu sắc, họa tiết và chất liệu phải được giữ lại 100%.`,
-                    `    *   **CẤM TUYỆT ĐỐI:** Không được tự ý thay đổi kiểu dáng, thêm, bớt hoặc sáng tạo bất kỳ chi tiết trang phục nào. Nếu trang phục trong ảnh gốc là áo croptop và quần jean, thì ảnh kết quả cũng phải chính xác là áo croptop và quần jean đó, không phải là một chiếc váy hay loại quần áo khác.`,
-                    `    *   **ƯU TIÊN HÀNG ĐẦU:** Quy tắc về trang phục này có độ ưu tiên cao hơn tất cả các mô tả khác, kể cả mô tả chung của người dùng.`
-                ].join('\n');
-                charDescription.push(clothingInstruction);
+            if (faceData) {
+                parts.push({ inlineData: { data: faceData.base64, mimeType: faceData.mimeType } });
             }
-            if (faceImageProcessed) {
-                imageInputIndex++;
-                finalApiParts.push({ inlineData: { data: faceImageProcessed.base64, mimeType: faceImageProcessed.mimeType } });
-                charDescription.push(`*   **GƯƠNG MẶT:** Sử dụng **Ảnh ${imageInputIndex}**. (QUY TẮC TUYỆT ĐỐI: Gương mặt phải được cấy ghép một cách hoàn hảo, không thay đổi từ ảnh này. Giữ nguyên mọi đường nét, biểu cảm và chi tiết. Đây là quy tắc quan trọng nhất.)`);
-            }
+
+            const response = await ai.models.generateContent({
+                model,
+                contents: { parts },
+                config: { responseModalities: [Modality.IMAGE] },
+            });
+            const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+            if (!imagePart?.inlineData) throw new Error(`AI không thể tạo được nhân vật ${i + 1}.`);
             
-            charDescription.push(`*   **HÀNH ĐỘNG BẮT BUỘC:** Nhân vật ${i + 1} được tạo ra phải sao chép **giống hệt tư thế, hướng cơ thể và vị trí** của người mà họ đang thay thế trong Ảnh Mẫu Tham Chiếu.`);
-            
-            promptParts.push(charDescription.join('\n'));
+            generatedCharacters.push(imagePart.inlineData);
+
+            // Add a delay between API calls
+            await new Promise(resolve => setTimeout(resolve, 2000));
         }
 
-        promptParts.push(
-            ``,
-            `**--- KIỂM TRA CHẤT LƯỢNG CUỐI CÙNG (Tự sửa lỗi) ---**`,
-            `Trước khi hoàn thành, hãy tự trả lời những câu hỏi này. Nếu bất kỳ câu trả lời nào là "KHÔNG", bạn phải hủy bỏ và làm lại từ đầu.`,
-            `1.  Bạn đã sao chép bối cảnh và ánh sáng từ Ảnh 1 một cách hoàn hảo chưa? (CÓ/KHÔNG)`,
-            `2.  Có chính xác ${numCharacters} người trong ảnh không? (CÓ/KHÔNG)`,
-            `3.  Trang phục có được "lột" chính xác 100% từ ảnh nguồn không? Gương mặt có được cấy ghép hoàn hảo không? (CÓ/KHÔNG)`,
-            `4.  Mỗi nhân vật mới có khớp hoàn hảo với tư thế và vị trí của một người trong ảnh mẫu không? (CÓ/KHÔNG)`,
-            `**CHỈ KẾT QUẢ HOÀN HẢO MỚI ĐƯỢC CHẤP NHẬN.**`
-        );
-        
-        const superPrompt = promptParts.join('\n');
-        
-        finalApiParts.unshift({ text: superPrompt });
+        // Step 2: Composite all characters onto the reference background
+        await supabaseAdmin.from('generated_images').update({ progress_text: 'Đang tổng hợp ảnh cuối cùng...' }).eq('id', jobId);
 
-        console.log(`[WORKER ${jobId}] Super Prompt constructed. Making API call...`);
+        const compositePrompt = [
+            `**Nhiệm vụ:** Ghép các nhân vật đã được tạo sẵn vào ảnh bối cảnh.`,
+            `1. **Bối cảnh & Bố cục:** Sử dụng ảnh tham chiếu đầu tiên làm bối cảnh và hướng dẫn vị trí.`,
+            `2. **Nhân vật:** Lấy các nhân vật từ các ảnh có nền đen và đặt họ vào bối cảnh.`,
+            `3. **Hòa trộn:** Điều chỉnh ánh sáng và bóng đổ trên các nhân vật để họ hòa hợp một cách tự nhiên với bối cảnh.`,
+            `4. **Yêu cầu bổ sung:** ${prompt || `Giữ nguyên phong cách của ảnh bối cảnh.`}`
+        ].join('\n');
+
+        const refData = processDataUrl(referenceImage);
+        if (!refData) throw new Error('Ảnh mẫu tham chiếu không hợp lệ.');
+        
+        const finalParts = [
+            { text: compositePrompt },
+            { inlineData: { data: refData.base64, mimeType: refData.mimeType } },
+            ...generatedCharacters.map(charData => ({ inlineData: charData }))
+        ];
         
         const finalResponse = await ai.models.generateContent({
             model,
-            contents: { parts: finalApiParts },
+            contents: { parts: finalParts },
             config: { responseModalities: [Modality.IMAGE] },
         });
 
         const finalImagePart = finalResponse.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-        if (!finalImagePart?.inlineData) throw new Error("AI không thể tạo ảnh nhóm với các chỉ dẫn được cung cấp.");
-        
-        console.log(`[WORKER ${jobId}] Image generated successfully.`);
+        if (!finalImagePart?.inlineData) throw new Error("AI không thể tổng hợp ảnh cuối cùng.");
 
-        console.log(`[WORKER ${jobId}] Finalizing...`);
-
+        // Step 3: Upload final image and update database
         const finalImageBase64 = finalImagePart.inlineData.data;
         const finalImageMimeType = finalImagePart.inlineData.mimeType;
 
@@ -229,25 +153,25 @@ const handler: Handler = async (event: HandlerEvent) => {
         await (s3Client as any).send(new PutObjectCommand({ Bucket: process.env.R2_BUCKET_NAME!, Key: fileName, Body: imageBuffer, ContentType: finalImageMimeType }));
         const publicUrl = `${process.env.R2_PUBLIC_URL}/${fileName}`;
         
-        const xpToAward = (characters.length || 0) * XP_PER_CHARACTER;
+        const xpToAward = numCharacters * XP_PER_CHARACTER;
 
-        const [updateJobResult, incrementXpResult] = await Promise.all([
-             supabaseAdmin.from('generated_images').update({ image_url: publicUrl, prompt: prompt }).eq('id', jobId), // Update prompt to be clean
-             supabaseAdmin.rpc('increment_user_xp', { user_id_param: userId, xp_amount: xpToAward })
+        await Promise.all([
+             supabaseAdmin.from('generated_images').update({ image_url: publicUrl, prompt: prompt, progress_text: null }).eq('id', jobId),
+             supabaseAdmin.rpc('increment_user_xp', { user_id_param: userId, xp_amount: xpToAward }),
+             supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id })
         ]);
-
-        if (updateJobResult.error) throw new Error(`Failed to update job status: ${updateJobResult.error.message}`);
-        if (incrementXpResult.error) console.error(`[WORKER] Failed to award XP for job ${jobId}:`, incrementXpResult.error.message);
-
-        await supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id });
         
         console.log(`[WORKER ${jobId}] Job finalized successfully.`);
-        return { statusCode: 200 };
 
     } catch (error: any) {
-        await failJob(jobId, error.message || 'Lỗi không xác định từ máy chủ.');
-        return { statusCode: 200 };
+        if (userId && totalCost > 0) {
+            await failJob(jobId, error.message, userId, totalCost);
+        } else {
+             console.error(`[WORKER ${jobId}] Failed without user/cost info`, error);
+        }
     }
+
+    return { statusCode: 200 };
 };
 
 export { handler };

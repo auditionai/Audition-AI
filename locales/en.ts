@@ -153,6 +153,9 @@ export const en = {
         errorCredits: 'You need {{cost}} diamonds, but you only have {{balance}}. Please top up.',
         errorProcessImage: 'Error processing input image.',
         cancel: 'Cancel',
+        fileTypes: 'PNG, JPG, GIF',
+        unavailable: 'Unavailable',
+        unavailableDesc: 'This model does not support image input.',
       },
       singlePhoto: {
         bgRemoverTip: 'Tip: For the best quality, please use character images with the background removed.',

@@ -153,6 +153,9 @@ export const vi = {
         errorCredits: 'Bạn cần {{cost}} kim cương, nhưng chỉ có {{balance}}. Vui lòng nạp thêm.',
         errorProcessImage: 'Lỗi khi xử lý ảnh đầu vào.',
         cancel: 'Hủy bỏ',
+        fileTypes: 'PNG, JPG, GIF',
+        unavailable: 'Không khả dụng',
+        unavailableDesc: 'Model này không hỗ trợ ảnh đầu vào.',
       },
       singlePhoto: {
         bgRemoverTip: 'Mẹo: Để có chất lượng ảnh tốt nhất, vui lòng sử dụng ảnh nhân vật đã được tách nền.',

@@ -118,7 +118,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                     body: JSON.stringify({ image: base64Image }),
                 });
                 const result = await response.json();
-                if (!response.ok) throw new Error(result.error || 'Xử lý gương mặt thất bại.');
+                if (!response.ok) throw new Error(result.error || t('creator.aiTool.singlePhoto.superFaceLockProcessing'));
 
                 setProcessedFaceImage(result.processedImageBase64);
                 updateUserDiamonds(result.newDiamondCount);

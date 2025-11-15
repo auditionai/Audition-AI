@@ -11,8 +11,8 @@ const handler: Handler = async (event: HandlerEvent) => {
         return { statusCode: 401, body: JSON.stringify({ error: 'Bearer token is missing.' }) };
     }
 
-    // FIX: Use Supabase v1 `api.getUser(token)` instead of v2 `auth.getUser(token)` and correct the destructuring.
-    const { user, error: authError } = await supabaseAdmin.auth.api.getUser(token);
+    // FIX: Use Supabase v2 `auth.getUser` as `auth.api` is from v1.
+    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
 
     if (authError || !user) {
         return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized: Invalid token.' }) };
@@ -51,8 +51,8 @@ const handler: Handler = async (event: HandlerEvent) => {
 
             // 1. Handle password update separately
             if (updates.password && typeof updates.password === 'string' && updates.password.length >= 6) {
-                // FIX: Use Supabase v1 `api.updateUserById` instead of v2 `auth.admin.updateUserById`.
-                const { error: passwordUpdateError } = await supabaseAdmin.auth.api.updateUserById(
+                // FIX: Use Supabase v2 `auth.admin.updateUserById` as `auth.api` is from v1.
+                const { error: passwordUpdateError } = await supabaseAdmin.auth.admin.updateUserById(
                     userId,
                     { password: updates.password }
                 );

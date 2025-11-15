@@ -1,8 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode, useMemo, useRef } from 'react';
 import { getSupabaseClient } from '../utils/supabaseClient';
-// Fix: The types `Session` and `User` are not exported from the root of `@supabase/supabase-js` in v1.
-// They are removed from here to fix the compile error. `any` will be used for the session object.
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { SupabaseClient, Session } from '@supabase/supabase-js';
 import { User, Announcement } from '../types';
 import { calculateLevelFromXp } from '../utils/rankUtils';
 
@@ -24,7 +22,7 @@ const getRouteFromPath = (path: string): string => {
 };
 
 interface AuthContextType {
-    session: any | null;
+    session: Session | null;
     user: User | null;
     loading: boolean;
     toast: { message: string; type: 'success' | 'error' } | null;
@@ -48,7 +46,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const [supabase, setSupabase] = useState<SupabaseClient | null>(null);
-    const [session, setSession] = useState<any | null>(null);
+    const [session, setSession] = useState<Session | null>(null);
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -100,7 +98,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         });
     }, []);
 
-    const fetchUserProfile = useCallback(async (session: any) => {
+    const fetchUserProfile = useCallback(async (session: Session) => {
         if (!session?.access_token) return null;
         try {
             const response = await fetch('/.netlify/functions/user-profile', {
@@ -131,7 +129,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
     }, [showToast]);
 
-    const fetchAndSetUser = useCallback(async (session: any) => {
+    const fetchAndSetUser = useCallback(async (session: Session) => {
         // The server-side function now handles retries, so we just call it once.
         const profile = await fetchUserProfile(session);
         
@@ -184,8 +182,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                     fetch('/.netlify/functions/log-app-visit', { method: 'POST' });
                 }
 
-                // FIX: Use Supabase v1 method `session()` which is synchronous, instead of v2 `getSession()`.
-                const currentSession = supabaseClient.auth.session();
+                // FIX: Use Supabase v2 async method `getSession()`.
+                const { data: { session: currentSession } } = await supabaseClient.auth.getSession();
                 setSession(currentSession);
                 
                 if (currentSession) {
@@ -195,8 +193,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                     }
                 }
 
-                // FIX: Use Supabase v1 destructuring for onAuthStateChange. The `subscription` object is in `data`, not `data.subscription`.
-                const { data: subscription } = supabaseClient.auth.onAuthStateChange(
+                // FIX: Use Supabase v2 destructuring for onAuthStateChange.
+                const { data: { subscription } } = supabaseClient.auth.onAuthStateChange(
                     async (_event, newSession) => {
                         setSession(newSession);
                         if (newSession?.user) {
@@ -329,9 +327,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 return;
             }
             try {
-                // FIX: Use Supabase v1 method `signIn` with `idToken` instead of v2 `signInWithIdToken`.
-                const { error } = await supabase.auth.signIn({
-                    idToken: response.credential,
+                // FIX: Use Supabase v2 method `signInWithIdToken`.
+                const { error } = await supabase.auth.signInWithIdToken({
+                    provider: 'google',
+                    token: response.credential,
                 });
                 if (error) throw error;
                 // Auth state change will handle navigation and user profile fetching.
@@ -356,7 +355,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const logout = useCallback(async () => {
         if (!supabase) return;
-        // FIX: The `signOut` method exists in v1 but may have been flagged due to type inconsistencies. It should work correctly with other v1 fixes.
+        // The `signOut` method is correct for v2.
         await supabase.auth.signOut();
     }, [supabase]);
 

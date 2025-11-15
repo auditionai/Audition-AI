@@ -14,8 +14,8 @@ const handler: Handler = async (event: HandlerEvent) => {
     if (authHeader) {
         const token = authHeader.split(' ')[1];
         if (token) {
-            // FIX: Use Supabase v1 `api.getUser(token)` instead of v2 `auth.getUser(token)` and correct the destructuring.
-            const { user } = await supabaseAdmin.auth.api.getUser(token);
+            // FIX: Use Supabase v2 `auth.getUser` as `auth.api` is from v1.
+            const { data: { user } } = await supabaseAdmin.auth.getUser(token);
             if (user) {
                 userId = user.id;
             }

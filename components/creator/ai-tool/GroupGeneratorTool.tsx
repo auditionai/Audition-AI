@@ -42,6 +42,10 @@ interface ProcessedImageData {
     originalUrl?: string;
 }
 
+interface GroupGeneratorToolProps {
+    onSwitchToUtility: () => void;
+}
+
 const fileToBase64 = (file: File): Promise<string> => new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onloadend = () => resolve(reader.result as string);
@@ -50,7 +54,7 @@ const fileToBase64 = (file: File): Promise<string> => new Promise((resolve, reje
 });
 
 // Main Component
-const GroupGeneratorTool: React.FC = () => {
+const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtility }) => {
     const { user, session, showToast, supabase, updateUserDiamonds } = useAuth();
     const [numCharacters, setNumCharacters] = useState<number>(0);
     const [isConfirmOpen, setConfirmOpen] = useState(false);
@@ -98,7 +102,7 @@ const GroupGeneratorTool: React.FC = () => {
             // Allocate 80% of the progress to character generation
             return 10 + ((current -1) / total) * 80;
         }
-        if (progressText.includes('tổng hợp')) return 95;
+        if (progressText.includes('tổng hợp') || progressText.includes('tạo bối cảnh')) return 95;
         if (progressText.includes('khởi tạo')) return 5;
         return 10; // Default progress after init
     }, [isGenerating, generatedImage, progressText]);
@@ -201,8 +205,8 @@ const GroupGeneratorTool: React.FC = () => {
     const totalCost = numCharacters + 1;
 
     const handleGenerateClick = () => {
-        if (!referenceImage) {
-            showToast('Vui lòng tải lên "Ảnh Mẫu Tham Chiếu".', 'error');
+        if (!referenceImage && !prompt.trim()) {
+            showToast('Vui lòng tải "Ảnh Mẫu Tham Chiếu" hoặc nhập "Prompt".', 'error');
             return;
         }
         for (let i = 0; i < characters.length; i++) {
@@ -253,17 +257,16 @@ const GroupGeneratorTool: React.FC = () => {
                 filter: `id=eq.${jobId}`
             }, (payload) => {
                 const record = payload.new as any;
-
-                // WORKAROUND: Read progress from the 'prompt' field.
-                if (record.prompt) {
+                
+                // Robustly parse progress from the 'prompt' field.
+                if (record.prompt && record.prompt.startsWith('{')) {
                     try {
                         const jobData = JSON.parse(record.prompt);
                         if (jobData && jobData.progress) {
                             setProgressText(jobData.progress);
                         }
                     } catch (e) {
-                        // This may fail if the prompt has been updated to the final plain text.
-                        // It's not an error, so we can ignore it.
+                       // Ignore parsing errors if the field is updated to non-JSON
                     }
                 }
 
@@ -470,6 +473,14 @@ const GroupGeneratorTool: React.FC = () => {
             />
             <ConfirmationModal isOpen={isConfirmOpen} onClose={() => setConfirmOpen(false)} onConfirm={handleConfirmGeneration} cost={totalCost} />
             
+             <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 text-yellow-300 rounded-lg text-sm flex items-start gap-3 mb-6">
+                <i className="ph-fill ph-info text-2xl flex-shrink-0"></i>
+                <div>
+                    <span className="font-bold">Mẹo:</span> Để có chất lượng ảnh tốt nhất, vui lòng sử dụng ảnh nhân vật đã được tách nền.
+                    <button onClick={onSwitchToUtility} className="font-bold underline ml-2 hover:text-white">Chuyển đến công cụ tách nền</button>
+                </div>
+            </div>
+
             <div className="flex flex-col lg:flex-row gap-6">
                  {/* Left Column: Character Inputs */}
                 <div className="w-full lg:w-2/3">
@@ -518,9 +529,9 @@ const GroupGeneratorTool: React.FC = () => {
                      <SettingsBlock title="Cài đặt Nhóm" instructionKey="group-studio" onInstructionClick={() => setInstructionModalOpen(true)}>
                         <div className="space-y-4">
                              <div>
-                                <label className="text-sm font-semibold text-skin-base mb-2 block">2. Ảnh Mẫu Tham Chiếu</label>
+                                <label className="text-sm font-semibold text-skin-base mb-2 block">2. Ảnh Mẫu Tham Chiếu (Tuỳ chọn)</label>
                                 <ImageUploader onUpload={(e) => handleImageUpload(e, 'reference')} image={referenceImage} onRemove={() => handleRemoveImage('reference')} text="Tải ảnh mẫu (Bố cục, tư thế...)" />
-                                <p className="text-xs text-skin-muted mt-2">AI sẽ "học" bố cục, tư thế, bối cảnh và phong cách từ ảnh này để tái tạo lại với nhân vật của bạn.</p>
+                                <p className="text-xs text-skin-muted mt-2">AI sẽ "học" bố cục, tư thế, bối cảnh và phong cách từ ảnh này. Có thể bỏ qua nếu bạn muốn AI tự tạo bối cảnh từ prompt.</p>
                             </div>
 
                              <div>

@@ -18,9 +18,10 @@ interface AiGeneratorToolProps {
     initialCharacterImage?: { url: string; file: File } | null;
     initialFaceImage?: { url: string; file: File } | null;
     onSendToSignatureTool: (imageUrl: string) => void;
+    onSwitchToUtility: () => void;
 }
 
-const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage, initialFaceImage, onSendToSignatureTool }) => {
+const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage, initialFaceImage, onSendToSignatureTool, onSwitchToUtility }) => {
     const { user, session, showToast, updateUserDiamonds } = useAuth();
     const { isGenerating, progress, generatedImage, error, generateImage, resetGenerator, cancelGeneration } = useImageGenerator();
 
@@ -175,13 +176,12 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
         user_id: user?.id || ''
     } : null;
 
-    // FIX: Add useMemo to calculate progress text and percentage for the GenerationProgress component.
     const { progressText, progressPercentage } = useMemo(() => {
         if (!isGenerating) {
             return { progressText: '', progressPercentage: 0 };
         }
 
-        const percentage = Math.min(progress * 10, 99); // Cap at 99% until complete
+        const percentage = Math.min(progress * 10, 99);
         let text = 'Đang chờ...';
         if (progress > 0 && progress < 3) {
             text = 'Đang khởi tạo tác vụ...';
@@ -198,7 +198,6 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
     if (isGenerating) {
         return (
             <div className="bg-black/30 p-4 rounded-lg flex flex-col items-center justify-center min-h-[70vh]">
-                {/* FIX: Replaced 'currentStep' with 'progressText' and 'progressPercentage' to match the component's props. */}
                 <GenerationProgress progressText={progressText} progressPercentage={progressPercentage} onCancel={cancelGeneration} />
                 {error && <p className="mt-4 text-red-400 text-center">{error}</p>}
             </div>
@@ -255,6 +254,13 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
             <div className="flex flex-col lg:flex-row gap-6">
                 {/* Main Content Area (Left) */}
                 <div className="w-full lg:w-2/3 flex flex-col gap-6">
+                     <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 text-yellow-300 rounded-lg text-sm flex items-start gap-3">
+                        <i className="ph-fill ph-info text-2xl flex-shrink-0"></i>
+                        <div>
+                            <span className="font-bold">Mẹo:</span> Để có chất lượng ảnh tốt nhất, vui lòng sử dụng ảnh nhân vật đã được tách nền.
+                            <button onClick={onSwitchToUtility} className="font-bold underline ml-2 hover:text-white">Chuyển đến công cụ tách nền</button>
+                        </div>
+                    </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <SettingsBlock title="Ảnh Nhân Vật" instructionKey="character" onInstructionClick={() => openInstructionModal('character')}>
                             <ImageUploader onUpload={(e) => handleImageUpload(e, 'pose')} image={poseImage} onRemove={() => handleRemoveImage('pose')} text="Tư thế & Trang phục" disabled={isImageInputDisabled} />

@@ -82,83 +82,99 @@ const handler: Handler = async (event: HandlerEvent) => {
         
         const generatedCharacters = [];
         
-        const refData = processDataUrl(referenceImage);
-        if (!refData) throw new Error('Ảnh mẫu tham chiếu không hợp lệ.');
+        // --- LOGIC FORK: DEPENDS ON WHETHER A REFERENCE IMAGE IS PROVIDED ---
+        let finalBackgroundData;
 
-        // Step 1: Generate each character individually
-        for (let i = 0; i < numCharacters; i++) {
-            await updateJobProgress(jobId, jobPromptData, `Đang xử lý nhân vật ${i + 1}/${numCharacters}...`);
-            
-            const char = characters[i];
-            const charPrompt = [
-                `**MỆNH LỆNH TUYỆT ĐỐI: BẠN PHẢI TẠO RA MỘT NHÂN VẬT ${char.gender === 'male' ? 'NAM' : 'NỮ'}.**`,
-                `Đây là yêu cầu quan trọng nhất và không thể thay đổi. Hãy **bỏ qua hoàn toàn** giới tính của bất kỳ ai trong các ảnh tham chiếu.`,
-                `---`,
-                `**QUY TRÌNH TẠO NHÂN VẬT (TRÊN NỀN ĐEN TUYỀN):**`,
-                `1. **XÁC ĐỊNH TƯ THẾ:**`,
-                `   - Nhìn vào **Ảnh Mẫu Tham Chiếu** (ảnh nhóm).`,
-                `   - Tìm người ở vị trí thứ ${i + 1} từ trái sang.`,
-                `   - **SAO CHÉP Y HỆT 100% TƯ THẾ** của người đó. Chỉ lấy tư thế, không lấy bất cứ thứ gì khác.`,
-                
-                `2. **LẤY TRANG PHỤC:**`,
-                `   - Nhìn vào **Ảnh Nhân Vật Audition**.`,
-                `   - **BÊ NGUYÊN** toàn bộ trang phục, phụ kiện, giày dép từ ảnh này và mặc cho nhân vật bạn đang tạo. **CẤM** thay đổi trang phục.`,
-                
-                `3. **LẤY GƯƠNG MẶT (nếu có):**`,
-                `   - Nếu có **Ảnh Gương Mặt** riêng, hãy sử dụng chính xác gương mặt đó.`,
-                
-                `4. **KIỂM TRA LẠI GIỚI TÍNH:**`,
-                `   - Trước khi hoàn thành, hãy đảm bảo nhân vật cuối cùng chắc chắn là **${char.gender === 'male' ? 'NAM' : 'NỮ'}** như mệnh lệnh đầu tiên.`,
-                
-                `**KẾT QUẢ:** Một nhân vật **${char.gender === 'male' ? 'NAM' : 'NỮ'}** duy nhất, đứng trên nền đen, có tư thế từ ảnh mẫu và trang phục từ ảnh nhân vật Audition.`,
-            ].join('\n');
+        if (referenceImage) {
+             // --- PATH A: Using a Reference Image ---
+            finalBackgroundData = processDataUrl(referenceImage);
+            if (!finalBackgroundData) throw new Error('Ảnh mẫu tham chiếu không hợp lệ.');
 
-            const poseData = processDataUrl(char.poseImage);
-            const faceData = processDataUrl(char.faceImage);
+            // Step 1.1: Generate each character individually, copying pose from reference
+            for (let i = 0; i < numCharacters; i++) {
+                await updateJobProgress(jobId, jobPromptData, `Đang xử lý nhân vật ${i + 1}/${numCharacters}...`);
+                // (Same prompt as before)
+                const char = characters[i];
+                const charPrompt = [
+                    `**MỆNH LỆNH TUYỆT ĐỐI: BẠN PHẢI TẠO RA MỘT NHÂN VẬT ${char.gender === 'male' ? 'NAM' : 'NỮ'}.**`,
+                    `Đây là yêu cầu quan trọng nhất. Hãy **bỏ qua hoàn toàn** giới tính của bất kỳ ai trong các ảnh tham chiếu.`, `---`,
+                    `**QUY TRÌNH (TRÊN NỀN ĐEN TUYỀN):**`,
+                    `1. **LẤY DÁNG:** Nhìn vào **Ảnh Mẫu Tham Chiếu**, tìm người ở vị trí thứ ${i + 1} từ trái sang và **CHỈ SAO CHÉP TƯ THẾ** của họ.`,
+                    `2. **MẶC ĐỒ:** Nhìn vào **Ảnh Nhân Vật Audition** và **BÊ NGUYÊN** trang phục. **CẤM** thay đổi.`,
+                    `3. **LẤY MẶT:** Nếu có **Ảnh Gương Mặt**, hãy dùng chính xác mặt đó.`,
+                    `4. **KIỂM TRA LẠI:** Đảm bảo nhân vật cuối cùng là **${char.gender === 'male' ? 'NAM' : 'NỮ'}**.`,
+                ].join('\n');
 
-            if (!poseData) throw new Error(`Ảnh nhân vật ${i+1} không hợp lệ.`);
+                const poseData = processDataUrl(char.poseImage);
+                const faceData = processDataUrl(char.faceImage);
+                if (!poseData) throw new Error(`Ảnh nhân vật ${i+1} không hợp lệ.`);
 
-            const parts = [
-                { text: charPrompt },
-                // Image order is important for the AI's understanding.
-                // 1. Reference image (for context and pose)
-                { inlineData: { data: refData.base64, mimeType: refData.mimeType } },
-                // 2. Character image (for outfit)
-                { inlineData: { data: poseData.base64, mimeType: poseData.mimeType } },
-            ];
-            if (faceData) {
-                // 3. Face image
-                parts.push({ inlineData: { data: faceData.base64, mimeType: faceData.mimeType } });
+                const parts = [
+                    { text: charPrompt },
+                    { inlineData: { data: finalBackgroundData.base64, mimeType: finalBackgroundData.mimeType } },
+                    { inlineData: { data: poseData.base64, mimeType: poseData.mimeType } },
+                ];
+                if (faceData) parts.push({ inlineData: { data: faceData.base64, mimeType: faceData.mimeType } });
+
+                const response = await ai.models.generateContent({ model, contents: { parts }, config: { responseModalities: [Modality.IMAGE] } });
+                const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+                if (!imagePart?.inlineData) throw new Error(`AI không thể tạo được nhân vật ${i + 1}.`);
+                
+                generatedCharacters.push(imagePart.inlineData);
+                await new Promise(resolve => setTimeout(resolve, 2000));
             }
 
-            const response = await ai.models.generateContent({
-                model,
-                contents: { parts },
-                config: { responseModalities: [Modality.IMAGE] },
-            });
-            const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-            if (!imagePart?.inlineData) throw new Error(`AI không thể tạo được nhân vật ${i + 1}.`);
-            
-            generatedCharacters.push(imagePart.inlineData);
-
-            // Add a delay between API calls
+        } else {
+            // --- PATH B: No Reference Image, Prompt-only ---
+            // Step 1.1: Generate a background first
+            await updateJobProgress(jobId, jobPromptData, 'Đang tạo bối cảnh từ prompt...');
+            const bgPrompt = `Create a high-quality, cinematic background scene described as: "${prompt}". The scene should have a style of "${style}". Do NOT include any people or characters.`;
+            const bgResponse = await ai.models.generateContent({ model, contents: { parts: [{ text: bgPrompt }] }, config: { responseModalities: [Modality.IMAGE] } });
+            const bgImagePart = bgResponse.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+            if (!bgImagePart?.inlineData) throw new Error("AI không thể tạo bối cảnh từ prompt của bạn.");
+            finalBackgroundData = bgImagePart.inlineData;
             await new Promise(resolve => setTimeout(resolve, 2000));
-        }
 
-        // Step 2: Composite all characters onto the reference background
+            // Step 1.2: Generate each character with a default pose
+            for (let i = 0; i < numCharacters; i++) {
+                await updateJobProgress(jobId, jobPromptData, `Đang xử lý nhân vật ${i + 1}/${numCharacters}...`);
+                const char = characters[i];
+                const charPrompt = `Create a full-body character of a **${char.gender}**. They MUST be wearing the exact outfit from the provided character image. If a face image is provided, use that exact face. Place the character on a solid black background.`;
+                
+                const poseData = processDataUrl(char.poseImage);
+                const faceData = processDataUrl(char.faceImage);
+                if (!poseData) throw new Error(`Ảnh nhân vật ${i+1} không hợp lệ.`);
+                
+                const parts = [
+                    { text: charPrompt },
+                    { inlineData: { data: poseData.base64, mimeType: poseData.mimeType } },
+                ];
+                if (faceData) parts.push({ inlineData: { data: faceData.base64, mimeType: faceData.mimeType } });
+
+                const response = await ai.models.generateContent({ model, contents: { parts }, config: { responseModalities: [Modality.IMAGE] } });
+                const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+                if (!imagePart?.inlineData) throw new Error(`AI không thể tạo được nhân vật ${i + 1}.`);
+                
+                generatedCharacters.push(imagePart.inlineData);
+                await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+        }
+        
+        // --- FINAL COMPOSITE STEP (COMMON FOR BOTH PATHS) ---
         await updateJobProgress(jobId, jobPromptData, 'Đang tổng hợp ảnh cuối cùng...');
 
         const compositePrompt = [
-            `**Nhiệm vụ:** Ghép các nhân vật đã được tạo sẵn vào ảnh bối cảnh.`,
-            `1. **Bối cảnh & Bố cục:** Sử dụng ảnh tham chiếu đầu tiên làm bối cảnh và hướng dẫn vị trí.`,
-            `2. **Nhân vật:** Lấy các nhân vật từ các ảnh có nền đen và đặt họ vào bối cảnh.`,
-            `3. **Hòa trộn:** Điều chỉnh ánh sáng và bóng đổ trên các nhân vật để họ hòa hợp một cách tự nhiên với bối cảnh.`,
-            `4. **Yêu cầu bổ sung:** ${prompt || `Giữ nguyên phong cách của ảnh bối cảnh.`}`
+            `**MỆNH LỆNH TUYỆT ĐỐI: BẠN PHẢI SỬ DỤNG CÁC NHÂN VẬT ĐÃ ĐƯỢC CUNG CẤP.**`, `---`,
+            `**Nhiệm vụ:**`,
+            `1. **Bối cảnh:** Sử dụng ảnh nền được cung cấp (ảnh đầu tiên).`,
+            `2. **Nhân vật:** Lấy **y hệt** các nhân vật từ các ảnh nền đen và ghép họ vào bối cảnh. **KHÔNG ĐƯỢC** thay đổi quần áo, giới tính, hay gương mặt của họ.`,
+            `3. **Bố cục:** ${referenceImage ? 'Sắp xếp các nhân vật theo bố cục của ảnh mẫu tham chiếu.' : 'Sắp xếp các nhân vật một cách hợp lý và tự nhiên trong bối cảnh.'}`,
+            `4. **Gợi ý bối cảnh từ người dùng:** Người dùng có gợi ý thêm về không khí của bức ảnh: '${prompt}'. Hãy sử dụng gợi ý này để điều chỉnh ánh sáng, bóng đổ, và các chi tiết nhỏ trong bối cảnh để tạo sự hòa hợp, **nhưng không được thay đổi các nhân vật.**`
         ].join('\n');
         
         const finalParts = [
             { text: compositePrompt },
-            { inlineData: { data: refData.base64, mimeType: refData.mimeType } },
+            { inlineData: { data: finalBackgroundData.base64, mimeType: finalBackgroundData.mimeType } },
             ...generatedCharacters.map(charData => ({ inlineData: charData }))
         ];
         
@@ -185,7 +201,6 @@ const handler: Handler = async (event: HandlerEvent) => {
         const xpToAward = numCharacters * XP_PER_CHARACTER;
 
         await Promise.all([
-             // WORKAROUND: Clean up the 'prompt' column by setting it to the user's text prompt.
              supabaseAdmin.from('generated_images').update({ image_url: publicUrl, prompt: payload.prompt }).eq('id', jobId),
              supabaseAdmin.rpc('increment_user_xp', { user_id_param: userId, xp_amount: xpToAward }),
              supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id })

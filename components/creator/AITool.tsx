@@ -29,6 +29,11 @@ const AITool: React.FC = () => {
         setUtilHelpKey(key);
         setUtilHelpOpen(true);
     };
+    
+    const handleSwitchToUtility = (utility: UtilityTab) => {
+        setActiveTab('utilities');
+        setActiveUtility(utility);
+    };
 
     const handleMoveToGenerator = (image: { url: string; file: File }) => {
         setPoseImage(image);
@@ -125,10 +130,11 @@ const AITool: React.FC = () => {
                            initialCharacterImage={poseImage}
                            initialFaceImage={rawFaceImage}
                            onSendToSignatureTool={handleSendToSignatureTool}
+                           onSwitchToUtility={() => handleSwitchToUtility('bg-remover')}
                         />
                     )}
                     {activeTab === 'group-studio' && (
-                        <GroupGeneratorTool />
+                        <GroupGeneratorTool onSwitchToUtility={() => handleSwitchToUtility('bg-remover')} />
                     )}
                     {activeTab === 'utilities' && (
                         <div>

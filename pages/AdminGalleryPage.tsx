@@ -2,9 +2,11 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { GalleryImage } from '../types';
 import ConfirmationModal from '../components/ConfirmationModal';
+import { useTranslation } from '../hooks/useTranslation';
 
 const AdminGalleryPage: React.FC = () => {
     const { session, showToast } = useAuth();
+    const { t } = useTranslation();
     const [images, setImages] = useState<GalleryImage[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [imageToDelete, setImageToDelete] = useState<GalleryImage | null>(null);
@@ -17,7 +19,7 @@ const AdminGalleryPage: React.FC = () => {
             const response = await fetch('/.netlify/functions/admin-public-gallery', {
                 headers: { Authorization: `Bearer ${session.access_token}` },
             });
-            if (!response.ok) throw new Error('Không thể tải các tác phẩm công khai.');
+            if (!response.ok) throw new Error(t('creator.adminGallery.error.load'));
             const data = await response.json();
             setImages(data);
         } catch (error: any) {
@@ -25,7 +27,7 @@ const AdminGalleryPage: React.FC = () => {
         } finally {
             setIsLoading(false);
         }
-    }, [session, showToast]);
+    }, [session, showToast, t]);
 
     useEffect(() => {
         fetchPublicGallery();
@@ -44,10 +46,10 @@ const AdminGalleryPage: React.FC = () => {
                 body: JSON.stringify({ imageId: imageToDelete.id }),
             });
             const result = await response.json();
-            if (!response.ok) throw new Error(result.error || 'Xóa ảnh thất bại.');
+            if (!response.ok) throw new Error(result.error || t('creator.myCreations.delete.error'));
 
             setImages(prev => prev.filter(img => img.id !== imageToDelete.id));
-            showToast('Đã xóa tác phẩm khỏi thư viện công cộng!', 'success');
+            showToast(t('creator.adminGallery.deleteSuccess'), 'success');
         } catch (error: any) {
             showToast(error.message, 'error');
         } finally {
@@ -57,7 +59,7 @@ const AdminGalleryPage: React.FC = () => {
     };
     
     if (isLoading) {
-        return <div className="text-center p-12">Đang tải thư viện công cộng...</div>;
+        return <div className="text-center p-12">{t('creator.adminGallery.loading')}</div>;
     }
     
     return (
@@ -72,15 +74,15 @@ const AdminGalleryPage: React.FC = () => {
                 />
             )}
             <div className="text-center max-w-2xl mx-auto mb-12">
-                <h1 className="text-4xl font-bold mb-4 bg-gradient-to-r from-red-400 via-orange-400 to-yellow-500 text-transparent bg-clip-text">Quản lý Thư viện Công cộng</h1>
-                <p className="text-lg text-gray-400">Xem xét và xóa các tác phẩm không phù hợp khỏi thư viện chung.</p>
+                <h1 className="text-4xl font-bold mb-4 bg-gradient-to-r from-red-400 via-orange-400 to-yellow-500 text-transparent bg-clip-text">{t('creator.adminGallery.title')}</h1>
+                <p className="text-lg text-gray-400">{t('creator.adminGallery.description')}</p>
             </div>
 
             {images.length === 0 ? (
                 <div className="text-center py-16 bg-white/5 rounded-2xl">
                     <i className="ph-fill ph-image-square text-6xl text-gray-500"></i>
-                    <h3 className="mt-4 text-2xl font-bold">Thư viện trống</h3>
-                    <p className="text-gray-400 mt-2">Chưa có tác phẩm nào được người dùng chia sẻ.</p>
+                    <h3 className="mt-4 text-2xl font-bold">{t('creator.adminGallery.empty.title')}</h3>
+                    <p className="text-gray-400 mt-2">{t('creator.adminGallery.empty.description')}</p>
                 </div>
             ) : (
                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">

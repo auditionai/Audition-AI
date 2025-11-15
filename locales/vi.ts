@@ -107,12 +107,22 @@ export const vi = {
         settings: 'Cài đặt',
         logout: 'Đăng xuất',
       },
+      notifications: {
+        title: 'Thông Báo Cập Nhật',
+        close: 'Đóng',
+      },
     },
     footer: {
       theme: 'Giao diện',
       terms: 'Điều khoản',
       policy: 'Chính sách',
       support: 'Hỗ trợ',
+      copyright: '© {{year}} AUDITION AI Studio.',
+      links: {
+        cla: 'Câu Lệnh AU',
+        promptGpt: 'PROMPT GPT',
+        community: 'Cộng Đồng AU AI',
+      }
     },
     aiTool: {
       title: 'Audition AI Studio',
@@ -142,6 +152,7 @@ export const vi = {
         errorPrompt: 'Vui lòng nhập mô tả (prompt).',
         errorCredits: 'Bạn cần {{cost}} kim cương, nhưng chỉ có {{balance}}. Vui lòng nạp thêm.',
         errorProcessImage: 'Lỗi khi xử lý ảnh đầu vào.',
+        cancel: 'Hủy bỏ',
       },
       singlePhoto: {
         bgRemoverTip: 'Mẹo: Để có chất lượng ảnh tốt nhất, vui lòng sử dụng ảnh nhân vật đã được tách nền.',
@@ -201,6 +212,8 @@ export const vi = {
         errorRefOrPrompt: 'Vui lòng tải "Ảnh Mẫu Tham Chiếu" hoặc nhập "Prompt".',
         errorPoseImage: 'Vui lòng cung cấp "Ảnh nhân vật" cho Nhân vật {{index}}.',
         errorGender: 'Vui lòng chọn giới tính cho Nhân vật {{index}}.',
+        pickFromProcessed: 'Chọn',
+        pickFromProcessedTooltip: 'Chọn ảnh đã xử lý',
       },
       bgRemover: {
         uploadTitle: '1. Tải ảnh lên',
@@ -228,7 +241,260 @@ export const vi = {
         applyAiButton: 'Áp dụng AI Style ({{cost}} 💎)',
         downloadButton: 'Tải ảnh',
         uploadPlaceholder: 'Nhấn để chọn ảnh',
+        position: 'Vị trí',
+        error: {
+          noImage: 'Vui lòng tải ảnh lên trước.',
+          noCredits: 'Bạn cần {{cost}} kim cương.',
+        },
       }
+    },
+    leaderboard: {
+      title: 'Bảng Xếp Hạng',
+      description: 'Vinh danh những nhà sáng tạo hàng đầu dựa trên cấp bậc và số lượng tác phẩm.',
+      loading: 'Đang tải bảng xếp hạng...',
+      error: {
+        load: 'Không thể tải bảng xếp hạng.',
+      },
+      empty: {
+        title: 'Bảng xếp hạng trống',
+        description: 'Hãy là người đầu tiên tạo ra tác phẩm và ghi danh!',
+      },
+      creations: 'tác phẩm',
+    },
+    myCreations: {
+      loading: 'Đang tải các tác phẩm của bạn...',
+      storageWarning: {
+        title: 'Lưu ý quan trọng về lưu trữ ảnh',
+        description: 'Để đảm bảo hiệu suất, các tác phẩm của bạn sẽ chỉ được lưu trữ trong vòng tối đa 3 ngày. Các tác phẩm được chia sẻ công khai sẽ được giữ lại vĩnh viễn. Vui lòng tải xuống những hình ảnh bạn yêu thích trước khi chúng bị hệ thống tự động xóa.',
+        public: 'công khai',
+        download: 'tải xuống',
+      },
+      title: 'Tác Phẩm Của Tôi',
+      description: 'Quản lý tất cả các hình ảnh bạn đã tạo bằng Audition AI.',
+      shareTip: '✨ Nhấn vào một tác phẩm và chọn nút Chia sẻ để đưa tác phẩm đẹp nhất của bạn ra Thư viện Cộng đồng! (Chi phí: 1 💎)',
+      share: 'Chia sẻ',
+      empty: {
+        title: 'Bạn chưa có tác phẩm nào',
+        description: 'Hãy vào mục "Tạo ảnh" và bắt đầu sáng tạo ngay!',
+      },
+      public: 'Công khai',
+      delete: {
+        success: 'Đã xóa tác phẩm thành công!',
+        error: 'Xóa ảnh thất bại.',
+      },
+      shareAction: {
+        success: 'Đã chia sẻ tác phẩm lên thư viện cộng đồng!',
+        error: 'Chia sẻ ảnh thất bại.',
+      }
+    },
+    settings: {
+      save: 'Lưu Tên',
+      saving: 'Đang lưu...',
+      updateSuccess: 'Cập nhật tên hiển thị thành công!',
+      avatar: {
+        change: 'Đổi ảnh đại diện',
+        uploading: 'Đang tải lên...',
+        updateSuccess: 'Cập nhật ảnh đại diện thành công!',
+        updateError: 'Cập nhật ảnh đại diện thất bại.',
+      },
+      transactionHistory: {
+        title: 'Lịch sử giao dịch Kim cương',
+        loading: 'Đang tải lịch sử...',
+        error: 'Không thể tải lịch sử giao dịch.',
+        empty: 'Chưa có giao dịch nào.',
+      },
+      redeem: {
+        title: 'Nhập Giftcode',
+        placeholder: 'Nhập mã code của bạn ở đây',
+        button: 'Xác nhận',
+        processing: 'Đang kiểm tra...',
+        error: 'Vui lòng nhập giftcode.',
+      },
+      admin: {
+        title: 'Bảng Điều Khiển Admin',
+        tabs: {
+          dashboard: 'Dashboard',
+          transactions: 'Duyệt Giao Dịch',
+          users: 'Quản lý User',
+          giftCodes: 'Giftcode',
+          packages: 'Gói Nạp',
+          rewards: 'Thưởng Điểm Danh',
+          announcements: 'Thông Báo',
+          apiKeys: 'API Keys',
+        },
+        dashboard: {
+          title: 'Bảng Điều Khiển Dữ Liệu',
+          description: 'Thống kê thời gian thực về hoạt động của ứng dụng.',
+          loading: 'Đang tải bảng điều khiển...',
+          error: 'Không thể tải dữ liệu thống kê.',
+        },
+        transactions: {
+          title: 'Duyệt Giao Dịch Nạp Kim Cương',
+          loading: 'Đang tải giao dịch chờ duyệt...',
+          empty: 'Không có giao dịch nào đang chờ duyệt.',
+          approve: 'Duyệt',
+          reject: 'Từ chối',
+          success: 'Giao dịch đã được {{action}}.',
+          approved: 'phê duyệt',
+          rejected: 'từ chối',
+          error: 'Không thể tải các giao dịch chờ duyệt.',
+        },
+        users: {
+          title: 'Quản Lý Người Dùng',
+          loading: 'Đang tải danh sách người dùng...',
+          editTitle: 'Chỉnh sửa: {{name}}',
+          diamonds: 'Kim cương',
+          xp: 'XP',
+          isAdmin: 'Là Admin?',
+          saveSuccess: 'Cập nhật người dùng thành công!',
+          saveError: 'Cập nhật thất bại.',
+          error: 'Không thể tải danh sách người dùng.',
+          header: {
+            user: 'Người dùng',
+            diamonds: 'Kim cương',
+            xp_level: 'XP / Cấp',
+            created_at: 'Ngày tạo',
+            admin: 'Admin',
+            actions: 'Hành động',
+          },
+        },
+        giftCodes: {
+          title: 'Admin: Quản lý Giftcode',
+          loading: 'Đang tải danh sách giftcode...',
+          createButton: 'Tạo Code',
+          creating: 'Đang tạo...',
+          form: {
+            code: 'Mã Code (VD: HELLOAU)',
+            reward: 'Số KC thưởng',
+            limit: 'Lượt dùng',
+          },
+          table: {
+            used: 'Đã dùng',
+            active: 'Active',
+            inactive: 'Inactive',
+          },
+          empty: 'Chưa có giftcode nào được tạo.',
+          success: {
+            create: 'Tạo giftcode thành công!',
+            update: 'Cập nhật trạng thái code thành công!',
+          },
+          error: {
+            load: 'Không thể tải danh sách giftcode.',
+            create: 'Tạo code thất bại.',
+            update: 'Cập nhật thất bại.',
+            fillForm: 'Vui lòng điền đầy đủ thông tin.',
+          },
+        },
+        packages: {
+          title: 'Quản Lý Gói Nạp',
+          loading: 'Đang tải danh sách gói nạp...',
+          create: 'Tạo Gói Mới',
+          edit: 'Chỉnh Sửa Gói',
+          form: {
+            name: 'Tên gói',
+            diamonds: 'Kim cương',
+            bonus: 'Thưởng',
+            price: 'Giá (VND)',
+            order: 'Thứ tự',
+            tag: 'Tag (e.g., Best Seller)',
+            isActive: 'Kích hoạt?',
+            isFeatured: 'Nổi bật?',
+          },
+          success: 'Lưu gói thành công!',
+          error: {
+            load: 'Không thể tải các gói nạp.',
+            save: 'Lưu gói thất bại.',
+          },
+        },
+        rewards: {
+          title: 'Quản Lý Thưởng Điểm Danh',
+          loading: 'Đang tải...',
+          form: {
+            days: 'Số ngày liên tục',
+            diamonds: 'KC thưởng',
+            xp: 'XP thưởng',
+            add: 'Thêm',
+          },
+          confirmDelete: 'Bạn chắc chắn muốn xóa mốc thưởng này?',
+          success: {
+            create: 'Tạo mốc thưởng thành công!',
+            delete: 'Xóa mốc thưởng thành công.',
+          },
+          error: {
+            load: 'Không thể tải phần thưởng điểm danh.',
+          },
+        },
+        announcements: {
+          title: 'Quản Lý Thông Báo',
+          loading: 'Đang tải...',
+          form: {
+            title: 'Tiêu đề thông báo',
+            content: 'Nội dung thông báo',
+            isActive: 'Kích hoạt thông báo này?',
+          },
+          success: 'Cập nhật thông báo thành công!',
+          error: {
+            load: 'Không thể tải thông báo.',
+          },
+        },
+        apiKeys: {
+          title: 'Quản Lý Khóa API',
+          loading: 'Đang tải...',
+          form: {
+            name: 'Tên gợi nhớ',
+            key: 'Giá trị khóa API',
+            add: 'Thêm',
+          },
+          table: {
+            name: 'Tên gợi nhớ',
+            key: 'Khóa API',
+            cost: 'Chi phí',
+            actions: 'Hành động',
+          },
+          confirmDelete: 'Bạn chắc chắn muốn xóa khóa API này?',
+          success: 'Thêm khóa API thành công!',
+          error: {
+            load: 'Không thể tải khóa API.',
+          }
+        },
+      },
+    },
+    buyCredits: {
+      title: 'Nạp Kim Cương',
+      description: 'Đừng quên điểm danh hàng ngày để nhận Kim Cương miễn phí và các phần thưởng hấp dẫn khác!',
+      info: {
+        noRefund: 'Không hoàn tiền & chuyển nhượng.',
+        expiry: 'Hạn sử dụng: 2 năm',
+        policy: 'Xem Chính Sách',
+      },
+      buy: 'Mua',
+      processing: 'Đang xử lý...',
+      success: 'Thanh toán thành công! Giao dịch của bạn đang chờ quản trị viên phê duyệt.',
+      cancelled: 'Bạn đã hủy thanh toán cho đơn hàng #{{orderCode}}.',
+      error: {
+        load: 'Không thể tải các gói nạp.',
+        login: 'Vui lòng đăng nhập để nạp kim cương.',
+        createLink: 'Không thể tạo liên kết thanh toán.',
+        parse: 'Lỗi xử lý kết quả thanh toán.',
+      },
+    },
+    adminGallery: {
+      title: 'Quản lý Thư viện Công cộng',
+      description: 'Xem xét và xóa các tác phẩm không phù hợp khỏi thư viện chung.',
+      loading: 'Đang tải thư viện công cộng...',
+      empty: {
+        title: 'Thư viện trống',
+        description: 'Chưa có tác phẩm nào được người dùng chia sẻ.',
+      },
+      deleteSuccess: 'Đã xóa tác phẩm khỏi thư viện công cộng!',
+      error: {
+        load: 'Không thể tải các tác phẩm công khai.',
+      }
+    },
+    xpBar: {
+      progress: 'Tiến độ cấp bậc',
+      needed: 'Cần {{xp}} XP nữa để đạt',
+      maxLevel: 'Đã đạt cấp tối đa!',
     }
   },
   modals: {
@@ -289,6 +555,10 @@ export const vi = {
       buttonProcessing: 'Đang xử lý...',
       buttonCheckedIn: 'Đã điểm danh hôm nay',
       weekdays: ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'],
+      error: 'Không thể tải lịch sử điểm danh.',
+      success: 'Điểm danh thành công! Bạn nhận được {{diamonds}} Kim cương và {{xp}} XP.',
+      fail: 'Điểm danh thất bại.',
+      alreadyCheckedIn: 'Bạn đã điểm danh hôm nay rồi.',
     },
     announcement: {
       button: 'Tôi đã hiểu',
@@ -404,6 +674,10 @@ export const vi = {
       use_cropped: 'Sử dụng ảnh đã Crop',
       crop_face: 'Crop Gương Mặt',
       cancel_crop: 'Hủy Crop',
+      success: {
+        full: 'Đã chuyển ảnh sang trình tạo AI!',
+        cropped: 'Đã chuyển ảnh gương mặt sang trình tạo AI!',
+      },
     },
     models: {
       title: 'Chọn Mô hình AI',

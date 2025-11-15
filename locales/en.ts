@@ -107,12 +107,22 @@ export const en = {
         settings: 'Settings',
         logout: 'Log Out',
       },
+      notifications: {
+        title: 'Update Notifications',
+        close: 'Close',
+      },
     },
     footer: {
       theme: 'Theme',
       terms: 'Terms',
       policy: 'Policy',
       support: 'Support',
+      copyright: '© {{year}} AUDITION AI Studio.',
+      links: {
+        cla: 'AU Prompts',
+        promptGpt: 'PROMPT GPT',
+        community: 'AU AI Community',
+      }
     },
     aiTool: {
       title: 'Audition AI Studio',
@@ -142,6 +152,7 @@ export const en = {
         errorPrompt: 'Please enter a prompt.',
         errorCredits: 'You need {{cost}} diamonds, but you only have {{balance}}. Please top up.',
         errorProcessImage: 'Error processing input image.',
+        cancel: 'Cancel',
       },
       singlePhoto: {
         bgRemoverTip: 'Tip: For the best quality, please use character images with the background removed.',
@@ -201,6 +212,8 @@ export const en = {
         errorRefOrPrompt: 'Please upload a "Reference Image" or enter a "Prompt".',
         errorPoseImage: 'Please provide a "Character Image" for Character {{index}}.',
         errorGender: 'Please select a gender for Character {{index}}.',
+        pickFromProcessed: 'Pick',
+        pickFromProcessedTooltip: 'Pick a processed image',
       },
       bgRemover: {
         uploadTitle: '1. Upload Images',
@@ -228,7 +241,260 @@ export const en = {
         applyAiButton: 'Apply AI Style ({{cost}} 💎)',
         downloadButton: 'Download Image',
         uploadPlaceholder: 'Click to select an image',
+        position: 'Position',
+        error: {
+          noImage: 'Please upload an image first.',
+          noCredits: 'You need {{cost}} diamonds.',
+        },
       }
+    },
+    leaderboard: {
+      title: 'Leaderboard',
+      description: 'Honoring the top creators based on their rank and number of creations.',
+      loading: 'Loading leaderboard...',
+      error: {
+        load: 'Could not load the leaderboard.',
+      },
+      empty: {
+        title: 'Leaderboard is empty',
+        description: 'Be the first to create something and get on the board!',
+      },
+      creations: 'creations',
+    },
+    myCreations: {
+      loading: 'Loading your creations...',
+      storageWarning: {
+        title: 'Important Note on Image Storage',
+        description: 'To ensure performance, your creations will only be stored for a maximum of 3 days. Works shared publicly will be kept permanently. Please download your favorite images before they are automatically deleted by the system.',
+        public: 'publicly',
+        download: 'download',
+      },
+      title: 'My Creations',
+      description: 'Manage all the images you have created with Audition AI.',
+      shareTip: '✨ Click on a creation and select the Share button to feature your best work in the Community Gallery! (Cost: 1 💎)',
+      share: 'Share',
+      empty: {
+        title: 'You have no creations yet',
+        description: 'Go to the "Create" section and start creating now!',
+      },
+      public: 'Public',
+      delete: {
+        success: 'Creation deleted successfully!',
+        error: 'Failed to delete image.',
+      },
+      shareAction: {
+        success: 'Shared to the community gallery!',
+        error: 'Failed to share image.',
+      }
+    },
+    settings: {
+      save: 'Save Name',
+      saving: 'Saving...',
+      updateSuccess: 'Display name updated successfully!',
+      avatar: {
+        change: 'Change Avatar',
+        uploading: 'Uploading...',
+        updateSuccess: 'Avatar updated successfully!',
+        updateError: 'Failed to update avatar.',
+      },
+      transactionHistory: {
+        title: 'Diamond Transaction History',
+        loading: 'Loading history...',
+        error: 'Could not load transaction history.',
+        empty: 'No transactions yet.',
+      },
+      redeem: {
+        title: 'Redeem Giftcode',
+        placeholder: 'Enter your gift code here',
+        button: 'Confirm',
+        processing: 'Verifying...',
+        error: 'Please enter a giftcode.',
+      },
+      admin: {
+        title: 'Admin Panel',
+        tabs: {
+          dashboard: 'Dashboard',
+          transactions: 'Approve Transactions',
+          users: 'Manage Users',
+          giftCodes: 'Giftcodes',
+          packages: 'Credit Packages',
+          rewards: 'Check-in Rewards',
+          announcements: 'Announcements',
+          apiKeys: 'API Keys',
+        },
+        dashboard: {
+          title: 'Data Dashboard',
+          description: 'Real-time statistics about the application\'s activity.',
+          loading: 'Loading dashboard...',
+          error: 'Could not load statistics.',
+        },
+        transactions: {
+          title: 'Approve Diamond Top-up Transactions',
+          loading: 'Loading pending transactions...',
+          empty: 'No transactions are pending approval.',
+          approve: 'Approve',
+          reject: 'Reject',
+          success: 'Transaction has been {{action}}.',
+          approved: 'approved',
+          rejected: 'rejected',
+          error: 'Could not load pending transactions.',
+        },
+        users: {
+          title: 'Manage Users',
+          loading: 'Loading user list...',
+          editTitle: 'Editing: {{name}}',
+          diamonds: 'Diamonds',
+          xp: 'XP',
+          isAdmin: 'Is Admin?',
+          saveSuccess: 'User updated successfully!',
+          saveError: 'Update failed.',
+          error: 'Could not load user list.',
+          header: {
+            user: 'User',
+            diamonds: 'Diamonds',
+            xp_level: 'XP / Level',
+            created_at: 'Created Date',
+            admin: 'Admin',
+            actions: 'Actions',
+          },
+        },
+        giftCodes: {
+          title: 'Admin: Manage Giftcodes',
+          loading: 'Loading giftcode list...',
+          createButton: 'Create Code',
+          creating: 'Creating...',
+          form: {
+            code: 'Code (e.g., HELLOAU)',
+            reward: 'Diamond Reward',
+            limit: 'Usage Limit',
+          },
+          table: {
+            used: 'Used',
+            active: 'Active',
+            inactive: 'Inactive',
+          },
+          empty: 'No giftcodes have been created yet.',
+          success: {
+            create: 'Giftcode created successfully!',
+            update: 'Code status updated successfully!',
+          },
+          error: {
+            load: 'Could not load giftcode list.',
+            create: 'Failed to create code.',
+            update: 'Update failed.',
+            fillForm: 'Please fill in all fields.',
+          },
+        },
+        packages: {
+          title: 'Manage Credit Packages',
+          loading: 'Loading credit package list...',
+          create: 'Create New Package',
+          edit: 'Edit Package',
+          form: {
+            name: 'Package Name',
+            diamonds: 'Diamonds',
+            bonus: 'Bonus',
+            price: 'Price (VND)',
+            order: 'Display Order',
+            tag: 'Tag (e.g., Best Seller)',
+            isActive: 'Is Active?',
+            isFeatured: 'Is Featured?',
+          },
+          success: 'Package saved successfully!',
+          error: {
+            load: 'Could not load credit packages.',
+            save: 'Failed to save package.',
+          },
+        },
+        rewards: {
+          title: 'Manage Check-in Rewards',
+          loading: 'Loading...',
+          form: {
+            days: 'Consecutive Days',
+            diamonds: 'Diamond Reward',
+            xp: 'XP Reward',
+            add: 'Add',
+          },
+          confirmDelete: 'Are you sure you want to delete this reward milestone?',
+          success: {
+            create: 'Reward milestone created successfully!',
+            delete: 'Reward milestone deleted successfully.',
+          },
+          error: {
+            load: 'Could not load check-in rewards.',
+          },
+        },
+        announcements: {
+          title: 'Manage Announcements',
+          loading: 'Loading...',
+          form: {
+            title: 'Announcement Title',
+            content: 'Announcement Content',
+            isActive: 'Activate this announcement?',
+          },
+          success: 'Announcement updated successfully!',
+          error: {
+            load: 'Could not load announcement.',
+          },
+        },
+        apiKeys: {
+          title: 'Manage API Keys',
+          loading: 'Loading...',
+          form: {
+            name: 'Alias',
+            key: 'API Key Value',
+            add: 'Add',
+          },
+          table: {
+            name: 'Alias',
+            key: 'API Key',
+            cost: 'Cost',
+            actions: 'Actions',
+          },
+          confirmDelete: 'Are you sure you want to delete this API key?',
+          success: 'API Key added successfully!',
+          error: {
+            load: 'Could not load API keys.',
+          }
+        },
+      },
+    },
+    buyCredits: {
+      title: 'Top Up Diamonds',
+      description: 'Don\'t forget to check in daily to receive free Diamonds and other exciting rewards!',
+      info: {
+        noRefund: 'No refunds & non-transferable.',
+        expiry: 'Expires in: 2 years',
+        policy: 'View Policy',
+      },
+      buy: 'Buy',
+      processing: 'Processing...',
+      success: 'Payment successful! Your transaction is awaiting admin approval.',
+      cancelled: 'You have cancelled the payment for order #{{orderCode}}.',
+      error: {
+        load: 'Could not load credit packages.',
+        login: 'Please log in to top up diamonds.',
+        createLink: 'Could not create payment link.',
+        parse: 'Error processing payment result.',
+      },
+    },
+    adminGallery: {
+      title: 'Manage Public Gallery',
+      description: 'Review and remove inappropriate creations from the public gallery.',
+      loading: 'Loading public gallery...',
+      empty: {
+        title: 'Gallery is empty',
+        description: 'No creations have been shared by users yet.',
+      },
+      deleteSuccess: 'Creation removed from public gallery!',
+      error: {
+        load: 'Could not load public creations.',
+      }
+    },
+    xpBar: {
+      progress: 'Rank Progress',
+      needed: '{{xp}} more XP to reach',
+      maxLevel: 'Max level reached!',
     }
   },
   modals: {
@@ -289,6 +555,10 @@ export const en = {
       buttonProcessing: 'Processing...',
       buttonCheckedIn: 'Checked-in Today',
       weekdays: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+      error: 'Could not load check-in history.',
+      success: 'Check-in successful! You received {{diamonds}} Diamonds and {{xp}} XP.',
+      fail: 'Check-in failed.',
+      alreadyCheckedIn: 'You have already checked in today.',
     },
     announcement: {
       button: 'I Understand',
@@ -404,6 +674,10 @@ export const en = {
       use_cropped: 'Use Cropped Image',
       crop_face: 'Crop Face',
       cancel_crop: 'Cancel Crop',
+      success: {
+        full: 'Image transferred to AI generator!',
+        cropped: 'Face image transferred to AI generator!',
+      },
     },
     models: {
       title: 'Select AI Model',
@@ -419,7 +693,7 @@ export const en = {
       },
       fast: {
         name: 'AUDITION AI FAST (New)',
-        description: 'Faster than PRO, high quality.',
+        description: 'Faster generation than PRO, high quality.',
         details: [
           'Uses AI: Imagen 4 Fast',
           'Optimized for speed compared to other Imagen models.',

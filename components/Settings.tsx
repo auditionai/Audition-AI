@@ -11,6 +11,7 @@ import CreditPackageManager from './admin/CreditPackageManager';
 import CheckInRewardManager from './admin/CheckInRewardManager';
 import AnnouncementManager from './admin/AnnouncementManager';
 import ApiKeyManager from './admin/ApiKeyManager';
+import { resizeImage } from '../utils/imageUtils';
 
 
 // User-facing Transaction History Component
@@ -96,6 +97,7 @@ const Settings: React.FC = () => {
     const { user, session, showToast, updateUserProfile } = useAuth();
     const [displayName, setDisplayName] = useState(user?.display_name || '');
     const [isSaving, setIsSaving] = useState(false);
+    const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
     
     if (!user) return null;
 
@@ -119,13 +121,63 @@ const Settings: React.FC = () => {
             setIsSaving(false);
         }
     };
+
+    const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !session) return;
+
+        setIsUploadingAvatar(true);
+        try {
+            const { dataUrl } = await resizeImage(file, 256); // Resize to 256x256 max
+
+            const response = await fetch('/.netlify/functions/upload-avatar', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${session.access_token}`,
+                },
+                body: JSON.stringify({ image: dataUrl }),
+            });
+
+            const result = await response.json();
+            if (!response.ok) {
+                throw new Error(result.error || 'Cập nhật ảnh đại diện thất bại.');
+            }
+            
+            updateUserProfile({ photo_url: result.photo_url });
+            showToast('Cập nhật ảnh đại diện thành công!', 'success');
+
+        } catch (error: any) {
+            showToast(error.message, 'error');
+        } finally {
+            setIsUploadingAvatar(false);
+        }
+    };
     
     return (
         <div className="container mx-auto px-4 py-8 animate-fade-in">
             <div className="max-w-4xl mx-auto">
                 <div className="bg-[#12121A]/80 border border-white/10 rounded-2xl shadow-lg p-6 flex flex-col md:flex-row items-center gap-6">
-                    <div className="relative">
-                        <img src={user.photo_url} alt={user.display_name} className="w-28 h-28 rounded-full" />
+                    <div className="relative group flex-shrink-0">
+                        <img src={user.photo_url} alt={user.display_name} className="w-28 h-28 rounded-full object-cover" />
+                        {isUploadingAvatar ? (
+                            <div className="absolute inset-0 bg-black/70 rounded-full flex items-center justify-center">
+                                <div className="w-8 h-8 border-2 border-white/50 border-t-white rounded-full animate-spin"></div>
+                            </div>
+                        ) : (
+                            <label htmlFor="avatar-upload" className="absolute inset-0 bg-black/60 rounded-full flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                                <i className="ph-fill ph-camera text-3xl"></i>
+                                <span className="sr-only">Đổi ảnh đại diện</span>
+                            </label>
+                        )}
+                        <input
+                            id="avatar-upload"
+                            type="file"
+                            accept="image/png, image/jpeg, image/gif"
+                            className="hidden"
+                            onChange={handleAvatarChange}
+                            disabled={isUploadingAvatar}
+                        />
                     </div>
                     <div className="flex-grow w-full">
                         <form onSubmit={handleProfileUpdate} className="flex flex-col sm:flex-row gap-4 items-center">
@@ -135,7 +187,7 @@ const Settings: React.FC = () => {
                                 onChange={(e) => setDisplayName(e.target.value)}
                                 className="auth-input flex-grow"
                             />
-                            <button type="submit" disabled={isSaving || displayName === user.display_name} className="themed-button-primary w-full sm:w-auto px-6 py-2 font-semibold">
+                            <button type="submit" disabled={isSaving || displayName.trim() === user.display_name} className="themed-button-primary w-full sm:w-auto px-6 py-2 font-semibold">
                                 {isSaving ? 'Đang lưu...' : 'Lưu Tên'}
                             </button>
                         </form>

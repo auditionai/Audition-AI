@@ -1,11 +1,11 @@
 import React from 'react';
 import { CreatorTab } from '../../pages/CreatorPage';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTranslation } from '../../hooks/useTranslation';
 
 interface BottomNavBarProps {
   activeTab: CreatorTab | 'buy-credits';
   onTabChange: (tab: CreatorTab) => void;
-  onTopUpClick: () => void;
   onCheckInClick: () => void;
 }
 
@@ -22,46 +22,41 @@ const NavButton = ({ icon, label, isActive, onClick, hasNotification = false }: 
     </button>
 );
 
-const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeTab, onTabChange, onTopUpClick, onCheckInClick }) => {
+const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeTab, onTabChange, onCheckInClick }) => {
   const { hasCheckedInToday } = useAuth();
+  const { t } = useTranslation();
   return (
     <div className="fixed bottom-0 left-0 w-full h-16 bg-[#12121A]/80 backdrop-blur-lg border-t border-white/10 z-50 md:hidden">
         <div className="flex justify-around items-center h-full">
             <NavButton 
                 icon="ph-paint-brush-broad"
-                label="Tạo ảnh"
+                label={t('creator.aiTool.tabs.single')}
                 isActive={activeTab === 'tool'}
                 onClick={() => onTabChange('tool')}
             />
             <NavButton 
                 icon="ph-images"
-                label="Tác phẩm"
+                label={t('creator.header.nav.myCreations')}
                 isActive={activeTab === 'my-creations'}
                 onClick={() => onTabChange('my-creations')}
             />
             <NavButton 
                 icon="ph-crown-simple"
-                label="Xếp hạng"
+                label={t('creator.header.nav.leaderboard')}
                 isActive={activeTab === 'leaderboard'}
                 onClick={() => onTabChange('leaderboard')}
             />
             {/* Fix: Add Daily Check-in button, which was missing for mobile users */}
             <NavButton 
                 icon="ph-calendar-check"
-                label="Điểm danh"
+                label={t('creator.header.nav.checkIn')}
                 isActive={false} // This is a modal action, not a tab.
                 onClick={onCheckInClick}
                 hasNotification={!hasCheckedInToday}
             />
             <NavButton 
-                icon="ph-diamonds-four"
-                label="Nạp"
-                isActive={activeTab === 'buy-credits'}
-                onClick={onTopUpClick}
-            />
-            <NavButton 
                 icon="ph-user-circle"
-                label="Tài khoản"
+                label={t('creator.header.userMenu.settings')}
                 isActive={activeTab === 'settings'}
                 onClick={() => onTabChange('settings')}
             />

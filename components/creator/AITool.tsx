@@ -6,12 +6,14 @@ import InstructionModal from '../common/InstructionModal';
 import SignatureTool from './tools/SignatureTool';
 import { useAuth } from '../../contexts/AuthContext';
 import UtilInstructionModal from '../ai-tool/InstructionModal'; // Renamed to avoid confusion
+import { useTranslation } from '../../hooks/useTranslation';
 
 type AIToolTab = 'generator' | 'group-studio' | 'utilities'; // NEW: Add 'group-studio'
 type UtilityTab = 'bg-remover' | 'signature';
 
 const AITool: React.FC = () => {
     const { showToast } = useAuth();
+    const { t } = useTranslation();
     const [activeTab, setActiveTab] = useState<AIToolTab>('generator');
     const [activeUtility, setActiveUtility] = useState<UtilityTab>('bg-remover');
     const [isInstructionModalOpen, setInstructionModalOpen] = useState(false);
@@ -83,17 +85,17 @@ const AITool: React.FC = () => {
                     className="themed-main-title text-4xl md:text-5xl lg:text-6xl font-black mb-4 leading-tight"
                     data-text="Audition AI Studio"
                 >
-                    Audition AI Studio
+                    {t('creator.aiTool.title')}
                 </h1>
                 <p className="themed-main-subtitle text-lg md:text-xl max-w-2xl mx-auto">
-                    Nền tảng sáng tạo ảnh 3D AI theo phong cách Audition độc đáo.
+                    {t('creator.aiTool.description')}
                 </p>
                 <button
                     onClick={() => setInstructionModalOpen(true)}
                     className="themed-guide-button"
                 >
                     <i className="ph-fill ph-book-open"></i>
-                    <span>Xem Hướng Dẫn Nhanh</span>
+                    <span>{t('creator.aiTool.quickGuide')}</span>
                 </button>
             </div>
             
@@ -105,21 +107,21 @@ const AITool: React.FC = () => {
                         className={`px-6 py-3 font-semibold transition-colors ${activeTab === 'generator' ? 'text-pink-400 border-b-2 border-pink-400' : 'text-gray-400 hover:text-white'}`}
                     >
                        <i className="ph-fill ph-magic-wand mr-2"></i>
-                        Tạo Ảnh Đơn
+                        {t('creator.aiTool.tabs.single')}
                     </button>
                      <button
                         onClick={() => setActiveTab('group-studio')}
                         className={`px-6 py-3 font-semibold transition-colors ${activeTab === 'group-studio' ? 'text-pink-400 border-b-2 border-pink-400' : 'text-gray-400 hover:text-white'}`}
                     >
                         <i className="ph-fill ph-users-three mr-2"></i>
-                        Studio Nhóm
+                        {t('creator.aiTool.tabs.group')}
                     </button>
                     <button
                         onClick={() => setActiveTab('utilities')}
                         className={`px-6 py-3 font-semibold transition-colors ${activeTab === 'utilities' ? 'text-pink-400 border-b-2 border-pink-400' : 'text-gray-400 hover:text-white'}`}
                     >
                         <i className="ph-fill ph-wrench mr-2"></i>
-                        Công Cụ Hỗ Trợ
+                        {t('creator.aiTool.tabs.utilities')}
                     </button>
                 </div>
 
@@ -141,10 +143,10 @@ const AITool: React.FC = () => {
                             {/* Utility Sub-tabs */}
                             <div className="flex justify-center border-b border-white/10 mb-6">
                                 <button onClick={() => setActiveUtility('bg-remover')} className={`px-4 py-2 text-sm font-semibold transition-colors ${activeUtility === 'bg-remover' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400 hover:text-white'}`}>
-                                    <i className="ph-fill ph-scissors mr-2"></i>Tách nền
+                                    <i className="ph-fill ph-scissors mr-2"></i>{t('creator.aiTool.utils.bgRemover')}
                                 </button>
                                 <button onClick={() => setActiveUtility('signature')} className={`px-4 py-2 text-sm font-semibold transition-colors ${activeUtility === 'signature' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400 hover:text-white'}`}>
-                                    <i className="ph-fill ph-pencil-simple-line mr-2"></i>Chèn chữ ký
+                                    <i className="ph-fill ph-pencil-simple-line mr-2"></i>{t('creator.aiTool.utils.signature')}
                                 </button>
                             </div>
                             

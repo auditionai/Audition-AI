@@ -74,15 +74,15 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
   return (
     <header className="fixed top-0 left-0 w-full z-40 bg-skin-fill/80 backdrop-blur-lg border-b border-skin-border">
       <div className="container mx-auto px-4">
-        <div className="flex justify-between items-center py-3 md:h-20 relative">
+        <div className="grid grid-cols-3 items-center h-20">
           
           {/* Left: Logo */}
-          <div className="flex-shrink-0">
+          <div className="justify-self-start">
              <Logo onClick={() => handleNavClick('tool')} />
           </div>
           
           {/* Center: Desktop Navigation */}
-           <nav className="hidden md:flex items-center gap-2 absolute left-1/2 -translate-x-1/2">
+           <nav className="hidden md:flex items-center gap-2 justify-self-center">
                 <button
                   onClick={() => handleNavClick('leaderboard')}
                   className={`themed-nav-button leaderboard ${activeTab === 'leaderboard' ? 'is-active' : ''}`}
@@ -123,7 +123,7 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
             </nav>
           
           {/* Right: Actions */}
-          <div className="flex items-center gap-2 md:gap-4">
+          <div className="flex items-center gap-2 md:gap-4 justify-self-end">
             {/* Language Switcher */}
             <div className="hidden md:block">
                 <LanguageSwitcher />
@@ -210,6 +210,9 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
                   </div>
                 </div>
               )}
+            </div>
+             <div className="md:hidden">
+                 <LanguageSwitcher />
             </div>
           </div>
         </div>

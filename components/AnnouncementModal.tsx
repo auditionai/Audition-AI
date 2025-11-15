@@ -1,6 +1,7 @@
 import React from 'react';
 import Modal from './common/Modal';
 import { Announcement } from '../types';
+import { useTranslation } from '../hooks/useTranslation';
 
 interface AnnouncementModalProps {
   isOpen: boolean;
@@ -9,6 +10,7 @@ interface AnnouncementModalProps {
 }
 
 const AnnouncementModal: React.FC<AnnouncementModalProps> = ({ isOpen, onClose, announcement }) => {
+  const { t } = useTranslation();
   if (!isOpen || !announcement) return null;
 
   return (
@@ -25,7 +27,7 @@ const AnnouncementModal: React.FC<AnnouncementModalProps> = ({ isOpen, onClose, 
             onClick={onClose}
             className="mt-8 w-full py-3 font-bold text-white bg-gradient-to-r from-pink-500 to-fuchsia-600 rounded-lg hover:opacity-90 transition"
         >
-            Tôi đã hiểu
+            {t('modals.announcement.button')}
         </button>
       </div>
     </Modal>

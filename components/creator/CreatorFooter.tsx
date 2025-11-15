@@ -33,7 +33,7 @@ const CreatorFooter: React.FC<CreatorFooterProps> = ({ onInfoLinkClick }) => {
             <div className="flex gap-2 items-center text-skin-muted">
                 <a onClick={() => onInfoLinkClick('terms')} className="px-4 py-2 rounded-full bg-white/5 hover:bg-skin-accent/10 text-skin-muted hover:text-skin-base border border-transparent hover:border-skin-border-accent transition-all duration-300 cursor-pointer text-sm font-semibold">{t('creator.footer.terms')}</a>
                 <a onClick={() => onInfoLinkClick('policy')} className="px-4 py-2 rounded-full bg-white/5 hover:bg-skin-accent/10 text-skin-muted hover:text-skin-base border border-transparent hover:border-skin-border-accent transition-all duration-300 cursor-pointer text-sm font-semibold">{t('creator.footer.policy')}</a>
-                <a onClick={() => onInfoLinkClick('contact')} className="px-4 py-2 rounded-full bg-white/5 hover:bg-skin-accent/10 text-skin-muted hover:text-skin-base border border-transparent hover:border-skin-border-accent transition-all duration-300 cursor-pointer text-sm font-semibold">{t('creator.footer.support')}</a>
+                <a onClick={() => onInfoLinkClick('contact')} className="px-4 py-2 rounded-full bg-white/5 hover:bg-skin-accent/10 text-skin-muted hover:text-skin-base border border-transparent hover:border-skin-border-accent transition-all duration-300 cursor-pointer text-sm font-semibold">{t('creator.footer.contact')}</a>
             </div>
         </div>
         <p className="font-semibold text-base my-6 text-center themed-footer-copyright">

@@ -14,27 +14,13 @@ import ImageModal from '../../common/ImageModal';
 import ToggleSwitch from '../../ai-tool/ToggleSwitch';
 import { resizeImage } from '../../../utils/imageUtils';
 
-type ImageState = { url: string; file: File } | null;
-
 interface AiGeneratorToolProps {
-    poseImage: ImageState;
-    onPoseImageChange: (image: ImageState) => void;
-    rawFaceImage: ImageState;
-    onRawFaceImageChange: (image: ImageState) => void;
-    processedFaceImage: string | null;
-    onProcessedFaceImageChange: (image: string | null) => void;
-    styleImage: ImageState;
-    onStyleImageChange: (image: ImageState) => void;
+    initialCharacterImage?: { url: string; file: File } | null;
+    initialFaceImage?: { url: string; file: File } | null;
     onSendToSignatureTool: (imageUrl: string) => void;
 }
 
-const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({
-    poseImage, onPoseImageChange,
-    rawFaceImage, onRawFaceImageChange,
-    processedFaceImage, onProcessedFaceImageChange,
-    styleImage, onStyleImageChange,
-    onSendToSignatureTool
-}) => {
+const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage, initialFaceImage, onSendToSignatureTool }) => {
     const { user, session, showToast, updateUserDiamonds } = useAuth();
     const { isGenerating, progress, generatedImage, error, generateImage, resetGenerator, cancelGeneration } = useImageGenerator();
 
@@ -45,8 +31,13 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({
     const [isConfirmOpen, setConfirmOpen] = useState(false);
     const [isResultModalOpen, setIsResultModalOpen] = useState(false);
     
-    // Feature States (now only local UI state, image state is controlled by parent)
+    // Feature States
+    const [poseImage, setPoseImage] = useState<{ url: string; file: File } | null>(null);
+    const [rawFaceImage, setRawFaceImage] = useState<{ url: string; file: File } | null>(null);
+    const [processedFaceImage, setProcessedFaceImage] = useState<string | null>(null); // Stores base64 of processed face
+    const [styleImage, setStyleImage] = useState<{ url: string; file: File } | null>(null);
     const [isProcessingFace, setIsProcessingFace] = useState(false);
+
     const [prompt, setPrompt] = useState('');
     const [negativePrompt, setNegativePrompt] = useState('');
     const [selectedModel, setSelectedModel] = useState<AIModel>(DETAILED_AI_MODELS.find((m: AIModel) => m.recommended) || DETAILED_AI_MODELS[0]);
@@ -60,6 +51,17 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({
     const [isStyleDropdownOpen, setIsStyleDropdownOpen] = useState(false);
     const styleDropdownRef = useRef<HTMLDivElement>(null);
 
+
+    useEffect(() => {
+        if (initialCharacterImage) {
+            setPoseImage(initialCharacterImage);
+        }
+        if (initialFaceImage) {
+            setRawFaceImage(initialFaceImage);
+            setProcessedFaceImage(null);
+        }
+    }, [initialCharacterImage, initialFaceImage]);
+    
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (styleDropdownRef.current && !styleDropdownRef.current.contains(event.target as Node)) {
@@ -76,12 +78,12 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({
             resizeImage(file, 1024) // Resize to max 1024px
                 .then(({ file: resizedFile, dataUrl: resizedDataUrl }: { file: File, dataUrl: string }) => {
                     const newImage = { url: resizedDataUrl, file: resizedFile };
-                    if (type === 'pose') onPoseImageChange(newImage);
+                    if (type === 'pose') setPoseImage(newImage);
                     else if (type === 'face') {
-                        onRawFaceImageChange(newImage);
-                        onProcessedFaceImageChange(null); // Reset processed image if a new one is uploaded
+                        setRawFaceImage(newImage);
+                        setProcessedFaceImage(null); // Reset processed image if a new one is uploaded
                     }
-                    else if (type === 'style') onStyleImageChange(newImage);
+                    else if (type === 'style') setStyleImage(newImage);
                 })
                 .catch((err: any) => {
                     console.error("Error resizing image:", err);
@@ -91,12 +93,12 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({
     };
 
     const handleRemoveImage = (type: 'pose' | 'face' | 'style') => {
-        if (type === 'pose') onPoseImageChange(null);
+        if (type === 'pose') setPoseImage(null);
         else if (type === 'face') {
-            onRawFaceImageChange(null);
-            onProcessedFaceImageChange(null);
+            setRawFaceImage(null);
+            setProcessedFaceImage(null);
         }
-        else if (type === 'style') onStyleImageChange(null);
+        else if (type === 'style') setStyleImage(null);
     }
     
     const handleProcessFace = async () => {
@@ -115,7 +117,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({
                 const result = await response.json();
                 if (!response.ok) throw new Error(result.error || 'Xử lý gương mặt thất bại.');
 
-                onProcessedFaceImageChange(result.processedImageBase64);
+                setProcessedFaceImage(result.processedImageBase64);
                 updateUserDiamonds(result.newDiamondCount);
                 showToast('Xử lý & Khóa gương mặt thành công!', 'success');
             };
@@ -125,6 +127,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({
             setIsProcessingFace(false);
         }
     };
+
 
     const generationCost = 1 + (useUpscaler ? 1 : 0);
 
@@ -220,6 +223,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({
              </>
         )
     }
+
 
     return (
         <>

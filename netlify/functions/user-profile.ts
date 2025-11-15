@@ -13,7 +13,8 @@ const handler: Handler = async (event: HandlerEvent) => {
     }
 
     try {
-        const { data: { user: authUser }, error: authError } = await supabaseAdmin.auth.getUser(token);
+        // FIX: Use Supabase v1 `api.getUser(token)` instead of v2 `auth.getUser(token)` and correct the destructuring.
+        const { user: authUser, error: authError } = await supabaseAdmin.auth.api.getUser(token);
         if (authError || !authUser) {
             return { statusCode: 401, body: JSON.stringify({ error: `Unauthorized: ${authError?.message || 'Invalid token.'}` }) };
         }

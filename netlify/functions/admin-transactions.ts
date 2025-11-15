@@ -12,8 +12,8 @@ const handler: Handler = async (event: HandlerEvent) => {
         return { statusCode: 401, body: JSON.stringify({ error: 'Bearer token is missing.' }) };
     }
 
-    // FIX: Use Supabase v2 method `getUser` instead of v1 `api.getUser`.
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+    // FIX: Use Supabase v1 `api.getUser(token)` instead of v2 `auth.getUser(token)` and correct the destructuring.
+    const { user, error: authError } = await supabaseAdmin.auth.api.getUser(token);
     if (authError || !user) {
         return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized: Invalid token.' }) };
     }
@@ -26,7 +26,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     // 2. Method Handling
     switch (event.httpMethod) {
         case 'GET': {
-            // Lấy các giao dịch có trạng thái 'pending' để admin phê duyệt
+            // L?y cac giao d?ch co tr?ng thai 'pending' d? admin phe duy?t
             const { data, error } = await supabaseAdmin
                 .from('transactions')
                 .select(`
@@ -37,7 +37,7 @@ const handler: Handler = async (event: HandlerEvent) => {
                         photo_url
                     )
                 `)
-                .eq('status', 'pending') // <-- THAY ĐỔI
+                .eq('status', 'pending') // <-- THAY D?I
                 .order('created_at', { ascending: true });
 
             if (error) {
@@ -55,7 +55,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             }
 
             if (action === 'approve') {
-                // Gọi RPC function (đã được cập nhật để xử lý 'pending' status)
+                // G?i RPC function (da du?c c?p nh?t d? x? ly 'pending' status)
                 const { error: rpcError } = await supabaseAdmin
                     .rpc('approve_and_credit_transaction', { transaction_id_param: transactionId });
 

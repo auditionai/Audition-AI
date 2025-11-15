@@ -1,264 +1,63 @@
-import type { Handler, HandlerEvent } from "@netlify/functions";
-import { GoogleGenAI, Modality } from "@google/genai";
-import { supabaseAdmin } from './utils/supabaseClient';
-import { Buffer } from 'buffer';
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import React, { createContext, useState, useEffect, ReactNode, useMemo, useCallback } from 'react';
+import { translations } from '../locales';
 
-const XP_PER_CHARACTER = 5;
+export type Language = 'vi' | 'en';
 
-// Helper to fail the job and notify the user by deleting the record.
-const failJob = async (jobId: string, reason: string, userId: string, cost: number) => {
-    console.error(`[WORKER] Failing job ${jobId}: ${reason}`);
-    try {
-        await Promise.all([
-            // Delete the record, which triggers the frontend to stop waiting
-            supabaseAdmin.from('generated_images').delete().eq('id', jobId),
-            // Refund the user
-            supabaseAdmin.rpc('increment_user_diamonds', { user_id_param: userId, diamond_amount: cost }),
-            // Log the refund
-            supabaseAdmin.from('diamond_transactions_log').insert({
-                user_id: userId,
-                amount: cost,
-                transaction_type: 'REFUND',
-                description: `Hoàn tiền tạo ảnh nhóm thất bại (Lỗi: ${reason.substring(0, 50)})`,
-            })
-        ]);
-    } catch (e) {
-        console.error(`[WORKER] CRITICAL: Failed to clean up or refund for job ${jobId}`, e);
-    }
-};
+interface LanguageContextType {
+    language: Language;
+    setLanguage: (language: Language) => void;
+    // FIX: Changed return type to `any` to support arrays and other non-string translations.
+    t: (key: string, replacements?: Record<string, string | number>) => any;
+}
 
-const processDataUrl = (dataUrl: string | null) => {
-    if (!dataUrl) return null;
-    const [header, base64] = dataUrl.split(',');
-    if (!base64) return null;
-    const mimeType = header.match(/:(.*?);/)?.[1] || 'image/png';
-    return { base64, mimeType };
-};
+export const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
 
-// WORKAROUND HELPER: Update progress by rewriting the 'prompt' column.
-const updateJobProgress = async (jobId: string, currentPromptData: any, progressMessage: string) => {
-    const newProgressData = { ...currentPromptData, progress: progressMessage };
-    await supabaseAdmin.from('generated_images').update({ prompt: JSON.stringify(newProgressData) }).eq('id', jobId);
-};
+export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+    const [language, setLanguageState] = useState<Language>(() => {
+        const storedLang = localStorage.getItem('app-language') as Language;
+        return storedLang && ['vi', 'en'].includes(storedLang) ? storedLang : 'vi';
+    });
 
+    useEffect(() => {
+        localStorage.setItem('app-language', language);
+    }, [language]);
 
-const handler: Handler = async (event: HandlerEvent) => {
-    if (event.httpMethod !== 'POST') return { statusCode: 200 };
+    const setLanguage = (lang: Language) => {
+        setLanguageState(lang);
+    };
 
-    const { jobId } = JSON.parse(event.body || '{}');
-    if (!jobId) {
-        console.error("[WORKER] Job ID is missing.");
-        return { statusCode: 200 };
-    }
+    // FIX: Updated `t` function logic to correctly handle non-string values like arrays.
+    const t = useCallback((key: string, replacements?: Record<string, string | number>): any => {
+        const langTranslations = translations[language];
+        let translation = key.split('.').reduce((acc: any, k) => acc?.[k], langTranslations);
 
-    let jobPromptData, payload, userId, totalCost = 0;
-
-    try {
-        const { data: jobData, error: fetchError } = await supabaseAdmin
-            .from('generated_images')
-            .select('prompt, user_id')
-            .eq('id', jobId)
-            .single();
-
-        if (fetchError || !jobData || !jobData.prompt) {
-            throw new Error(fetchError?.message || 'Job not found or payload is missing.');
-        }
-
-        // WORKAROUND: Parse the structured data from the 'prompt' column.
-        jobPromptData = JSON.parse(jobData.prompt);
-        payload = jobPromptData.payload; // Extract original payload
-        userId = jobData.user_id;
-        totalCost = (payload.characters?.length || 0) + 1;
-
-        const { characters, referenceImage, prompt, style, aspectRatio } = payload;
-        const numCharacters = characters.length;
-
-        const { data: apiKeyData, error: apiKeyError } = await supabaseAdmin.from('api_keys').select('id, key_value').eq('status', 'active').order('usage_count', { ascending: true }).limit(1).single();
-        if (apiKeyError || !apiKeyData) throw new Error('Hết tài nguyên AI. Vui lòng thử lại sau.');
-        
-        const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
-        const model = 'gemini-2.5-flash-image';
-        
-        const generatedCharacters = [];
-        
-        // --- LOGIC FORK: DEPENDS ON WHETHER A REFERENCE IMAGE IS PROVIDED ---
-        let finalBackgroundData;
-
-        if (referenceImage) {
-             // --- PATH A: Using a Reference Image ---
-            finalBackgroundData = processDataUrl(referenceImage);
-            if (!finalBackgroundData) throw new Error('Ảnh mẫu tham chiếu không hợp lệ.');
-
-            // Step 1.1: Generate each character individually, copying pose from reference
-            for (let i = 0; i < numCharacters; i++) {
-                await updateJobProgress(jobId, jobPromptData, `Processing character ${i + 1}/${numCharacters}...`);
-                
-                const char = characters[i];
-                const genderKeywords = char.gender === 'male' 
-                    ? 'cool, masculine, and strong' 
-                    : 'charming, stylish, and beautiful';
-
-                const faceReferenceExists = !!char.faceImage;
-
-                const charPrompt = [
-                    `**ROLE DEFINITIONS:**`,
-                    `- IMAGE 1 = "POSE INSPIRATION SOURCE" (The group photo).`,
-                    `- IMAGE 2 = "OUTFIT DATA SOURCE" (The Audition character photo).`,
-                    faceReferenceExists ? `- IMAGE 3 = "FACE DATA SOURCE" (The user's face photo).` : '',
-                    `---`,
-                    `**ABSOLUTE COMMAND: CREATE A ${char.gender.toUpperCase()} CHARACTER.**`,
-                    `This is the most important rule. You MUST IGNORE the gender of any person in the reference images.`,
-                    `---`,
-                    `**WORKFLOW (to be rendered on a solid black background):**`,
-                    `1. **POSE CREATION (UNIQUE & DYNAMIC):**`,
-                    `   a. Analyze **IMAGE 1 ("POSE INSPIRATION SOURCE")** and identify the person at position #${i + 1} (from left to right).`,
-                    `   b. Use their pose **ONLY as inspiration**. Do not copy it directly.`,
-                    `   c. You **MUST CREATE A NEW, UNIQUE, AND DYNAMIC POSE** that is natural and perfectly suits a ${char.gender.toUpperCase()} character. The pose should convey a sense of being '${genderKeywords}'.`,
-                    `   d. **CRITICAL RULE:** This new pose **MUST BE DIFFERENT** from the pose in the reference image and **MUST NOT** be a simple standing pose.`,
-                    `   e. **FORBIDDEN:** Absolutely **DO NOT** use the stiff, default standing pose from **IMAGE 2 ("OUTFIT DATA SOURCE")**.`,
-                    `2. **OUTFIT TRANSFER (PRECISION REQUIRED):**`,
-                    `   a. Look **ONLY** at **IMAGE 2 ("OUTFIT DATA SOURCE")**.`,
-                    `   b. You **MUST** transfer 100% of the outfit, including all clothes, accessories, hairstyle, and hair color, from this image to the new character.`,
-                    `   c. **FORBIDDEN:** Do not take clothing, hair, or accessories from any other image. Do not invent new clothing items.`,
-                    `3. **FACE APPLICATION (EXACT MATCH):**`,
-                    `   a. If **IMAGE 3 ("FACE DATA SOURCE")** is provided, you **MUST** use that exact face on the final character.`,
-                    `4. **FINAL VALIDATION CHECK:**`,
-                    `   a. Is the final character a ${char.gender.toUpperCase()}? (Mandatory)`,
-                    `   b. Is the pose new, unique, and dynamic (not stiff)? (Mandatory)`,
-                    `   c. Is the outfit an EXACT match from **IMAGE 2**? (Mandatory)`,
-                ].filter(Boolean).join('\n');
-
-                const poseData = processDataUrl(char.poseImage);
-                const faceData = processDataUrl(char.faceImage);
-                if (!poseData) throw new Error(`Invalid image for Character ${i+1}.`);
-
-                const parts = [
-                    { text: charPrompt },
-                    { inlineData: { data: finalBackgroundData.base64, mimeType: finalBackgroundData.mimeType } },
-                    { inlineData: { data: poseData.base64, mimeType: poseData.mimeType } },
-                ];
-                if (faceData) parts.push({ inlineData: { data: faceData.base64, mimeType: faceData.mimeType } });
-
-                const response = await ai.models.generateContent({ model, contents: { parts }, config: { responseModalities: [Modality.IMAGE] } });
-                const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-                if (!imagePart?.inlineData) throw new Error(`AI failed to generate Character ${i + 1}.`);
-                
-                generatedCharacters.push(imagePart.inlineData);
-                await new Promise(resolve => setTimeout(resolve, 2000));
-            }
-
-        } else {
-            // --- PATH B: No Reference Image, Prompt-only ---
-            // Step 1.1: Generate a background first
-            await updateJobProgress(jobId, jobPromptData, 'Creating background from prompt...');
-            const bgPrompt = `Create a high-quality, cinematic background scene described as: "${prompt}". The scene should have a style of "${style}". Do NOT include any people or characters.`;
-            const bgResponse = await ai.models.generateContent({ model, contents: { parts: [{ text: bgPrompt }] }, config: { responseModalities: [Modality.IMAGE] } });
-            const bgImagePart = bgResponse.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-            if (!bgImagePart?.inlineData) throw new Error("AI failed to create a background from your prompt.");
-            finalBackgroundData = bgImagePart.inlineData;
-            await new Promise(resolve => setTimeout(resolve, 2000));
-
-            // Step 1.2: Generate each character with a default pose
-            for (let i = 0; i < numCharacters; i++) {
-                await updateJobProgress(jobId, jobPromptData, `Processing character ${i + 1}/${numCharacters}...`);
-                const char = characters[i];
-                const charPrompt = `Create a full-body character of a **${char.gender}**. They MUST be wearing the exact outfit from the provided character image. If a face image is provided, use that exact face. Place the character on a solid black background.`;
-                
-                const poseData = processDataUrl(char.poseImage);
-                const faceData = processDataUrl(char.faceImage);
-                if (!poseData) throw new Error(`Invalid image for Character ${i+1}.`);
-                
-                const parts = [
-                    { text: charPrompt },
-                    { inlineData: { data: poseData.base64, mimeType: poseData.mimeType } },
-                ];
-                if (faceData) parts.push({ inlineData: { data: faceData.base64, mimeType: faceData.mimeType } });
-
-                const response = await ai.models.generateContent({ model, contents: { parts }, config: { responseModalities: [Modality.IMAGE] } });
-                const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-                if (!imagePart?.inlineData) throw new Error(`AI failed to generate Character ${i + 1}.`);
-                
-                generatedCharacters.push(imagePart.inlineData);
-                await new Promise(resolve => setTimeout(resolve, 2000));
-            }
+        if (translation === undefined) {
+            // Fallback to English if key not found in current language
+            const fallbackTranslations = translations['en'];
+            translation = key.split('.').reduce((acc: any, k) => acc?.[k], fallbackTranslations);
         }
         
-        // --- FINAL COMPOSITE STEP (COMMON FOR BOTH PATHS) ---
-        await updateJobProgress(jobId, jobPromptData, 'Translating prompt for final composition...');
-
-        let translatedPrompt = prompt;
-        if (prompt && prompt.trim()) {
-            try {
-                const translationResponse = await ai.models.generateContent({
-                    model: 'gemini-2.5-flash',
-                    contents: `Translate the following user request for an image scene from Vietnamese to English. Keep it concise and descriptive. Text: "${prompt}"`,
-                });
-                const translatedText = translationResponse.text.trim();
-                if (translatedText && translatedText.length > 3) {
-                    translatedPrompt = translatedText;
-                }
-            } catch (e) {
-                console.warn(`[WORKER] Prompt translation failed, using original. Error: ${e}`);
-            }
+        if (translation === undefined) {
+            console.warn(`Translation not found for key: ${key}`);
+            return key;
         }
 
-        await updateJobProgress(jobId, jobPromptData, 'Compositing final image...');
-
-        const compositePrompt = [
-            `**ABSOLUTE COMMAND: YOU MUST USE THE PROVIDED CHARACTERS.**`, `---`,
-            `**Task:**`,
-            `1. **Background:** Use the provided background image (the first image).`,
-            `2. **Characters:** Take the characters **exactly** as they are from the black-background images and composite them into the background. **DO NOT** change their clothes, gender, or faces.`,
-            `3. **Layout:** ${referenceImage ? 'Arrange the characters according to the layout of the reference group photo.' : 'Arrange the characters logically and naturally within the background.'}`,
-            `4. **User's Context Suggestion:** The user has provided a suggestion for the photo's atmosphere: '${translatedPrompt}'. Use this suggestion ONLY to adjust lighting, shadows, and minor background details for harmony. **DO NOT change the characters.**`
-        ].join('\n');
-        
-        const finalParts = [
-            { text: compositePrompt },
-            { inlineData: { data: finalBackgroundData.base64, mimeType: finalBackgroundData.mimeType } },
-            ...generatedCharacters.map(charData => ({ inlineData: charData }))
-        ];
-        
-        const finalResponse = await ai.models.generateContent({
-            model,
-            contents: { parts: finalParts },
-            config: { responseModalities: [Modality.IMAGE] },
-        });
-
-        const finalImagePart = finalResponse.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-        if (!finalImagePart?.inlineData) throw new Error("AI failed to composite the final image.");
-
-        // Step 3: Upload final image and update database
-        const finalImageBase64 = finalImagePart.inlineData.data;
-        const finalImageMimeType = finalImagePart.inlineData.mimeType;
-
-        const s3Client = new S3Client({ region: "auto", endpoint: process.env.R2_ENDPOINT!, credentials: { accessKeyId: process.env.R2_ACCESS_KEY_ID!, secretAccessKey: process.env.R2_SECRET_ACCESS_KEY! }});
-        const imageBuffer = Buffer.from(finalImageBase64, 'base64');
-        const fileName = `${userId}/group/${Date.now()}.${finalImageMimeType.split('/')[1] || 'png'}`;
-        
-        await (s3Client as any).send(new PutObjectCommand({ Bucket: process.env.R2_BUCKET_NAME!, Key: fileName, Body: imageBuffer, ContentType: finalImageMimeType }));
-        const publicUrl = `${process.env.R2_PUBLIC_URL}/${fileName}`;
-        
-        const xpToAward = numCharacters * XP_PER_CHARACTER;
-
-        await Promise.all([
-             supabaseAdmin.from('generated_images').update({ image_url: publicUrl, prompt: payload.prompt }).eq('id', jobId),
-             supabaseAdmin.rpc('increment_user_xp', { user_id_param: userId, xp_amount: xpToAward }),
-             supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id })
-        ]);
-        
-        console.log(`[WORKER ${jobId}] Job finalized successfully.`);
-
-    } catch (error: any) {
-        if (userId && totalCost > 0) {
-            await failJob(jobId, error.message, userId, totalCost);
-        } else {
-             console.error(`[WORKER ${jobId}] Failed without user/cost info`, error);
+        if (typeof translation === 'string' && replacements) {
+            let result = translation;
+            Object.entries(replacements).forEach(([rKey, rValue]) => {
+                result = result.replace(`{{${rKey}}}`, String(rValue));
+            });
+            return result;
         }
-    }
+        
+        return translation;
+    }, [language]);
 
-    return { statusCode: 200 };
+    const value = useMemo(() => ({ language, setLanguage, t }), [language, t]);
+
+    return (
+        <LanguageContext.Provider value={value}>
+            {children}
+        </LanguageContext.Provider>
+    );
 };
-
-export { handler };

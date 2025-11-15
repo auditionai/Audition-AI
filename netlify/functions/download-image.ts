@@ -1,43 +1,43 @@
 import type { Handler, HandlerEvent } from "@netlify/functions";
-import { Buffer } from 'buffer';
+import { supabaseAdmin } from './utils/supabaseClient';
 
 const handler: Handler = async (event: HandlerEvent) => {
-    const imageUrl = event.queryStringParameters?.url;
-
-    if (!imageUrl) {
-        return { statusCode: 400, body: JSON.stringify({ error: 'Image URL is required.' }) };
+    if (event.httpMethod !== 'POST') {
+        return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
     }
 
-    // Security check: ensure we are only proxying images from our R2 bucket
-    const allowedOrigin = process.env.R2_PUBLIC_URL;
-    if (!allowedOrigin || !imageUrl.startsWith(allowedOrigin)) {
-        return { statusCode: 403, body: JSON.stringify({ error: 'Forbidden: Cannot proxy this URL.' }) };
+    const authHeader = event.headers['authorization'];
+    const token = authHeader?.split(' ')[1];
+    if (!token) {
+        return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized' }) };
+    }
+    // FIX: Use Supabase v1 `api.getUser(token)` instead of v2 `auth.getUser(token)` and correct the destructuring.
+    const { user, error: authError } = await supabaseAdmin.auth.api.getUser(token);
+    if (authError || !user) {
+        return { statusCode: 401, body: JSON.stringify({ error: 'Invalid token' }) };
     }
 
     try {
-        const response = await fetch(imageUrl);
-        if (!response.ok) {
-            console.error(`Failed to fetch image from R2. Status: ${response.status}, URL: ${imageUrl}`);
-            return { statusCode: response.status, body: response.statusText };
+        const { announcementId } = JSON.parse(event.body || '{}');
+        if (!announcementId) {
+            return { statusCode: 400, body: JSON.stringify({ error: 'Announcement ID is required.' }) };
         }
 
-        const arrayBuffer = await response.arrayBuffer();
-        const imageBuffer = Buffer.from(arrayBuffer);
-        const contentType = response.headers.get('content-type') || 'application/octet-stream';
-        const fileName = imageUrl.split('/').pop() || `download.png`;
+        const { error } = await supabaseAdmin
+            .from('users')
+            .update({ last_announcement_seen_id: announcementId })
+            .eq('id', user.id);
+
+        if (error) throw error;
 
         return {
             statusCode: 200,
-            headers: {
-                'Content-Type': contentType,
-                'Content-Disposition': `attachment; filename="${fileName}"`,
-            },
-            body: imageBuffer.toString('base64'),
-            isBase64Encoded: true,
+            body: JSON.stringify({ success: true, message: 'Announcement marked as read.' }),
         };
+
     } catch (error: any) {
-        console.error('Download proxy error:', error);
-        return { statusCode: 500, body: JSON.stringify({ error: 'Failed to fetch image.' }) };
+        console.error("Mark announcement read failed:", error);
+        return { statusCode: 500, body: JSON.stringify({ error: error.message || 'Server error' }) };
     }
 };
 

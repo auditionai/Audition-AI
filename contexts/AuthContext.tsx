@@ -184,7 +184,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                     fetch('/.netlify/functions/log-app-visit', { method: 'POST' });
                 }
 
-                const { data: { session: currentSession } } = await supabaseClient.auth.getSession();
+                // FIX: Use Supabase v1 method `session()` which is synchronous, instead of v2 `getSession()`.
+                const currentSession = supabaseClient.auth.session();
                 setSession(currentSession);
                 
                 if (currentSession) {
@@ -194,7 +195,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                     }
                 }
 
-                const { data: { subscription } } = supabaseClient.auth.onAuthStateChange(
+                // FIX: Use Supabase v1 destructuring for onAuthStateChange. The `subscription` object is in `data`, not `data.subscription`.
+                const { data: subscription } = supabaseClient.auth.onAuthStateChange(
                     async (_event, newSession) => {
                         setSession(newSession);
                         if (newSession?.user) {
@@ -219,45 +221,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
     
-    // NEW: Initialize Google Identity Services client
-    useEffect(() => {
-        if (loading || !supabase) return;
-
-        const handleCredentialResponse = async (response: any) => {
-            if (!response.credential) {
-                showToast('Không nhận được thông tin đăng nhập từ Google.', 'error');
-                return;
-            }
-
-            try {
-                const { error } = await supabase.auth.signInWithIdToken({
-                    provider: 'google',
-                    token: response.credential,
-                });
-
-                if (error) throw error;
-                // Auth state change will handle navigation and user profile fetching.
-            } catch (error: any) {
-                showToast(`Đăng nhập thất bại: ${error.message}`, 'error');
-            }
-        };
-        
-        const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-
-        if (googleClientId && typeof google !== 'undefined') {
-            try {
-                google.accounts.id.initialize({
-                    client_id: googleClientId,
-                    callback: handleCredentialResponse,
-                });
-            } catch (error) {
-                console.error("Google accounts.id.initialize failed:", error);
-            }
-        } else if (!googleClientId) {
-            console.error("VITE_GOOGLE_CLIENT_ID is not configured.");
-        }
-    }, [loading, supabase, showToast]);
-
     // Effect to check for new announcements when user logs in or data changes
     useEffect(() => {
         const checkAnnouncement = async () => {
@@ -353,14 +316,35 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return getVNDateString(new Date()) === getVNDateString(new Date(user.last_check_in_at));
     }, [user?.last_check_in_at]);
 
-    // NEW: Use Google One Tap prompt for login
     const login = useCallback(async (): Promise<boolean> => {
         const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-        if (!googleClientId || typeof google === 'undefined') {
+        if (!supabase || !googleClientId || typeof google === 'undefined') {
             showToast("Chức năng đăng nhập chưa được cấu hình. Vui lòng liên hệ quản trị viên.", "error");
             return false;
         }
+
+        const handleCredentialResponse = async (response: any) => {
+            if (!response.credential) {
+                showToast('Không nhận được thông tin đăng nhập từ Google.', 'error');
+                return;
+            }
+            try {
+                // FIX: Use Supabase v1 method `signIn` with `idToken` instead of v2 `signInWithIdToken`.
+                const { error } = await supabase.auth.signIn({
+                    idToken: response.credential,
+                });
+                if (error) throw error;
+                // Auth state change will handle navigation and user profile fetching.
+            } catch (error: any) {
+                showToast(`Đăng nhập thất bại: ${error.message}`, 'error');
+            }
+        };
+        
         try {
+            google.accounts.id.initialize({
+                client_id: googleClientId,
+                callback: handleCredentialResponse,
+            });
             google.accounts.id.prompt();
             return true;
         } catch (error: any) {
@@ -368,10 +352,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             showToast("Không thể hiển thị cửa sổ đăng nhập. Vui lòng thử lại.", "error");
             return false;
         }
-    }, [showToast]);
+    }, [supabase, showToast]);
 
     const logout = useCallback(async () => {
         if (!supabase) return;
+        // FIX: The `signOut` method exists in v1 but may have been flagged due to type inconsistencies. It should work correctly with other v1 fixes.
         await supabase.auth.signOut();
     }, [supabase]);
 

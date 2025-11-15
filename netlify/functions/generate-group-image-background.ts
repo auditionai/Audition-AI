@@ -170,7 +170,13 @@ const handler: Handler = async (event: HandlerEvent) => {
             if (poseImageProcessed) {
                 imageInputIndex++;
                 finalApiParts.push({ inlineData: { data: poseImageProcessed.base64, mimeType: poseImageProcessed.mimeType } });
-                charDescription.push(`*   **DIỆN MẠO (Trang phục/Cơ thể):** Sử dụng **Ảnh ${imageInputIndex}**. (QUY TẮC TUYỆT ĐỐI: Trang phục, kiểu tóc và hình dáng cơ thể phải là một bản sao hoàn hảo, không thay đổi từ ảnh này.)`);
+                const clothingInstruction = [
+                    `*   **DIỆN MẠO (Trang phục/Cơ thể):** Sử dụng **Ảnh ${imageInputIndex}**. (QUY TẮC TUYỆT ĐỐI & QUAN TRỌNG NHẤT VỀ TRANG PHỤC): Nhiệm vụ của bạn là "lột" toàn bộ bộ trang phục từ nhân vật trong ảnh này và "mặc" nó cho nhân vật mới.`,
+                    `    *   **BẮT BUỘC GIỮ LẠI:** Mọi chi tiết của quần áo, phụ kiện, màu sắc, họa tiết và chất liệu phải được giữ lại 100%.`,
+                    `    *   **CẤM TUYỆT ĐỐI:** Không được tự ý thay đổi kiểu dáng, thêm, bớt hoặc sáng tạo bất kỳ chi tiết trang phục nào. Nếu trang phục trong ảnh gốc là áo croptop và quần jean, thì ảnh kết quả cũng phải chính xác là áo croptop và quần jean đó, không phải là một chiếc váy hay loại quần áo khác.`,
+                    `    *   **ƯU TIÊN HÀNG ĐẦU:** Quy tắc về trang phục này có độ ưu tiên cao hơn tất cả các mô tả khác, kể cả mô tả chung của người dùng.`
+                ].join('\n');
+                charDescription.push(clothingInstruction);
             }
             if (faceImageProcessed) {
                 imageInputIndex++;
@@ -189,7 +195,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             `Trước khi hoàn thành, hãy tự trả lời những câu hỏi này. Nếu bất kỳ câu trả lời nào là "KHÔNG", bạn phải hủy bỏ và làm lại từ đầu.`,
             `1.  Bạn đã sao chép bối cảnh và ánh sáng từ Ảnh 1 một cách hoàn hảo chưa? (CÓ/KHÔNG)`,
             `2.  Có chính xác ${numCharacters} người trong ảnh không? (CÓ/KHÔNG)`,
-            `3.  Trang phục và gương mặt của mỗi người có khớp hoàn toàn với ảnh nguồn được chỉ định của họ không? (CÓ/KHÔNG)`,
+            `3.  Trang phục có được "lột" chính xác 100% từ ảnh nguồn không? Gương mặt có được cấy ghép hoàn hảo không? (CÓ/KHÔNG)`,
             `4.  Mỗi nhân vật mới có khớp hoàn hảo với tư thế và vị trí của một người trong ảnh mẫu không? (CÓ/KHÔNG)`,
             `**CHỈ KẾT QUẢ HOÀN HẢO MỚI ĐƯỢC CHẤP NHẬN.**`
         );

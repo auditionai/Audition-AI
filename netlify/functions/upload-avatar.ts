@@ -60,10 +60,20 @@ const handler: Handler = async (event: HandlerEvent) => {
         // FIX: Cast s3Client to 'any' to bypass a likely environment-specific TypeScript type resolution error.
         await (s3Client as any).send(putCommand);
 
-        // 4. Get public URL and update user profile
+        // 4. Get public URL and update user profile in both auth and public schemas
         // Add timestamp to bust cache
         const finalUrl = `${process.env.R2_PUBLIC_URL}/${fileName}?t=${Date.now()}`;
 
+        // Step 4.1: Update the auth user's metadata for persistence across sessions
+        const { error: authUpdateError } = await supabaseAdmin.auth.admin.updateUserById(
+            user.id,
+            { user_metadata: { avatar_url: finalUrl } }
+        );
+        if (authUpdateError) {
+            throw new Error(`Failed to update auth user metadata: ${authUpdateError.message}`);
+        }
+
+        // Step 4.2: Update the public users table for immediate reflection in the app
         const { data: updatedUser, error: updateError } = await supabaseAdmin
             .from('users')
             .update({ photo_url: finalUrl })

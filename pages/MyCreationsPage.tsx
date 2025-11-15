@@ -23,8 +23,9 @@ const MyCreationsPage: React.FC = () => {
                 headers: { Authorization: `Bearer ${session.access_token}` },
             });
             if (!response.ok) throw new Error(t('creator.myCreations.loading'));
-            const data = await response.json();
-            setImages(data);
+            const data: GalleryImage[] = await response.json();
+            // Safeguard: Filter out any images that may have been deleted but still returned
+            setImages(data.filter(img => img.image_url));
         } catch (error: any) {
             showToast(error.message, 'error');
         } finally {

@@ -333,6 +333,21 @@ export const en = {
         processing: 'Verifying...',
         error: 'Please enter a giftcode.',
       },
+      xpGuide: {
+        title: 'Level Up & XP Guide',
+        checkIn: {
+          title: 'Daily Check-in',
+          description: 'Receive an XP reward every time you check in. The longer your streak, the bigger the reward!',
+        },
+        createImage: {
+          title: 'Create Artwork',
+          description: 'Each time you successfully generate a single or group photo, you will receive experience points.',
+        },
+        active: {
+          title: 'Stay Active',
+          description: 'By staying active on the application, you will be rewarded with 1 XP for every minute you are online.',
+        },
+      },
       admin: {
         title: 'Admin Panel',
         tabs: {

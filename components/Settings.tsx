@@ -201,6 +201,35 @@ const Settings: React.FC = () => {
                     </div>
                 </div>
 
+                <div className="bg-[#12121A]/80 border border-cyan-500/20 rounded-2xl shadow-lg p-6 mt-8">
+                    <h3 className="text-2xl font-bold mb-4 text-cyan-400 flex items-center gap-2">
+                        <i className="ph-fill ph-star"></i>{t('creator.settings.xpGuide.title')}
+                    </h3>
+                    <ul className="space-y-3 text-sm text-gray-300">
+                        <li className="flex items-start gap-3 p-3 bg-white/5 rounded-lg">
+                            <i className="ph-fill ph-calendar-check text-xl text-cyan-400 mt-1"></i>
+                            <div>
+                                <strong className="text-white">{t('creator.settings.xpGuide.checkIn.title')}</strong>
+                                <p className="text-gray-400">{t('creator.settings.xpGuide.checkIn.description')}</p>
+                            </div>
+                        </li>
+                        <li className="flex items-start gap-3 p-3 bg-white/5 rounded-lg">
+                            <i className="ph-fill ph-magic-wand text-xl text-cyan-400 mt-1"></i>
+                            <div>
+                                <strong className="text-white">{t('creator.settings.xpGuide.createImage.title')}</strong>
+                                <p className="text-gray-400">{t('creator.settings.xpGuide.createImage.description')}</p>
+                            </div>
+                        </li>
+                        <li className="flex items-start gap-3 p-3 bg-white/5 rounded-lg">
+                            <i className="ph-fill ph-timer text-xl text-cyan-400 mt-1"></i>
+                            <div>
+                                <strong className="text-white">{t('creator.settings.xpGuide.active.title')}</strong>
+                                <p className="text-gray-400">{t('creator.settings.xpGuide.active.description')}</p>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+
                 <div className="mt-8">
                     <RedeemGiftCode />
                 </div>

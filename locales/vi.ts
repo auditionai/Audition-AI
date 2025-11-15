@@ -333,6 +333,21 @@ export const vi = {
         processing: 'Đang kiểm tra...',
         error: 'Vui lòng nhập giftcode.',
       },
+      xpGuide: {
+        title: 'Hướng dẫn Thăng Cấp & Kiếm XP',
+        checkIn: {
+          title: 'Điểm danh hàng ngày',
+          description: 'Nhận phần thưởng XP mỗi khi bạn điểm danh. Chuỗi điểm danh càng dài, thưởng càng lớn!',
+        },
+        createImage: {
+          title: 'Sáng tạo tác phẩm',
+          description: 'Mỗi lần tạo ảnh đơn hoặc ảnh nhóm thành công, bạn sẽ nhận được điểm kinh nghiệm.',
+        },
+        active: {
+          title: 'Hoạt động tích cực',
+          description: 'Duy trì hoạt động trên ứng dụng, bạn sẽ được thưởng 1 XP cho mỗi phút online.',
+        },
+      },
       admin: {
         title: 'Bảng Điều Khiển Admin',
         tabs: {
@@ -854,44 +869,44 @@ export const vi = {
   },
   changelog: {
     10: {
-      title: 'Ra Mắt Studio Nhóm & Nâng Cấp Giao Diện',
-      description: 'Giới thiệu Studio Nhóm, cho phép tạo ảnh với nhiều nhân vật. Sửa lỗi hiển thị và vị trí của nút "Sử dụng PROMPT có sẵn". Bổ sung tính năng "Tải thêm" cho Thư viện Prompt.',
+      title: 'Group Studio Launch & UI Upgrades',
+      description: 'Introducing Group Studio for multi-character image generation. Fixed display and position of the "Use Available PROMPT" button. Added "Load More" functionality to the Prompt Library.',
     },
     9: {
-      title: 'Ra Mắt Thư Viện Prompt & Cải Thiện Hỗ Trợ',
-      description: 'Tích hợp thư viện prompt từ caulenhau.io.vn, cho phép người dùng tham khảo và sử dụng các câu lệnh tạo ảnh chất lượng cao. Bổ sung kênh hỗ trợ thanh toán qua Facebook ngay trên trang nạp tiền.',
+      title: 'Prompt Library Launch & Improved Support',
+      description: 'Integrated prompt library from caulenhau.io.vn, allowing users to reference and use high-quality prompts. Added a Facebook support channel on the top-up page for payment issues.',
     },
     8: {
-      title: 'Toàn Cầu Hóa & Sửa Lỗi Nghiêm Trọng',
-      description: 'Dịch toàn bộ giao diện ứng dụng sang Tiếng Anh, hỗ trợ chuyển đổi ngôn ngữ linh hoạt. Sửa lỗi nghiêm trọng gây treo ứng dụng khi khởi động và các vấn đề về hiển thị.',
+      title: 'Globalization & Critical Bug Fixes',
+      description: 'Translated the entire application interface into English, supporting flexible language switching. Fixed a critical bug causing the application to freeze on startup and other display issues.',
     },
     7: {
-      title: 'Nâng Cấp Toàn Diện Công Cụ Chữ Ký',
-      description: 'Sửa lỗi định vị chữ ký AI, bổ sung tùy chọn Font, kích thước, in đậm/nghiêng. Mở rộng kho hiệu ứng và thêm tính năng chọn màu tùy chỉnh, mang lại sự tự do sáng tạo tối đa.',
+      title: 'Comprehensive Signature Tool Upgrade',
+      description: 'Fixed AI signature positioning, added options for Font, size, bold/italic. Expanded the effects library and added a custom color picker for maximum creative freedom.',
     },
     6: {
-      title: 'Cuộc Cách Mạng Giao Diện',
-      description: 'Đại tu toàn bộ hệ thống giao diện! Mỗi theme có một bản sắc riêng biệt. Giao diện mặc định được thay thế bằng "Vũ Điệu Neon". Thêm tính năng tự động random giao diện mỗi khi truy cập để tạo sự mới mẻ.',
+      title: 'Interface Revolution',
+      description: 'Complete overhaul of the theme system! Each theme now has its own unique identity. The default theme has been replaced with "Neon Dance". Added a feature to randomly select a theme on each visit for a fresh experience.',
     },
     5: {
-      title: 'Cải tiến Siêu Khóa Gương Mặt & Giao diện',
-      description: 'Nâng cấp tính năng Siêu Khóa Gương Mặt (Face ID+) cho độ chính xác cao hơn. Tích hợp công cụ Tách Nền vào tab chính để quy trình làm việc liền mạch và thuận tiện hơn.',
+      title: 'Super Face Lock & UI Improvements',
+      description: 'Upgraded the Super Face Lock (Face ID+) feature for higher accuracy. Integrated the Background Remover tool into the main tab for a more seamless and convenient workflow.',
     },
     4: {
-      title: 'Hệ thống Giftcode & Thông báo ra mắt',
-      description: 'Ra mắt hệ thống Giftcode cho phép người dùng nhận thưởng. Thêm tính năng thông báo cập nhật ngay trên thanh điều hướng. Bổ sung trang quản lý Gallery cho Admin.',
+      title: 'Giftcode System & Announcements Launch',
+      description: 'Launched a Giftcode system for users to receive rewards. Added an update notification feature on the navigation bar. Added a Gallery management page for Admins.',
     },
     3: {
-      title: 'Bảng Điều Khiển Admin',
-      description: 'Trang thống kê dữ liệu real-time dành cho Admin đã được thêm vào mục Cài đặt. Sửa lỗi hiển thị và múi giờ.',
+      title: 'Admin Dashboard',
+      description: 'A real-time data statistics page for Admins has been added to the Settings section. Fixed display and timezone issues.',
     },
     2: {
-      title: 'Sửa lỗi và Cải thiện hiệu năng',
-      description: 'Tối ưu hóa quy trình làm việc trên các nhánh (branch) và sửa lỗi không hiển thị trang xem trước (Preview) trên Netlify.',
+      title: 'Bug Fixes and Performance Improvements',
+      description: 'Optimized the workflow on branches and fixed an issue where the Preview page was not displaying on Netlify.',
     },
     1: {
-      title: 'Ra mắt tính năng Tách nền & Khóa Gương mặt',
-      description: 'Bổ sung công cụ Tách nền ảnh và tính năng "Siêu Khóa Gương Mặt" giúp giữ lại danh tính nhân vật chính xác hơn.',
+      title: 'Launch of Background Remover & Face Lock',
+      description: 'Added a Background Remover tool and a "Super Face Lock" feature to retain character identity more accurately.',
     },
   },
 };

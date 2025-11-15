@@ -521,6 +521,14 @@ export const vi = {
     }
   },
   modals: {
+    promptLibrary: {
+      title: 'Thư viện Prompt',
+      button: 'Thư viện',
+      buttonTooltip: 'Sử dụng prompt có sẵn từ caulenhau.io.vn',
+      empty: 'Không tìm thấy prompt nào cho chuyên mục này.',
+      error: 'Không thể tải thư viện prompt.',
+      usePrompt: 'Dùng',
+    },
     auth: {
       title: 'Đăng nhập / Đăng ký',
       description: 'Sử dụng tài khoản Google để tham gia cộng đồng và lưu trữ các tác phẩm của bạn một cách an toàn.',

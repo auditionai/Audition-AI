@@ -200,3 +200,8 @@ export interface GiftCode {
     is_active: boolean;
     created_at: string;
 }
+
+export interface PromptLibraryItem {
+  image_url: string;
+  prompt: string;
+}

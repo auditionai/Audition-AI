@@ -11,6 +11,7 @@ import ImageModal from '../../common/ImageModal';
 import ProcessedImageModal from '../../ai-tool/ProcessedImageModal';
 import SettingsBlock from '../../ai-tool/SettingsBlock';
 import { useTranslation } from '../../../hooks/useTranslation';
+import PromptLibraryModal from './PromptLibraryModal';
 
 
 // Mock data for presets - in a real app, this would come from a database
@@ -79,6 +80,7 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
     const [pickerTarget, setPickerTarget] = useState<{ index: number; type: 'pose' | 'face' } | null>(null);
     const [isResultModalOpen, setIsResultModalOpen] = useState(false);
     const [imageToProcess, setImageToProcess] = useState<ProcessedImageData | null>(null);
+    const [isPromptLibraryOpen, setIsPromptLibraryOpen] = useState(false);
 
     // Effect to clean up any dangling subscriptions on unmount
     useEffect(() => {
@@ -437,6 +439,7 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
     return (
         <div className="animate-fade-in">
              <ProcessedImagePickerModal isOpen={isPickerOpen} onClose={() => setIsPickerOpen(false)} onSelect={handleImageSelectFromPicker} />
+             <PromptLibraryModal isOpen={isPromptLibraryOpen} onClose={() => setIsPromptLibraryOpen(false)} onSelectPrompt={(p) => setPrompt(p)} category={numCharacters > 2 ? 'group-photo' : 'couple-photo'} />
              <ProcessedImageModal
                 isOpen={!!imageToProcess}
                 onClose={() => { setImageToProcess(null); setPickerTarget(null); }}
@@ -541,7 +544,16 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
 
                              <div>
                                 <label className="text-sm font-semibold text-skin-base mb-2 block">{t('creator.aiTool.groupStudio.promptTitle')}</label>
-                                <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder={t('creator.aiTool.groupStudio.promptPlaceholder')} className="w-full p-2 bg-skin-input-bg rounded-md border border-skin-border focus:border-skin-border-accent transition text-xs text-skin-base resize-none" rows={3}/>
+                                <div className="relative">
+                                    <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder={t('creator.aiTool.groupStudio.promptPlaceholder')} className="w-full p-2 bg-skin-input-bg rounded-md border border-skin-border focus:border-skin-border-accent transition text-xs text-skin-base resize-none" rows={3}/>
+                                    <button
+                                        onClick={() => setIsPromptLibraryOpen(true)}
+                                        className="absolute top-1.5 right-1.5 flex items-center gap-1 text-xs text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 rounded-full px-2 py-1 font-semibold transition"
+                                        title={t('modals.promptLibrary.buttonTooltip')}
+                                    >
+                                        <i className="ph-fill ph-scroll"></i>
+                                    </button>
+                                </div>
                             </div>
 
                             <div>

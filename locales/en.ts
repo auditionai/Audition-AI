@@ -521,6 +521,14 @@ export const en = {
     }
   },
   modals: {
+    promptLibrary: {
+      title: 'Prompt Library',
+      button: 'Library',
+      buttonTooltip: 'Use available prompts from caulenhau.io.vn',
+      empty: 'No prompts found for this category.',
+      error: 'Could not load the prompt library.',
+      usePrompt: 'Use',
+    },
     auth: {
       title: 'Sign In / Sign Up',
       description: 'Use your Google account to join the community and securely store your creations.',

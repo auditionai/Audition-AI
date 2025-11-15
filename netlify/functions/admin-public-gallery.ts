@@ -30,6 +30,7 @@ const handler: Handler = async (event: HandlerEvent) => {
                 creator:users (display_name, photo_url, xp)
             `)
             .eq('is_public', true)
+            .not('image_url', 'is', null) // Filter out deleted images
             .order('created_at', { ascending: false });
 
         if (error) throw error;

@@ -851,5 +851,47 @@ export const vi = {
     'classic-dark': 'Giáng Sinh',
     'dreamy-galaxy': 'Dải Ngân Hà',
     'neon-vibe': 'Lâu Đài Pha Lê',
-  }
+  },
+  changelog: {
+    10: {
+      title: 'Ra Mắt Studio Nhóm & Nâng Cấp Giao Diện',
+      description: 'Giới thiệu Studio Nhóm, cho phép tạo ảnh với nhiều nhân vật. Sửa lỗi hiển thị và vị trí của nút "Sử dụng PROMPT có sẵn". Bổ sung tính năng "Tải thêm" cho Thư viện Prompt.',
+    },
+    9: {
+      title: 'Ra Mắt Thư Viện Prompt & Cải Thiện Hỗ Trợ',
+      description: 'Tích hợp thư viện prompt từ caulenhau.io.vn, cho phép người dùng tham khảo và sử dụng các câu lệnh tạo ảnh chất lượng cao. Bổ sung kênh hỗ trợ thanh toán qua Facebook ngay trên trang nạp tiền.',
+    },
+    8: {
+      title: 'Toàn Cầu Hóa & Sửa Lỗi Nghiêm Trọng',
+      description: 'Dịch toàn bộ giao diện ứng dụng sang Tiếng Anh, hỗ trợ chuyển đổi ngôn ngữ linh hoạt. Sửa lỗi nghiêm trọng gây treo ứng dụng khi khởi động và các vấn đề về hiển thị.',
+    },
+    7: {
+      title: 'Nâng Cấp Toàn Diện Công Cụ Chữ Ký',
+      description: 'Sửa lỗi định vị chữ ký AI, bổ sung tùy chọn Font, kích thước, in đậm/nghiêng. Mở rộng kho hiệu ứng và thêm tính năng chọn màu tùy chỉnh, mang lại sự tự do sáng tạo tối đa.',
+    },
+    6: {
+      title: 'Cuộc Cách Mạng Giao Diện',
+      description: 'Đại tu toàn bộ hệ thống giao diện! Mỗi theme có một bản sắc riêng biệt. Giao diện mặc định được thay thế bằng "Vũ Điệu Neon". Thêm tính năng tự động random giao diện mỗi khi truy cập để tạo sự mới mẻ.',
+    },
+    5: {
+      title: 'Cải tiến Siêu Khóa Gương Mặt & Giao diện',
+      description: 'Nâng cấp tính năng Siêu Khóa Gương Mặt (Face ID+) cho độ chính xác cao hơn. Tích hợp công cụ Tách Nền vào tab chính để quy trình làm việc liền mạch và thuận tiện hơn.',
+    },
+    4: {
+      title: 'Hệ thống Giftcode & Thông báo ra mắt',
+      description: 'Ra mắt hệ thống Giftcode cho phép người dùng nhận thưởng. Thêm tính năng thông báo cập nhật ngay trên thanh điều hướng. Bổ sung trang quản lý Gallery cho Admin.',
+    },
+    3: {
+      title: 'Bảng Điều Khiển Admin',
+      description: 'Trang thống kê dữ liệu real-time dành cho Admin đã được thêm vào mục Cài đặt. Sửa lỗi hiển thị và múi giờ.',
+    },
+    2: {
+      title: 'Sửa lỗi và Cải thiện hiệu năng',
+      description: 'Tối ưu hóa quy trình làm việc trên các nhánh (branch) và sửa lỗi không hiển thị trang xem trước (Preview) trên Netlify.',
+    },
+    1: {
+      title: 'Ra mắt tính năng Tách nền & Khóa Gương mặt',
+      description: 'Bổ sung công cụ Tách nền ảnh và tính năng "Siêu Khóa Gương Mặt" giúp giữ lại danh tính nhân vật chính xác hơn.',
+    },
+  },
 };

@@ -25,8 +25,8 @@ const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ onClose }) 
               <span className="font-bold bg-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded">{item.version}</span>
               <span className="text-gray-500">{item.date}</span>
             </div>
-            <p className="font-semibold text-white text-sm">{item.title}</p>
-            <p className="text-xs text-gray-400">{item.description}</p>
+            <p className="font-semibold text-white text-sm">{t(item.title)}</p>
+            <p className="text-xs text-gray-400">{t(item.description)}</p>
           </div>
         ))}
       </div>

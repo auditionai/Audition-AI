@@ -851,5 +851,47 @@ export const en = {
     'classic-dark': 'Christmas',
     'dreamy-galaxy': 'Dreamy Galaxy',
     'neon-vibe': 'Crystal Palace',
-  }
+  },
+  changelog: {
+    10: {
+      title: 'Group Studio Launch & UI Upgrades',
+      description: 'Introducing Group Studio for multi-character image generation. Fixed display and position of the "Use Available PROMPT" button. Added "Load More" functionality to the Prompt Library.',
+    },
+    9: {
+      title: 'Prompt Library Launch & Improved Support',
+      description: 'Integrated prompt library from caulenhau.io.vn, allowing users to reference and use high-quality prompts. Added a Facebook support channel on the top-up page for payment issues.',
+    },
+    8: {
+      title: 'Globalization & Critical Bug Fixes',
+      description: 'Translated the entire application interface into English, supporting flexible language switching. Fixed a critical bug causing the application to freeze on startup and other display issues.',
+    },
+    7: {
+      title: 'Comprehensive Signature Tool Upgrade',
+      description: 'Fixed AI signature positioning, added options for Font, size, bold/italic. Expanded the effects library and added a custom color picker for maximum creative freedom.',
+    },
+    6: {
+      title: 'Interface Revolution',
+      description: 'Complete overhaul of the theme system! Each theme now has its own unique identity. The default theme has been replaced with "Neon Dance". Added a feature to randomly select a theme on each visit for a fresh experience.',
+    },
+    5: {
+      title: 'Super Face Lock & UI Improvements',
+      description: 'Upgraded the Super Face Lock (Face ID+) feature for higher accuracy. Integrated the Background Remover tool into the main tab for a more seamless and convenient workflow.',
+    },
+    4: {
+      title: 'Giftcode System & Announcements Launch',
+      description: 'Launched a Giftcode system for users to receive rewards. Added an update notification feature on the navigation bar. Added a Gallery management page for Admins.',
+    },
+    3: {
+      title: 'Admin Dashboard',
+      description: 'A real-time data statistics page for Admins has been added to the Settings section. Fixed display and timezone issues.',
+    },
+    2: {
+      title: 'Bug Fixes and Performance Improvements',
+      description: 'Optimized the workflow on branches and fixed an issue where the Preview page was not displaying on Netlify.',
+    },
+    1: {
+      title: 'Launch of Background Remover & Face Lock',
+      description: 'Added a Background Remover tool and a "Super Face Lock" feature to retain character identity more accurately.',
+    },
+  },
 };

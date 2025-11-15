@@ -122,7 +122,7 @@ const MyCreationsPage: React.FC = () => {
                 <div>
                     <h4 className="font-bold text-yellow-200">Lưu ý quan trọng về lưu trữ ảnh</h4>
                     <p className="text-sm mt-1 leading-relaxed">
-                        Để đảm bảo hiệu suất và duy trì chi phí hoạt động, các tác phẩm của bạn sẽ chỉ được lưu trữ trên hệ thống trong vòng <strong>tối đa 7 ngày</strong> kể từ ngày tạo. Vui lòng <strong>tải xuống</strong> những hình ảnh bạn yêu thích trước khi chúng bị hệ thống tự động xóa vĩnh viễn.
+                        Để đảm bảo hiệu suất, các tác phẩm của bạn sẽ chỉ được lưu trữ trong vòng <strong>tối đa 3 ngày</strong>. Các tác phẩm được chia sẻ <span className="font-bold text-cyan-300">công khai</span> sẽ được giữ lại vĩnh viễn. Vui lòng <strong>tải xuống</strong> những hình ảnh bạn yêu thích trước khi chúng bị hệ thống tự động xóa.
                     </p>
                 </div>
             </div>

@@ -20,11 +20,12 @@ const handler: Handler = async (event: HandlerEvent) => {
             return { statusCode: 401, body: JSON.stringify({ error: 'Invalid token.' }) };
         }
 
-        // 2. Fetch all images created by this user, NOW including the is_public status.
+        // 2. Fetch all images created by this user, excluding those with a null URL (expired/deleted).
         const { data: images, error: imagesError } = await supabaseAdmin
             .from('generated_images')
             .select('id, user_id, prompt, image_url, model_used, created_at, is_public')
             .eq('user_id', user.id)
+            .not('image_url', 'is', null) // Only fetch images that have not been expired/deleted
             .order('created_at', { ascending: false });
 
         if (imagesError) {

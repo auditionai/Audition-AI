@@ -57,25 +57,27 @@ const handler: Handler = async (event: HandlerEvent) => {
             return { statusCode: 403, body: JSON.stringify({ error: 'You do not have permission to delete this image.' }) };
         }
 
-        // 5. Delete image from R2 storage
+        // 5. Delete image from R2 storage, if it exists
         const imageUrl = imageData.image_url;
-        const key = imageUrl.replace(`${process.env.R2_PUBLIC_URL}/`, '');
-        
-        const deleteCommand = new DeleteObjectCommand({
-            Bucket: process.env.R2_BUCKET_NAME!,
-            Key: key,
-        });
+        if (imageUrl) {
+            const key = imageUrl.replace(`${process.env.R2_PUBLIC_URL}/`, '');
+            
+            const deleteCommand = new DeleteObjectCommand({
+                Bucket: process.env.R2_BUCKET_NAME!,
+                Key: key,
+            });
 
-        await (s3Client as any).send(deleteCommand);
+            await (s3Client as any).send(deleteCommand);
+        }
 
-        // 6. Delete image record from Supabase database
-        const { error: deleteDbError } = await supabaseAdmin
+        // 6. Update image record in Supabase to set URL to null instead of deleting
+        const { error: updateDbError } = await supabaseAdmin
             .from('generated_images')
-            .delete()
+            .update({ image_url: null })
             .eq('id', imageId);
 
-        if (deleteDbError) {
-            throw new Error(`Failed to delete database record: ${deleteDbError.message}`);
+        if (updateDbError) {
+            throw new Error(`Failed to update database record: ${updateDbError.message}`);
         }
 
         return {

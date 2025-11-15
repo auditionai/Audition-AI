@@ -93,16 +93,25 @@ const handler: Handler = async (event: HandlerEvent) => {
             // Step 1.1: Generate each character individually, copying pose from reference
             for (let i = 0; i < numCharacters; i++) {
                 await updateJobProgress(jobId, jobPromptData, `Đang xử lý nhân vật ${i + 1}/${numCharacters}...`);
-                // (Same prompt as before)
+                
                 const char = characters[i];
+                const genderKeywords = char.gender === 'male' 
+                    ? 'cool ngầu, nam tính, và mạnh mẽ' 
+                    : 'quyến rũ, cá tính, và xinh đẹp';
+
                 const charPrompt = [
                     `**MỆNH LỆNH TUYỆT ĐỐI: BẠN PHẢI TẠO RA MỘT NHÂN VẬT ${char.gender === 'male' ? 'NAM' : 'NỮ'}.**`,
-                    `Đây là yêu cầu quan trọng nhất. Hãy **bỏ qua hoàn toàn** giới tính của bất kỳ ai trong các ảnh tham chiếu.`, `---`,
+                    `Đây là yêu cầu quan trọng nhất. Hãy **bỏ qua hoàn toàn** giới tính của bất kỳ ai trong các ảnh tham chiếu.`,
+                    `---`,
                     `**QUY TRÌNH (TRÊN NỀN ĐEN TUYỀN):**`,
-                    `1. **LẤY DÁNG:** Nhìn vào **Ảnh Mẫu Tham Chiếu**, tìm người ở vị trí thứ ${i + 1} từ trái sang và **CHỈ SAO CHÉP TƯ THẾ** của họ.`,
+                    `1. **SÁNG TẠO TƯ THẾ:**`,
+                    `   a. Nhìn vào **Ảnh Mẫu Tham Chiếu**, xác định người ở vị trí thứ ${i + 1} từ trái sang.`,
+                    `   b. Lấy tư thế của họ làm **CẢM HỨNG**, không sao chép máy móc.`,
+                    `   c. **SÁNG TẠO** một tư thế mới tự nhiên, sống động, phù hợp với một nhân vật **${char.gender === 'male' ? 'NAM' : 'NỮ'}**. Tư thế nên thể hiện sự ${genderKeywords}.`,
+                    `   d. **CẤM TUYỆT ĐỐI:** Không được lấy tư thế đứng thẳng, cứng đơ từ **Ảnh Nhân Vật Audition**. Phải tạo dáng mới.`,
                     `2. **MẶC ĐỒ:** Nhìn vào **Ảnh Nhân Vật Audition** và **BÊ NGUYÊN** trang phục. **CẤM** thay đổi.`,
                     `3. **LẤY MẶT:** Nếu có **Ảnh Gương Mặt**, hãy dùng chính xác mặt đó.`,
-                    `4. **KIỂM TRA LẠI:** Đảm bảo nhân vật cuối cùng là **${char.gender === 'male' ? 'NAM' : 'NỮ'}**.`,
+                    `4. **KIỂM TRA LẠI:** Đảm bảo nhân vật cuối cùng chắc chắn là **${char.gender === 'male' ? 'NAM' : 'NỮ'}** với tư thế đã được sáng tạo.`,
                 ].join('\n');
 
                 const poseData = processDataUrl(char.poseImage);

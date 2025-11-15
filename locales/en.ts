@@ -500,6 +500,10 @@ export const en = {
         createLink: 'Could not create payment link.',
         parse: 'Error processing payment result.',
       },
+      paymentSupport: {
+        note: 'If you\'ve completed the payment but haven\'t received your diamonds, please message me on Facebook for assistance.',
+        button: 'Message on Facebook',
+      },
     },
     adminGallery: {
       title: 'Manage Public Gallery',

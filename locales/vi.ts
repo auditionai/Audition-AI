@@ -500,6 +500,10 @@ export const vi = {
         createLink: 'Không thể tạo liên kết thanh toán.',
         parse: 'Lỗi xử lý kết quả thanh toán.',
       },
+      paymentSupport: {
+        note: 'Nếu nạp tiền xong chưa thấy tài khoản + kim cương, vui lòng nhắn tin tiếp vào Facebook mình để kiểm tra.',
+        button: 'Nhắn tin Facebook',
+      },
     },
     adminGallery: {
       title: 'Quản lý Thư viện Công cộng',

@@ -99,6 +99,24 @@ const BuyCreditsPage: React.FC = () => {
                         </p>
                     </div>
 
+                    <div className="max-w-4xl mx-auto mb-8">
+                        <div className="bg-yellow-500/10 border border-yellow-500/30 text-yellow-300 p-4 rounded-lg flex items-center justify-between gap-4">
+                            <div className="flex items-start gap-3">
+                                <i className="ph-fill ph-chat-circle-dots text-2xl text-yellow-400 mt-1 flex-shrink-0"></i>
+                                <p className="text-sm leading-relaxed">{t('creator.buyCredits.paymentSupport.note')}</p>
+                            </div>
+                            <a 
+                                href="https://www.facebook.com/iam.cody.real/" 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="flex-shrink-0 px-4 py-2 text-sm font-bold bg-blue-500/80 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2"
+                            >
+                                <i className="ph-fill ph-facebook-logo"></i>
+                                {t('creator.buyCredits.paymentSupport.button')}
+                            </a>
+                        </div>
+                    </div>
+
                     <div className="max-w-4xl mx-auto mb-12">
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div className="themed-info-box">

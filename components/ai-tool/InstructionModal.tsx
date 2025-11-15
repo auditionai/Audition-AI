@@ -1,7 +1,7 @@
 import React from 'react';
 import Modal from '../common/Modal';
 
-type InstructionKey = 'character' | 'style' | 'prompt' | 'advanced' | 'face' | 'bg-remover' | 'signature' | null;
+type InstructionKey = 'character' | 'style' | 'prompt' | 'advanced' | 'face' | 'bg-remover' | 'signature' | 'group-studio' | null;
 
 interface InstructionModalProps {
   isOpen: boolean;
@@ -124,6 +124,24 @@ const instructionContent = {
         </ol>
       </>
     )
+  },
+  'group-studio': {
+    title: 'Hướng Dẫn: Studio Nhóm',
+    content: (
+      <>
+        <p>Công cụ này cho phép bạn tạo ảnh nhóm bằng cách ghép nhiều nhân vật vào một bối cảnh chung.</p>
+        <p className="font-bold mt-4">Các bước thực hiện:</p>
+        <ol className="list-decimal list-inside space-y-2 mt-2">
+          <li><strong>Chọn số lượng:</strong> Chọn số nhân vật bạn muốn có trong ảnh.</li>
+          <li><strong>Cung cấp nhân vật:</strong> Với mỗi nhân vật, tải lên "Ảnh nhân vật" để lấy trang phục và "Ảnh gương mặt" (tùy chọn) để khóa mặt. Đừng quên chọn giới tính.</li>
+          <li><strong>Ảnh Mẫu Tham Chiếu:</strong> Đây là ảnh quan trọng nhất. AI sẽ học theo bố cục, bối cảnh, và phong cách từ ảnh này để tạo ra ảnh cuối cùng.</li>
+          <li><strong>Prompt & Cài đặt:</strong> Thêm mô tả chi tiết và chọn phong cách, tỷ lệ ảnh mong muốn.</li>
+          <li><strong>Tạo ảnh:</strong> Nhấn nút "Tạo Ảnh Nhóm". Quá trình này có thể mất vài phút vì độ phức tạp cao hơn.</li>
+        </ol>
+        <p className="font-bold mt-4">Lưu ý:</p>
+        <p>Chất lượng của "Ảnh Mẫu Tham Chiếu" sẽ ảnh hưởng lớn đến kết quả cuối cùng. Hãy chọn một ảnh có bố cục rõ ràng và đẹp mắt.</p>
+      </>
+    ),
   }
 };
 

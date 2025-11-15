@@ -1,6 +1,6 @@
 import React from 'react';
 
-type InstructionKey = 'character' | 'style' | 'prompt' | 'advanced' | 'face';
+type InstructionKey = 'character' | 'style' | 'prompt' | 'advanced' | 'face' | 'group-studio';
 
 interface SettingsBlockProps {
     title: string;
@@ -27,5 +27,4 @@ const SettingsBlock: React.FC<SettingsBlockProps> = ({ title, instructionKey, ch
     );
 };
 
-// FIX: Add missing export statement to make this component a module.
 export default SettingsBlock;

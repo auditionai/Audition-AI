@@ -11,6 +11,7 @@ import ImageModal from '../../common/ImageModal';
 import ToggleSwitch from '../../ai-tool/ToggleSwitch';
 import ProcessedImageModal from '../../ai-tool/ProcessedImageModal';
 import SettingsBlock from '../../ai-tool/SettingsBlock';
+import InstructionModal from '../../ai-tool/InstructionModal';
 
 
 // Mock data for presets - in a real app, this would come from a database
@@ -74,6 +75,7 @@ const GroupGeneratorTool: React.FC = () => {
     const [isResultModalOpen, setIsResultModalOpen] = useState(false);
     const [useUpscaler, setUseUpscaler] = useState(false);
     const [imageToProcess, setImageToProcess] = useState<ProcessedImageData | null>(null);
+    const [isInstructionModalOpen, setInstructionModalOpen] = useState(false);
 
     // Effect to clean up any dangling subscriptions on unmount
     useEffect(() => {
@@ -413,6 +415,11 @@ const GroupGeneratorTool: React.FC = () => {
 
     return (
         <div className="animate-fade-in">
+             <InstructionModal
+                isOpen={isInstructionModalOpen}
+                onClose={() => setInstructionModalOpen(false)}
+                instructionKey="group-studio"
+            />
              <ProcessedImagePickerModal isOpen={isPickerOpen} onClose={() => setIsPickerOpen(false)} onSelect={handleImageSelectFromPicker} />
              <ProcessedImageModal
                 isOpen={!!imageToProcess}
@@ -500,7 +507,7 @@ const GroupGeneratorTool: React.FC = () => {
 
                 {/* Right Column: Settings */}
                 <div className="w-full lg:w-1/3 themed-panel p-4 flex flex-col">
-                     <SettingsBlock title="Cài đặt Nhóm" instructionKey="character" onInstructionClick={()=>{/* No-op for now */}}>
+                     <SettingsBlock title="Cài đặt Nhóm" instructionKey="group-studio" onInstructionClick={() => setInstructionModalOpen(true)}>
                         <div className="space-y-4">
                              <div>
                                 <label className="text-sm font-semibold text-skin-base mb-2 block">2. Ảnh Mẫu Tham Chiếu</label>

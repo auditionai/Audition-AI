@@ -20,14 +20,14 @@ const AITool: React.FC = () => {
     
     // NEW: State for utility-specific instruction modal
     const [isUtilHelpOpen, setUtilHelpOpen] = useState(false);
-    const [utilHelpKey, setUtilHelpKey] = useState<'bg-remover' | 'signature' | null>(null);
+    const [utilHelpKey, setUtilHelpKey] = useState<'bg-remover' | 'signature' | 'group-studio' | null>(null);
 
     // State to pass images between tools
     const [poseImage, setPoseImage] = useState<{ url: string; file: File } | null>(null);
     const [rawFaceImage, setRawFaceImage] = useState<{ url: string; file: File } | null>(null);
     const [imageForUtility, setImageForUtility] = useState<string | null>(null);
 
-    const openUtilHelp = (key: 'bg-remover' | 'signature') => {
+    const openUtilHelp = (key: 'bg-remover' | 'signature' | 'group-studio') => {
         setUtilHelpKey(key);
         setUtilHelpOpen(true);
     };
@@ -83,7 +83,7 @@ const AITool: React.FC = () => {
             <div className="themed-main-title-container text-center max-w-4xl mx-auto mb-12">
                 <h1 
                     className="themed-main-title text-4xl md:text-5xl lg:text-6xl font-black mb-4 leading-tight"
-                    data-text="Audition AI Studio"
+                    data-text={t('creator.aiTool.title')}
                 >
                     {t('creator.aiTool.title')}
                 </h1>
@@ -136,7 +136,10 @@ const AITool: React.FC = () => {
                         />
                     )}
                     {activeTab === 'group-studio' && (
-                        <GroupGeneratorTool onSwitchToUtility={() => handleSwitchToUtility('bg-remover')} />
+                        <GroupGeneratorTool 
+                            onSwitchToUtility={() => handleSwitchToUtility('bg-remover')} 
+                            onInstructionClick={() => openUtilHelp('group-studio')}
+                        />
                     )}
                     {activeTab === 'utilities' && (
                         <div>

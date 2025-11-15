@@ -582,6 +582,7 @@ export const vi = {
       success: 'Điểm danh thành công! Bạn nhận được {{diamonds}} Kim cương và {{xp}} XP.',
       fail: 'Điểm danh thất bại.',
       alreadyCheckedIn: 'Bạn đã điểm danh hôm nay rồi.',
+      milestone: 'Mốc',
     },
     announcement: {
       button: 'Tôi đã hiểu',

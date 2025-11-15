@@ -10,7 +10,6 @@ import GenerationProgress from '../../ai-tool/GenerationProgress';
 import ImageModal from '../../common/ImageModal';
 import ProcessedImageModal from '../../ai-tool/ProcessedImageModal';
 import SettingsBlock from '../../ai-tool/SettingsBlock';
-import InstructionModal from '../../ai-tool/InstructionModal';
 
 
 // Mock data for presets - in a real app, this would come from a database
@@ -44,6 +43,8 @@ interface ProcessedImageData {
 
 interface GroupGeneratorToolProps {
     onSwitchToUtility: () => void;
+    // FIX: Add missing 'onInstructionClick' prop to align with its usage in AITool.tsx.
+    onInstructionClick: () => void;
 }
 
 const fileToBase64 = (file: File): Promise<string> => new Promise((resolve, reject) => {
@@ -54,7 +55,7 @@ const fileToBase64 = (file: File): Promise<string> => new Promise((resolve, reje
 });
 
 // Main Component
-const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtility }) => {
+const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtility, onInstructionClick }) => {
     const { user, session, showToast, supabase, updateUserDiamonds } = useAuth();
     const [numCharacters, setNumCharacters] = useState<number>(0);
     const [isConfirmOpen, setConfirmOpen] = useState(false);
@@ -76,7 +77,6 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
     const [pickerTarget, setPickerTarget] = useState<{ index: number; type: 'pose' | 'face' } | null>(null);
     const [isResultModalOpen, setIsResultModalOpen] = useState(false);
     const [imageToProcess, setImageToProcess] = useState<ProcessedImageData | null>(null);
-    const [isInstructionModalOpen, setInstructionModalOpen] = useState(false);
 
     // Effect to clean up any dangling subscriptions on unmount
     useEffect(() => {
@@ -426,11 +426,6 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
 
     return (
         <div className="animate-fade-in">
-             <InstructionModal
-                isOpen={isInstructionModalOpen}
-                onClose={() => setInstructionModalOpen(false)}
-                instructionKey="group-studio"
-            />
              <ProcessedImagePickerModal isOpen={isPickerOpen} onClose={() => setIsPickerOpen(false)} onSelect={handleImageSelectFromPicker} />
              <ProcessedImageModal
                 isOpen={!!imageToProcess}
@@ -526,7 +521,7 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
 
                 {/* Right Column: Settings */}
                 <div className="w-full lg:w-1/3 themed-panel p-4 flex flex-col">
-                     <SettingsBlock title="Cài đặt Nhóm" instructionKey="group-studio" onInstructionClick={() => setInstructionModalOpen(true)}>
+                     <SettingsBlock title="Cài đặt Nhóm" instructionKey="group-studio" onInstructionClick={onInstructionClick}>
                         <div className="space-y-4">
                              <div>
                                 <label className="text-sm font-semibold text-skin-base mb-2 block">2. Ảnh Mẫu Tham Chiếu (Tuỳ chọn)</label>

@@ -582,6 +582,7 @@ export const en = {
       success: 'Check-in successful! You received {{diamonds}} Diamonds and {{xp}} XP.',
       fail: 'Check-in failed.',
       alreadyCheckedIn: 'You have already checked in today.',
+      milestone: 'Day',
     },
     announcement: {
       button: 'I Understand',

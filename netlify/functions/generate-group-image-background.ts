@@ -92,46 +92,46 @@ const handler: Handler = async (event: HandlerEvent) => {
 
             // Step 1.1: Generate each character individually, copying pose from reference
             for (let i = 0; i < numCharacters; i++) {
-                await updateJobProgress(jobId, jobPromptData, `Đang xử lý nhân vật ${i + 1}/${numCharacters}...`);
+                await updateJobProgress(jobId, jobPromptData, `Processing character ${i + 1}/${numCharacters}...`);
                 
                 const char = characters[i];
                 const genderKeywords = char.gender === 'male' 
-                    ? 'cool ngầu, nam tính, và mạnh mẽ' 
-                    : 'quyến rũ, cá tính, và xinh đẹp';
+                    ? 'cool, masculine, and strong' 
+                    : 'charming, stylish, and beautiful';
 
                 const faceReferenceExists = !!char.faceImage;
 
                 const charPrompt = [
-                    `**DEFINITIONS:**`,
-                    `- IMAGE 1 = "THE POSE REFERENCE" (The group photo)`,
-                    `- IMAGE 2 = "THE OUTFIT SOURCE" (The Audition character photo)`,
-                    faceReferenceExists ? `- IMAGE 3 = "THE FACE SOURCE" (The user's face photo)` : '',
+                    `**ROLE DEFINITIONS:**`,
+                    `- IMAGE 1 = "POSE INSPIRATION SOURCE" (The group photo).`,
+                    `- IMAGE 2 = "OUTFIT DATA SOURCE" (The Audition character photo).`,
+                    faceReferenceExists ? `- IMAGE 3 = "FACE DATA SOURCE" (The user's face photo).` : '',
                     `---`,
-                    `**ABSOLUTE COMMAND: CREATE A ${char.gender === 'male' ? 'MALE' : 'FEMALE'} CHARACTER.**`,
-                    `This is the most important rule. IGNORE the gender of any person in the reference images.`,
+                    `**ABSOLUTE COMMAND: CREATE A ${char.gender.toUpperCase()} CHARACTER.**`,
+                    `This is the most important rule. You MUST IGNORE the gender of any person in the reference images.`,
                     `---`,
-                    `**WORKFLOW (ON A SOLID BLACK BACKGROUND):**`,
+                    `**WORKFLOW (to be rendered on a solid black background):**`,
                     `1. **POSE CREATION (UNIQUE & DYNAMIC):**`,
-                    `   a. Look at **IMAGE 1 ("THE POSE REFERENCE")** and identify the person at position #${i + 1} (from left).`,
-                    `   b. Use their pose ONLY as **inspiration**.`,
-                    `   c. **CREATE A NEW, UNIQUE POSE** that is natural, dynamic, and suitable for a ${char.gender === 'male' ? 'MALE' : 'FEMALE'} character. This new pose MUST be **different** from the pose in the reference image and different from any other characters you may have generated. Make it ${genderKeywords}.`,
-                    `   d. **FORBIDDEN:** DO NOT use the stiff, default standing pose from **IMAGE 2 ("THE OUTFIT SOURCE")**.`,
-                    `2. **OUTFIT TRANSFER (PRECISE):**`,
-                    `   a. Look ONLY at **IMAGE 2 ("THE OUTFIT SOURCE")**.`,
-                    `   b. Take 100% of the outfit, including all clothes, accessories, hair style, and hair color, from this image.`,
-                    `   c. **ABSOLUTE RULE:** DO NOT take clothing, hair, or accessories from any other image.`,
-                    `3. **FACE APPLICATION (EXACT):**`,
-                    `   a. If **IMAGE 3 ("THE FACE SOURCE")** is provided, use that exact face.`,
-                    `4. **FINAL CHECK:**`,
-                    `   a. Is the final character a ${char.gender === 'male' ? 'MALE' : 'FEMALE'}?`,
-                    `   b. Is the pose new, unique, and not stiff?`,
-                    `   c. Is the outfit EXACTLY from **IMAGE 2**?`,
+                    `   a. Analyze **IMAGE 1 ("POSE INSPIRATION SOURCE")** and identify the person at position #${i + 1} (from left to right).`,
+                    `   b. Use their pose **ONLY as inspiration**. Do not copy it directly.`,
+                    `   c. You **MUST CREATE A NEW, UNIQUE, AND DYNAMIC POSE** that is natural and perfectly suits a ${char.gender.toUpperCase()} character. The pose should convey a sense of being '${genderKeywords}'.`,
+                    `   d. **CRITICAL RULE:** This new pose **MUST BE DIFFERENT** from the pose in the reference image and **MUST NOT** be a simple standing pose.`,
+                    `   e. **FORBIDDEN:** Absolutely **DO NOT** use the stiff, default standing pose from **IMAGE 2 ("OUTFIT DATA SOURCE")**.`,
+                    `2. **OUTFIT TRANSFER (PRECISION REQUIRED):**`,
+                    `   a. Look **ONLY** at **IMAGE 2 ("OUTFIT DATA SOURCE")**.`,
+                    `   b. You **MUST** transfer 100% of the outfit, including all clothes, accessories, hairstyle, and hair color, from this image to the new character.`,
+                    `   c. **FORBIDDEN:** Do not take clothing, hair, or accessories from any other image. Do not invent new clothing items.`,
+                    `3. **FACE APPLICATION (EXACT MATCH):**`,
+                    `   a. If **IMAGE 3 ("FACE DATA SOURCE")** is provided, you **MUST** use that exact face on the final character.`,
+                    `4. **FINAL VALIDATION CHECK:**`,
+                    `   a. Is the final character a ${char.gender.toUpperCase()}? (Mandatory)`,
+                    `   b. Is the pose new, unique, and dynamic (not stiff)? (Mandatory)`,
+                    `   c. Is the outfit an EXACT match from **IMAGE 2**? (Mandatory)`,
                 ].filter(Boolean).join('\n');
-
 
                 const poseData = processDataUrl(char.poseImage);
                 const faceData = processDataUrl(char.faceImage);
-                if (!poseData) throw new Error(`Ảnh nhân vật ${i+1} không hợp lệ.`);
+                if (!poseData) throw new Error(`Invalid image for Character ${i+1}.`);
 
                 const parts = [
                     { text: charPrompt },
@@ -142,7 +142,7 @@ const handler: Handler = async (event: HandlerEvent) => {
 
                 const response = await ai.models.generateContent({ model, contents: { parts }, config: { responseModalities: [Modality.IMAGE] } });
                 const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-                if (!imagePart?.inlineData) throw new Error(`AI không thể tạo được nhân vật ${i + 1}.`);
+                if (!imagePart?.inlineData) throw new Error(`AI failed to generate Character ${i + 1}.`);
                 
                 generatedCharacters.push(imagePart.inlineData);
                 await new Promise(resolve => setTimeout(resolve, 2000));
@@ -151,23 +151,23 @@ const handler: Handler = async (event: HandlerEvent) => {
         } else {
             // --- PATH B: No Reference Image, Prompt-only ---
             // Step 1.1: Generate a background first
-            await updateJobProgress(jobId, jobPromptData, 'Đang tạo bối cảnh từ prompt...');
+            await updateJobProgress(jobId, jobPromptData, 'Creating background from prompt...');
             const bgPrompt = `Create a high-quality, cinematic background scene described as: "${prompt}". The scene should have a style of "${style}". Do NOT include any people or characters.`;
             const bgResponse = await ai.models.generateContent({ model, contents: { parts: [{ text: bgPrompt }] }, config: { responseModalities: [Modality.IMAGE] } });
             const bgImagePart = bgResponse.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-            if (!bgImagePart?.inlineData) throw new Error("AI không thể tạo bối cảnh từ prompt của bạn.");
+            if (!bgImagePart?.inlineData) throw new Error("AI failed to create a background from your prompt.");
             finalBackgroundData = bgImagePart.inlineData;
             await new Promise(resolve => setTimeout(resolve, 2000));
 
             // Step 1.2: Generate each character with a default pose
             for (let i = 0; i < numCharacters; i++) {
-                await updateJobProgress(jobId, jobPromptData, `Đang xử lý nhân vật ${i + 1}/${numCharacters}...`);
+                await updateJobProgress(jobId, jobPromptData, `Processing character ${i + 1}/${numCharacters}...`);
                 const char = characters[i];
                 const charPrompt = `Create a full-body character of a **${char.gender}**. They MUST be wearing the exact outfit from the provided character image. If a face image is provided, use that exact face. Place the character on a solid black background.`;
                 
                 const poseData = processDataUrl(char.poseImage);
                 const faceData = processDataUrl(char.faceImage);
-                if (!poseData) throw new Error(`Ảnh nhân vật ${i+1} không hợp lệ.`);
+                if (!poseData) throw new Error(`Invalid image for Character ${i+1}.`);
                 
                 const parts = [
                     { text: charPrompt },
@@ -177,7 +177,7 @@ const handler: Handler = async (event: HandlerEvent) => {
 
                 const response = await ai.models.generateContent({ model, contents: { parts }, config: { responseModalities: [Modality.IMAGE] } });
                 const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-                if (!imagePart?.inlineData) throw new Error(`AI không thể tạo được nhân vật ${i + 1}.`);
+                if (!imagePart?.inlineData) throw new Error(`AI failed to generate Character ${i + 1}.`);
                 
                 generatedCharacters.push(imagePart.inlineData);
                 await new Promise(resolve => setTimeout(resolve, 2000));
@@ -185,15 +185,33 @@ const handler: Handler = async (event: HandlerEvent) => {
         }
         
         // --- FINAL COMPOSITE STEP (COMMON FOR BOTH PATHS) ---
-        await updateJobProgress(jobId, jobPromptData, 'Đang tổng hợp ảnh cuối cùng...');
+        await updateJobProgress(jobId, jobPromptData, 'Translating prompt for final composition...');
+
+        let translatedPrompt = prompt;
+        if (prompt && prompt.trim()) {
+            try {
+                const translationResponse = await ai.models.generateContent({
+                    model: 'gemini-2.5-flash',
+                    contents: `Translate the following user request for an image scene from Vietnamese to English. Keep it concise and descriptive. Text: "${prompt}"`,
+                });
+                const translatedText = translationResponse.text.trim();
+                if (translatedText && translatedText.length > 3) {
+                    translatedPrompt = translatedText;
+                }
+            } catch (e) {
+                console.warn(`[WORKER] Prompt translation failed, using original. Error: ${e}`);
+            }
+        }
+
+        await updateJobProgress(jobId, jobPromptData, 'Compositing final image...');
 
         const compositePrompt = [
-            `**MỆNH LỆNH TUYỆT ĐỐI: BẠN PHẢI SỬ DỤNG CÁC NHÂN VẬT ĐÃ ĐƯỢC CUNG CẤP.**`, `---`,
-            `**Nhiệm vụ:**`,
-            `1. **Bối cảnh:** Sử dụng ảnh nền được cung cấp (ảnh đầu tiên).`,
-            `2. **Nhân vật:** Lấy **y hệt** các nhân vật từ các ảnh nền đen và ghép họ vào bối cảnh. **KHÔNG ĐƯỢC** thay đổi quần áo, giới tính, hay gương mặt của họ.`,
-            `3. **Bố cục:** ${referenceImage ? 'Sắp xếp các nhân vật theo bố cục của ảnh mẫu tham chiếu.' : 'Sắp xếp các nhân vật một cách hợp lý và tự nhiên trong bối cảnh.'}`,
-            `4. **Gợi ý bối cảnh từ người dùng:** Người dùng có gợi ý thêm về không khí của bức ảnh: '${prompt}'. Hãy sử dụng gợi ý này để điều chỉnh ánh sáng, bóng đổ, và các chi tiết nhỏ trong bối cảnh để tạo sự hòa hợp, **nhưng không được thay đổi các nhân vật.**`
+            `**ABSOLUTE COMMAND: YOU MUST USE THE PROVIDED CHARACTERS.**`, `---`,
+            `**Task:**`,
+            `1. **Background:** Use the provided background image (the first image).`,
+            `2. **Characters:** Take the characters **exactly** as they are from the black-background images and composite them into the background. **DO NOT** change their clothes, gender, or faces.`,
+            `3. **Layout:** ${referenceImage ? 'Arrange the characters according to the layout of the reference group photo.' : 'Arrange the characters logically and naturally within the background.'}`,
+            `4. **User's Context Suggestion:** The user has provided a suggestion for the photo's atmosphere: '${translatedPrompt}'. Use this suggestion ONLY to adjust lighting, shadows, and minor background details for harmony. **DO NOT change the characters.**`
         ].join('\n');
         
         const finalParts = [
@@ -209,7 +227,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         });
 
         const finalImagePart = finalResponse.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-        if (!finalImagePart?.inlineData) throw new Error("AI không thể tổng hợp ảnh cuối cùng.");
+        if (!finalImagePart?.inlineData) throw new Error("AI failed to composite the final image.");
 
         // Step 3: Upload final image and update database
         const finalImageBase64 = finalImagePart.inlineData.data;

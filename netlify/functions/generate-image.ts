@@ -114,15 +114,31 @@ const handler: Handler = async (event: HandlerEvent) => {
         
         const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
 
+        let translatedPrompt = prompt;
+        if (prompt && prompt.trim()) {
+            try {
+                const translationResponse = await ai.models.generateContent({
+                    model: 'gemini-2.5-flash',
+                    contents: `Translate the following image description from Vietnamese to English. Keep it concise and descriptive. Text: "${prompt}"`,
+                });
+                const translatedText = translationResponse.text.trim();
+                if (translatedText && translatedText.length > 3) {
+                    translatedPrompt = translatedText;
+                }
+            } catch (e) {
+                console.warn(`[generate-image] Prompt translation failed, using original. Error: ${e}`);
+            }
+        }
+
         let finalImageBase64: string;
         let finalImageMimeType: string;
         
-        let fullPrompt = prompt;
+        let fullPrompt = translatedPrompt;
 
         // NEW: Add absolute instruction for Super Face Lock
         if (faceReferenceImage) {
             const faceLockInstruction = `(ABSOLUTE INSTRUCTION: The final image MUST use the exact face, including all features, details, and the complete facial expression, from the provided face reference image. Do NOT alter, modify, stylize, or change the expression of this face in any way. Ignore any conflicting instructions about facial expressions in the user's prompt. The face from the reference image must be perfectly preserved and transplanted onto the generated character.)\n\n`;
-            fullPrompt = faceLockInstruction + prompt;
+            fullPrompt = faceLockInstruction + fullPrompt;
         }
 
         if (negativePrompt) {

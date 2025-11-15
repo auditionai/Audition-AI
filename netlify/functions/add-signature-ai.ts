@@ -35,25 +35,25 @@ const handler: Handler = async (event: HandlerEvent) => {
         const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
         const model = 'gemini-2.5-flash-image';
 
-        // --- SERVER-SIDE PROMPT CONSTRUCTION ---
-         let promptParts = [
-            "Your task is to add text to the provided image with precision. Follow these rules strictly:",
-            `1.  **Text Content:** Add the exact text: "${text}"`,
-            `2.  **Placement:** The text block's absolute center must be at this location: ${Math.round(signaturePosition.x * 100)}% from the left and ${Math.round(signaturePosition.y * 100)}% from the top. This is a critical placement requirement.`,
-            "3.  **Visual Style:",
-            `    *   **Overall Style:** Create a legible text with a style described as '${aiStyle}'.`,
-            `    *   **Font Family:** Use a font that visually resembles "${aiFont}".`,
-            `    *   **Font Attributes:** ${aiIsBold ? 'Bold weight' : 'Normal weight'}. ${aiIsItalic ? 'Italic style' : 'Upright style'}.`,
-            `    *   **Font Size:** The text height should be approximately ${aiSize} pixels relative to a 1024px tall image. Adjust size proportionally if the image is a different height.`,
+        // --- SERVER-SIDE PROMPT CONSTRUCTION (IN ENGLISH) ---
+        let promptParts = [
+            "You are an AI specializing in typography and image editing. Your task is to add text to an image with absolute precision. Follow these rules strictly:",
+            `1.  **Text Content:** You MUST add the following text exactly as written: "${text}"`,
+            `2.  **Placement Rule:** The absolute center of the text block you create **MUST** be placed at this precise location: ${Math.round(signaturePosition.x * 100)}% from the left edge and ${Math.round(signaturePosition.y * 100)}% from the top edge of the image. This is a non-negotiable placement requirement.`,
+            "3.  **Visual Style Rules:**",
+            `    - **Overall Style:** The text must be legible and have an artistic style described as '${aiStyle}'.`,
+            `    - **Font Family:** Use a font that visually resembles "${aiFont}".`,
+            `    - **Font Attributes:** The font weight must be ${aiIsBold ? 'Bold' : 'Normal'}. The font style must be ${aiIsItalic ? 'Italic' : 'Upright'}.`,
+            `    - **Font Size:** The text's height should be approximately ${aiSize} pixels, assuming the input image is 1024px tall. You must scale this size proportionally if the image has a different height.`,
         ];
 
         if (aiColor === 'custom') {
-            promptParts.push(`    *   **Coloring:** The text color MUST be this exact hex code: ${aiCustomColor}. Do not use any other colors or gradients.`);
+            promptParts.push(`    - **Coloring:** The text color **MUST** be the exact hex code: ${aiCustomColor}. Do not use any other colors, gradients, or variations.`);
         } else {
-            promptParts.push(`    *   **Coloring:** The text must have a vibrant ${aiColor} color palette.`);
+            promptParts.push(`    - **Coloring:** The text must have a vibrant and artistic color palette best described as '${aiColor}'.`);
         }
 
-        promptParts.push("4.  **Final Output:** Do not alter, crop, or change any other part of the original image. The output must be the original image with only the specified text added according to these rules.");
+        promptParts.push("4.  **Preservation Rule:** DO NOT alter, crop, or change any part of the original image. The final output must be the original image with ONLY the specified text added according to all the rules above.");
 
         const aiPrompt = promptParts.join('\n');
         // --- END ---

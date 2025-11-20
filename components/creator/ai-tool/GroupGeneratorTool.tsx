@@ -1,3 +1,4 @@
+
 // NEW: Create the content for the GroupGeneratorTool component.
 // FIX: Import 'useState' from 'react' to resolve 'Cannot find name' errors.
 import React, { useState, useEffect, useMemo } from 'react';
@@ -70,6 +71,7 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
     const [prompt, setPrompt] = useState('');
     const [selectedStyle, setSelectedStyle] = useState(MOCK_STYLES[0].id);
     const [aspectRatio, setAspectRatio] = useState('3:4');
+    const [selectedModel, setSelectedModel] = useState<'flash' | 'pro'>('flash');
     
     // New states for generation flow
     const [isGenerating, setIsGenerating] = useState(false);
@@ -189,7 +191,8 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                 const response = await fetch('/.netlify/functions/process-face', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-                    body: JSON.stringify({ image: base64Image }),
+                    // Face lock in Group Studio currently defaults to Flash for simplicity, or we could add a selector per face
+                    body: JSON.stringify({ image: base64Image, model: 'gemini-2.5-flash-image' }),
                 });
                 const result = await response.json();
                 if (!response.ok) throw new Error(result.error || t('creator.aiTool.singlePhoto.superFaceLockProcessing'));
@@ -205,7 +208,12 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
         }
     };
 
-    const totalCost = numCharacters + 1;
+    // Base cost is dependent on model. Flash = 1 + chars, Pro = 2 + chars*2 (example logic)
+    // Or keeping it simple: Group Fee + Char Fee. 
+    // If Flash: Base 1 + 1 per char.
+    // If Pro: Base 2 + 1 per char. (Let's keep per char cost same for now to be user friendly, just bump base cost)
+    const baseCost = selectedModel === 'pro' ? 2 : 1;
+    const totalCost = baseCost + numCharacters;
 
     const handleGenerateClick = () => {
         if (!referenceImage && !prompt.trim()) {
@@ -318,6 +326,7 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                                 prompt,
                                 style: selectedStyle,
                                 aspectRatio: aspectRatio,
+                                model: selectedModel // Pass selected model
                             }),
                         });
 
@@ -525,7 +534,7 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                                     className={`w-full text-sm font-bold py-2 px-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-wait
                                         ${char.processedFace ? 'bg-green-500/20 text-green-300' : 'bg-yellow-500/20 text-yellow-300 hover:bg-yellow-500/30'}`}
                                 >
-                                    {processingFaceIndex === index ? t('creator.aiTool.singlePhoto.superFaceLockProcessing') : char.processedFace ? t('creator.aiTool.singlePhoto.superFaceLockProcessed') : t('creator.aiTool.singlePhoto.superFaceLockProcess')}
+                                    {processingFaceIndex === index ? t('creator.aiTool.singlePhoto.superFaceLockProcessing') : char.processedFace ? t('creator.aiTool.singlePhoto.superFaceLockProcessed') : t('creator.aiTool.singlePhoto.superFaceLockActionFlash')}
                                 </button>
                             </div>
                         ))}
@@ -555,6 +564,26 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                                     </button>
                                 </div>
                                 <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder={t('creator.aiTool.groupStudio.promptPlaceholder')} className="w-full p-2 bg-skin-input-bg rounded-md border border-skin-border focus:border-skin-border-accent transition text-xs text-skin-base resize-none" rows={3}/>
+                            </div>
+
+                            <div>
+                                <label className="text-sm font-semibold text-skin-base mb-2 block">{t('creator.aiTool.singlePhoto.modelLabel')}</label>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <button 
+                                        onClick={() => setSelectedModel('flash')}
+                                        className={`p-2 rounded-lg border-2 text-left transition-all ${selectedModel === 'flash' ? 'border-blue-500 bg-blue-500/10 text-blue-300' : 'border-skin-border bg-skin-fill-secondary text-gray-400'}`}
+                                    >
+                                        <div className="text-xs font-bold">Flash</div>
+                                        <div className="text-[10px] mt-1 opacity-80">1💎 base</div>
+                                    </button>
+                                    <button 
+                                        onClick={() => setSelectedModel('pro')}
+                                        className={`p-2 rounded-lg border-2 text-left transition-all ${selectedModel === 'pro' ? 'border-yellow-500 bg-yellow-500/10 text-yellow-300' : 'border-skin-border bg-skin-fill-secondary text-gray-400'}`}
+                                    >
+                                        <div className="text-xs font-bold">Pro 4K</div>
+                                        <div className="text-[10px] mt-1 opacity-80">2💎 base</div>
+                                    </button>
+                                </div>
                             </div>
 
                             <div>

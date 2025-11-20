@@ -131,6 +131,11 @@ export const en = {
       title: 'Audition AI Studio',
       description: 'The creative platform for 3D AI photos in the unique Audition style.',
       quickGuide: 'View Quick Guide',
+      upgradeBanner: {
+        title: 'Upgrade: Nano Banana Pro (Gemini 3) Available!',
+        desc: '4K ultra-sharp photos, extreme detail. Fee: 2 Diamonds/photo.',
+        button: 'Switch Model',
+      },
       tabs: {
         single: 'Single Photo',
         group: 'Group Studio',
@@ -159,6 +164,8 @@ export const en = {
         fileTypes: 'PNG, JPG, GIF',
         unavailable: 'Unavailable',
         unavailableDesc: 'This model does not support image input.',
+        flashModel: 'Flash (1 💎)',
+        proModel: 'Pro 4K (2 💎)',
       },
       singlePhoto: {
         bgRemoverTip: 'Tip: For the best quality, please use character images with the background removed.',
@@ -173,6 +180,8 @@ export const en = {
         superFaceLockProcessing: 'Processing...',
         superFaceLockProcessed: 'Face Locked',
         superFaceLockDesc: 'Upload a clear portrait, then you must press the "Process" button for the AI to enhance and lock the face. This costs 1 diamond.',
+        superFaceLockActionFlash: 'Flash Process (1 💎)',
+        superFaceLockActionPro: 'Pro Process (2 💎)',
         styleTitle: 'Style Image',
         styleUploadText: 'Style Reference',
         styleDesc: 'The AI will learn the color palette, lighting, and composition from this image to apply to your creation.',
@@ -231,6 +240,8 @@ export const en = {
         resultDesc: 'Note: Images are saved temporarily. Reloading the page will clear them.',
         placeholder: 'Processed images will appear here',
         viewDetails: 'View Details',
+        flashButton: 'Flash Remove (1 💎)',
+        proButton: 'Pro Remove (2 💎)',
       },
       signature: {
         title: 'Signature Tool',
@@ -245,6 +256,8 @@ export const en = {
         positionHelp: 'Drag and drop the \'Position\' box on the image to set the signature location.',
         applyButton: 'Apply Signature',
         applyAiButton: 'Apply AI Style ({{cost}} 💎)',
+        applyAiFlash: 'AI Flash (1 💎)',
+        applyAiPro: 'AI Pro (2 💎)',
         downloadButton: 'Download Image',
         uploadPlaceholder: 'Click to select an image',
         position: 'Position',

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useImageGenerator } from '../../../hooks/useImageGenerator';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -42,9 +43,6 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
     const [processedFaceImage, setProcessedFaceImage] = useState<string | null>(null); // Stores base64 of processed face
     const [styleImage, setStyleImage] = useState<{ url: string; file: File } | null>(null);
     const [isProcessingFace, setIsProcessingFace] = useState(false);
-
-    // Model Selection States
-    const [faceLockModel, setFaceLockModel] = useState<'flash' | 'pro'>('flash');
 
     const [prompt, setPrompt] = useState('');
     const [negativePrompt, setNegativePrompt] = useState('');
@@ -109,9 +107,9 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
         else if (type === 'style') setStyleImage(null);
     }
     
-    const handleProcessFace = async () => {
+    const handleProcessFace = async (modelType: 'flash' | 'pro') => {
         if (!rawFaceImage || !session) return;
-        const cost = faceLockModel === 'pro' ? 2 : 1;
+        const cost = modelType === 'pro' ? 2 : 1;
 
         if (user && user.diamonds < cost) {
             showToast(t('creator.aiTool.common.errorCredits', { cost, balance: user.diamonds }), 'error');
@@ -129,7 +127,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
                     body: JSON.stringify({ 
                         image: base64Image,
-                        model: faceLockModel === 'pro' ? 'gemini-3-pro-image-preview' : 'gemini-2.5-flash-image'
+                        model: modelType === 'pro' ? 'gemini-3-pro-image-preview' : 'gemini-2.5-flash-image'
                     }),
                 });
                 const result = await response.json();
@@ -271,7 +269,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
             <InstructionModal isOpen={isInstructionModalOpen} onClose={() => setInstructionModalOpen(false)} instructionKey={instructionKey} />
             <PromptLibraryModal isOpen={isPromptLibraryOpen} onClose={() => setIsPromptLibraryOpen(false)} onSelectPrompt={(p) => setPrompt(p)} category="single-photo" />
 
-            {/* Announcement Banner for New Model */}
+            {/* Announcement Banner for New Model - Localized */}
             <div className="bg-gradient-to-r from-yellow-600/20 to-red-600/20 border border-yellow-500/30 rounded-xl p-4 mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-fade-in">
                 <div className="flex items-start gap-3">
                     <div className="bg-yellow-500/20 p-2 rounded-full text-yellow-400">
@@ -279,11 +277,10 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                     </div>
                     <div>
                         <h4 className="font-bold text-white text-sm sm:text-base">
-                            🚀 Nâng cấp: Ứng dụng đang mặc định sử dụng <span className="text-yellow-400">Nano Banana Pro (Gemini 3)</span>
+                            {t('creator.aiTool.upgradeBanner.title')}
                         </h4>
                         <p className="text-xs text-gray-300 mt-1">
-                            Ảnh siêu nét 4K, chi tiết cực đỉnh. Phí: <span className="font-bold text-white">2 Kim Cương/ảnh</span>. 
-                            Bạn có thể đổi về bản cũ (1 KC) trong phần Cài đặt nâng cao.
+                            {t('creator.aiTool.upgradeBanner.desc')}
                         </p>
                     </div>
                 </div>
@@ -291,7 +288,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                     onClick={() => setModelModalOpen(true)}
                     className="whitespace-nowrap px-4 py-2 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-300 text-xs font-bold rounded-lg transition-colors border border-yellow-500/30"
                 >
-                    Đổi Model
+                     {t('creator.aiTool.upgradeBanner.button')}
                 </button>
             </div>
 
@@ -316,25 +313,14 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                             <ImageUploader onUpload={(e) => handleImageUpload(e, 'face')} image={rawFaceImage ? { url: processedFaceImage ? `data:image/png;base64,${processedFaceImage}` : rawFaceImage.url } : null} onRemove={() => handleRemoveImage('face')} text={t('creator.aiTool.singlePhoto.superFaceLockUploadText')} disabled={isImageInputDisabled} />
                              <div className="mt-2 space-y-2">
                                 {rawFaceImage && !processedFaceImage && (
-                                    <>
-                                        <div className="grid grid-cols-2 gap-2 mb-2">
-                                            <button 
-                                                onClick={() => setFaceLockModel('flash')}
-                                                className={`p-2 text-[10px] font-bold rounded border transition-all ${faceLockModel === 'flash' ? 'bg-blue-500/20 border-blue-500 text-blue-300' : 'bg-white/5 border-white/10 text-gray-400'}`}
-                                            >
-                                                Flash (1 💎)
-                                            </button>
-                                            <button 
-                                                onClick={() => setFaceLockModel('pro')}
-                                                className={`p-2 text-[10px] font-bold rounded border transition-all ${faceLockModel === 'pro' ? 'bg-yellow-500/20 border-yellow-500 text-yellow-300' : 'bg-white/5 border-white/10 text-gray-400'}`}
-                                            >
-                                                Pro 4K (2 💎)
-                                            </button>
-                                        </div>
-                                        <button onClick={handleProcessFace} disabled={isProcessingFace} className="w-full text-sm font-bold py-2 px-3 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-wait shadow-md">
-                                            {isProcessingFace ? t('creator.aiTool.singlePhoto.superFaceLockProcessing') : `Xử lý (${faceLockModel === 'pro' ? 2 : 1} 💎)`}
+                                    <div className="flex flex-col gap-2">
+                                        <button onClick={() => handleProcessFace('flash')} disabled={isProcessingFace} className="w-full text-xs font-bold py-2 px-2 bg-blue-500/20 text-blue-300 border border-blue-500/50 rounded-lg hover:bg-blue-500/30 disabled:opacity-50">
+                                            {isProcessingFace ? t('creator.aiTool.singlePhoto.superFaceLockProcessing') : t('creator.aiTool.singlePhoto.superFaceLockActionFlash')}
                                         </button>
-                                    </>
+                                        <button onClick={() => handleProcessFace('pro')} disabled={isProcessingFace} className="w-full text-xs font-bold py-2 px-2 bg-yellow-500/20 text-yellow-300 border border-yellow-500/50 rounded-lg hover:bg-yellow-500/30 disabled:opacity-50">
+                                            {isProcessingFace ? t('creator.aiTool.singlePhoto.superFaceLockProcessing') : t('creator.aiTool.singlePhoto.superFaceLockActionPro')}
+                                        </button>
+                                    </div>
                                 )}
                                 {processedFaceImage && (
                                      <div className="w-full text-sm font-bold py-2 px-3 bg-green-500/20 text-green-300 rounded-lg text-center">

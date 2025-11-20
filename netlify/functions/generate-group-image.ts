@@ -1,3 +1,4 @@
+
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
 
@@ -24,13 +25,15 @@ const handler: Handler = async (event: HandlerEvent) => {
         }
         
         const payload = JSON.parse(rawPayload);
-        const { jobId, characters, referenceImage } = payload;
+        const { jobId, characters, referenceImage, model } = payload;
         
         if (!jobId || !characters || !Array.isArray(characters) || characters.length === 0 || !referenceImage) {
             return { statusCode: 400, body: JSON.stringify({ error: 'Job ID, reference image, and character data are required.' }) };
         }
 
-        const totalCost = characters.length + 1;
+        // Cost Calculation: Base cost depends on model (1 for Flash, 2 for Pro) + 1 per character
+        const baseCost = model === 'pro' ? 2 : 1;
+        const totalCost = baseCost + characters.length;
 
         const { data: userData, error: userError } = await supabaseAdmin.from('users').select('diamonds, xp').eq('id', user.id).single();
         if (userError || !userData) {
@@ -51,7 +54,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         const { error: insertError } = await supabaseAdmin.from('generated_images').insert({
             id: jobId,
             user_id: user.id,
-            model_used: 'Group Studio',
+            model_used: model === 'pro' ? 'Group Studio (Pro)' : 'Group Studio (Flash)',
             prompt: JSON.stringify(initialJobData), // Store structured data here
             is_public: false,
             image_url: 'PENDING',
@@ -69,7 +72,7 @@ const handler: Handler = async (event: HandlerEvent) => {
                 user_id: user.id,
                 amount: -totalCost,
                 transaction_type: 'GROUP_IMAGE_GENERATION',
-                description: `Tạo ảnh nhóm ${characters.length} người`,
+                description: `Tạo ảnh nhóm ${characters.length} người (${model === 'pro' ? 'Pro' : 'Flash'})`,
             }),
         ]);
 

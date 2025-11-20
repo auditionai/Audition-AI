@@ -65,12 +65,10 @@ const TransactionHistory: React.FC = () => {
 const PersonalizationPanel: React.FC = () => {
     const { user, session, updateUserProfile, showToast } = useAuth();
     const { t } = useTranslation();
-    const [isLoading, setIsLoading] = useState(false);
-
+    
     if (!user) return null;
 
     const handleEquip = async (type: 'frame' | 'title', itemId: string) => {
-        setIsLoading(true);
         try {
             const res = await fetch('/.netlify/functions/update-appearance', {
                 method: 'PUT',
@@ -89,8 +87,6 @@ const PersonalizationPanel: React.FC = () => {
             showToast(t('creator.settings.personalization.success'), 'success');
         } catch (error: any) {
             showToast(error.message, 'error');
-        } finally {
-            setIsLoading(false);
         }
     };
 

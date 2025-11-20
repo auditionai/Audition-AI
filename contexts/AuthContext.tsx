@@ -40,6 +40,10 @@ interface AuthContextType {
     navigate: (path: string) => void;
     clearReward: () => void;
     markAnnouncementAsRead: () => void;
+    // New Email Auth Methods
+    loginWithEmail: (email: string, password: string) => Promise<boolean>;
+    registerWithEmail: (email: string, password: string, displayName: string) => Promise<boolean>;
+    resetPassword: (email: string) => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -353,6 +357,61 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
     }, [supabase, showToast]);
 
+    // --- New Email Auth Methods ---
+    const loginWithEmail = useCallback(async (email: string, password: string): Promise<boolean> => {
+        if (!supabase) return false;
+        try {
+            const { error } = await supabase.auth.signInWithPassword({ email, password });
+            if (error) throw error;
+            return true;
+        } catch (error: any) {
+            showToast(error.message || "Đăng nhập thất bại.", "error");
+            return false;
+        }
+    }, [supabase, showToast]);
+
+    const registerWithEmail = useCallback(async (email: string, password: string, displayName: string): Promise<boolean> => {
+        if (!supabase) return false;
+        try {
+             // Using a default avatar
+            const defaultAvatar = `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(email)}`;
+            
+            const { error } = await supabase.auth.signUp({
+                email,
+                password,
+                options: {
+                    data: {
+                        full_name: displayName,
+                        avatar_url: defaultAvatar,
+                    }
+                }
+            });
+            if (error) throw error;
+            // If email confirmation is disabled, they are logged in.
+            // If enabled, they need to check email. We assume disabled for demo flow or handle notification.
+            return true;
+        } catch (error: any) {
+            showToast(error.message || "Đăng ký thất bại.", "error");
+            return false;
+        }
+    }, [supabase, showToast]);
+
+    const resetPassword = useCallback(async (email: string): Promise<boolean> => {
+        if (!supabase) return false;
+        try {
+            // Redirect user to the app after clicking the reset link
+            const { error } = await supabase.auth.resetPasswordForEmail(email, {
+                redirectTo: window.location.origin,
+            });
+            if (error) throw error;
+            return true;
+        } catch (error: any) {
+            showToast(error.message || "Không thể gửi yêu cầu đặt lại mật khẩu.", "error");
+            return false;
+        }
+    }, [supabase, showToast]);
+
+
     const logout = useCallback(async () => {
         if (!supabase) return;
         // The `signOut` method is correct for v2.
@@ -364,11 +423,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         announcement, showAnnouncementModal, supabase,
         login, logout, updateUserDiamonds, updateUserProfile, showToast, navigate, clearReward,
         markAnnouncementAsRead,
+        loginWithEmail, registerWithEmail, resetPassword
     }), [
         session, user, loading, toast, route, hasCheckedInToday, reward,
         announcement, showAnnouncementModal, supabase,
         login, logout, updateUserDiamonds, updateUserProfile, showToast, navigate, clearReward,
-        markAnnouncementAsRead
+        markAnnouncementAsRead,
+        loginWithEmail, registerWithEmail, resetPassword
     ]);
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -12,7 +12,7 @@ export const en = {
       title: 'Create 3D AI Photos\nAudition Style',
       description: 'AI understands composition, color, style, and perspective to create cinematic, deep photos with the right Audition vibe while preserving character identity.',
       cta: 'Start Creating',
-      login: 'Sign in with Google',
+      login: 'Sign in',
     },
     features: {
       title: 'Outstanding Features',
@@ -551,12 +551,35 @@ export const en = {
     },
     auth: {
       title: 'Sign In / Sign Up',
-      description: 'Use your Google account to join the community and securely store your creations.',
+      description: 'Join the community and securely store your creations.',
       button: 'Continue with Google',
       processing: 'Processing...',
       legal: 'By continuing, you agree to our',
       terms: 'Terms of Service',
       policy: 'Privacy Policy',
+      tabs: {
+        login: 'Sign In',
+        register: 'Sign Up',
+      },
+      form: {
+        name: 'Display Name',
+        email: 'Email Address',
+        password: 'Password',
+        confirmPassword: 'Confirm Password',
+        forgotPassword: 'Forgot Password?',
+        or: 'Or',
+        submitLogin: 'Sign In',
+        submitRegister: 'Register',
+        recoverEmail: 'Enter your email',
+        sendLink: 'Send Reset Link',
+        backToLogin: 'Back to Sign In',
+        resetSuccess: 'Password reset link sent to your email!',
+      },
+      errors: {
+        fillAll: 'Please fill in all fields.',
+        passwordMismatch: 'Passwords do not match.',
+        passwordLength: 'Password must be at least 6 characters.',
+      }
     },
     topUp: {
       title: 'Top Up Diamonds',

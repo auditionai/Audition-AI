@@ -22,7 +22,6 @@ const PersonalizationPanel: React.FC = () => {
     const { user, updateUserProfile, showToast, session } = useAuth();
     const { t } = useTranslation();
     const [activeSubTab, setActiveSubTab] = useState<'frames' | 'titles'>('frames');
-    const [isLoading, setIsLoading] = useState(false);
     
     // Calculate user stats for locking logic (Approximation using available data)
     // Ideally, we should fetch precise 'creations_count' from DB, but user.xp correlates somewhat.

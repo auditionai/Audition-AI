@@ -235,3 +235,21 @@ export interface CosmeticItem {
     previewColor?: string;
     is_active?: boolean;
 }
+
+// NEW: Chat Types
+export interface ChatMessage {
+    id: string;
+    user_id: string;
+    content: string;
+    type: 'text' | 'image' | 'sticker' | 'system';
+    metadata: {
+        sender_name?: string;
+        sender_avatar?: string;
+        sender_level?: number;
+        sender_frame_id?: string;
+        sender_title_id?: string;
+        image_url?: string;
+        sticker_id?: string;
+    };
+    created_at: string;
+}

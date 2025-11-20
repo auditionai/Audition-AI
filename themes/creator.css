@@ -569,42 +569,47 @@
    COSMETICS: AVATAR FRAMES & TITLES
    ========================================================================== */
 
-/* 1. Cosmetic Horizontal List Layout (NEW FIX) */
+/* 1. Horizontal Scroll List for Cosmetics */
 .cosmetic-list-horizontal {
     display: flex;
-    overflow-x: auto;
     gap: 1rem;
+    overflow-x: auto;
     padding-bottom: 1rem; /* Space for scrollbar */
     scroll-behavior: smooth;
-    /* Custom Scrollbar */
     scrollbar-width: thin;
-    scrollbar-color: rgba(var(--color-accent), 0.5) rgba(0,0,0,0.2);
+    scrollbar-color: rgba(var(--color-accent), 0.5) rgba(255, 255, 255, 0.05);
+}
+
+.cosmetic-list-horizontal::-webkit-scrollbar {
+    height: 8px;
+}
+.cosmetic-list-horizontal::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 4px;
+}
+.cosmetic-list-horizontal::-webkit-scrollbar-thumb {
+    background-color: rgba(var(--color-accent), 0.5);
+    border-radius: 4px;
 }
 
 .cosmetic-item {
-    flex: 0 0 120px; /* Fixed width */
-    width: 120px;
-    min-height: 140px;
-    
     border: 1px solid var(--color-border);
     border-radius: 0.75rem;
     padding: 0.75rem 0.5rem;
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: flex-start;
+    justify-content: flex-start; /* Changed from center */
     cursor: pointer;
     transition: all 0.3s ease;
     background-color: var(--color-fill-secondary);
+    flex: 0 0 120px; /* Fixed width for horizontal items */
+    width: 120px;
+    min-height: 160px;
     scroll-snap-align: start;
 }
 
-.cosmetic-item:hover {
-    transform: translateY(-2px);
-    border-color: var(--color-border-accent);
-}
-
-/* Handle text overlap for items */
+/* Add text handling to prevent overlap */
 .cosmetic-item span {
     overflow-wrap: break-word;
     word-wrap: break-word;
@@ -615,7 +620,7 @@
     text-align: center;
     margin-top: 0.5rem;
     display: -webkit-box;
-    -webkit-line-clamp: 2;
+    -webkit-line-clamp: 2; /* Limit to 2 lines */
     -webkit-box-orient: vertical;
     overflow: hidden;
 }
@@ -646,7 +651,8 @@
     align-items: center;
     justify-content: center;
     border-radius: 50%;
-    overflow: visible; /* Allow glows to spill out */
+    /* Ensure glow effects don't get cut off */
+    overflow: visible;
 }
 /* Reset inner image styles */
 .avatar-frame-container img {
@@ -661,184 +667,104 @@
 
 /* --- FRAMES VISUAL STYLES --- */
 
-/* Common - Simple Border */
+/* None/Wood */
 .frame-none img { border: 2px solid rgba(255,255,255,0.1); }
-.frame-wood img { border: 3px solid #8B4513; box-shadow: inset 0 0 5px #000; }
+.frame-wood img { border: 4px solid #8B4513; box-shadow: inset 0 0 5px #000; }
 
-/* Rare - Single Neon Color */
+/* Neons */
 .frame-basic-blue img { border: 3px solid #3B82F6; box-shadow: 0 0 8px #3B82F6; }
 .frame-basic-pink img { border: 3px solid #EC4899; box-shadow: 0 0 8px #EC4899; }
+
+/* Musical Note */
 .frame-music { padding: 4px; background: linear-gradient(45deg, #fff, #333); border-radius: 50%; animation: spin-slow 4s linear infinite; }
 .frame-music img { border: 2px solid #fff; }
 .frame-music::after { content: '🎵'; position: absolute; bottom: -5px; right: -5px; font-size: 16px; animation: pulse-glow 1s infinite; z-index: 2; }
 
-/* Epic - Gradients & Movement */
-.frame-gradient-spin { padding: 3px; background: conic-gradient(from 0deg, #ec4899, #8b5cf6, #3b82f6, #ec4899); border-radius: 50%; animation: spin-slow 3s linear infinite; }
+/* Gradient Spin */
+.frame-gradient-spin { padding: 3px; background: linear-gradient(0deg, #ec4899, #8b5cf6, #3b82f6); background-size: 400% 400%; animation: gradient-spin-bg 3s linear infinite; border-radius: 50%; }
 .frame-gradient-spin img { border: 2px solid #12121A; }
 
-.frame-sakura { box-shadow: 0 0 12px #FBCFE8; border-radius: 50%; }
+/* Sakura */
+.frame-sakura { box-shadow: 0 0 10px #FBCFE8; }
 .frame-sakura img { border: 3px solid #FBCFE8; }
-.frame-sakura::before { content: '🌸'; position: absolute; top: -5px; left: -5px; font-size: 14px; animation: float 3s ease-in-out infinite; }
-.frame-sakura::after { content: '🌸'; position: absolute; bottom: -5px; right: -5px; font-size: 14px; animation: float 3s ease-in-out infinite reverse; }
+.frame-sakura::before { content: '🌸'; position: absolute; top: -5px; left: -5px; font-size: 14px; z-index: 2; }
+.frame-sakura::after { content: '🌸'; position: absolute; bottom: -5px; right: -5px; font-size: 14px; z-index: 2; }
 
+/* Cyber Tech */
 .frame-cyber img { border: 2px solid #00ff9d; box-shadow: 0 0 5px #00ff9d, inset 0 0 5px #00ff9d; }
 .frame-cyber::before {
-    content: ''; position: absolute; inset: -6px; border-radius: 50%;
-    border: 2px dashed #00ff9d; border-left: 2px solid transparent; border-right: 2px solid transparent;
-    animation: spin-slow 8s linear infinite;
+    content: ''; position: absolute; inset: -4px; border-radius: 50%;
+    border: 2px dashed #00ff9d; animation: spin-slow 8s linear infinite;
 }
 
-/* Legendary - Particles & Power */
-.frame-angel img { border: 3px solid #fff; box-shadow: 0 0 15px #fff, 0 0 30px rgba(255,255,255,0.5); }
+/* Angel Wings */
+.frame-angel img { border: 3px solid #fff; box-shadow: 0 0 15px #fff; }
 .frame-angel::before {
-    content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
-    background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 60%);
-    animation: pulse-strong 3s infinite; z-index: -1;
-}
-/* Simulated Wings using clip-path or borders is tricky, keeping it simpler but high quality */
-.frame-angel::after {
-    content: ''; position: absolute; top: -15px; left: 50%; transform: translateX(-50%);
-    width: 60px; height: 20px; background: rgba(255,255,255,0.8);
-    border-radius: 50%; filter: blur(8px); box-shadow: 0 0 10px #fff;
+    content: ''; position: absolute; top: -20px; left: 50%; transform: translateX(-50%);
+    width: 60px; height: 15px; background: rgba(255,255,255,0.8);
+    border-radius: 50%; filter: blur(5px); /* Halo */
 }
 
-.frame-demon img { border: 3px solid #800000; box-shadow: 0 0 15px #ff0000, inset 0 0 10px #000; }
+/* Demon Aura */
+.frame-demon img { border: 3px solid #800000; box-shadow: 0 0 15px #ff0000; }
 .frame-demon::after {
-    content: '☠️'; position: absolute; bottom: -10px; left: 50%; transform: translateX(-50%);
-    font-size: 18px; filter: drop-shadow(0 0 5px red); z-index: 2;
-}
-.frame-demon::before {
-    content: ''; position: absolute; inset: -8px; border-radius: 50%;
-    background: conic-gradient(from 0deg, transparent, rgba(255,0,0,0.8), transparent);
-    animation: spin-slow 2s linear infinite; z-index: -1;
-}
-
-.frame-thunder { position: relative; z-index: 1; }
-.frame-thunder img { border: 3px solid #F59E0B; box-shadow: 0 0 10px #F59E0B; }
-.frame-thunder::before {
     content: ''; position: absolute; inset: -5px; border-radius: 50%;
-    border: 2px solid #FEF3C7; opacity: 0;
-    animation: flicker 0.5s infinite;
+    background: radial-gradient(transparent 60%, rgba(255,0,0,0.5));
+    animation: pulse-glow 2s infinite; z-index: 0;
 }
 
-.frame-legendary-gold {
-    padding: 4px;
-    background: linear-gradient(135deg, #BF953F, #FCF6BA, #B38728, #FBF5B7, #AA771C);
-    border-radius: 50%;
-    box-shadow: 0 0 15px rgba(212, 175, 55, 0.6);
-    animation: shine 3s linear infinite;
-    background-size: 200% 200%;
+/* Thunder Storm */
+.frame-thunder img { border: 3px solid #F59E0B; }
+.frame-thunder::before {
+    content: ''; position: absolute; inset: -6px; border-radius: 50%;
+    border: 2px solid transparent; border-top-color: #F59E0B; border-bottom-color: #F59E0B;
+    animation: spin-slow 0.5s linear infinite; /* Fast spin */
 }
-.frame-legendary-gold img { border: 2px solid #422006; }
-/* Crown Element */
-.frame-legendary-gold::after {
-    content: '👑'; position: absolute; top: -18px; left: 50%; transform: translateX(-50%) rotate(0deg);
-    font-size: 24px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
-    z-index: 2;
-}
+
+/* Legendary Gold */
+.frame-legendary-gold::before { content: ''; position: absolute; inset: -4px; border-radius: 50%; border: 2px dashed #FBBF24; animation: spin-slow 10s linear infinite; }
+.frame-legendary-gold::after { content: ''; position: absolute; inset: -4px; border-radius: 50%; border: 2px dashed #F59E0B; animation: spin-slow 15s linear infinite reverse; opacity: 0.5; }
+.frame-legendary-gold img { border: 2px solid #FBBF24; box-shadow: 0 0 15px rgba(251, 191, 36, 0.5); }
 
 /* Ice Crystal */
 .frame-ice img { border: 3px solid #A5F3FC; box-shadow: 0 0 15px #0EA5E9; }
 .frame-ice::before {
     content: ''; position: absolute; inset: -5px; border-radius: 50%;
-    border: 2px solid rgba(165, 243, 252, 0.8);
+    border: 2px solid rgba(165, 243, 252, 0.5);
     clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
-    animation: spin-slow 10s linear infinite;
+    animation: spin-slow 6s linear infinite;
 }
 
 /* Love Beat */
-.frame-love img { border: 3px solid #EC4899; box-shadow: 0 0 15px #EC4899; }
+.frame-love img { border: 3px solid #EC4899; }
 .frame-love::after {
-    content: ''; position: absolute; inset: -4px; border-radius: 50%;
-    border: 2px solid #F472B6; opacity: 0.5;
-    animation: pulse-strong 1s infinite;
+    content: '💗'; position: absolute; top: -10px; right: -5px; font-size: 16px;
+    animation: pulse-glow 1s infinite alternate;
 }
-.frame-love::before {
-    content: '💖'; position: absolute; top: -8px; right: -8px; font-size: 16px;
-    animation: float 2s ease-in-out infinite;
-}
-
-/* Mythic - God Tier */
 
 /* Galaxy Void */
-.frame-galaxy { 
-    background: conic-gradient(from 0deg, #000, #4c1d95, #be185d, #000);
-    padding: 4px; border-radius: 50%; 
-    animation: spin-slow 6s linear infinite; 
-    box-shadow: 0 0 20px rgba(139, 92, 246, 0.6);
-}
+.frame-galaxy { background: conic-gradient(#4c1d95, #8b5cf6, #c4b5fd, #4c1d95); padding: 4px; border-radius: 50%; animation: spin-slow 5s linear infinite; }
 .frame-galaxy img { border: 2px solid #fff; }
-.frame-galaxy::after {
-    content: ''; position: absolute; inset: -10px; border-radius: 50%;
-    background: radial-gradient(transparent 60%, rgba(139, 92, 246, 0.3));
-    z-index: -1;
-}
 
 /* Matrix Code */
-.frame-matrix img { border: 2px solid #22c55e; box-shadow: 0 0 10px #22c55e, inset 0 0 10px #000; }
+.frame-matrix img { border: 2px solid #22c55e; box-shadow: 0 0 10px #22c55e; }
 .frame-matrix::before {
-    content: ''; position: absolute; inset: -5px; border-radius: 50%;
+    content: ''; position: absolute; inset: -4px; border-radius: 50%;
     border: 2px dotted #22c55e; animation: spin-slow 10s linear reverse;
-}
-.frame-matrix::after {
-    content: '101'; position: absolute; bottom: -5px; right: 0;
-    color: #22c55e; font-family: monospace; font-size: 10px; font-weight: bold;
-    animation: flicker 0.2s infinite;
 }
 
 /* Rainbow Glitch */
-.frame-rainbow-glitch { 
-    padding: 4px; 
-    background: linear-gradient(90deg, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000); 
-    border-radius: 50%; 
-    animation: shimmer 0.5s linear infinite; 
-    box-shadow: 0 0 15px rgba(255,255,255,0.5);
-}
+.frame-rainbow-glitch { padding: 3px; background: linear-gradient(90deg, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000); border-radius: 50%; animation: shimmer 0.5s linear infinite; }
 .frame-rainbow-glitch img { border: 2px solid #000; }
 
-/* Mythic Fire (Re-imagined) */
+/* Mythic Fire */
 .frame-mythic-fire { z-index: 1; }
-.frame-mythic-fire::before { 
-    content: ''; position: absolute; inset: -8px; border-radius: 50%; 
-    background: conic-gradient(from 180deg, transparent, #ff0000, #ff8800, #ffff00, transparent); 
-    filter: blur(4px); z-index: -1; 
-    animation: spin-slow 2s linear infinite; 
-}
-.frame-mythic-fire img { border: 2px solid #fff; box-shadow: 0 0 10px #ff4400; }
-.frame-mythic-fire::after {
-    content: ''; position: absolute; inset: 0; border-radius: 50%;
-    box-shadow: inset 0 0 15px #ff0000; pointer-events: none;
-}
+.frame-mythic-fire::before { content: ''; position: absolute; inset: -6px; border-radius: 50%; background: conic-gradient(from 0deg, #ff0000, #ff8800, #ffff00, #ff0000); filter: blur(6px); z-index: -1; animation: spin-slow 3s linear infinite; }
+.frame-mythic-fire img { border: 2px solid #fff; }
 
-/* Infinity God (The Ultimate) */
-.frame-infinity { 
-    padding: 5px; 
-    /* Metallic Gold/Platinum Gradient */
-    background: conic-gradient(
-        from 0deg, 
-        #FFD700, #FFF, #FFD700, #B8860B, #FFD700, #FFF, #FFD700
-    ); 
-    border-radius: 50%; 
-    animation: spin-slow 8s linear infinite; 
-    box-shadow: 0 0 25px rgba(255, 215, 0, 0.8), 0 0 50px rgba(255, 255, 255, 0.4);
-    z-index: 1;
-}
-.frame-infinity img { border: 3px solid #fff; }
-/* Wings for God */
-.frame-infinity::before {
-    content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-    width: 160%; height: 160%;
-    border-radius: 50%;
-    background: radial-gradient(circle, rgba(255,215,0,0.1) 40%, transparent 70%);
-    border: 1px solid rgba(255,215,0,0.3);
-    z-index: -1;
-    animation: pulse-strong 4s infinite;
-}
-.frame-infinity::after {
-    content: '✦'; position: absolute; top: -12px; right: -5px;
-    font-size: 20px; color: #fff; text-shadow: 0 0 10px #FFD700;
-    animation: flicker 1s infinite;
-}
+/* Infinity God */
+.frame-infinity { padding: 5px; background: conic-gradient(#fff, #ffd700, #fff, #ffd700); border-radius: 50%; animation: spin-slow 20s linear infinite; box-shadow: 0 0 30px #ffd700; }
+.frame-infinity img { border: 2px solid #fff; }
 
 
 /* --- TITLE VISUAL STYLES --- */
@@ -852,21 +778,21 @@
     letter-spacing: 0.05em;
     padding: 3px 8px;
     border-radius: 6px;
-    line-height: 1.2;
-    
-    /* Handle overflow */
-    max-width: 100%;
     white-space: nowrap;
+    line-height: 1.2;
+    max-width: 100%;
+    /* Ensure text doesn't overflow the badge */
     overflow: hidden;
     text-overflow: ellipsis;
     vertical-align: middle;
-
+    
     /* Default basic style */
     color: #9CA3AF;
     background: rgba(255,255,255,0.05);
     border: 1px solid rgba(255,255,255,0.1);
 }
 
+/* Fix for image badges (Legacy) */
 .title-badge img {
     max-height: 24px;
     width: auto;
@@ -949,15 +875,26 @@
 .themed-checkin-modal__reward-box .day { font-size: 0.7rem; color: var(--color-text-muted); text-transform: uppercase; font-weight: 700; }
 .themed-checkin-modal__reward-box .prize { font-size: 0.8rem; font-weight: 700; color: var(--color-text-base); }
 
+/* --- CHAT STYLES --- */
+.chat-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+.chat-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.chat-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+}
+.chat-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
 /* Animation Keyframes */
 @keyframes gradient-spin-bg { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
 @keyframes pulse-glow { 0% { opacity: 0.8; box-shadow: 0 0 5px currentColor; } 50% { opacity: 1; box-shadow: 0 0 15px currentColor; } 100% { opacity: 0.8; box-shadow: 0 0 5px currentColor; } }
-@keyframes pulse-strong { 0% { opacity: 0.4; transform: scale(0.95); } 50% { opacity: 1; transform: scale(1.05); } 100% { opacity: 0.4; transform: scale(0.95); } }
 @keyframes spin-slow { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 @keyframes shimmer { 0% { opacity: 0.8; } 50% { opacity: 1; filter: brightness(1.3); } 100% { opacity: 0.8; } }
-@keyframes shine { 0% { background-position: 200% center; } 100% { background-position: -200% center; } }
-@keyframes flicker { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-@keyframes float { 0% { transform: translateY(0); } 50% { transform: translateY(-5px); } 100% { transform: translateY(0); } }
 @keyframes glitch-text { 0% { transform: skew(0deg); } 20% { transform: skew(-2deg); } 40% { transform: skew(2deg); } 60% { transform: skew(-1deg); } 80% { transform: skew(1deg); } 100% { transform: skew(0deg); } }
 @keyframes theme-highlight-anim { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.2); opacity: 0.7; filter: drop-shadow(0 0 10px rgb(var(--color-accent))); } 100% { transform: scale(1); opacity: 1; } }
 @keyframes progress-flow { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }

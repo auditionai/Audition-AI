@@ -2,6 +2,7 @@
 import React from 'react';
 import { useAuth } from './contexts/AuthContext';
 import { GameConfigProvider } from './contexts/GameConfigContext';
+import { ChatProvider } from './contexts/ChatContext'; // NEW
 
 // Import Pages
 import HomePage from './pages/HomePage';
@@ -11,6 +12,7 @@ import BuyCreditsPage from './pages/BuyCreditsPage';
 
 // Import Common Components
 import RewardNotification from './components/common/RewardNotification';
+import GlobalChat from './components/chat/GlobalChat'; // NEW
 
 const AppContent: React.FC = () => {
     const { user, loading, route, toast, reward, clearReward } = useAuth();
@@ -52,6 +54,10 @@ const AppContent: React.FC = () => {
         <>
             {renderPage()}
             
+            {/* Global Chat is always available if logged in, or maybe we restrict to creator page? 
+                Let's make it available everywhere for logged in users */}
+            {user && <GlobalChat />}
+            
             {toast && (
                 <div 
                     className={`fixed top-5 right-5 z-[9999] p-4 rounded-lg shadow-lg animate-fade-in-down
@@ -71,7 +77,9 @@ const AppContent: React.FC = () => {
 const App: React.FC = () => {
     return (
         <GameConfigProvider>
-            <AppContent />
+            <ChatProvider>
+                <AppContent />
+            </ChatProvider>
         </GameConfigProvider>
     );
 }

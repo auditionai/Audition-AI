@@ -412,8 +412,8 @@ export const en = {
           rewards: 'Check-in Rewards',
           announcements: 'Announcements',
           apiKeys: 'API Keys',
-          ranks: 'Ranks', 
-          frames: 'Avatar Frames', 
+          ranks: 'Ranks',
+          frames: 'Avatar Frames',
           titles: 'Title Badges'
         },
         dashboard: {

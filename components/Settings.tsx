@@ -105,7 +105,7 @@ const PersonalizationPanel: React.FC = () => {
             {/* Avatar Frames */}
             <div className="mb-8">
                 <h4 className="text-lg font-semibold text-white mb-3">{t('creator.settings.personalization.frames')}</h4>
-                <div className="cosmetic-grid">
+                <div className="cosmetic-list-horizontal">
                     {AVATAR_FRAMES.map(frame => {
                         const locked = isLocked(frame.unlockCondition);
                         const active = user.equipped_frame_id === frame.id || (!user.equipped_frame_id && frame.id === 'default');
@@ -118,7 +118,7 @@ const PersonalizationPanel: React.FC = () => {
                                 <div className={`avatar-frame-container ${frame.cssClass} mb-2`}>
                                     <img src={user.photo_url} className="w-12 h-12 rounded-full object-cover" alt="preview" />
                                 </div>
-                                <span className="text-xs font-bold text-center text-gray-300">{t(frame.nameKey)}</span>
+                                <span className="text-center text-gray-300">{t(frame.nameKey)}</span>
                                 {locked && <span className="text-[10px] text-red-400 mt-1">Lv.{frame.unlockCondition?.level}</span>}
                             </div>
                         );
@@ -129,7 +129,7 @@ const PersonalizationPanel: React.FC = () => {
             {/* Titles */}
             <div>
                 <h4 className="text-lg font-semibold text-white mb-3">{t('creator.settings.personalization.titles')}</h4>
-                <div className="cosmetic-grid">
+                <div className="cosmetic-list-horizontal">
                     {ACHIEVEMENT_TITLES.map(title => {
                         const locked = isLocked(title.unlockCondition);
                         const active = user.equipped_title_id === title.id || (!user.equipped_title_id && title.id === 'newbie');
@@ -142,7 +142,7 @@ const PersonalizationPanel: React.FC = () => {
                                 <div className="h-12 flex items-center justify-center">
                                     <span className={`title-badge ${title.cssClass}`}>{t(title.nameKey)}</span>
                                 </div>
-                                <span className="text-xs font-bold text-center text-gray-300 mt-2">{t(title.nameKey)}</span>
+                                <span className="text-center text-gray-300 mt-2">{t(title.nameKey)}</span>
                                 {locked && <span className="text-[10px] text-red-400 mt-1">Lv.{title.unlockCondition?.level}</span>}
                             </div>
                         );

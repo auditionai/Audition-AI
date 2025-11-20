@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import XPProgressBar from './common/XPProgressBar';
 import Dashboard from './admin/Dashboard';

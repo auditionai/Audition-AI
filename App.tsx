@@ -1,5 +1,7 @@
+
 import React from 'react';
 import { useAuth } from './contexts/AuthContext';
+import { GameConfigProvider } from './contexts/GameConfigContext';
 
 // Import Pages
 import HomePage from './pages/HomePage';
@@ -10,7 +12,7 @@ import BuyCreditsPage from './pages/BuyCreditsPage';
 // Import Common Components
 import RewardNotification from './components/common/RewardNotification';
 
-const App: React.FC = () => {
+const AppContent: React.FC = () => {
     const { user, loading, route, toast, reward, clearReward } = useAuth();
 
     if (loading) {
@@ -24,16 +26,12 @@ const App: React.FC = () => {
     const renderPage = () => {
         let pageComponent;
 
-        // Determine which page component to render based on the route and user status
         switch (route) {
             case 'tool':
             case 'leaderboard':
             case 'my-creations':
             case 'settings':
             case 'admin-gallery':
-                // These routes are for logged-in users.
-                // If the user is not logged in, AuthContext handles redirection,
-                // but we render HomePage as a safe fallback.
                 pageComponent = user ? <CreatorPage activeTab={route} /> : <HomePage />;
                 break;
             case 'buy-credits':
@@ -47,8 +45,6 @@ const App: React.FC = () => {
                 pageComponent = <HomePage />;
         }
         
-        // The data-theme attribute is now applied within each themed page (e.g., CreatorPage)
-        // instead of globally here, allowing the homepage to have a separate style.
         return pageComponent;
     };
 
@@ -56,7 +52,6 @@ const App: React.FC = () => {
         <>
             {renderPage()}
             
-            {/* Global Toast Notification */}
             {toast && (
                 <div 
                     className={`fixed top-5 right-5 z-[9999] p-4 rounded-lg shadow-lg animate-fade-in-down
@@ -66,12 +61,19 @@ const App: React.FC = () => {
                 </div>
             )}
             
-            {/* Global Reward Notification */}
             {reward && (reward.diamonds > 0 || reward.xp > 0) && (
                  <RewardNotification reward={reward} onDismiss={clearReward} />
             )}
         </>
     );
 };
+
+const App: React.FC = () => {
+    return (
+        <GameConfigProvider>
+            <AppContent />
+        </GameConfigProvider>
+    );
+}
 
 export default App;

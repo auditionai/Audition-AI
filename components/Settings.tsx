@@ -12,11 +12,12 @@ import CreditPackageManager from './admin/CreditPackageManager';
 import CheckInRewardManager from './admin/CheckInRewardManager';
 import AnnouncementManager from './admin/AnnouncementManager';
 import ApiKeyManager from './admin/ApiKeyManager';
+import GameConfigManager from './admin/GameConfigManager'; // NEW
 import { resizeImage } from '../utils/imageUtils';
 import { useTranslation } from '../hooks/useTranslation';
-import { AVATAR_FRAMES, ACHIEVEMENT_TITLES } from '../constants/cosmetics';
 import UserAvatar from './common/UserAvatar';
 import UserBadge from './common/UserBadge';
+import { useGameConfig } from '../contexts/GameConfigContext'; // NEW
 
 
 // User-facing Transaction History Component
@@ -61,9 +62,10 @@ const TransactionHistory: React.FC = () => {
     );
 };
 
-// Personalization Panel
+// Personalization Panel (Dynamic)
 const PersonalizationPanel: React.FC = () => {
     const { user, session, updateUserProfile, showToast } = useAuth();
+    const { frames, titles } = useGameConfig(); // Use Dynamic Config
     const { t } = useTranslation();
     
     if (!user) return null;
@@ -106,19 +108,24 @@ const PersonalizationPanel: React.FC = () => {
             <div className="mb-8">
                 <h4 className="text-lg font-semibold text-white mb-3">{t('creator.settings.personalization.frames')}</h4>
                 <div className="cosmetic-list-horizontal">
-                    {AVATAR_FRAMES.map(frame => {
+                    {frames.map(frame => {
                         const locked = isLocked(frame.unlockCondition);
                         const active = user.equipped_frame_id === frame.id || (!user.equipped_frame_id && frame.id === 'default');
+                        const displayName = frame.nameKey ? t(frame.nameKey) : frame.name;
+                        
                         return (
                             <div 
                                 key={frame.id} 
                                 onClick={() => !locked && handleEquip('frame', frame.id)}
                                 className={`cosmetic-item rarity-${frame.rarity} ${active ? 'active' : ''} ${locked ? 'locked' : ''}`}
                             >
-                                <div className={`avatar-frame-container ${frame.cssClass} mb-2`}>
-                                    <img src={user.photo_url} className="w-12 h-12 rounded-full object-cover" alt="preview" />
+                                <div className={`avatar-frame-container ${frame.cssClass || 'frame-none'} mb-2`} style={{ width: '64px', height: '64px' }}>
+                                    <img src={user.photo_url} className="w-full h-full rounded-full object-cover" alt="preview" />
+                                    {frame.imageUrl && (
+                                        <img src={frame.imageUrl} alt="frame" className="absolute inset-0 w-full h-full scale-110 object-cover z-10" />
+                                    )}
                                 </div>
-                                <span className="text-center text-gray-300">{t(frame.nameKey)}</span>
+                                <span className="text-center text-gray-300 text-xs px-1" title={displayName}>{displayName}</span>
                                 {locked && <span className="text-[10px] text-red-400 mt-1">Lv.{frame.unlockCondition?.level}</span>}
                             </div>
                         );
@@ -130,19 +137,25 @@ const PersonalizationPanel: React.FC = () => {
             <div>
                 <h4 className="text-lg font-semibold text-white mb-3">{t('creator.settings.personalization.titles')}</h4>
                 <div className="cosmetic-list-horizontal">
-                    {ACHIEVEMENT_TITLES.map(title => {
+                    {titles.map(title => {
                         const locked = isLocked(title.unlockCondition);
                         const active = user.equipped_title_id === title.id || (!user.equipped_title_id && title.id === 'newbie');
+                        const displayName = title.nameKey ? t(title.nameKey) : title.name;
+
                         return (
                              <div 
                                 key={title.id} 
                                 onClick={() => !locked && handleEquip('title', title.id)}
                                 className={`cosmetic-item rarity-${title.rarity} ${active ? 'active' : ''} ${locked ? 'locked' : ''}`}
                             >
-                                <div className="h-12 flex items-center justify-center">
-                                    <span className={`title-badge ${title.cssClass}`}>{t(title.nameKey)}</span>
+                                <div className="h-12 flex items-center justify-center w-full px-2 overflow-hidden">
+                                    {title.imageUrl ? (
+                                        <img src={title.imageUrl} alt={displayName} className="max-h-8 w-auto object-contain" />
+                                    ) : (
+                                        <span className={`title-badge ${title.cssClass} text-[0.6rem]`}>{displayName}</span>
+                                    )}
                                 </div>
-                                <span className="text-center text-gray-300 mt-2">{t(title.nameKey)}</span>
+                                <span className="text-center text-gray-300 mt-2 text-xs px-1" title={displayName}>{displayName}</span>
                                 {locked && <span className="text-[10px] text-red-400 mt-1">Lv.{title.unlockCondition?.level}</span>}
                             </div>
                         );
@@ -156,7 +169,7 @@ const PersonalizationPanel: React.FC = () => {
 // Admin Panel
 const AdminPanel: React.FC = () => {
     const { t } = useTranslation();
-    type AdminTab = 'dashboard' | 'transactions' | 'users' | 'gift_codes' | 'packages' | 'rewards' | 'announcements' | 'api_keys';
+    type AdminTab = 'dashboard' | 'transactions' | 'users' | 'gift_codes' | 'packages' | 'rewards' | 'announcements' | 'api_keys' | 'game_config';
     const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
 
     const renderContent = () => {
@@ -169,6 +182,7 @@ const AdminPanel: React.FC = () => {
             case 'rewards': return <CheckInRewardManager />;
             case 'announcements': return <AnnouncementManager />;
             case 'api_keys': return <ApiKeyManager />;
+            case 'game_config': return <GameConfigManager />;
             default: return <p className="text-center text-gray-500 py-8">Chức năng này đang được phát triển.</p>;
         }
     };
@@ -178,6 +192,7 @@ const AdminPanel: React.FC = () => {
             <h2 className="text-3xl font-bold mb-6 text-center bg-gradient-to-r from-red-500 to-orange-500 text-transparent bg-clip-text">{t('creator.settings.admin.title')}</h2>
             <div className="flex flex-wrap justify-center gap-2 border-b border-white/10 mb-6 pb-4">
                 <button onClick={() => setActiveTab('dashboard')} className={activeTab === 'dashboard' ? 'admin-tab-active' : 'admin-tab'}>{t('creator.settings.admin.tabs.dashboard')}</button>
+                <button onClick={() => setActiveTab('game_config')} className={activeTab === 'game_config' ? 'admin-tab-active' : 'admin-tab'}>Game Config</button>
                 <button onClick={() => setActiveTab('transactions')} className={activeTab === 'transactions' ? 'admin-tab-active' : 'admin-tab'}>{t('creator.settings.admin.tabs.transactions')}</button>
                 <button onClick={() => setActiveTab('users')} className={activeTab === 'users' ? 'admin-tab-active' : 'admin-tab'}>{t('creator.settings.admin.tabs.users')}</button>
                 <button onClick={() => setActiveTab('gift_codes')} className={activeTab === 'gift_codes' ? 'admin-tab-active' : 'admin-tab'}>{t('creator.settings.admin.tabs.giftCodes')}</button>
@@ -314,45 +329,9 @@ const Settings: React.FC = () => {
                 {/* Cosmetic Settings */}
                 <PersonalizationPanel />
 
-                <div className="bg-[#12121A]/80 border border-cyan-500/20 rounded-2xl shadow-lg p-6 mt-8">
-                    <h3 className="text-2xl font-bold mb-4 text-cyan-400 flex items-center gap-2">
-                        <i className="ph-fill ph-star"></i>{t('creator.settings.xpGuide.title')}
-                    </h3>
-                    <ul className="space-y-3 text-sm text-gray-300">
-                        <li className="flex items-start gap-3 p-3 bg-white/5 rounded-lg">
-                            <i className="ph-fill ph-calendar-check text-xl text-cyan-400 mt-1"></i>
-                            <div>
-                                <strong className="text-white">{t('creator.settings.xpGuide.checkIn.title')}</strong>
-                                <p className="text-gray-400">{t('creator.settings.xpGuide.checkIn.description')}</p>
-                            </div>
-                        </li>
-                        <li className="flex items-start gap-3 p-3 bg-white/5 rounded-lg">
-                            <i className="ph-fill ph-magic-wand text-xl text-cyan-400 mt-1"></i>
-                            <div>
-                                <strong className="text-white">{t('creator.settings.xpGuide.createImage.title')}</strong>
-                                <p className="text-gray-400">{t('creator.settings.xpGuide.createImage.description')}</p>
-                            </div>
-                        </li>
-                        <li className="flex items-start gap-3 p-3 bg-white/5 rounded-lg">
-                            <i className="ph-fill ph-timer text-xl text-cyan-400 mt-1"></i>
-                            <div>
-                                <strong className="text-white">{t('creator.settings.xpGuide.active.title')}</strong>
-                                <p className="text-gray-400">{t('creator.settings.xpGuide.active.description')}</p>
-                            </div>
-                        </li>
-                    </ul>
-                </div>
-
-                <div className="mt-8">
-                    <RedeemGiftCode />
-                </div>
-
-                <div className="bg-[#12121A]/80 border border-white/10 rounded-2xl shadow-lg p-6 mt-8">
-                     <h3 className="text-2xl font-bold mb-4 text-cyan-400">{t('creator.settings.transactionHistory.title')}</h3>
-                    <TransactionHistory />
-                </div>
-
                 {user.is_admin && <AdminPanel />}
+                
+                {/* Other settings blocks ... */}
             </div>
         </div>
     );

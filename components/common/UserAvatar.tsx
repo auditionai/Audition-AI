@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { getCosmeticById } from '../../constants/cosmetics';
+import { useGameConfig } from '../../contexts/GameConfigContext';
 
 interface UserAvatarProps {
     url: string;
@@ -11,6 +11,7 @@ interface UserAvatarProps {
 }
 
 const UserAvatar: React.FC<UserAvatarProps> = ({ url, alt, frameId, size = 'md', className = '' }) => {
+    const { getCosmeticById } = useGameConfig();
     const frame = getCosmeticById(frameId, 'frame');
     
     // Map size prop to specific pixel width/height style
@@ -24,12 +25,23 @@ const UserAvatar: React.FC<UserAvatarProps> = ({ url, alt, frameId, size = 'md',
         }
     };
 
+    const containerStyle = getSizeStyle();
+
     return (
         <div 
-            className={`avatar-frame-container ${frame?.cssClass} ${className}`}
-            style={getSizeStyle()}
+            className={`avatar-frame-container ${frame?.cssClass || 'frame-none'} ${className}`}
+            style={containerStyle}
         >
             <img src={url} alt={alt} />
+            {/* Render image overlay if frame has an image_url instead of just CSS */}
+            {frame?.imageUrl && (
+                <img 
+                    src={frame.imageUrl} 
+                    alt="frame" 
+                    className="absolute inset-0 w-full h-full object-cover pointer-events-none z-10"
+                    style={{ transform: 'scale(1.2)' }} // Scale up frame slightly to fit avatar inside
+                />
+            )}
         </div>
     );
 };

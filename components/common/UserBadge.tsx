@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { getCosmeticById } from '../../constants/cosmetics';
+import { useGameConfig } from '../../contexts/GameConfigContext';
 import { useTranslation } from '../../hooks/useTranslation';
 
 interface UserBadgeProps {
@@ -10,13 +10,20 @@ interface UserBadgeProps {
 
 const UserBadge: React.FC<UserBadgeProps> = ({ titleId, className = '' }) => {
     const { t } = useTranslation();
+    const { getCosmeticById } = useGameConfig();
     const title = getCosmeticById(titleId, 'title');
 
     if (!title) return null;
 
+    const displayName = title.nameKey ? t(title.nameKey) : title.name;
+
     return (
-        <span className={`title-badge ${title.cssClass} ${className}`}>
-            {t(title.nameKey)}
+        <span className={`title-badge ${title.cssClass || ''} ${className}`} title={displayName}>
+            {title.imageUrl ? (
+                <img src={title.imageUrl} alt={displayName} className="h-5 w-auto" />
+            ) : (
+                displayName
+            )}
         </span>
     );
 };

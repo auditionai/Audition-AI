@@ -61,12 +61,13 @@ export interface AdminManagedUser extends User {
     consecutive_check_in_days?: number;
 }
 
-
+// UPDATED: Rank interface for DB
 export interface Rank {
+  id?: string;
   levelThreshold: number;
   title: string;
-  icon: React.ReactNode;
-  color: string; // e.g., 'text-yellow-400'
+  icon?: React.ReactNode | string; // URL or CSS class
+  color: string; // CSS class or Hex
 }
 
 
@@ -199,7 +200,6 @@ export interface CheckInReward {
     created_at: string;
 }
 
-// FIX: Add missing GiftCode type definition
 // For Admin Gift Code Management
 export interface GiftCode {
     id: string;
@@ -222,12 +222,15 @@ export type CosmeticRarity = 'common' | 'rare' | 'epic' | 'legendary' | 'mythic'
 export interface CosmeticItem {
     id: string;
     type: 'frame' | 'title';
-    nameKey: string; // Translation key
+    nameKey?: string; // Legacy Translation key
+    name?: string; // DB Name
     rarity: CosmeticRarity;
-    cssClass: string; // CSS class for animation/style
+    cssClass?: string; // CSS class for animation/style (legacy/optional)
+    imageUrl?: string; // NEW: URL for uploaded image
     unlockCondition?: {
         level?: number;
         vip?: boolean;
     };
     previewColor?: string;
+    is_active?: boolean;
 }

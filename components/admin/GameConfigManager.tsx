@@ -68,13 +68,20 @@ const GameConfigManager: React.FC = () => {
 
     // --- Cosmetics Logic (Shared for Frames and Titles) ---
     const handleEditCosmetic = (cosmetic: CosmeticItem | null, defaultType: 'frame' | 'title') => {
-        setEditingCosmetic(cosmetic || { 
+        // FIX: Auto-fill name for legacy items using translation key if name is missing
+        let cosmeticToEdit = cosmetic ? { ...cosmetic } : null;
+        if (cosmeticToEdit && !cosmeticToEdit.name && cosmeticToEdit.nameKey) {
+             cosmeticToEdit.name = t(cosmeticToEdit.nameKey);
+        }
+
+        setEditingCosmetic(cosmeticToEdit || { 
             type: defaultType, // Set type based on active tab
             name: '', 
             rarity: 'common', 
             unlockCondition: { level: 0 },
-            cssClass: 'frame-none'
+            cssClass: defaultType === 'title' ? 'title-basic' : 'frame-none'
         } as any);
+        
         setUploadIconFile(null);
         setIsModalOpen(true);
     };
@@ -86,6 +93,7 @@ const GameConfigManager: React.FC = () => {
             let finalIconUrl = editingCosmetic.iconUrl;
 
             if (uploadIconFile) {
+                // Resize icon to 128x128 max for performance
                 const { dataUrl } = await resizeImage(uploadIconFile, 128); 
                 const uploadRes = await fetch('/.netlify/functions/upload-asset', {
                     method: 'POST',
@@ -106,8 +114,8 @@ const GameConfigManager: React.FC = () => {
                 name: editingCosmetic.name,
                 rarity: editingCosmetic.rarity,
                 css_class: editingCosmetic.cssClass,
-                image_url: editingCosmetic.imageUrl, // Preserve existing main image URL if any
-                icon_url: finalIconUrl,
+                image_url: editingCosmetic.imageUrl, // Preserve existing image_url (frames) but don't allow edit
+                icon_url: finalIconUrl, // This relies on the 'icon_url' column existing in DB
                 unlock_level: editingCosmetic.unlockCondition?.level || 0,
                 is_active: true
             };
@@ -137,7 +145,7 @@ const GameConfigManager: React.FC = () => {
         if (!confirm('Are you sure? This cannot be undone.')) return;
         
         if (!isUUID(id)) {
-            showToast("Cannot delete built-in default items. Please create a new item to override them.", "error");
+            showToast("Cannot delete built-in default items directly. Create a new item to replace them.", "error");
             return;
         }
 
@@ -186,45 +194,19 @@ const GameConfigManager: React.FC = () => {
                 </div>
             )}
 
-            {/* FRAMES TAB */}
-            {activeSubTab === 'frames' && (
+            {/* FRAMES & TITLES LIST VIEW */}
+            {(activeSubTab === 'frames' || activeSubTab === 'titles') && (
                 <div>
-                    <button onClick={() => handleEditCosmetic(null, 'frame')} className="themed-button-primary mb-4 px-4 py-2 text-sm">+ {t('creator.settings.admin.gameConfig.buttons.addFrame')}</button>
+                    <button onClick={() => handleEditCosmetic(null, activeSubTab === 'frames' ? 'frame' : 'title')} className="themed-button-primary mb-4 px-4 py-2 text-sm">
+                        + {activeSubTab === 'frames' ? t('creator.settings.admin.gameConfig.buttons.addFrame') : t('creator.settings.admin.gameConfig.buttons.addTitle')}
+                    </button>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-96 overflow-y-auto custom-scrollbar">
-                        {frames.map(c => (
-                            <div key={c.id} className="flex gap-3 p-2 bg-white/5 rounded items-center">
-                                <div className="w-12 h-12 bg-black/30 rounded flex items-center justify-center overflow-hidden relative">
-                                    {c.imageUrl ? <img src={c.imageUrl} className="w-full h-full object-contain" alt=""/> : <span className="text-xs text-gray-500">CSS</span>}
-                                </div>
-                                <div className="flex-grow">
-                                    <p className="font-bold text-sm text-white flex items-center gap-1">
-                                        {c.nameKey ? t(c.nameKey) : c.name}
-                                    </p>
-                                    <p className="text-xs text-gray-400 uppercase">{t(`creator.settings.admin.gameConfig.rarities.${c.rarity}`)}</p>
-                                    <p className="text-xs text-yellow-500">{t('creator.settings.admin.gameConfig.form.unlockLevel')}: {c.unlockCondition?.level || 0}</p>
-                                </div>
-                                <div className="flex flex-col gap-1">
-                                     <button onClick={() => handleEditCosmetic(c, 'frame')} className="text-blue-400 text-xs">{t('creator.settings.admin.gameConfig.buttons.edit')}</button>
-                                     {c.id && isUUID(c.id) && <button onClick={() => handleDelete(c.id, 'cosmetic')} className="text-red-400 text-xs">{t('creator.settings.admin.gameConfig.buttons.delete')}</button>}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {/* TITLES TAB */}
-            {activeSubTab === 'titles' && (
-                <div>
-                    <button onClick={() => handleEditCosmetic(null, 'title')} className="themed-button-primary mb-4 px-4 py-2 text-sm">+ {t('creator.settings.admin.gameConfig.buttons.addTitle')}</button>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-96 overflow-y-auto custom-scrollbar">
-                        {titles.map(c => (
+                        {(activeSubTab === 'frames' ? frames : titles).map(c => (
                             <div key={c.id} className="flex gap-3 p-2 bg-white/5 rounded items-center">
                                 <div className="w-12 h-12 bg-black/30 rounded flex items-center justify-center overflow-hidden relative">
                                     {c.imageUrl ? <img src={c.imageUrl} className="w-full h-full object-contain" alt=""/> : (
                                          <div className="text-center">
-                                             {c.iconUrl && <img src={c.iconUrl} alt="" className="w-6 h-6 mx-auto mb-1 object-contain" />}
-                                             <span className="text-[10px] text-gray-500">Text</span>
+                                             {c.iconUrl ? <img src={c.iconUrl} alt="" className="w-6 h-6 mx-auto mb-1 object-contain" /> : <span className="text-[10px] text-gray-500">CSS</span>}
                                          </div>
                                     )}
                                 </div>
@@ -236,7 +218,7 @@ const GameConfigManager: React.FC = () => {
                                     <p className="text-xs text-yellow-500">{t('creator.settings.admin.gameConfig.form.unlockLevel')}: {c.unlockCondition?.level || 0}</p>
                                 </div>
                                 <div className="flex flex-col gap-1">
-                                     <button onClick={() => handleEditCosmetic(c, 'title')} className="text-blue-400 text-xs">{t('creator.settings.admin.gameConfig.buttons.edit')}</button>
+                                     <button onClick={() => handleEditCosmetic(c, c.type)} className="text-blue-400 text-xs">{t('creator.settings.admin.gameConfig.buttons.edit')}</button>
                                      {c.id && isUUID(c.id) && <button onClick={() => handleDelete(c.id, 'cosmetic')} className="text-red-400 text-xs">{t('creator.settings.admin.gameConfig.buttons.delete')}</button>}
                                 </div>
                             </div>
@@ -249,8 +231,8 @@ const GameConfigManager: React.FC = () => {
             {isModalOpen && (
                 <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={
                     activeSubTab === 'ranks' ? t('creator.settings.admin.gameConfig.buttons.addRank') : 
-                    activeSubTab === 'frames' ? (editingCosmetic?.id ? t('creator.settings.admin.gameConfig.buttons.edit') : t('creator.settings.admin.gameConfig.buttons.addFrame')) :
-                    (editingCosmetic?.id ? t('creator.settings.admin.gameConfig.buttons.edit') : t('creator.settings.admin.gameConfig.buttons.addTitle'))
+                    (editingCosmetic?.id ? t('creator.settings.admin.gameConfig.buttons.edit') : 
+                     (activeSubTab === 'frames' ? t('creator.settings.admin.gameConfig.buttons.addFrame') : t('creator.settings.admin.gameConfig.buttons.addTitle')))
                 }>
                     {activeSubTab === 'ranks' && editingRank && (
                          <div className="space-y-3">
@@ -269,7 +251,7 @@ const GameConfigManager: React.FC = () => {
                             <button onClick={saveRank} disabled={isSaving} className="themed-button-primary w-full mt-4">{isSaving ? t('creator.settings.admin.gameConfig.buttons.saving') : t('creator.settings.admin.gameConfig.buttons.save')}</button>
                          </div>
                     )}
-                    {/* Cosmetics Form (Frames & Titles) */}
+                    {/* Cosmetics Form (Frames & Titles) - SIMPLIFIED UI */}
                     {(activeSubTab === 'frames' || activeSubTab === 'titles') && editingCosmetic && (
                         <div className="space-y-3">
                             <div>
@@ -281,7 +263,7 @@ const GameConfigManager: React.FC = () => {
                             </div>
                             <div>
                                 <label className="text-sm text-gray-400">{t('creator.settings.admin.gameConfig.form.name')}</label>
-                                <input type="text" value={editingCosmetic.name} onChange={e => setEditingCosmetic({...editingCosmetic, name: e.target.value})} className="auth-input mt-1" />
+                                <input type="text" value={editingCosmetic.name} onChange={e => setEditingCosmetic({...editingCosmetic, name: e.target.value})} className="auth-input mt-1" placeholder="Tên hiển thị (VD: Thần Sấm)" />
                             </div>
                             <div>
                                 <label className="text-sm text-gray-400">{t('creator.settings.admin.gameConfig.form.rarity')}</label>
@@ -298,10 +280,13 @@ const GameConfigManager: React.FC = () => {
                                 <input type="number" value={editingCosmetic.unlockCondition?.level || 0} onChange={e => setEditingCosmetic({...editingCosmetic, unlockCondition: { level: Number(e.target.value) }})} className="auth-input w-20" />
                             </div>
                             
-                            {/* Simplified Upload: Only Icon */}
+                            {/* Only Icon Upload - Clean UI */}
                             <div>
                                 <label className="block text-sm text-gray-400 mb-1">{t('creator.settings.admin.gameConfig.form.uploadIcon')}</label>
-                                <input type="file" accept="image/*" onChange={e => setUploadIconFile(e.target.files?.[0] || null)} className="text-sm text-gray-400" />
+                                <div className="flex gap-2 items-center">
+                                    {editingCosmetic.iconUrl && <img src={editingCosmetic.iconUrl} className="w-8 h-8 object-contain bg-black/50 rounded" alt="current icon" />}
+                                    <input type="file" accept="image/*" onChange={e => setUploadIconFile(e.target.files?.[0] || null)} className="text-sm text-gray-400" />
+                                </div>
                             </div>
 
                             <div>

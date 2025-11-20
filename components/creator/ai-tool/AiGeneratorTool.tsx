@@ -43,9 +43,12 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
     const [styleImage, setStyleImage] = useState<{ url: string; file: File } | null>(null);
     const [isProcessingFace, setIsProcessingFace] = useState(false);
 
+    // Model Selection States
+    const [faceLockModel, setFaceLockModel] = useState<'flash' | 'pro'>('flash');
+
     const [prompt, setPrompt] = useState('');
     const [negativePrompt, setNegativePrompt] = useState('');
-    const [selectedModel, setSelectedModel] = useState<AIModel>(DETAILED_AI_MODELS.find((m: AIModel) => m.recommended) || DETAILED_AI_MODELS[0]);
+    const [selectedModel, setSelectedModel] = useState<AIModel>(DETAILED_AI_MODELS[0]); // Default to Pro (first in list)
     const [selectedStyle, setSelectedStyle] = useState('none');
     const [aspectRatio, setAspectRatio] = useState('3:4');
     const [seed, setSeed] = useState<number | ''>('');
@@ -108,6 +111,13 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
     
     const handleProcessFace = async () => {
         if (!rawFaceImage || !session) return;
+        const cost = faceLockModel === 'pro' ? 2 : 1;
+
+        if (user && user.diamonds < cost) {
+            showToast(t('creator.aiTool.common.errorCredits', { cost, balance: user.diamonds }), 'error');
+            return;
+        }
+
         setIsProcessingFace(true);
         try {
             const reader = new FileReader();
@@ -117,7 +127,10 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                 const response = await fetch('/.netlify/functions/process-face', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-                    body: JSON.stringify({ image: base64Image }),
+                    body: JSON.stringify({ 
+                        image: base64Image,
+                        model: faceLockModel === 'pro' ? 'gemini-3-pro-image-preview' : 'gemini-2.5-flash-image'
+                    }),
                 });
                 const result = await response.json();
                 if (!response.ok) throw new Error(result.error || t('creator.aiTool.singlePhoto.superFaceLockProcessing'));
@@ -133,8 +146,11 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
         }
     };
 
-
-    const generationCost = 1 + (useUpscaler ? 1 : 0);
+    // Calculate Total Cost
+    // Base cost: 2 if Gemini 3 Pro, 1 if Flash
+    // Upscaler: +1 (Standard)
+    const baseModelCost = selectedModel.apiModel === 'gemini-3-pro-image-preview' ? 2 : 1;
+    const generationCost = baseModelCost + (useUpscaler ? 1 : 0);
 
     const handleGenerateClick = () => {
         if (!prompt.trim()) {
@@ -150,7 +166,6 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
     
     const handleConfirmGeneration = () => {
         setConfirmOpen(false);
-        // Determine which face image to send
         const finalFaceImage = processedFaceImage ? processedFaceImage : (useBasicFaceLock && poseImage) ? poseImage.file : null;
 
         generateImage(
@@ -256,10 +271,33 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
             <InstructionModal isOpen={isInstructionModalOpen} onClose={() => setInstructionModalOpen(false)} instructionKey={instructionKey} />
             <PromptLibraryModal isOpen={isPromptLibraryOpen} onClose={() => setIsPromptLibraryOpen(false)} onSelectPrompt={(p) => setPrompt(p)} category="single-photo" />
 
+            {/* Announcement Banner for New Model */}
+            <div className="bg-gradient-to-r from-yellow-600/20 to-red-600/20 border border-yellow-500/30 rounded-xl p-4 mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-fade-in">
+                <div className="flex items-start gap-3">
+                    <div className="bg-yellow-500/20 p-2 rounded-full text-yellow-400">
+                        <i className="ph-fill ph-rocket-launch text-2xl"></i>
+                    </div>
+                    <div>
+                        <h4 className="font-bold text-white text-sm sm:text-base">
+                            🚀 Nâng cấp: Ứng dụng đang mặc định sử dụng <span className="text-yellow-400">Nano Banana Pro (Gemini 3)</span>
+                        </h4>
+                        <p className="text-xs text-gray-300 mt-1">
+                            Ảnh siêu nét 4K, chi tiết cực đỉnh. Phí: <span className="font-bold text-white">2 Kim Cương/ảnh</span>. 
+                            Bạn có thể đổi về bản cũ (1 KC) trong phần Cài đặt nâng cao.
+                        </p>
+                    </div>
+                </div>
+                <button 
+                    onClick={() => setModelModalOpen(true)}
+                    className="whitespace-nowrap px-4 py-2 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-300 text-xs font-bold rounded-lg transition-colors border border-yellow-500/30"
+                >
+                    Đổi Model
+                </button>
+            </div>
+
             <div className="flex flex-col lg:flex-row gap-6">
-                {/* Main Content Area (Left) */}
                 <div className="w-full lg:w-2/3 flex flex-col gap-6">
-                     <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 text-yellow-300 rounded-lg text-sm flex items-start gap-3">
+                     <div className="p-4 bg-blue-500/10 border border-blue-500/30 text-blue-300 rounded-lg text-sm flex items-start gap-3">
                         <i className="ph-fill ph-info text-2xl flex-shrink-0"></i>
                         <div>
                             <span className="font-bold">{t('langName') === 'English' ? 'Tip:' : 'Mẹo:'}</span> {t('creator.aiTool.singlePhoto.bgRemoverTip')}
@@ -278,9 +316,25 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                             <ImageUploader onUpload={(e) => handleImageUpload(e, 'face')} image={rawFaceImage ? { url: processedFaceImage ? `data:image/png;base64,${processedFaceImage}` : rawFaceImage.url } : null} onRemove={() => handleRemoveImage('face')} text={t('creator.aiTool.singlePhoto.superFaceLockUploadText')} disabled={isImageInputDisabled} />
                              <div className="mt-2 space-y-2">
                                 {rawFaceImage && !processedFaceImage && (
-                                    <button onClick={handleProcessFace} disabled={isProcessingFace} className="w-full text-sm font-bold py-2 px-3 bg-yellow-500/20 text-yellow-300 rounded-lg hover:bg-yellow-500/30 disabled:opacity-50 disabled:cursor-wait">
-                                        {isProcessingFace ? t('creator.aiTool.singlePhoto.superFaceLockProcessing') : t('creator.aiTool.singlePhoto.superFaceLockProcess')}
-                                    </button>
+                                    <>
+                                        <div className="grid grid-cols-2 gap-2 mb-2">
+                                            <button 
+                                                onClick={() => setFaceLockModel('flash')}
+                                                className={`p-2 text-[10px] font-bold rounded border transition-all ${faceLockModel === 'flash' ? 'bg-blue-500/20 border-blue-500 text-blue-300' : 'bg-white/5 border-white/10 text-gray-400'}`}
+                                            >
+                                                Flash (1 💎)
+                                            </button>
+                                            <button 
+                                                onClick={() => setFaceLockModel('pro')}
+                                                className={`p-2 text-[10px] font-bold rounded border transition-all ${faceLockModel === 'pro' ? 'bg-yellow-500/20 border-yellow-500 text-yellow-300' : 'bg-white/5 border-white/10 text-gray-400'}`}
+                                            >
+                                                Pro 4K (2 💎)
+                                            </button>
+                                        </div>
+                                        <button onClick={handleProcessFace} disabled={isProcessingFace} className="w-full text-sm font-bold py-2 px-3 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-wait shadow-md">
+                                            {isProcessingFace ? t('creator.aiTool.singlePhoto.superFaceLockProcessing') : `Xử lý (${faceLockModel === 'pro' ? 2 : 1} 💎)`}
+                                        </button>
+                                    </>
                                 )}
                                 {processedFaceImage && (
                                      <div className="w-full text-sm font-bold py-2 px-3 bg-green-500/20 text-green-300 rounded-lg text-center">
@@ -323,8 +377,12 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                         <div className="space-y-4">
                             <div>
                                 <label className="text-sm font-semibold text-skin-base mb-1 block">{t('creator.aiTool.singlePhoto.modelLabel')}</label>
-                                <button onClick={() => setModelModalOpen(true)} className="p-2 bg-black/30 rounded-md border border-gray-600 hover:border-pink-500 text-left w-full transition auth-input">
-                                    <p className="font-semibold text-white truncate">{t(selectedModel.name)}</p>
+                                <button onClick={() => setModelModalOpen(true)} className="p-3 bg-black/30 rounded-lg border border-gray-600 hover:border-pink-500 text-left w-full transition auth-input flex justify-between items-center">
+                                    <div>
+                                        <p className="font-bold text-white truncate">{t(selectedModel.name)}</p>
+                                        <p className="text-[10px] text-skin-muted">{selectedModel.id === 'audition-ai-pro-v3' ? 'Gemini 3 Pro (4K)' : 'Flash / Imagen'}</p>
+                                    </div>
+                                    <span className="text-xs font-bold text-pink-400 bg-pink-500/10 px-2 py-1 rounded">{baseModelCost} 💎</span>
                                 </button>
                             </div>
                             

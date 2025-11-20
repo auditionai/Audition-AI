@@ -5,7 +5,8 @@ import { DiamondIcon } from '../../common/DiamondIcon';
 import { useTranslation } from '../../../hooks/useTranslation';
 
 const COST_MANUAL = 0;
-const COST_AI = 1;
+const COST_AI_FLASH = 1;
+const COST_AI_PRO = 2;
 
 const FONTS = [
     { name: 'Poppins', class: 'font-["Poppins"]' },
@@ -34,6 +35,7 @@ interface SignatureToolProps {
 
 interface SignatureState {
     mode: ToolMode;
+    aiModelType: 'flash' | 'pro'; // Added model type
     text: string;
     // Manual
     font: string;
@@ -65,6 +67,7 @@ const SignatureTool: React.FC<SignatureToolProps> = ({ initialImage, onClearInit
 
     const [state, setState] = useState<SignatureState>({
         mode: 'ai',
+        aiModelType: 'flash',
         text: 'Audition AI',
         font: 'Poppins',
         size: 48,
@@ -195,7 +198,7 @@ const SignatureTool: React.FC<SignatureToolProps> = ({ initialImage, onClearInit
         e.target.value = '';
     };
 
-    const cost = state.mode === 'ai' ? COST_AI : COST_MANUAL;
+    const cost = state.mode === 'ai' ? (state.aiModelType === 'pro' ? COST_AI_PRO : COST_AI_FLASH) : COST_MANUAL;
 
     const handleApplyClick = () => {
         if (!sourceImage) return showToast(t('creator.aiTool.signature.error.noImage'), 'error');
@@ -228,7 +231,8 @@ const SignatureTool: React.FC<SignatureToolProps> = ({ initialImage, onClearInit
                     aiSize: state.aiSize,
                     aiIsBold: state.aiIsBold,
                     aiIsItalic: state.aiIsItalic,
-                    aiCustomColor: state.aiCustomColor
+                    aiCustomColor: state.aiCustomColor,
+                    model: state.aiModelType === 'pro' ? 'gemini-3-pro-image-preview' : 'gemini-2.5-flash-image'
                 }),
             });
             const result = await res.json();
@@ -340,6 +344,27 @@ const SignatureTool: React.FC<SignatureToolProps> = ({ initialImage, onClearInit
                             </>
                         ) : (
                            <>
+                                {/* NEW: Model Selection for AI Mode */}
+                                <div>
+                                    <label className="text-sm font-semibold text-skin-base mb-2 block">Mô hình AI (Chất lượng)</label>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <button 
+                                            onClick={() => updateState({ aiModelType: 'flash' })}
+                                            className={`p-3 rounded-lg border-2 text-left transition-all ${state.aiModelType === 'flash' ? 'border-blue-500 bg-blue-500/10 text-blue-300' : 'border-skin-border bg-skin-fill-secondary text-gray-400'}`}
+                                        >
+                                            <div className="text-xs font-bold">Nano Banana (Flash)</div>
+                                            <div className="text-[10px] mt-1 opacity-80">Tốc độ cao • 1 <i className="ph-fill ph-diamonds-four inline"></i></div>
+                                        </button>
+                                        <button 
+                                            onClick={() => updateState({ aiModelType: 'pro' })}
+                                            className={`p-3 rounded-lg border-2 text-left transition-all ${state.aiModelType === 'pro' ? 'border-yellow-500 bg-yellow-500/10 text-yellow-300 shadow-lg shadow-yellow-500/10' : 'border-skin-border bg-skin-fill-secondary text-gray-400'}`}
+                                        >
+                                            <div className="text-xs font-bold">Nano Banana Pro</div>
+                                            <div className="text-[10px] mt-1 opacity-80">4K Ultra • 2 <i className="ph-fill ph-diamonds-four inline"></i></div>
+                                        </button>
+                                    </div>
+                                </div>
+
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
                                         <label className="text-sm font-semibold text-skin-base mb-1 block">{t('creator.aiTool.signature.fontLabel')}</label>

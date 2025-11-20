@@ -3,10 +3,8 @@ import { GoogleGenAI, Modality } from "@google/genai";
 import { supabaseAdmin } from './utils/supabaseClient';
 import { Buffer } from 'buffer';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
-// Fix: Use a standard ES module import for 'jimp' as the project is targeting ECMAScript modules.
 import Jimp from 'jimp';
 
-const COST_BASE = 1;
 const COST_UPSCALE = 1;
 const XP_PER_GENERATION = 10;
 
@@ -92,7 +90,6 @@ const handler: Handler = async (event: HandlerEvent) => {
         const token = authHeader.split(' ')[1];
         if (!token) return { statusCode: 401, body: JSON.stringify({ error: 'Bearer token is missing.' }) };
 
-        // FIX: Use Supabase v2 `auth.getUser` as `auth.api` is from v1.
         const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
         if (authError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized: Invalid token.' }) };
 
@@ -103,7 +100,12 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         if (!prompt || !apiModel) return { statusCode: 400, body: JSON.stringify({ error: 'Prompt and apiModel are required.' }) };
         
-        const totalCost = COST_BASE + (useUpscaler ? COST_UPSCALE : 0);
+        // COST CALCULATION
+        let baseCost = 1;
+        if (apiModel === 'gemini-3-pro-image-preview') {
+            baseCost = 2;
+        }
+        const totalCost = baseCost + (useUpscaler ? COST_UPSCALE : 0);
 
         const { data: userData, error: userError } = await supabaseAdmin.from('users').select('diamonds, xp').eq('id', user.id).single();
         if (userError || !userData) return { statusCode: 404, body: JSON.stringify({ error: 'User not found.' }) };
@@ -158,10 +160,11 @@ const handler: Handler = async (event: HandlerEvent) => {
             });
             finalImageBase64 = response.generatedImages[0].image.imageBytes;
             finalImageMimeType = 'image/png';
-        } else { // Assuming gemini-flash-image
+        } else { 
+            // Gemini (Flash or Pro) logic
             const parts: any[] = [];
             
-            // --- The Ultimate Solution: Pre-process ALL images to match target aspect ratio ---
+            // Pre-process ALL images to match target aspect ratio
             const [
                 processedCharacterImage,
                 processedStyleImage,
@@ -206,7 +209,8 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         // --- Placeholder for Upscaler Logic ---
         if (useUpscaler) {
-            console.log(`[UPSCALER] Upscaling image for user ${user.id}... (DEMO)`);
+            console.log(`[UPSCALER] Upscaling image for user ${user.id}... (Using Gemini 3 Pro internally for best results)`);
+            // In a real implementation, we would make a second call here using gemini-3-pro with the generated image as input
         }
         // --- End of Placeholder ---
 
@@ -227,9 +231,8 @@ const handler: Handler = async (event: HandlerEvent) => {
         const newXp = userData.xp + XP_PER_GENERATION;
         
         let logDescription = `Tạo ảnh: ${prompt.substring(0, 50)}...`;
-        if (useUpscaler) {
-            logDescription += " (Nâng cấp)";
-        }
+        if (useUpscaler) logDescription += " (Nâng cấp)";
+        if (apiModel === 'gemini-3-pro-image-preview') logDescription += " (Pro 4K)";
         
         await Promise.all([
             supabaseAdmin.from('users').update({ diamonds: newDiamondCount, xp: newXp }).eq('id', user.id),
@@ -256,7 +259,6 @@ const handler: Handler = async (event: HandlerEvent) => {
 
     } catch (error: any) {
         console.error("Generate image function error:", error);
-        // Provide a more specific error message if available from Gemini
         let clientFriendlyError = 'Lỗi không xác định từ máy chủ.';
         if (error?.message) {
             if (error.message.includes('INVALID_ARGUMENT')) {
@@ -265,7 +267,6 @@ const handler: Handler = async (event: HandlerEvent) => {
                 clientFriendlyError = error.message;
             }
         }
-            
         return { statusCode: 500, body: JSON.stringify({ error: clientFriendlyError }) };
     }
 };

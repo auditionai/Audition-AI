@@ -26,12 +26,16 @@ interface ProcessedImageData {
 const BgRemoverTool: React.FC<BgRemoverToolProps> = ({ onMoveToGenerator, onMoveFaceToGenerator, onInstructionClick }) => {
     const { user, showToast } = useAuth();
     const { t } = useTranslation();
-    const { isProcessing, removeBackground, COST_PER_REMOVAL } = useBackgroundRemover();
+    const { isProcessing, removeBackground } = useBackgroundRemover();
 
     const [imagesForBgRemoval, setImagesForBgRemoval] = useState<Array<{id: string, url: string, file: File}>>([]);
     const [processedImages, setProcessedImages] = useState<ProcessedImageData[]>([]);
     const [isConfirmOpen, setConfirmOpen] = useState(false);
     const [selectedProcessedImage, setSelectedProcessedImage] = useState<ProcessedImageData | null>(null);
+    
+    // NEW: Model Selection
+    const [modelType, setModelType] = useState<'flash' | 'pro'>('flash');
+    const costPerImage = modelType === 'pro' ? 2 : 1;
     
     // Load processed images from sessionStorage on component mount
     useEffect(() => {
@@ -71,7 +75,7 @@ const BgRemoverTool: React.FC<BgRemoverToolProps> = ({ onMoveToGenerator, onMove
             showToast('Vui lòng tải lên ảnh để xử lý.', 'error');
             return;
         }
-        const totalCost = imagesForBgRemoval.length * COST_PER_REMOVAL;
+        const totalCost = imagesForBgRemoval.length * costPerImage;
         if (user && user.diamonds < totalCost) {
             showToast(`Bạn cần ${totalCost} kim cương, nhưng chỉ có ${user.diamonds}. Vui lòng nạp thêm.`, 'error');
             return;
@@ -84,8 +88,10 @@ const BgRemoverTool: React.FC<BgRemoverToolProps> = ({ onMoveToGenerator, onMove
         const imagesToProcessNow = [...imagesForBgRemoval];
         setImagesForBgRemoval([]);
     
+        const modelId = modelType === 'pro' ? 'gemini-3-pro-image-preview' : 'gemini-2.5-flash-image';
+
         for (const image of imagesToProcessNow) {
-            const result = await removeBackground(image.file);
+            const result = await removeBackground(image.file, modelId);
             if (result) {
                 const { processedUrl, imageBase64, mimeType } = result;
                 setProcessedImages(prev => [...prev, {
@@ -119,7 +125,7 @@ const BgRemoverTool: React.FC<BgRemoverToolProps> = ({ onMoveToGenerator, onMove
     };
 
 
-    const totalCost = imagesForBgRemoval.length * COST_PER_REMOVAL;
+    const totalCost = imagesForBgRemoval.length * costPerImage;
 
     return (
         <div className="h-full flex flex-col">
@@ -163,6 +169,25 @@ const BgRemoverTool: React.FC<BgRemoverToolProps> = ({ onMoveToGenerator, onMove
                             <p className="text-xs">{t('creator.aiTool.bgRemover.uploadDesc')}</p>
                             <input type="file" multiple accept="image/*" onChange={handleBgRemovalImageUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
                         </label>
+                        
+                        {/* Model Selection for BG Removal */}
+                        <div className="grid grid-cols-2 gap-3 mt-4">
+                            <button 
+                                onClick={() => setModelType('flash')}
+                                className={`p-2 text-left rounded-lg border transition-all ${modelType === 'flash' ? 'bg-blue-500/20 border-blue-500 text-blue-300' : 'bg-white/5 border-white/10 text-gray-400'}`}
+                            >
+                                <div className="text-xs font-bold">Flash (1💎)</div>
+                                <div className="text-[10px] opacity-80">Tốc độ nhanh</div>
+                            </button>
+                            <button 
+                                onClick={() => setModelType('pro')}
+                                className={`p-2 text-left rounded-lg border transition-all ${modelType === 'pro' ? 'bg-yellow-500/20 border-yellow-500 text-yellow-300 shadow-yellow-500/10 shadow-lg' : 'bg-white/5 border-white/10 text-gray-400'}`}
+                            >
+                                <div className="text-xs font-bold">Pro 4K (2💎)</div>
+                                <div className="text-[10px] opacity-80">Cắt siêu chi tiết</div>
+                            </button>
+                        </div>
+
                         {imagesForBgRemoval.length > 0 && (
                             <div className="mt-4">
                             <h4 className="text-sm font-semibold mb-2 text-gray-300">{t('creator.aiTool.bgRemover.readyToProcess', { count: imagesForBgRemoval.length })}</h4>

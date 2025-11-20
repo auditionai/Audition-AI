@@ -566,56 +566,45 @@
 }
 
 /* ==========================================================================
-   COSMETICS: AVATAR FRAMES & TITLES (Horizontal Scroll Update)
+   COSMETICS: AVATAR FRAMES & TITLES
    ========================================================================== */
 
-/* 1. Cosmetic Horizontal List */
+/* 1. Cosmetic Horizontal List Layout (NEW FIX) */
 .cosmetic-list-horizontal {
     display: flex;
-    flex-direction: row;
     overflow-x: auto;
     gap: 1rem;
-    width: 100%;
     padding-bottom: 1rem; /* Space for scrollbar */
-    scroll-snap-type: x mandatory;
-}
-
-/* Custom horizontal scrollbar */
-.cosmetic-list-horizontal::-webkit-scrollbar {
-    height: 8px;
-}
-.cosmetic-list-horizontal::-webkit-scrollbar-track {
-    background: rgba(255,255,255,0.05);
-    border-radius: 4px;
-}
-.cosmetic-list-horizontal::-webkit-scrollbar-thumb {
-    background: rgba(var(--color-accent), 0.3);
-    border-radius: 4px;
-}
-.cosmetic-list-horizontal::-webkit-scrollbar-thumb:hover {
-    background: rgba(var(--color-accent), 0.5);
+    scroll-behavior: smooth;
+    /* Custom Scrollbar */
+    scrollbar-width: thin;
+    scrollbar-color: rgba(var(--color-accent), 0.5) rgba(0,0,0,0.2);
 }
 
 .cosmetic-item {
+    flex: 0 0 120px; /* Fixed width */
+    width: 120px;
+    min-height: 140px;
+    
     border: 1px solid var(--color-border);
     border-radius: 0.75rem;
     padding: 0.75rem 0.5rem;
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     cursor: pointer;
     transition: all 0.3s ease;
     background-color: var(--color-fill-secondary);
-    
-    /* Fixed width for horizontal scroll items */
-    flex: 0 0 110px; 
-    width: 110px;
-    min-height: 150px; /* Increased height for better spacing */
     scroll-snap-align: start;
 }
 
-/* Add text handling to prevent overlap */
+.cosmetic-item:hover {
+    transform: translateY(-2px);
+    border-color: var(--color-border-accent);
+}
+
+/* Handle text overlap for items */
 .cosmetic-item span {
     overflow-wrap: break-word;
     word-wrap: break-word;
@@ -625,11 +614,8 @@
     max-width: 100%;
     text-align: center;
     margin-top: 0.5rem;
-    font-size: 0.75rem; /* Ensure font size is readable but small enough */
-    
-    /* Multi-line truncation */
     display: -webkit-box;
-    -webkit-line-clamp: 3; 
+    -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
 }
@@ -637,13 +623,12 @@
 .cosmetic-item.active {
     border-color: rgb(var(--color-accent));
     background-color: rgba(var(--color-accent), 0.1);
-    box-shadow: 0 0 15px rgba(var(--color-accent), 0.2);
-    transform: translateY(-2px);
+    box-shadow: 0 0 10px rgba(var(--color-accent), 0.2);
 }
 
 .cosmetic-item.locked {
-    opacity: 0.5;
-    filter: grayscale(0.9);
+    opacity: 0.6;
+    filter: grayscale(0.8);
     cursor: not-allowed;
 }
 
@@ -661,12 +646,8 @@
     align-items: center;
     justify-content: center;
     border-radius: 50%;
-    overflow: visible; /* Important for glow effects */
-    flex-shrink: 0;
-    
-    /* Sizing logic handled by component props now, CSS handles decorations */
+    overflow: visible; /* Allow glows to spill out */
 }
-
 /* Reset inner image styles */
 .avatar-frame-container img {
     border-radius: 50%;
@@ -676,8 +657,6 @@
     display: block;
     position: relative;
     z-index: 1;
-    /* Ensure image stays within circular bounds unless frame specifically wants overflow */
-    box-sizing: border-box; 
 }
 
 /* --- FRAMES VISUAL STYLES --- */
@@ -691,7 +670,7 @@
 .frame-basic-pink img { border: 3px solid #EC4899; box-shadow: 0 0 8px #EC4899; }
 
 /* Musical Note */
-.frame-music { padding: 3px; background: linear-gradient(45deg, #fff, #333); border-radius: 50%; animation: spin-slow 4s linear infinite; }
+.frame-music { padding: 4px; background: linear-gradient(45deg, #fff, #333); border-radius: 50%; animation: spin-slow 4s linear infinite; }
 .frame-music img { border: 2px solid #fff; }
 .frame-music::after { content: '🎵'; position: absolute; bottom: -5px; right: -5px; font-size: 16px; animation: pulse-glow 1s infinite; z-index: 2; }
 
@@ -716,7 +695,7 @@
 .frame-angel img { border: 3px solid #fff; box-shadow: 0 0 15px #fff; }
 .frame-angel::before {
     content: ''; position: absolute; top: -20px; left: 50%; transform: translateX(-50%);
-    width: 120%; height: 20px; background: rgba(255,255,255,0.8);
+    width: 60px; height: 15px; background: rgba(255,255,255,0.8);
     border-radius: 50%; filter: blur(5px); /* Halo */
 }
 
@@ -784,21 +763,34 @@
 
 /* --- TITLE VISUAL STYLES --- */
 .title-badge {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     font-size: 0.7rem;
     font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 0.05em;
     padding: 3px 8px;
     border-radius: 6px;
-    white-space: nowrap;
-    text-align: center;
     line-height: 1.2;
+    
+    /* Handle overflow */
     max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: middle;
+
     /* Default basic style */
     color: #9CA3AF;
     background: rgba(255,255,255,0.05);
     border: 1px solid rgba(255,255,255,0.1);
+}
+
+.title-badge img {
+    max-height: 24px;
+    width: auto;
+    object-fit: contain;
 }
 
 .title-basic { /* Default */ }

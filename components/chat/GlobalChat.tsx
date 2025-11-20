@@ -4,20 +4,25 @@ import { useChat } from '../../contexts/ChatContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import ChatMessageItem from './ChatMessage';
-import ImageModal from '../common/ImageModal'; // NEW
+import ImageModal from '../common/ImageModal';
+import ConfirmationModal from '../ConfirmationModal'; // Use existing app confirmation modal
 
 const EMOTES = [
     '😀', '😂', '😍', '😎', '😭', '😡', '👍', '👎', '❤️', '🔥', '✨', '🎉', '💃', '🕺', '🎶'
 ];
 
 const GlobalChat: React.FC = () => {
-    const { messages, isOpen, toggleChat, unreadCount, sendMessage, isLoading, uploadChatImage } = useChat();
+    const { messages, isOpen, toggleChat, unreadCount, sendMessage, isLoading, uploadChatImage, deleteMessage } = useChat();
     const { user } = useAuth();
     const { theme } = useTheme();
     const [input, setInput] = useState('');
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const [showEmotes, setShowEmotes] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
+
+    // Deletion State
+    const [messageToDelete, setMessageToDelete] = useState<string | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     // Image Preview State
     const [previewImage, setPreviewImage] = useState<string | null>(null);
@@ -59,6 +64,20 @@ const GlobalChat: React.FC = () => {
         }
         setIsUploading(false);
         e.target.value = '';
+    };
+
+    // Handle Message Deletion Request from ChatMessageItem
+    const handleRequestDelete = (messageId: string) => {
+        setMessageToDelete(messageId);
+    };
+
+    // Confirm Deletion
+    const handleConfirmDelete = async () => {
+        if (!messageToDelete) return;
+        setIsDeleting(true);
+        await deleteMessage(messageToDelete);
+        setIsDeleting(false);
+        setMessageToDelete(null);
     };
 
     // --- Drag Logic (Mouse) ---
@@ -155,6 +174,15 @@ const GlobalChat: React.FC = () => {
                 showInfoPanel={false}
             />
 
+            {/* Delete Confirmation Modal */}
+            <ConfirmationModal
+                isOpen={!!messageToDelete}
+                onClose={() => setMessageToDelete(null)}
+                onConfirm={handleConfirmDelete}
+                cost={0}
+                isLoading={isDeleting}
+            />
+
             {/* Draggable Chat Toggle Button */}
             <button
                 ref={bubbleRef}
@@ -182,6 +210,8 @@ const GlobalChat: React.FC = () => {
             <div 
                 className={`fixed top-0 right-0 h-full w-full sm:w-[380px] z-[80] chat-glass shadow-2xl transition-transform duration-300 ease-in-out transform flex flex-col
                     ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}
+                // Stop propagation to prevent unintended closes from parent click listeners (if any)
+                onClick={(e) => e.stopPropagation()} 
             >
                 {/* Header */}
                 <div className="h-16 flex items-center justify-between px-4 border-b border-white/10 bg-gradient-to-r from-transparent via-white/5 to-transparent">
@@ -209,6 +239,7 @@ const GlobalChat: React.FC = () => {
                             message={msg} 
                             isOwn={msg.user_id === user.id} 
                             onImageClick={(url) => setPreviewImage(url)}
+                            onDeleteMessage={handleRequestDelete}
                         />
                     ))}
                     <div ref={messagesEndRef} />

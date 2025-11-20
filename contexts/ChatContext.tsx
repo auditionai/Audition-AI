@@ -66,7 +66,11 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'global_chat_messages' }, 
                 (payload) => {
                     const newMsg = payload.new as ChatMessage;
-                    setMessages(prev => [...prev, newMsg]);
+                    // Avoid duplicate if we added it optimistically (though here we rely on fetch mostly)
+                    setMessages(prev => {
+                        if (prev.find(m => m.id === newMsg.id)) return prev;
+                        return [...prev, newMsg];
+                    });
                     if (!isOpen && newMsg.user_id !== user?.id) {
                         setUnreadCount(prev => prev + 1);
                     }
@@ -167,6 +171,8 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (!supabase || !user) return;
         
         try {
+             // Fetch the message first to verify ownership/admin status locally before DB call if needed, 
+             // or trust DB RLS. Here we do logic checks.
              const { data: msg, error } = await supabase
                 .from('global_chat_messages')
                 .select('user_id, metadata')
@@ -190,10 +196,25 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                  deleted_at: new Date().toISOString()
              };
 
-             await supabase
+             // Perform the DB update
+             const { error: updateError } = await supabase
                 .from('global_chat_messages')
                 .update({ is_deleted: true, metadata: updatedMetadata })
                 .eq('id', messageId);
+
+             if (updateError) throw updateError;
+             
+             // Optimistic UI Update: Immediately reflect changes locally
+             setMessages(prev => prev.map(m => {
+                 if (m.id === messageId) {
+                     return {
+                         ...m,
+                         is_deleted: true,
+                         metadata: updatedMetadata
+                     };
+                 }
+                 return m;
+             }));
              
              showToast("Đã xóa tin nhắn.", "success");
                 

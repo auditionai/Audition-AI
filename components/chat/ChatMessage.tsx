@@ -10,11 +10,12 @@ interface ChatMessageProps {
     message: ChatMessage;
     isOwn: boolean;
     onImageClick: (url: string) => void;
+    onDeleteMessage?: (id: string) => void;
 }
 
-const ChatMessageItem: React.FC<ChatMessageProps> = ({ message, isOwn, onImageClick }) => {
+const ChatMessageItem: React.FC<ChatMessageProps> = ({ message, isOwn, onImageClick, onDeleteMessage }) => {
     const { user } = useAuth();
-    const { deleteMessage, muteUser } = useChat();
+    const { muteUser } = useChat();
     const { content, type, metadata, is_deleted, created_at } = message;
     const [showMenu, setShowMenu] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
@@ -47,8 +48,10 @@ const ChatMessageItem: React.FC<ChatMessageProps> = ({ message, isOwn, onImageCl
         }
     };
 
-    const handleDelete = () => {
-        if (confirm('Xóa tin nhắn này?')) deleteMessage(message.id);
+    const handleDeleteClick = () => {
+        if (onDeleteMessage) {
+            onDeleteMessage(message.id);
+        }
         setShowMenu(false);
     };
 
@@ -93,7 +96,7 @@ const ChatMessageItem: React.FC<ChatMessageProps> = ({ message, isOwn, onImageCl
                     ${type === 'image' && !is_deleted ? 'p-1 bg-transparent border-none shadow-none' : ''}
                 `}>
                     {is_deleted ? (
-                        <div className="italic text-[11px] flex items-center gap-1.5 py-1">
+                        <div className="italic text-[11px] flex items-center gap-1.5 py-1 text-gray-400">
                             <i className="ph-fill ph-trash text-gray-500"></i>
                             <span>
                                 Tin nhắn đã bị xóa bởi <span className="font-bold text-gray-300">{deletedBy || 'Admin'}</span>
@@ -145,18 +148,18 @@ const ChatMessageItem: React.FC<ChatMessageProps> = ({ message, isOwn, onImageCl
 
             {/* Context Menu */}
             {showMenu && !is_deleted && (
-                <div ref={menuRef} className={`absolute top-8 ${isOwn ? 'right-10' : 'left-10'} bg-[#1e1b25] border border-white/10 rounded-lg shadow-xl z-50 py-1 min-w-[120px] animate-fade-in-up`}>
-                    <button onClick={handleDelete} className="w-full text-left px-3 py-2 text-xs text-red-400 hover:bg-white/5 flex items-center gap-2">
-                        <i className="ph-fill ph-trash"></i> Xóa tin
+                <div ref={menuRef} className={`absolute top-8 ${isOwn ? 'right-10' : 'left-10'} bg-[#1e1b25] border border-white/20 rounded-lg shadow-2xl z-50 py-2 min-w-[140px] animate-fade-in-up backdrop-blur-md`}>
+                    <button onClick={handleDeleteClick} className="w-full text-left px-4 py-2 text-xs text-red-400 hover:bg-white/5 flex items-center gap-2 transition-colors font-semibold">
+                        <i className="ph-fill ph-trash text-sm"></i> Xóa tin nhắn
                     </button>
                     {isAdmin && !isOwn && (
                         <>
                             <div className="border-t border-white/10 my-1"></div>
-                            <button onClick={() => handleMute(5)} className="w-full text-left px-3 py-2 text-xs text-yellow-400 hover:bg-white/5 flex items-center gap-2">
-                                <i className="ph-fill ph-clock"></i> Mute 5p
+                            <button onClick={() => handleMute(5)} className="w-full text-left px-4 py-2 text-xs text-yellow-400 hover:bg-white/5 flex items-center gap-2 transition-colors">
+                                <i className="ph-fill ph-clock text-sm"></i> Cấm chat 5p
                             </button>
-                            <button onClick={() => handleMute(60)} className="w-full text-left px-3 py-2 text-xs text-orange-400 hover:bg-white/5 flex items-center gap-2">
-                                <i className="ph-fill ph-clock"></i> Mute 1h
+                            <button onClick={() => handleMute(60)} className="w-full text-left px-4 py-2 text-xs text-orange-400 hover:bg-white/5 flex items-center gap-2 transition-colors">
+                                <i className="ph-fill ph-clock text-sm"></i> Cấm chat 1h
                             </button>
                         </>
                     )}

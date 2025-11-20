@@ -205,14 +205,19 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
         setConfirmOpen(false);
         const finalFaceImage = processedFaceImage ? processedFaceImage : (useBasicFaceLock && poseImage) ? poseImage.file : null;
 
+        // Calling the hook with all 11 arguments to match the definition
         generateImage(
-            prompt, selectedModel,
+            prompt, 
+            selectedModel,
             poseImage?.file ?? null,
             styleImage?.file ?? null,
             finalFaceImage,
-            aspectRatio, negativePrompt,
-            seed || undefined, useUpscaler,
-            imageResolution, useGoogleSearch
+            aspectRatio, 
+            negativePrompt,
+            seed || undefined, 
+            useUpscaler,
+            imageResolution, // Arg 10
+            useGoogleSearch  // Arg 11
         );
     };
     

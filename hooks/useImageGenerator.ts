@@ -1,3 +1,4 @@
+
 import { useState, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { AIModel } from '../types';
@@ -18,10 +19,17 @@ export const useImageGenerator = () => {
     const abortControllerRef = useRef<AbortController | null>(null);
 
     const generateImage = async (
-        prompt: string, model: AIModel, poseImageFile: File | null,
-        styleImageFile: File | null, faceImage: File | string | null,
-        aspectRatio: string, negativePrompt: string,
-        seed: number | undefined, useUpscaler: boolean
+        prompt: string, 
+        model: AIModel, 
+        poseImageFile: File | null,
+        styleImageFile: File | null, 
+        faceImage: File | string | null,
+        aspectRatio: string, 
+        negativePrompt: string,
+        seed: number | undefined, 
+        useUpscaler: boolean,
+        imageResolution: string = '1K',
+        useGoogleSearch: boolean = false
     ) => {
         setIsGenerating(true);
         setProgress(1);
@@ -29,11 +37,10 @@ export const useImageGenerator = () => {
         setGeneratedImage(null);
         abortControllerRef.current = new AbortController();
 
-        // Fix: Changed NodeJS.Timeout to ReturnType<typeof setInterval> for browser compatibility.
         let progressInterval: ReturnType<typeof setInterval> | null = null;
 
         try {
-            // Simulate initial steps a bit faster
+            // Simulate initial steps
             progressInterval = setInterval(() => {
                 setProgress(prev => (prev < 8 ? prev + 1 : prev));
             }, 1800);
@@ -51,12 +58,18 @@ export const useImageGenerator = () => {
                     Authorization: `Bearer ${session?.access_token}`,
                 },
                 body: JSON.stringify({
-                    prompt, modelId: model.id, apiModel: model.apiModel,
+                    prompt, 
+                    modelId: model.id, 
+                    apiModel: model.apiModel,
                     characterImage: poseImageBase64,
                     styleImage: styleImageBase64, 
                     faceReferenceImage: faceImageBase64,
-                    aspectRatio, negativePrompt,
-                    seed, useUpscaler
+                    aspectRatio, 
+                    negativePrompt,
+                    seed, 
+                    useUpscaler,
+                    imageSize: imageResolution,
+                    useGoogleSearch
                 }),
                 signal: abortControllerRef.current.signal,
             });

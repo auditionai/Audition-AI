@@ -3,7 +3,6 @@ import React, { useRef, useEffect, useState } from 'react';
 import { useChat } from '../../contexts/ChatContext';
 import { useAuth } from '../../contexts/AuthContext';
 import ChatMessageItem from './ChatMessage';
-import { useTranslation } from '../../hooks/useTranslation';
 
 const EMOTES = [
     '😀', '😂', '😍', '😎', '😭', '😡', '👍', '👎', '❤️', '🔥', '✨', '🎉', '💃', '🕺', '🎶'
@@ -12,7 +11,6 @@ const EMOTES = [
 const GlobalChat: React.FC = () => {
     const { messages, isOpen, toggleChat, unreadCount, sendMessage, isLoading } = useChat();
     const { user } = useAuth();
-    const { t } = useTranslation();
     const [input, setInput] = useState('');
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const [showEmotes, setShowEmotes] = useState(false);

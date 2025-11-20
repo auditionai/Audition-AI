@@ -1,7 +1,7 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useAuth } from './AuthContext';
-import { ChatMessage, User } from '../types';
+import { ChatMessage } from '../types';
 
 interface ChatContextType {
     messages: ChatMessage[];

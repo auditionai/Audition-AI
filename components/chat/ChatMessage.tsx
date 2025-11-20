@@ -3,7 +3,6 @@ import React from 'react';
 import { ChatMessage } from '../../types';
 import UserAvatar from '../common/UserAvatar';
 import UserBadge from '../common/UserBadge';
-import { useGameConfig } from '../../contexts/GameConfigContext';
 
 interface ChatMessageProps {
     message: ChatMessage;
@@ -11,7 +10,6 @@ interface ChatMessageProps {
 }
 
 const ChatMessageItem: React.FC<ChatMessageProps> = ({ message, isOwn }) => {
-    const { getRankForLevel } = useGameConfig();
     const { content, type, metadata } = message;
     
     // Fallback for legacy messages or missing metadata
@@ -20,8 +18,6 @@ const ChatMessageItem: React.FC<ChatMessageProps> = ({ message, isOwn }) => {
     const senderLevel = metadata?.sender_level || 1;
     const senderFrame = metadata?.sender_frame_id;
     const senderTitle = metadata?.sender_title_id;
-
-    const rank = getRankForLevel(senderLevel);
 
     return (
         <div className={`flex gap-3 ${isOwn ? 'flex-row-reverse' : 'flex-row'} items-start group`}>

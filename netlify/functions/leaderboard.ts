@@ -1,3 +1,4 @@
+
 import type { Handler } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
 
@@ -28,7 +29,10 @@ const handler: Handler = async () => {
             photo_url: user.photo_url,
             level: calculateLevelFromXp(user.xp),
             xp: user.xp,
-            creations_count: Number(user.creations_count), // Đảm bảo kiểu dữ liệu là number
+            creations_count: Number(user.creations_count),
+            // Add these fields to support badges in leaderboard
+            equipped_title_id: user.equipped_title_id,
+            equipped_frame_id: user.equipped_frame_id
         }));
 
         return {

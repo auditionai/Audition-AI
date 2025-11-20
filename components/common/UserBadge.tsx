@@ -21,7 +21,7 @@ const UserBadge: React.FC<UserBadgeProps> = ({ titleId, className = '' }) => {
     const displayName = title.nameKey ? t(title.nameKey) : (title.name || 'Title');
 
     return (
-        <div className={`inline-flex items-center gap-1.5 ${className}`}>
+        <div className={`inline-flex items-center gap-1.5 ${className}`} style={{ verticalAlign: 'middle' }}>
             {/* Render Icon OUTSIDE the badge frame if it exists */}
             {title.iconUrl && (
                 <img 

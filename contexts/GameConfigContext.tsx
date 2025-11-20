@@ -3,6 +3,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { Rank, CosmeticItem } from '../types';
 import { RANKS as DEFAULT_RANKS } from '../constants/ranks';
 import { ALL_COSMETICS as DEFAULT_COSMETICS } from '../constants/cosmetics';
+import { useTranslation } from '../hooks/useTranslation';
 
 interface GameConfigContextType {
     ranks: Rank[];
@@ -21,6 +22,7 @@ export const GameConfigProvider: React.FC<{ children: ReactNode }> = ({ children
     const [frames, setFrames] = useState<CosmeticItem[]>(DEFAULT_COSMETICS.filter(c => c.type === 'frame'));
     const [titles, setTitles] = useState<CosmeticItem[]>(DEFAULT_COSMETICS.filter(c => c.type === 'title'));
     const [isLoading, setIsLoading] = useState(true);
+    const { t } = useTranslation();
 
     const refreshConfig = async () => {
         setIsLoading(true);
@@ -36,30 +38,43 @@ export const GameConfigProvider: React.FC<{ children: ReactNode }> = ({ children
 
                 // 2. Process Cosmetics (Merge with Defaults to keep nameKeys)
                 if (data.cosmetics) {
-                    // Create a map of DB items for faster lookup
-                    const dbMap = new Map<string, any>(data.cosmetics.map((c: any) => [c.id, c]));
+                    // Create a map of DB items for faster lookup by ID
+                    const dbMapById = new Map<string, any>(data.cosmetics.map((c: any) => [c.id, c]));
+                    
+                    // Create a map of DB items for lookup by Name (for legacy item matching)
+                    // We normalize names to lower case for better matching
+                    const dbMapByName = new Map<string, any>(data.cosmetics.map((c: any) => [c.name.toLowerCase().trim(), c]));
 
                     // Merge Default Items with DB overrides
                     const mergedDefaultCosmetics = DEFAULT_COSMETICS.map(defaultItem => {
-                        const dbItem = dbMap.get(defaultItem.id);
+                        // 1. Try to find by exact ID (if we ever migrate IDs)
+                        let dbItem = dbMapById.get(defaultItem.id);
+                        
+                        // 2. If not found, try to find by Translated Name (This fixes the Icon issue for default items)
+                        if (!dbItem && defaultItem.nameKey) {
+                            const translatedName = t(defaultItem.nameKey).toLowerCase().trim();
+                            dbItem = dbMapByName.get(translatedName);
+                        }
+
                         if (dbItem) {
-                            // Remove from map to track what's left (custom items)
-                            dbMap.delete(defaultItem.id);
+                            // Remove from map to track what's left (custom items) if matched by ID
+                            if (dbMapById.has(dbItem.id)) dbMapById.delete(dbItem.id);
                             
                             return {
                                 ...defaultItem, // Keep defaults like nameKey, id, type
                                 ...dbItem,      // Override with DB values (iconUrl, unlockLevel, etc.)
-                                nameKey: defaultItem.nameKey, // Ensure nameKey persists if DB name is empty or hardcoded
-                                cssClass: dbItem.cssClass || defaultItem.cssClass, // Prefer DB, fallback to default
+                                id: defaultItem.id, // KEEP the legacy ID so user profiles don't break
+                                nameKey: defaultItem.nameKey, // Ensure nameKey persists
+                                cssClass: dbItem.cssClass || defaultItem.cssClass, 
                                 imageUrl: dbItem.imageUrl || defaultItem.imageUrl,
-                                iconUrl: dbItem.iconUrl || defaultItem.iconUrl
+                                iconUrl: dbItem.iconUrl || defaultItem.iconUrl // This will apply the uploaded icon
                             };
                         }
                         return defaultItem;
                     });
 
                     // Add remaining custom items from DB
-                    const customItems = Array.from(dbMap.values()).map((c: any) => ({
+                    const customItems = Array.from(dbMapById.values()).map((c: any) => ({
                         ...c,
                         nameKey: null // Custom items don't have translation keys
                     }));
@@ -80,9 +95,10 @@ export const GameConfigProvider: React.FC<{ children: ReactNode }> = ({ children
         }
     };
 
+    // Reload config when language changes to ensure name matching works
     useEffect(() => {
         refreshConfig();
-    }, []);
+    }, [t]);
 
     const getRankForLevel = (level: number): Rank => {
         let currentRank = ranks[0];
@@ -100,6 +116,7 @@ export const GameConfigProvider: React.FC<{ children: ReactNode }> = ({ children
         const list = type === 'frame' ? frames : titles;
         const found = list.find(item => item.id === id);
         if (!found) {
+             // Fallback
              if (type === 'frame') return list.find(i => i.id === 'default') || list[0];
              if (type === 'title') return list.find(i => i.id === 'newbie') || list[0];
         }

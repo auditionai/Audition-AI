@@ -20,6 +20,9 @@ const GameConfigManager: React.FC = () => {
     const [editingCosmetic, setEditingCosmetic] = useState<Partial<CosmeticItem> | null>(null);
     const [uploadFile, setUploadFile] = useState<File | null>(null);
 
+    // Helper to check valid UUID
+    const isUUID = (str?: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str || '');
+
     // --- Ranks Logic ---
     const handleEditRank = (rank: Rank | null) => {
         setEditingRank(rank || { levelThreshold: 0, title: '', color: 'text-gray-400', icon: '' });
@@ -30,9 +33,14 @@ const GameConfigManager: React.FC = () => {
         if (!editingRank) return;
         setIsSaving(true);
         try {
+            // Logic: If ID is legacy (not UUID) or missing, treat as CREATE (POST)
+            // If ID is valid UUID, treat as UPDATE (PUT)
+            const isLegacyOrNew = !editingRank.id || !isUUID(editingRank.id);
+            const method = isLegacyOrNew ? 'POST' : 'PUT';
+
             // Map to snake_case for DB
             const dbPayload = {
-                id: editingRank.id,
+                id: isLegacyOrNew ? undefined : editingRank.id, // Don't send legacy IDs to DB
                 level_threshold: editingRank.levelThreshold,
                 title: editingRank.title,
                 color_hex: editingRank.color,
@@ -40,7 +48,7 @@ const GameConfigManager: React.FC = () => {
             };
 
             const res = await fetch('/.netlify/functions/admin-game-config?type=rank', {
-                method: editingRank.id ? 'PUT' : 'POST',
+                method: method,
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
                 body: JSON.stringify(dbPayload),
             });
@@ -91,9 +99,13 @@ const GameConfigManager: React.FC = () => {
                 finalImageUrl = uploadData.url;
             }
 
+            // Logic: If ID is legacy (not UUID) or missing, treat as CREATE (POST)
+            const isLegacyOrNew = !editingCosmetic.id || !isUUID(editingCosmetic.id);
+            const method = isLegacyOrNew ? 'POST' : 'PUT';
+
             // Map to snake_case for DB
             const dbPayload = {
-                id: editingCosmetic.id,
+                id: isLegacyOrNew ? undefined : editingCosmetic.id, // Don't send legacy IDs to DB
                 type: editingCosmetic.type,
                 name: editingCosmetic.name,
                 rarity: editingCosmetic.rarity,
@@ -104,7 +116,7 @@ const GameConfigManager: React.FC = () => {
             };
 
             const res = await fetch('/.netlify/functions/admin-game-config?type=cosmetic', {
-                method: editingCosmetic.id ? 'PUT' : 'POST',
+                method: method,
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
                 body: JSON.stringify(dbPayload),
             });
@@ -126,6 +138,13 @@ const GameConfigManager: React.FC = () => {
     
     const handleDelete = async (id: string, type: 'rank' | 'cosmetic') => {
         if (!confirm('Are you sure? This cannot be undone.')) return;
+        
+        // Prevent deleting legacy items via API (since they aren't in DB yet)
+        if (!isUUID(id)) {
+            showToast("Cannot delete built-in default items. Please create a new item to override them.", "error");
+            return;
+        }
+
         try {
              await fetch(`/.netlify/functions/admin-game-config?type=${type}`, {
                 method: 'DELETE',
@@ -161,7 +180,7 @@ const GameConfigManager: React.FC = () => {
                                 </div>
                                 <div className="flex gap-2">
                                     <button onClick={() => handleEditRank(r)} className="text-blue-400 text-xs">{t('creator.settings.admin.gameConfig.buttons.edit')}</button>
-                                    {r.id && <button onClick={() => handleDelete(r.id!, 'rank')} className="text-red-400 text-xs">{t('creator.settings.admin.gameConfig.buttons.delete')}</button>}
+                                    {r.id && isUUID(r.id) && <button onClick={() => handleDelete(r.id!, 'rank')} className="text-red-400 text-xs">{t('creator.settings.admin.gameConfig.buttons.delete')}</button>}
                                 </div>
                             </div>
                         ))}
@@ -185,7 +204,7 @@ const GameConfigManager: React.FC = () => {
                                 </div>
                                 <div className="flex flex-col gap-1">
                                      <button onClick={() => handleEditCosmetic(c)} className="text-blue-400 text-xs">{t('creator.settings.admin.gameConfig.buttons.edit')}</button>
-                                     {c.id && c.id !== 'default' && c.id !== 'newbie' && <button onClick={() => handleDelete(c.id, 'cosmetic')} className="text-red-400 text-xs">{t('creator.settings.admin.gameConfig.buttons.delete')}</button>}
+                                     {c.id && isUUID(c.id) && <button onClick={() => handleDelete(c.id, 'cosmetic')} className="text-red-400 text-xs">{t('creator.settings.admin.gameConfig.buttons.delete')}</button>}
                                 </div>
                             </div>
                         ))}

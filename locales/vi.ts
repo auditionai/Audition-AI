@@ -272,6 +272,49 @@ export const vi = {
           vaporwave: 'VAPORWAVE',
           monochrome: 'ĐƠN SẮC',
         }
+      },
+      cosmetics: {
+        frames: {
+          default: 'Cơ Bản',
+          wood: 'Gỗ Mộc',
+          neonBlue: 'Neon Xanh',
+          neonPink: 'Neon Hồng',
+          music: 'Giai Điệu',
+          gradientSpin: 'Vòng Xoay 7 Màu',
+          sakura: 'Hoa Anh Đào',
+          cyber: 'Công Nghệ',
+          angel: 'Thiên Thần',
+          demon: 'Ác Quỷ',
+          thunder: 'Sấm Sét',
+          legendaryGold: 'Rồng Vàng Huyền Thoại',
+          ice: 'Băng Giá',
+          love: 'Nhịp Đập Trái Tim',
+          galaxy: 'Dải Ngân Hà',
+          matrix: 'Ma Trận Số',
+          glitch: 'Nhiễu Sóng',
+          mythicFire: 'Hỏa Thần',
+          god: 'Vô Cực',
+        },
+        titles: {
+          newbie: 'Tân Binh',
+          dancer: 'Vũ Công Phố Sàn',
+          styleIcon: 'Biểu Tượng Thời Trang',
+          party: 'Dân Chơi',
+          rhythm: 'Thánh Nhịp Điệu',
+          vip: 'VIP',
+          charming: 'Người Đẹp',
+          cyber: 'Cyberpunk',
+          angel: 'Giọng Ca Thiên Thần',
+          demon: 'Chúa Tể Bóng Đêm',
+          thunder: 'Thần Sấm',
+          glitchMaster: 'Bậc Thầy Glitch',
+          ice: 'Nữ Hoàng Băng Giá',
+          love: 'Kẻ Cắp Trái Tim',
+          galaxy: 'Ngôi Sao Vũ Trụ',
+          matrix: 'The One',
+          legend: 'Huyền Thoại',
+          auditionGod: 'Thánh Quẩy Audition',
+        }
       }
     },
     leaderboard: {
@@ -464,10 +507,8 @@ export const vi = {
             add: 'Thêm',
           },
           confirmDelete: 'Bạn chắc chắn muốn xóa mốc thưởng này?',
-          success: {
-            create: 'Tạo mốc thưởng thành công!',
-            delete: 'Xóa mốc thưởng thành công.',
-          },
+          success: 'Tạo mốc thưởng thành công!',
+          delete: 'Xóa mốc thưởng thành công.',
           error: {
             load: 'Không thể tải phần thưởng điểm danh.',
           },
@@ -548,23 +589,6 @@ export const vi = {
       needed: 'Cần {{xp}} XP nữa để đạt',
       maxLevel: 'Đã đạt cấp tối đa!',
     },
-    cosmetics: {
-      frames: {
-        default: 'Cơ Bản',
-        neonBlue: 'Neon Xanh',
-        neonPink: 'Neon Hồng',
-        gradientSpin: 'Vòng Xoay 7 Màu',
-        legendaryGold: 'Rồng Vàng Huyền Thoại',
-        mythicFire: 'Hỏa Thần',
-      },
-      titles: {
-        newbie: 'Tân Binh',
-        styleIcon: 'Biểu Tượng Thời Trang',
-        vip: 'VIP',
-        glitchMaster: 'Bậc Thầy Glitch',
-        auditionGod: 'Thánh Quẩy Audition',
-      }
-    }
   },
   modals: {
     promptLibrary: {
@@ -760,7 +784,7 @@ export const vi = {
         formula: 'Công thức gợi ý:',
         formula_text: '[Chủ thể], [Hành động], [Bối cảnh], [Chi tiết bổ sung]',
         example: 'Ví dụ:',
-        example_text: '"một cô gái tóc hồng dài, mặc váy công chúa lấp lánh, đang khiêu vũ một mình, trong một cung điện tráng lệ bằng pha lê, ánh trăng chiếu rọi, hiệu ứng phép thuật bay xung quanh"',
+        example_text: '"một cô gái tóc hồng, mặc váy công chúa lấp lánh, đang khiêu vũ một mình, trong một cung điện tráng lệ bằng pha lê, ánh trăng chiếu rọi, hiệu ứng phép thuật bay xung quanh"',
         p2: 'Sử dụng tiếng Việt, không dấu hoặc có dấu đều được.',
       },
       advanced: {

@@ -76,14 +76,15 @@ const ImageModal: React.FC<ImageModalProps> = ({ isOpen, onClose, image, showInf
                         <UserAvatar 
                             url={image.creator.photo_url} 
                             alt={image.creator.display_name} 
-                            frameId={image.creator.equipped_frame_id} 
+                            frameId={image.creator.equipped_frame_id}
+                            level={image.creator.level}
                             size="md" 
                         />
                         <div>
                             <div className="flex items-center gap-2">
                                 <p className={`font-bold ${rank.color} neon-text-glow`}>{image.creator.display_name}</p>
                             </div>
-                            <UserBadge titleId={image.creator.equipped_title_id} />
+                            <UserBadge titleId={image.creator.equipped_title_id} level={image.creator.level} />
                             <p className={`text-xs font-semibold flex items-center gap-1.5 mt-1 ${rank.color}`}>{rank.icon} {rank.title}</p>
                         </div>
                     </div>

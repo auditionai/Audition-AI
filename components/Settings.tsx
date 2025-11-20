@@ -20,7 +20,7 @@ import { useGameConfig } from '../contexts/GameConfigContext';
 // Personalization Panel (Dynamic)
 const PersonalizationPanel: React.FC = () => {
     const { user, session, updateUserProfile, showToast } = useAuth();
-    const { frames, titles } = useGameConfig(); // Use Dynamic Config
+    const { frames, titles, getBestCosmeticForLevel } = useGameConfig(); 
     const { t } = useTranslation();
     
     if (!user) return null;
@@ -53,6 +53,13 @@ const PersonalizationPanel: React.FC = () => {
         return false;
     };
 
+    // Determine the effective active item (Auto or Manual)
+    const bestFrame = getBestCosmeticForLevel('frame', user.level);
+    const activeFrameId = (user.equipped_frame_id && user.equipped_frame_id !== 'default') ? user.equipped_frame_id : bestFrame.id;
+
+    const bestTitle = getBestCosmeticForLevel('title', user.level);
+    const activeTitleId = (user.equipped_title_id && user.equipped_title_id !== 'newbie') ? user.equipped_title_id : bestTitle.id;
+
     return (
         <div className="bg-[#12121A]/80 border border-pink-500/20 rounded-2xl shadow-lg p-6 mt-8">
              <h3 className="text-2xl font-bold mb-6 text-pink-400 flex items-center gap-2">
@@ -65,14 +72,14 @@ const PersonalizationPanel: React.FC = () => {
                 <div className="cosmetic-list-horizontal">
                     {frames.map(frame => {
                         const locked = isLocked(frame.unlockCondition);
-                        const active = user.equipped_frame_id === frame.id || (!user.equipped_frame_id && frame.id === 'default');
+                        const isActive = activeFrameId === frame.id;
                         const displayName = frame.nameKey ? t(frame.nameKey) : frame.name;
                         
                         return (
                             <div 
                                 key={frame.id} 
                                 onClick={() => !locked && handleEquip('frame', frame.id)}
-                                className={`cosmetic-item rarity-${frame.rarity} ${active ? 'active' : ''} ${locked ? 'locked' : ''}`}
+                                className={`cosmetic-item rarity-${frame.rarity} ${isActive ? 'active' : ''} ${locked ? 'locked' : ''}`}
                             >
                                 <div className={`avatar-frame-container ${frame.cssClass || 'frame-none'} mb-2`} style={{ width: '64px', height: '64px' }}>
                                     <img src={user.photo_url} className="w-full h-full rounded-full object-cover" alt="preview" />
@@ -94,17 +101,17 @@ const PersonalizationPanel: React.FC = () => {
                 <div className="cosmetic-list-horizontal">
                     {titles.map(title => {
                         const locked = isLocked(title.unlockCondition);
-                        const active = user.equipped_title_id === title.id || (!user.equipped_title_id && title.id === 'newbie');
+                        const isActive = activeTitleId === title.id;
                         const displayName = title.nameKey ? t(title.nameKey) : title.name;
 
                         return (
                              <div 
                                 key={title.id} 
                                 onClick={() => !locked && handleEquip('title', title.id)}
-                                className={`cosmetic-item rarity-${title.rarity} ${active ? 'active' : ''} ${locked ? 'locked' : ''}`}
+                                className={`cosmetic-item rarity-${title.rarity} ${isActive ? 'active' : ''} ${locked ? 'locked' : ''}`}
                             >
                                 <div className="h-12 flex items-center justify-center w-full px-2 overflow-hidden">
-                                    {/* Use UserBadge here to ensure icons are displayed correctly */}
+                                    {/* Explicitly pass ID here for preview list */}
                                     <UserBadge titleId={title.id} />
                                 </div>
                                 <span className="text-center text-gray-300 mt-2 text-xs px-1" title={displayName}>{displayName}</span>
@@ -226,11 +233,12 @@ const Settings: React.FC = () => {
             <div className="max-w-4xl mx-auto">
                 <div className="bg-[#12121A]/80 border border-white/10 rounded-2xl shadow-lg p-6 flex flex-col md:flex-row items-center gap-6">
                     <div className="relative group flex-shrink-0">
-                        {/* Updated to use UserAvatar with current frame */}
+                        {/* Updated to use UserAvatar with current frame and level for auto-selection */}
                         <UserAvatar 
                             url={user.photo_url} 
                             alt={user.display_name} 
                             frameId={user.equipped_frame_id}
+                            level={user.level}
                             size="lg"
                             className="w-28 h-28" 
                         />
@@ -262,10 +270,10 @@ const Settings: React.FC = () => {
                                     onChange={(e) => setDisplayName(e.target.value)}
                                     className="auth-input"
                                 />
-                                {/* Display Title Badge Preview */}
+                                {/* Display Title Badge Preview with auto-selection support */}
                                 <div className="mt-2 flex items-center gap-2">
                                     <span className="text-xs text-gray-400">{t('creator.settings.personalization.currentTitle')}:</span>
-                                    <UserBadge titleId={user.equipped_title_id} />
+                                    <UserBadge titleId={user.equipped_title_id} level={user.level} />
                                 </div>
                             </div>
                             <button type="submit" disabled={isSaving || displayName.trim() === user.display_name} className="themed-button-primary w-full sm:w-auto px-6 py-2 font-semibold">
@@ -282,8 +290,6 @@ const Settings: React.FC = () => {
                 <PersonalizationPanel />
 
                 {user.is_admin && <AdminPanel />}
-                
-                {/* Other settings blocks ... */}
             </div>
         </div>
     );

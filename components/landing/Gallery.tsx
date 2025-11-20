@@ -58,7 +58,8 @@ const Gallery: React.FC<GalleryProps> = ({ images, onImageClick, limit, showSeeM
                           <UserAvatar 
                             url={image.creator.photo_url} 
                             alt={image.creator.display_name} 
-                            frameId={image.creator.equipped_frame_id} 
+                            frameId={image.creator.equipped_frame_id}
+                            level={image.creator.level}
                             size="sm" 
                             className="flex-shrink-0"
                           />
@@ -66,7 +67,7 @@ const Gallery: React.FC<GalleryProps> = ({ images, onImageClick, limit, showSeeM
                             <p className={`font-bold text-sm drop-shadow-lg truncate ${rank.color} neon-text-glow`}>{image.creator.display_name}</p>
                             {/* Use UserBadge for icon and title display */}
                             <div className="flex items-center">
-                                <UserBadge titleId={image.creator.equipped_title_id} className="scale-90 origin-left" />
+                                <UserBadge titleId={image.creator.equipped_title_id} level={image.creator.level} className="scale-90 origin-left" />
                             </div>
                           </div>
                       </div>
@@ -107,14 +108,15 @@ const Gallery: React.FC<GalleryProps> = ({ images, onImageClick, limit, showSeeM
                       <UserAvatar 
                         url={image.creator.photo_url} 
                         alt={image.creator.display_name} 
-                        frameId={image.creator.equipped_frame_id} 
+                        frameId={image.creator.equipped_frame_id}
+                        level={image.creator.level}
                         size="sm" 
                         className="flex-shrink-0"
                       />
                       <div className="truncate flex flex-col gap-1">
                         <p className={`font-bold text-sm drop-shadow-lg truncate ${rank.color} neon-text-glow`}>{image.creator.display_name}</p>
                          <div className="flex items-center">
-                            <UserBadge titleId={image.creator.equipped_title_id} className="scale-90 origin-left" />
+                            <UserBadge titleId={image.creator.equipped_title_id} level={image.creator.level} className="scale-90 origin-left" />
                          </div>
                       </div>
                   </div>

@@ -8,11 +8,24 @@ interface UserAvatarProps {
     frameId?: string;
     size?: 'sm' | 'md' | 'lg' | 'xl';
     className?: string;
+    level?: number; // Added level for auto-equip logic
 }
 
-const UserAvatar: React.FC<UserAvatarProps> = ({ url, alt, frameId, size = 'md', className = '' }) => {
-    const { getCosmeticById } = useGameConfig();
-    const frame = getCosmeticById(frameId, 'frame');
+const UserAvatar: React.FC<UserAvatarProps> = ({ url, alt, frameId, size = 'md', className = '', level }) => {
+    const { getCosmeticById, getBestCosmeticForLevel } = useGameConfig();
+    
+    let frame = getCosmeticById(frameId, 'frame');
+    
+    // Auto-equip logic: If no specific frame is equipped (or it's the legacy 'default'), 
+    // and we know the user's level, find the best frame for that level.
+    if ((!frameId || frameId === 'default') && level !== undefined) {
+        frame = getBestCosmeticForLevel('frame', level);
+    }
+    
+    // Fallback if still null (e.g. no level provided)
+    if (!frame) {
+        frame = getCosmeticById('default', 'frame');
+    }
     
     // Map size prop to specific pixel width/height style
     const getSizeStyle = () => {

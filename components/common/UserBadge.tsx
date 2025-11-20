@@ -6,14 +6,25 @@ import { useTranslation } from '../../hooks/useTranslation';
 interface UserBadgeProps {
     titleId?: string;
     className?: string;
+    level?: number; // Added level for auto-equip logic
 }
 
-const UserBadge: React.FC<UserBadgeProps> = ({ titleId, className = '' }) => {
+const UserBadge: React.FC<UserBadgeProps> = ({ titleId, className = '', level }) => {
     const { t } = useTranslation();
-    const { getCosmeticById } = useGameConfig();
+    const { getCosmeticById, getBestCosmeticForLevel } = useGameConfig();
     
-    // Get the title item, handled safely by context
-    const title = getCosmeticById(titleId, 'title');
+    let title = getCosmeticById(titleId, 'title');
+
+    // Auto-equip logic: If no specific title is equipped (or it's the legacy 'newbie'), 
+    // and we know the user's level, find the best title for that level.
+    if ((!titleId || titleId === 'newbie') && level !== undefined) {
+        title = getBestCosmeticForLevel('title', level);
+    }
+
+    // Fallback
+    if (!title) {
+         title = getCosmeticById('newbie', 'title');
+    }
 
     if (!title) return null;
 

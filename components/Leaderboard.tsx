@@ -95,10 +95,10 @@ const Leaderboard: React.FC = () => {
                                             <div className="podium-rank-icon">{rankIcon}</div>
                                             <div className="podium-rank-number">{user.rank}</div>
                                             <div className="mb-4">
-                                                <UserAvatar url={user.photo_url} alt={user.display_name} frameId={user.equipped_frame_id} size="lg" />
+                                                <UserAvatar url={user.photo_url} alt={user.display_name} frameId={user.equipped_frame_id} level={user.level} size="lg" />
                                             </div>
                                             <p className="podium-name">{user.display_name}</p>
-                                            <UserBadge titleId={user.equipped_title_id} className="mb-2" />
+                                            <UserBadge titleId={user.equipped_title_id} level={user.level} className="mb-2" />
                                             <p className={`podium-level ${rankDetails.color}`}>{rankDetails.title} - {t('common.level')} {user.level}</p>
                                             <div className="podium-stats">
                                                 <span><i className="ph-fill ph-image text-pink-400"></i> {user.creations_count}</span>
@@ -118,11 +118,11 @@ const Leaderboard: React.FC = () => {
                                     return (
                                         <div key={user.id} className="leaderboard-item">
                                             <div className="leaderboard-rank">{user.rank}</div>
-                                            <UserAvatar url={user.photo_url} alt={user.display_name} frameId={user.equipped_frame_id} size="md" />
+                                            <UserAvatar url={user.photo_url} alt={user.display_name} frameId={user.equipped_frame_id} level={user.level} size="md" />
                                             <div className="flex-grow">
                                                 <div className="flex items-center gap-2">
                                                     <p className={`font-bold text-lg truncate ${rank.color} neon-text-glow`}>{user.display_name}</p>
-                                                    <UserBadge titleId={user.equipped_title_id} />
+                                                    <UserBadge titleId={user.equipped_title_id} level={user.level} />
                                                 </div>
                                                 <div className="flex items-center gap-4 text-sm text-skin-muted">
                                                     <span>{t('common.level')} {user.level}</span>

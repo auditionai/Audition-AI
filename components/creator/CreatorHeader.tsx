@@ -175,10 +175,10 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
             <div className="hidden md:flex relative items-center gap-3" ref={dropdownRef}>
                 <div className="hidden sm:flex flex-col items-end gap-0 text-right">
                     <span className="font-semibold text-skin-base text-sm">{user.display_name}</span>
-                    <UserBadge titleId={user.equipped_title_id} className="scale-90 origin-right" />
+                    <UserBadge titleId={user.equipped_title_id} level={user.level} className="scale-90 origin-right" />
                 </div>
                 <button onClick={() => setDropdownOpen(!isDropdownOpen)} className="flex items-center gap-3 cursor-pointer">
-                  <UserAvatar url={user.photo_url} alt={user.display_name} frameId={user.equipped_frame_id} size="md" />
+                  <UserAvatar url={user.photo_url} alt={user.display_name} frameId={user.equipped_frame_id} level={user.level} size="md" />
                 </button>
               {isDropdownOpen && (
                 <div className="absolute right-0 mt-3 top-full w-72 origin-top-right bg-skin-fill-modal border border-skin-border rounded-md shadow-lg z-50 animate-fade-in-down">

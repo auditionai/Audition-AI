@@ -21,11 +21,20 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         if (event.httpMethod === 'POST') {
             const { data, error } = await supabaseAdmin.from(table).insert(payload).select().single();
-            if (error) return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
+            if (error) {
+                console.error(`DB Insert Error (${table}):`, error);
+                return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
+            }
             return { statusCode: 201, body: JSON.stringify(data) };
         } else {
+             // PUT
+             if (!id) return { statusCode: 400, body: JSON.stringify({ error: 'ID missing for update' }) };
+             
              const { data, error } = await supabaseAdmin.from(table).update(payload).eq('id', id).select().single();
-            if (error) return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
+            if (error) {
+                console.error(`DB Update Error (${table} ID: ${id}):`, error);
+                return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
+            }
             return { statusCode: 200, body: JSON.stringify(data) };
         }
     }

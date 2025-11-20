@@ -16,11 +16,31 @@ const handler: Handler = async (event: HandlerEvent) => {
         if (ranksRes.error) throw ranksRes.error;
         if (cosmeticsRes.error) throw cosmeticsRes.error;
 
+        // Map snake_case from DB to camelCase for Frontend
+        const ranks = (ranksRes.data || []).map((r: any) => ({
+            id: r.id,
+            levelThreshold: r.level_threshold,
+            title: r.title,
+            icon: r.icon_url,
+            color: r.color_hex
+        }));
+
+        const cosmetics = (cosmeticsRes.data || []).map((c: any) => ({
+            id: c.id,
+            type: c.type,
+            name: c.name,
+            nameKey: null, // Configured from admin panel usually lacks key, unless manually added
+            rarity: c.rarity,
+            cssClass: c.css_class,
+            imageUrl: c.image_url,
+            unlockCondition: { level: c.unlock_level }
+        }));
+
         return {
             statusCode: 200,
             body: JSON.stringify({
-                ranks: ranksRes.data,
-                cosmetics: cosmeticsRes.data
+                ranks,
+                cosmetics
             }),
         };
     } catch (error: any) {

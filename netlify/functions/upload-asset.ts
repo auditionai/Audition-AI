@@ -33,8 +33,11 @@ const handler: Handler = async (event: HandlerEvent) => {
         const [header, base64] = image.split(',');
         const mimeType = header.match(/:(.*?);/)?.[1] || 'image/png';
         const imageBuffer = Buffer.from(base64, 'base64');
+        
+        // Sanitize folder name to prevent path traversal
+        const safeFolder = folder.replace(/[^a-zA-Z0-9_-]/g, ''); 
         const ext = mimeType.split('/')[1] || 'png';
-        const fileName = `${folder}/${Date.now()}_${Math.floor(Math.random() * 1000)}.${ext}`;
+        const fileName = `${safeFolder}/${Date.now()}_${Math.floor(Math.random() * 10000)}.${ext}`;
 
         await (s3Client as any).send(new PutObjectCommand({
             Bucket: process.env.R2_BUCKET_NAME!,

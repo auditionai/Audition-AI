@@ -30,12 +30,26 @@ const GameConfigManager: React.FC = () => {
         if (!editingRank) return;
         setIsSaving(true);
         try {
+            // Map to snake_case for DB
+            const dbPayload = {
+                id: editingRank.id,
+                level_threshold: editingRank.levelThreshold,
+                title: editingRank.title,
+                color_hex: editingRank.color,
+                icon_url: typeof editingRank.icon === 'string' ? editingRank.icon : ''
+            };
+
             const res = await fetch('/.netlify/functions/admin-game-config?type=rank', {
                 method: editingRank.id ? 'PUT' : 'POST',
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
-                body: JSON.stringify(editingRank),
+                body: JSON.stringify(dbPayload),
             });
-            if (!res.ok) throw new Error('Failed to save rank');
+            
+            if (!res.ok) {
+                const errData = await res.json();
+                throw new Error(errData.error || 'Failed to save rank');
+            }
+            
             showToast(t('creator.settings.admin.gameConfig.buttons.save'), 'success');
             setIsModalOpen(false);
             refreshConfig();
@@ -66,26 +80,40 @@ const GameConfigManager: React.FC = () => {
             let finalImageUrl = editingCosmetic.imageUrl;
 
             if (uploadFile) {
-                const { dataUrl } = await resizeImage(uploadFile, 512); // Resize logic if needed
+                const { dataUrl } = await resizeImage(uploadFile, 512); 
                 const uploadRes = await fetch('/.netlify/functions/upload-asset', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
-                    body: JSON.stringify({ image: dataUrl, folder: 'assets' }),
+                    body: JSON.stringify({ image: dataUrl, folder: 'cosmetics' }),
                 });
                 const uploadData = await uploadRes.json();
                 if (!uploadRes.ok) throw new Error(uploadData.error);
                 finalImageUrl = uploadData.url;
             }
 
-            const payload = { ...editingCosmetic, imageUrl: finalImageUrl };
+            // Map to snake_case for DB
+            const dbPayload = {
+                id: editingCosmetic.id,
+                type: editingCosmetic.type,
+                name: editingCosmetic.name,
+                rarity: editingCosmetic.rarity,
+                css_class: editingCosmetic.cssClass,
+                image_url: finalImageUrl,
+                unlock_level: editingCosmetic.unlockCondition?.level || 0,
+                is_active: true
+            };
 
             const res = await fetch('/.netlify/functions/admin-game-config?type=cosmetic', {
                 method: editingCosmetic.id ? 'PUT' : 'POST',
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
-                body: JSON.stringify(payload),
+                body: JSON.stringify(dbPayload),
             });
             
-            if (!res.ok) throw new Error('Failed to save cosmetic');
+            if (!res.ok) {
+                const errData = await res.json();
+                throw new Error(errData.error || 'Failed to save cosmetic');
+            }
+            
             showToast(t('creator.settings.admin.gameConfig.buttons.save'), 'success');
             setIsModalOpen(false);
             refreshConfig();
@@ -147,7 +175,7 @@ const GameConfigManager: React.FC = () => {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-96 overflow-y-auto custom-scrollbar">
                         {[...frames, ...titles].map(c => (
                             <div key={c.id} className="flex gap-3 p-2 bg-white/5 rounded items-center">
-                                <div className="w-12 h-12 bg-black/30 rounded flex items-center justify-center overflow-hidden">
+                                <div className="w-12 h-12 bg-black/30 rounded flex items-center justify-center overflow-hidden relative">
                                     {c.imageUrl ? <img src={c.imageUrl} className="w-full h-full object-contain" alt=""/> : <span className="text-xs text-gray-500">CSS</span>}
                                 </div>
                                 <div className="flex-grow">
@@ -213,7 +241,7 @@ const GameConfigManager: React.FC = () => {
                             </div>
                             <div>
                                 <label className="block text-sm text-gray-400 mb-1">{t('creator.settings.admin.gameConfig.form.uploadImage')}</label>
-                                <input type="file" onChange={e => setUploadFile(e.target.files?.[0] || null)} className="text-sm text-gray-400" />
+                                <input type="file" accept="image/*" onChange={e => setUploadFile(e.target.files?.[0] || null)} className="text-sm text-gray-400" />
                             </div>
                             <div>
                                 <label className="text-sm text-gray-400">{t('creator.settings.admin.gameConfig.form.cssClass')}</label>

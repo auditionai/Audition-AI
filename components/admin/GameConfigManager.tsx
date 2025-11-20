@@ -11,7 +11,8 @@ const GameConfigManager: React.FC = () => {
     const { session, showToast } = useAuth();
     const { t } = useTranslation();
     const { refreshConfig, ranks, frames, titles } = useGameConfig();
-    // Separate tabs for ranks, frames, and titles
+    
+    // Tabs
     const [activeSubTab, setActiveSubTab] = useState<'ranks' | 'frames' | 'titles'>('ranks');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
@@ -34,16 +35,19 @@ const GameConfigManager: React.FC = () => {
         if (!editingRank) return;
         setIsSaving(true);
         try {
-            const isLegacyOrNew = !editingRank.id || !isUUID(editingRank.id);
-            const method = isLegacyOrNew ? 'POST' : 'PUT';
-
             const dbPayload = {
-                id: isLegacyOrNew ? undefined : editingRank.id,
+                id: editingRank.id,
                 level_threshold: editingRank.levelThreshold,
                 title: editingRank.title,
                 color_hex: editingRank.color,
                 icon_url: typeof editingRank.icon === 'string' ? editingRank.icon : ''
             };
+
+            // Force POST if it's a legacy ID (not UUID) or new item
+            const isNewOrLegacy = !editingRank.id || !isUUID(editingRank.id);
+            const method = isNewOrLegacy ? 'POST' : 'PUT';
+            // If creating new from legacy, remove the ID so DB generates a new UUID
+            if (isNewOrLegacy) delete dbPayload.id;
 
             const res = await fetch('/.netlify/functions/admin-game-config?type=rank', {
                 method: method,
@@ -66,16 +70,17 @@ const GameConfigManager: React.FC = () => {
         }
     };
 
-    // --- Cosmetics Logic (Shared for Frames and Titles) ---
+    // --- Cosmetics Logic ---
     const handleEditCosmetic = (cosmetic: CosmeticItem | null, defaultType: 'frame' | 'title') => {
-        // FIX: Auto-fill name for legacy items using translation key if name is missing
         let cosmeticToEdit = cosmetic ? { ...cosmetic } : null;
+        
+        // Auto-fill name from translation if available
         if (cosmeticToEdit && !cosmeticToEdit.name && cosmeticToEdit.nameKey) {
              cosmeticToEdit.name = t(cosmeticToEdit.nameKey);
         }
 
         setEditingCosmetic(cosmeticToEdit || { 
-            type: defaultType, // Set type based on active tab
+            type: defaultType,
             name: '', 
             rarity: 'common', 
             unlockCondition: { level: 0 },
@@ -95,8 +100,8 @@ const GameConfigManager: React.FC = () => {
             if (uploadIconFile) {
                 let finalDataUrl: string;
 
-                // FIX: Skip resize for GIFs to preserve animation and transparency.
-                // Resizing via Canvas converts GIFs to a static frame and often blackens transparent backgrounds.
+                // CRITICAL FIX: Check if file is GIF. If so, DO NOT RESIZE.
+                // Resizing GIFs with canvas kills animation and transparency (black background).
                 if (uploadIconFile.type === 'image/gif') {
                      finalDataUrl = await new Promise((resolve, reject) => {
                         const reader = new FileReader();
@@ -105,7 +110,7 @@ const GameConfigManager: React.FC = () => {
                         reader.readAsDataURL(uploadIconFile);
                      });
                 } else {
-                    // Resize other formats to 128x128 max for performance
+                    // Resize other formats to 128x128 for icons
                     const { dataUrl } = await resizeImage(uploadIconFile, 128); 
                     finalDataUrl = dataUrl;
                 }
@@ -120,17 +125,17 @@ const GameConfigManager: React.FC = () => {
                 finalIconUrl = uploadData.url;
             }
 
-            const isLegacyOrNew = !editingCosmetic.id || !isUUID(editingCosmetic.id);
-            const method = isLegacyOrNew ? 'POST' : 'PUT';
+            const isNewOrLegacy = !editingCosmetic.id || !isUUID(editingCosmetic.id);
+            const method = isNewOrLegacy ? 'POST' : 'PUT';
 
             const dbPayload = {
-                id: isLegacyOrNew ? undefined : editingCosmetic.id,
+                id: isNewOrLegacy ? undefined : editingCosmetic.id,
                 type: editingCosmetic.type,
                 name: editingCosmetic.name,
                 rarity: editingCosmetic.rarity,
                 css_class: editingCosmetic.cssClass,
-                image_url: editingCosmetic.imageUrl, // Preserve existing image_url (frames) but don't allow edit
-                icon_url: finalIconUrl, // This relies on the 'icon_url' column existing in DB
+                image_url: editingCosmetic.imageUrl,
+                icon_url: finalIconUrl,
                 unlock_level: editingCosmetic.unlockCondition?.level || 0,
                 is_active: true
             };
@@ -219,11 +224,12 @@ const GameConfigManager: React.FC = () => {
                         {(activeSubTab === 'frames' ? frames : titles).map(c => (
                             <div key={c.id} className="flex gap-3 p-2 bg-white/5 rounded items-center">
                                 <div className="w-12 h-12 bg-black/30 rounded flex items-center justify-center overflow-hidden relative">
-                                    {c.imageUrl ? <img src={c.imageUrl} className="w-full h-full object-contain" alt=""/> : (
-                                         <div className="text-center">
-                                             {c.iconUrl ? <img src={c.iconUrl} alt="" className="w-6 h-6 mx-auto mb-1 object-contain" /> : <span className="text-[10px] text-gray-500">CSS</span>}
-                                         </div>
-                                    )}
+                                     {/* Show Icon or Fallback */}
+                                     {c.iconUrl ? (
+                                         <img src={c.iconUrl} alt="" className="w-8 h-8 object-contain" />
+                                     ) : (
+                                         c.imageUrl ? <img src={c.imageUrl} className="w-full h-full object-contain" alt=""/> : <span className="text-[10px] text-gray-500">CSS</span>
+                                     )}
                                 </div>
                                 <div className="flex-grow">
                                     <p className="font-bold text-sm text-white flex items-center gap-1">
@@ -242,13 +248,14 @@ const GameConfigManager: React.FC = () => {
                 </div>
             )}
 
-            {/* MODAL - SHARED FOR ALL */}
+            {/* MODAL */}
             {isModalOpen && (
                 <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={
                     activeSubTab === 'ranks' ? t('creator.settings.admin.gameConfig.buttons.addRank') : 
                     (editingCosmetic?.id ? t('creator.settings.admin.gameConfig.buttons.edit') : 
                      (activeSubTab === 'frames' ? t('creator.settings.admin.gameConfig.buttons.addFrame') : t('creator.settings.admin.gameConfig.buttons.addTitle')))
                 }>
+                    {/* Rank Form */}
                     {activeSubTab === 'ranks' && editingRank && (
                          <div className="space-y-3">
                             <div>
@@ -266,7 +273,8 @@ const GameConfigManager: React.FC = () => {
                             <button onClick={saveRank} disabled={isSaving} className="themed-button-primary w-full mt-4">{isSaving ? t('creator.settings.admin.gameConfig.buttons.saving') : t('creator.settings.admin.gameConfig.buttons.save')}</button>
                          </div>
                     )}
-                    {/* Cosmetics Form (Frames & Titles) - SIMPLIFIED UI */}
+                    
+                    {/* Cosmetics Form (Frames & Titles) */}
                     {(activeSubTab === 'frames' || activeSubTab === 'titles') && editingCosmetic && (
                         <div className="space-y-3">
                             <div>
@@ -295,7 +303,7 @@ const GameConfigManager: React.FC = () => {
                                 <input type="number" value={editingCosmetic.unlockCondition?.level || 0} onChange={e => setEditingCosmetic({...editingCosmetic, unlockCondition: { level: Number(e.target.value) }})} className="auth-input w-20" />
                             </div>
                             
-                            {/* Only Icon Upload - Clean UI */}
+                            {/* Upload Icon Only */}
                             <div>
                                 <label className="block text-sm text-gray-400 mb-1">{t('creator.settings.admin.gameConfig.form.uploadIcon')}</label>
                                 <div className="flex gap-2 items-center">

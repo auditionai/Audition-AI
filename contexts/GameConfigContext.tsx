@@ -28,14 +28,29 @@ export const GameConfigProvider: React.FC<{ children: ReactNode }> = ({ children
             const response = await fetch('/.netlify/functions/game-config');
             if (response.ok) {
                 const data = await response.json();
+                
+                // 1. Process Ranks
                 if (data.ranks && data.ranks.length > 0) {
-                    // Sort ranks by threshold desc for easier logic, but we store asc usually
                     setRanks(data.ranks.sort((a: Rank, b: Rank) => a.levelThreshold - b.levelThreshold));
                 }
+
+                // 2. Process Cosmetics (Merge with Defaults to keep nameKeys)
                 if (data.cosmetics) {
-                    const dbFrames = data.cosmetics.filter((c: any) => c.type === 'frame');
-                    const dbTitles = data.cosmetics.filter((c: any) => c.type === 'title');
+                    const processedCosmetics = data.cosmetics.map((dbItem: CosmeticItem) => {
+                        // Find corresponding default item to restore translation keys (nameKey)
+                        // This fixes the issue where default titles disappear or show raw names
+                        const defaultItem = DEFAULT_COSMETICS.find(c => c.id === dbItem.id);
+                        return {
+                            ...dbItem,
+                            nameKey: defaultItem?.nameKey || dbItem.nameKey, // Restore nameKey if available
+                            cssClass: dbItem.cssClass || defaultItem?.cssClass || '' // Restore default CSS if not overridden
+                        };
+                    });
+
+                    const dbFrames = processedCosmetics.filter((c: CosmeticItem) => c.type === 'frame');
+                    const dbTitles = processedCosmetics.filter((c: CosmeticItem) => c.type === 'title');
                     
+                    // Update state, defaulting to constants if DB is empty to prevent empty UI
                     if (dbFrames.length > 0) setFrames(dbFrames);
                     if (dbTitles.length > 0) setTitles(dbTitles);
                 }
@@ -52,7 +67,6 @@ export const GameConfigProvider: React.FC<{ children: ReactNode }> = ({ children
     }, []);
 
     const getRankForLevel = (level: number): Rank => {
-        // Find the highest threshold less than or equal to level
         let currentRank = ranks[0];
         for (const rank of ranks) {
             if (level >= rank.levelThreshold) {
@@ -67,7 +81,6 @@ export const GameConfigProvider: React.FC<{ children: ReactNode }> = ({ children
     const getCosmeticById = (id: string | undefined, type: 'frame' | 'title'): CosmeticItem | undefined => {
         const list = type === 'frame' ? frames : titles;
         const found = list.find(item => item.id === id);
-        // Return default if not found
         if (!found) {
              if (type === 'frame') return list.find(i => i.id === 'default') || list[0];
              if (type === 'title') return list.find(i => i.id === 'newbie') || list[0];

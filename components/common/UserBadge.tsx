@@ -11,36 +11,38 @@ interface UserBadgeProps {
 const UserBadge: React.FC<UserBadgeProps> = ({ titleId, className = '' }) => {
     const { t } = useTranslation();
     const { getCosmeticById } = useGameConfig();
+    
+    // Get the title item, handled safely by context
     const title = getCosmeticById(titleId, 'title');
 
     if (!title) return null;
 
-    const displayName = title.nameKey ? t(title.nameKey) : title.name;
+    // Determine display name: Use translation key if available (default items), otherwise use raw name (custom items)
+    const displayName = title.nameKey ? t(title.nameKey) : (title.name || 'Title');
 
-    // Legacy: Full image replacement for title (if imageUrl is present)
-    if (title.imageUrl) {
-        return <img src={title.imageUrl} alt={displayName} className={`h-5 w-auto ${className}`} />;
-    }
-
-    // New Style: Icon is rendered OUTSIDE the badge frame
-    if (title.iconUrl) {
-        return (
-            <span className={`inline-flex items-center gap-1.5 ${className}`}>
-                {/* Icon outside */}
-                <img src={title.iconUrl} alt="" className="w-5 h-5 object-contain" />
-                {/* Title Badge Frame */}
+    return (
+        <div className={`inline-flex items-center gap-1.5 ${className}`}>
+            {/* Render Icon OUTSIDE the badge frame if it exists */}
+            {title.iconUrl && (
+                <img 
+                    src={title.iconUrl} 
+                    alt="" 
+                    className="w-5 h-5 object-contain flex-shrink-0 drop-shadow-md" 
+                    loading="lazy"
+                />
+            )}
+            
+            {/* Render the Title Text Badge */}
+            {title.imageUrl ? (
+                // Legacy support: If the title itself is an image
+                <img src={title.imageUrl} alt={displayName} className="h-5 w-auto" />
+            ) : (
+                // Standard CSS Badge
                 <span className={`title-badge ${title.cssClass || ''}`} title={displayName}>
                     {displayName}
                 </span>
-            </span>
-        );
-    }
-
-    // Default: Just the badge frame with text
-    return (
-        <span className={`title-badge ${title.cssClass || ''} ${className}`} title={displayName}>
-            {displayName}
-        </span>
+            )}
+        </div>
     );
 };
 

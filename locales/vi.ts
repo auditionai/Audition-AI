@@ -360,45 +360,6 @@ export const vi = {
         }
       }
     },
-    leaderboard: {
-      title: 'Bảng Xếp Hạng',
-      description: 'Vinh danh những nhà sáng tạo hàng đầu dựa trên cấp bậc và số lượng tác phẩm.',
-      loading: 'Đang tải bảng xếp hạng...',
-      error: {
-        load: 'Không thể tải bảng xếp hạng.',
-      },
-      empty: {
-        title: 'Bảng xếp hạng trống',
-        description: 'Hãy là người đầu tiên tạo ra tác phẩm và ghi danh!',
-      },
-      creations: 'tác phẩm',
-    },
-    myCreations: {
-      loading: 'Đang tải các tác phẩm của bạn...',
-      storageWarning: {
-        title: 'Lưu ý quan trọng về lưu trữ ảnh',
-        description: 'Để đảm bảo hiệu suất, các tác phẩm của bạn sẽ chỉ được lưu trữ trong vòng tối đa 3 ngày. Các tác phẩm được chia sẻ công khai sẽ được giữ lại vĩnh viễn. Vui lòng tải xuống những hình ảnh bạn yêu thích trước khi chúng bị hệ thống tự động xóa.',
-        public: 'công khai',
-        download: 'tải xuống',
-      },
-      title: 'Tác Phẩm Của Tôi',
-      description: 'Quản lý tất cả các hình ảnh bạn đã tạo bằng Audition AI.',
-      shareTip: '✨ Nhấn vào một tác phẩm và chọn nút Chia sẻ để đưa tác phẩm đẹp nhất của bạn ra Thư viện Cộng đồng! (Chi phí: 1 💎)',
-      share: 'Chia sẻ',
-      empty: {
-        title: 'Bạn chưa có tác phẩm nào',
-        description: 'Hãy vào mục "Tạo ảnh" và bắt đầu sáng tạo ngay!',
-      },
-      public: 'Công khai',
-      delete: {
-        success: 'Đã xóa tác phẩm thành công!',
-        error: 'Xóa ảnh thất bại.',
-      },
-      shareAction: {
-        success: 'Đã chia sẻ tác phẩm lên thư viện cộng đồng!',
-        error: 'Chia sẻ ảnh thất bại.',
-      }
-    },
     settings: {
       save: 'Lưu Tên',
       saving: 'Đang lưu...',
@@ -408,6 +369,13 @@ export const vi = {
         uploading: 'Đang tải lên...',
         updateSuccess: 'Cập nhật ảnh đại diện thành công!',
         updateError: 'Cập nhật ảnh đại diện thất bại.',
+      },
+      personalization: {
+          title: 'Giao Diện & Trang Trí',
+          frames: 'Khung Avatar',
+          titles: 'Danh Hiệu Thành Tựu',
+          success: 'Cập nhật trang bị thành công!',
+          currentTitle: 'Danh hiệu đang dùng',
       },
       transactionHistory: {
         title: 'Lịch sử giao dịch Kim cương',
@@ -974,25 +942,25 @@ export const vi = {
     }
   },
   common: {
-    loading: 'Đang tải...',
-    processing: 'Đang xử lý...',
-    understand: 'Tôi đã hiểu',
-    close: 'Đóng',
-    save: 'Lưu',
-    saving: 'Đang lưu...',
-    edit: 'Chỉnh sửa',
-    delete: 'Xóa',
-    cancel: 'Hủy',
-    confirm: 'Xác nhận',
-    download: 'Tải xuống',
-    copied: 'Đã sao chép!',
-    level: 'Cấp',
-    creator: 'Người tạo',
+    loading: 'Loading...',
+    processing: 'Processing...',
+    understand: 'I Understand',
+    close: 'Close',
+    save: 'Save',
+    saving: 'Saving...',
+    edit: 'Edit',
+    delete: 'Delete',
+    cancel: 'Cancel',
+    confirm: 'Confirm',
+    download: 'Download',
+    copied: 'Copied!',
+    level: 'Level',
+    creator: 'Creator',
   },
   themes: {
-    'cyber-punk': 'Vũ Điệu Neon',
-    'solar-flare': 'Kẹo Ngọt Pastel',
-    'classic-dark': 'Giáng Sinh',
+    'cyber-punk': 'Neon Dance',
+    'solar-flare': 'Pastel Candy',
+    'classic-dark': 'Christmas',
     'dreamy-galaxy': 'Dải Ngân Hà',
     'neon-vibe': 'Lâu Đài Pha Lê',
   },

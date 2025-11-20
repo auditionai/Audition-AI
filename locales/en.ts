@@ -315,6 +315,49 @@ export const en = {
           vaporwave: 'VAPORWAVE',
           monochrome: 'MONO',
         }
+      },
+      cosmetics: {
+        frames: {
+          default: 'Basic',
+          wood: 'Wooden',
+          neonBlue: 'Neon Blue',
+          neonPink: 'Neon Pink',
+          music: 'Melody',
+          gradientSpin: 'Rainbow Spin',
+          sakura: 'Cherry Blossom',
+          cyber: 'Cyber Tech',
+          angel: 'Angel Wings',
+          demon: 'Demon Aura',
+          thunder: 'Thunder Storm',
+          legendaryGold: 'Legendary Dragon',
+          ice: 'Ice Crystal',
+          love: 'Heartbeat',
+          galaxy: 'Galaxy Void',
+          matrix: 'The Matrix',
+          glitch: 'Glitch Wave',
+          mythicFire: 'Fire God',
+          god: 'Infinity God',
+        },
+        titles: {
+          newbie: 'Newbie',
+          dancer: 'Street Dancer',
+          styleIcon: 'Style Icon',
+          party: 'Party Animal',
+          rhythm: 'Rhythm Master',
+          vip: 'VIP',
+          charming: 'Charming',
+          cyber: 'Cyberpunk',
+          angel: 'Angelic Voice',
+          demon: 'Dark Lord',
+          thunder: 'Thunder God',
+          glitchMaster: 'Glitch Master',
+          ice: 'Ice Queen',
+          love: 'Heart Breaker',
+          galaxy: 'Star Lord',
+          matrix: 'The One',
+          legend: 'Living Legend',
+          auditionGod: 'Audition God',
+        }
       }
     },
     leaderboard: {
@@ -541,6 +584,24 @@ export const en = {
             load: 'Could not load API keys.',
           }
         },
+        gameConfig: {
+            title: 'Game Configuration',
+            tabs: { ranks: 'Ranks', cosmetics: 'Cosmetics' },
+            buttons: { addRank: 'Add Rank', addCosmetic: 'Add Cosmetic', save: 'Save', saving: 'Saving...', edit: 'Edit', delete: 'Del' },
+            form: {
+                level: 'Level Threshold',
+                titleName: 'Title Name',
+                colorClass: 'Color/CSS Class',
+                type: 'Type',
+                name: 'Display Name',
+                rarity: 'Rarity',
+                uploadImage: 'Upload Image (Overrides CSS)',
+                cssClass: 'CSS Class (Legacy)',
+                unlockLevel: 'Unlock Lv.',
+            },
+            types: { frame: 'Avatar Frame', title: 'Title Badge' },
+            rarities: { common: 'Common', rare: 'Rare', epic: 'Epic', legendary: 'Legendary', mythic: 'Mythic' }
+        }
       },
     },
     buyCredits: {

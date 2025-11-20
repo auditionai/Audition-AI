@@ -589,6 +589,24 @@ export const vi = {
             load: 'Không thể tải khóa API.',
           }
         },
+        gameConfig: {
+            title: 'Cấu Hình Trò Chơi',
+            tabs: { ranks: 'Cấp Bậc', cosmetics: 'Trang Trí' },
+            buttons: { addRank: 'Thêm Cấp Bậc', addCosmetic: 'Thêm Trang Trí', save: 'Lưu', saving: 'Đang lưu...', edit: 'Sửa', delete: 'Xóa' },
+            form: {
+                level: 'Cấp độ yêu cầu',
+                titleName: 'Tên danh hiệu',
+                colorClass: 'Mã màu/Lớp CSS',
+                type: 'Loại',
+                name: 'Tên hiển thị',
+                rarity: 'Độ hiếm',
+                uploadImage: 'Tải ảnh lên (Ghi đè CSS)',
+                cssClass: 'Lớp CSS (Cũ)',
+                unlockLevel: 'Mở khóa Lv.',
+            },
+            types: { frame: 'Khung Avatar', title: 'Danh Hiệu' },
+            rarities: { common: 'Thường', rare: 'Hiếm', epic: 'Sử Thi', legendary: 'Huyền Thoại', mythic: 'Thần Thoại' }
+        }
       },
     },
     buyCredits: {

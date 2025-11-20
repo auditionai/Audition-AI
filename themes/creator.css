@@ -1,3 +1,4 @@
+
 /* ---
   AUDITION AI - CREATOR THEME STYLESHEET
   Contains all theme-specific styles for the creator dashboard.
@@ -92,6 +93,7 @@
     position: relative;
     background-color: transparent;
     border: 1px solid transparent;
+    cursor: pointer;
 }
 
 .themed-nav-button:hover {
@@ -103,6 +105,7 @@
     background-color: rgba(var(--color-accent), 0.1);
     color: rgb(var(--color-accent));
     border-color: rgba(var(--color-accent), 0.2);
+    box-shadow: 0 0 10px rgba(var(--color-accent), 0.1);
 }
 
 /* Top Up Button */
@@ -120,6 +123,7 @@
 .themed-top-up-button:hover {
     border-color: rgba(var(--color-accent), 0.5);
     box-shadow: 0 0 15px rgba(var(--color-accent), 0.2);
+    transform: scale(1.02);
 }
 .themed-top-up-button__icon-wrapper {
     width: 32px;
@@ -179,9 +183,11 @@
     background: linear-gradient(to right, rgb(var(--color-accent)), rgb(var(--color-accent-secondary)));
     color: var(--color-accent-text);
     border-radius: 0.5rem;
-    transition: all 0.3s ease;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     box-shadow: var(--shadow-accent);
     border: none;
+    position: relative;
+    overflow: hidden;
 }
 .themed-button-primary:hover:not(:disabled) {
     opacity: 0.9;
@@ -203,7 +209,9 @@
 }
 .themed-button-secondary:hover:not(:disabled) {
     background-color: rgba(255, 255, 255, 0.15);
-    border-color: rgba(255, 255, 255, 0.2);
+    border-color: rgba(var(--color-accent), 0.5);
+    color: rgb(var(--color-accent));
+    box-shadow: 0 0 10px rgba(var(--color-accent), 0.1);
 }
 
 /* Notification Button */
@@ -211,6 +219,7 @@
     color: var(--color-text-muted);
     transition: color 0.3s ease;
     border-radius: 9999px;
+    position: relative;
 }
 .themed-notification-button:hover {
     color: var(--color-text-base);
@@ -260,6 +269,7 @@
     border-radius: 0.5rem;
     color: var(--color-text-base);
     font-size: 0.875rem;
+    cursor: pointer;
 }
 .custom-select-options {
     position: absolute;
@@ -285,6 +295,7 @@
     text-align: left;
     font-size: 0.875rem;
     transition: background-color 0.2s;
+    cursor: pointer;
 }
 .custom-select-option:hover {
     background-color: rgba(255, 255, 255, 0.05);
@@ -293,6 +304,7 @@
 .custom-select-option.active {
     color: rgb(var(--color-accent));
     font-weight: 600;
+    background-color: rgba(var(--color-accent), 0.1);
 }
 
 /* Selected Glow utility */
@@ -315,45 +327,52 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    padding: 0.5rem 1rem;
+    padding: 0.5rem 1.5rem;
     background-color: rgba(var(--color-accent), 0.1);
     border: 1px solid rgba(var(--color-accent), 0.3);
     border-radius: 9999px;
     color: rgb(var(--color-accent));
     font-size: 0.875rem;
-    font-weight: 600;
+    font-weight: 700;
     transition: all 0.3s ease;
+    cursor: pointer;
 }
 .themed-guide-button:hover {
     background-color: rgba(var(--color-accent), 0.2);
     box-shadow: var(--shadow-accent);
+    transform: translateY(-2px);
 }
 
 /* Interactive 3D Effect (Common) */
 .interactive-3d {
   transition: transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1), box-shadow 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
   will-change: transform;
+  perspective: 1000px;
 }
 .interactive-3d:hover {
-  transform: perspective(1200px) rotateX(7deg) rotateY(-8deg) scale(1.02);
-  box-shadow: 0 25px 50px rgba(0,0,0,0.5);
+  transform: perspective(1000px) rotateX(2deg) rotateY(-2deg) scale(1.02);
+  box-shadow: 0 15px 30px rgba(0,0,0,0.4), var(--shadow-accent);
+  z-index: 10;
 }
 .glowing-border {
   position: absolute;
   inset: 0;
   border-radius: inherit;
   padding: 2px;
-  background: linear-gradient(45deg, rgba(var(--color-accent), 0), rgba(var(--color-accent), 0.3), rgba(var(--color-accent), 0));
+  background: linear-gradient(45deg, rgba(var(--color-accent), 0), rgba(var(--color-accent), 0.6), rgba(var(--color-accent), 0));
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
   pointer-events: none;
-  opacity: 0.3;
+  opacity: 0.5;
   transition: opacity 0.3s ease;
+  background-size: 200% 200%;
+  animation: gradient-spin-bg 3s linear infinite;
 }
 .group:hover .glowing-border, .interactive-3d:hover .glowing-border {
   opacity: 1;
-  background: linear-gradient(45deg, rgba(var(--color-accent), 0), rgba(var(--color-accent), 0.5), rgba(var(--color-accent), 0));
+  background: linear-gradient(45deg, rgba(var(--color-accent), 0), rgb(var(--color-accent)), rgba(var(--color-accent), 0));
+  background-size: 200% 200%;
 }
 
 /* Neon Text Effects */
@@ -478,6 +497,7 @@
     font-size: 2rem;
     font-weight: 900;
     line-height: 1;
+    text-shadow: 0 0 10px rgba(var(--color-accent), 0.3);
 }
 .themed-credit-package__label {
     font-size: 0.875rem;
@@ -504,6 +524,8 @@
     background-color: rgba(255,255,255,0.1);
     color: var(--color-text-base);
     transition: all 0.2s;
+    border: none;
+    cursor: pointer;
 }
 .themed-credit-package:hover .themed-credit-package__button {
     background: linear-gradient(to right, rgb(var(--color-accent)), rgb(var(--color-accent-secondary)));
@@ -518,15 +540,18 @@
     font-weight: 600;
     color: var(--color-text-muted);
     transition: all 0.2s;
+    background: transparent;
+    border: 1px solid transparent;
 }
 .admin-tab:hover {
     background-color: rgba(255, 255, 255, 0.05);
     color: var(--color-text-base);
 }
 .admin-tab-active {
-    background-color: rgba(var(--color-accent), 0.1);
+    background-color: rgba(var(--color-accent), 0.15);
     color: rgb(var(--color-accent));
-    border: 1px solid rgba(var(--color-accent), 0.2);
+    border: 1px solid rgba(var(--color-accent), 0.3);
+    box-shadow: 0 0 10px rgba(var(--color-accent), 0.1);
 }
 
 /* Leaderboard */
@@ -647,12 +672,12 @@
 .title-vip-gold { background: linear-gradient(to right, #FCD34D, #F59E0B, #B45309); -webkit-background-clip: text; background-clip: text; color: transparent; border: 1px solid #F59E0B; background-color: rgba(245, 158, 11, 0.1); animation: shimmer 3s infinite; }
 .title-cyber-glitch { color: #00fff9; background: rgba(0,0,0,0.5); border: 1px solid #ec4899; text-shadow: 2px 0 #ec4899, -2px 0 #00fff9; position: relative; animation: glitch-text 3s infinite linear alternate-reverse; }
 .title-mythic-fire { color: #FFF; background: linear-gradient(45deg, #ef4444, #f59e0b); border: none; box-shadow: 0 0 10px #ef4444; animation: pulse-glow 1.5s infinite; }
-.signature-style-neon { animation: signature-neon-flicker 4s infinite alternate; }
 
 /* Animation Helpers & Keyframes */
 .theme-display-highlight { animation: theme-highlight-anim 1.5s ease-out; }
 .notification-dot-ping { animation: ping 1s cubic-bezier(0, 0, 0.2, 1) infinite; }
 .notification-dot { background-color: rgb(var(--color-accent-secondary)); border-color: var(--color-fill); }
+.signature-style-neon { animation: signature-neon-flicker 4s infinite alternate; }
 
 @keyframes gradient-spin-bg { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
 @keyframes pulse-glow { 0% { opacity: 0.8; box-shadow: 0 0 5px currentColor; } 50% { opacity: 1; box-shadow: 0 0 15px currentColor; } 100% { opacity: 0.8; box-shadow: 0 0 5px currentColor; } }

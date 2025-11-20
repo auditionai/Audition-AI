@@ -14,7 +14,7 @@ export const vi = {
       subheading: 'Tạo ảnh chỉ 1.000đ/ảnh · 1 Kim cương',
       title: 'Tạo Ảnh 3D AI\nPhong Cách Audition',
       description: 'AI hiểu bố cục, màu sắc, phong cách, góc nhìn… tạo ảnh điện ảnh, có chiều sâu, đúng vibe Audition và giữ nguyên danh tính nhân vật.',
-      cta: 'Bắt đầu Sáng tạo',
+      cta: 'Bắt đầu sáng tạo',
       login: 'Đăng nhập Google',
     },
     features: {
@@ -517,8 +517,7 @@ export const vi = {
                 type: 'Loại',
                 name: 'Tên hiển thị',
                 rarity: 'Độ hiếm',
-                uploadImage: 'Tải ảnh lên (Ghi đè CSS)',
-                uploadIcon: 'Tải Icon (Bên cạnh tên)',
+                uploadIcon: 'Tải Icon lên',
                 cssClass: 'Lớp CSS (Cũ)',
                 unlockLevel: 'Mở khóa Lv.',
             },

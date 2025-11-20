@@ -19,7 +19,6 @@ const GameConfigManager: React.FC = () => {
     // State for editing
     const [editingRank, setEditingRank] = useState<Partial<Rank> | null>(null);
     const [editingCosmetic, setEditingCosmetic] = useState<Partial<CosmeticItem> | null>(null);
-    const [uploadFile, setUploadFile] = useState<File | null>(null);
     const [uploadIconFile, setUploadIconFile] = useState<File | null>(null);
 
     // Helper to check valid UUID
@@ -76,7 +75,6 @@ const GameConfigManager: React.FC = () => {
             unlockCondition: { level: 0 },
             cssClass: 'frame-none'
         } as any);
-        setUploadFile(null);
         setUploadIconFile(null);
         setIsModalOpen(true);
     };
@@ -85,20 +83,7 @@ const GameConfigManager: React.FC = () => {
         if (!editingCosmetic) return;
         setIsSaving(true);
         try {
-            let finalImageUrl = editingCosmetic.imageUrl;
             let finalIconUrl = editingCosmetic.iconUrl;
-
-            if (uploadFile) {
-                const { dataUrl } = await resizeImage(uploadFile, 512); 
-                const uploadRes = await fetch('/.netlify/functions/upload-asset', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
-                    body: JSON.stringify({ image: dataUrl, folder: 'cosmetics' }),
-                });
-                const uploadData = await uploadRes.json();
-                if (!uploadRes.ok) throw new Error(uploadData.error);
-                finalImageUrl = uploadData.url;
-            }
 
             if (uploadIconFile) {
                 const { dataUrl } = await resizeImage(uploadIconFile, 128); 
@@ -121,7 +106,7 @@ const GameConfigManager: React.FC = () => {
                 name: editingCosmetic.name,
                 rarity: editingCosmetic.rarity,
                 css_class: editingCosmetic.cssClass,
-                image_url: finalImageUrl,
+                image_url: editingCosmetic.imageUrl, // Preserve existing main image URL if any
                 icon_url: finalIconUrl,
                 unlock_level: editingCosmetic.unlockCondition?.level || 0,
                 is_active: true
@@ -313,13 +298,7 @@ const GameConfigManager: React.FC = () => {
                                 <input type="number" value={editingCosmetic.unlockCondition?.level || 0} onChange={e => setEditingCosmetic({...editingCosmetic, unlockCondition: { level: Number(e.target.value) }})} className="auth-input w-20" />
                             </div>
                             
-                            {/* Upload Main Image */}
-                            <div>
-                                <label className="block text-sm text-gray-400 mb-1">{t('creator.settings.admin.gameConfig.form.uploadImage')}</label>
-                                <input type="file" accept="image/*" onChange={e => setUploadFile(e.target.files?.[0] || null)} className="text-sm text-gray-400" />
-                            </div>
-
-                            {/* Upload Icon - Show mostly for Titles, but optional for Frames */}
+                            {/* Simplified Upload: Only Icon */}
                             <div>
                                 <label className="block text-sm text-gray-400 mb-1">{t('creator.settings.admin.gameConfig.form.uploadIcon')}</label>
                                 <input type="file" accept="image/*" onChange={e => setUploadIconFile(e.target.files?.[0] || null)} className="text-sm text-gray-400" />

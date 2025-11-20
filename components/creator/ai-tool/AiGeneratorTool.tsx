@@ -269,26 +269,32 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
             <InstructionModal isOpen={isInstructionModalOpen} onClose={() => setInstructionModalOpen(false)} instructionKey={instructionKey} />
             <PromptLibraryModal isOpen={isPromptLibraryOpen} onClose={() => setIsPromptLibraryOpen(false)} onSelectPrompt={(p) => setPrompt(p)} category="single-photo" />
 
-            {/* Announcement Banner for New Model - Localized */}
-            <div className="bg-gradient-to-r from-yellow-600/20 to-red-600/20 border border-yellow-500/30 rounded-xl p-4 mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-fade-in">
-                <div className="flex items-start gap-3">
-                    <div className="bg-yellow-500/20 p-2 rounded-full text-yellow-400">
+            {/* Updated Announcement Banner for New Model - Metallic Gold Style */}
+            <div className="bg-gradient-to-r from-amber-500/10 via-yellow-500/10 to-amber-500/10 border border-yellow-400/40 rounded-xl p-5 mb-8 flex flex-col md:flex-row items-center justify-between gap-4 shadow-[0_0_15px_rgba(245,158,11,0.15)] relative overflow-hidden group">
+                {/* Subtle Shimmer Effect */}
+                <div className="absolute inset-0 bg-gradient-to-r from-yellow-400/5 via-transparent to-yellow-400/5 opacity-50 pointer-events-none group-hover:animate-[shimmer_3s_infinite]"></div>
+                
+                <div className="flex items-start gap-4 relative z-10">
+                    <div className="flex-shrink-0 bg-gradient-to-br from-yellow-400 to-amber-600 text-white w-12 h-12 rounded-full flex items-center justify-center shadow-lg shadow-amber-500/30">
                         <i className="ph-fill ph-rocket-launch text-2xl"></i>
                     </div>
                     <div>
-                        <h4 className="font-bold text-white text-sm sm:text-base">
+                        <h4 className="text-lg font-bold text-yellow-100 flex items-center gap-2">
                             {t('creator.aiTool.upgradeBanner.title')}
+                            <span className="px-2 py-0.5 bg-yellow-400 text-black text-[10px] font-black rounded uppercase tracking-wide">PRO</span>
                         </h4>
-                        <p className="text-xs text-gray-300 mt-1">
+                        <p className="text-sm text-yellow-100/80 mt-1 leading-relaxed max-w-2xl">
                             {t('creator.aiTool.upgradeBanner.desc')}
                         </p>
                     </div>
                 </div>
+
                 <button 
                     onClick={() => setModelModalOpen(true)}
-                    className="whitespace-nowrap px-4 py-2 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-300 text-xs font-bold rounded-lg transition-colors border border-yellow-500/30"
+                    className="flex-shrink-0 whitespace-nowrap px-6 py-3 bg-gradient-to-r from-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 text-black font-bold text-sm rounded-lg transition-all shadow-lg shadow-amber-500/20 transform hover:-translate-y-0.5 relative z-10 flex items-center gap-2"
                 >
-                     {t('creator.aiTool.upgradeBanner.button')}
+                    <i className="ph-bold ph-swaps"></i>
+                    {t('creator.aiTool.upgradeBanner.button')}
                 </button>
             </div>
 

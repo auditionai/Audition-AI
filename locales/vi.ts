@@ -133,8 +133,8 @@ export const vi = {
       quickGuide: 'Xem Hướng Dẫn Nhanh',
       upgradeBanner: {
         title: 'Nâng cấp: Đã có Nano Banana Pro (Gemini 3)!',
-        desc: 'Ảnh siêu nét 4K, chi tiết cực đỉnh. Phí: 2 Kim Cương/ảnh.',
-        button: 'Đổi Model',
+        desc: 'Ứng dụng đang mặc định sử dụng Gemini 3 Pro (Nano Banana Pro) để ảnh siêu nét (4K). Phí: 2 Kim Cương/ảnh. Bạn có thể đổi về bản thường (1 KC) bằng nút bên cạnh hoặc trong Cài đặt nâng cao.',
+        button: 'Đổi Ngay',
       },
       tabs: {
         single: 'Tạo Ảnh Đơn',

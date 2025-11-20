@@ -132,9 +132,9 @@ export const en = {
       description: 'The creative platform for 3D AI photos in the unique Audition style.',
       quickGuide: 'View Quick Guide',
       upgradeBanner: {
-        title: 'Upgrade: Nano Banana Pro (Gemini 3) Available!',
-        desc: '4K ultra-sharp photos, extreme detail. Fee: 2 Diamonds/photo.',
-        button: 'Switch Model',
+        title: 'Upgrade: Nano Banana Pro (Gemini 3) is Live!',
+        desc: 'The app now defaults to Gemini 3 Pro for 4K ultra-sharp images. Cost: 2 Diamonds/image. You can switch back to the standard version (1 Diamond) using the button or in Advanced Settings.',
+        button: 'Change Now',
       },
       tabs: {
         single: 'Single Photo',

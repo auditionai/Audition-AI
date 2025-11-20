@@ -1,7 +1,8 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useGameConfig } from '../../contexts/GameConfigContext';
+import { useChat } from '../../contexts/ChatContext';
 import { CosmeticItem, Rank } from '../../types';
 import Modal from '../common/Modal';
 import { resizeImage } from '../../utils/imageUtils';
@@ -11,9 +12,10 @@ const GameConfigManager: React.FC = () => {
     const { session, showToast } = useAuth();
     const { t } = useTranslation();
     const { refreshConfig, ranks, frames, titles } = useGameConfig();
+    const { chatConfig, updateChatConfig } = useChat();
     
     // Tabs
-    const [activeSubTab, setActiveSubTab] = useState<'ranks' | 'frames' | 'titles'>('ranks');
+    const [activeSubTab, setActiveSubTab] = useState<'ranks' | 'frames' | 'titles' | 'chat'>('ranks');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     
@@ -21,6 +23,15 @@ const GameConfigManager: React.FC = () => {
     const [editingRank, setEditingRank] = useState<Partial<Rank> | null>(null);
     const [editingCosmetic, setEditingCosmetic] = useState<Partial<CosmeticItem> | null>(null);
     const [uploadIconFile, setUploadIconFile] = useState<File | null>(null);
+    
+    // Chat Config State
+    const [forbiddenInput, setForbiddenInput] = useState('');
+
+    useEffect(() => {
+        if (chatConfig) {
+            setForbiddenInput(chatConfig.forbidden_words.join(', '));
+        }
+    }, [chatConfig]);
 
     // Helper to check valid UUID
     const isUUID = (str?: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str || '');
@@ -43,10 +54,8 @@ const GameConfigManager: React.FC = () => {
                 icon_url: typeof editingRank.icon === 'string' ? editingRank.icon : ''
             };
 
-            // Force POST if it's a legacy ID (not UUID) or new item
             const isNewOrLegacy = !editingRank.id || !isUUID(editingRank.id);
             const method = isNewOrLegacy ? 'POST' : 'PUT';
-            // If creating new from legacy, remove the ID so DB generates a new UUID
             if (isNewOrLegacy) delete dbPayload.id;
 
             const res = await fetch('/.netlify/functions/admin-game-config?type=rank', {
@@ -74,7 +83,7 @@ const GameConfigManager: React.FC = () => {
     const handleEditCosmetic = (cosmetic: CosmeticItem | null, defaultType: 'frame' | 'title') => {
         let cosmeticToEdit = cosmetic ? { ...cosmetic } : null;
         
-        // Auto-fill name from translation if available
+        // Auto-fill name from translation if available and not set
         if (cosmeticToEdit && !cosmeticToEdit.name && cosmeticToEdit.nameKey) {
              cosmeticToEdit.name = t(cosmeticToEdit.nameKey);
         }
@@ -99,9 +108,6 @@ const GameConfigManager: React.FC = () => {
 
             if (uploadIconFile) {
                 let finalDataUrl: string;
-
-                // CRITICAL FIX: Check if file is GIF (Case Insensitive). If so, DO NOT RESIZE.
-                // Resizing GIFs with canvas kills animation and transparency (black background).
                 if (uploadIconFile.type.toLowerCase().includes('gif')) {
                      finalDataUrl = await new Promise((resolve, reject) => {
                         const reader = new FileReader();
@@ -110,7 +116,6 @@ const GameConfigManager: React.FC = () => {
                         reader.readAsDataURL(uploadIconFile);
                      });
                 } else {
-                    // Resize other formats to 128x128 for icons
                     const { dataUrl } = await resizeImage(uploadIconFile, 128); 
                     finalDataUrl = dataUrl;
                 }
@@ -163,12 +168,10 @@ const GameConfigManager: React.FC = () => {
     
     const handleDelete = async (id: string, type: 'rank' | 'cosmetic') => {
         if (!confirm('Are you sure? This cannot be undone.')) return;
-        
         if (!isUUID(id)) {
             showToast("Cannot delete built-in default items directly. Create a new item to replace them.", "error");
             return;
         }
-
         try {
              await fetch(`/.netlify/functions/admin-game-config?type=${type}`, {
                 method: 'DELETE',
@@ -182,16 +185,49 @@ const GameConfigManager: React.FC = () => {
         }
     }
 
+    const saveChatConfig = async () => {
+        setIsSaving(true);
+        try {
+            const words = forbiddenInput.split(',').map(s => s.trim()).filter(s => s);
+            await updateChatConfig({ forbidden_words: words });
+            showToast("Đã cập nhật cấu hình chat!", "success");
+        } catch(e) {
+            showToast("Lỗi khi lưu cấu hình chat.", "error");
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
     return (
         <div className="bg-[#12121A]/80 border border-blue-500/20 rounded-2xl shadow-lg p-6">
             <div className="flex justify-between items-center mb-6">
                 <h3 className="text-2xl font-bold text-blue-400">{t('creator.settings.admin.gameConfig.title')}</h3>
-                <div className="flex gap-2">
-                     <button onClick={() => setActiveSubTab('ranks')} className={`px-3 py-1 rounded ${activeSubTab === 'ranks' ? 'bg-blue-500 text-white' : 'bg-white/5 text-gray-400'}`}>{t('creator.settings.admin.gameConfig.tabs.ranks')}</button>
-                     <button onClick={() => setActiveSubTab('frames')} className={`px-3 py-1 rounded ${activeSubTab === 'frames' ? 'bg-blue-500 text-white' : 'bg-white/5 text-gray-400'}`}>{t('creator.settings.admin.gameConfig.tabs.frames')}</button>
-                     <button onClick={() => setActiveSubTab('titles')} className={`px-3 py-1 rounded ${activeSubTab === 'titles' ? 'bg-blue-500 text-white' : 'bg-white/5 text-gray-400'}`}>{t('creator.settings.admin.gameConfig.tabs.titles')}</button>
+                <div className="flex gap-2 overflow-x-auto pb-2">
+                     <button onClick={() => setActiveSubTab('ranks')} className={`px-3 py-1 rounded whitespace-nowrap ${activeSubTab === 'ranks' ? 'bg-blue-500 text-white' : 'bg-white/5 text-gray-400'}`}>{t('creator.settings.admin.gameConfig.tabs.ranks')}</button>
+                     <button onClick={() => setActiveSubTab('frames')} className={`px-3 py-1 rounded whitespace-nowrap ${activeSubTab === 'frames' ? 'bg-blue-500 text-white' : 'bg-white/5 text-gray-400'}`}>{t('creator.settings.admin.gameConfig.tabs.frames')}</button>
+                     <button onClick={() => setActiveSubTab('titles')} className={`px-3 py-1 rounded whitespace-nowrap ${activeSubTab === 'titles' ? 'bg-blue-500 text-white' : 'bg-white/5 text-gray-400'}`}>{t('creator.settings.admin.gameConfig.tabs.titles')}</button>
+                     <button onClick={() => setActiveSubTab('chat')} className={`px-3 py-1 rounded whitespace-nowrap ${activeSubTab === 'chat' ? 'bg-blue-500 text-white' : 'bg-white/5 text-gray-400'}`}>Chat Settings</button>
                 </div>
             </div>
+
+            {/* CHAT CONFIG TAB */}
+            {activeSubTab === 'chat' && (
+                <div className="space-y-4">
+                    <div className="bg-white/5 p-4 rounded-lg">
+                        <label className="block text-sm font-bold text-gray-300 mb-2">Từ khóa bị cấm (Phân cách bằng dấu phẩy)</label>
+                        <textarea 
+                            value={forbiddenInput}
+                            onChange={e => setForbiddenInput(e.target.value)}
+                            className="auth-input min-h-[150px]"
+                            placeholder="ví dụ: badword, spam, ..."
+                        />
+                        <p className="text-xs text-gray-500 mt-2">Hệ thống sẽ tự động chặn tin nhắn chứa các từ này.</p>
+                    </div>
+                    <button onClick={saveChatConfig} disabled={isSaving} className="themed-button-primary w-full md:w-auto px-6 py-2">
+                        {isSaving ? 'Đang lưu...' : 'Lưu Cấu Hình Chat'}
+                    </button>
+                </div>
+            )}
 
             {/* RANKS TAB */}
             {activeSubTab === 'ranks' && (
@@ -224,7 +260,6 @@ const GameConfigManager: React.FC = () => {
                         {(activeSubTab === 'frames' ? frames : titles).map(c => (
                             <div key={c.id} className="flex gap-3 p-2 bg-white/5 rounded items-center">
                                 <div className="w-12 h-12 bg-black/30 rounded flex items-center justify-center overflow-hidden relative">
-                                     {/* Show Icon (Prioritized) or Main Image or Fallback */}
                                      {c.iconUrl ? (
                                          <img src={c.iconUrl} alt="icon" className="w-8 h-8 object-contain" />
                                      ) : c.imageUrl ? (

@@ -252,4 +252,17 @@ export interface ChatMessage {
         sticker_id?: string;
     };
     created_at: string;
+    is_deleted?: boolean; // Added for admin moderation
+}
+
+export interface ChatConfig {
+    id?: number;
+    forbidden_words: string[];
+    rate_limit_ms: number;
+}
+
+export interface ChatBan {
+    user_id: string;
+    banned_until: string;
+    reason?: string;
 }

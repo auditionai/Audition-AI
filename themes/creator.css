@@ -665,106 +665,102 @@
     z-index: 1;
 }
 
-/* --- FRAMES VISUAL STYLES --- */
+/* --- HIGH-END AVATAR FRAME EFFECTS (UPDATED) --- */
 
-/* None/Wood */
-.frame-none img { border: 2px solid rgba(255,255,255,0.1); }
-.frame-wood img { border: 4px solid #8B4513; box-shadow: inset 0 0 5px #000; }
+/* 1. Metallic/Shiny Effects (Level 20-40) */
+.frame-gradient-spin { 
+    padding: 3px; 
+    border-radius: 50%;
+    background: conic-gradient(from 0deg, #ec4899, #8b5cf6, #3b82f6, #ec4899); 
+    animation: spin-slow 4s linear infinite; 
+    box-shadow: 0 0 15px rgba(236, 72, 153, 0.4);
+}
 
-/* Neons */
-.frame-basic-blue img { border: 3px solid #3B82F6; box-shadow: 0 0 8px #3B82F6; }
-.frame-basic-pink img { border: 3px solid #EC4899; box-shadow: 0 0 8px #EC4899; }
-
-/* Musical Note */
-.frame-music { padding: 4px; background: linear-gradient(45deg, #fff, #333); border-radius: 50%; animation: spin-slow 4s linear infinite; }
-.frame-music img { border: 2px solid #fff; }
-.frame-music::after { content: '🎵'; position: absolute; bottom: -5px; right: -5px; font-size: 16px; animation: pulse-glow 1s infinite; z-index: 2; }
-
-/* Gradient Spin */
-.frame-gradient-spin { padding: 3px; background: linear-gradient(0deg, #ec4899, #8b5cf6, #3b82f6); background-size: 400% 400%; animation: gradient-spin-bg 3s linear infinite; border-radius: 50%; }
-.frame-gradient-spin img { border: 2px solid #12121A; }
-
-/* Sakura */
-.frame-sakura { box-shadow: 0 0 10px #FBCFE8; }
-.frame-sakura img { border: 3px solid #FBCFE8; }
-.frame-sakura::before { content: '🌸'; position: absolute; top: -5px; left: -5px; font-size: 14px; z-index: 2; }
-.frame-sakura::after { content: '🌸'; position: absolute; bottom: -5px; right: -5px; font-size: 14px; z-index: 2; }
-
-/* Cyber Tech */
-.frame-cyber img { border: 2px solid #00ff9d; box-shadow: 0 0 5px #00ff9d, inset 0 0 5px #00ff9d; }
+.frame-cyber {
+    padding: 2px;
+    border-radius: 50%;
+    border: 2px solid #00ff9d;
+    box-shadow: 0 0 10px #00ff9d, inset 0 0 10px #00ff9d;
+    position: relative;
+}
 .frame-cyber::before {
-    content: ''; position: absolute; inset: -4px; border-radius: 50%;
-    border: 2px dashed #00ff9d; animation: spin-slow 8s linear infinite;
-}
-
-/* Angel Wings */
-.frame-angel img { border: 3px solid #fff; box-shadow: 0 0 15px #fff; }
-.frame-angel::before {
-    content: ''; position: absolute; top: -20px; left: 50%; transform: translateX(-50%);
-    width: 60px; height: 15px; background: rgba(255,255,255,0.8);
-    border-radius: 50%; filter: blur(5px); /* Halo */
-}
-
-/* Demon Aura */
-.frame-demon img { border: 3px solid #800000; box-shadow: 0 0 15px #ff0000; }
-.frame-demon::after {
-    content: ''; position: absolute; inset: -5px; border-radius: 50%;
-    background: radial-gradient(transparent 60%, rgba(255,0,0,0.5));
-    animation: pulse-glow 2s infinite; z-index: 0;
-}
-
-/* Thunder Storm */
-.frame-thunder img { border: 3px solid #F59E0B; }
-.frame-thunder::before {
     content: ''; position: absolute; inset: -6px; border-radius: 50%;
-    border: 2px solid transparent; border-top-color: #F59E0B; border-bottom-color: #F59E0B;
-    animation: spin-slow 0.5s linear infinite; /* Fast spin */
+    border: 2px dashed #00ff9d; animation: spin-slow 10s linear infinite;
+}
+.frame-cyber::after {
+    content: ''; position: absolute; inset: -6px; border-radius: 50%;
+    border: 2px dashed #00ff9d; animation: spin-slow 8s linear infinite reverse; opacity: 0.5;
 }
 
-/* Legendary Gold */
-.frame-legendary-gold::before { content: ''; position: absolute; inset: -4px; border-radius: 50%; border: 2px dashed #FBBF24; animation: spin-slow 10s linear infinite; }
-.frame-legendary-gold::after { content: ''; position: absolute; inset: -4px; border-radius: 50%; border: 2px dashed #F59E0B; animation: spin-slow 15s linear infinite reverse; opacity: 0.5; }
-.frame-legendary-gold img { border: 2px solid #FBBF24; box-shadow: 0 0 15px rgba(251, 191, 36, 0.5); }
+/* 2. Particle & Aura Effects (Level 50-70) */
+.frame-demon {
+    border: 2px solid #ef4444;
+    box-shadow: 0 0 20px #ef4444, inset 0 0 10px #7f1d1d;
+}
+.frame-demon::before {
+    content: ''; position: absolute; inset: -10px; border-radius: 50%;
+    background: radial-gradient(transparent 60%, rgba(239, 68, 68, 0.3));
+    animation: pulse-glow 2s infinite; z-index: -1;
+}
 
-/* Ice Crystal */
-.frame-ice img { border: 3px solid #A5F3FC; box-shadow: 0 0 15px #0EA5E9; }
-.frame-ice::before {
-    content: ''; position: absolute; inset: -5px; border-radius: 50%;
-    border: 2px solid rgba(165, 243, 252, 0.5);
-    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+.frame-ice {
+    border: 3px solid #A5F3FC;
+    box-shadow: 0 0 20px #0EA5E9, 0 0 10px #A5F3FC inset;
+    animation: pulse-glow 3s infinite alternate;
+}
+.frame-ice::after {
+    content: ''; position: absolute; inset: -8px; border-radius: 50%;
+    border: 2px solid rgba(165, 243, 252, 0.6);
+    clip-path: polygon(50% 0%, 80% 10%, 100% 35%, 100% 70%, 80% 90%, 50% 100%, 20% 90%, 0% 70%, 0% 35%, 20% 10%);
+    animation: spin-slow 8s linear infinite;
+}
+
+/* 3. Aristocratic/Royal Effects (Level 80+) */
+.frame-legendary-gold {
+    padding: 4px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #bf953f, #fcf6ba, #b38728, #fbf5b7, #aa771c);
+    box-shadow: 0 0 20px rgba(253, 230, 138, 0.6);
+    position: relative;
+}
+.frame-legendary-gold::before {
+    content: ''; position: absolute; top: -25px; left: 50%; transform: translateX(-50%);
+    width: 40px; height: 30px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23FFD700'%3E%3Cpath d='M2 19h20v2H2v-2zM2 5l5 3 5-6 5 6 5-3v12H2V5z'/%3E%3C/svg%3E");
+    background-size: contain; background-repeat: no-repeat;
+    filter: drop-shadow(0 0 5px #FFD700);
+    animation: float-crown 3s ease-in-out infinite;
+}
+
+/* 4. Mythic/Godly Effects (Level 100+) */
+.frame-mythic-fire {
+    z-index: 1;
+    padding: 3px;
+    background: linear-gradient(to bottom, #ef4444, #f59e0b);
+    border-radius: 50%;
+    box-shadow: 0 0 20px #ef4444;
+}
+.frame-mythic-fire::before {
+    content: ''; position: absolute; inset: -15px; border-radius: 50%;
+    background: conic-gradient(from 0deg, transparent, #ff0000, #ff8800, #ffff00, transparent);
+    filter: blur(10px); z-index: -1;
+    animation: spin-slow 2s linear infinite;
+}
+
+.frame-infinity {
+    padding: 4px;
+    border-radius: 50%;
+    background: conic-gradient(#fff, #ffd700, #fff, #ffd700, #fff);
+    box-shadow: 0 0 30px #ffd700, 0 0 60px rgba(255, 215, 0, 0.5);
     animation: spin-slow 6s linear infinite;
+    position: relative;
 }
-
-/* Love Beat */
-.frame-love img { border: 3px solid #EC4899; }
-.frame-love::after {
-    content: '💗'; position: absolute; top: -10px; right: -5px; font-size: 16px;
-    animation: pulse-glow 1s infinite alternate;
+.frame-infinity::after {
+    content: ''; position: absolute; inset: -20px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    animation: ping 3s cubic-bezier(0, 0, 0.2, 1) infinite;
 }
-
-/* Galaxy Void */
-.frame-galaxy { background: conic-gradient(#4c1d95, #8b5cf6, #c4b5fd, #4c1d95); padding: 4px; border-radius: 50%; animation: spin-slow 5s linear infinite; }
-.frame-galaxy img { border: 2px solid #fff; }
-
-/* Matrix Code */
-.frame-matrix img { border: 2px solid #22c55e; box-shadow: 0 0 10px #22c55e; }
-.frame-matrix::before {
-    content: ''; position: absolute; inset: -4px; border-radius: 50%;
-    border: 2px dotted #22c55e; animation: spin-slow 10s linear reverse;
-}
-
-/* Rainbow Glitch */
-.frame-rainbow-glitch { padding: 3px; background: linear-gradient(90deg, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000); border-radius: 50%; animation: shimmer 0.5s linear infinite; }
-.frame-rainbow-glitch img { border: 2px solid #000; }
-
-/* Mythic Fire */
-.frame-mythic-fire { z-index: 1; }
-.frame-mythic-fire::before { content: ''; position: absolute; inset: -6px; border-radius: 50%; background: conic-gradient(from 0deg, #ff0000, #ff8800, #ffff00, #ff0000); filter: blur(6px); z-index: -1; animation: spin-slow 3s linear infinite; }
-.frame-mythic-fire img { border: 2px solid #fff; }
-
-/* Infinity God */
-.frame-infinity { padding: 5px; background: conic-gradient(#fff, #ffd700, #fff, #ffd700); border-radius: 50%; animation: spin-slow 20s linear infinite; box-shadow: 0 0 30px #ffd700; }
-.frame-infinity img { border: 2px solid #fff; }
 
 
 /* --- TITLE VISUAL STYLES --- */
@@ -875,22 +871,37 @@
 .themed-checkin-modal__reward-box .day { font-size: 0.7rem; color: var(--color-text-muted); text-transform: uppercase; font-weight: 700; }
 .themed-checkin-modal__reward-box .prize { font-size: 0.8rem; font-weight: 700; color: var(--color-text-base); }
 
-/* --- CHAT STYLES --- */
-.chat-scroll::-webkit-scrollbar {
-  width: 4px;
+/* --- CHAT STYLES (NEW) --- */
+.chat-glass {
+    background: rgba(15, 15, 20, 0.75);
+    backdrop-filter: blur(16px);
+    border-left: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: -10px 0 40px rgba(0, 0, 0, 0.5);
 }
-.chat-scroll::-webkit-scrollbar-track {
-  background: transparent;
+
+.chat-bubble-user {
+    background: linear-gradient(135deg, rgba(236, 72, 153, 0.8) 0%, rgba(217, 70, 239, 0.8) 100%);
+    box-shadow: 0 4px 15px rgba(236, 72, 153, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.1);
 }
-.chat-scroll::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 2px;
+
+.chat-bubble-other {
+    background: rgba(255, 255, 255, 0.05);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.05);
 }
-.chat-scroll::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.3);
+
+.message-appear {
+    animation: message-pop-in 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+    transform-origin: bottom left;
+}
+
+.group.flex-row-reverse .message-appear {
+    transform-origin: bottom right;
 }
 
 /* Animation Keyframes */
+@keyframes message-pop-in { 0% { opacity: 0; transform: translateY(10px) scale(0.9); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
 @keyframes gradient-spin-bg { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
 @keyframes pulse-glow { 0% { opacity: 0.8; box-shadow: 0 0 5px currentColor; } 50% { opacity: 1; box-shadow: 0 0 15px currentColor; } 100% { opacity: 0.8; box-shadow: 0 0 5px currentColor; } }
 @keyframes spin-slow { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
@@ -903,6 +914,7 @@
 @keyframes reward-icon-pop { 0% { transform: scale(1); } 50% { transform: scale(1.2) rotate(-10deg); } 100% { transform: scale(1); } }
 @keyframes reward-item-enter { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
 @keyframes sparkle { 0%, 100% { opacity: 0.2; transform: scale(1); } 50% { opacity: 0.5; transform: scale(1.1); } }
+@keyframes float-crown { 0%, 100% { transform: translateX(-50%) translateY(0); } 50% { transform: translateX(-50%) translateY(-5px); } }
 
 @keyframes signature-neon-flicker {
   0%, 18%, 22%, 25%, 53%, 57%, 100% {

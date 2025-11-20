@@ -596,6 +596,7 @@ export const en = {
                 name: 'Display Name',
                 rarity: 'Rarity',
                 uploadImage: 'Upload Image (Overrides CSS)',
+                uploadIcon: 'Upload Icon (Next to Name)',
                 cssClass: 'CSS Class (Legacy)',
                 unlockLevel: 'Unlock Lv.',
             },

@@ -20,9 +20,16 @@ const UserBadge: React.FC<UserBadgeProps> = ({ titleId, className = '' }) => {
     return (
         <span className={`title-badge ${title.cssClass || ''} ${className}`} title={displayName}>
             {title.imageUrl ? (
+                // Full image replacement (legacy/graphic titles)
                 <img src={title.imageUrl} alt={displayName} className="h-5 w-auto" />
             ) : (
-                displayName
+                // CSS Style + Optional Icon + Text
+                <span className="flex items-center gap-1">
+                    {title.iconUrl && (
+                         <img src={title.iconUrl} alt="" className="w-3.5 h-3.5 object-contain" />
+                    )}
+                    <span>{displayName}</span>
+                </span>
             )}
         </span>
     );

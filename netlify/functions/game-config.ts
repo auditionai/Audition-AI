@@ -33,6 +33,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             rarity: c.rarity,
             cssClass: c.css_class,
             imageUrl: c.image_url,
+            iconUrl: c.icon_url, // NEW: Map icon_url to iconUrl
             unlockCondition: { level: c.unlock_level }
         }));
 

@@ -226,7 +226,8 @@ export interface CosmeticItem {
     name?: string; // DB Name
     rarity: CosmeticRarity;
     cssClass?: string; // CSS class for animation/style (legacy/optional)
-    imageUrl?: string; // NEW: URL for uploaded image
+    imageUrl?: string; // URL for uploaded image (Main Image/Background)
+    iconUrl?: string; // NEW: URL for small icon (e.g., badge icon)
     unlockCondition?: {
         level?: number;
         vip?: boolean;

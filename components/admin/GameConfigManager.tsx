@@ -19,6 +19,7 @@ const GameConfigManager: React.FC = () => {
     const [editingRank, setEditingRank] = useState<Partial<Rank> | null>(null);
     const [editingCosmetic, setEditingCosmetic] = useState<Partial<CosmeticItem> | null>(null);
     const [uploadFile, setUploadFile] = useState<File | null>(null);
+    const [uploadIconFile, setUploadIconFile] = useState<File | null>(null); // NEW
 
     // Helper to check valid UUID
     const isUUID = (str?: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str || '');
@@ -78,6 +79,7 @@ const GameConfigManager: React.FC = () => {
             cssClass: 'frame-none'
         } as any);
         setUploadFile(null);
+        setUploadIconFile(null); // NEW
         setIsModalOpen(true);
     };
 
@@ -86,7 +88,9 @@ const GameConfigManager: React.FC = () => {
         setIsSaving(true);
         try {
             let finalImageUrl = editingCosmetic.imageUrl;
+            let finalIconUrl = editingCosmetic.iconUrl;
 
+            // Upload Main Image (Frame or Full Badge)
             if (uploadFile) {
                 const { dataUrl } = await resizeImage(uploadFile, 512); 
                 const uploadRes = await fetch('/.netlify/functions/upload-asset', {
@@ -97,6 +101,19 @@ const GameConfigManager: React.FC = () => {
                 const uploadData = await uploadRes.json();
                 if (!uploadRes.ok) throw new Error(uploadData.error);
                 finalImageUrl = uploadData.url;
+            }
+
+            // Upload Small Icon (Badge Icon)
+            if (uploadIconFile) {
+                const { dataUrl } = await resizeImage(uploadIconFile, 128); 
+                const uploadRes = await fetch('/.netlify/functions/upload-asset', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+                    body: JSON.stringify({ image: dataUrl, folder: 'icons' }),
+                });
+                const uploadData = await uploadRes.json();
+                if (!uploadRes.ok) throw new Error(uploadData.error);
+                finalIconUrl = uploadData.url;
             }
 
             // Logic: If ID is legacy (not UUID) or missing, treat as CREATE (POST)
@@ -111,6 +128,7 @@ const GameConfigManager: React.FC = () => {
                 rarity: editingCosmetic.rarity,
                 css_class: editingCosmetic.cssClass,
                 image_url: finalImageUrl,
+                icon_url: finalIconUrl, // NEW
                 unlock_level: editingCosmetic.unlockCondition?.level || 0,
                 is_active: true
             };
@@ -198,7 +216,10 @@ const GameConfigManager: React.FC = () => {
                                     {c.imageUrl ? <img src={c.imageUrl} className="w-full h-full object-contain" alt=""/> : <span className="text-xs text-gray-500">CSS</span>}
                                 </div>
                                 <div className="flex-grow">
-                                    <p className="font-bold text-sm text-white">{c.nameKey ? t(c.nameKey) : c.name}</p>
+                                    <p className="font-bold text-sm text-white flex items-center gap-1">
+                                        {c.iconUrl && <img src={c.iconUrl} alt="" className="w-4 h-4 object-contain" />}
+                                        {c.nameKey ? t(c.nameKey) : c.name}
+                                    </p>
                                     <p className="text-xs text-gray-400 uppercase">{t(`creator.settings.admin.gameConfig.types.${c.type}`)} - {t(`creator.settings.admin.gameConfig.rarities.${c.rarity}`)}</p>
                                     <p className="text-xs text-yellow-500">{t('creator.settings.admin.gameConfig.form.unlockLevel')}: {c.unlockCondition?.level || 0}</p>
                                 </div>
@@ -258,10 +279,19 @@ const GameConfigManager: React.FC = () => {
                                 <label className="text-sm text-gray-400">{t('creator.settings.admin.gameConfig.form.unlockLevel')}:</label>
                                 <input type="number" value={editingCosmetic.unlockCondition?.level || 0} onChange={e => setEditingCosmetic({...editingCosmetic, unlockCondition: { level: Number(e.target.value) }})} className="auth-input w-20" />
                             </div>
+                            
+                            {/* Upload Main Image */}
                             <div>
                                 <label className="block text-sm text-gray-400 mb-1">{t('creator.settings.admin.gameConfig.form.uploadImage')}</label>
                                 <input type="file" accept="image/*" onChange={e => setUploadFile(e.target.files?.[0] || null)} className="text-sm text-gray-400" />
                             </div>
+
+                            {/* NEW: Upload Icon (Only for Titles usually, but available for all) */}
+                            <div>
+                                <label className="block text-sm text-gray-400 mb-1">{t('creator.settings.admin.gameConfig.form.uploadIcon')}</label>
+                                <input type="file" accept="image/*" onChange={e => setUploadIconFile(e.target.files?.[0] || null)} className="text-sm text-gray-400" />
+                            </div>
+
                             <div>
                                 <label className="text-sm text-gray-400">{t('creator.settings.admin.gameConfig.form.cssClass')}</label>
                                 <input type="text" value={editingCosmetic.cssClass || ''} onChange={e => setEditingCosmetic({...editingCosmetic, cssClass: e.target.value})} className="auth-input mt-1" />

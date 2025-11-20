@@ -3,6 +3,8 @@ import { GalleryImage } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { getRankForLevel } from '../../utils/rankUtils';
 import { useTranslation } from '../../hooks/useTranslation';
+import UserAvatar from './UserAvatar';
+import UserBadge from './UserBadge';
 
 interface ImageModalProps {
   isOpen: boolean;
@@ -70,9 +72,17 @@ const ImageModal: React.FC<ImageModalProps> = ({ isOpen, onClose, image, showInf
                 {/* Conditionally show Creator info */}
                 {showInfoPanel && image.creator && (
                     <div className="flex items-center gap-3 pb-4 border-b border-white/10">
-                        <img src={image.creator.photo_url} alt={image.creator.display_name} className="w-12 h-12 rounded-full" />
-                        <div>
-                            <p className={`font-bold ${rank.color} neon-text-glow`}>{image.creator.display_name}</p>
+                        <UserAvatar 
+                            src={image.creator.photo_url} 
+                            alt={image.creator.display_name} 
+                            frameId={image.creator.equipped_frame_id} 
+                            size="md"
+                        />
+                        <div className="overflow-hidden">
+                            <div className="flex items-center gap-2">
+                                <p className={`font-bold ${rank.color} neon-text-glow truncate`}>{image.creator.display_name}</p>
+                                <UserBadge titleId={image.creator.equipped_title_id} className="scale-90 origin-left" />
+                            </div>
                             <p className={`text-xs font-semibold flex items-center gap-1.5 ${rank.color}`}>{rank.icon} {rank.title}</p>
                         </div>
                     </div>

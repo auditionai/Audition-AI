@@ -8,6 +8,8 @@ import { CHANGELOG_DATA } from '../../constants/changelogData';
 import Logo from '../common/Logo';
 import { useTranslation } from '../../hooks/useTranslation';
 import LanguageSwitcher from '../common/LanguageSwitcher';
+import UserAvatar from '../common/UserAvatar';
+import UserBadge from '../common/UserBadge';
 
 interface CreatorHeaderProps {
   onTopUpClick: () => void;
@@ -170,15 +172,23 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
 
             {/* Desktop User Dropdown */}
             <div className="hidden md:flex relative items-center gap-3" ref={dropdownRef}>
-                <div className="hidden sm:flex items-center gap-2 text-right">
-                    <span className="font-semibold text-skin-base">{user.display_name}</span>
+                <div className="hidden sm:flex flex-col items-end">
+                    <div className="flex items-center gap-2">
+                        <span className="font-semibold text-skin-base">{user.display_name}</span>
+                        <UserBadge titleId={user.equipped_title_id} className="scale-75 origin-left" />
+                    </div>
                     <span className="text-xs text-skin-muted">{rank.title}</span>
                 </div>
-                <button onClick={() => setDropdownOpen(!isDropdownOpen)} className="flex items-center gap-3 cursor-pointer">
-                  <div className="relative">
-                     <img src={user.photo_url} alt={user.display_name} className="w-11 h-11 rounded-full border-2 border-transparent group-hover:border-skin-accent transition-all" />
-                      <div className={`absolute inset-0 rounded-full border-2 border-skin-accent transition-all duration-300 shadow-accent ${isDropdownOpen ? 'opacity-100' : 'opacity-0'}`}></div>
-                  </div>
+                <button onClick={() => setDropdownOpen(!isDropdownOpen)} className="flex items-center gap-3 cursor-pointer outline-none">
+                    <div className="relative">
+                        <UserAvatar 
+                            src={user.photo_url} 
+                            alt={user.display_name} 
+                            frameId={user.equipped_frame_id} 
+                            size="md"
+                            className="transform scale-90" 
+                        />
+                    </div>
                 </button>
               {isDropdownOpen && (
                 <div className="absolute right-0 mt-3 top-full w-72 origin-top-right bg-skin-fill-modal border border-skin-border rounded-md shadow-lg z-50 animate-fade-in-down">
@@ -186,8 +196,9 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
                      <div className="px-2 py-2 border-b border-skin-border">
                         <div className="flex items-center gap-3">
                            <span className="text-2xl">{rank.icon}</span>
-                           <div>
-                               <p className="font-semibold text-sm text-skin-base">{user.display_name}</p>
+                           <div className="overflow-hidden">
+                               <p className="font-semibold text-sm text-skin-base truncate">{user.display_name}</p>
+                               <UserBadge titleId={user.equipped_title_id} className="text-[10px] mb-1 scale-90 origin-left" />
                                <p className="text-xs text-skin-muted truncate">{rank.title} - {t('creator.header.level')} {user.level}</p>
                            </div>
                         </div>

@@ -322,6 +322,16 @@ export const vi = {
         updateSuccess: 'Cập nhật ảnh đại diện thành công!',
         updateError: 'Cập nhật ảnh đại diện thất bại.',
       },
+      // NEW: Personalization Translations
+      personalization: {
+        title: 'Trang Trí & Làm Đẹp',
+        frames: 'Khung Avatar',
+        titles: 'Danh Hiệu',
+        equip: 'Trang bị',
+        equipped: 'Đã trang bị thành công!',
+        using: 'Đang dùng',
+        locked: 'Chưa mở khóa',
+      },
       transactionHistory: {
         title: 'Lịch sử giao dịch Kim cương',
         loading: 'Đang tải lịch sử...',

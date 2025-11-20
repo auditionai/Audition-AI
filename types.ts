@@ -49,6 +49,9 @@ export interface User {
     last_check_in_at?: string;
     consecutive_check_in_days?: number;
     last_announcement_seen_id?: number | null;
+    // NEW: Personalization fields
+    equipped_title_id?: string | null;
+    equipped_frame_id?: string | null;
 }
 
 export interface AdminManagedUser extends User {
@@ -97,6 +100,9 @@ export interface GalleryImage {
     display_name: string;
     photo_url: string;
     level: number;
+    // NEW: Add cosmetic fields to creator info in gallery
+    equipped_title_id?: string | null;
+    equipped_frame_id?: string | null;
   };
 }
 
@@ -120,6 +126,9 @@ export interface LeaderboardUser {
     xp: number;
     // creations_count sẽ được tính toán
     creations_count: number;
+    // NEW: Add cosmetic fields to leaderboard
+    equipped_title_id?: string | null;
+    equipped_frame_id?: string | null;
 }
 
 // Dành cho các gói nạp kim cương
@@ -204,4 +213,23 @@ export interface GiftCode {
 export interface PromptLibraryItem {
   image_url: string;
   prompt: string;
+}
+
+// NEW: Cosmetic Types
+export type RequirementType = 'level' | 'xp' | 'diamonds' | 'creations' | 'checkin_streak' | 'admin';
+
+export interface UnlockRequirement {
+    type: RequirementType;
+    value: number;
+    description: string;
+}
+
+export interface CosmeticItem {
+    id: string;
+    name: string;
+    description: string;
+    type: 'title' | 'frame';
+    cssClass: string; // The tailwind/custom CSS class for the visual effect
+    rarity: 'common' | 'rare' | 'epic' | 'legendary' | 'mythic';
+    requirement: UnlockRequirement;
 }

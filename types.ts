@@ -250,6 +250,8 @@ export interface ChatMessage {
         sender_title_id?: string;
         image_url?: string;
         sticker_id?: string;
+        deleted_by?: string;
+        deleted_at?: string;
     };
     created_at: string;
     is_deleted?: boolean; // Added for admin moderation

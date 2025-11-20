@@ -164,9 +164,43 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
 
     const deleteMessage = async (messageId: string) => {
-        if (!supabase) return;
-        // Soft delete
-        await supabase.from('global_chat_messages').update({ is_deleted: true, content: 'Tin nhắn đã bị xóa bởi Admin.' }).eq('id', messageId);
+        if (!supabase || !user) return;
+        
+        try {
+             const { data: msg, error } = await supabase
+                .from('global_chat_messages')
+                .select('user_id, metadata')
+                .eq('id', messageId)
+                .single();
+                
+             if (error || !msg) throw new Error("Message not found");
+
+             const isOwner = msg.user_id === user.id;
+             
+             if (!user.is_admin && !isOwner) {
+                 showToast("Bạn không có quyền xóa tin nhắn này.", "error");
+                 return;
+             }
+             
+             const deleterName = (user.is_admin && !isOwner) ? 'ADMIN' : user.display_name;
+             
+             const updatedMetadata = {
+                 ...msg.metadata,
+                 deleted_by: deleterName,
+                 deleted_at: new Date().toISOString()
+             };
+
+             await supabase
+                .from('global_chat_messages')
+                .update({ is_deleted: true, metadata: updatedMetadata })
+                .eq('id', messageId);
+             
+             showToast("Đã xóa tin nhắn.", "success");
+                
+        } catch (e) {
+            console.error("Delete message error:", e);
+            showToast("Không thể xóa tin nhắn.", "error");
+        }
     };
 
     const muteUser = async (userId: string, minutes: number) => {

@@ -100,9 +100,9 @@ const GameConfigManager: React.FC = () => {
             if (uploadIconFile) {
                 let finalDataUrl: string;
 
-                // CRITICAL FIX: Check if file is GIF. If so, DO NOT RESIZE.
+                // CRITICAL FIX: Check if file is GIF (Case Insensitive). If so, DO NOT RESIZE.
                 // Resizing GIFs with canvas kills animation and transparency (black background).
-                if (uploadIconFile.type === 'image/gif') {
+                if (uploadIconFile.type.toLowerCase().includes('gif')) {
                      finalDataUrl = await new Promise((resolve, reject) => {
                         const reader = new FileReader();
                         reader.onload = (e) => resolve(e.target?.result as string);
@@ -224,11 +224,13 @@ const GameConfigManager: React.FC = () => {
                         {(activeSubTab === 'frames' ? frames : titles).map(c => (
                             <div key={c.id} className="flex gap-3 p-2 bg-white/5 rounded items-center">
                                 <div className="w-12 h-12 bg-black/30 rounded flex items-center justify-center overflow-hidden relative">
-                                     {/* Show Icon or Fallback */}
+                                     {/* Show Icon (Prioritized) or Main Image or Fallback */}
                                      {c.iconUrl ? (
-                                         <img src={c.iconUrl} alt="" className="w-8 h-8 object-contain" />
+                                         <img src={c.iconUrl} alt="icon" className="w-8 h-8 object-contain" />
+                                     ) : c.imageUrl ? (
+                                         <img src={c.imageUrl} className="w-full h-full object-contain" alt="preview"/> 
                                      ) : (
-                                         c.imageUrl ? <img src={c.imageUrl} className="w-full h-full object-contain" alt=""/> : <span className="text-[10px] text-gray-500">CSS</span>
+                                         <span className="text-[10px] text-gray-500">CSS</span>
                                      )}
                                 </div>
                                 <div className="flex-grow">

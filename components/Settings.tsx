@@ -10,12 +10,12 @@ import CreditPackageManager from './admin/CreditPackageManager';
 import CheckInRewardManager from './admin/CheckInRewardManager';
 import AnnouncementManager from './admin/AnnouncementManager';
 import ApiKeyManager from './admin/ApiKeyManager';
-import GameConfigManager from './admin/GameConfigManager'; // NEW
+import GameConfigManager from './admin/GameConfigManager'; 
 import { resizeImage } from '../utils/imageUtils';
 import { useTranslation } from '../hooks/useTranslation';
 import UserAvatar from './common/UserAvatar';
 import UserBadge from './common/UserBadge';
-import { useGameConfig } from '../contexts/GameConfigContext'; // NEW
+import { useGameConfig } from '../contexts/GameConfigContext'; 
 
 // Personalization Panel (Dynamic)
 const PersonalizationPanel: React.FC = () => {
@@ -104,11 +104,8 @@ const PersonalizationPanel: React.FC = () => {
                                 className={`cosmetic-item rarity-${title.rarity} ${active ? 'active' : ''} ${locked ? 'locked' : ''}`}
                             >
                                 <div className="h-12 flex items-center justify-center w-full px-2 overflow-hidden">
-                                    {title.imageUrl ? (
-                                        <img src={title.imageUrl} alt={displayName} className="max-h-8 w-auto object-contain" />
-                                    ) : (
-                                        <span className={`title-badge ${title.cssClass} text-[0.6rem]`}>{displayName}</span>
-                                    )}
+                                    {/* Use UserBadge here to ensure icons are displayed correctly */}
+                                    <UserBadge titleId={title.id} />
                                 </div>
                                 <span className="text-center text-gray-300 mt-2 text-xs px-1" title={displayName}>{displayName}</span>
                                 {locked && <span className="text-[10px] text-red-400 mt-1">Lv.{title.unlockCondition?.level}</span>}

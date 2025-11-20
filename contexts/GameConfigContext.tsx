@@ -36,23 +36,41 @@ export const GameConfigProvider: React.FC<{ children: ReactNode }> = ({ children
 
                 // 2. Process Cosmetics (Merge with Defaults to keep nameKeys)
                 if (data.cosmetics) {
-                    const processedCosmetics = data.cosmetics.map((dbItem: CosmeticItem) => {
-                        // Find corresponding default item to restore translation keys (nameKey)
-                        // This fixes the issue where default titles disappear or show raw names
-                        const defaultItem = DEFAULT_COSMETICS.find(c => c.id === dbItem.id);
-                        return {
-                            ...dbItem,
-                            nameKey: defaultItem?.nameKey || dbItem.nameKey, // Restore nameKey if available
-                            cssClass: dbItem.cssClass || defaultItem?.cssClass || '' // Restore default CSS if not overridden
-                        };
+                    // Create a map of DB items for faster lookup
+                    const dbMap = new Map<string, any>(data.cosmetics.map((c: any) => [c.id, c]));
+
+                    // Merge Default Items with DB overrides
+                    const mergedDefaultCosmetics = DEFAULT_COSMETICS.map(defaultItem => {
+                        const dbItem = dbMap.get(defaultItem.id);
+                        if (dbItem) {
+                            // Remove from map to track what's left (custom items)
+                            dbMap.delete(defaultItem.id);
+                            
+                            return {
+                                ...defaultItem, // Keep defaults like nameKey, id, type
+                                ...dbItem,      // Override with DB values (iconUrl, unlockLevel, etc.)
+                                nameKey: defaultItem.nameKey, // Ensure nameKey persists if DB name is empty or hardcoded
+                                cssClass: dbItem.cssClass || defaultItem.cssClass, // Prefer DB, fallback to default
+                                imageUrl: dbItem.imageUrl || defaultItem.imageUrl,
+                                iconUrl: dbItem.iconUrl || defaultItem.iconUrl
+                            };
+                        }
+                        return defaultItem;
                     });
 
-                    const dbFrames = processedCosmetics.filter((c: CosmeticItem) => c.type === 'frame');
-                    const dbTitles = processedCosmetics.filter((c: CosmeticItem) => c.type === 'title');
+                    // Add remaining custom items from DB
+                    const customItems = Array.from(dbMap.values()).map((c: any) => ({
+                        ...c,
+                        nameKey: null // Custom items don't have translation keys
+                    }));
+
+                    const allCosmetics = [...mergedDefaultCosmetics, ...customItems];
+
+                    const finalFrames = allCosmetics.filter((c: CosmeticItem) => c.type === 'frame');
+                    const finalTitles = allCosmetics.filter((c: CosmeticItem) => c.type === 'title');
                     
-                    // Update state, defaulting to constants if DB is empty to prevent empty UI
-                    if (dbFrames.length > 0) setFrames(dbFrames);
-                    if (dbTitles.length > 0) setTitles(dbTitles);
+                    setFrames(finalFrames);
+                    setTitles(finalTitles);
                 }
             }
         } catch (error) {

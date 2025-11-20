@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useGameConfig } from '../../contexts/GameConfigContext';
 import { CosmeticItem, Rank } from '../../types';

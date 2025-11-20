@@ -1,9 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { TransactionLogEntry } from '../types';
 import XPProgressBar from './common/XPProgressBar';
-import RedeemGiftCode from './user/RedeemGiftCode';
 import Dashboard from './admin/Dashboard';
 import GiftCodeManager from './admin/GiftCodeManager';
 import TransactionManager from './admin/TransactionManager';
@@ -18,49 +16,6 @@ import { useTranslation } from '../hooks/useTranslation';
 import UserAvatar from './common/UserAvatar';
 import UserBadge from './common/UserBadge';
 import { useGameConfig } from '../contexts/GameConfigContext'; // NEW
-
-
-// User-facing Transaction History Component
-const TransactionHistory: React.FC = () => {
-    const { session, showToast } = useAuth();
-    const { t } = useTranslation();
-    const [logs, setLogs] = useState<TransactionLogEntry[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-
-    useEffect(() => {
-        const fetchHistory = async () => {
-            if (!session) return;
-            try {
-                const res = await fetch('/.netlify/functions/transaction-history', {
-                    headers: { Authorization: `Bearer ${session.access_token}` }
-                });
-                if (!res.ok) throw new Error(t('creator.settings.transactionHistory.error'));
-                setLogs(await res.json());
-            } catch (e: any) {
-                showToast(e.message, 'error');
-            } finally {
-                setIsLoading(false);
-            }
-        };
-        fetchHistory();
-    }, [session, showToast, t]);
-
-    if (isLoading) return <p className="text-center text-gray-400">{t('creator.settings.transactionHistory.loading')}</p>;
-
-    return (
-        <div className="space-y-2 max-h-80 overflow-y-auto custom-scrollbar pr-2">
-            {logs.length > 0 ? logs.map(log => (
-                <div key={log.id} className="grid grid-cols-12 gap-2 items-center p-3 bg-white/5 rounded-lg text-sm">
-                    <div className="col-span-3 md:col-span-2 text-gray-400">{new Date(log.created_at).toLocaleDateString('vi-VN')}</div>
-                    <div className="col-span-6 md:col-span-7 text-white">{log.description}</div>
-                    <div className={`col-span-3 text-right font-bold ${log.amount >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                        {log.amount >= 0 ? '+' : ''}{log.amount.toLocaleString()} 💎
-                    </div>
-                </div>
-            )) : <p className="text-center text-gray-500 py-8">{t('creator.settings.transactionHistory.empty')}</p>}
-        </div>
-    );
-};
 
 // Personalization Panel (Dynamic)
 const PersonalizationPanel: React.FC = () => {

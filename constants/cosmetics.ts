@@ -5,14 +5,14 @@ export const AVATAR_FRAMES: CosmeticItem[] = [
     {
         id: 'default',
         type: 'frame',
-        nameKey: 'cosmetics.frames.default',
+        nameKey: 'creator.cosmetics.frames.default',
         rarity: 'common',
         cssClass: 'frame-none',
     },
     {
         id: 'neon-blue',
         type: 'frame',
-        nameKey: 'cosmetics.frames.neonBlue',
+        nameKey: 'creator.cosmetics.frames.neonBlue',
         rarity: 'rare',
         cssClass: 'frame-basic-blue',
         unlockCondition: { level: 5 },
@@ -20,7 +20,7 @@ export const AVATAR_FRAMES: CosmeticItem[] = [
     {
         id: 'neon-pink',
         type: 'frame',
-        nameKey: 'cosmetics.frames.neonPink',
+        nameKey: 'creator.cosmetics.frames.neonPink',
         rarity: 'rare',
         cssClass: 'frame-basic-pink',
         unlockCondition: { level: 10 },
@@ -28,7 +28,7 @@ export const AVATAR_FRAMES: CosmeticItem[] = [
     {
         id: 'gradient-spin',
         type: 'frame',
-        nameKey: 'cosmetics.frames.gradientSpin',
+        nameKey: 'creator.cosmetics.frames.gradientSpin',
         rarity: 'epic',
         cssClass: 'frame-gradient-spin',
         unlockCondition: { level: 20 },
@@ -36,7 +36,7 @@ export const AVATAR_FRAMES: CosmeticItem[] = [
     {
         id: 'legendary-gold',
         type: 'frame',
-        nameKey: 'cosmetics.frames.legendaryGold',
+        nameKey: 'creator.cosmetics.frames.legendaryGold',
         rarity: 'legendary',
         cssClass: 'frame-legendary-gold',
         unlockCondition: { level: 50 },
@@ -44,7 +44,7 @@ export const AVATAR_FRAMES: CosmeticItem[] = [
     {
         id: 'mythic-fire',
         type: 'frame',
-        nameKey: 'cosmetics.frames.mythicFire',
+        nameKey: 'creator.cosmetics.frames.mythicFire',
         rarity: 'mythic',
         cssClass: 'frame-mythic-fire',
         unlockCondition: { level: 100 },
@@ -55,14 +55,14 @@ export const ACHIEVEMENT_TITLES: CosmeticItem[] = [
     {
         id: 'newbie',
         type: 'title',
-        nameKey: 'cosmetics.titles.newbie',
+        nameKey: 'creator.cosmetics.titles.newbie',
         rarity: 'common',
         cssClass: 'title-basic',
     },
     {
         id: 'style-icon',
         type: 'title',
-        nameKey: 'cosmetics.titles.styleIcon',
+        nameKey: 'creator.cosmetics.titles.styleIcon',
         rarity: 'rare',
         cssClass: 'title-neon-blue',
         unlockCondition: { level: 5 },
@@ -70,7 +70,7 @@ export const ACHIEVEMENT_TITLES: CosmeticItem[] = [
     {
         id: 'vip',
         type: 'title',
-        nameKey: 'cosmetics.titles.vip',
+        nameKey: 'creator.cosmetics.titles.vip',
         rarity: 'epic',
         cssClass: 'title-vip-gold',
         unlockCondition: { level: 20 },
@@ -78,7 +78,7 @@ export const ACHIEVEMENT_TITLES: CosmeticItem[] = [
     {
         id: 'glitch-master',
         type: 'title',
-        nameKey: 'cosmetics.titles.glitchMaster',
+        nameKey: 'creator.cosmetics.titles.glitchMaster',
         rarity: 'legendary',
         cssClass: 'title-cyber-glitch',
         unlockCondition: { level: 50 },
@@ -86,7 +86,7 @@ export const ACHIEVEMENT_TITLES: CosmeticItem[] = [
     {
         id: 'audition-god',
         type: 'title',
-        nameKey: 'cosmetics.titles.auditionGod',
+        nameKey: 'creator.cosmetics.titles.auditionGod',
         rarity: 'mythic',
         cssClass: 'title-mythic-fire',
         unlockCondition: { level: 100 },

@@ -1,3 +1,4 @@
+
 export const en = {
   langName: 'English',
   landing: {
@@ -322,6 +323,13 @@ export const en = {
         updateSuccess: 'Avatar updated successfully!',
         updateError: 'Failed to update avatar.',
       },
+      personalization: {
+        title: 'Appearance & Decoration',
+        frames: 'Avatar Frames',
+        titles: 'Achievement Titles',
+        success: 'Equipment updated successfully!',
+        currentTitle: 'Current Title',
+      },
       transactionHistory: {
         title: 'Diamond Transaction History',
         loading: 'Loading history...',
@@ -539,6 +547,23 @@ export const en = {
       progress: 'Rank Progress',
       needed: '{{xp}} more XP to reach',
       maxLevel: 'Max level reached!',
+    },
+    cosmetics: {
+      frames: {
+        default: 'Basic',
+        neonBlue: 'Neon Blue',
+        neonPink: 'Neon Pink',
+        gradientSpin: 'Rainbow Spin',
+        legendaryGold: 'Legendary Gold',
+        mythicFire: 'Mythic Fire',
+      },
+      titles: {
+        newbie: 'Newbie',
+        styleIcon: 'Style Icon',
+        vip: 'VIP',
+        glitchMaster: 'Glitch Master',
+        auditionGod: 'Audition God',
+      }
     }
   },
   modals: {

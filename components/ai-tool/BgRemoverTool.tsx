@@ -2,7 +2,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useBackgroundRemover } from '../../hooks/useBackgroundRemover';
-import { DiamondIcon } from '../common/DiamondIcon';
 import ConfirmationModal from '../ConfirmationModal';
 import { resizeImage, base64ToFile } from '../../utils/imageUtils';
 import ProcessedImageModal from './ProcessedImageModal';

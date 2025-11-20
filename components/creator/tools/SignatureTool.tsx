@@ -53,7 +53,7 @@ interface SignatureState {
 }
 
 const SignatureTool: React.FC<SignatureToolProps> = ({ initialImage, onClearInitialImage, onInstructionClick }) => {
-    const { user, session, showToast, updateUserProfile, updateUserDiamonds } = useAuth();
+    const { user, session, showToast, updateUserDiamonds } = useAuth();
     const { t } = useTranslation();
     const [isConfirmOpen, setConfirmOpen] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);

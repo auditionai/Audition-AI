@@ -90,6 +90,8 @@
     color: var(--color-text-muted);
     transition: all 0.3s ease;
     position: relative;
+    background-color: transparent;
+    border: 1px solid transparent;
 }
 
 .themed-nav-button:hover {
@@ -100,7 +102,7 @@
 .themed-nav-button.is-active {
     background-color: rgba(var(--color-accent), 0.1);
     color: rgb(var(--color-accent));
-    border: 1px solid rgba(var(--color-accent), 0.2);
+    border-color: rgba(var(--color-accent), 0.2);
 }
 
 /* Top Up Button */
@@ -173,11 +175,13 @@
 
 /* Buttons */
 .themed-button-primary {
+    background-color: rgb(var(--color-accent)); /* Fallback */
     background: linear-gradient(to right, rgb(var(--color-accent)), rgb(var(--color-accent-secondary)));
     color: var(--color-accent-text);
     border-radius: 0.5rem;
     transition: all 0.3s ease;
     box-shadow: var(--shadow-accent);
+    border: none;
 }
 .themed-button-primary:hover:not(:disabled) {
     opacity: 0.9;
@@ -200,6 +204,17 @@
 .themed-button-secondary:hover:not(:disabled) {
     background-color: rgba(255, 255, 255, 0.15);
     border-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Notification Button */
+.themed-notification-button {
+    color: var(--color-text-muted);
+    transition: color 0.3s ease;
+    border-radius: 9999px;
+}
+.themed-notification-button:hover {
+    color: var(--color-text-base);
+    background-color: rgba(255, 255, 255, 0.05);
 }
 
 /* Settings Block */
@@ -314,6 +329,41 @@
     box-shadow: var(--shadow-accent);
 }
 
+/* Interactive 3D Effect (Common) */
+.interactive-3d {
+  transition: transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1), box-shadow 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+  will-change: transform;
+}
+.interactive-3d:hover {
+  transform: perspective(1200px) rotateX(7deg) rotateY(-8deg) scale(1.02);
+  box-shadow: 0 25px 50px rgba(0,0,0,0.5);
+}
+.glowing-border {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 2px;
+  background: linear-gradient(45deg, rgba(var(--color-accent), 0), rgba(var(--color-accent), 0.3), rgba(var(--color-accent), 0));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  opacity: 0.3;
+  transition: opacity 0.3s ease;
+}
+.group:hover .glowing-border, .interactive-3d:hover .glowing-border {
+  opacity: 1;
+  background: linear-gradient(45deg, rgba(var(--color-accent), 0), rgba(var(--color-accent), 0.5), rgba(var(--color-accent), 0));
+}
+
+/* Neon Text Effects */
+.neon-text-glow { 
+    text-shadow: 0 0 5px currentColor, 0 0 10px currentColor; 
+}
+.neon-text-flow {
+    animation: neon-text-flow 3s ease-in-out infinite;
+}
+
 /* Check-in Modal Specifics */
 .themed-checkin-modal__streak-box {
     background: linear-gradient(135deg, rgba(var(--color-accent), 0.1), rgba(var(--color-accent-secondary), 0.1));
@@ -353,6 +403,9 @@
 }
 .themed-checkin-modal__day--today {
     border-color: var(--color-text-base);
+}
+.themed-checkin-modal__day--future {
+    opacity: 0.5;
 }
 .themed-checkin-modal__reward-box {
     background-color: var(--color-fill-secondary);
@@ -585,7 +638,7 @@
 .frame-legendary-gold::after { content: ''; position: absolute; inset: -4px; border-radius: 50%; border: 2px dashed #F59E0B; animation: spin-slow 15s linear infinite reverse; opacity: 0.5; }
 .frame-legendary-gold img { border: 2px solid #FBBF24; box-shadow: 0 0 15px rgba(251, 191, 36, 0.5); }
 .frame-mythic-fire { z-index: 1; }
-.frame-mythic-fire::before { content: ''; position: absolute; inset: -6px; border-radius: 50%; background: conic-gradient(from 0deg, #ff0000, #ff8800, #ffff00, #ff0000); filter: blur(6px); z-index: -1; animation: spin 3s linear infinite; }
+.frame-mythic-fire::before { content: ''; position: absolute; inset: -6px; border-radius: 50%; background: conic-gradient(from 0deg, #ff0000, #ff8800, #ffff00, #ff0000); filter: blur(6px); z-index: -1; animation: spin-slow 3s linear infinite; }
 .frame-mythic-fire img { border: 2px solid #fff; }
 
 .title-badge { display: inline-block; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 6px; border-radius: 4px; white-space: nowrap; }
@@ -594,20 +647,50 @@
 .title-vip-gold { background: linear-gradient(to right, #FCD34D, #F59E0B, #B45309); -webkit-background-clip: text; background-clip: text; color: transparent; border: 1px solid #F59E0B; background-color: rgba(245, 158, 11, 0.1); animation: shimmer 3s infinite; }
 .title-cyber-glitch { color: #00fff9; background: rgba(0,0,0,0.5); border: 1px solid #ec4899; text-shadow: 2px 0 #ec4899, -2px 0 #00fff9; position: relative; animation: glitch-text 3s infinite linear alternate-reverse; }
 .title-mythic-fire { color: #FFF; background: linear-gradient(45deg, #ef4444, #f59e0b); border: none; box-shadow: 0 0 10px #ef4444; animation: pulse-glow 1.5s infinite; }
+.signature-style-neon { animation: signature-neon-flicker 4s infinite alternate; }
+
+/* Animation Helpers & Keyframes */
+.theme-display-highlight { animation: theme-highlight-anim 1.5s ease-out; }
+.notification-dot-ping { animation: ping 1s cubic-bezier(0, 0, 0.2, 1) infinite; }
+.notification-dot { background-color: rgb(var(--color-accent-secondary)); border-color: var(--color-fill); }
 
 @keyframes gradient-spin-bg { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
 @keyframes pulse-glow { 0% { opacity: 0.8; box-shadow: 0 0 5px currentColor; } 50% { opacity: 1; box-shadow: 0 0 15px currentColor; } 100% { opacity: 0.8; box-shadow: 0 0 5px currentColor; } }
 @keyframes spin-slow { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 @keyframes shimmer { 0% { opacity: 0.8; } 50% { opacity: 1; filter: brightness(1.3); } 100% { opacity: 0.8; } }
 @keyframes glitch-text { 0% { transform: skew(0deg); } 20% { transform: skew(-2deg); } 40% { transform: skew(2deg); } 60% { transform: skew(-1deg); } 80% { transform: skew(1deg); } 100% { transform: skew(0deg); } }
-
-/* Animation Helpers */
-.theme-display-highlight { animation: theme-highlight-anim 1.5s ease-out; }
 @keyframes theme-highlight-anim { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.2); opacity: 0.7; filter: drop-shadow(0 0 10px rgb(var(--color-accent))); } 100% { transform: scale(1); opacity: 1; } }
 @keyframes progress-flow { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
 @keyframes reward-enter { from { opacity: 0; transform: scale(0.8) translateY(20px); } to { opacity: 1; transform: scale(1) translateY(0); } }
 @keyframes reward-exit { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0.9); } }
 @keyframes reward-icon-pop { 0% { transform: scale(1); } 50% { transform: scale(1.2) rotate(-10deg); } 100% { transform: scale(1); } }
 @keyframes reward-item-enter { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
-.reward-sparkles { background-image: radial-gradient(circle at 10% 20%, rgba(255,255,255,0.3) 0px, transparent 2px), radial-gradient(circle at 80% 30%, rgba(255,255,255,0.3) 0px, transparent 2px), radial-gradient(circle at 30% 90%, rgba(255,255,255,0.2) 0px, transparent 2px), radial-gradient(circle at 90% 80%, rgba(255,255,255,0.3) 0px, transparent 2px), radial-gradient(circle at 50% 50%, rgba(255,255,255,0.2) 0px, transparent 1px); animation: sparkle 5s linear infinite; }
-.signature-style-neon { animation: signature-neon-flicker 4s infinite alternate; }
+@keyframes sparkle { 0%, 100% { opacity: 0.2; transform: scale(1); } 50% { opacity: 0.5; transform: scale(1.1); } }
+
+@keyframes signature-neon-flicker {
+  0%, 18%, 22%, 25%, 53%, 57%, 100% {
+    text-shadow:
+      0 0 4px #fff,
+      0 0 11px #fff,
+      0 0 19px #fff,
+      0 0 40px rgb(var(--color-accent)),
+      0 0 80px rgb(var(--color-accent)),
+      0 0 90px rgb(var(--color-accent)),
+      0 0 100px rgb(var(--color-accent)),
+      0 0 150px rgb(var(--color-accent));
+  }
+  20%, 24%, 55% {
+    text-shadow: none;
+  }
+}
+
+@keyframes neon-text-flow {
+  0% { color: var(--color-accent-text); text-shadow: 0 0 5px rgba(var(--color-accent), 0.5); }
+  50% { color: rgb(var(--color-accent)); text-shadow: 0 0 20px rgba(var(--color-accent), 1); }
+  100% { color: var(--color-accent-text); text-shadow: 0 0 5px rgba(var(--color-accent), 0.5); }
+}
+
+.reward-sparkles { 
+    background-image: radial-gradient(circle at 10% 20%, rgba(255,255,255,0.3) 0px, transparent 2px), radial-gradient(circle at 80% 30%, rgba(255,255,255,0.3) 0px, transparent 2px), radial-gradient(circle at 30% 90%, rgba(255,255,255,0.2) 0px, transparent 2px), radial-gradient(circle at 90% 80%, rgba(255,255,255,0.3) 0px, transparent 2px), radial-gradient(circle at 50% 50%, rgba(255,255,255,0.2) 0px, transparent 1px); 
+    animation: sparkle 5s linear infinite; 
+}

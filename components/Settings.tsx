@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { TransactionLogEntry, CosmeticItem } from '../types';
+import { TransactionLogEntry } from '../types';
 import XPProgressBar from './common/XPProgressBar';
 import RedeemGiftCode from './user/RedeemGiftCode';
 import Dashboard from './admin/Dashboard';
@@ -13,120 +14,9 @@ import AnnouncementManager from './admin/AnnouncementManager';
 import ApiKeyManager from './admin/ApiKeyManager';
 import { resizeImage } from '../utils/imageUtils';
 import { useTranslation } from '../hooks/useTranslation';
-import { AVATAR_FRAMES, ACHIEVEMENT_TITLES, checkRequirement } from '../constants/cosmetics';
+import { AVATAR_FRAMES, ACHIEVEMENT_TITLES } from '../constants/cosmetics';
 import UserAvatar from './common/UserAvatar';
 import UserBadge from './common/UserBadge';
-
-// --- NEW: Personalization Panel Component ---
-const PersonalizationPanel: React.FC = () => {
-    const { user, updateUserProfile, showToast, session } = useAuth();
-    const { t } = useTranslation();
-    const [activeSubTab, setActiveSubTab] = useState<'frames' | 'titles'>('frames');
-    
-    // Calculate user stats for locking logic (Approximation using available data)
-    // Ideally, we should fetch precise 'creations_count' from DB, but user.xp correlates somewhat.
-    // For a perfect implementation, we'd need to fetch creation count. For now, let's mock creations based on XP/10.
-    const userStats = useMemo(() => ({
-        level: user?.level || 1,
-        xp: user?.xp || 0,
-        diamonds: user?.diamonds || 0,
-        creations: Math.floor((user?.xp || 0) / 10), // Approx
-        checkinStreak: user?.consecutive_check_in_days || 0
-    }), [user]);
-
-    const handleEquip = async (item: CosmeticItem) => {
-        if (!user || !session) return;
-        
-        // Optimistic update
-        if (item.type === 'frame') updateUserProfile({ equipped_frame_id: item.id });
-        else updateUserProfile({ equipped_title_id: item.id });
-
-        try {
-            await fetch('/.netlify/functions/update-appearance', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-                body: JSON.stringify({ type: item.type, itemId: item.id }),
-            });
-            showToast(t('creator.settings.personalization.equipped'), 'success');
-        } catch (e) {
-            showToast('Lỗi khi lưu trang bị.', 'error');
-        }
-    };
-
-    const renderItems = (items: CosmeticItem[]) => (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-            {items.map(item => {
-                const isUnlocked = checkRequirement(item, userStats);
-                const isEquipped = item.type === 'frame' ? user?.equipped_frame_id === item.id : user?.equipped_title_id === item.id;
-                
-                return (
-                    <div 
-                        key={item.id} 
-                        className={`relative bg-[#12121A] border rounded-xl p-4 flex flex-col items-center text-center transition-all duration-300 ${isEquipped ? 'border-skin-accent shadow-accent' : 'border-skin-border hover:border-skin-border-accent'}`}
-                        onClick={() => isUnlocked && handleEquip(item)}
-                    >
-                        {/* Visual Preview */}
-                        <div className="mb-4 h-20 flex items-center justify-center w-full">
-                            {item.type === 'frame' ? (
-                                <div className={`avatar-frame-container ${item.cssClass} w-16 h-16`}>
-                                    <img src={user?.photo_url} alt="" className="rounded-full w-full h-full object-cover" />
-                                </div>
-                            ) : (
-                                <span className={`title-badge ${item.cssClass} text-base`}>{item.name}</span>
-                            )}
-                        </div>
-
-                        <h4 className="font-bold text-sm text-skin-base mb-1">{item.name}</h4>
-                        <p className="text-xs text-skin-muted mb-3 line-clamp-2 h-8">{item.description}</p>
-
-                        {isEquipped ? (
-                             <div className="mt-auto px-3 py-1 bg-green-500/20 text-green-400 text-xs font-bold rounded-full flex items-center gap-1">
-                                <i className="ph-fill ph-check-circle"></i> {t('creator.settings.personalization.using')}
-                             </div>
-                        ) : isUnlocked ? (
-                            <button className="mt-auto px-3 py-1 bg-skin-accent/10 text-skin-accent hover:bg-skin-accent/20 text-xs font-bold rounded-full w-full transition">
-                                {t('creator.settings.personalization.equip')}
-                            </button>
-                        ) : (
-                            <div className="mt-auto text-xs text-gray-500 flex flex-col items-center gap-1">
-                                <i className="ph-fill ph-lock-key text-lg"></i>
-                                <span>{item.requirement.description}</span>
-                            </div>
-                        )}
-                        
-                        {/* Rarity Badge */}
-                        <div className={`absolute top-2 right-2 w-2 h-2 rounded-full rarity-${item.rarity} bg-current`}></div>
-                    </div>
-                );
-            })}
-        </div>
-    );
-
-    return (
-        <div className="bg-[#12121A]/80 border border-skin-border rounded-2xl shadow-lg p-6 mt-8 animate-fade-in">
-            <h3 className="text-2xl font-bold mb-6 text-skin-accent flex items-center gap-2">
-                <i className="ph-fill ph-paint-brush-broad"></i> {t('creator.settings.personalization.title')}
-            </h3>
-            
-            <div className="flex border-b border-skin-border mb-6">
-                <button 
-                    onClick={() => setActiveSubTab('frames')} 
-                    className={`px-6 py-3 font-semibold text-sm border-b-2 transition-colors ${activeSubTab === 'frames' ? 'border-skin-accent text-skin-accent' : 'border-transparent text-skin-muted hover:text-skin-base'}`}
-                >
-                    {t('creator.settings.personalization.frames')}
-                </button>
-                <button 
-                    onClick={() => setActiveSubTab('titles')} 
-                    className={`px-6 py-3 font-semibold text-sm border-b-2 transition-colors ${activeSubTab === 'titles' ? 'border-skin-accent text-skin-accent' : 'border-transparent text-skin-muted hover:text-skin-base'}`}
-                >
-                    {t('creator.settings.personalization.titles')}
-                </button>
-            </div>
-            
-            {activeSubTab === 'frames' ? renderItems(AVATAR_FRAMES) : renderItems(ACHIEVEMENT_TITLES)}
-        </div>
-    );
-};
 
 
 // User-facing Transaction History Component
@@ -167,6 +57,102 @@ const TransactionHistory: React.FC = () => {
                     </div>
                 </div>
             )) : <p className="text-center text-gray-500 py-8">{t('creator.settings.transactionHistory.empty')}</p>}
+        </div>
+    );
+};
+
+// Personalization Panel
+const PersonalizationPanel: React.FC = () => {
+    const { user, session, updateUserProfile, showToast } = useAuth();
+    const { t } = useTranslation();
+    const [isLoading, setIsLoading] = useState(false);
+
+    if (!user) return null;
+
+    const handleEquip = async (type: 'frame' | 'title', itemId: string) => {
+        setIsLoading(true);
+        try {
+            const res = await fetch('/.netlify/functions/update-appearance', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${session?.access_token}`,
+                },
+                body: JSON.stringify({ type, itemId }),
+            });
+            
+            if (!res.ok) throw new Error('Failed to update appearance');
+            
+            if (type === 'frame') updateUserProfile({ equipped_frame_id: itemId });
+            if (type === 'title') updateUserProfile({ equipped_title_id: itemId });
+            
+            showToast(t('creator.settings.personalization.success'), 'success');
+        } catch (error: any) {
+            showToast(error.message, 'error');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const isLocked = (condition?: { level?: number }) => {
+        if (!condition) return false;
+        if (condition.level && user.level < condition.level) return true;
+        return false;
+    };
+
+    return (
+        <div className="bg-[#12121A]/80 border border-pink-500/20 rounded-2xl shadow-lg p-6 mt-8">
+             <h3 className="text-2xl font-bold mb-6 text-pink-400 flex items-center gap-2">
+                <i className="ph-fill ph-paint-brush-broad"></i>{t('creator.settings.personalization.title')}
+            </h3>
+            
+            {/* Avatar Frames */}
+            <div className="mb-8">
+                <h4 className="text-lg font-semibold text-white mb-3">{t('creator.settings.personalization.frames')}</h4>
+                <div className="cosmetic-grid">
+                    {AVATAR_FRAMES.map(frame => {
+                        const locked = isLocked(frame.unlockCondition);
+                        const active = user.equipped_frame_id === frame.id || (!user.equipped_frame_id && frame.id === 'default');
+                        return (
+                            <div 
+                                key={frame.id} 
+                                onClick={() => !locked && handleEquip('frame', frame.id)}
+                                className={`cosmetic-item rarity-${frame.rarity} ${active ? 'active' : ''} ${locked ? 'locked' : ''}`}
+                            >
+                                <div className={`avatar-frame-container ${frame.cssClass} mb-2`}>
+                                    <img src={user.photo_url} className="w-12 h-12 rounded-full object-cover" alt="preview" />
+                                </div>
+                                <span className="text-xs font-bold text-center text-gray-300">{t(frame.nameKey)}</span>
+                                {locked && <span className="text-[10px] text-red-400 mt-1">Lv.{frame.unlockCondition?.level}</span>}
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+
+            {/* Titles */}
+            <div>
+                <h4 className="text-lg font-semibold text-white mb-3">{t('creator.settings.personalization.titles')}</h4>
+                <div className="cosmetic-grid">
+                    {ACHIEVEMENT_TITLES.map(title => {
+                        const locked = isLocked(title.unlockCondition);
+                        const active = user.equipped_title_id === title.id || (!user.equipped_title_id && title.id === 'newbie');
+                        return (
+                             <div 
+                                key={title.id} 
+                                onClick={() => !locked && handleEquip('title', title.id)}
+                                className={`cosmetic-item rarity-${title.rarity} ${active ? 'active' : ''} ${locked ? 'locked' : ''}`}
+                            >
+                                <div className="h-12 flex items-center justify-center">
+                                    <span className={`title-badge ${title.cssClass}`}>{t(title.nameKey)}</span>
+                                </div>
+                                <span className="text-xs font-bold text-center text-gray-300 mt-2">{t(title.nameKey)}</span>
+                                {locked && <span className="text-[10px] text-red-400 mt-1">Lv.{title.unlockCondition?.level}</span>}
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
         </div>
     );
 };
@@ -277,11 +263,13 @@ const Settings: React.FC = () => {
             <div className="max-w-4xl mx-auto">
                 <div className="bg-[#12121A]/80 border border-white/10 rounded-2xl shadow-lg p-6 flex flex-col md:flex-row items-center gap-6">
                     <div className="relative group flex-shrink-0">
+                        {/* Updated to use UserAvatar with current frame */}
                         <UserAvatar 
-                            src={user.photo_url} 
+                            url={user.photo_url} 
                             alt={user.display_name} 
-                            frameId={user.equipped_frame_id} 
-                            size="xl" 
+                            frameId={user.equipped_frame_id}
+                            size="lg"
+                            className="w-28 h-28" 
                         />
                         {isUploadingAvatar ? (
                             <div className="absolute inset-0 bg-black/70 rounded-full flex items-center justify-center">
@@ -303,21 +291,23 @@ const Settings: React.FC = () => {
                         />
                     </div>
                     <div className="flex-grow w-full">
-                        <form onSubmit={handleProfileUpdate} className="flex flex-col gap-4">
-                             <div className="flex flex-col sm:flex-row gap-4 items-center">
+                        <form onSubmit={handleProfileUpdate} className="flex flex-col sm:flex-row gap-4 items-center">
+                            <div className="flex-grow w-full">
                                 <input
                                     type="text"
                                     value={displayName}
                                     onChange={(e) => setDisplayName(e.target.value)}
-                                    className="auth-input flex-grow"
+                                    className="auth-input"
                                 />
-                                <button type="submit" disabled={isSaving || displayName.trim() === user.display_name} className="themed-button-primary w-full sm:w-auto px-6 py-2 font-semibold">
-                                    {isSaving ? t('creator.settings.saving') : t('creator.settings.save')}
-                                </button>
-                             </div>
-                             <div className="flex justify-center md:justify-start">
-                                <UserBadge titleId={user.equipped_title_id} className="text-sm" />
-                             </div>
+                                {/* Display Title Badge Preview */}
+                                <div className="mt-2 flex items-center gap-2">
+                                    <span className="text-xs text-gray-400">{t('creator.settings.personalization.currentTitle')}:</span>
+                                    <UserBadge titleId={user.equipped_title_id} />
+                                </div>
+                            </div>
+                            <button type="submit" disabled={isSaving || displayName.trim() === user.display_name} className="themed-button-primary w-full sm:w-auto px-6 py-2 font-semibold">
+                                {isSaving ? t('creator.settings.saving') : t('creator.settings.save')}
+                            </button>
                         </form>
                         <div className="mt-4 w-full">
                             <XPProgressBar currentXp={user.xp} currentLevel={user.level} />
@@ -325,6 +315,7 @@ const Settings: React.FC = () => {
                     </div>
                 </div>
                 
+                {/* Cosmetic Settings */}
                 <PersonalizationPanel />
 
                 <div className="bg-[#12121A]/80 border border-cyan-500/20 rounded-2xl shadow-lg p-6 mt-8">

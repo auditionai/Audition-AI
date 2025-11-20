@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { LeaderboardUser } from '../types';
 import { useAuth } from '../contexts/AuthContext';
@@ -76,13 +77,11 @@ const Leaderboard: React.FC = () => {
                                     let rankClass = '';
                                     let rankIcon = null;
                                     let orderClass = '';
-                                    let avatarSize: 'lg' | 'xl' = 'lg';
 
                                     if (user.rank === 1) {
                                         rankClass = 'podium-rank-1';
                                         rankIcon = <i className="ph-fill ph-crown-simple text-5xl"></i>;
                                         orderClass = 'md:order-2';
-                                        avatarSize = 'xl';
                                     } else if (user.rank === 2) {
                                         rankClass = 'podium-rank-2';
                                         orderClass = 'md:order-1';
@@ -95,21 +94,11 @@ const Leaderboard: React.FC = () => {
                                         <div key={user.id} className={`podium-card ${rankClass} ${orderClass}`}>
                                             <div className="podium-rank-icon">{rankIcon}</div>
                                             <div className="podium-rank-number">{user.rank}</div>
-                                            
-                                            <div className="mb-4 flex flex-col items-center">
-                                                <UserAvatar 
-                                                    src={user.photo_url} 
-                                                    alt={user.display_name} 
-                                                    frameId={user.equipped_frame_id} 
-                                                    size={avatarSize} 
-                                                />
+                                            <div className="mb-4">
+                                                <UserAvatar url={user.photo_url} alt={user.display_name} frameId={user.equipped_frame_id} size="lg" />
                                             </div>
-
-                                            <div className="flex flex-col items-center w-full">
-                                                <p className="podium-name">{user.display_name}</p>
-                                                <UserBadge titleId={user.equipped_title_id} className="mb-1" />
-                                            </div>
-
+                                            <p className="podium-name">{user.display_name}</p>
+                                            <UserBadge titleId={user.equipped_title_id} className="mb-2" />
                                             <p className={`podium-level ${rankDetails.color}`}>{rankDetails.title} - {t('common.level')} {user.level}</p>
                                             <div className="podium-stats">
                                                 <span><i className="ph-fill ph-image text-pink-400"></i> {user.creations_count}</span>
@@ -129,16 +118,8 @@ const Leaderboard: React.FC = () => {
                                     return (
                                         <div key={user.id} className="leaderboard-item">
                                             <div className="leaderboard-rank">{user.rank}</div>
-                                            
-                                            <UserAvatar 
-                                                src={user.photo_url} 
-                                                alt={user.display_name} 
-                                                frameId={user.equipped_frame_id} 
-                                                size="md"
-                                                className="mr-2"
-                                            />
-
-                                            <div className="flex-grow overflow-hidden">
+                                            <UserAvatar url={user.photo_url} alt={user.display_name} frameId={user.equipped_frame_id} size="md" />
+                                            <div className="flex-grow">
                                                 <div className="flex items-center gap-2">
                                                     <p className={`font-bold text-lg truncate ${rank.color} neon-text-glow`}>{user.display_name}</p>
                                                     <UserBadge titleId={user.equipped_title_id} />

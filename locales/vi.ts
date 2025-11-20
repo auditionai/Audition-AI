@@ -1,3 +1,4 @@
+
 export const vi = {
   langName: 'Tiếng Việt',
   landing: {
@@ -322,15 +323,12 @@ export const vi = {
         updateSuccess: 'Cập nhật ảnh đại diện thành công!',
         updateError: 'Cập nhật ảnh đại diện thất bại.',
       },
-      // NEW: Personalization Translations
       personalization: {
-        title: 'Trang Trí & Làm Đẹp',
+        title: 'Giao Diện & Trang Trí',
         frames: 'Khung Avatar',
-        titles: 'Danh Hiệu',
-        equip: 'Trang bị',
-        equipped: 'Đã trang bị thành công!',
-        using: 'Đang dùng',
-        locked: 'Chưa mở khóa',
+        titles: 'Danh Hiệu Thành Tựu',
+        success: 'Cập nhật trang bị thành công!',
+        currentTitle: 'Danh hiệu đang dùng',
       },
       transactionHistory: {
         title: 'Lịch sử giao dịch Kim cương',
@@ -549,6 +547,23 @@ export const vi = {
       progress: 'Tiến độ cấp bậc',
       needed: 'Cần {{xp}} XP nữa để đạt',
       maxLevel: 'Đã đạt cấp tối đa!',
+    },
+    cosmetics: {
+      frames: {
+        default: 'Cơ Bản',
+        neonBlue: 'Neon Xanh',
+        neonPink: 'Neon Hồng',
+        gradientSpin: 'Vòng Xoay 7 Màu',
+        legendaryGold: 'Rồng Vàng Huyền Thoại',
+        mythicFire: 'Hỏa Thần',
+      },
+      titles: {
+        newbie: 'Tân Binh',
+        styleIcon: 'Biểu Tượng Thời Trang',
+        vip: 'VIP',
+        glitchMaster: 'Bậc Thầy Glitch',
+        auditionGod: 'Thánh Quẩy Audition',
+      }
     }
   },
   modals: {

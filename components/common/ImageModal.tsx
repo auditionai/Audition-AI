@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { GalleryImage } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
@@ -73,17 +74,17 @@ const ImageModal: React.FC<ImageModalProps> = ({ isOpen, onClose, image, showInf
                 {showInfoPanel && image.creator && (
                     <div className="flex items-center gap-3 pb-4 border-b border-white/10">
                         <UserAvatar 
-                            src={image.creator.photo_url} 
+                            url={image.creator.photo_url} 
                             alt={image.creator.display_name} 
                             frameId={image.creator.equipped_frame_id} 
-                            size="md"
+                            size="md" 
                         />
-                        <div className="overflow-hidden">
+                        <div>
                             <div className="flex items-center gap-2">
-                                <p className={`font-bold ${rank.color} neon-text-glow truncate`}>{image.creator.display_name}</p>
-                                <UserBadge titleId={image.creator.equipped_title_id} className="scale-90 origin-left" />
+                                <p className={`font-bold ${rank.color} neon-text-glow`}>{image.creator.display_name}</p>
                             </div>
-                            <p className={`text-xs font-semibold flex items-center gap-1.5 ${rank.color}`}>{rank.icon} {rank.title}</p>
+                            <UserBadge titleId={image.creator.equipped_title_id} />
+                            <p className={`text-xs font-semibold flex items-center gap-1.5 mt-1 ${rank.color}`}>{rank.icon} {rank.title}</p>
                         </div>
                     </div>
                 )}

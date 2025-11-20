@@ -1,20 +1,22 @@
+
 import React from 'react';
-import { ACHIEVEMENT_TITLES } from '../../constants/cosmetics';
+import { getCosmeticById } from '../../constants/cosmetics';
+import { useTranslation } from '../../hooks/useTranslation';
 
 interface UserBadgeProps {
-    titleId?: string | null;
+    titleId?: string;
     className?: string;
 }
 
 const UserBadge: React.FC<UserBadgeProps> = ({ titleId, className = '' }) => {
-    if (!titleId || titleId === 'title_none') return null;
+    const { t } = useTranslation();
+    const title = getCosmeticById(titleId, 'title');
 
-    const title = ACHIEVEMENT_TITLES.find(t => t.id === titleId);
     if (!title) return null;
 
     return (
         <span className={`title-badge ${title.cssClass} ${className}`}>
-            {title.name}
+            {t(title.nameKey)}
         </span>
     );
 };

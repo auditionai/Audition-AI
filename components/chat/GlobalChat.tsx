@@ -4,6 +4,7 @@ import { useChat } from '../../contexts/ChatContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import ChatMessageItem from './ChatMessage';
+import ImageModal from '../common/ImageModal'; // NEW
 
 const EMOTES = [
     '😀', '😂', '😍', '😎', '😭', '😡', '👍', '👎', '❤️', '🔥', '✨', '🎉', '💃', '🕺', '🎶'
@@ -17,6 +18,9 @@ const GlobalChat: React.FC = () => {
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const [showEmotes, setShowEmotes] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
+
+    // Image Preview State
+    const [previewImage, setPreviewImage] = useState<string | null>(null);
 
     // Drag State
     const bubbleRef = useRef<HTMLButtonElement>(null);
@@ -57,11 +61,17 @@ const GlobalChat: React.FC = () => {
         e.target.value = '';
     };
 
-    // --- Drag Logic ---
+    // --- Drag Logic (Mouse) ---
     const handleMouseDown = (e: React.MouseEvent) => {
-        // Only allow drag if not toggling (simple heuristic: check movement)
         setIsDragging(true);
         dragStart.current = { x: e.clientX, y: e.clientY };
+    };
+
+    // --- Drag Logic (Touch/Mobile) ---
+    const handleTouchStart = (e: React.TouchEvent) => {
+        setIsDragging(true);
+        const touch = e.touches[0];
+        dragStart.current = { x: touch.clientX, y: touch.clientY };
     };
 
     useEffect(() => {
@@ -71,24 +81,43 @@ const GlobalChat: React.FC = () => {
             const dy = dragStart.current.y - e.clientY;
             
             setPosition(prev => ({
-                x: Math.max(20, prev.x + dx),
-                y: Math.max(20, prev.y + dy)
+                x: Math.max(10, Math.min(window.innerWidth - 60, prev.x + dx)),
+                y: Math.max(10, Math.min(window.innerHeight - 60, prev.y + dy))
             }));
             
             dragStart.current = { x: e.clientX, y: e.clientY };
         };
 
-        const handleMouseUp = () => {
+        const handleTouchMove = (e: TouchEvent) => {
+             if (!isDragging) return;
+             e.preventDefault(); // Prevent scrolling while dragging
+             const touch = e.touches[0];
+             const dx = dragStart.current.x - touch.clientX;
+             const dy = dragStart.current.y - touch.clientY;
+             
+             setPosition(prev => ({
+                 x: Math.max(10, Math.min(window.innerWidth - 60, prev.x + dx)),
+                 y: Math.max(10, Math.min(window.innerHeight - 60, prev.y + dy))
+             }));
+             
+             dragStart.current = { x: touch.clientX, y: touch.clientY };
+        };
+
+        const handleEnd = () => {
             setIsDragging(false);
         };
 
         if (isDragging) {
             window.addEventListener('mousemove', handleMouseMove);
-            window.addEventListener('mouseup', handleMouseUp);
+            window.addEventListener('mouseup', handleEnd);
+            window.addEventListener('touchmove', handleTouchMove, { passive: false });
+            window.addEventListener('touchend', handleEnd);
         }
         return () => {
             window.removeEventListener('mousemove', handleMouseMove);
-            window.removeEventListener('mouseup', handleMouseUp);
+            window.removeEventListener('mouseup', handleEnd);
+            window.removeEventListener('touchmove', handleTouchMove);
+            window.removeEventListener('touchend', handleEnd);
         };
     }, [isDragging]);
 
@@ -105,15 +134,35 @@ const GlobalChat: React.FC = () => {
 
     if (!user) return null;
 
+    // Mock Image Object for Modal
+    const modalImage = previewImage ? {
+        id: 'chat-preview',
+        user_id: '',
+        prompt: 'Ảnh từ Chat',
+        image_url: previewImage,
+        model_used: 'Chat',
+        created_at: new Date().toISOString(),
+        creator: { display_name: 'Chat User', photo_url: '', level: 1 }
+    } : null;
+
     return (
         <>
+            {/* Image Preview Modal */}
+            <ImageModal 
+                isOpen={!!previewImage}
+                onClose={() => setPreviewImage(null)}
+                image={modalImage}
+                showInfoPanel={false}
+            />
+
             {/* Draggable Chat Toggle Button */}
             <button
                 ref={bubbleRef}
                 onMouseDown={handleMouseDown}
+                onTouchStart={handleTouchStart}
                 onClick={() => !isDragging && toggleChat()}
                 style={{ bottom: `${position.y}px`, right: `${position.x}px` }}
-                className={`fixed z-[90] w-16 h-16 rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(236,72,153,0.6)] transition-transform duration-200 hover:scale-110 cursor-move active:cursor-grabbing
+                className={`fixed z-[90] w-14 h-14 md:w-16 md:h-16 rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(236,72,153,0.6)] transition-transform duration-200 hover:scale-110 cursor-move active:cursor-grabbing touch-none
                     ${isOpen ? 'bg-gradient-to-br from-red-500 to-pink-600 rotate-90' : 'chat-bubble-user border-2 border-white/20 backdrop-blur-md'}`}
             >
                 {isOpen ? (
@@ -137,8 +186,8 @@ const GlobalChat: React.FC = () => {
                 {/* Header */}
                 <div className="h-16 flex items-center justify-between px-4 border-b border-white/10 bg-gradient-to-r from-transparent via-white/5 to-transparent">
                     <h3 className="text-white font-bold text-lg flex items-center gap-2 drop-shadow-md">
-                        <i className="ph-fill ph-globe-hemisphere-east text-cyan-400 animate-spin-slow"></i>
-                        <span className="bg-clip-text text-transparent bg-gradient-to-r from-pink-300 to-purple-300">Global Chat</span>
+                        <i className="ph-fill ph-chats-circle text-cyan-400 animate-spin-slow"></i>
+                        <span className="bg-clip-text text-transparent bg-gradient-to-r from-pink-300 to-purple-300">Chém Gió & Tán Gẫu</span>
                     </h3>
                     <div className="flex items-center gap-2 bg-black/30 px-2 py-1 rounded-full border border-white/5">
                          <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
@@ -147,7 +196,7 @@ const GlobalChat: React.FC = () => {
                 </div>
 
                 {/* Messages Area */}
-                <div className="flex-grow overflow-y-auto custom-scrollbar p-4 space-y-4 scroll-smooth" style={{ backgroundImage: 'radial-gradient(circle at center, rgba(236, 72, 153, 0.05) 0%, transparent 70%)' }}>
+                <div className="flex-grow overflow-y-auto chat-no-scrollbar p-4 space-y-4 scroll-smooth" style={{ backgroundImage: 'radial-gradient(circle at center, rgba(236, 72, 153, 0.05) 0%, transparent 70%)' }}>
                     {isLoading && (
                         <div className="flex justify-center py-4">
                             <div className="w-8 h-8 border-4 border-pink-500 border-t-transparent rounded-full animate-spin"></div>
@@ -155,7 +204,12 @@ const GlobalChat: React.FC = () => {
                     )}
                     
                     {messages.map((msg) => (
-                        <ChatMessageItem key={msg.id} message={msg} isOwn={msg.user_id === user.id} />
+                        <ChatMessageItem 
+                            key={msg.id} 
+                            message={msg} 
+                            isOwn={msg.user_id === user.id} 
+                            onImageClick={(url) => setPreviewImage(url)}
+                        />
                     ))}
                     <div ref={messagesEndRef} />
                 </div>
@@ -185,7 +239,7 @@ const GlobalChat: React.FC = () => {
                                 type="text"
                                 value={input}
                                 onChange={(e) => setInput(e.target.value)}
-                                placeholder="Chat..."
+                                placeholder="Nhập tin nhắn..."
                                 className="w-full bg-white/5 border border-white/10 rounded-full pl-4 pr-10 py-2.5 text-sm text-white focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition shadow-inner"
                             />
                              <button 

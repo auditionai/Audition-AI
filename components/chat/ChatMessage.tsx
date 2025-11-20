@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ChatMessage } from '../../types';
 import UserAvatar from '../common/UserAvatar';
 import UserBadge from '../common/UserBadge';
@@ -9,13 +9,15 @@ import { useChat } from '../../contexts/ChatContext';
 interface ChatMessageProps {
     message: ChatMessage;
     isOwn: boolean;
+    onImageClick: (url: string) => void;
 }
 
-const ChatMessageItem: React.FC<ChatMessageProps> = ({ message, isOwn }) => {
+const ChatMessageItem: React.FC<ChatMessageProps> = ({ message, isOwn, onImageClick }) => {
     const { user } = useAuth();
     const { deleteMessage, muteUser } = useChat();
     const { content, type, metadata, is_deleted, created_at } = message;
     const [showMenu, setShowMenu] = useState(false);
+    const menuRef = useRef<HTMLDivElement>(null);
 
     // Fallback for legacy messages or missing metadata
     const senderName = metadata?.sender_name || 'Unknown';
@@ -27,8 +29,18 @@ const ChatMessageItem: React.FC<ChatMessageProps> = ({ message, isOwn }) => {
 
     const isAdmin = user?.is_admin;
 
+    // Handle click outside to close menu
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+                setShowMenu(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
     const handleContextMenu = (e: React.MouseEvent) => {
-        // Allow admin to moderate or user to delete their own message
         if (isAdmin || (!is_deleted && isOwn)) {
             e.preventDefault();
             setShowMenu(true);
@@ -49,9 +61,8 @@ const ChatMessageItem: React.FC<ChatMessageProps> = ({ message, isOwn }) => {
         <div 
             className={`flex gap-3 ${isOwn ? 'flex-row-reverse' : 'flex-row'} items-end group relative message-appear`}
             onContextMenu={handleContextMenu}
-            onMouseLeave={() => setShowMenu(false)}
         >
-            {/* Avatar - Always show even if deleted for context */}
+            {/* Avatar */}
             <div className="flex-shrink-0 mb-5 relative z-10">
                  <UserAvatar 
                     url={senderAvatar} 
@@ -64,8 +75,8 @@ const ChatMessageItem: React.FC<ChatMessageProps> = ({ message, isOwn }) => {
             </div>
 
             {/* Content Bubble */}
-            <div className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'} max-w-[75%]`}>
-                {/* Sender Info - Always show */}
+            <div className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'} max-w-[75%] relative`}>
+                {/* Sender Info */}
                 <div className={`flex items-center gap-1 mb-1 ${isOwn ? 'mr-1 flex-row-reverse' : 'ml-1'}`}>
                         <span className="text-[10px] font-bold text-cyan-300 drop-shadow-sm tracking-wide uppercase">
                         {senderName}
@@ -94,7 +105,12 @@ const ChatMessageItem: React.FC<ChatMessageProps> = ({ message, isOwn }) => {
                             
                             {type === 'image' && metadata?.image_url && (
                                 <div className="rounded-lg overflow-hidden border-2 border-white/20 cursor-pointer shadow-lg group/img">
-                                    <img src={metadata.image_url} alt="Shared" className="max-w-full max-h-48 object-cover transition-transform duration-300 group-hover/img:scale-105" onClick={() => window.open(metadata.image_url, '_blank')} />
+                                    <img 
+                                        src={metadata.image_url} 
+                                        alt="Shared" 
+                                        className="max-w-full max-h-48 object-cover transition-transform duration-300 group-hover/img:scale-105" 
+                                        onClick={() => onImageClick(metadata.image_url!)} 
+                                    />
                                 </div>
                             )}
 
@@ -111,15 +127,25 @@ const ChatMessageItem: React.FC<ChatMessageProps> = ({ message, isOwn }) => {
                     )}
                 </div>
                 
-                {/* Timestamp - Always visible as requested */}
+                {/* Timestamp */}
                 <span className={`text-[9px] text-gray-500 mt-1 px-1 font-medium ${isOwn ? 'text-right' : 'text-left'}`}>
                     {new Date(created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </span>
+
+                {/* Options Button (Visible on hover/tap for owner or admin) */}
+                {!is_deleted && (isOwn || isAdmin) && (
+                    <button 
+                        onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu); }}
+                        className={`absolute top-2 p-1 rounded-full bg-black/40 text-gray-300 hover:text-white hover:bg-black/60 transition-all opacity-0 group-hover:opacity-100 z-20 ${isOwn ? '-left-8' : '-right-8'}`}
+                    >
+                        <i className="ph-fill ph-dots-three-vertical text-sm"></i>
+                    </button>
+                )}
             </div>
 
-            {/* Admin/Owner Context Menu */}
+            {/* Context Menu */}
             {showMenu && !is_deleted && (
-                <div className={`absolute top-0 ${isOwn ? 'right-full mr-2' : 'left-full ml-2'} bg-[#1e1b25] border border-white/10 rounded-lg shadow-xl z-50 py-1 min-w-[120px] animate-fade-in-up`}>
+                <div ref={menuRef} className={`absolute top-8 ${isOwn ? 'right-10' : 'left-10'} bg-[#1e1b25] border border-white/10 rounded-lg shadow-xl z-50 py-1 min-w-[120px] animate-fade-in-up`}>
                     <button onClick={handleDelete} className="w-full text-left px-3 py-2 text-xs text-red-400 hover:bg-white/5 flex items-center gap-2">
                         <i className="ph-fill ph-trash"></i> Xóa tin
                     </button>

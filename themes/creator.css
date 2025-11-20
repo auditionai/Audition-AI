@@ -879,6 +879,16 @@
     box-shadow: -10px 0 40px rgba(0, 0, 0, 0.5);
 }
 
+/* Add specific class to hide scrollbar in chat while keeping scrolling enabled */
+.chat-no-scrollbar {
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE and Edge */
+}
+
+.chat-no-scrollbar::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
+}
+
 .chat-bubble-user {
     background: linear-gradient(135deg, rgba(236, 72, 153, 0.8) 0%, rgba(217, 70, 239, 0.8) 100%);
     box-shadow: 0 4px 15px rgba(236, 72, 153, 0.2);

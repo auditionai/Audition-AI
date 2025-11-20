@@ -584,8 +584,8 @@ export const vi = {
         },
         gameConfig: {
             title: 'Cấu Hình Trò Chơi',
-            tabs: { ranks: 'Cấp Bậc', cosmetics: 'Trang Trí' },
-            buttons: { addRank: 'Thêm Cấp Bậc', addCosmetic: 'Thêm Trang Trí', save: 'Lưu', saving: 'Đang lưu...', edit: 'Sửa', delete: 'Xóa' },
+            tabs: { ranks: 'Cấp Bậc', frames: 'Khung Avatar', titles: 'Danh Hiệu' },
+            buttons: { addRank: 'Thêm Cấp Bậc', addFrame: 'Thêm Khung', addTitle: 'Thêm Danh Hiệu', save: 'Lưu', saving: 'Đang lưu...', edit: 'Sửa', delete: 'Xóa' },
             form: {
                 level: 'Cấp độ yêu cầu',
                 titleName: 'Tên danh hiệu',

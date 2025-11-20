@@ -586,8 +586,8 @@ export const en = {
         },
         gameConfig: {
             title: 'Game Configuration',
-            tabs: { ranks: 'Ranks', cosmetics: 'Cosmetics' },
-            buttons: { addRank: 'Add Rank', addCosmetic: 'Add Cosmetic', save: 'Save', saving: 'Saving...', edit: 'Edit', delete: 'Del' },
+            tabs: { ranks: 'Ranks', frames: 'Avatar Frames', titles: 'Title Badges' },
+            buttons: { addRank: 'Add Rank', addFrame: 'Add Frame', addTitle: 'Add Title', save: 'Save', saving: 'Saving...', edit: 'Edit', delete: 'Del' },
             form: {
                 level: 'Level Threshold',
                 titleName: 'Title Name',

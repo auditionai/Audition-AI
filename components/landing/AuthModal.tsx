@@ -6,16 +6,17 @@ import { useTranslation } from '../../hooks/useTranslation';
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
+  initialMode?: 'login' | 'register';
 }
 
 type AuthMode = 'login' | 'register' | 'forgot';
 
-const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
+const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMode = 'login' }) => {
     const [isLoading, setIsLoading] = useState(false);
     const { login, loginWithEmail, registerWithEmail, resetPassword, showToast } = useAuth();
     const { t } = useTranslation();
     
-    const [mode, setMode] = useState<AuthMode>('login');
+    const [mode, setMode] = useState<AuthMode>(initialMode);
 
     // Form States
     const [displayName, setDisplayName] = useState('');
@@ -27,10 +28,12 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
     useEffect(() => {
         if (!isOpen) {
             setIsLoading(false);
-            setMode('login');
             resetForm();
+        } else {
+            // When opening, respect the requested initial mode
+            setMode(initialMode);
         }
-    }, [isOpen]);
+    }, [isOpen, initialMode]);
 
     const resetForm = () => {
         setDisplayName('');

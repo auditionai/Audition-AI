@@ -31,6 +31,7 @@ const HomePage: React.FC = () => {
     
     // State for Modals
     const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+    const [authModalMode, setAuthModalMode] = useState<'login' | 'register'>('login');
     const [isTopUpModalOpen, setIsTopUpModalOpen] = useState(false);
     const [infoModalKey, setInfoModalKey] = useState<'terms' | 'policy' | 'contact' | null>(null);
     const [selectedImage, setSelectedImage] = useState<GalleryImage | null>(null);
@@ -124,10 +125,11 @@ const HomePage: React.FC = () => {
         };
     }, [supabase]);
 
-    const handleCtaClick = () => {
+    const handleAuthClick = (mode: 'login' | 'register' = 'login') => {
         if (user) {
             navigate('tool');
         } else {
+            setAuthModalMode(mode);
             setIsAuthModalOpen(true);
         }
     };
@@ -136,6 +138,7 @@ const HomePage: React.FC = () => {
         if (user) {
             setIsTopUpModalOpen(true);
         } else {
+            setAuthModalMode('login');
             setIsAuthModalOpen(true);
         }
     };
@@ -153,11 +156,12 @@ const HomePage: React.FC = () => {
                 user={user}
                 onTopUpClick={handleTopUpClick}
                 onScrollTo={handleScrollTo}
+                onAuthClick={handleAuthClick}
             />
             
             <main>
                 <section id="hero">
-                    <Hero onCtaClick={handleCtaClick} onGoogleLoginClick={login} />
+                    <Hero onCtaClick={() => handleAuthClick('register')} onGoogleLoginClick={login} />
                 </section>
                 
                 <AnimatedSection id="features">
@@ -174,7 +178,7 @@ const HomePage: React.FC = () => {
                      ) : (
                         <Community
                             images={publicGalleryImages}
-                            onLoginClick={handleCtaClick}
+                            onLoginClick={() => handleAuthClick('register')}
                             onImageClick={setSelectedImage}
                             onSeeMoreClick={() => navigate('gallery')}
                         />
@@ -183,7 +187,7 @@ const HomePage: React.FC = () => {
 
                 <AnimatedSection id="pricing">
                     <Pricing 
-                        onCtaClick={handleCtaClick} 
+                        onCtaClick={() => handleAuthClick('register')} 
                         packages={featuredPackages}
                         isLoading={isPackagesLoading}
                     />
@@ -198,7 +202,7 @@ const HomePage: React.FC = () => {
                 </AnimatedSection>
 
                 <AnimatedSection id="cta">
-                    <Cta onCtaClick={handleCtaClick} />
+                    <Cta onCtaClick={() => handleAuthClick('register')} />
                 </AnimatedSection>
             </main>
             
@@ -210,6 +214,7 @@ const HomePage: React.FC = () => {
             <AuthModal 
                 isOpen={isAuthModalOpen}
                 onClose={() => setIsAuthModalOpen(false)}
+                initialMode={authModalMode}
             />
             <TopUpModal 
                 isOpen={isTopUpModalOpen}

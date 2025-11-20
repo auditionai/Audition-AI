@@ -1,5 +1,4 @@
 
-// NEW: Create the content for the GroupGeneratorTool component.
 // FIX: Import 'useState' from 'react' to resolve 'Cannot find name' errors.
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -13,6 +12,7 @@ import ProcessedImageModal from '../../ai-tool/ProcessedImageModal';
 import SettingsBlock from '../../ai-tool/SettingsBlock';
 import { useTranslation } from '../../../hooks/useTranslation';
 import PromptLibraryModal from './PromptLibraryModal';
+import ToggleSwitch from '../../ai-tool/ToggleSwitch';
 
 
 // Mock data for presets - in a real app, this would come from a database
@@ -23,6 +23,20 @@ const MOCK_STYLES = [
     { id: 'photographic', name: 'Nhiếp ảnh' },
     { id: 'fantasy', name: 'Kỳ ảo' },
     { id: 'oil-painting', name: 'Tranh sơn dầu' },
+];
+
+const ASPECT_RATIOS = [
+    { label: '1:1', value: '1:1', icon: 'ph-square' },
+    { label: '3:4', value: '3:4', icon: 'ph-rectangle' }, // Portrait
+    { label: '4:3', value: '4:3', icon: 'ph-rectangle' }, // Landscape
+    { label: '9:16', value: '9:16', icon: 'ph-device-mobile' },
+    { label: '16:9', value: '16:9', icon: 'ph-monitor' },
+    { label: '2:3', value: '2:3', icon: 'ph-frame-corners' },
+    { label: '3:2', value: '3:2', icon: 'ph-frame-corners' },
+    { label: '4:5', value: '4:5', icon: 'ph-instagram-logo' },
+    { label: '5:4', value: '5:4', icon: 'ph-image' },
+    { label: '9:21', value: '9:21', icon: 'ph-arrows-out-line-vertical' },
+    { label: '21:9', value: '21:9', icon: 'ph-arrows-out-line-horizontal' },
 ];
 
 type ImageState = { url: string; file: File } | null;
@@ -73,6 +87,10 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
     const [aspectRatio, setAspectRatio] = useState('3:4');
     const [selectedModel, setSelectedModel] = useState<'flash' | 'pro'>('flash');
     
+    // New features state
+    const [imageResolution, setImageResolution] = useState<'1K' | '2K' | '4K'>('1K');
+    const [useGoogleSearch, setUseGoogleSearch] = useState(true);
+
     // New states for generation flow
     const [isGenerating, setIsGenerating] = useState(false);
     const [generatedImage, setGeneratedImage] = useState<string | null>(null);
@@ -96,6 +114,16 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
         else if (numCharacters <= 4) setAspectRatio('1:1');
         else setAspectRatio('16:9');
     }, [numCharacters]);
+    
+    // Reset resolution when switching to flash
+    useEffect(() => {
+        if (selectedModel === 'flash') {
+            setImageResolution('1K');
+            setUseGoogleSearch(false);
+        } else {
+            setUseGoogleSearch(true);
+        }
+    }, [selectedModel]);
 
     const progressPercentage = useMemo(() => {
         if (!isGenerating) return 0;
@@ -191,7 +219,7 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                 const response = await fetch('/.netlify/functions/process-face', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-                    // Face lock in Group Studio currently defaults to Flash for simplicity, or we could add a selector per face
+                    // Face lock in Group Studio currently defaults to Flash for simplicity
                     body: JSON.stringify({ image: base64Image, model: 'gemini-2.5-flash-image' }),
                 });
                 const result = await response.json();
@@ -208,11 +236,18 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
         }
     };
 
-    // Base cost is dependent on model. Flash = 1 + chars, Pro = 2 + chars*2 (example logic)
-    // Or keeping it simple: Group Fee + Char Fee. 
-    // If Flash: Base 1 + 1 per char.
-    // If Pro: Base 2 + 1 per char. (Let's keep per char cost same for now to be user friendly, just bump base cost)
-    const baseCost = selectedModel === 'pro' ? 2 : 1;
+    // Cost Calculation
+    // Base: Pro (1K) = 2, Pro (2K) = 3, Pro (4K) = 4. Flash = 1.
+    // + Characters count.
+    const getBaseCost = () => {
+        if (selectedModel === 'pro') {
+            if (imageResolution === '4K') return 4;
+            if (imageResolution === '2K') return 3;
+            return 2;
+        }
+        return 1;
+    };
+    const baseCost = getBaseCost();
     const totalCost = baseCost + numCharacters;
 
     const handleGenerateClick = () => {
@@ -326,7 +361,9 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                                 prompt,
                                 style: selectedStyle,
                                 aspectRatio: aspectRatio,
-                                model: selectedModel // Pass selected model
+                                model: selectedModel,
+                                imageSize: imageResolution, // Pass resolution
+                                useSearch: useGoogleSearch  // Pass search toggle
                             }),
                         });
 
@@ -581,10 +618,43 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                                         className={`p-2 rounded-lg border-2 text-left transition-all ${selectedModel === 'pro' ? 'border-yellow-500 bg-yellow-500/10 text-yellow-300' : 'border-skin-border bg-skin-fill-secondary text-gray-400'}`}
                                     >
                                         <div className="text-xs font-bold">Pro 4K</div>
-                                        <div className="text-[10px] mt-1 opacity-80">2💎 base</div>
+                                        <div className="text-[10px] mt-1 opacity-80">2+ 💎 base</div>
                                     </button>
                                 </div>
                             </div>
+
+                             {/* Resolution & Search for Pro */}
+                             {selectedModel === 'pro' && (
+                                <div className="p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg space-y-3">
+                                     <div>
+                                        <label className="text-xs font-bold text-yellow-400 mb-2 block flex justify-between">
+                                            <span>Resolution (Pro)</span>
+                                            <span className="text-[10px] bg-yellow-500/20 px-2 py-0.5 rounded">{imageResolution === '1K' ? 'Base 2💎' : imageResolution === '2K' ? 'Base 3💎' : 'Base 4💎'}</span>
+                                        </label>
+                                        <div className="grid grid-cols-3 gap-2">
+                                            {(['1K', '2K', '4K'] as const).map(res => (
+                                                <button 
+                                                    key={res}
+                                                    onClick={() => setImageResolution(res)}
+                                                    className={`py-1.5 px-2 text-xs font-bold rounded border transition-all ${imageResolution === res ? 'bg-yellow-500 text-black border-yellow-500' : 'bg-transparent text-yellow-200/70 border-yellow-500/30 hover:bg-yellow-500/20'}`}
+                                                >
+                                                    {res}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div className="pt-2 border-t border-yellow-500/20">
+                                        <ToggleSwitch 
+                                            label="Google Search Grounding" 
+                                            checked={useGoogleSearch} 
+                                            onChange={(e) => setUseGoogleSearch(e.target.checked)} 
+                                        />
+                                        <p className="text-[10px] text-yellow-200/60 mt-1">
+                                            Kết nối tìm kiếm thực tế (Auto-on).
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
 
                             <div>
                                 <label className="text-sm font-semibold text-skin-base mb-2 block">{t('creator.aiTool.groupStudio.styleTitle')}</label>
@@ -599,16 +669,18 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                             
                             <div>
                                 <label className="text-sm font-semibold text-skin-base mb-2 block">{t('creator.aiTool.groupStudio.aspectRatioTitle')}</label>
-                                <div className="grid grid-cols-5 gap-2">
-                                    {(['3:4', '1:1', '4:3', '9:16', '16:9'] as const).map(ar => {
-                                        const dims: { [key: string]: string } = { '3:4': 'w-3 h-4', '1:1': 'w-4 h-4', '4:3': 'w-4 h-3', '9:16': 'w-[1.125rem] h-5', '16:9': 'w-5 h-[1.125rem]' };
-                                        return (
-                                            <button key={ar} onClick={() => setAspectRatio(ar)} className={`p-2 rounded-md flex flex-col items-center justify-center gap-1 border-2 transition ${aspectRatio === ar ? 'selected-glow' : 'border-skin-border bg-skin-fill-secondary hover:border-pink-500/50 text-skin-base'}`}>
-                                                <div className={`${dims[ar]} bg-gray-500 rounded-sm`}/>
-                                                <span className="text-xs font-semibold">{ar}</span>
-                                            </button>
-                                        );
-                                    })}
+                                <div className="grid grid-cols-5 gap-2 max-h-40 overflow-y-auto custom-scrollbar pr-1">
+                                    {ASPECT_RATIOS.map(ar => (
+                                        <button 
+                                            key={ar.value} 
+                                            onClick={() => setAspectRatio(ar.value)} 
+                                            className={`p-2 rounded-md flex flex-col items-center justify-center gap-1 border-2 transition hover:scale-105 ${aspectRatio === ar.value ? 'selected-glow' : 'border-skin-border bg-skin-fill-secondary hover:border-pink-500/50 text-skin-base'}`}
+                                            title={ar.label}
+                                        >
+                                             <i className={`ph-fill ${ar.icon} text-xl`}></i>
+                                            <span className="text-[10px] font-semibold">{ar.label}</span>
+                                        </button>
+                                    ))}
                                 </div>
                             </div>
                         </div>

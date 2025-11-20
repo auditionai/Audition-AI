@@ -24,6 +24,20 @@ interface AiGeneratorToolProps {
     onSwitchToUtility: () => void;
 }
 
+const ASPECT_RATIOS = [
+    { label: '1:1', value: '1:1', icon: 'ph-square' },
+    { label: '3:4', value: '3:4', icon: 'ph-rectangle' }, // Portrait
+    { label: '4:3', value: '4:3', icon: 'ph-rectangle' }, // Landscape
+    { label: '9:16', value: '9:16', icon: 'ph-device-mobile' },
+    { label: '16:9', value: '16:9', icon: 'ph-monitor' },
+    { label: '2:3', value: '2:3', icon: 'ph-frame-corners' },
+    { label: '3:2', value: '3:2', icon: 'ph-frame-corners' },
+    { label: '4:5', value: '4:5', icon: 'ph-instagram-logo' },
+    { label: '5:4', value: '5:4', icon: 'ph-image' },
+    { label: '9:21', value: '9:21', icon: 'ph-arrows-out-line-vertical' },
+    { label: '21:9', value: '21:9', icon: 'ph-arrows-out-line-horizontal' },
+];
+
 const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage, initialFaceImage, onSendToSignatureTool, onSwitchToUtility }) => {
     const { user, session, showToast, updateUserDiamonds } = useAuth();
     const { t } = useTranslation();
@@ -46,12 +60,16 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
 
     const [prompt, setPrompt] = useState('');
     const [negativePrompt, setNegativePrompt] = useState('');
-    const [selectedModel, setSelectedModel] = useState<AIModel>(DETAILED_AI_MODELS[0]); // Default to Pro (first in list)
+    const [selectedModel, setSelectedModel] = useState<AIModel>(DETAILED_AI_MODELS[0]); // Default to Pro
     const [selectedStyle, setSelectedStyle] = useState('none');
     const [aspectRatio, setAspectRatio] = useState('3:4');
     const [seed, setSeed] = useState<number | ''>('');
     const [useUpscaler, setUseUpscaler] = useState(false);
     const [useBasicFaceLock, setUseBasicFaceLock] = useState(true);
+    
+    // New Features
+    const [imageResolution, setImageResolution] = useState<'1K' | '2K' | '4K'>('1K');
+    const [useGoogleSearch, setUseGoogleSearch] = useState(true); // Auto-on
     
     // Custom Style Dropdown State
     const [isStyleDropdownOpen, setIsStyleDropdownOpen] = useState(false);
@@ -77,6 +95,16 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
+
+    // Reset resolution to 1K if switching to Flash
+    useEffect(() => {
+        if (selectedModel.apiModel === 'gemini-2.5-flash-image') {
+            setImageResolution('1K');
+            setUseGoogleSearch(false);
+        } else {
+            setUseGoogleSearch(true); // Auto on for Pro
+        }
+    }, [selectedModel]);
 
     const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'pose' | 'face' | 'style') => {
         const file = e.target.files?.[0];
@@ -145,10 +173,21 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
     };
 
     // Calculate Total Cost
-    // Base cost: 2 if Gemini 3 Pro, 1 if Flash
-    // Upscaler: +1 (Standard)
-    const baseModelCost = selectedModel.apiModel === 'gemini-3-pro-image-preview' ? 2 : 1;
-    const generationCost = baseModelCost + (useUpscaler ? 1 : 0);
+    const getCost = () => {
+        let cost = 0;
+        if (selectedModel.apiModel === 'gemini-3-pro-image-preview') {
+             // Pro Pricing Logic
+             if (imageResolution === '4K') cost = 4;
+             else if (imageResolution === '2K') cost = 3;
+             else cost = 2; // 1K Pro
+        } else {
+            cost = 1; // Flash
+        }
+        if (useUpscaler) cost += 1;
+        return cost;
+    };
+
+    const generationCost = getCost();
 
     const handleGenerateClick = () => {
         if (!prompt.trim()) {
@@ -172,7 +211,8 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
             styleImage?.file ?? null,
             finalFaceImage,
             aspectRatio, negativePrompt,
-            seed || undefined, useUpscaler
+            seed || undefined, useUpscaler,
+            imageResolution, useGoogleSearch
         );
     };
     
@@ -182,6 +222,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
     };
 
     const isImageInputDisabled = !selectedModel.supportedModes.includes('image-to-image');
+    const isProModel = selectedModel.apiModel === 'gemini-3-pro-image-preview';
     
     const resultImageForModal = generatedImage ? {
         id: 'generated-result',
@@ -269,11 +310,9 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
             <InstructionModal isOpen={isInstructionModalOpen} onClose={() => setInstructionModalOpen(false)} instructionKey={instructionKey} />
             <PromptLibraryModal isOpen={isPromptLibraryOpen} onClose={() => setIsPromptLibraryOpen(false)} onSelectPrompt={(p) => setPrompt(p)} category="single-photo" />
 
-            {/* Updated Announcement Banner for New Model - Metallic Gold Style */}
+            {/* Upgrade Banner */}
             <div className="bg-gradient-to-r from-amber-500/10 via-yellow-500/10 to-amber-500/10 border border-yellow-400/40 rounded-xl p-5 mb-8 flex flex-col md:flex-row items-center justify-between gap-4 shadow-[0_0_15px_rgba(245,158,11,0.15)] relative overflow-hidden group">
-                {/* Subtle Shimmer Effect */}
                 <div className="absolute inset-0 bg-gradient-to-r from-yellow-400/5 via-transparent to-yellow-400/5 opacity-50 pointer-events-none group-hover:animate-[shimmer_3s_infinite]"></div>
-                
                 <div className="flex items-start gap-4 relative z-10">
                     <div className="flex-shrink-0 bg-gradient-to-br from-yellow-400 to-amber-600 text-white w-12 h-12 rounded-full flex items-center justify-center shadow-lg shadow-amber-500/30">
                         <i className="ph-fill ph-rocket-launch text-2xl"></i>
@@ -288,11 +327,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                         </p>
                     </div>
                 </div>
-
-                <button 
-                    onClick={() => setModelModalOpen(true)}
-                    className="flex-shrink-0 whitespace-nowrap px-6 py-3 bg-gradient-to-r from-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 text-black font-bold text-sm rounded-lg transition-all shadow-lg shadow-amber-500/20 transform hover:-translate-y-0.5 relative z-10 flex items-center gap-2"
-                >
+                <button onClick={() => setModelModalOpen(true)} className="flex-shrink-0 whitespace-nowrap px-6 py-3 bg-gradient-to-r from-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 text-black font-bold text-sm rounded-lg transition-all shadow-lg shadow-amber-500/20 transform hover:-translate-y-0.5 relative z-10 flex items-center gap-2">
                     <i className="ph-bold ph-swaps"></i>
                     {t('creator.aiTool.upgradeBanner.button')}
                 </button>
@@ -374,10 +409,45 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                                         <p className="font-bold text-white truncate">{t(selectedModel.name)}</p>
                                         <p className="text-[10px] text-skin-muted">{selectedModel.id === 'audition-ai-pro-v3' ? 'Gemini 3 Pro (4K)' : 'Flash / Imagen'}</p>
                                     </div>
-                                    <span className="text-xs font-bold text-pink-400 bg-pink-500/10 px-2 py-1 rounded">{baseModelCost} 💎</span>
+                                    <span className="text-xs font-bold text-pink-400 bg-pink-500/10 px-2 py-1 rounded">
+                                        {selectedModel.apiModel === 'gemini-3-pro-image-preview' ? '2+ 💎' : '1 💎'}
+                                    </span>
                                 </button>
                             </div>
                             
+                            {/* Resolution & Google Search - Only for Pro */}
+                            {isProModel && (
+                                <div className="p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg space-y-3">
+                                     <div>
+                                        <label className="text-xs font-bold text-yellow-400 mb-2 block flex justify-between">
+                                            <span>Resolution (Pro)</span>
+                                            <span className="text-[10px] bg-yellow-500/20 px-2 py-0.5 rounded">{imageResolution === '1K' ? '2💎' : imageResolution === '2K' ? '3💎' : '4💎'}</span>
+                                        </label>
+                                        <div className="grid grid-cols-3 gap-2">
+                                            {(['1K', '2K', '4K'] as const).map(res => (
+                                                <button 
+                                                    key={res}
+                                                    onClick={() => setImageResolution(res)}
+                                                    className={`py-1.5 px-2 text-xs font-bold rounded border transition-all ${imageResolution === res ? 'bg-yellow-500 text-black border-yellow-500' : 'bg-transparent text-yellow-200/70 border-yellow-500/30 hover:bg-yellow-500/20'}`}
+                                                >
+                                                    {res}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div className="pt-2 border-t border-yellow-500/20">
+                                        <ToggleSwitch 
+                                            label="Google Search Grounding" 
+                                            checked={useGoogleSearch} 
+                                            onChange={(e) => setUseGoogleSearch(e.target.checked)} 
+                                        />
+                                        <p className="text-[10px] text-yellow-200/60 mt-1">
+                                            Giúp AI hiểu rõ hơn về các sự kiện, nhân vật và đồ vật thực tế.
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+
                             <div className="relative" ref={styleDropdownRef}>
                                 <label className="text-sm font-semibold text-skin-base mb-1 block">{t('creator.aiTool.singlePhoto.styleLabel')}</label>
                                 <div className="custom-select-wrapper">
@@ -410,16 +480,18 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                             
                             <div>
                                 <label className="text-sm font-semibold text-skin-base mb-2 block">{t('creator.aiTool.singlePhoto.aspectRatioLabel')}</label>
-                                <div className="grid grid-cols-5 gap-2">
-                                    {(['3:4', '1:1', '4:3', '9:16', '16:9'] as const).map(ar => {
-                                        const dims: { [key: string]: string } = { '3:4': 'w-3 h-4', '1:1': 'w-4 h-4', '4:3': 'w-4 h-3', '9:16': 'w-[1.125rem] h-5', '16:9': 'w-5 h-[1.125rem]' };
-                                        return (
-                                            <button key={ar} onClick={() => setAspectRatio(ar)} className={`p-2 rounded-md flex flex-col items-center justify-center gap-1 border-2 transition ${aspectRatio === ar ? 'selected-glow' : 'border-skin-border bg-skin-fill-secondary hover:border-pink-500/50 text-skin-base'}`}>
-                                                <div className={`${dims[ar]} bg-gray-500 rounded-sm`}/>
-                                                <span className="text-xs font-semibold">{ar}</span>
-                                            </button>
-                                        );
-                                    })}
+                                <div className="grid grid-cols-5 gap-2 max-h-40 overflow-y-auto custom-scrollbar pr-1">
+                                    {ASPECT_RATIOS.map(ar => (
+                                        <button 
+                                            key={ar.value} 
+                                            onClick={() => setAspectRatio(ar.value)} 
+                                            className={`p-2 rounded-md flex flex-col items-center justify-center gap-1 border-2 transition hover:scale-105 ${aspectRatio === ar.value ? 'selected-glow' : 'border-skin-border bg-skin-fill-secondary hover:border-pink-500/50 text-skin-base'}`}
+                                            title={ar.label}
+                                        >
+                                            <i className={`ph-fill ${ar.icon} text-xl`}></i>
+                                            <span className="text-[10px] font-semibold">{ar.label}</span>
+                                        </button>
+                                    ))}
                                 </div>
                             </div>
                             

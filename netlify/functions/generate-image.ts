@@ -1,3 +1,4 @@
+
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { GoogleGenAI, Modality } from "@google/genai";
 import { supabaseAdmin } from './utils/supabaseClient';
@@ -95,7 +96,8 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         const { 
             prompt, apiModel, characterImage, faceReferenceImage, styleImage, 
-            aspectRatio, negativePrompt, seed, useUpscaler 
+            aspectRatio, negativePrompt, seed, useUpscaler,
+            imageSize = '1K', useGoogleSearch = false
         } = JSON.parse(event.body || '{}');
 
         if (!prompt || !apiModel) return { statusCode: 400, body: JSON.stringify({ error: 'Prompt and apiModel are required.' }) };
@@ -103,7 +105,10 @@ const handler: Handler = async (event: HandlerEvent) => {
         // COST CALCULATION
         let baseCost = 1;
         if (apiModel === 'gemini-3-pro-image-preview') {
-            baseCost = 2;
+             // Pricing: 1K = 2, 2K = 3, 4K = 4
+             if (imageSize === '4K') baseCost = 4;
+             else if (imageSize === '2K') baseCost = 3;
+             else baseCost = 2; // 1K
         }
         const totalCost = baseCost + (useUpscaler ? COST_UPSCALE : 0);
 
@@ -191,13 +196,27 @@ const handler: Handler = async (event: HandlerEvent) => {
             addImagePart(processedStyleImage);
             addImagePart(processedFaceImage);
             
+            // Config construction
+            const config: any = { 
+                responseModalities: [Modality.IMAGE],
+                seed: seed ? Number(seed) : undefined,
+            };
+
+            // Specific config for Gemini 3 Pro
+            if (apiModel === 'gemini-3-pro-image-preview') {
+                config.imageConfig = {
+                    aspectRatio: aspectRatio,
+                    imageSize: imageSize // "1K", "2K", "4K"
+                };
+                if (useGoogleSearch) {
+                    config.tools = [{ google_search: {} }]; // Use google_search as per SDK instructions
+                }
+            }
+
             const response = await ai.models.generateContent({
                 model: apiModel,
                 contents: { parts: parts },
-                config: { 
-                    responseModalities: [Modality.IMAGE],
-                    seed: seed ? Number(seed) : undefined,
-                },
+                config: config,
             });
 
             const imagePartResponse = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
@@ -230,9 +249,9 @@ const handler: Handler = async (event: HandlerEvent) => {
         const newDiamondCount = userData.diamonds - totalCost;
         const newXp = userData.xp + XP_PER_GENERATION;
         
-        let logDescription = `Tạo ảnh: ${prompt.substring(0, 50)}...`;
-        if (useUpscaler) logDescription += " (Nâng cấp)";
-        if (apiModel === 'gemini-3-pro-image-preview') logDescription += " (Pro 4K)";
+        let logDescription = `Tạo ảnh: ${prompt.substring(0, 30)}...`;
+        if (useUpscaler) logDescription += " (Upscale)";
+        if (apiModel === 'gemini-3-pro-image-preview') logDescription += ` (Pro ${imageSize})`;
         
         await Promise.all([
             supabaseAdmin.from('users').update({ diamonds: newDiamondCount, xp: newXp }).eq('id', user.id),

@@ -894,44 +894,44 @@ export const vi = {
   },
   changelog: {
     10: {
-      title: 'Group Studio Launch & UI Upgrades',
-      description: 'Introducing Group Studio for multi-character image generation. Fixed display and position of the "Use Available PROMPT" button. Added "Load More" functionality to the Prompt Library.',
+      title: 'Ra mắt Studio Nhóm & Nâng cấp Giao diện',
+      description: 'Giới thiệu Group Studio cho phép tạo ảnh nhiều nhân vật. Sửa lỗi hiển thị nút "Dùng Prompt có sẵn". Thêm tính năng "Tải thêm" cho Thư viện Prompt.',
     },
     9: {
-      title: 'Prompt Library Launch & Improved Support',
-      description: 'Integrated prompt library from caulenhau.io.vn, allowing users to reference and use high-quality prompts. Added a Facebook support channel on the top-up page for payment issues.',
+      title: 'Ra mắt Thư viện Prompt & Hỗ trợ tốt hơn',
+      description: 'Tích hợp thư viện prompt từ caulenhau.io.vn. Thêm kênh hỗ trợ Facebook tại trang nạp tiền.',
     },
     8: {
-      title: 'Globalization & Critical Bug Fixes',
-      description: 'Translated the entire application interface into English, supporting flexible language switching. Fixed a critical bug causing the application to freeze on startup and other display issues.',
+      title: 'Toàn cầu hóa & Sửa lỗi nghiêm trọng',
+      description: 'Dịch toàn bộ giao diện sang tiếng Anh, hỗ trợ chuyển đổi ngôn ngữ linh hoạt. Sửa lỗi treo ứng dụng khi khởi động và các lỗi hiển thị khác.',
     },
     7: {
-      title: 'Comprehensive Signature Tool Upgrade',
-      description: 'Fixed AI signature positioning, added options for Font, size, bold/italic. Expanded the effects library and added a custom color picker for maximum creative freedom.',
+      title: 'Nâng cấp toàn diện Công cụ Chữ ký',
+      description: 'Sửa lỗi vị trí chữ ký AI, thêm tùy chọn Font, kích thước, in đậm/nghiêng. Mở rộng thư viện hiệu ứng và thêm bộ chọn màu tùy chỉnh.',
     },
     6: {
-      title: 'Interface Revolution',
-      description: 'Complete overhaul of the theme system! Each theme now has its own unique identity. The default theme has been replaced with "Neon Dance". Added a feature to randomly select a theme on each visit for a fresh experience.',
+      title: 'Cách mạng Giao diện',
+      description: 'Thay đổi hoàn toàn hệ thống giao diện! Mỗi chủ đề có bản sắc riêng. Chủ đề mặc định thay bằng "Vũ Điệu Neon". Thêm tính năng ngẫu nhiên chủ đề mỗi lần truy cập.',
     },
     5: {
-      title: 'Super Face Lock & UI Improvements',
-      description: 'Upgraded the Super Face Lock (Face ID+) feature for higher accuracy. Integrated the Background Remover tool into the main tab for a more seamless and convenient workflow.',
+      title: 'Siêu Khóa Gương Mặt & Cải tiến UI',
+      description: 'Nâng cấp tính năng Siêu Khóa Gương Mặt (Face ID+) cho độ chính xác cao hơn. Tích hợp công cụ Tách Nền vào tab chính để thuận tiện hơn.',
     },
     4: {
-      title: 'Giftcode System & Announcements Launch',
-      description: 'Launched a Giftcode system for users to receive rewards. Added an update notification feature on the navigation bar. Added a Gallery management page for Admins.',
+      title: 'Hệ thống Giftcode & Thông báo',
+      description: 'Ra mắt hệ thống Giftcode nhận thưởng. Thêm tính năng thông báo cập nhật trên thanh điều hướng. Thêm trang quản lý Gallery cho Admin.',
     },
     3: {
-      title: 'Admin Dashboard',
-      description: 'A real-time data statistics page for Admins has been added to the Settings section. Fixed display and timezone issues.',
+      title: 'Bảng điều khiển Admin',
+      description: 'Thêm trang thống kê dữ liệu thời gian thực cho Admin trong phần Cài đặt. Sửa lỗi hiển thị và múi giờ.',
     },
     2: {
-      title: 'Bug Fixes and Performance Improvements',
-      description: 'Optimized the workflow on branches and fixed an issue where the Preview page was not displaying on Netlify.',
+      title: 'Sửa lỗi và Cải thiện hiệu năng',
+      description: 'Tối ưu quy trình trên các nhánh và sửa lỗi trang Preview không hiển thị trên Netlify.',
     },
     1: {
-      title: 'Launch of Background Remover & Face Lock',
-      description: 'Added a Background Remover tool and a "Super Face Lock" feature to retain character identity more accurately.',
+      title: 'Ra mắt Tách Nền & Khóa Mặt',
+      description: 'Thêm công cụ Tách Nền và tính năng "Siêu Khóa Gương Mặt" giúp giữ nét nhân vật chính xác hơn.',
     },
   },
 };

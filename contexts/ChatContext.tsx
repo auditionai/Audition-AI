@@ -168,59 +168,53 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
 
     const deleteMessage = async (messageId: string) => {
-        if (!supabase || !user) return;
+        if (!user || !session) {
+            showToast("Bạn cần đăng nhập để thực hiện thao tác này.", "error");
+            return;
+        }
+        
+        // 1. Save previous state for rollback
+        const previousMessages = [...messages];
+
+        // 2. Optimistic UI Update: Immediately show as deleted
+        setMessages(prev => prev.map(m => {
+            if (m.id === messageId) {
+                return {
+                    ...m,
+                    is_deleted: true,
+                    metadata: {
+                        ...m.metadata,
+                        deleted_by: user.display_name, // Display current user initially
+                        deleted_at: new Date().toISOString()
+                    }
+                };
+            }
+            return m;
+        }));
         
         try {
-             // Fetch the message first to verify ownership/admin status locally before DB call if needed, 
-             // or trust DB RLS. Here we do logic checks.
-             const { data: msg, error } = await supabase
-                .from('global_chat_messages')
-                .select('user_id, metadata')
-                .eq('id', messageId)
-                .single();
-                
-             if (error || !msg) throw new Error("Message not found");
+             // 3. Call Server-side Function for Persistence
+             const response = await fetch('/.netlify/functions/delete-chat-message', {
+                 method: 'POST',
+                 headers: {
+                     'Content-Type': 'application/json',
+                     'Authorization': `Bearer ${session.access_token}`
+                 },
+                 body: JSON.stringify({ messageId })
+             });
 
-             const isOwner = msg.user_id === user.id;
-             
-             if (!user.is_admin && !isOwner) {
-                 showToast("Bạn không có quyền xóa tin nhắn này.", "error");
-                 return;
+             if (!response.ok) {
+                 const resData = await response.json();
+                 throw new Error(resData.error || "Server delete failed");
              }
-             
-             const deleterName = (user.is_admin && !isOwner) ? 'ADMIN' : user.display_name;
-             
-             const updatedMetadata = {
-                 ...msg.metadata,
-                 deleted_by: deleterName,
-                 deleted_at: new Date().toISOString()
-             };
-
-             // Perform the DB update
-             const { error: updateError } = await supabase
-                .from('global_chat_messages')
-                .update({ is_deleted: true, metadata: updatedMetadata })
-                .eq('id', messageId);
-
-             if (updateError) throw updateError;
-             
-             // Optimistic UI Update: Immediately reflect changes locally
-             setMessages(prev => prev.map(m => {
-                 if (m.id === messageId) {
-                     return {
-                         ...m,
-                         is_deleted: true,
-                         metadata: updatedMetadata
-                     };
-                 }
-                 return m;
-             }));
              
              showToast("Đã xóa tin nhắn.", "success");
                 
-        } catch (e) {
+        } catch (e: any) {
             console.error("Delete message error:", e);
-            showToast("Không thể xóa tin nhắn.", "error");
+            showToast(e.message || "Không thể xóa tin nhắn.", "error");
+            // 4. Rollback if server request fails
+            setMessages(previousMessages);
         }
     };
 

@@ -93,12 +93,27 @@ const GameConfigManager: React.FC = () => {
             let finalIconUrl = editingCosmetic.iconUrl;
 
             if (uploadIconFile) {
-                // Resize icon to 128x128 max for performance
-                const { dataUrl } = await resizeImage(uploadIconFile, 128); 
+                let finalDataUrl: string;
+
+                // FIX: Skip resize for GIFs to preserve animation and transparency.
+                // Resizing via Canvas converts GIFs to a static frame and often blackens transparent backgrounds.
+                if (uploadIconFile.type === 'image/gif') {
+                     finalDataUrl = await new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = (e) => resolve(e.target?.result as string);
+                        reader.onerror = reject;
+                        reader.readAsDataURL(uploadIconFile);
+                     });
+                } else {
+                    // Resize other formats to 128x128 max for performance
+                    const { dataUrl } = await resizeImage(uploadIconFile, 128); 
+                    finalDataUrl = dataUrl;
+                }
+
                 const uploadRes = await fetch('/.netlify/functions/upload-asset', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
-                    body: JSON.stringify({ image: dataUrl, folder: 'icons' }),
+                    body: JSON.stringify({ image: finalDataUrl, folder: 'icons' }),
                 });
                 const uploadData = await uploadRes.json();
                 if (!uploadRes.ok) throw new Error(uploadData.error);

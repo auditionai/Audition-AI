@@ -11,11 +11,6 @@ const XP_PER_GENERATION = 10;
 
 /**
  * Pre-processes an image by placing it onto a new canvas of a target aspect ratio.
- * This "letterboxing" technique ensures all input images sent to Gemini
- * have the same aspect ratio, forcing the output to match.
- * @param imageDataUrl The base64 data URL of the input image.
- * @param targetAspectRatio The desired aspect ratio string (e.g., '16:9').
- * @returns A promise that resolves to the new base64 data URL.
  */
 const processImageForGemini = async (imageDataUrl: string | null, targetAspectRatio: string): Promise<string | null> => {
     if (!imageDataUrl) return null;
@@ -25,7 +20,6 @@ const processImageForGemini = async (imageDataUrl: string | null, targetAspectRa
         if (!base64) return null;
 
         const imageBuffer = Buffer.from(base64, 'base64');
-        // FIX: The type definitions for 'jimp' may not align with its ESM module exports. Casting to 'any' bypasses the TypeScript error for `read`, assuming the method exists at runtime.
         const image = await (Jimp as any).read(imageBuffer);
         const originalWidth = image.getWidth();
         const originalHeight = image.getHeight();
@@ -36,36 +30,26 @@ const processImageForGemini = async (imageDataUrl: string | null, targetAspectRa
 
         let newCanvasWidth: number, newCanvasHeight: number;
 
-        // Determine new canvas dimensions to match target aspect ratio while enclosing the original image
         if (targetRatio > originalRatio) {
-            // Target is wider than original (pillarbox)
             newCanvasHeight = originalHeight;
             newCanvasWidth = Math.round(originalHeight * targetRatio);
         } else {
-            // Target is taller than original (letterbox)
             newCanvasWidth = originalWidth;
             newCanvasHeight = Math.round(originalWidth / targetRatio);
         }
         
-        // Create a new black canvas with the target dimensions
-        // FIX: The 'jimp' constructor is not constructable on the imported type. Using `new (Jimp as any)` bypasses the strict type check.
         const newCanvas = new (Jimp as any)(newCanvasWidth, newCanvasHeight, '#000000');
         
-        // Calculate position to center the original image
         const x = (newCanvasWidth - originalWidth) / 2;
         const y = (newCanvasHeight - originalHeight) / 2;
         
-        // Composite the original image onto the new canvas
         newCanvas.composite(image, x, y);
 
-        // FIX: The type definitions for 'jimp' may not align with its ESM module exports. Casting to 'any' bypasses the TypeScript error for the MIME_PNG constant.
         const mime = header.match(/:(.*?);/)?.[1] || (Jimp as any).MIME_PNG;
         return newCanvas.getBase64Async(mime as any);
 
     } catch (error) {
         console.error("Error pre-processing image for Gemini:", error);
-        // If processing fails, return the original to not break the flow,
-        // though aspect ratio might be wrong.
         return imageDataUrl;
     }
 };
@@ -94,17 +78,20 @@ const handler: Handler = async (event: HandlerEvent) => {
         const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
         if (authError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized: Invalid token.' }) };
 
+        const body = JSON.parse(event.body || '{}');
         const { 
             prompt, apiModel, characterImage, faceReferenceImage, styleImage, 
             aspectRatio, negativePrompt, seed, useUpscaler,
             imageSize = '1K', useGoogleSearch = false
-        } = JSON.parse(event.body || '{}');
+        } = body;
 
         if (!prompt || !apiModel) return { statusCode: 400, body: JSON.stringify({ error: 'Prompt and apiModel are required.' }) };
         
         // COST CALCULATION
         let baseCost = 1;
-        if (apiModel === 'gemini-3-pro-image-preview') {
+        const isProModel = apiModel === 'gemini-3-pro-image-preview';
+
+        if (isProModel) {
              // Pricing: 1K = 2, 2K = 3, 4K = 4
              if (imageSize === '4K') baseCost = 4;
              else if (imageSize === '2K') baseCost = 3;
@@ -121,28 +108,11 @@ const handler: Handler = async (event: HandlerEvent) => {
         
         const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
 
-        let translatedPrompt = prompt;
-        if (prompt && prompt.trim()) {
-            try {
-                const translationResponse = await ai.models.generateContent({
-                    model: 'gemini-2.5-flash',
-                    contents: `Translate the following image description from Vietnamese to English. Keep it concise and descriptive. Text: "${prompt}"`,
-                });
-                const translatedText = translationResponse.text.trim();
-                if (translatedText && translatedText.length > 3) {
-                    translatedPrompt = translatedText;
-                }
-            } catch (e) {
-                console.warn(`[generate-image] Prompt translation failed, using original. Error: ${e}`);
-            }
-        }
-
         let finalImageBase64: string;
         let finalImageMimeType: string;
         
-        let fullPrompt = translatedPrompt;
+        let fullPrompt = prompt;
 
-        // NEW: Add absolute instruction for Super Face Lock
         if (faceReferenceImage) {
             const faceLockInstruction = `(ABSOLUTE INSTRUCTION: The final image MUST use the exact face, including all features, details, and the complete facial expression, from the provided face reference image. Do NOT alter, modify, stylize, or change the expression of this face in any way. Ignore any conflicting instructions about facial expressions in the user's prompt. The face from the reference image must be perfectly preserved and transplanted onto the generated character.)\n\n`;
             fullPrompt = faceLockInstruction + fullPrompt;
@@ -152,87 +122,73 @@ const handler: Handler = async (event: HandlerEvent) => {
             fullPrompt += ` --no ${negativePrompt}`;
         }
 
-        if (apiModel.startsWith('imagen')) {
-            const response = await ai.models.generateImages({
-                model: apiModel,
-                prompt: fullPrompt,
-                config: { 
-                    numberOfImages: 1, 
-                    outputMimeType: 'image/png',
-                    aspectRatio: aspectRatio,
-                    seed: seed ? Number(seed) : undefined,
-                },
-            });
-            finalImageBase64 = response.generatedImages[0].image.imageBytes;
-            finalImageMimeType = 'image/png';
-        } else { 
-            // Gemini (Flash or Pro) logic
-            const parts: any[] = [];
-            
-            // Pre-process ALL images to match target aspect ratio
-            const [
-                processedCharacterImage,
-                processedStyleImage,
-                processedFaceImage,
-            ] = await Promise.all([
-                processImageForGemini(characterImage, aspectRatio),
-                processImageForGemini(styleImage, aspectRatio),
-                processImageForGemini(faceReferenceImage, aspectRatio)
-            ]);
-            
-            // The text prompt is ALWAYS the first part.
-            parts.push({ text: fullPrompt });
+        // Gemini (Flash or Pro) logic
+        const parts: any[] = [];
+        
+        // Pre-process ALL images to match target aspect ratio
+        const [
+            processedCharacterImage,
+            processedStyleImage,
+            processedFaceImage,
+        ] = await Promise.all([
+            processImageForGemini(characterImage, aspectRatio),
+            processImageForGemini(styleImage, aspectRatio),
+            processImageForGemini(faceReferenceImage, aspectRatio)
+        ]);
+        
+        // The text prompt is ALWAYS the first part.
+        parts.push({ text: fullPrompt });
 
-            // Helper to add processed image parts
-            const addImagePart = (imageDataUrl: string | null) => {
-                if (!imageDataUrl) return;
-                const [header, base64] = imageDataUrl.split(',');
-                const mimeType = header.match(/:(.*?);/)?.[1] || 'image/png';
-                parts.push({ inlineData: { data: base64, mimeType } });
+        // Helper to add processed image parts
+        const addImagePart = (imageDataUrl: string | null) => {
+            if (!imageDataUrl) return;
+            const [header, base64] = imageDataUrl.split(',');
+            const mimeType = header.match(/:(.*?);/)?.[1] || 'image/png';
+            parts.push({ inlineData: { data: base64, mimeType } });
+        };
+
+        addImagePart(processedCharacterImage);
+        addImagePart(processedStyleImage);
+        addImagePart(processedFaceImage);
+        
+        // --- STRICT CONFIGURATION CONSTRUCTION ---
+        const config: any = { 
+            responseModalities: [Modality.IMAGE],
+            seed: seed ? Number(seed) : undefined,
+        };
+
+        if (isProModel) {
+            // Gemini 3 Pro Config
+            config.imageConfig = {
+                aspectRatio: aspectRatio,
+                imageSize: imageSize // "1K", "2K", "4K"
             };
-
-            // Add the pre-processed images to the request
-            addImagePart(processedCharacterImage);
-            addImagePart(processedStyleImage);
-            addImagePart(processedFaceImage);
-            
-            // Config construction
-            const config: any = { 
-                responseModalities: [Modality.IMAGE],
-                seed: seed ? Number(seed) : undefined,
-            };
-
-            // Specific config for Gemini 3 Pro
-            if (apiModel === 'gemini-3-pro-image-preview') {
-                config.imageConfig = {
-                    aspectRatio: aspectRatio,
-                    imageSize: imageSize // "1K", "2K", "4K"
-                };
-                if (useGoogleSearch) {
-                    config.tools = [{ google_search: {} }]; // Use google_search as per SDK instructions
-                }
+            if (useGoogleSearch) {
+                config.tools = [{ googleSearch: {} }]; 
             }
-
-            const response = await ai.models.generateContent({
-                model: apiModel,
-                contents: { parts: parts },
-                config: config,
-            });
-
-            const imagePartResponse = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-            if (!imagePartResponse?.inlineData) throw new Error("AI không thể tạo hình ảnh từ mô tả này. Hãy thử thay đổi prompt hoặc ảnh tham chiếu.");
-
-            finalImageBase64 = imagePartResponse.inlineData.data;
-            finalImageMimeType = imagePartResponse.inlineData.mimeType.includes('png') ? 'image/png' : 'image/jpeg';
+        } else {
+             // Gemini 2.5 Flash Config
+             // Flash mostly infers aspect ratio from input images or prompt, 
+             // but we can try to enforce strict output via the pre-processing above.
+             // We DO NOT send imageConfig or tools to Flash as it may cause errors.
         }
 
-        // --- Placeholder for Upscaler Logic ---
-        if (useUpscaler) {
-            console.log(`[UPSCALER] Upscaling image for user ${user.id}... (Using Gemini 3 Pro internally for best results)`);
-            // In a real implementation, we would make a second call here using gemini-3-pro with the generated image as input
-        }
-        // --- End of Placeholder ---
+        const response = await ai.models.generateContent({
+            model: apiModel,
+            contents: { parts: parts },
+            config: config,
+        });
 
+        const imagePartResponse = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+        if (!imagePartResponse?.inlineData) {
+            console.error("Gemini Response Error:", JSON.stringify(response, null, 2));
+            throw new Error("AI không thể tạo hình ảnh từ mô tả này. Hãy thử thay đổi prompt hoặc ảnh tham chiếu.");
+        }
+
+        finalImageBase64 = imagePartResponse.inlineData.data;
+        finalImageMimeType = imagePartResponse.inlineData.mimeType.includes('png') ? 'image/png' : 'image/jpeg';
+        
+        // --- R2 Upload ---
         const imageBuffer = Buffer.from(finalImageBase64, 'base64');
         const fileExtension = finalImageMimeType.split('/')[1] || 'png';
         const fileName = `${user.id}/${Date.now()}.${fileExtension}`;
@@ -251,7 +207,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         
         let logDescription = `Tạo ảnh: ${prompt.substring(0, 30)}...`;
         if (useUpscaler) logDescription += " (Upscale)";
-        if (apiModel === 'gemini-3-pro-image-preview') logDescription += ` (Pro ${imageSize})`;
+        if (isProModel) logDescription += ` (Pro ${imageSize})`;
         
         await Promise.all([
             supabaseAdmin.from('users').update({ diamonds: newDiamondCount, xp: newXp }).eq('id', user.id),
@@ -281,7 +237,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         let clientFriendlyError = 'Lỗi không xác định từ máy chủ.';
         if (error?.message) {
             if (error.message.includes('INVALID_ARGUMENT')) {
-                 clientFriendlyError = 'Lỗi từ AI: Không thể xử lý ảnh đầu vào. Hãy thử lại hoặc thay đổi ảnh đầu vào.';
+                 clientFriendlyError = 'Lỗi cấu hình AI: Vui lòng thử lại hoặc đổi model.';
             } else {
                 clientFriendlyError = error.message;
             }

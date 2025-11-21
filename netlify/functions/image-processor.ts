@@ -1,8 +1,20 @@
+
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { GoogleGenAI, Modality } from "@google/genai";
 import { supabaseAdmin } from './utils/supabaseClient';
+import { Buffer } from 'buffer';
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 
 const handler: Handler = async (event: HandlerEvent) => {
+    const s3Client = new S3Client({
+        region: "auto",
+        endpoint: process.env.R2_ENDPOINT!,
+        credentials: {
+            accessKeyId: process.env.R2_ACCESS_KEY_ID!,
+            secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
+        },
+    });
+
     try {
         if (event.httpMethod !== 'POST') {
             return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
@@ -16,90 +28,112 @@ const handler: Handler = async (event: HandlerEvent) => {
         const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
         if (authError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized: Invalid token.' }) };
 
-        const { 
-            image: imageDataUrl, text, aiStyle, aiColor, signaturePosition, 
-            aiFont, aiSize, aiIsBold, aiIsItalic, aiCustomColor, model 
-        } = JSON.parse(event.body || '{}');
+        const { image: imageDataUrl, model } = JSON.parse(event.body || '{}');
+        if (!imageDataUrl) return { statusCode: 400, body: JSON.stringify({ error: 'Image data is required.' }) };
 
-        // Validate cost based on selected model
-        const cost = (model === 'gemini-3-pro-image-preview') ? 2 : 1;
+        // Validate Cost
+        const isPro = model === 'gemini-3-pro-image-preview';
+        const cost = isPro ? 2 : 1;
 
-        if (!imageDataUrl || !text || !aiStyle || !aiColor || !signaturePosition || !aiFont || !aiSize || aiIsBold === undefined || aiIsItalic === undefined || !aiCustomColor) {
-            return { statusCode: 400, body: JSON.stringify({ error: 'Missing required parameters for AI signature.' }) };
-        }
+        const { data: userData, error: userError } = await supabaseAdmin
+            .from('users')
+            .select('diamonds')
+            .eq('id', user.id)
+            .single();
         
-        const { data: userData, error: userError } = await supabaseAdmin.from('users').select('diamonds').eq('id', user.id).single();
         if (userError || !userData) return { statusCode: 404, body: JSON.stringify({ error: 'User not found.' }) };
-        if (userData.diamonds < cost) return { statusCode: 402, body: JSON.stringify({ error: `Không đủ kim cương. Cần ${cost}, bạn có ${userData.diamonds}.` }) };
-        
-        const { data: apiKeyData, error: apiKeyError } = await supabaseAdmin.from('api_keys').select('id, key_value').eq('status', 'active').order('usage_count', { ascending: true }).limit(1).single();
+        if (userData.diamonds < cost) return { statusCode: 402, body: JSON.stringify({ error: 'Không đủ kim cương.' }) };
+
+        const { data: apiKeyData, error: apiKeyError } = await supabaseAdmin
+            .from('api_keys')
+            .select('id, key_value')
+            .eq('status', 'active')
+            .order('usage_count', { ascending: true })
+            .limit(1)
+            .single();
+
         if (apiKeyError || !apiKeyData) return { statusCode: 503, body: JSON.stringify({ error: 'Hết tài nguyên AI. Vui lòng thử lại sau.' }) };
-        
+
         const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
-        // Use the model passed from frontend (validated cost above) or fallback
-        const selectedModel = model === 'gemini-3-pro-image-preview' ? 'gemini-3-pro-image-preview' : 'gemini-2.5-flash-image';
-
-        // --- SERVER-SIDE PROMPT CONSTRUCTION (IN ENGLISH) ---
-        let promptParts = [
-            "You are an AI specializing in typography and image editing. Your task is to add text to an image with absolute precision. Follow these rules strictly:",
-            `1.  **Text Content:** You MUST add the following text exactly as written: "${text}"`,
-            `2.  **Placement Rule:** The absolute center of the text block you create **MUST** be placed at this precise location: ${Math.round(signaturePosition.x * 100)}% from the left edge and ${Math.round(signaturePosition.y * 100)}% from the top edge of the image. This is a non-negotiable placement requirement.`,
-            "3.  **Visual Style Rules:**",
-            `    - **Overall Style:** The text must be legible and have an artistic style described as '${aiStyle}'.`,
-            `    - **Font Family:** Use a font that visually resembles "${aiFont}".`,
-            `    - **Font Attributes:** The font weight must be ${aiIsBold ? 'Bold' : 'Normal'}. The font style must be ${aiIsItalic ? 'Italic' : 'Upright'}.`,
-            `    - **Font Size:** The text's height should be approximately ${aiSize} pixels, assuming the input image is 1024px tall. You must scale this size proportionally if the image has a different height.`,
-        ];
-
-        if (aiColor === 'custom') {
-            promptParts.push(`    - **Coloring:** The text color **MUST** be the exact hex code: ${aiCustomColor}. Do not use any other colors, gradients, or variations.`);
-        } else {
-            promptParts.push(`    - **Coloring:** The text must have a vibrant and artistic color palette best described as '${aiColor}'.`);
-        }
-
-        promptParts.push("4.  **Preservation Rule:** DO NOT alter, crop, or change any part of the original image. The final output must be the original image with ONLY the specified text added according to all the rules above.");
-
-        const aiPrompt = promptParts.join('\n');
-        // --- END ---
+        
+        // Selected model logic
+        const selectedModel = isPro ? 'gemini-3-pro-image-preview' : 'gemini-2.5-flash-image'; 
 
         const parts: any[] = [];
         const [header, base64] = imageDataUrl.split(',');
-        const mimeType = header.match(/:(.*?);/)?.[1] || 'image/png';
+        const mimeType = header.match(/:(.*?);/)[1];
         parts.push({ inlineData: { data: base64, mimeType } });
-        parts.push({ text: aiPrompt });
+        parts.push({ text: "isolate the main subject with a solid black background" });
+
+        // STRICT CONFIG: Do not add extra properties
+        const config: any = { 
+            responseModalities: [Modality.IMAGE] 
+        };
+        
+        // Note: We don't set imageConfig for editing/bg removal usually, as we want to preserve input aspect ratio if possible.
+        // However, if Pro requires it, we might default to 1K, but usually it's safer to omit for editing tasks unless generating new content.
 
         const response = await ai.models.generateContent({
             model: selectedModel,
-            contents: { parts },
-            config: { responseModalities: [Modality.IMAGE] },
+            contents: { parts: parts },
+            config: config,
         });
 
         const imagePartResponse = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-        if (!imagePartResponse?.inlineData) throw new Error("AI không thể chèn chữ ký vào ảnh này. Hãy thử lại.");
-
+        if (!imagePartResponse?.inlineData) {
+            throw new Error("AI không thể tách nền hình ảnh này.");
+        }
+        
         const finalImageBase64 = imagePartResponse.inlineData.data;
-        
+        const finalImageMimeType = imagePartResponse.inlineData.mimeType.includes('png') ? 'image/png' : 'image/jpeg';
+
+        // --- START OF R2 UPLOAD LOGIC ---
+        const imageBuffer = Buffer.from(finalImageBase64, 'base64');
+        const finalFileExtension = finalImageMimeType.split('/')[1] || 'png';
+        const fileName = `${user.id}/bg_removed/${Date.now()}.${finalFileExtension}`;
+
+        const putCommand = new PutObjectCommand({
+            Bucket: process.env.R2_BUCKET_NAME!,
+            Key: fileName,
+            Body: imageBuffer,
+            ContentType: finalImageMimeType,
+        });
+
+        await (s3Client as any).send(putCommand);
+
+        const publicUrl = `${process.env.R2_PUBLIC_URL}/${fileName}`;
+        // --- END OF R2 UPLOAD LOGIC ---
+
         const newDiamondCount = userData.diamonds - cost;
-        
         await Promise.all([
             supabaseAdmin.from('users').update({ diamonds: newDiamondCount }).eq('id', user.id),
             supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id }),
             supabaseAdmin.from('diamond_transactions_log').insert({
                 user_id: user.id,
                 amount: -cost,
-                transaction_type: 'TOOL_USE',
-                description: `Chèn chữ ký AI (${selectedModel === 'gemini-3-pro-image-preview' ? 'Pro' : 'Flash'})`
+                transaction_type: 'BG_REMOVAL',
+                description: `Tách nền ảnh (${isPro ? 'Pro' : 'Flash'})`
             })
         ]);
 
         return {
             statusCode: 200,
-            body: JSON.stringify({ imageBase64: finalImageBase64, newDiamondCount }),
+            body: JSON.stringify({
+                imageUrl: publicUrl,
+                newDiamondCount,
+                imageBase64: finalImageBase64,
+                mimeType: finalImageMimeType,
+            }),
         };
 
     } catch (error: any) {
-        console.error("Add signature AI function error:", error);
-        return { statusCode: 500, body: JSON.stringify({ error: error.message || 'Lỗi không xác định từ máy chủ.' }) };
+        console.error(`A FATAL ERROR occurred in the image-processor function:`, error);
+        return { 
+            statusCode: 500, 
+            body: JSON.stringify({ 
+                error: `Lỗi máy chủ nghiêm trọng: ${error.message || 'Unknown server error.'}` 
+            }) 
+        };
     }
 };
 

@@ -12,7 +12,7 @@ interface LuckyWheelModalProps {
 
 const LuckyWheelModal: React.FC<LuckyWheelModalProps> = ({ isOpen, onClose }) => {
     const { user, session, showToast, updateUserProfile } = useAuth();
-    const { t, language } = useTranslation();
+    const { t } = useTranslation();
     const [rewards, setRewards] = useState<LuckyWheelReward[]>([]);
     const [isSpinning, setIsSpinning] = useState(false);
     const [tickets, setTickets] = useState(0);
@@ -20,8 +20,6 @@ const LuckyWheelModal: React.FC<LuckyWheelModalProps> = ({ isOpen, onClose }) =>
     const [canClaimDaily, setCanClaimDaily] = useState(false);
     const [winningReward, setWinningReward] = useState<LuckyWheelReward | null>(null);
     
-    // Removed unused wheelRef to fix TS6133 error
-
     // Fetch Config & User Status
     useEffect(() => {
         if (isOpen && session) {
@@ -146,9 +144,9 @@ const LuckyWheelModal: React.FC<LuckyWheelModalProps> = ({ isOpen, onClose }) =>
     // Helper to get localized label for wheel segments
     const getRewardLabel = (reward: LuckyWheelReward) => {
         switch (reward.type) {
-            case 'diamond': return t('luckyWheel.win.diamond');
+            case 'diamond': return t('luckyWheel.win.diamond_short');
             case 'xp': return 'XP';
-            case 'ticket': return t('luckyWheel.win.ticket');
+            case 'ticket': return t('luckyWheel.win.ticket_short');
             case 'lucky': return t('luckyWheel.win.lucky_short');
             default: return reward.label;
         }
@@ -204,7 +202,7 @@ const LuckyWheelModal: React.FC<LuckyWheelModalProps> = ({ isOpen, onClose }) =>
                         }}></div>
 
                         {/* Render Content (Text/Icons) */}
-                        {wheelSegments.map((item, index) => { 
+                        {wheelSegments.map((item) => { 
                             const rotation = item.rotate + (item.angle / 2); // Center of the slice
                             return (
                                 <div 

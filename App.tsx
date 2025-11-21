@@ -9,9 +9,10 @@ import HomePage from './pages/HomePage';
 import CreatorPage from './pages/CreatorPage';
 import GalleryPage from './pages/GalleryPage';
 import BuyCreditsPage from './pages/BuyCreditsPage';
-import ProfilePage from './pages/ProfilePage'; // NEW
-import UserProfilePage from './pages/UserProfilePage'; // NEW
-import MessagesPage from './pages/MessagesPage'; // NEW
+import ProfilePage from './pages/ProfilePage';
+import UserProfilePage from './pages/UserProfilePage';
+import MessagesPage from './pages/MessagesPage';
+import ShopPage from './pages/ShopPage'; // NEW
 
 // Import Common Components
 import RewardNotification from './components/common/RewardNotification';
@@ -48,6 +49,9 @@ const AppContent: React.FC = () => {
                 break;
             case 'messages':
                 pageComponent = user ? <MessagesPage /> : <HomePage />;
+                break;
+            case 'shop':
+                pageComponent = user ? <ShopPage /> : <HomePage />;
                 break;
             case 'buy-credits':
                 pageComponent = user ? <BuyCreditsPage /> : <HomePage />;

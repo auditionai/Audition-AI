@@ -14,8 +14,8 @@ import UserBadge from '../common/UserBadge';
 
 interface CreatorHeaderProps {
   onTopUpClick: () => void;
-  activeTab: CreatorTab | 'admin-gallery'; // Add new admin tab
-  onNavigate: (tab: any) => void; // Relaxed type to allow 'profile'
+  activeTab: CreatorTab | 'admin-gallery' | 'shop'; // Add shop to activeTab type
+  onNavigate: (tab: any) => void; 
   onCheckInClick: () => void;
 }
 
@@ -108,6 +108,15 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
                     <span className="hidden md:inline">{t('creator.header.nav.checkIn')}</span>
                 </button>
                 
+                {/* Shop Button (New) */}
+                <button
+                  onClick={() => handleNavClick('shop')}
+                  className={`themed-nav-button shop ${activeTab === 'shop' ? 'is-active' : ''}`}
+                  >
+                    <i className="ph-fill ph-storefront text-base"></i>
+                    <span className="hidden md:inline">Cửa Hàng</span>
+                </button>
+
                 <button
                   onClick={() => handleNavClick('my-creations')}
                   className={`themed-nav-button creations ${activeTab === 'my-creations' ? 'is-active' : ''}`}

@@ -242,6 +242,8 @@ export interface CosmeticItem {
         level?: number;
         vip?: boolean;
     };
+    price?: number; // NEW: Price in diamonds
+    owned?: boolean; // NEW: Helper flag for UI
     previewColor?: string;
     is_active?: boolean;
 }

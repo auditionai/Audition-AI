@@ -1,4 +1,3 @@
-
 export const vi = {
   langName: 'Tiếng Việt',
   landing: {
@@ -83,7 +82,7 @@ export const vi = {
       button: 'Bắt đầu sáng tạo',
     },
     footer: {
-      copyright: '© 2025 AUDITION AI Studio.',
+      copyright: '© {{year}} AUDITION AI Studio.',
       terms: 'Điều khoản',
       policy: 'Chính sách',
       contact: 'Liên hệ',
@@ -562,7 +561,6 @@ export const vi = {
             types: { frame: 'Khung Avatar', title: 'Danh Hiệu' },
             rarities: { common: 'Thường', rare: 'Hiếm', epic: 'Sử Thi', legendary: 'Huyền Thoại', mythic: 'Thần Thoại' }
         },
-        // NEW LUCKY WHEEL TRANSLATIONS
         luckyWheel: {
             title: 'Cấu Hình Vòng Quay',
             form: {

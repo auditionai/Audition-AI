@@ -1,4 +1,3 @@
-
 export const en = {
   langName: 'English',
   landing: {

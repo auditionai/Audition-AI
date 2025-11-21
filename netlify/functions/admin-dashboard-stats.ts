@@ -15,7 +15,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         const day = now.toLocaleDateString('en-CA', { day: '2-digit', timeZone: 'Asia/Ho_Chi_Minh' });
         const startOfTodayInVietnam = new Date(`${year}-${month}-${day}T00:00:00+07:00`).toISOString();
 
-        // 1. Basic Counters (existing logic)
+        // 1. Basic Counters
         const basicResults = await Promise.all([
             supabaseAdmin.from('daily_visits').select('*', { count: 'exact', head: true }).gte('visited_at', startOfTodayInVietnam),
             supabaseAdmin.from('daily_visits').select('*', { count: 'exact', head: true }),
@@ -23,25 +23,29 @@ const handler: Handler = async (event: HandlerEvent) => {
             supabaseAdmin.from('users').select('*', { count: 'exact', head: true }),
             supabaseAdmin.from('generated_images').select('*', { count: 'exact', head: true }).gte('created_at', startOfTodayInVietnam),
             supabaseAdmin.from('generated_images').select('*', { count: 'exact', head: true }),
+            // NEW: Get Total API Key Usage as the Source of Truth
+            supabaseAdmin.from('api_keys').select('usage_count').eq('status', 'active')
         ]);
 
         const [
-            visitsTodayRes, totalVisitsRes, newUsersTodayRes, totalUsersRes, imagesTodayRes, totalImagesRes,
+            visitsTodayRes, totalVisitsRes, newUsersTodayRes, totalUsersRes, imagesTodayRes, totalImagesRes, apiKeyRes
         ] = basicResults;
 
-        // 2. Detailed Usage Statistics (New Logic)
-        // Fetch transaction logs where diamonds were spent (amount < 0)
-        // We limit to last 5000 for performance, or you could implement pagination/aggregation in DB
+        // Calculate total real usage from API Keys
+        const totalRealUsage = (apiKeyRes.data || []).reduce((sum, key) => sum + key.usage_count, 0);
+
+        // 2. Detailed Usage Statistics
+        // Fetch logs to categorize. Increased limit to capture more recent detailed history.
         const { data: usageLogs, error: usageError } = await supabaseAdmin
             .from('diamond_transactions_log')
             .select('amount, description')
             .lt('amount', 0)
             .order('created_at', { ascending: false })
-            .limit(5000);
+            .limit(10000); // Increased limit
 
         if (usageError) throw usageError;
 
-        // Process logs to aggregate stats
+        // Initialize stats container
         const detailedStats: Record<string, { flashCount: number; proCount: number; totalDiamonds: number }> = {
             'Single Image': { flashCount: 0, proCount: 0, totalDiamonds: 0 },
             'Group Image': { flashCount: 0, proCount: 0, totalDiamonds: 0 },
@@ -51,6 +55,9 @@ const handler: Handler = async (event: HandlerEvent) => {
             'Other': { flashCount: 0, proCount: 0, totalDiamonds: 0 },
         };
 
+        let trackedLogTotal = 0;
+
+        // Categorize fetched logs
         usageLogs?.forEach(log => {
             const desc = log.description || '';
             const cost = Math.abs(log.amount);
@@ -63,10 +70,25 @@ const handler: Handler = async (event: HandlerEvent) => {
             else if (desc.includes('Tách nền')) category = 'Bg Removal';
             else if (desc.includes('Chèn chữ ký')) category = 'Signature';
 
+            // Increment category stats
             detailedStats[category].totalDiamonds += cost;
+            trackedLogTotal += cost;
+
             if (isPro) detailedStats[category].proCount += 1;
             else detailedStats[category].flashCount += 1;
         });
+
+        // 3. Reconcile / Balance the Books
+        // Calculate the discrepancy between Total API Usage and what we found in the logs
+        // If TotalRealUsage > TrackedLogTotal, implies older logs were truncated or lost.
+        // As requested: dump this difference into 'Single Image' (Flash).
+        const discrepancy = totalRealUsage - trackedLogTotal;
+
+        if (discrepancy > 0) {
+            // Assuming Flash cost is 1 diamond per usage
+            detailedStats['Single Image'].flashCount += discrepancy;
+            detailedStats['Single Image'].totalDiamonds += discrepancy;
+        }
 
         const stats = {
             visitsToday: visitsTodayRes.count ?? 0,
@@ -75,7 +97,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             totalUsers: totalUsersRes.count ?? 0,
             imagesToday: imagesTodayRes.count ?? 0,
             totalImages: totalImagesRes.count ?? 0,
-            detailedUsage: detailedStats // Add to response
+            detailedUsage: detailedStats
         };
 
         return {

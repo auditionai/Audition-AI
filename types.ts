@@ -385,3 +385,33 @@ export interface DirectMessage {
     is_read: boolean;
     created_at: string;
 }
+
+// --- COMIC STUDIO TYPES ---
+export interface ComicProject {
+    id?: string;
+    title: string;
+    story_premise: string;
+    art_style: string;
+    layout_style: string;
+    dialogue_amount: string;
+    characters: ComicCharacter[];
+    pages: ComicPage[];
+}
+
+export interface ComicCharacter {
+    id: string; // Internal temporary ID for UI
+    name: string;
+    image_file?: File;
+    image_url?: string; // Base64 for preview
+    description: string; // Analysis result
+    is_analyzing?: boolean;
+}
+
+export interface ComicPage {
+    id: string;
+    page_number: number;
+    panel_description: string;
+    dialogue: { speaker: string; text: string }[];
+    image_url?: string;
+    status: 'draft' | 'rendering' | 'completed' | 'failed';
+}

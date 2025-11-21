@@ -1,14 +1,16 @@
+
 import React, { useState } from 'react';
 import AiGeneratorTool from './ai-tool/AiGeneratorTool';
-import GroupGeneratorTool from './ai-tool/GroupGeneratorTool'; // NEW: Import the new group tool
+import GroupGeneratorTool from './ai-tool/GroupGeneratorTool';
 import BgRemoverTool from '../ai-tool/BgRemoverTool';
 import InstructionModal from '../common/InstructionModal';
 import SignatureTool from './tools/SignatureTool';
+import ComicStudio from './comic/ComicStudio'; // Import Comic Studio
 import { useAuth } from '../../contexts/AuthContext';
-import UtilInstructionModal from '../ai-tool/InstructionModal'; // Renamed to avoid confusion
+import UtilInstructionModal from '../ai-tool/InstructionModal'; 
 import { useTranslation } from '../../hooks/useTranslation';
 
-type AIToolTab = 'generator' | 'group-studio' | 'utilities'; // NEW: Add 'group-studio'
+type AIToolTab = 'generator' | 'group-studio' | 'comic-studio' | 'utilities'; // Added comic-studio
 type UtilityTab = 'bg-remover' | 'signature';
 
 const AITool: React.FC = () => {
@@ -101,24 +103,33 @@ const AITool: React.FC = () => {
             
             <div className="max-w-7xl mx-auto">
                 {/* Main Tabs */}
-                <div className="flex justify-center border-b border-white/10 mb-6">
+                <div className="flex justify-center border-b border-white/10 mb-6 overflow-x-auto">
                     <button
                         onClick={() => setActiveTab('generator')}
-                        className={`px-6 py-3 font-semibold transition-colors ${activeTab === 'generator' ? 'text-pink-400 border-b-2 border-pink-400' : 'text-gray-400 hover:text-white'}`}
+                        className={`px-6 py-3 font-semibold whitespace-nowrap transition-colors ${activeTab === 'generator' ? 'text-pink-400 border-b-2 border-pink-400' : 'text-gray-400 hover:text-white'}`}
                     >
                        <i className="ph-fill ph-magic-wand mr-2"></i>
                         {t('creator.aiTool.tabs.single')}
                     </button>
                      <button
                         onClick={() => setActiveTab('group-studio')}
-                        className={`px-6 py-3 font-semibold transition-colors ${activeTab === 'group-studio' ? 'text-pink-400 border-b-2 border-pink-400' : 'text-gray-400 hover:text-white'}`}
+                        className={`px-6 py-3 font-semibold whitespace-nowrap transition-colors ${activeTab === 'group-studio' ? 'text-pink-400 border-b-2 border-pink-400' : 'text-gray-400 hover:text-white'}`}
                     >
                         <i className="ph-fill ph-users-three mr-2"></i>
                         {t('creator.aiTool.tabs.group')}
                     </button>
+                    {/* NEW COMIC TAB */}
+                    <button
+                        onClick={() => setActiveTab('comic-studio')}
+                        className={`px-6 py-3 font-semibold whitespace-nowrap transition-colors ${activeTab === 'comic-studio' ? 'text-pink-400 border-b-2 border-pink-400' : 'text-gray-400 hover:text-white'}`}
+                    >
+                        <i className="ph-fill ph-book-open-text mr-2"></i>
+                        Truyện Tranh
+                        <span className="ml-2 bg-gradient-to-r from-yellow-400 to-red-500 text-white text-[9px] px-1.5 py-0.5 rounded font-bold">HOT</span>
+                    </button>
                     <button
                         onClick={() => setActiveTab('utilities')}
-                        className={`px-6 py-3 font-semibold transition-colors ${activeTab === 'utilities' ? 'text-pink-400 border-b-2 border-pink-400' : 'text-gray-400 hover:text-white'}`}
+                        className={`px-6 py-3 font-semibold whitespace-nowrap transition-colors ${activeTab === 'utilities' ? 'text-pink-400 border-b-2 border-pink-400' : 'text-gray-400 hover:text-white'}`}
                     >
                         <i className="ph-fill ph-wrench mr-2"></i>
                         {t('creator.aiTool.tabs.utilities')}
@@ -126,50 +137,55 @@ const AITool: React.FC = () => {
                 </div>
 
                 {/* Content */}
-                <div className="p-4 bg-skin-fill-secondary rounded-2xl border border-skin-border shadow-lg">
-                    {activeTab === 'generator' && (
-                        <AiGeneratorTool 
-                           initialCharacterImage={poseImage}
-                           initialFaceImage={rawFaceImage}
-                           onSendToSignatureTool={handleSendToSignatureTool}
-                           onSwitchToUtility={() => handleSwitchToUtility('bg-remover')}
-                        />
-                    )}
-                    {activeTab === 'group-studio' && (
-                        <GroupGeneratorTool 
-                            onSwitchToUtility={() => handleSwitchToUtility('bg-remover')} 
-                            onInstructionClick={() => openUtilHelp('group-studio')}
-                        />
-                    )}
-                    {activeTab === 'utilities' && (
-                        <div>
-                            {/* Utility Sub-tabs */}
-                            <div className="flex justify-center border-b border-white/10 mb-6">
-                                <button onClick={() => setActiveUtility('bg-remover')} className={`px-4 py-2 text-sm font-semibold transition-colors ${activeUtility === 'bg-remover' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400 hover:text-white'}`}>
-                                    <i className="ph-fill ph-scissors mr-2"></i>{t('creator.aiTool.utils.bgRemover')}
-                                </button>
-                                <button onClick={() => setActiveUtility('signature')} className={`px-4 py-2 text-sm font-semibold transition-colors ${activeUtility === 'signature' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400 hover:text-white'}`}>
-                                    <i className="ph-fill ph-pencil-simple-line mr-2"></i>{t('creator.aiTool.utils.signature')}
-                                </button>
+                {activeTab === 'comic-studio' ? (
+                    // Comic Studio has its own container logic, no wrapper needed
+                    <ComicStudio />
+                ) : (
+                    <div className="p-4 bg-skin-fill-secondary rounded-2xl border border-skin-border shadow-lg">
+                        {activeTab === 'generator' && (
+                            <AiGeneratorTool 
+                            initialCharacterImage={poseImage}
+                            initialFaceImage={rawFaceImage}
+                            onSendToSignatureTool={handleSendToSignatureTool}
+                            onSwitchToUtility={() => handleSwitchToUtility('bg-remover')}
+                            />
+                        )}
+                        {activeTab === 'group-studio' && (
+                            <GroupGeneratorTool 
+                                onSwitchToUtility={() => handleSwitchToUtility('bg-remover')} 
+                                onInstructionClick={() => openUtilHelp('group-studio')}
+                            />
+                        )}
+                        {activeTab === 'utilities' && (
+                            <div>
+                                {/* Utility Sub-tabs */}
+                                <div className="flex justify-center border-b border-white/10 mb-6">
+                                    <button onClick={() => setActiveUtility('bg-remover')} className={`px-4 py-2 text-sm font-semibold transition-colors ${activeUtility === 'bg-remover' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400 hover:text-white'}`}>
+                                        <i className="ph-fill ph-scissors mr-2"></i>{t('creator.aiTool.utils.bgRemover')}
+                                    </button>
+                                    <button onClick={() => setActiveUtility('signature')} className={`px-4 py-2 text-sm font-semibold transition-colors ${activeUtility === 'signature' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400 hover:text-white'}`}>
+                                        <i className="ph-fill ph-pencil-simple-line mr-2"></i>{t('creator.aiTool.utils.signature')}
+                                    </button>
+                                </div>
+                                
+                                {activeUtility === 'bg-remover' && (
+                                    <BgRemoverTool 
+                                        onMoveToGenerator={handleMoveToGenerator}
+                                        onMoveFaceToGenerator={handleMoveFaceToGenerator}
+                                        onInstructionClick={() => openUtilHelp('bg-remover')}
+                                    />
+                                )}
+                                {activeUtility === 'signature' && (
+                                    <SignatureTool 
+                                        initialImage={imageForUtility}
+                                        onClearInitialImage={() => setImageForUtility(null)}
+                                        onInstructionClick={() => openUtilHelp('signature')}
+                                    />
+                                )}
                             </div>
-                            
-                            {activeUtility === 'bg-remover' && (
-                                <BgRemoverTool 
-                                    onMoveToGenerator={handleMoveToGenerator}
-                                    onMoveFaceToGenerator={handleMoveFaceToGenerator}
-                                    onInstructionClick={() => openUtilHelp('bg-remover')}
-                                />
-                            )}
-                            {activeUtility === 'signature' && (
-                                <SignatureTool 
-                                    initialImage={imageForUtility}
-                                    onClearInitialImage={() => setImageForUtility(null)}
-                                    onInstructionClick={() => openUtilHelp('signature')}
-                                />
-                            )}
-                        </div>
-                    )}
-                </div>
+                        )}
+                    </div>
+                )}
             </div>
         </div>
     );

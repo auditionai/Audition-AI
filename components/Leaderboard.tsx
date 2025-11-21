@@ -17,6 +17,7 @@ const Leaderboard: React.FC = () => {
     useEffect(() => {
         const fetchLeaderboard = async () => {
             setIsLoading(true);
+            setLeaderboard([]); // Clear old data to avoid rendering mismatch crash
             try {
                 let url = '/.netlify/functions/leaderboard';
                 if (activeTab === 'weekly') {
@@ -129,7 +130,7 @@ const Leaderboard: React.FC = () => {
                                                     </>
                                                 ) : (
                                                     <>
-                                                        <p className="text-yellow-400 font-black text-lg">{user.weekly_points.toLocaleString()} Điểm</p>
+                                                        <p className="text-yellow-400 font-black text-lg">{(user.weekly_points || 0).toLocaleString()} Điểm</p>
                                                         <p className="text-xs text-skin-muted mt-1">HOT Tuần</p>
                                                     </>
                                                 )}
@@ -160,7 +161,7 @@ const Leaderboard: React.FC = () => {
                                                         </div>
                                                     ) : (
                                                         <div className="flex items-center gap-2 text-yellow-400 font-bold">
-                                                            <i className="ph-fill ph-fire"></i> {user.weekly_points.toLocaleString()} Điểm HOT
+                                                            <i className="ph-fill ph-fire"></i> {(user.weekly_points || 0).toLocaleString()} Điểm HOT
                                                         </div>
                                                     )}
                                                 </div>

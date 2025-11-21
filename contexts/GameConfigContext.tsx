@@ -67,10 +67,9 @@ export const GameConfigProvider: React.FC<{ children: ReactNode }> = ({ children
                         let nameKey: string | null = null;
                         
                         // HEURISTIC: Try to recover a translation key if the name is uppercase (likely from a previous bad seed/save)
-                        // by checking if a default item has a key that translates to this name (case-insensitive) or is similar.
-                        // This is a fallback to fix the "CREATOR.COSMETICS..." display issue.
+                        // or if it matches a default key structure.
                         if (dbItem.name) {
-                             // Check if it matches a default key's simplified form
+                             // Check if it matches a default key's simplified form ignoring case and spaces
                              const matchedDefault = DEFAULT_COSMETICS.find(d => 
                                 d.nameKey && d.nameKey.toLowerCase().endsWith(dbItem.name.toLowerCase().replace(/ /g, ''))
                              );
@@ -78,7 +77,10 @@ export const GameConfigProvider: React.FC<{ children: ReactNode }> = ({ children
                              if (matchedDefault && matchedDefault.nameKey) {
                                  nameKey = matchedDefault.nameKey;
                              } else if (dbItem.name.includes('.') && dbItem.name === dbItem.name.toUpperCase()) {
-                                // If it looks like a raw key string in uppercase, force lowercase it
+                                // If it looks like a raw key string in uppercase (e.g. CREATOR.COSMETICS...), force lowercase it
+                                // But we must ensure we preserve camelCase parts if possible. 
+                                // Actually, just finding the matching default item by ID usually solves this, 
+                                // but if ID was lost or changed, this is a fallback.
                                 nameKey = dbItem.name.toLowerCase();
                              }
                         }

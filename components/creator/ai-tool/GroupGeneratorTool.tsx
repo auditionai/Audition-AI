@@ -633,7 +633,21 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
 
                 {/* Right Column: Settings */}
                 <div className="w-full lg:w-1/3 themed-panel p-4 flex flex-col">
-                     <SettingsBlock title={t('creator.aiTool.groupStudio.settingsTitle')} instructionKey="group-studio" onInstructionClick={onInstructionClick}>
+                     <SettingsBlock 
+                        title={t('creator.aiTool.groupStudio.settingsTitle')} 
+                        instructionKey="group-studio" 
+                        onInstructionClick={onInstructionClick}
+                        extraHeaderContent={
+                            <button
+                                onClick={() => setIsPromptLibraryOpen(true)}
+                                className="flex items-center gap-1.5 text-xs text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 rounded-full px-3 py-1.5 font-semibold transition whitespace-nowrap"
+                                title={t('modals.promptLibrary.buttonTooltip')}
+                            >
+                                <i className="ph-fill ph-scroll"></i>
+                                {t('modals.promptLibrary.button')}
+                            </button>
+                        }
+                    >
                         <div className="space-y-4">
                              <div>
                                 <label className="text-sm font-semibold text-skin-base mb-2 block">{t('creator.aiTool.groupStudio.refImageTitle')}</label>
@@ -644,14 +658,6 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                              <div>
                                 <div className="flex justify-between items-center mb-2">
                                     <label className="text-sm font-semibold text-skin-base">{t('creator.aiTool.groupStudio.promptTitle')}</label>
-                                    <button
-                                        onClick={() => setIsPromptLibraryOpen(true)}
-                                        className="flex items-center gap-1.5 text-xs text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 rounded-lg px-3 py-1.5 font-semibold transition whitespace-nowrap"
-                                        title={t('modals.promptLibrary.buttonTooltip')}
-                                    >
-                                        <i className="ph-fill ph-scroll"></i>
-                                        {t('modals.promptLibrary.button')}
-                                    </button>
                                 </div>
                                 <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder={t('creator.aiTool.groupStudio.promptPlaceholder')} className="w-full p-2 bg-skin-input-bg rounded-md border border-skin-border focus:border-skin-border-accent transition text-xs text-skin-base resize-none" rows={3}/>
                             </div>

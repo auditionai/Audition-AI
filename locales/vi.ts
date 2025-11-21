@@ -52,6 +52,7 @@ export const vi = {
       card: {
         get: 'Nhận',
         diamonds: 'Kim cương',
+        bonus: 'Thưởng'
       }
     },
     faq: {
@@ -135,6 +136,7 @@ export const vi = {
       views: "Lượt xem",
       fame: "Danh Vọng",
       newPost: "Đăng Ảnh Mới",
+      sendMessage: "Gửi Tin Nhắn",
       tabs: {
           feed: "Bảng Tin",
           inventory: "Tủ Đồ",
@@ -142,6 +144,7 @@ export const vi = {
       },
       feedEmpty: "Nhà cửa vắng quá!",
       feedEmptyDesc: "Hãy đăng tấm ảnh đầu tiên để khoe với mọi người nào.",
+      feedEmptyUser: "Người dùng này chưa đăng bài viết nào.",
       inventory: {
           frames: "Khung Avatar",
           titles: "Danh Hiệu"
@@ -153,6 +156,11 @@ export const vi = {
           change: "Chọn ảnh khác",
           posting: "Đang đăng...",
           post: "Đăng bài"
+      },
+      notFound: {
+        title: "Không tìm thấy người dùng",
+        desc: "Người dùng này không tồn tại hoặc đường dẫn không chính xác.",
+        home: "Về Trang Chủ"
       }
     },
     shop: {
@@ -556,8 +564,9 @@ export const vi = {
             add: 'Thêm',
           },
           confirmDelete: 'Bạn có chắc muốn xóa mốc thưởng này?',
-          success: 'Tạo mốc thưởng thành công!',
-          delete: 'Xóa mốc thưởng thành công.',
+          success: {
+            create: 'Tạo mốc thưởng thành công!',
+            delete: 'Xóa mốc thưởng thành công.',
           },
           error: {
             load: 'Không thể tải phần thưởng điểm danh.',

@@ -184,7 +184,7 @@ const ProfilePage: React.FC = () => {
     // --- DELETE POST ---
     const handleDeletePost = async (postId: string) => {
         if (!session) return;
-        if (!confirm("Bạn có chắc chắn muốn xóa bài viết này không?")) return;
+        if (!confirm(t('creator.myCreations.delete.confirm') || "Bạn có chắc chắn muốn xóa bài viết này không?")) return;
 
         try {
             const res = await fetch('/.netlify/functions/delete-post', {
@@ -200,7 +200,7 @@ const ProfilePage: React.FC = () => {
             if (!res.ok) throw new Error(data.error);
 
             setPosts(prev => prev.filter(p => p.id !== postId));
-            showToast("Đã xóa bài viết.", "success");
+            showToast(t('creator.myCreations.delete.success'), "success");
         } catch (e: any) {
             showToast(e.message, "error");
         }

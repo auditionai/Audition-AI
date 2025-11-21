@@ -36,6 +36,16 @@ const PricingCard: React.FC<{ pkg: CreditPackage; onBuy: () => void; isProcessin
         glowColor = 'shadow-red-500/40';
     }
 
+    // Helper to translate tags safely
+    const getTranslatedTag = (tag: string | null | undefined) => {
+        if (!tag) return null;
+        // Try to get translation from 'creator.buyCredits.tags' map, else fallback to 't(tag)', else raw tag
+        const key = `creator.buyCredits.tags.${tag}`;
+        const translated = t(key);
+        // If translation returns key (missing), use raw tag or simple t(tag)
+        return translated !== key ? translated : t(tag);
+    };
+
     return (
         <div 
             className={`group relative rounded-2xl p-1 transition-all duration-500 hover:-translate-y-2 interactive-3d h-full flex flex-col`}
@@ -52,7 +62,7 @@ const PricingCard: React.FC<{ pkg: CreditPackage; onBuy: () => void; isProcessin
                 {pkg.tag && (
                     <div className="absolute top-0 right-0">
                         <div className="bg-gradient-to-bl from-pink-500 to-purple-600 text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl rounded-tr-xl shadow-md uppercase tracking-wider">
-                            {t(pkg.tag)}
+                            {getTranslatedTag(pkg.tag)}
                         </div>
                     </div>
                 )}
@@ -95,7 +105,7 @@ const PricingCard: React.FC<{ pkg: CreditPackage; onBuy: () => void; isProcessin
                             </>
                         ) : (
                             <>
-                                {pkg.price_vnd.toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US')} đ
+                                {pkg.price_vnd.toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US')} ₫
                             </>
                         )}
                     </button>

@@ -2,6 +2,12 @@
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
 
+// Helper to get VN Date String (YYYY-MM-DD)
+const getVNDateString = (date: Date = new Date()) => {
+    const vietnamTime = new Date(date.getTime() + 7 * 3600 * 1000);
+    return vietnamTime.toISOString().split('T')[0];
+};
+
 const handler: Handler = async (event: HandlerEvent) => {
     const authHeader = event.headers['authorization'];
     if (!authHeader) return { statusCode: 401, body: JSON.stringify({ error: 'Authorization required.' }) };
@@ -12,18 +18,25 @@ const handler: Handler = async (event: HandlerEvent) => {
     // GET: Fetch Wheel Config & User Tickets
     if (event.httpMethod === 'GET') {
         const { data: rewards } = await supabaseAdmin.from('lucky_wheel_rewards').select('*').eq('is_active', true).order('display_order');
-        const { data: userData } = await supabaseAdmin.from('users').select('spin_tickets, last_daily_spin_at').eq('id', user.id).single();
+        const { data: userData } = await supabaseAdmin.from('users').select('spin_tickets, last_daily_spin_at, last_share_app_at').eq('id', user.id).single();
         
-        const today = new Date().toISOString().split('T')[0];
-        const lastSpinDate = userData?.last_daily_spin_at ? userData.last_daily_spin_at.split('T')[0] : null;
+        const today = getVNDateString();
+        
+        // Check Daily Spin
+        const lastSpinDate = userData?.last_daily_spin_at ? getVNDateString(new Date(userData.last_daily_spin_at)) : null;
         const canClaimDaily = lastSpinDate !== today;
+
+        // Check Daily Share Task
+        const lastShareDate = userData?.last_share_app_at ? getVNDateString(new Date(userData.last_share_app_at)) : null;
+        const isShareTaskDone = lastShareDate === today;
 
         return { 
             statusCode: 200, 
             body: JSON.stringify({ 
                 rewards: rewards || [], 
                 tickets: userData?.spin_tickets || 0,
-                canClaimDaily
+                canClaimDaily,
+                isShareTaskDone
             }) 
         };
     }
@@ -34,8 +47,8 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         if (action === 'daily') {
             const { data: userData } = await supabaseAdmin.from('users').select('spin_tickets, last_daily_spin_at').eq('id', user.id).single();
-            const today = new Date().toISOString().split('T')[0];
-            const lastSpinDate = userData?.last_daily_spin_at ? userData.last_daily_spin_at.split('T')[0] : null;
+            const today = getVNDateString();
+            const lastSpinDate = userData?.last_daily_spin_at ? getVNDateString(new Date(userData.last_daily_spin_at)) : null;
 
             if (lastSpinDate === today) {
                 return { statusCode: 400, body: JSON.stringify({ error: 'Already claimed today.' }) };

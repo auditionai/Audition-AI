@@ -11,7 +11,7 @@ interface LuckyWheelModalProps {
 }
 
 // Define states for the task buttons
-type TaskStatus = 'idle' | 'waiting' | 'ready';
+type TaskStatus = 'idle' | 'waiting' | 'ready' | 'done';
 
 const LuckyWheelModal: React.FC<LuckyWheelModalProps> = ({ isOpen, onClose }) => {
     const { user, session, showToast, updateUserProfile } = useAuth();
@@ -41,6 +41,11 @@ const LuckyWheelModal: React.FC<LuckyWheelModalProps> = ({ isOpen, onClose }) =>
                     setRewards(data.rewards || []);
                     setTickets(data.tickets || 0);
                     setCanClaimDaily(data.canClaimDaily);
+                    
+                    // Check if share task is done
+                    if (data.isShareTaskDone) {
+                        setTaskStates(prev => ({ ...prev, 'share_app': 'done' }));
+                    }
                 } catch (e) {
                     console.error(e);
                 }
@@ -150,16 +155,13 @@ const LuckyWheelModal: React.FC<LuckyWheelModalProps> = ({ isOpen, onClose }) =>
 
     // Step 1: User clicks Go -> Open Share -> Start Timer
     const handleTaskStart = (taskType: 'share_app' | 'share_image') => {
-        if (taskStates[taskType] === 'waiting' || taskStates[taskType] === 'ready') return;
+        if (taskStates[taskType] === 'waiting' || taskStates[taskType] === 'ready' || taskStates[taskType] === 'done') return;
 
         if (taskType === 'share_app') {
              const url = encodeURIComponent(window.location.origin);
              window.open(`https://www.facebook.com/sharer/sharer.php?u=${url}`, '_blank');
         }
-        // Note: share_image usually needs a specific image URL, here assuming app share or generic flow
-        // If share_image logic exists elsewhere (e.g. My Creations), this button might just redirect there.
-        // For this component, we simulate the task flow.
-
+        
         // Set waiting state and 10s countdown
         setTaskStates(prev => ({ ...prev, [taskType]: 'waiting' }));
         setCountdowns(prev => ({ ...prev, [taskType]: 10 })); // 10 seconds verification delay
@@ -177,11 +179,18 @@ const LuckyWheelModal: React.FC<LuckyWheelModalProps> = ({ isOpen, onClose }) =>
             if (res.ok) {
                 setTickets(data.tickets);
                 showToast('Đã nhận thêm vé quay!', 'success');
-                // Reset to idle so they can do it again tomorrow (or dependent on backend logic)
-                setTaskStates(prev => ({ ...prev, [taskType]: 'idle' }));
+                if (taskType === 'share_app') {
+                    setTaskStates(prev => ({ ...prev, [taskType]: 'done' }));
+                } else {
+                    // Share image is repeatable per image, so reset to idle
+                    setTaskStates(prev => ({ ...prev, [taskType]: 'idle' }));
+                }
             } else {
                 console.log(data.error);
                 showToast(data.error, 'error');
+                if (data.error.includes('hôm nay')) {
+                     setTaskStates(prev => ({ ...prev, [taskType]: 'done' }));
+                }
             }
         } catch (e) { console.error(e); }
     };
@@ -189,6 +198,14 @@ const LuckyWheelModal: React.FC<LuckyWheelModalProps> = ({ isOpen, onClose }) =>
     const renderTaskButton = (taskType: 'share_app' | 'share_image') => {
         const status = taskStates[taskType] || 'idle';
         const countdown = countdowns[taskType] || 0;
+
+        if (status === 'done') {
+            return (
+                <button disabled className="px-4 py-1.5 bg-white/10 border border-white/10 text-gray-400 text-xs font-bold rounded-lg flex items-center gap-1 cursor-not-allowed">
+                    <i className="ph-fill ph-check-circle"></i> Đã làm hôm nay
+                </button>
+            );
+        }
 
         if (status === 'waiting') {
             return (

@@ -56,6 +56,7 @@ export interface User {
     // NEW: Lucky Wheel
     spin_tickets?: number;
     last_daily_spin_at?: string;
+    last_share_app_at?: string; // NEW: Track daily share app task
 }
 
 export interface AdminManagedUser extends User {

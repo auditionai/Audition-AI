@@ -1046,12 +1046,8 @@
     text-shadow: 0px 1px 0px rgba(255,255,255,0.5);
 }
 
-/* Title 7: Cute Phô Mai Que */
-.shop-title-07 {
-    background: #ffebcd; color: #ff69b4;
-    border: 2px dashed #ff69b4; border-radius: 12px;
-    font-family: 'Comic Sans MS', cursive, sans-serif;
-}
+/* Title 7: Cute Phô Mai Que (REMOVED - Not used in new seed) */
+/* .shop-title-07 { ... } */
 
 /* Title 8: Bóng Tối (Darkness) */
 .shop-title-08 {
@@ -1106,12 +1102,8 @@
     box-shadow: 0 0 10px #ff00cc;
 }
 
-/* Title 15: Yêu Thiên Nhiên */
-.shop-title-15 {
-    background: #f0fff0; color: #228b22;
-    border: 1px solid #32cd32;
-    border-radius: 15px 0 15px 0;
-}
+/* Title 15: Yêu Thiên Nhiên (REMOVED - Not used in new seed) */
+/* .shop-title-15 { ... } */
 
 /* Title 16: Super Idol */
 .shop-title-16 {

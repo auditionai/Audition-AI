@@ -36,18 +36,18 @@ const GameConfigManager: React.FC = () => {
     // Helper to check valid UUID
     const isUUID = (str?: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str || '');
 
-    // --- SEED DEFAULT ITEMS ---
-    const handleSeed = async () => {
-        if (!confirm("Thao tác này sẽ thêm lại toàn bộ vật phẩm mặc định vào Database. Bạn có chắc chắn không?")) return;
+    // --- RESET SHOP ITEMS ---
+    const handleResetShop = async () => {
+        if (!confirm("CẢNH BÁO: Thao tác này sẽ XÓA TOÀN BỘ vật phẩm hiện có trong Database và nạp lại danh sách chuẩn. Bạn có chắc chắn muốn làm mới không?")) return;
         setIsSaving(true);
         try {
-            const res = await fetch('/.netlify/functions/admin-game-config?action=seed', {
+            const res = await fetch('/.netlify/functions/admin-game-config?action=reset', {
                 method: 'POST',
                 headers: { Authorization: `Bearer ${session?.access_token}` }
             });
             const data = await res.json();
             if(!res.ok) throw new Error(data.error);
-            showToast(`Đã khởi tạo ${data.count} vật phẩm mẫu!`, 'success');
+            showToast(data.message || 'Đã làm mới cửa hàng thành công!', 'success');
             refreshConfig();
         } catch(e: any) {
             showToast(e.message, 'error');
@@ -191,7 +191,7 @@ const GameConfigManager: React.FC = () => {
         if (!confirm('Bạn có chắc chắn muốn xóa vĩnh viễn vật phẩm này khỏi Shop?')) return;
         
         if (!isUUID(id)) {
-            showToast("Không thể xóa vật phẩm mặc định từ code. Vui lòng sử dụng tính năng 'Khởi tạo Shop' để chuyển chúng vào Database trước.", "error");
+            showToast("Không thể xóa vật phẩm mặc định từ code. Vui lòng sử dụng tính năng 'Làm Mới Shop' để cập nhật Database.", "error");
             return;
         }
 
@@ -276,21 +276,22 @@ const GameConfigManager: React.FC = () => {
             {/* FRAMES & TITLES LIST VIEW */}
             {(activeSubTab === 'frames' || activeSubTab === 'titles') && (
                 <div>
-                    <div className="flex justify-between mb-4">
-                        <button onClick={() => handleEditCosmetic(null, activeSubTab === 'frames' ? 'frame' : 'title')} className="themed-button-primary px-4 py-2 text-sm">
+                    <div className="flex justify-between mb-4 gap-3">
+                        <button onClick={() => handleEditCosmetic(null, activeSubTab === 'frames' ? 'frame' : 'title')} className="themed-button-primary px-4 py-2 text-sm flex-grow md:flex-grow-0">
                             + Thêm Mới
                         </button>
-                        {(frames.length === 0 && titles.length === 0) && (
-                            <button onClick={handleSeed} disabled={isSaving} className="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg animate-pulse">
-                                {isSaving ? 'Đang khởi tạo...' : '⚡ Khởi Tạo Shop Mẫu'}
-                            </button>
-                        )}
+                        
+                        {/* RESET BUTTON */}
+                        <button onClick={handleResetShop} disabled={isSaving} className="bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg flex items-center gap-2 whitespace-nowrap">
+                            <i className="ph-fill ph-arrow-counter-clockwise"></i>
+                            {isSaving ? 'Đang xử lý...' : 'Làm Mới Shop (Reset)'}
+                        </button>
                     </div>
 
                     {/* Info Alert */}
                     <div className="bg-blue-500/10 border border-blue-500/30 p-3 rounded-lg mb-4 text-xs text-blue-200">
                         <i className="ph-fill ph-info mr-2"></i>
-                        Bạn có thể sửa giá bán và xóa vật phẩm tại đây. Thay đổi sẽ áp dụng ngay lập tức cho tất cả người dùng.
+                        Nếu thấy vật phẩm trùng lặp hoặc lỗi tên, hãy nhấn nút <strong>"Làm Mới Shop"</strong> để xóa sạch dữ liệu cũ và nạp lại danh sách chuẩn.
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[500px] overflow-y-auto custom-scrollbar">

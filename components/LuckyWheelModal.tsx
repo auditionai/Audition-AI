@@ -189,7 +189,7 @@ const LuckyWheelModal: React.FC<LuckyWheelModalProps> = ({ isOpen, onClose }) =>
                         }}></div>
 
                         {/* Render Content (Text/Icons) */}
-                        {wheelSegments.map((item, index) => { // Index is used here for key and color cycling implicitly via map
+                        {wheelSegments.map((item) => { 
                             const rotation = item.rotate + (item.angle / 2); // Center of the slice
                             return (
                                 <div 

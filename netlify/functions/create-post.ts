@@ -4,6 +4,10 @@ import { supabaseAdmin } from './utils/supabaseClient';
 
 const POINTS_PER_POST = 20;
 
+const calculateLevelFromXp = (xp: number): number => {
+    return Math.floor((xp || 0) / 100) + 1;
+};
+
 const handler: Handler = async (event: HandlerEvent) => {
     if (event.httpMethod !== 'POST') {
         return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
@@ -35,6 +39,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         const newPoints = (currentUserData?.weekly_points || 0) + POINTS_PER_POST;
 
         // 2. Create Post
+        // FIX: Removed 'level' from select query, fetch 'xp' instead and calculate level manually
         const { data: postData, error: postError } = await supabaseAdmin
             .from('posts')
             .insert({
@@ -44,7 +49,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             })
             .select(`
                 *,
-                user:users (display_name, photo_url, level, equipped_frame_id, equipped_title_id)
+                user:users (display_name, photo_url, xp, equipped_frame_id, equipped_title_id)
             `)
             .single();
 
@@ -58,11 +63,21 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         if (updateError) throw updateError;
 
+        // 4. Transform user data to include 'level' for frontend compatibility
+        const userData = Array.isArray(postData.user) ? postData.user[0] : postData.user;
+        const processedPost = {
+            ...postData,
+            user: {
+                ...userData,
+                level: calculateLevelFromXp(userData?.xp || 0)
+            }
+        };
+
         return {
             statusCode: 200,
             body: JSON.stringify({
                 success: true,
-                post: postData,
+                post: processedPost,
                 newWeeklyPoints: newPoints,
                 message: `Đăng bài thành công! +${POINTS_PER_POST} Điểm HOT`
             }),

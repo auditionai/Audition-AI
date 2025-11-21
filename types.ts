@@ -337,6 +337,7 @@ export interface Conversation {
     participants: {
         user_id: string;
         user: {
+            id: string;
             display_name: string;
             photo_url: string;
             is_online?: boolean; // Optional for future online status

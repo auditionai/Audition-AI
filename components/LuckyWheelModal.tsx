@@ -44,7 +44,7 @@ const LuckyWheelModal: React.FC<LuckyWheelModalProps> = ({ isOpen, onClose }) =>
 
     const handleSpin = async () => {
         if (tickets <= 0) {
-            showToast('Bạn đã hết vé quay!', 'error');
+            showToast(t('luckyWheel.win.lucky') || 'Bạn đã hết vé quay!', 'error'); // Fallback text
             return;
         }
         if (isSpinning) return;
@@ -65,11 +65,18 @@ const LuckyWheelModal: React.FC<LuckyWheelModalProps> = ({ isOpen, onClose }) =>
             }
 
             // Calculate rotation
+            // Adjust rotation so the pointer (top) lands on the center of the segment
             const segmentAngle = 360 / rewards.length;
             const targetIndex = result.rewardIndex;
             
-            const segmentCenter = (targetIndex * segmentAngle) + (segmentAngle / 2);
-            const finalRotation = 3600 + (360 - segmentCenter); // 10 full spins + alignment
+            // Random visual offset within the segment to make it look natural (+/- 40% of segment)
+            const randomOffset = (Math.random() - 0.5) * (segmentAngle * 0.8);
+            
+            // Calculate angle to rotate TO (subtract target angle from 360 because CSS rotate goes clockwise)
+            // We want the target segment to be at 0deg (top)
+            const targetAngle = targetIndex * segmentAngle;
+            const spins = 5 + Math.floor(Math.random() * 5); // 5 to 10 spins
+            const finalRotation = rotation + (360 * spins) + (360 - targetAngle) + randomOffset;
             
             setRotation(finalRotation);
             
@@ -80,7 +87,7 @@ const LuckyWheelModal: React.FC<LuckyWheelModalProps> = ({ isOpen, onClose }) =>
                 setTickets(result.remainingTickets);
                 updateUserProfile({ diamonds: result.newDiamondCount, xp: result.newXp });
                 
-            }, 5000); // 5s animation
+            }, 5000); // 5s animation matches CSS transition
 
         } catch (e: any) {
             showToast(e.message, 'error');
@@ -98,7 +105,7 @@ const LuckyWheelModal: React.FC<LuckyWheelModalProps> = ({ isOpen, onClose }) =>
             if (res.ok) {
                 setTickets(data.tickets);
                 setCanClaimDaily(false);
-                showToast('Đã nhận vé quay miễn phí!', 'success');
+                showToast(t('luckyWheel.claimed'), 'success');
             } else {
                 showToast(data.error, 'error');
             }
@@ -106,14 +113,11 @@ const LuckyWheelModal: React.FC<LuckyWheelModalProps> = ({ isOpen, onClose }) =>
     };
 
     const handleTask = async (taskType: 'share_app' | 'share_image') => {
-        // Simulate task completion
         if (taskType === 'share_app') {
-            // In real app: Open FB share dialog
              const url = encodeURIComponent(window.location.origin);
              window.open(`https://www.facebook.com/sharer/sharer.php?u=${url}`, '_blank');
         }
         
-        // Call API to verify/claim
         try {
             const res = await fetch('/.netlify/functions/task-reward', {
                 method: 'POST',
@@ -125,140 +129,210 @@ const LuckyWheelModal: React.FC<LuckyWheelModalProps> = ({ isOpen, onClose }) =>
                 setTickets(data.tickets);
                 showToast('Đã nhận thêm vé quay!', 'success');
             } else {
-                showToast(data.error || 'Không thể nhận thưởng.', 'error');
+                // Silent fail or small notice if already claimed
+                console.log(data.error);
             }
         } catch (e) { console.error(e); }
     };
 
+    // Helper for translations with fallback
+    const getTrans = (key: string) => {
+        const text = t(key);
+        return text === key ? key.split('.').pop() : text; // Fallback to last key part if trans missing
+    }
+
     if (!isOpen) return null;
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title={t('luckyWheel.title')}>
-            <div className="flex flex-col md:flex-row gap-8 items-center justify-center min-h-[500px]">
-                {/* Wheel Section */}
-                <div className="relative w-[300px] h-[300px] md:w-[400px] md:h-[400px] flex-shrink-0">
-                    {/* Pointer */}
-                    <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-4 z-20 w-8 h-10 bg-gradient-to-b from-yellow-400 to-red-500" style={{ clipPath: 'polygon(50% 100%, 0 0, 100% 0)' }}></div>
+        <Modal isOpen={isOpen} onClose={onClose} title={getTrans('luckyWheel.title')}>
+            <div className="flex flex-col lg:flex-row gap-8 items-center justify-center lg:min-w-[800px] min-h-[500px] p-4">
+                
+                {/* --- LEFT: THE WHEEL --- */}
+                <div className="relative w-[320px] h-[320px] sm:w-[400px] sm:h-[400px] flex-shrink-0">
+                    {/* Decorative Glow Behind */}
+                    <div className="absolute inset-0 bg-gradient-to-r from-pink-500/30 to-yellow-500/30 rounded-full blur-3xl animate-pulse"></div>
+
+                    {/* Pointer (Arrow) */}
+                    <div className="absolute -top-6 left-1/2 -translate-x-1/2 z-30 filter drop-shadow-lg">
+                        <div className="w-0 h-0 border-l-[20px] border-l-transparent border-r-[20px] border-r-transparent border-t-[30px] border-t-yellow-400 relative">
+                             <div className="absolute -top-[32px] -left-[10px] w-5 h-5 bg-white rounded-full"></div>
+                        </div>
+                    </div>
                     
-                    {/* The Wheel */}
+                    {/* The Rotating Wheel */}
                     <div 
                         ref={wheelRef}
-                        className="w-full h-full rounded-full border-4 border-yellow-500 shadow-[0_0_30px_rgba(234,179,8,0.5)] relative overflow-hidden transition-transform cubic-bezier(0.25, 0.1, 0.25, 1)"
+                        className="w-full h-full rounded-full border-8 border-gray-800 shadow-[0_0_0_4px_#fbbf24,inset_0_0_20px_rgba(0,0,0,0.5)] relative overflow-hidden transition-transform cubic-bezier(0.2, 0.8, 0.3, 1)"
                         style={{ 
                             transform: `rotate(${rotation}deg)`,
-                            transitionDuration: isSpinning ? '5s' : '0s'
+                            transitionDuration: isSpinning ? '5000ms' : '0ms',
+                            background: '#1f2937'
                         }}
                     >
                         {rewards.map((reward, index) => {
-                            const angle = 360 / rewards.length;
-                            const rotate = angle * index;
+                            const count = rewards.length;
+                            const rotationAngle = (360 / count) * index;
+                            const skewAngle = 90 - (360 / count);
+                            
+                            // Colors palette if not provided
+                            const defaultColors = ['#ec4899', '#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ef4444'];
+                            const bgColor = reward.color && reward.color !== '#FF0000' ? reward.color : defaultColors[index % defaultColors.length];
+
                             return (
                                 <div 
                                     key={reward.id}
-                                    className="absolute top-0 left-1/2 w-1/2 h-full origin-left"
+                                    className="absolute top-0 right-0 w-1/2 h-1/2 origin-bottom-left border-l border-white/10"
                                     style={{ 
-                                        transform: `rotate(${rotate}deg)`,
-                                        transformOrigin: 'left center',
+                                        transform: `rotate(${rotationAngle}deg) skewY(-${skewAngle}deg)`,
+                                        background: bgColor,
+                                        boxShadow: 'inset 0 0 20px rgba(0,0,0,0.2)'
                                     }}
                                 >
+                                    {/* Text Container - Counter rotated to be readable */}
                                     <div 
-                                        className="w-full h-full"
-                                        style={{
-                                            background: index % 2 === 0 ? reward.color : `${reward.color}CC`, // Slight variation or custom
-                                            transform: `skewY(-${90 - angle}deg)`, // Only works for specific counts, better use conic-gradient if fully dynamic.
-                                        }}
-                                    >
-                                    </div>
-                                    {/* Label */}
-                                    <div 
-                                        className="absolute top-1/2 left-8 -translate-y-1/2 text-white font-bold text-xs md:text-sm whitespace-nowrap"
+                                        className="absolute bottom-0 left-0 w-full h-full flex flex-col items-center justify-end pb-4"
                                         style={{ 
-                                            transform: `rotate(${angle/2}deg)`, // Center text in wedge
-                                            transformOrigin: 'left center',
-                                            width: '120px',
-                                            textAlign: 'right'
+                                            transform: `skewY(${skewAngle}deg) rotate(${360/count/2}deg)`,
+                                            transformOrigin: 'bottom left' 
                                         }}
                                     >
-                                        {reward.label}
+                                        <span className="text-white font-black text-sm sm:text-base uppercase drop-shadow-md px-8 text-center mb-12 sm:mb-16 rotate-90">
+                                            {reward.label}
+                                        </span>
+                                        {/* Icon based on type */}
+                                        <div className="absolute top-1/2 -translate-y-1/2 rotate-90 translate-x-8">
+                                            {reward.type === 'diamond' && <i className="ph-fill ph-diamonds-four text-2xl text-white drop-shadow-md"></i>}
+                                            {reward.type === 'xp' && <i className="ph-fill ph-star text-2xl text-yellow-200 drop-shadow-md"></i>}
+                                            {reward.type === 'ticket' && <i className="ph-fill ph-ticket text-2xl text-green-200 drop-shadow-md"></i>}
+                                            {reward.type === 'lucky' && <i className="ph-fill ph-clover text-2xl text-gray-200 drop-shadow-md"></i>}
+                                        </div>
                                     </div>
                                 </div>
                             );
                         })}
-                        
-                        {/* Fallback Visual if CSS segments fail: Conic Gradient */}
-                        <div className="absolute inset-0 -z-10 rounded-full" style={{
-                            background: `conic-gradient(
-                                ${rewards.map((r, i) => `${r.color} ${i * (100/rewards.length)}% ${(i+1) * (100/rewards.length)}%`).join(', ')}
-                            )`
-                        }}></div>
                     </div>
 
-                    {/* Center Button */}
-                    <button 
-                        onClick={handleSpin}
-                        disabled={isSpinning || tickets <= 0}
-                        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 rounded-full bg-gradient-to-br from-red-600 to-pink-600 border-4 border-white shadow-xl flex items-center justify-center z-10 hover:scale-105 transition active:scale-95 disabled:opacity-80 disabled:cursor-not-allowed"
-                    >
-                        <span className="font-black text-white text-xs text-center leading-tight">
-                            {isSpinning ? t('luckyWheel.spinning') : t('luckyWheel.spin')}
-                        </span>
-                    </button>
+                    {/* Center Hub */}
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-yellow-300 to-orange-500 rounded-full shadow-[0_0_15px_rgba(245,158,11,0.6)] z-10 flex items-center justify-center border-4 border-white/80">
+                        <button 
+                            onClick={handleSpin}
+                            disabled={isSpinning || tickets <= 0}
+                            className="w-full h-full rounded-full flex items-center justify-center active:scale-95 transition disabled:opacity-80 disabled:cursor-not-allowed group"
+                        >
+                            <span className="font-black text-white text-xs sm:text-sm uppercase leading-tight drop-shadow-md group-hover:animate-pulse">
+                                {isSpinning ? '...' : getTrans('luckyWheel.spin')}
+                            </span>
+                        </button>
+                    </div>
                 </div>
 
-                {/* Controls & Tasks */}
-                <div className="flex-grow w-full max-w-sm space-y-6">
-                    <div className="bg-skin-fill-secondary p-4 rounded-xl border border-skin-border text-center">
-                        <p className="text-skin-muted uppercase text-xs font-bold">{t('luckyWheel.tickets')}</p>
-                        <p className="text-4xl font-black text-yellow-400 my-2">{tickets}</p>
+                {/* --- RIGHT: CONTROLS & TASKS --- */}
+                <div className="flex-grow w-full max-w-md flex flex-col gap-4">
+                    
+                    {/* Ticket Counter */}
+                    <div className="bg-[#1e1b25] border border-yellow-500/30 rounded-2xl p-4 flex justify-between items-center shadow-lg relative overflow-hidden">
+                        <div className="absolute inset-0 bg-gradient-to-r from-yellow-500/5 to-transparent"></div>
+                        <div className="relative z-10">
+                            <p className="text-gray-400 text-xs uppercase font-bold tracking-wider">{getTrans('luckyWheel.tickets')}</p>
+                            <div className="flex items-center gap-2">
+                                <i className="ph-fill ph-ticket text-3xl text-yellow-400"></i>
+                                <span className="text-4xl font-black text-white">{tickets}</span>
+                            </div>
+                        </div>
+                        
                         {canClaimDaily ? (
-                            <button onClick={handleClaimDaily} className="w-full py-2 bg-green-500 hover:bg-green-600 text-white font-bold rounded-lg transition animate-pulse">
-                                {t('luckyWheel.claim')}
+                            <button 
+                                onClick={handleClaimDaily}
+                                className="relative z-10 px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-bold text-xs rounded-lg shadow-lg hover:scale-105 transition animate-pulse"
+                            >
+                                <i className="ph-fill ph-gift mr-1"></i> {getTrans('luckyWheel.claim')}
                             </button>
                         ) : (
-                            <div className="text-xs text-green-400 bg-green-500/10 py-1 rounded">
-                                <i className="ph-fill ph-check-circle"></i> {t('luckyWheel.claimed')}
+                            <div className="relative z-10 px-4 py-2 bg-white/5 border border-white/10 text-gray-400 font-bold text-xs rounded-lg flex items-center gap-1">
+                                <i className="ph-fill ph-check-circle text-green-500"></i> {getTrans('luckyWheel.claimed')}
                             </div>
                         )}
                     </div>
 
-                    <div className="space-y-3">
-                        <h4 className="font-bold text-skin-base flex items-center gap-2">
-                            <i className="ph-fill ph-list-checks text-pink-400"></i>
-                            {t('luckyWheel.tasks.title')}
-                        </h4>
-                        
-                        <div className="bg-skin-fill p-3 rounded-lg flex justify-between items-center border border-skin-border">
-                            <span className="text-sm text-gray-300">{t('luckyWheel.tasks.shareApp')}</span>
-                            <button onClick={() => handleTask('share_app')} className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded">{t('luckyWheel.tasks.go')}</button>
+                    {/* Tasks List */}
+                    <div className="bg-skin-fill-secondary rounded-2xl border border-skin-border overflow-hidden flex-grow">
+                        <div className="bg-white/5 p-3 border-b border-white/5">
+                            <h4 className="font-bold text-skin-base flex items-center gap-2">
+                                <i className="ph-fill ph-list-checks text-pink-400"></i>
+                                {getTrans('luckyWheel.tasks.title')}
+                            </h4>
                         </div>
-                        <div className="bg-skin-fill p-3 rounded-lg flex justify-between items-center border border-skin-border">
-                            <span className="text-sm text-gray-300">{t('luckyWheel.tasks.invite')}</span>
-                            {/* Just copy code logic */}
-                            <button onClick={() => { navigator.clipboard.writeText(user?.id?.substring(0,8).toUpperCase() || ''); showToast('Đã sao chép mã!', 'success'); }} className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded">Copy Code</button>
+                        <div className="p-2 space-y-2 max-h-[250px] overflow-y-auto custom-scrollbar">
+                            {/* Task 1 */}
+                            <div className="bg-[#12121A] p-3 rounded-xl flex justify-between items-center border border-white/5 hover:border-pink-500/30 transition group">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 rounded-full bg-blue-600/20 flex items-center justify-center text-blue-400">
+                                        <i className="ph-fill ph-facebook-logo text-lg"></i>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs sm:text-sm font-semibold text-gray-200">{getTrans('luckyWheel.tasks.shareApp')}</p>
+                                        <p className="text-[10px] text-green-400 font-bold">+1 Vé quay</p>
+                                    </div>
+                                </div>
+                                <button onClick={() => handleTask('share_app')} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg shadow-md transition transform active:scale-95">
+                                    {getTrans('luckyWheel.tasks.go')}
+                                </button>
+                            </div>
+
+                            {/* Task 2 */}
+                            <div className="bg-[#12121A] p-3 rounded-xl flex justify-between items-center border border-white/5 hover:border-pink-500/30 transition group">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 rounded-full bg-purple-600/20 flex items-center justify-center text-purple-400">
+                                        <i className="ph-fill ph-users text-lg"></i>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs sm:text-sm font-semibold text-gray-200">{getTrans('luckyWheel.tasks.invite')}</p>
+                                        <p className="text-[10px] text-green-400 font-bold">+3 Vé quay</p>
+                                    </div>
+                                </div>
+                                <button 
+                                    onClick={() => { navigator.clipboard.writeText(user?.id?.substring(0,8).toUpperCase() || ''); showToast('Đã sao chép mã giới thiệu!', 'success'); }} 
+                                    className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-lg shadow-md transition transform active:scale-95"
+                                >
+                                    Copy Code
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* Win Modal Overlay */}
+            {/* --- WINNER MODAL OVERLAY --- */}
             {winningReward && (
-                <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm rounded-2xl animate-fade-in">
-                    <div className="text-center p-8 bg-gradient-to-b from-[#1e1b25] to-black border border-yellow-500/50 rounded-2xl shadow-[0_0_50px_rgba(234,179,8,0.3)] transform scale-110">
-                        <div className="text-6xl mb-4 animate-bounce">
+                <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md rounded-2xl animate-fade-in p-4">
+                    <div className="text-center p-8 bg-gradient-to-b from-[#1e1b25] to-black border-2 border-yellow-500 rounded-2xl shadow-[0_0_50px_rgba(234,179,8,0.5)] transform scale-110 max-w-sm w-full relative overflow-hidden">
+                        {/* Confetti Effect (Simple CSS dots) */}
+                        <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
+                            <div className="absolute top-10 left-10 w-2 h-2 bg-red-500 rounded-full animate-ping"></div>
+                            <div className="absolute top-20 right-20 w-3 h-3 bg-yellow-500 rounded-full animate-ping delay-75"></div>
+                            <div className="absolute bottom-10 left-20 w-2 h-2 bg-blue-500 rounded-full animate-ping delay-150"></div>
+                        </div>
+
+                        <div className="text-7xl mb-4 animate-bounce filter drop-shadow-lg">
                             {winningReward.type === 'diamond' ? '💎' : winningReward.type === 'xp' ? '✨' : winningReward.type === 'ticket' ? '🎟️' : '🍀'}
                         </div>
-                        <h3 className="text-2xl font-black text-yellow-400 mb-2">{t('luckyWheel.win.title')}</h3>
-                        <p className="text-white text-lg">
+                        
+                        <h3 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 to-orange-500 mb-2 uppercase tracking-wider">
+                            {getTrans('luckyWheel.win.title')}
+                        </h3>
+                        
+                        <p className="text-gray-300 text-base mb-6">
                             {winningReward.type === 'lucky' 
-                                ? t('luckyWheel.win.lucky') 
-                                : `${t('luckyWheel.win.desc')} ${winningReward.amount} ${t(`luckyWheel.win.${winningReward.type}`)}`
+                                ? getTrans('luckyWheel.win.lucky')
+                                : <>{getTrans('luckyWheel.win.desc')} <span className="text-xl font-bold text-white block mt-1">{winningReward.amount} {winningReward.label}</span></>
                             }
                         </p>
+                        
                         <button 
                             onClick={() => setWinningReward(null)}
-                            className="mt-6 px-8 py-3 bg-yellow-500 hover:bg-yellow-400 text-black font-bold rounded-full transition shadow-lg"
+                            className="w-full py-3 bg-gradient-to-r from-yellow-500 to-orange-600 hover:from-yellow-400 hover:to-orange-500 text-white font-bold rounded-xl transition shadow-lg transform hover:-translate-y-1"
                         >
-                            OK
+                            NHẬN THƯỞNG
                         </button>
                     </div>
                 </div>

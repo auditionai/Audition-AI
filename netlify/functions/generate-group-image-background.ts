@@ -4,8 +4,38 @@ import { GoogleGenAI, Modality } from "@google/genai";
 import { supabaseAdmin } from './utils/supabaseClient';
 import { Buffer } from 'buffer';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import Jimp from 'jimp';
 
 const XP_PER_CHARACTER = 5;
+
+// Watermark Function (Duplicate from generate-image for consistency in worker)
+const addWatermark = async (imageBuffer: Buffer): Promise<Buffer> => {
+    try {
+        const image = await (Jimp as any).read(imageBuffer);
+        const font = await (Jimp as any).loadFont((Jimp as any).FONT_SANS_32_WHITE);
+        const width = image.getWidth();
+        const height = image.getHeight();
+        
+        const text = "Created by Audition AI";
+        const textWidth = (Jimp as any).measureText(font, text);
+        const textHeight = (Jimp as any).measureTextHeight(font, text, width);
+        
+        const margin = 20;
+        const x = width - textWidth - margin;
+        const y = height - textHeight - margin;
+
+        const bgImage = new (Jimp as any)(textWidth + 20, textHeight + 10, '#000000');
+        bgImage.opacity(0.5);
+        
+        image.composite(bgImage, x - 10, y - 5);
+        image.print(font, x, y, text);
+
+        return await image.getBufferAsync((Jimp as any).MIME_PNG);
+    } catch (error) {
+        console.error("Failed to add watermark in group worker:", error);
+        return imageBuffer;
+    }
+};
 
 const failJob = async (jobId: string, reason: string, userId: string, cost: number) => {
     console.error(`[WORKER] Failing job ${jobId}: ${reason}`);
@@ -65,7 +95,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         payload = jobPromptData.payload;
         userId = jobData.user_id;
 
-        const { characters, referenceImage, prompt, style, aspectRatio, model: selectedModel, imageSize = '1K', useSearch = false } = payload;
+        const { characters, referenceImage, prompt, style, aspectRatio, model: selectedModel, imageSize = '1K', useSearch = false, removeWatermark = false } = payload;
         const numCharacters = characters.length;
         
         // Sync this cost logic with generate-group-image.ts
@@ -76,6 +106,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             else baseCost = 10;
         }
         totalCost = baseCost + numCharacters;
+        if (removeWatermark) totalCost += 1;
 
         const { data: apiKeyData, error: apiKeyError } = await supabaseAdmin.from('api_keys').select('id, key_value').eq('status', 'active').order('usage_count', { ascending: true }).limit(1).single();
         if (apiKeyError || !apiKeyData) throw new Error('Hết tài nguyên AI. Vui lòng thử lại sau.');
@@ -208,8 +239,14 @@ const handler: Handler = async (event: HandlerEvent) => {
         const finalImageBase64 = finalImagePart.inlineData.data;
         const finalImageMimeType = finalImagePart.inlineData.mimeType;
 
+        // --- WATERMARK LOGIC ---
+        let imageBuffer = Buffer.from(finalImageBase64, 'base64');
+        if (!removeWatermark) {
+            imageBuffer = await addWatermark(imageBuffer);
+        }
+        // --- END WATERMARK LOGIC ---
+
         const s3Client = new S3Client({ region: "auto", endpoint: process.env.R2_ENDPOINT!, credentials: { accessKeyId: process.env.R2_ACCESS_KEY_ID!, secretAccessKey: process.env.R2_SECRET_ACCESS_KEY! }});
-        const imageBuffer = Buffer.from(finalImageBase64, 'base64');
         const fileName = `${userId}/group/${Date.now()}.${finalImageMimeType.split('/')[1] || 'png'}`;
         
         await (s3Client as any).send(new PutObjectCommand({ Bucket: process.env.R2_BUCKET_NAME!, Key: fileName, Body: imageBuffer, ContentType: finalImageMimeType }));

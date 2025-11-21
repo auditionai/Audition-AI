@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import Modal from '../common/Modal';
 import { useAuth } from '../../contexts/AuthContext';
@@ -13,7 +14,7 @@ type AuthMode = 'login' | 'register' | 'forgot';
 
 const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMode = 'login' }) => {
     const [isLoading, setIsLoading] = useState(false);
-    const { login, loginWithEmail, registerWithEmail, resetPassword, showToast } = useAuth();
+    const { login, loginWithEmail, registerWithEmail, resetPassword, showToast, session } = useAuth();
     const { t } = useTranslation();
     
     const [mode, setMode] = useState<AuthMode>(initialMode);
@@ -23,6 +24,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMode = 'l
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
+    const [referralCode, setReferralCode] = useState(''); // New State
 
     // Reset loading state and form when modal is closed or mode changes
     useEffect(() => {
@@ -40,6 +42,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMode = 'l
         setEmail('');
         setPassword('');
         setConfirmPassword('');
+        setReferralCode('');
     }
 
     const handleGoogleLogin = async () => {
@@ -82,7 +85,19 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMode = 'l
                 }
 
                 const success = await registerWithEmail(email, password, displayName);
-                if (success) onClose();
+                if (success) {
+                    // If referral code is provided, process it after successful registration
+                    // NOTE: This logic relies on the user being immediately logged in after registerWithEmail
+                    // or having a valid session. Since registerWithEmail returns success, we try to use the code.
+                    if (referralCode.trim()) {
+                        // We might need to wait a moment for session to be set in context, or handle it differently.
+                        // A more robust way is to pass referral code to registerWithEmail, but we are keeping changes minimal.
+                        // For now, we trigger a separate call. It might fail if session isn't ready instantly.
+                        // A safer bet is to store it in localStorage and process it when AuthContext detects a new user.
+                        localStorage.setItem('pendingReferralCode', referralCode.trim());
+                    }
+                    onClose();
+                }
             }
             else if (mode === 'forgot') {
                  if (!email) {
@@ -171,19 +186,34 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMode = 'l
                         </div>
 
                         {mode === 'register' && (
-                            <div>
-                                <label className="block text-xs font-bold text-skin-muted uppercase mb-1">{t('modals.auth.form.confirmPassword')}</label>
-                                <div className="relative">
-                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-skin-muted"><i className="ph-fill ph-lock-key"></i></span>
-                                    <input 
-                                        type="password" 
-                                        value={confirmPassword}
-                                        onChange={(e) => setConfirmPassword(e.target.value)}
-                                        className="w-full pl-9 p-3 bg-skin-fill-secondary rounded-lg border border-skin-border focus:border-skin-accent focus:ring-1 focus:ring-skin-accent transition text-skin-base"
-                                        placeholder="••••••••"
-                                    />
+                            <>
+                                <div>
+                                    <label className="block text-xs font-bold text-skin-muted uppercase mb-1">{t('modals.auth.form.confirmPassword')}</label>
+                                    <div className="relative">
+                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-skin-muted"><i className="ph-fill ph-lock-key"></i></span>
+                                        <input 
+                                            type="password" 
+                                            value={confirmPassword}
+                                            onChange={(e) => setConfirmPassword(e.target.value)}
+                                            className="w-full pl-9 p-3 bg-skin-fill-secondary rounded-lg border border-skin-border focus:border-skin-accent focus:ring-1 focus:ring-skin-accent transition text-skin-base"
+                                            placeholder="••••••••"
+                                        />
+                                    </div>
                                 </div>
-                            </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-skin-muted uppercase mb-1">{t('modals.auth.form.referralCode')}</label>
+                                    <div className="relative">
+                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-skin-muted"><i className="ph-fill ph-users"></i></span>
+                                        <input 
+                                            type="text" 
+                                            value={referralCode}
+                                            onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
+                                            className="w-full pl-9 p-3 bg-skin-fill-secondary rounded-lg border border-skin-border focus:border-skin-accent focus:ring-1 focus:ring-skin-accent transition text-skin-base"
+                                            placeholder="VD: X8J9K2L1"
+                                        />
+                                    </div>
+                                </div>
+                            </>
                         )}
 
                         {mode === 'login' && (

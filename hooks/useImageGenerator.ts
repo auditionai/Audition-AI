@@ -29,7 +29,8 @@ export const useImageGenerator = () => {
         seed: number | undefined, 
         useUpscaler: boolean,
         imageResolution: string = '1K',
-        useGoogleSearch: boolean = false
+        useGoogleSearch: boolean = false,
+        removeWatermark: boolean = false // Added param
     ) => {
         setIsGenerating(true);
         setProgress(1);
@@ -69,7 +70,8 @@ export const useImageGenerator = () => {
                     seed, 
                     useUpscaler,
                     imageSize: imageResolution,
-                    useGoogleSearch
+                    useGoogleSearch,
+                    removeWatermark // Pass to backend
                 }),
                 signal: abortControllerRef.current.signal,
             });

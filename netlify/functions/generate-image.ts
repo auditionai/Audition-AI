@@ -7,6 +7,7 @@ import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import Jimp from 'jimp';
 
 const COST_UPSCALE = 1;
+const COST_REMOVE_WATERMARK = 1; // Cost for removing watermark
 const XP_PER_GENERATION = 10;
 
 /**
@@ -54,6 +55,36 @@ const processImageForGemini = async (imageDataUrl: string | null, targetAspectRa
     }
 };
 
+// Add Watermark Function
+const addWatermark = async (imageBuffer: Buffer): Promise<Buffer> => {
+    try {
+        const image = await (Jimp as any).read(imageBuffer);
+        const font = await (Jimp as any).loadFont((Jimp as any).FONT_SANS_32_WHITE);
+        const width = image.getWidth();
+        const height = image.getHeight();
+        
+        const text = "Created by Audition AI";
+        const textWidth = (Jimp as any).measureText(font, text);
+        const textHeight = (Jimp as any).measureTextHeight(font, text, width);
+        
+        const margin = 20;
+        const x = width - textWidth - margin;
+        const y = height - textHeight - margin;
+
+        // Add a subtle semi-transparent background block behind text for readability
+        const bgImage = new (Jimp as any)(textWidth + 20, textHeight + 10, '#000000');
+        bgImage.opacity(0.5);
+        
+        image.composite(bgImage, x - 10, y - 5);
+        image.print(font, x, y, text);
+
+        return await image.getBufferAsync((Jimp as any).MIME_PNG);
+    } catch (error) {
+        console.error("Failed to add watermark:", error);
+        return imageBuffer; // Return original if watermark fails
+    }
+};
+
 
 const handler: Handler = async (event: HandlerEvent) => {
     const s3Client = new S3Client({
@@ -82,12 +113,13 @@ const handler: Handler = async (event: HandlerEvent) => {
         const { 
             prompt, apiModel, characterImage, faceReferenceImage, styleImage, 
             aspectRatio, negativePrompt, seed, useUpscaler,
-            imageSize = '1K', useGoogleSearch = false
+            imageSize = '1K', useGoogleSearch = false,
+            removeWatermark = false // Get param
         } = body;
 
         if (!prompt || !apiModel) return { statusCode: 400, body: JSON.stringify({ error: 'Prompt and apiModel are required.' }) };
         
-        // COST CALCULATION (UPDATED)
+        // COST CALCULATION
         let baseCost = 1;
         const isProModel = apiModel === 'gemini-3-pro-image-preview';
 
@@ -97,7 +129,10 @@ const handler: Handler = async (event: HandlerEvent) => {
              else if (imageSize === '2K') baseCost = 15;
              else baseCost = 10; // 1K Base
         }
-        const totalCost = baseCost + (useUpscaler ? COST_UPSCALE : 0);
+        
+        let totalCost = baseCost;
+        if (useUpscaler) totalCost += COST_UPSCALE;
+        if (removeWatermark) totalCost += COST_REMOVE_WATERMARK; // Charge for watermark removal
 
         const { data: userData, error: userError } = await supabaseAdmin.from('users').select('diamonds, xp').eq('id', user.id).single();
         if (userError || !userData) return { statusCode: 404, body: JSON.stringify({ error: 'User not found.' }) };
@@ -166,11 +201,6 @@ const handler: Handler = async (event: HandlerEvent) => {
             if (useGoogleSearch) {
                 config.tools = [{ googleSearch: {} }]; 
             }
-        } else {
-             // Gemini 2.5 Flash Config
-             // Flash mostly infers aspect ratio from input images or prompt, 
-             // but we can try to enforce strict output via the pre-processing above.
-             // We DO NOT send imageConfig or tools to Flash as it may cause errors.
         }
 
         const response = await ai.models.generateContent({
@@ -188,8 +218,14 @@ const handler: Handler = async (event: HandlerEvent) => {
         finalImageBase64 = imagePartResponse.inlineData.data;
         finalImageMimeType = imagePartResponse.inlineData.mimeType.includes('png') ? 'image/png' : 'image/jpeg';
         
-        // --- R2 Upload ---
-        const imageBuffer = Buffer.from(finalImageBase64, 'base64');
+        // --- R2 Upload & Watermarking Logic ---
+        let imageBuffer = Buffer.from(finalImageBase64, 'base64');
+
+        // Apply Watermark if user did NOT choose to remove it
+        if (!removeWatermark) {
+            imageBuffer = await addWatermark(imageBuffer);
+        }
+
         const fileExtension = finalImageMimeType.split('/')[1] || 'png';
         const fileName = `${user.id}/${Date.now()}.${fileExtension}`;
 
@@ -214,6 +250,8 @@ const handler: Handler = async (event: HandlerEvent) => {
         }
         
         if (useUpscaler) logDescription += " + Upscale";
+        if (removeWatermark) logDescription += " + NoWatermark";
+        
         logDescription += `: ${prompt.substring(0, 20)}...`;
         
         await Promise.all([

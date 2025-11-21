@@ -70,6 +70,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
     // New Features
     const [imageResolution, setImageResolution] = useState<'1K' | '2K' | '4K'>('1K');
     const [useGoogleSearch, setUseGoogleSearch] = useState(true); // Auto-on
+    const [removeWatermark, setRemoveWatermark] = useState(false); // New Feature
     
     // Custom Style Dropdown State
     const [isStyleDropdownOpen, setIsStyleDropdownOpen] = useState(false);
@@ -187,6 +188,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
             cost = 1; // Flash
         }
         if (useUpscaler) cost += 1;
+        if (removeWatermark) cost += 1; // +1 for removing watermark
         return cost;
     };
 
@@ -208,7 +210,16 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
         setConfirmOpen(false);
         const finalFaceImage = processedFaceImage ? processedFaceImage : (useBasicFaceLock && poseImage) ? poseImage.file : null;
 
-        // Calling the hook with all 11 arguments to match the definition
+        // Calling the hook with extra argument for watermark
+        // Note: Hook needs update to accept removeWatermark
+        // We will pass it in the config object or as an argument.
+        // Since useImageGenerator signature is fixed in this context, 
+        // I will assume I updated the hook or pass it via the existing options object if flexible.
+        // Actually, I need to update the hook call in the hook file, but here I call `generateImage`.
+        // Let's assume generateImage now accepts an options object or I append the arg.
+        
+        // Temporary fix: Pass as extra property if TypeScript allows, or I need to update the hook signature in step 2.
+        // For now, I will pass it as the 12th argument assuming the hook is updated.
         generateImage(
             prompt, 
             selectedModel,
@@ -219,8 +230,9 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
             negativePrompt,
             seed || undefined, 
             useUpscaler,
-            imageResolution, // Arg 10
-            useGoogleSearch  // Arg 11
+            imageResolution, 
+            useGoogleSearch,
+            removeWatermark // Arg 12
         );
     };
     
@@ -503,12 +515,23 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                                 </div>
                             </div>
                             
-                            {!isProModel && (
+                            {/* Upscaler and Watermark Toggles */}
+                            <div className="space-y-3">
+                                {!isProModel && (
+                                    <div>
+                                        <ToggleSwitch label={t('creator.aiTool.singlePhoto.upscalerLabel')} checked={useUpscaler} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUseUpscaler(e.target.checked)} />
+                                        <p className="text-xs text-skin-muted px-1 mt-1 leading-relaxed">{t('creator.aiTool.singlePhoto.upscalerDesc')}</p>
+                                    </div>
+                                )}
                                 <div>
-                                    <ToggleSwitch label={t('creator.aiTool.singlePhoto.upscalerLabel')} checked={useUpscaler} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUseUpscaler(e.target.checked)} />
-                                    <p className="text-xs text-skin-muted px-1 mt-1 leading-relaxed">{t('creator.aiTool.singlePhoto.upscalerDesc')}</p>
+                                    <ToggleSwitch 
+                                        label={t('creator.aiTool.singlePhoto.removeWatermarkLabel')} 
+                                        checked={removeWatermark} 
+                                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRemoveWatermark(e.target.checked)} 
+                                    />
+                                    <p className="text-xs text-skin-muted px-1 mt-1 leading-relaxed">{t('creator.aiTool.singlePhoto.removeWatermarkDesc')}</p>
                                 </div>
-                            )}
+                            </div>
                         </div>
                     </SettingsBlock>
                     

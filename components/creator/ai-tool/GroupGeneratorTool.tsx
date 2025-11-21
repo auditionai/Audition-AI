@@ -90,6 +90,7 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
     // New features state
     const [imageResolution, setImageResolution] = useState<'1K' | '2K' | '4K'>('1K');
     const [useGoogleSearch, setUseGoogleSearch] = useState(true);
+    const [removeWatermark, setRemoveWatermark] = useState(false); // New
 
     // New states for generation flow
     const [isGenerating, setIsGenerating] = useState(false);
@@ -252,6 +253,7 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
     // Cost Calculation
     // Base: Pro (1K) = 10, Pro (2K) = 15, Pro (4K) = 20. Flash = 1.
     // + Characters count.
+    // + Watermark removal (+1)
     const getBaseCost = () => {
         if (selectedModel === 'pro') {
             if (imageResolution === '4K') return 20;
@@ -261,7 +263,8 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
         return 1;
     };
     const baseCost = getBaseCost();
-    const totalCost = baseCost + numCharacters;
+    let totalCost = baseCost + numCharacters;
+    if (removeWatermark) totalCost += 1;
 
     const handleGenerateClick = () => {
         if (!referenceImage && !prompt.trim()) {
@@ -380,8 +383,9 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                                 style: selectedStyle,
                                 aspectRatio: aspectRatio,
                                 model: selectedModel,
-                                imageSize: imageResolution, // Pass resolution
-                                useSearch: useGoogleSearch  // Pass search toggle
+                                imageSize: imageResolution, 
+                                useSearch: useGoogleSearch,
+                                removeWatermark // New Param
                             }),
                         });
 
@@ -731,6 +735,15 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                                         </button>
                                     ))}
                                 </div>
+                            </div>
+
+                            <div>
+                                <ToggleSwitch 
+                                    label={t('creator.aiTool.singlePhoto.removeWatermarkLabel')} 
+                                    checked={removeWatermark} 
+                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRemoveWatermark(e.target.checked)} 
+                                />
+                                <p className="text-xs text-skin-muted px-1 mt-1 leading-relaxed">{t('creator.aiTool.singlePhoto.removeWatermarkDesc')}</p>
                             </div>
                         </div>
                     </SettingsBlock>

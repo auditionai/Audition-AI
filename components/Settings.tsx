@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import XPProgressBar from './common/XPProgressBar';
 import Dashboard from './admin/Dashboard';
@@ -16,6 +16,59 @@ import { useTranslation } from '../hooks/useTranslation';
 import UserAvatar from './common/UserAvatar';
 import UserBadge from './common/UserBadge';
 import { useGameConfig } from '../contexts/GameConfigContext'; 
+import RedeemGiftCode from './user/RedeemGiftCode'; // Import existing Redeem component
+
+// Referral Panel
+const ReferralPanel: React.FC = () => {
+    const { user, showToast } = useAuth();
+    const { t } = useTranslation();
+    const [copied, setCopied] = useState(false);
+
+    if (!user) return null;
+
+    // Generate referral code from user ID (first 8 chars, uppercase)
+    const referralCode = user.id.substring(0, 8).toUpperCase();
+
+    const handleCopy = () => {
+        navigator.clipboard.writeText(referralCode);
+        setCopied(true);
+        showToast(t('modals.image.copied'), 'success');
+        setTimeout(() => setCopied(false), 2000);
+    };
+
+    return (
+        <div className="bg-gradient-to-r from-indigo-900/80 to-purple-900/80 border border-indigo-500/30 rounded-2xl shadow-lg p-6 mb-8 max-w-4xl mx-auto relative overflow-hidden">
+            {/* Decorative background */}
+            <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
+            
+            <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
+                <div className="flex-1">
+                    <h3 className="text-2xl font-bold mb-2 text-indigo-300 flex items-center gap-2">
+                        <i className="ph-fill ph-users-three"></i> {t('creator.settings.referral.title')}
+                    </h3>
+                    <p className="text-indigo-100/80 text-sm leading-relaxed">
+                        {t('creator.settings.referral.desc')} <span className="font-bold text-yellow-400">{t('creator.settings.referral.bonus')}</span>.
+                    </p>
+                </div>
+                
+                <div className="flex flex-col items-center gap-2 w-full md:w-auto">
+                    <span className="text-xs text-indigo-300 font-semibold uppercase">{t('creator.settings.referral.myCode')}</span>
+                    <div className="flex items-center gap-2 w-full">
+                        <div className="bg-black/30 border border-indigo-500/30 rounded-lg px-4 py-3 font-mono text-xl font-bold text-white tracking-wider text-center flex-grow md:w-48">
+                            {referralCode}
+                        </div>
+                        <button 
+                            onClick={handleCopy}
+                            className={`p-3 rounded-lg transition-all duration-300 ${copied ? 'bg-green-500 text-white' : 'bg-indigo-500 text-white hover:bg-indigo-600'}`}
+                        >
+                            <i className={`ph-fill ${copied ? 'ph-check' : 'ph-copy'} text-xl`}></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 // Personalization Panel (Dynamic)
 const PersonalizationPanel: React.FC = () => {
@@ -167,12 +220,45 @@ const AdminPanel: React.FC = () => {
 
 // Main Settings Component
 const Settings: React.FC = () => {
-    const { user, session, showToast, updateUserProfile } = useAuth();
+    const { user, session, showToast, updateUserProfile, updateUserDiamonds } = useAuth();
     const { t } = useTranslation();
     const [displayName, setDisplayName] = useState(user?.display_name || '');
     const [isSaving, setIsSaving] = useState(false);
     const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
     
+    // Check for pending referral code on mount
+    useEffect(() => {
+        const checkReferral = async () => {
+            const pendingCode = localStorage.getItem('pendingReferralCode');
+            if (pendingCode && session) {
+                try {
+                    const res = await fetch('/.netlify/functions/process-referral', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            Authorization: `Bearer ${session.access_token}`,
+                        },
+                        body: JSON.stringify({ referralCode: pendingCode }),
+                    });
+                    const data = await res.json();
+                    if (res.ok) {
+                        showToast('Nhập mã giới thiệu thành công! +5 Kim Cương', 'success');
+                        updateUserDiamonds(user!.diamonds + 5);
+                    } else {
+                        // Optional: showToast(data.error, 'error'); 
+                        // Don't show error for "Self referral" or "Already referred" to avoid spamming toast on reload
+                        console.log("Referral process info:", data.error);
+                    }
+                } catch (e) {
+                    console.error("Referral error:", e);
+                } finally {
+                    localStorage.removeItem('pendingReferralCode');
+                }
+            }
+        };
+        checkReferral();
+    }, [session, showToast, updateUserDiamonds, user]);
+
     if (!user) return null;
 
     const handleProfileUpdate = async (e: React.FormEvent) => {
@@ -231,7 +317,7 @@ const Settings: React.FC = () => {
     return (
         <div className="container mx-auto px-4 py-8 animate-fade-in">
             <div className="max-w-4xl mx-auto">
-                <div className="bg-[#12121A]/80 border border-white/10 rounded-2xl shadow-lg p-6 flex flex-col md:flex-row items-center gap-6">
+                <div className="bg-[#12121A]/80 border border-white/10 rounded-2xl shadow-lg p-6 flex flex-col md:flex-row items-center gap-6 mb-8">
                     <div className="relative group flex-shrink-0">
                         {/* Updated to use UserAvatar with current frame and level for auto-selection */}
                         <UserAvatar 
@@ -285,6 +371,12 @@ const Settings: React.FC = () => {
                         </div>
                     </div>
                 </div>
+                
+                {/* Referral Panel */}
+                <ReferralPanel />
+
+                {/* Redeem Giftcode */}
+                <RedeemGiftCode />
                 
                 {/* Cosmetic Settings */}
                 <PersonalizationPanel />

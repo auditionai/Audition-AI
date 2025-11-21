@@ -197,6 +197,8 @@ export const vi = {
         aspectRatioLabel: 'Tỷ lệ khung hình',
         upscalerLabel: 'Làm Nét & Nâng Cấp (+1 💎)',
         upscalerDesc: 'Khi bật, ảnh AI tạo ra sẽ có kết quả siêu nét, chi tiết rõ ràng, và dung lượng ảnh cao hơn.',
+        removeWatermarkLabel: 'Xóa Watermark (+1 💎)',
+        removeWatermarkDesc: 'Tắt đóng dấu bản quyền "Audition AI" trên ảnh.',
         generateButton: 'Bắt đầu sáng tạo',
         sendToSignature: 'Chèn chữ ký',
       },
@@ -355,6 +357,14 @@ export const vi = {
         button: 'Xác nhận',
         processing: 'Đang kiểm tra...',
         error: 'Vui lòng nhập giftcode.',
+      },
+      referral: {
+        title: 'Mời Bạn Bè - Nhận Kim Cương',
+        myCode: 'Mã giới thiệu của bạn:',
+        copy: 'Sao chép',
+        copied: 'Đã chép',
+        desc: 'Chia sẻ mã này cho bạn bè. Khi họ đăng ký và nhập mã, cả hai sẽ nhận ngay',
+        bonus: '5 Kim Cương',
       },
       xpGuide: {
         title: 'Hướng dẫn Thăng Cấp & Kiếm XP',
@@ -659,6 +669,7 @@ export const vi = {
         sendLink: 'Gửi link đặt lại',
         backToLogin: 'Quay lại đăng nhập',
         resetSuccess: 'Đã gửi link đặt lại mật khẩu vào email của bạn!',
+        referralCode: 'Mã giới thiệu (Nếu có)',
       },
       errors: {
         fillAll: 'Vui lòng điền đầy đủ thông tin.',

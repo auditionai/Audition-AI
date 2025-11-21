@@ -1,98 +1,293 @@
 
 import type { Handler, HandlerEvent } from "@netlify/functions";
+import { GoogleGenAI, Modality } from "@google/genai";
 import { supabaseAdmin } from './utils/supabaseClient';
+import { Buffer } from 'buffer';
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import Jimp from 'jimp';
 
-const handler: Handler = async (event: HandlerEvent) => {
-    if (event.httpMethod !== 'POST') {
-        return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
-    }
-    
-    const authHeader = event.headers['authorization'];
-    if (!authHeader) return { statusCode: 401, body: JSON.stringify({ error: 'Authorization header is required.' }) };
-    const token = authHeader.split(' ')[1];
-    if (!token) return { statusCode: 401, body: JSON.stringify({ error: 'Bearer token is missing.' }) };
+const COST_UPSCALE = 1;
+const COST_REMOVE_WATERMARK = 1; // Cost for removing watermark
+const XP_PER_GENERATION = 10;
+
+/**
+ * Pre-processes an image by placing it onto a new canvas of a target aspect ratio.
+ */
+const processImageForGemini = async (imageDataUrl: string | null, targetAspectRatio: string): Promise<string | null> => {
+    if (!imageDataUrl) return null;
 
     try {
-        // FIX: Use Supabase v2 `auth.getUser` as `auth.api` is from v1.
+        const [header, base64] = imageDataUrl.split(',');
+        if (!base64) return null;
+
+        const imageBuffer = Buffer.from(base64, 'base64');
+        const image = await (Jimp as any).read(imageBuffer);
+        const originalWidth = image.getWidth();
+        const originalHeight = image.getHeight();
+
+        const [aspectW, aspectH] = targetAspectRatio.split(':').map(Number);
+        const targetRatio = aspectW / aspectH;
+        const originalRatio = originalWidth / originalHeight;
+
+        let newCanvasWidth: number, newCanvasHeight: number;
+
+        if (targetRatio > originalRatio) {
+            newCanvasHeight = originalHeight;
+            newCanvasWidth = Math.round(originalHeight * targetRatio);
+        } else {
+            newCanvasWidth = originalWidth;
+            newCanvasHeight = Math.round(originalWidth / targetRatio);
+        }
+        
+        const newCanvas = new (Jimp as any)(newCanvasWidth, newCanvasHeight, '#000000');
+        
+        const x = (newCanvasWidth - originalWidth) / 2;
+        const y = (newCanvasHeight - originalHeight) / 2;
+        
+        newCanvas.composite(image, x, y);
+
+        const mime = header.match(/:(.*?);/)?.[1] || (Jimp as any).MIME_PNG;
+        return newCanvas.getBase64Async(mime as any);
+
+    } catch (error) {
+        console.error("Error pre-processing image for Gemini:", error);
+        return imageDataUrl;
+    }
+};
+
+// Add Watermark Function
+const addWatermark = async (imageBuffer: Buffer): Promise<Buffer> => {
+    try {
+        const image = await (Jimp as any).read(imageBuffer);
+        const font = await (Jimp as any).loadFont((Jimp as any).FONT_SANS_32_WHITE);
+        const width = image.getWidth();
+        const height = image.getHeight();
+        
+        const text = "Created by Audition AI";
+        const textWidth = (Jimp as any).measureText(font, text);
+        const textHeight = (Jimp as any).measureTextHeight(font, text, width);
+        
+        const margin = 20;
+        const x = width - textWidth - margin;
+        const y = height - textHeight - margin;
+
+        // Add a subtle semi-transparent background block behind text for readability
+        const bgImage = new (Jimp as any)(textWidth + 20, textHeight + 10, '#000000');
+        bgImage.opacity(0.5);
+        
+        image.composite(bgImage, x - 10, y - 5);
+        image.print(font, x, y, text);
+
+        return await image.getBufferAsync((Jimp as any).MIME_PNG);
+    } catch (error) {
+        console.error("Failed to add watermark:", error);
+        return imageBuffer; // Return original if watermark fails
+    }
+};
+
+
+const handler: Handler = async (event: HandlerEvent) => {
+    const s3Client = new S3Client({
+        region: "auto",
+        endpoint: process.env.R2_ENDPOINT!,
+        credentials: {
+            accessKeyId: process.env.R2_ACCESS_KEY_ID!,
+            secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
+        },
+    });
+
+    try {
+        if (event.httpMethod !== 'POST') {
+            return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
+        }
+        
+        const authHeader = event.headers['authorization'];
+        if (!authHeader) return { statusCode: 401, body: JSON.stringify({ error: 'Authorization header is required.' }) };
+        const token = authHeader.split(' ')[1];
+        if (!token) return { statusCode: 401, body: JSON.stringify({ error: 'Bearer token is missing.' }) };
+
         const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
-        if (authError || !user) {
-            return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized: Invalid token.' }) };
-        }
-        
-        const rawPayload = event.body;
-        if (!rawPayload) {
-            return { statusCode: 400, body: JSON.stringify({ error: 'Request body is missing.' }) };
-        }
-        
-        const payload = JSON.parse(rawPayload);
-        const { jobId, characters, referenceImage, model, imageSize = '1K' } = payload;
-        
-        if (!jobId || !characters || !Array.isArray(characters) || characters.length === 0 || !referenceImage) {
-            return { statusCode: 400, body: JSON.stringify({ error: 'Job ID, reference image, and character data are required.' }) };
-        }
+        if (authError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized: Invalid token.' }) };
 
-        // Cost Calculation:
-        // Base cost depends on model AND resolution for Pro.
-        // Flash: 1 base.
-        // Pro 1K: 2 base. Pro 2K: 3 base. Pro 4K: 4 base.
+        const body = JSON.parse(event.body || '{}');
+        const { 
+            prompt, apiModel, characterImage, faceReferenceImage, styleImage, 
+            aspectRatio, negativePrompt, seed, useUpscaler,
+            imageSize = '1K', useGoogleSearch = false,
+            removeWatermark = false // Get param
+        } = body;
+
+        if (!prompt || !apiModel) return { statusCode: 400, body: JSON.stringify({ error: 'Prompt and apiModel are required.' }) };
+        
+        // COST CALCULATION
         let baseCost = 1;
-        if (model === 'pro') {
-            if (imageSize === '4K') baseCost = 4;
-            else if (imageSize === '2K') baseCost = 3;
-            else baseCost = 2;
-        }
+        const isProModel = apiModel === 'gemini-3-pro-image-preview';
 
-        const totalCost = baseCost + characters.length;
+        if (isProModel) {
+             // Pricing: 1K = 10, 2K = 15, 4K = 20
+             if (imageSize === '4K') baseCost = 20;
+             else if (imageSize === '2K') baseCost = 15;
+             else baseCost = 10; // 1K Base
+        }
+        
+        let totalCost = baseCost;
+        if (useUpscaler) totalCost += COST_UPSCALE;
+        if (removeWatermark) totalCost += COST_REMOVE_WATERMARK; // Charge for watermark removal
 
         const { data: userData, error: userError } = await supabaseAdmin.from('users').select('diamonds, xp').eq('id', user.id).single();
-        if (userError || !userData) {
-            return { statusCode: 404, body: JSON.stringify({ error: 'User not found.' }) };
-        }
-        if (userData.diamonds < totalCost) {
-            return { statusCode: 402, body: JSON.stringify({ error: `Không đủ kim cương. Cần ${totalCost}, bạn có ${userData.diamonds}.` }) };
+        if (userError || !userData) return { statusCode: 404, body: JSON.stringify({ error: 'User not found.' }) };
+        if (userData.diamonds < totalCost) return { statusCode: 402, body: JSON.stringify({ error: `Không đủ kim cương. Cần ${totalCost}, bạn có ${userData.diamonds}.` }) };
+        
+        const { data: apiKeyData, error: apiKeyError } = await supabaseAdmin.from('api_keys').select('id, key_value').eq('status', 'active').order('usage_count', { ascending: true }).limit(1).single();
+        if (apiKeyError || !apiKeyData) return { statusCode: 503, body: JSON.stringify({ error: 'Hết tài nguyên AI. Vui lòng thử lại sau.' }) };
+        
+        const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
+
+        let finalImageBase64: string;
+        let finalImageMimeType: string;
+        
+        let fullPrompt = prompt;
+
+        if (faceReferenceImage) {
+            const faceLockInstruction = `(ABSOLUTE INSTRUCTION: The final image MUST use the exact face, including all features, details, and the complete facial expression, from the provided face reference image. Do NOT alter, modify, stylize, or change the expression of this face in any way. Ignore any conflicting instructions about facial expressions in the user's prompt. The face from the reference image must be perfectly preserved and transplanted onto the generated character.)\n\n`;
+            fullPrompt = faceLockInstruction + fullPrompt;
         }
 
-        const newDiamondCount = userData.diamonds - totalCost;
+        if (negativePrompt) {
+            fullPrompt += ` --no ${negativePrompt}`;
+        }
 
-        // WORKAROUND: Store progress and payload in the 'prompt' column to avoid schema cache issues with 'progress_text'.
-        const initialJobData = {
-            payload: payload,
-            progress: 'Đang khởi tạo tác vụ...'
+        // Gemini (Flash or Pro) logic
+        const parts: any[] = [];
+        
+        // Pre-process ALL images to match target aspect ratio
+        const [
+            processedCharacterImage,
+            processedStyleImage,
+            processedFaceImage,
+        ] = await Promise.all([
+            processImageForGemini(characterImage, aspectRatio),
+            processImageForGemini(styleImage, aspectRatio),
+            processImageForGemini(faceReferenceImage, aspectRatio)
+        ]);
+        
+        // The text prompt is ALWAYS the first part.
+        parts.push({ text: fullPrompt });
+
+        // Helper to add processed image parts
+        const addImagePart = (imageDataUrl: string | null) => {
+            if (!imageDataUrl) return;
+            const [header, base64] = imageDataUrl.split(',');
+            const mimeType = header.match(/:(.*?);/)?.[1] || 'image/png';
+            parts.push({ inlineData: { data: base64, mimeType } });
         };
 
-        const { error: insertError } = await supabaseAdmin.from('generated_images').insert({
-            id: jobId,
-            user_id: user.id,
-            model_used: model === 'pro' ? `Group Studio (Pro ${imageSize})` : 'Group Studio (Flash)',
-            prompt: JSON.stringify(initialJobData), // Store structured data here
-            is_public: false,
-            image_url: 'PENDING',
-        });
+        addImagePart(processedCharacterImage);
+        addImagePart(processedStyleImage);
+        addImagePart(processedFaceImage);
         
-        if (insertError) {
-            if (insertError.code !== '23505') { // Ignore unique_violation for retries
-                throw new Error(`Failed to create job record: ${insertError.message}`);
+        // --- STRICT CONFIGURATION CONSTRUCTION ---
+        const config: any = { 
+            responseModalities: [Modality.IMAGE],
+            seed: seed ? Number(seed) : undefined,
+        };
+
+        if (isProModel) {
+            // Gemini 3 Pro Config
+            config.imageConfig = {
+                aspectRatio: aspectRatio,
+                imageSize: imageSize // "1K", "2K", "4K"
+            };
+            if (useGoogleSearch) {
+                config.tools = [{ googleSearch: {} }]; 
             }
         }
 
+        const response = await ai.models.generateContent({
+            model: apiModel,
+            contents: { parts: parts },
+            config: config,
+        });
+
+        const imagePartResponse = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+        if (!imagePartResponse?.inlineData) {
+            console.error("Gemini Response Error:", JSON.stringify(response, null, 2));
+            throw new Error("AI không thể tạo hình ảnh từ mô tả này. Hãy thử thay đổi prompt hoặc ảnh tham chiếu.");
+        }
+
+        finalImageBase64 = imagePartResponse.inlineData.data;
+        finalImageMimeType = imagePartResponse.inlineData.mimeType.includes('png') ? 'image/png' : 'image/jpeg';
+        
+        // --- R2 Upload & Watermarking Logic ---
+        let imageBuffer = Buffer.from(finalImageBase64, 'base64');
+
+        // Apply Watermark if user did NOT choose to remove it
+        if (!removeWatermark) {
+            imageBuffer = await addWatermark(imageBuffer);
+        }
+
+        const fileExtension = finalImageMimeType.split('/')[1] || 'png';
+        const fileName = `${user.id}/${Date.now()}.${fileExtension}`;
+
+        const putCommand = new PutObjectCommand({
+            Bucket: process.env.R2_BUCKET_NAME!,
+            Key: fileName,
+            Body: imageBuffer,
+            ContentType: finalImageMimeType,
+        });
+        await (s3Client as any).send(putCommand);
+        const publicUrl = `${process.env.R2_PUBLIC_URL}/${fileName}`;
+
+        const newDiamondCount = userData.diamonds - totalCost;
+        const newXp = userData.xp + XP_PER_GENERATION;
+        
+        // Create detailed log description
+        let logDescription = `Tạo ảnh`;
+        if (isProModel) {
+            logDescription += ` (Pro ${imageSize})`;
+        } else {
+            logDescription += ` (Flash)`;
+        }
+        
+        if (useUpscaler) logDescription += " + Upscale";
+        if (removeWatermark) logDescription += " + NoWatermark";
+        
+        logDescription += `: ${prompt.substring(0, 20)}...`;
+        
         await Promise.all([
-            supabaseAdmin.from('users').update({ diamonds: newDiamondCount }).eq('id', user.id),
+            supabaseAdmin.from('users').update({ diamonds: newDiamondCount, xp: newXp }).eq('id', user.id),
+            supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id }),
+            supabaseAdmin.from('generated_images').insert({
+                user_id: user.id,
+                prompt: prompt,
+                image_url: publicUrl,
+                model_used: apiModel,
+                used_face_enhancer: !!faceReferenceImage
+            }),
             supabaseAdmin.from('diamond_transactions_log').insert({
                 user_id: user.id,
                 amount: -totalCost,
-                transaction_type: 'GROUP_IMAGE_GENERATION',
-                description: `Tạo ảnh nhóm ${characters.length} người (${model === 'pro' ? `Pro ${imageSize}` : 'Flash'})`,
-            }),
+                transaction_type: 'IMAGE_GENERATION',
+                description: logDescription
+            })
         ]);
 
         return {
             statusCode: 200,
-            body: JSON.stringify({ message: 'Job record created successfully.', newDiamondCount })
+            body: JSON.stringify({ imageUrl: publicUrl, newDiamondCount, newXp }),
         };
 
     } catch (error: any) {
-        console.error("Generate group image spawner error:", error);
-        return { statusCode: 500, body: JSON.stringify({ error: error.message || 'Server error during task initialization.' }) };
+        console.error("Generate image function error:", error);
+        let clientFriendlyError = 'Lỗi không xác định từ máy chủ.';
+        if (error?.message) {
+            if (error.message.includes('INVALID_ARGUMENT')) {
+                 clientFriendlyError = 'Lỗi cấu hình AI: Vui lòng thử lại hoặc đổi model.';
+            } else {
+                clientFriendlyError = error.message;
+            }
+        }
+        return { statusCode: 500, body: JSON.stringify({ error: clientFriendlyError }) };
     }
 };
 

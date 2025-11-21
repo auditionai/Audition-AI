@@ -197,6 +197,8 @@ export const en = {
         aspectRatioLabel: 'Aspect Ratio',
         upscalerLabel: 'Sharpen & Upscale (+1 💎)',
         upscalerDesc: 'When enabled, the AI-generated image will have super-sharp results, clear details, and a larger file size.',
+        removeWatermarkLabel: 'Remove Watermark (+1 💎)',
+        removeWatermarkDesc: 'Disable the "Audition AI" watermark on your image.',
         generateButton: 'Start Creating',
         sendToSignature: 'Add Signature',
       },
@@ -355,6 +357,14 @@ export const en = {
         button: 'Confirm',
         processing: 'Verifying...',
         error: 'Please enter a giftcode.',
+      },
+      referral: {
+        title: 'Invite Friends - Get Diamonds',
+        myCode: 'Your Referral Code:',
+        copy: 'Copy',
+        copied: 'Copied',
+        desc: 'Share this code with friends. When they sign up and use it, both get',
+        bonus: '5 Diamonds',
       },
       xpGuide: {
         title: 'Level Up & XP Guide',
@@ -661,6 +671,7 @@ export const en = {
         sendLink: 'Send Reset Link',
         backToLogin: 'Back to Sign In',
         resetSuccess: 'Password reset link sent to your email!',
+        referralCode: 'Referral Code (Optional)',
       },
       errors: {
         fillAll: 'Please fill in all fields.',

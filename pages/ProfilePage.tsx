@@ -136,24 +136,42 @@ const ProfilePage: React.FC = () => {
     }
 
     const handlePost = async () => {
-        if (!selectedImageForPost || !user || !supabase) return;
+        if (!selectedImageForPost || !user || !session) return;
         setIsPosting(true);
         try {
-            const { error } = await supabase.from('posts').insert({
-                user_id: user.id,
-                image_url: selectedImageForPost.image_url,
-                caption: caption
+            const response = await fetch('/.netlify/functions/create-post', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${session.access_token}`,
+                },
+                body: JSON.stringify({
+                    imageUrl: selectedImageForPost.image_url,
+                    caption: caption
+                }),
             });
+
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || "Lỗi khi đăng bài");
             
-            if (error) throw error;
+            showToast(data.message, "success");
             
-            showToast("Đăng bài thành công! +20 Điểm HOT", "success");
+            // Update local state immediately
             setIsPostModalOpen(false);
             setCaption('');
             setSelectedImageForPost(null);
-            fetchPosts(); // Refresh feed
             
-            updateUserProfile({ weekly_points: (user.weekly_points || 0) + 20 });
+            // Prepend new post to list without refetching
+            if (data.post) {
+                setPosts(prev => [data.post, ...prev]);
+            } else {
+                fetchPosts(); // Fallback
+            }
+            
+            // Update points in context
+            if (data.newWeeklyPoints !== undefined) {
+                updateUserProfile({ weekly_points: data.newWeeklyPoints });
+            }
 
         } catch (e: any) {
             showToast(e.message || "Lỗi khi đăng bài", "error");

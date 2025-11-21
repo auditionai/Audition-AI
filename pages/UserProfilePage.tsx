@@ -9,7 +9,6 @@ import UserAvatar from '../components/common/UserAvatar';
 import UserBadge from '../components/common/UserBadge';
 import { User, Post } from '../types';
 import BottomNavBar from '../components/common/BottomNavBar';
-import { useTranslation } from '../hooks/useTranslation';
 
 const UserProfilePage: React.FC = () => {
     const { navigate, supabase } = useAuth();

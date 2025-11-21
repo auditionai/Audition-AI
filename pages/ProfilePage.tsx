@@ -7,16 +7,13 @@ import CreatorFooter from '../components/creator/CreatorFooter';
 import ThemeEffects from '../components/themes/ThemeEffects';
 import UserAvatar from '../components/common/UserAvatar';
 import UserBadge from '../components/common/UserBadge';
-import { getRankForLevel } from '../utils/rankUtils';
 import { Post, GalleryImage } from '../types';
 import BottomNavBar from '../components/common/BottomNavBar';
-import { useTranslation } from '../hooks/useTranslation';
 import Modal from '../components/common/Modal';
 
 const ProfilePage: React.FC = () => {
     const { user, session, supabase, showToast, navigate, updateUserProfile } = useAuth();
     const { theme } = useTheme();
-    const { t } = useTranslation();
     const [posts, setPosts] = useState<Post[]>([]);
     const [isLoadingPosts, setIsLoadingPosts] = useState(true);
     
@@ -26,8 +23,6 @@ const ProfilePage: React.FC = () => {
     const [selectedImageForPost, setSelectedImageForPost] = useState<GalleryImage | null>(null);
     const [caption, setCaption] = useState('');
     const [isPosting, setIsPosting] = useState(false);
-
-    const rank = user ? getRankForLevel(user.level) : null;
 
     // Fetch Posts
     const fetchPosts = useCallback(async () => {

@@ -11,7 +11,6 @@ import { useTranslation } from '../../hooks/useTranslation';
 import LanguageSwitcher from '../common/LanguageSwitcher';
 import UserAvatar from '../common/UserAvatar';
 import UserBadge from '../common/UserBadge';
-import LuckyWheelModal from '../LuckyWheelModal';
 
 interface CreatorHeaderProps {
   onTopUpClick: () => void;
@@ -25,7 +24,6 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
   const { t } = useTranslation();
   const [isDropdownOpen, setDropdownOpen] = useState(false);
   const [isNotificationOpen, setNotificationOpen] = useState(false);
-  const [isLuckyWheelOpen, setLuckyWheelOpen] = useState(false);
   const [hasUnread, setHasUnread] = useState(false);
 
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -78,7 +76,6 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
 
   return (
     <header className="fixed top-0 left-0 w-full z-40 bg-skin-fill/80 backdrop-blur-lg border-b border-skin-border">
-      <LuckyWheelModal isOpen={isLuckyWheelOpen} onClose={() => setLuckyWheelOpen(false)} />
       
       <div className="container mx-auto px-4">
         <div className="flex justify-between items-center h-20">
@@ -111,15 +108,6 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
                     <span className="hidden md:inline">{t('creator.header.nav.checkIn')}</span>
                 </button>
                 
-                {/* Lucky Wheel Button */}
-                <button
-                  onClick={() => setLuckyWheelOpen(true)}
-                  className="themed-nav-button text-yellow-400 hover:text-yellow-300"
-                >
-                    <i className="ph-fill ph-spinner text-base animate-spin-slow"></i>
-                    <span className="hidden md:inline font-bold">{t('luckyWheel.title')}</span>
-                </button>
-
                 <button
                   onClick={() => handleNavClick('my-creations')}
                   className={`themed-nav-button creations ${activeTab === 'my-creations' ? 'is-active' : ''}`}
@@ -211,10 +199,6 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
                         </div>
                      </div>
                      <div className="py-1 mt-1">
-                        <button onClick={() => { setLuckyWheelOpen(true); setDropdownOpen(false); }} className="flex items-center gap-3 w-full text-left px-2 py-2 text-sm rounded-md cursor-pointer text-yellow-400 hover:bg-white/10">
-                            <i className="ph-fill ph-spinner"></i>
-                            {t('luckyWheel.title')}
-                        </button>
                         <button onClick={() => handleNavClick('settings')} className={`flex items-center gap-3 w-full text-left px-2 py-2 text-sm rounded-md cursor-pointer ${activeTab === 'settings' ? 'bg-skin-accent/20 text-skin-base' : 'text-skin-muted hover:bg-white/10'}`}>
                             <i className="ph-fill ph-gear"></i>
                             {t('creator.header.userMenu.settings')}

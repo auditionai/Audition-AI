@@ -40,7 +40,7 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
 
-        // 3. Construct Prompt for Gemini 3 Pro
+        // 3. Construct Prompt
         const characterDescriptions = characters.map((c: any) => 
             `- ${c.name}: ${c.description}`
         ).join('\n');
@@ -70,8 +70,9 @@ const handler: Handler = async (event: HandlerEvent) => {
         `;
 
         // 4. Call AI with JSON Schema
+        // Switch to 'gemini-2.5-flash' for speed to avoid 10s Netlify timeout
         const response = await ai.models.generateContent({
-            model: 'gemini-3-pro-preview',
+            model: 'gemini-2.5-flash', 
             contents: {
                 parts: [{ text: prompt }]
             },
@@ -100,7 +101,16 @@ const handler: Handler = async (event: HandlerEvent) => {
             }
         });
 
-        const scriptJson = JSON.parse(response.text || '[]');
+        let scriptJson;
+        try {
+            const text = response.text || '[]';
+            // Clean up any potential markdown formatting even in JSON mode
+            const cleanText = text.replace(/```json|```/g, '').trim();
+            scriptJson = JSON.parse(cleanText);
+        } catch (parseError) {
+            console.error("JSON Parse Error:", parseError);
+            return { statusCode: 500, body: JSON.stringify({ error: 'AI returned invalid format. Please try again.' }) };
+        }
 
         // 5. Deduct Gems
         await supabaseAdmin.rpc('increment_user_diamonds', { user_id_param: user.id, diamond_amount: -COST });

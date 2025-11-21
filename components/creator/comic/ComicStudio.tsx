@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { ComicCharacter, ComicPanel } from '../../../types';
@@ -198,7 +199,15 @@ const ComicStudio: React.FC = () => {
                 body: JSON.stringify({ ...storySettings, characters })
             });
 
-            const data = await res.json();
+            const text = await res.text();
+            let data;
+            try {
+                data = JSON.parse(text);
+            } catch (e) {
+                // If parsing fails, usually it's an HTML 502/500 error from Netlify Timeout
+                throw new Error("Hệ thống đang quá tải hoặc kết nối bị gián đoạn. Vui lòng thử lại!");
+            }
+
             if (!res.ok) throw new Error(data.error);
 
             const generatedPanels = data.script.map((p: any) => ({

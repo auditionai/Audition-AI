@@ -242,7 +242,7 @@ const ComicStudio: React.FC = () => {
                     </div>
 
                     <div className="grid grid-cols-1 gap-6">
-                        {panels.map((panel, index) => (
+                        {panels.map((panel) => (
                             <div key={panel.id} className="bg-skin-fill-secondary border border-skin-border rounded-xl overflow-hidden">
                                 <div className="bg-white/5 p-3 border-b border-white/10 flex justify-between items-center">
                                     <h4 className="font-bold text-white">Khung Tranh #{panel.panel_number}</h4>

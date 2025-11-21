@@ -260,7 +260,7 @@ const BuyCreditsPage: React.FC = () => {
                     ) : (
                         /* Pricing Grid */
                         <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-6 mt-8 max-w-6xl mx-auto pb-12 animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
-                            {packages.map((pkg, index) => (
+                            {packages.map((pkg) => (
                                 <PricingCard 
                                     key={pkg.id} 
                                     pkg={pkg} 

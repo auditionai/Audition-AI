@@ -14,7 +14,7 @@ interface ChatMessageProps {
 }
 
 const ChatMessageItem: React.FC<ChatMessageProps> = ({ message, isOwn, onImageClick, onDeleteMessage }) => {
-    const { user } = useAuth();
+    const { user, navigate } = useAuth();
     const { muteUser } = useChat();
     const { content, type, metadata, is_deleted, created_at } = message;
     const [showMenu, setShowMenu] = useState(false);
@@ -60,13 +60,17 @@ const ChatMessageItem: React.FC<ChatMessageProps> = ({ message, isOwn, onImageCl
         setShowMenu(false);
     };
 
+    const handleProfileClick = () => {
+        navigate(`user/${message.user_id}`);
+    };
+
     return (
         <div 
             className={`flex gap-3 ${isOwn ? 'flex-row-reverse' : 'flex-row'} items-end group relative message-appear`}
             onContextMenu={handleContextMenu}
         >
             {/* Avatar */}
-            <div className="flex-shrink-0 mb-5 relative z-10">
+            <div className="flex-shrink-0 mb-5 relative z-10 cursor-pointer" onClick={handleProfileClick}>
                  <UserAvatar 
                     url={senderAvatar} 
                     alt={senderName} 
@@ -80,8 +84,11 @@ const ChatMessageItem: React.FC<ChatMessageProps> = ({ message, isOwn, onImageCl
             {/* Content Bubble */}
             <div className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'} max-w-[75%] relative`}>
                 {/* Sender Info */}
-                <div className={`flex items-center gap-1 mb-1 ${isOwn ? 'mr-1 flex-row-reverse' : 'ml-1'}`}>
-                        <span className="text-[10px] font-bold text-cyan-300 drop-shadow-sm tracking-wide uppercase">
+                <div 
+                    className={`flex items-center gap-1 mb-1 ${isOwn ? 'mr-1 flex-row-reverse' : 'ml-1'} cursor-pointer`}
+                    onClick={handleProfileClick}
+                >
+                        <span className="text-[10px] font-bold text-cyan-300 drop-shadow-sm tracking-wide uppercase hover:underline">
                         {senderName}
                     </span>
                     <UserBadge titleId={senderTitle} level={senderLevel} className={`scale-75 ${isOwn ? 'origin-right' : 'origin-left'}`} />

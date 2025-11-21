@@ -6,27 +6,20 @@ import { useTranslation } from '../../hooks/useTranslation';
 interface UserBadgeProps {
     titleId?: string;
     className?: string;
-    level?: number; // Added level for auto-equip logic
+    level?: number; // Kept for compatibility but ignored
 }
 
-const UserBadge: React.FC<UserBadgeProps> = ({ titleId, className = '', level }) => {
+const UserBadge: React.FC<UserBadgeProps> = ({ titleId, className = '' }) => {
     const { t } = useTranslation();
-    const { getCosmeticById, getBestCosmeticForLevel } = useGameConfig();
+    const { getCosmeticById } = useGameConfig();
     
     let title = getCosmeticById(titleId, 'title');
 
-    // Auto-equip logic: If no specific title is equipped (or it's the legacy 'newbie'), 
-    // and we know the user's level, find the best title for that level.
-    if ((!titleId || titleId === 'newbie') && level !== undefined) {
-        title = getBestCosmeticForLevel('title', level);
-    }
-
-    // Fallback
-    if (!title) {
-         title = getCosmeticById('newbie', 'title');
-    }
-
-    if (!title) return null;
+    // The previous auto-equip logic using getBestCosmeticForLevel is removed.
+    // If titleId is missing or 'newbie' (default), we generally don't show a special badge unless configured.
+    // However, to keep it clean as requested: "only show if equipped".
+    
+    if (!title || titleId === 'newbie' || !titleId) return null;
 
     // Determine display name: Use translation key if available (default items), otherwise use raw name (custom items)
     const displayName = title.nameKey ? t(title.nameKey) : (title.name || 'Title');

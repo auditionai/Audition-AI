@@ -8,25 +8,20 @@ interface UserAvatarProps {
     frameId?: string;
     size?: 'sm' | 'md' | 'lg' | 'xl';
     className?: string;
-    level?: number; // Added level for auto-equip logic
+    level?: number; // Kept for interface compatibility but ignored for logic
 }
 
-const UserAvatar: React.FC<UserAvatarProps> = ({ url, alt, frameId, size = 'md', className = '', level }) => {
-    const { getCosmeticById, getBestCosmeticForLevel } = useGameConfig();
+const UserAvatar: React.FC<UserAvatarProps> = ({ url, alt, frameId, size = 'md', className = '' }) => {
+    const { getCosmeticById } = useGameConfig();
     
+    // Retrieve the equipped frame. If frameId is null/undefined/default, it returns undefined or the default item
+    // With the new rule: Only show if equipped. 
+    // We assume 'default' or undefined means "no premium frame".
     let frame = getCosmeticById(frameId, 'frame');
     
-    // Auto-equip logic: If no specific frame is equipped (or it's the legacy 'default'), 
-    // and we know the user's level, find the best frame for that level.
-    if ((!frameId || frameId === 'default') && level !== undefined) {
-        frame = getBestCosmeticForLevel('frame', level);
-    }
-    
-    // Fallback if still null (e.g. no level provided)
-    if (!frame) {
-        frame = getCosmeticById('default', 'frame');
-    }
-    
+    // If no specific frame is equipped, we render nothing special (standard avatar)
+    // The previous auto-equip logic based on level is removed here.
+
     // Map size prop to specific pixel width/height style
     const getSizeStyle = () => {
         switch(size) {

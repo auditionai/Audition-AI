@@ -7,24 +7,21 @@ import { useTranslation } from '../hooks/useTranslation';
 import UserAvatar from './common/UserAvatar';
 import UserBadge from './common/UserBadge';
 
+type LeaderboardType = 'creation' | 'level' | 'tycoon' | 'hot';
+
 const Leaderboard: React.FC = () => {
     const [leaderboard, setLeaderboard] = useState<any[]>([]); 
     const [isLoading, setIsLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<'level' | 'weekly'>('level');
-    const { showToast } = useAuth();
+    const [activeTab, setActiveTab] = useState<LeaderboardType>('creation');
+    const { showToast, navigate } = useAuth();
     const { t } = useTranslation();
 
     useEffect(() => {
         const fetchLeaderboard = async () => {
             setIsLoading(true);
-            setLeaderboard([]); // Clear old data to avoid rendering mismatch crash
+            setLeaderboard([]); 
             try {
-                let url = '/.netlify/functions/leaderboard';
-                if (activeTab === 'weekly') {
-                    url += '?type=weekly';
-                }
-                
-                const response = await fetch(url);
+                const response = await fetch(`/.netlify/functions/leaderboard?type=${activeTab}`);
                 if (!response.ok) throw new Error(t('creator.leaderboard.error.load'));
                 const data = await response.json();
                 setLeaderboard(data);
@@ -39,9 +36,21 @@ const Leaderboard: React.FC = () => {
 
     const topThree = leaderboard.slice(0, 3);
     const theRest = leaderboard.slice(3);
-
-    // Reorder topThree for podium display: [2nd, 1st, 3rd]
     const podiumOrder = topThree.length === 3 ? [topThree[1], topThree[0], topThree[2]] : topThree;
+
+    const getMetricLabel = (value: number) => {
+        switch (activeTab) {
+            case 'creation': return `${value.toLocaleString()} Ảnh`;
+            case 'level': return `${value.toLocaleString()} XP`;
+            case 'tycoon': return `${value.toLocaleString()} 💎 tiêu`;
+            case 'hot': return `${value.toLocaleString()} Điểm`;
+            default: return value;
+        }
+    };
+
+    const handleUserClick = (userId: string) => {
+        navigate(`user/${userId}`);
+    };
 
     return (
         <div className="container mx-auto px-4 py-8 animate-fade-in">
@@ -58,18 +67,30 @@ const Leaderboard: React.FC = () => {
             </div>
 
             {/* Tabs */}
-            <div className="flex justify-center gap-4 mb-12">
+            <div className="flex justify-center gap-2 mb-12 flex-wrap">
                 <button 
-                    onClick={() => setActiveTab('level')}
-                    className={`px-6 py-2 rounded-full font-bold transition-all ${activeTab === 'level' ? 'bg-pink-500 text-white shadow-lg shadow-pink-500/30' : 'bg-skin-fill-secondary text-skin-muted hover:bg-white/10'}`}
+                    onClick={() => setActiveTab('creation')}
+                    className={`px-4 py-2 rounded-full font-bold transition-all ${activeTab === 'creation' ? 'bg-pink-500 text-white shadow-lg shadow-pink-500/30' : 'bg-skin-fill-secondary text-skin-muted hover:bg-white/10'}`}
                 >
-                    <i className="ph-fill ph-star mr-2"></i> Đại Gia Cấp Độ
+                    <i className="ph-fill ph-image mr-2"></i> Tạo Ảnh
                 </button>
                 <button 
-                    onClick={() => setActiveTab('weekly')}
-                    className={`px-6 py-2 rounded-full font-bold transition-all ${activeTab === 'weekly' ? 'bg-yellow-500 text-black shadow-lg shadow-yellow-500/30' : 'bg-skin-fill-secondary text-skin-muted hover:bg-white/10'}`}
+                    onClick={() => setActiveTab('level')}
+                    className={`px-4 py-2 rounded-full font-bold transition-all ${activeTab === 'level' ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30' : 'bg-skin-fill-secondary text-skin-muted hover:bg-white/10'}`}
                 >
-                    <i className="ph-fill ph-fire mr-2"></i> Ngôi Sao Tuần
+                    <i className="ph-fill ph-star mr-2"></i> Cấp Độ
+                </button>
+                <button 
+                    onClick={() => setActiveTab('tycoon')}
+                    className={`px-4 py-2 rounded-full font-bold transition-all ${activeTab === 'tycoon' ? 'bg-yellow-500 text-black shadow-lg shadow-yellow-500/30' : 'bg-skin-fill-secondary text-skin-muted hover:bg-white/10'}`}
+                >
+                    <i className="ph-fill ph-crown mr-2"></i> Đại Gia
+                </button>
+                <button 
+                    onClick={() => setActiveTab('hot')}
+                    className={`px-4 py-2 rounded-full font-bold transition-all ${activeTab === 'hot' ? 'bg-red-500 text-white shadow-lg shadow-red-500/30' : 'bg-skin-fill-secondary text-skin-muted hover:bg-white/10'}`}
+                >
+                    <i className="ph-fill ph-fire mr-2"></i> HOT
                 </button>
             </div>
 
@@ -110,30 +131,17 @@ const Leaderboard: React.FC = () => {
                                         }
 
                                         return (
-                                            <div key={user.id} className={`podium-card ${rankClass} ${orderClass}`}>
+                                            <div key={user.id} className={`podium-card ${rankClass} ${orderClass} cursor-pointer transition-transform hover:-translate-y-2`} onClick={() => handleUserClick(user.id)}>
                                                 <div className="podium-rank-icon">{rankIcon}</div>
                                                 <div className="podium-rank-number">{user.rank}</div>
                                                 <div className="mb-4">
                                                     <UserAvatar url={user.photo_url} alt={user.display_name} frameId={user.equipped_frame_id} level={user.level} size="lg" />
                                                 </div>
-                                                <p className="podium-name">{user.display_name}</p>
+                                                <p className="podium-name hover:underline">{user.display_name}</p>
                                                 <UserBadge titleId={user.equipped_title_id} level={user.level} className="mb-2" />
                                                 
-                                                {/* Conditional Stats based on Tab */}
-                                                {activeTab === 'level' ? (
-                                                    <>
-                                                        <p className={`podium-level ${rankDetails.color}`}>{rankDetails.title} - Lv.{user.level}</p>
-                                                        <div className="podium-stats">
-                                                            <span><i className="ph-fill ph-image text-pink-400"></i> {user.creations_count}</span>
-                                                            <span><i className="ph-fill ph-star text-cyan-400"></i> {user.xp.toLocaleString()} XP</span>
-                                                        </div>
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <p className="text-yellow-400 font-black text-lg">{(user.weekly_points || 0).toLocaleString()} Điểm</p>
-                                                        <p className="text-xs text-skin-muted mt-1">HOT Tuần</p>
-                                                    </>
-                                                )}
+                                                <p className="text-yellow-400 font-black text-lg">{getMetricLabel(user.metric_value)}</p>
+                                                <p className={`podium-level ${rankDetails.color} text-xs mt-1`}>{rankDetails.title} - Lv.{user.level}</p>
                                             </div>
                                         );
                                     })}
@@ -146,24 +154,17 @@ const Leaderboard: React.FC = () => {
                                     {theRest.map((user) => {
                                         const rank = getRankForLevel(user.level);
                                         return (
-                                            <div key={user.id} className="leaderboard-item">
+                                            <div key={user.id} className="leaderboard-item cursor-pointer hover:bg-white/5" onClick={() => handleUserClick(user.id)}>
                                                 <div className="leaderboard-rank">{user.rank}</div>
                                                 <UserAvatar url={user.photo_url} alt={user.display_name} frameId={user.equipped_frame_id} level={user.level} size="md" />
                                                 <div className="flex-grow">
                                                     <div className="flex items-center gap-2">
-                                                        <p className={`font-bold text-lg truncate ${rank.color} neon-text-glow`}>{user.display_name}</p>
+                                                        <p className={`font-bold text-lg truncate ${rank.color} neon-text-glow hover:underline`}>{user.display_name}</p>
                                                         <UserBadge titleId={user.equipped_title_id} level={user.level} />
                                                     </div>
-                                                    {activeTab === 'level' ? (
-                                                        <div className="flex items-center gap-4 text-sm text-skin-muted">
-                                                            <span>{t('common.level')} {user.level}</span>
-                                                            <span className="flex items-center gap-1.5"><i className="ph-fill ph-image text-pink-400"></i>{user.creations_count} {t('creator.leaderboard.creations')}</span>
-                                                        </div>
-                                                    ) : (
-                                                        <div className="flex items-center gap-2 text-yellow-400 font-bold">
-                                                            <i className="ph-fill ph-fire"></i> {(user.weekly_points || 0).toLocaleString()} Điểm HOT
-                                                        </div>
-                                                    )}
+                                                    <div className="flex items-center gap-2 text-yellow-400 font-bold">
+                                                        {getMetricLabel(user.metric_value)}
+                                                    </div>
                                                 </div>
                                                 {activeTab === 'level' && (
                                                     <div className="hidden md:block w-1/3">

@@ -13,7 +13,6 @@ interface GameConfigContextType {
     refreshConfig: () => Promise<void>;
     getRankForLevel: (level: number) => Rank;
     getCosmeticById: (id: string | undefined, type: 'frame' | 'title') => CosmeticItem | undefined;
-    getBestCosmeticForLevel: (type: 'frame' | 'title', level: number) => CosmeticItem;
 }
 
 const GameConfigContext = createContext<GameConfigContextType | undefined>(undefined);
@@ -116,30 +115,11 @@ export const GameConfigProvider: React.FC<{ children: ReactNode }> = ({ children
     const getCosmeticById = (id: string | undefined, type: 'frame' | 'title'): CosmeticItem | undefined => {
         const list = type === 'frame' ? frames : titles;
         const found = list.find(item => item.id === id);
-        // Don't fallback here, let the component handle fallback logic based on level
         return found;
     };
 
-    const getBestCosmeticForLevel = (type: 'frame' | 'title', level: number): CosmeticItem => {
-        const list = type === 'frame' ? frames : titles;
-        // Filter items that are unlocked at or below the user's level
-        const unlocked = list.filter(c => (c.unlockCondition?.level || 0) <= level);
-        
-        // Sort by unlock level descending (highest first), then by rarity (mythic > common)
-        const rarityWeight = { mythic: 5, legendary: 4, epic: 3, rare: 2, common: 1 };
-        
-        unlocked.sort((a, b) => {
-            const levelDiff = (b.unlockCondition?.level || 0) - (a.unlockCondition?.level || 0);
-            if (levelDiff !== 0) return levelDiff;
-            return rarityWeight[b.rarity] - rarityWeight[a.rarity];
-        });
-
-        // Return the best one, or the very first default one if nothing found
-        return unlocked[0] || list[0];
-    };
-
     return (
-        <GameConfigContext.Provider value={{ ranks, frames, titles, isLoading, refreshConfig, getRankForLevel, getCosmeticById, getBestCosmeticForLevel }}>
+        <GameConfigContext.Provider value={{ ranks, frames, titles, isLoading, refreshConfig, getRankForLevel, getCosmeticById }}>
             {children}
         </GameConfigContext.Provider>
     );

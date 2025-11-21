@@ -1,8 +1,8 @@
+
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Rank, CosmeticItem } from '../types';
 import { RANKS as DEFAULT_RANKS } from '../constants/ranks';
 import { ALL_COSMETICS as DEFAULT_COSMETICS } from '../constants/cosmetics';
-import { useTranslation } from '../hooks/useTranslation';
 import { translations } from '../locales'; // Import translations for reverse lookup
 
 interface GameConfigContextType {
@@ -22,7 +22,6 @@ export const GameConfigProvider: React.FC<{ children: ReactNode }> = ({ children
     const [frames, setFrames] = useState<CosmeticItem[]>(DEFAULT_COSMETICS.filter(c => c.type === 'frame'));
     const [titles, setTitles] = useState<CosmeticItem[]>(DEFAULT_COSMETICS.filter(c => c.type === 'title'));
     const [isLoading, setIsLoading] = useState(true);
-    const { t } = useTranslation();
 
     const refreshConfig = async () => {
         setIsLoading(true);
@@ -38,18 +37,15 @@ export const GameConfigProvider: React.FC<{ children: ReactNode }> = ({ children
 
                 // 2. Process Cosmetics (Merge with Defaults to keep nameKeys)
                 if (data.cosmetics) {
-                    // Build Reverse Lookup Maps for Titles
-                    // This helps recover the correct translation key (e.g., 'auditionGod') 
-                    // from a database name string (e.g., "Thánh AU" or "AUDITIONGOD")
+                    // Build Reverse Lookup Maps for Titles to fix key issues
                     const enTitles = translations.en.cosmetics.titles as Record<string, string>;
                     const viTitles = translations.vi.cosmetics.titles as Record<string, string>;
                     
                     const titleKeyMap = new Map<string, string>();
                     
-                    // Map "English Name" -> "key"
-                    Object.entries(enTitles).forEach(([key, val]) => titleKeyMap.set(val.toLowerCase(), key));
-                    // Map "Vietnamese Name" -> "key"
-                    Object.entries(viTitles).forEach(([key, val]) => titleKeyMap.set(val.toLowerCase(), key));
+                    // Normalize lookup: "English Name" -> "key", "Vietnamese Name" -> "key"
+                    Object.entries(enTitles).forEach(([key, val]) => titleKeyMap.set(val.toLowerCase().trim(), key));
+                    Object.entries(viTitles).forEach(([key, val]) => titleKeyMap.set(val.toLowerCase().trim(), key));
 
                     // Create a map of DB items for faster lookup by ID
                     const dbMapById = new Map<string, any>(data.cosmetics.map((c: any) => [c.id, c]));
@@ -88,16 +84,13 @@ export const GameConfigProvider: React.FC<{ children: ReactNode }> = ({ children
                                  const key = titleKeyMap.get(lowerName);
                                  if (key) nameKey = `cosmetics.titles.${key}`;
                              } 
-                             // Strategy 2: Heuristic for Uppercase Keys (e.g. CREATOR.COSMETICS.TITLES.AUDITIONGOD)
+                             // Strategy 2: Handle "CODE.KEY" cases if saved in DB erroneously
                              else {
-                                 // Extract last part of dot-notation
-                                 const possibleSuffix = lowerName.split('.').pop(); 
-                                 if (possibleSuffix) {
-                                     // Find actual camelCase key that matches case-insensitively
-                                     const realKey = Object.keys(enTitles).find(k => k.toLowerCase() === possibleSuffix);
-                                     if (realKey) {
-                                         nameKey = `cosmetics.titles.${realKey}`;
-                                     }
+                                 // Attempt to clean up common prefixes if any
+                                 const cleanName = lowerName.replace('creator.cosmetics.titles.', '');
+                                 // Check if this cleaned name exists as a key directly
+                                 if (enTitles[cleanName] || viTitles[cleanName]) {
+                                     nameKey = `cosmetics.titles.${cleanName}`;
                                  }
                              }
                         }
@@ -124,9 +117,6 @@ export const GameConfigProvider: React.FC<{ children: ReactNode }> = ({ children
         }
     };
 
-    // Reload config when language changes is NOT needed for the logic above, 
-    // but we want to ensure the UI updates.
-    // Actually, we only need to load once effectively, UI updates reactively via `t`.
     useEffect(() => {
         refreshConfig();
     }, []);

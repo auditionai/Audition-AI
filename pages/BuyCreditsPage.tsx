@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import CreatorHeader from '../components/creator/CreatorHeader';
 import CreatorFooter from '../components/creator/CreatorFooter';
@@ -39,10 +40,10 @@ const PricingCard: React.FC<{ pkg: CreditPackage; onBuy: () => void; isProcessin
     // Helper to translate tags safely
     const getTranslatedTag = (tag: string | null | undefined) => {
         if (!tag) return null;
-        // Try to get translation from 'creator.buyCredits.tags' map, else fallback to 't(tag)', else raw tag
+        // Try to translate using known tags key
         const key = `creator.buyCredits.tags.${tag}`;
         const translated = t(key);
-        // If translation returns key (missing), use raw tag or simple t(tag)
+        // If key exists in translation map (i.e. not returned as key string), use it
         return translated !== key ? translated : t(tag);
     };
 

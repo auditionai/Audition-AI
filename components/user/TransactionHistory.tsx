@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTranslation } from '../../hooks/useTranslation';
@@ -36,12 +37,12 @@ const TransactionHistory: React.FC = () => {
 
         // Map DB description patterns to localized strings
         if (desc.includes('Mua vật phẩm:') || desc.includes('Mua "')) {
-             // Extract item name if possible or just return localized "Buy Item"
-             return desc.replace(/Mua vật phẩm:|Mua "/, getT('buy') + ': ').replace('"', '');
+             // Extract item name if possible or just return localized "Buy Item" + name
+             return desc.replace(/Mua vật phẩm:|Mua "/, getT('buy') + ': ').replace(/"$/, '');
         }
         if (desc.includes('Nạp tiền') || desc.includes('NAP AUAI')) return getT('topup');
         if (desc.includes('Tạo ảnh nhóm')) return getT('groupGenerate');
-        if (desc.includes('Tạo ảnh')) return getT('generate'); // Matches "Tạo ảnh" but not "Tạo ảnh nhóm" (checked above)
+        if (desc.includes('Tạo ảnh')) return getT('generate'); 
         if (desc.includes('Tách nền')) return getT('bgRemoval');
         if (desc.includes('Chia sẻ')) return getT('share');
         if (desc.includes('Điểm danh')) return getT('checkIn');
@@ -52,6 +53,21 @@ const TransactionHistory: React.FC = () => {
         if (desc.includes('Hoàn tiền')) return getT('refund');
 
         return desc;
+    };
+
+    // Helper for localized date format
+    const formatDate = (dateString: string) => {
+        try {
+            return new Date(dateString).toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        } catch (e) {
+            return dateString;
+        }
     };
 
     return (
@@ -69,7 +85,7 @@ const TransactionHistory: React.FC = () => {
                         <div key={log.id} className="flex justify-between items-center p-3 bg-white/5 rounded-lg border border-white/5 text-sm">
                             <div>
                                 <p className="font-semibold text-white">{translateDescription(log.description)}</p>
-                                <p className="text-xs text-gray-500">{new Date(log.created_at).toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US')}</p>
+                                <p className="text-xs text-gray-500">{formatDate(log.created_at)}</p>
                             </div>
                             <div className={`font-bold ${log.amount >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                                 {log.amount >= 0 ? '+' : ''}{log.amount} 💎

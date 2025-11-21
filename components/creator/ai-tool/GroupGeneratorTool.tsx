@@ -748,6 +748,7 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                                     label={t('creator.aiTool.singlePhoto.removeWatermarkLabel')} 
                                     checked={removeWatermark} 
                                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRemoveWatermark(e.target.checked)} 
+                                    title={t('creator.aiTool.singlePhoto.removeWatermarkDesc')}
                                 />
                                 <p className="text-xs text-skin-muted px-1 mt-1 leading-relaxed">{t('creator.aiTool.singlePhoto.removeWatermarkDesc')}</p>
                             </div>

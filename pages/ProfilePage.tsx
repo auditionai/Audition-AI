@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -367,7 +368,6 @@ const ProfilePage: React.FC = () => {
                                     <div className="grid grid-cols-3 sm:grid-cols-4 gap-4 max-h-[500px] overflow-y-auto custom-scrollbar pr-2">
                                         {inventoryItems.filter(i => i.type === 'frame').map(frame => {
                                             const isActive = user.equipped_frame_id === frame.id;
-                                            // Use the new safe logic: if nameKey is available, translate it. If not, use raw name.
                                             const displayName = frame.nameKey ? t(frame.nameKey) : frame.name;
                                             return (
                                                 <div 

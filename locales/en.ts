@@ -496,6 +496,10 @@ export const en = {
         note: 'If you don\'t receive diamonds after payment, please message my Facebook to check.',
         button: 'Message Facebook',
       },
+      card: {
+        get: 'Get',
+        diamonds: 'Diamonds'
+      }
     },
     adminGallery: {
       title: 'Public Gallery Management',

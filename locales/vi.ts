@@ -658,6 +658,10 @@ export const vi = {
         note: 'Nếu nạp tiền xong chưa thấy tài khoản + kim cương, vui lòng nhắn tin tiếp vào Facebook mình để kiểm tra.',
         button: 'Nhắn tin Facebook',
       },
+      card: {
+        get: 'Nhận',
+        diamonds: 'Kim Cương'
+      }
     },
     adminGallery: {
       title: 'Quản lý Thư viện Công cộng',
@@ -1051,4 +1055,69 @@ export const vi = {
       pixel_art: 'Pixel Art',
     }
   },
+  common: {
+    loading: 'Đang tải...',
+    processing: 'Đang xử lý...',
+    understand: 'Tôi đã hiểu',
+    close: 'Đóng',
+    save: 'Lưu',
+    saving: 'Đang lưu...',
+    edit: 'Sửa',
+    delete: 'Xóa',
+    cancel: 'Hủy',
+    confirm: 'Xác nhận',
+    download: 'Tải xuống',
+    copied: 'Đã sao chép!',
+    level: 'Cấp',
+    creator: 'Người tạo',
+  },
+  themes: {
+    'cyber-punk': 'Neon Dance',
+    'solar-flare': 'Kẹo Ngọt Pastel',
+    'classic-dark': 'Giáng Sinh',
+    'dreamy-galaxy': 'Dải Ngân Hà',
+    'neon-vibe': 'Cung Điện Pha Lê',
+  },
+  changelog: {
+    10: {
+      title: 'Ra mắt Group Studio & Nâng cấp Giao diện',
+      description: 'Thêm tính năng Studio Nhóm cho phép tạo ảnh nhiều nhân vật. Sửa lỗi hiển thị và vị trí nút "Sử dụng PROMPT có sẵn". Thêm tính năng "Tải thêm" cho Thư viện Prompt.',
+    },
+    9: {
+      title: 'Ra mắt Thư viện Prompt & Hỗ trợ tốt hơn',
+      description: 'Tích hợp thư viện prompt từ caulenhau.io.vn, cho phép người dùng tham khảo và sử dụng các prompt chất lượng cao. Thêm kênh hỗ trợ Facebook tại trang nạp thẻ để giải quyết các vấn đề thanh toán.',
+    },
+    8: {
+      title: 'Toàn cầu hóa & Sửa lỗi nghiêm trọng',
+      description: 'Dịch thuật toàn bộ giao diện ứng dụng sang tiếng Anh, hỗ trợ chuyển đổi ngôn ngữ linh hoạt. Sửa lỗi nghiêm trọng gây treo ứng dụng khi khởi động và các vấn đề hiển thị khác.',
+    },
+    7: {
+      title: 'Nâng cấp toàn diện Công cụ Chữ ký',
+      description: 'Sửa lỗi vị trí chữ ký AI, thêm tùy chọn Font chữ, kích thước, in đậm/nghiêng. Mở rộng thư viện hiệu ứng và thêm bộ chọn màu tùy chỉnh để tối đa sự tự do sáng tạo.',
+    },
+    6: {
+      title: 'Cuộc Cách mạng Giao diện',
+      description: 'Lột xác hoàn toàn hệ thống Theme! Mỗi chủ đề giờ đây có bản sắc riêng biệt. Theme mặc định đã được đổi thành "Neon Dance". Thêm tính năng ngẫu nhiên chọn theme mỗi lần truy cập để mang lại trải nghiệm mới mẻ.',
+    },
+    5: {
+      title: 'Siêu Khóa Gương Mặt & Cải thiện UI',
+      description: 'Nâng cấp tính năng Siêu Khóa Gương Mặt (Face ID+) cho độ chính xác cao hơn. Tích hợp công cụ Tách Nền vào tab chính để quy trình làm việc liền mạch và thuận tiện hơn.',
+    },
+    4: {
+      title: 'Hệ thống Giftcode & Ra mắt Thông báo',
+      description: 'Ra mắt hệ thống Giftcode cho phép người dùng nhận quà tặng. Thêm tính năng thông báo cập nhật trên thanh điều hướng. Bổ sung trang quản lý Gallery cho Admin.',
+    },
+    3: {
+      title: 'Admin Dashboard',
+      description: 'Trang thống kê dữ liệu thời gian thực dành cho Admin đã được thêm vào phần Cài đặt. Sửa lỗi hiển thị và múi giờ.',
+    },
+    2: {
+      title: 'Sửa lỗi và Cải thiện hiệu năng',
+      description: 'Tối ưu hóa quy trình làm việc trên các nhánh (branch) và sửa lỗi không hiển thị trang Preview trên Netlify.',
+    },
+    1: {
+      title: 'Ra mắt Tách nền & Khóa gương mặt',
+      description: 'Bổ sung công cụ Tách nền và tính năng "Siêu Khóa Gương Mặt" giúp giữ lại danh tính nhân vật chính xác hơn.',
+    },
+  }
 };

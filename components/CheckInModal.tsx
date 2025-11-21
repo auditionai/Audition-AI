@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import Modal from './common/Modal';
 import { useAuth } from '../contexts/AuthContext';
@@ -66,7 +67,10 @@ const CheckInModal: React.FC<{ isOpen: boolean; onClose: () => void; }> = ({ isO
     const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
     const dayBlanks = Array(firstDayOfMonth).fill(null);
     const dayCells = Array.from({ length: daysInMonth }, (_, i) => i + 1);
-    const weekdays: string[] = t('modals.checkIn.weekdays');
+    
+    // Fix: Safe check for translation array. If missing or string, fallback to default array.
+    const rawWeekdays = t('modals.checkIn.weekdays');
+    const weekdays: string[] = Array.isArray(rawWeekdays) ? rawWeekdays : ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
     
     const hasCheckedInToday = checkIns.has(todayVnString) || (user?.last_check_in_at && getVNDateString(new Date(user.last_check_in_at)) === todayVnString);
 

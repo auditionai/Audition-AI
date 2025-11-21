@@ -178,6 +178,40 @@ export const vi = {
       buy: 'Mua',
       owned: 'Đã sở hữu',
     },
+    buyCredits: {
+      title: 'Nạp Kim Cương',
+      description: 'Đừng quên điểm danh mỗi ngày để nhận Kim Cương miễn phí và các phần quà hấp dẫn khác!',
+      info: {
+        noRefund: 'Không hoàn tiền & không thể chuyển nhượng.',
+        expiry: 'Hạn sử dụng 2 năm',
+        policy: 'Xem chính sách',
+      },
+      buy: 'Mua',
+      processing: 'Đang xử lý...',
+      success: 'Thanh toán thành công! Giao dịch của bạn đang chờ Admin phê duyệt.',
+      cancelled: 'Bạn đã hủy thanh toán cho đơn hàng #{{orderCode}}.',
+      error: {
+        load: 'Không thể tải các gói nạp.',
+        login: 'Vui lòng đăng nhập để nạp kim cương.',
+        createLink: 'Không thể tạo liên kết thanh toán.',
+        parse: 'Lỗi xử lý kết quả thanh toán.',
+      },
+      paymentSupport: {
+        note: 'Nếu bạn đã nạp tiền nhưng tài khoản chưa được cộng kim cương, vui lòng nhắn tin cho chúng tôi qua Facebook để được kiểm tra.',
+        button: 'Nhắn tin Facebook',
+      },
+      card: {
+        get: 'Nhận',
+        diamonds: 'Kim cương',
+        bonus: 'Thưởng'
+      },
+      tags: {
+        'Bán chạy': 'Bán chạy',
+        'Phổ biến': 'Phổ biến',
+        'Ưu đãi': 'Ưu đãi',
+        'Mới': 'Mới'
+      }
+    },
     aiTool: {
       title: 'Audition AI Studio',
       description: 'Nền tảng sáng tạo ảnh 3D AI theo phong cách Audition độc đáo.',
@@ -701,40 +735,6 @@ export const vi = {
         lucky_short: 'May mắn',
         diamond_short: 'Kim Cương',
         ticket_short: 'Vé',
-    }
-  },
-  buyCredits: {
-    title: 'Nạp Kim Cương',
-    description: 'Đừng quên điểm danh mỗi ngày để nhận Kim Cương miễn phí và các phần quà hấp dẫn khác!',
-    info: {
-      noRefund: 'Không hoàn tiền & không thể chuyển nhượng.',
-      expiry: 'Hạn sử dụng 2 năm',
-      policy: 'Xem chính sách',
-    },
-    buy: 'Mua',
-    processing: 'Đang xử lý...',
-    success: 'Thanh toán thành công! Giao dịch của bạn đang chờ Admin phê duyệt.',
-    cancelled: 'Bạn đã hủy thanh toán cho đơn hàng #{{orderCode}}.',
-    error: {
-      load: 'Không thể tải các gói nạp.',
-      login: 'Vui lòng đăng nhập để nạp kim cương.',
-      createLink: 'Không thể tạo liên kết thanh toán.',
-      parse: 'Lỗi xử lý kết quả thanh toán.',
-    },
-    paymentSupport: {
-      note: 'Nếu bạn đã nạp tiền nhưng tài khoản chưa được cộng kim cương, vui lòng nhắn tin cho chúng tôi qua Facebook để được kiểm tra.',
-      button: 'Nhắn tin Facebook',
-    },
-    card: {
-      get: 'Nhận',
-      diamonds: 'Kim cương',
-      bonus: 'Thưởng'
-    },
-    tags: {
-      'Bán chạy': 'Bán chạy',
-      'Phổ biến': 'Phổ biến',
-      'Ưu đãi': 'Ưu đãi',
-      'Mới': 'Mới'
     }
   },
   cosmetics: {

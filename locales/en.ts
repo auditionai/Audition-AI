@@ -178,6 +178,40 @@ export const en = {
       buy: 'Buy',
       owned: 'Owned',
     },
+    buyCredits: {
+      title: 'Top Up Diamonds',
+      description: 'Don\'t forget to check in daily for free Diamonds and other exciting rewards!',
+      info: {
+        noRefund: 'No refunds & non-transferable.',
+        expiry: 'Expires in 2 years',
+        policy: 'View Policy',
+      },
+      buy: 'Buy',
+      processing: 'Processing...',
+      success: 'Payment successful! Your transaction is pending admin approval.',
+      cancelled: 'You have cancelled the payment for order #{{orderCode}}.',
+      error: {
+        load: 'Could not load packages.',
+        login: 'Please log in to top up diamonds.',
+        createLink: 'Could not create payment link.',
+        parse: 'Error processing payment result.',
+      },
+      paymentSupport: {
+        note: 'If you have topped up but your account has not been credited with diamonds, please message us on Facebook to check.',
+        button: 'Message on Facebook',
+      },
+      card: {
+        get: 'Get',
+        diamonds: 'Diamonds',
+        bonus: 'Bonus'
+      },
+      tags: {
+        'Bán chạy': 'Best Seller',
+        'Phổ biến': 'Popular',
+        'Ưu đãi': 'Hot Deal',
+        'Mới': 'New'
+      }
+    },
     aiTool: {
       title: 'Audition AI Studio',
       description: 'The creative platform for 3D AI photos in the unique Audition style.',
@@ -634,40 +668,6 @@ export const en = {
         lucky_short: 'Luck',
         diamond_short: 'Diamonds',
         ticket_short: 'Ticket',
-    }
-  },
-  buyCredits: {
-    title: 'Top Up Diamonds',
-    description: 'Don\'t forget to check in daily for free Diamonds and other exciting rewards!',
-    info: {
-      noRefund: 'No refunds & non-transferable.',
-      expiry: 'Expires in 2 years',
-      policy: 'View Policy',
-    },
-    buy: 'Buy',
-    processing: 'Processing...',
-    success: 'Payment successful! Your transaction is pending admin approval.',
-    cancelled: 'You have cancelled the payment for order #{{orderCode}}.',
-    error: {
-      load: 'Could not load packages.',
-      login: 'Please log in to top up diamonds.',
-      createLink: 'Could not create payment link.',
-      parse: 'Error processing payment result.',
-    },
-    paymentSupport: {
-      note: 'If you have topped up but your account has not been credited with diamonds, please message us on Facebook to check.',
-      button: 'Message on Facebook',
-    },
-    card: {
-      get: 'Get',
-      diamonds: 'Diamonds',
-      bonus: 'Bonus'
-    },
-    tags: {
-      'Bán chạy': 'Best Seller',
-      'Phổ biến': 'Popular',
-      'Ưu đãi': 'Hot Deal',
-      'Mới': 'New'
     }
   },
   cosmetics: {

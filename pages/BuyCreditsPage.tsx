@@ -53,7 +53,7 @@ const PricingCard: React.FC<{ pkg: CreditPackage; onBuy: () => void; isProcessin
                 {pkg.tag && (
                     <div className="absolute top-0 right-0">
                         <div className="bg-gradient-to-bl from-pink-500 to-purple-600 text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl rounded-tr-xl shadow-md uppercase tracking-wider">
-                            {pkg.tag}
+                            {t(pkg.tag)}
                         </div>
                     </div>
                 )}
@@ -65,7 +65,7 @@ const PricingCard: React.FC<{ pkg: CreditPackage; onBuy: () => void; isProcessin
                 </div>
 
                 {/* Content */}
-                <h3 className="text-lg font-bold text-white mb-1">{pkg.name}</h3>
+                <h3 className="text-lg font-bold text-white mb-1">{t(pkg.name)}</h3>
                 
                 <div className="flex items-baseline gap-1 mb-1">
                     <span className={`text-3xl font-black ${accentColor}`}>{totalCredits.toLocaleString()}</span>
@@ -258,7 +258,7 @@ const BuyCreditsPage: React.FC = () => {
                             <div className="w-12 h-12 border-4 border-t-skin-accent border-skin-border rounded-full animate-spin"></div>
                          </div>
                     ) : (
-                        /* Pricing Grid */
+                        /* Pricing Grid */}
                         <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-6 mt-8 max-w-6xl mx-auto pb-12 animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
                             {packages.map((pkg) => (
                                 <PricingCard 

@@ -159,7 +159,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
                     body: JSON.stringify({ 
                         image: base64Image,
-                        model: modelType === 'pro' ? 'gemini-3-pro-image-preview' : 'gemini-2.5-flash-image'
+                        model: modelType === 'pro' ? 'gemini-3-pro-image-preview' : 'gemini-2.5-flash-image' 
                     }),
                 });
                 const result = await response.json();
@@ -209,17 +209,6 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
     const handleConfirmGeneration = () => {
         setConfirmOpen(false);
         const finalFaceImage = processedFaceImage ? processedFaceImage : (useBasicFaceLock && poseImage) ? poseImage.file : null;
-
-        // Calling the hook with extra argument for watermark
-        // Note: Hook needs update to accept removeWatermark
-        // We will pass it in the config object or as an argument.
-        // Since useImageGenerator signature is fixed in this context, 
-        // I will assume I updated the hook or pass it via the existing options object if flexible.
-        // Actually, I need to update the hook call in the hook file, but here I call `generateImage`.
-        // Let's assume generateImage now accepts an options object or I append the arg.
-        
-        // Temporary fix: Pass as extra property if TypeScript allows, or I need to update the hook signature in step 2.
-        // For now, I will pass it as the 12th argument assuming the hook is updated.
         generateImage(
             prompt, 
             selectedModel,
@@ -232,7 +221,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
             useUpscaler,
             imageResolution, 
             useGoogleSearch,
-            removeWatermark // Arg 12
+            removeWatermark 
         );
     };
     
@@ -379,7 +368,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                                             {isProcessingFace ? t('creator.aiTool.singlePhoto.superFaceLockProcessing') : t('creator.aiTool.singlePhoto.superFaceLockActionFlash')}
                                         </button>
                                         <button onClick={() => handleProcessFace('pro')} disabled={isProcessingFace} className="w-full text-xs font-bold py-2 px-2 bg-yellow-500/20 text-yellow-300 border border-yellow-500/50 rounded-lg hover:bg-yellow-500/30 disabled:opacity-50">
-                                            {isProcessingFace ? t('creator.aiTool.singlePhoto.superFaceLockProcessing') : 'Xử lý Pro (10 💎)'}
+                                            {isProcessingFace ? t('creator.aiTool.singlePhoto.superFaceLockProcessing') : t('creator.aiTool.singlePhoto.superFaceLockActionPro')}
                                         </button>
                                     </div>
                                 )}
@@ -403,18 +392,18 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                         title={t('creator.aiTool.singlePhoto.promptTitle')} 
                         instructionKey="prompt" 
                         onInstructionClick={() => openInstructionModal('prompt')}
-                        extraHeaderContent={
-                            <button
+                    >
+                        <div className="relative">
+                             <textarea value={prompt} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setPrompt(e.target.value)} placeholder={t('creator.aiTool.singlePhoto.promptPlaceholder')} className="w-full p-3 bg-black/30 rounded-md border border-gray-600 focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition text-base text-white flex-grow resize-none min-h-[150px] auth-input" />
+                             <button
                                 onClick={() => setIsPromptLibraryOpen(true)}
-                                className="flex items-center gap-1.5 text-xs text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 rounded-lg px-3 py-1.5 font-semibold transition whitespace-nowrap"
+                                className="absolute top-2 right-2 flex items-center gap-1.5 text-xs text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 rounded-full px-3 py-1.5 font-semibold transition"
                                 title={t('modals.promptLibrary.buttonTooltip')}
                             >
                                 <i className="ph-fill ph-scroll"></i>
                                 {t('modals.promptLibrary.button')}
                             </button>
-                        }
-                    >
-                        <textarea value={prompt} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setPrompt(e.target.value)} placeholder={t('creator.aiTool.singlePhoto.promptPlaceholder')} className="w-full p-3 bg-black/30 rounded-md border border-gray-600 focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition text-base text-white flex-grow resize-none min-h-[150px] auth-input" />
+                        </div>
                     </SettingsBlock>
                 </div>
 

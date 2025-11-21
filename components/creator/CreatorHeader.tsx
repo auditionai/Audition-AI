@@ -137,7 +137,7 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
                   className={`themed-nav-button shop ${activeTab === 'shop' ? 'is-active' : ''}`}
                   >
                     <i className="ph-fill ph-storefront text-base"></i>
-                    <span className="hidden md:inline">Cửa Hàng</span>
+                    <span className="hidden md:inline">{t('creator.header.nav.shop')}</span>
                 </button>
 
                 <button
@@ -193,7 +193,7 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
             <button
               onClick={() => handleNavClick('messages')}
               className={`themed-notification-button p-2.5 md:p-2 ${activeTab === 'messages' ? 'text-skin-base' : ''}`}
-              title="Tin nhắn"
+              title={t('creator.header.nav.messages')}
             >
                 <i className="ph-fill ph-chat-centered-text text-xl"></i>
             </button>
@@ -243,7 +243,7 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
                      <div className="py-1 mt-1">
                         <button onClick={() => handleNavClick('profile')} className="flex items-center gap-3 w-full text-left px-2 py-2 text-sm rounded-md cursor-pointer text-skin-base hover:bg-white/10 font-bold">
                             <i className="ph-fill ph-user-circle text-pink-400"></i>
-                            Trang Cá Nhân
+                            {t('creator.header.nav.profile')}
                         </button>
                      </div>
 

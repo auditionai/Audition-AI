@@ -5,6 +5,8 @@ import { resizeImage } from '../../../utils/imageUtils';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import SettingsBlock from '../ai-tool/SettingsBlock';
+import Modal from '../../common/Modal';
+import { COMIC_PREMISES } from '../../../constants/comicPremises';
 
 // --- CONSTANTS ---
 const ART_STYLES = [
@@ -115,6 +117,7 @@ const ComicStudio: React.FC = () => {
     const { session, showToast, updateUserDiamonds } = useAuth();
     const [activeStep, setActiveStep] = useState<1 | 2 | 3>(1); 
     const [isLoading, setIsLoading] = useState(false);
+    const [isPremiseModalOpen, setIsPremiseModalOpen] = useState(false);
     
     // State for Step 1: Setup
     const [characters, setCharacters] = useState<ComicCharacter[]>([]);
@@ -305,6 +308,11 @@ const ComicStudio: React.FC = () => {
         }
     };
 
+    const handleSelectPremise = (premise: string) => {
+        setStorySettings({ ...storySettings, premise });
+        setIsPremiseModalOpen(false);
+    };
+
     return (
         <div className="animate-fade-in h-[calc(100vh-140px)] min-h-[600px] flex flex-col max-w-7xl mx-auto">
             {/* GLOBAL STYLES */}
@@ -331,6 +339,24 @@ const ComicStudio: React.FC = () => {
                     box-shadow: var(--shadow-accent);
                 }
             `}</style>
+
+            <Modal isOpen={isPremiseModalOpen} onClose={() => setIsPremiseModalOpen(false)} title={`Gợi ý cốt truyện: ${storySettings.genre}`}>
+                <div className="max-h-[60vh] overflow-y-auto custom-scrollbar pr-2 space-y-2">
+                    {COMIC_PREMISES[storySettings.genre]?.map((p, idx) => (
+                        <button 
+                            key={idx}
+                            onClick={() => handleSelectPremise(p)}
+                            className="w-full text-left p-3 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 hover:border-pink-500/50 transition-all text-sm text-gray-300 hover:text-white"
+                        >
+                            <span className="font-bold text-pink-400 mr-2">#{idx + 1}</span>
+                            {p}
+                        </button>
+                    ))}
+                    {!COMIC_PREMISES[storySettings.genre] && (
+                        <p className="text-center text-gray-500 italic">Chưa có gợi ý cho thể loại này.</p>
+                    )}
+                </div>
+            </Modal>
 
             {/* Main Contained Box */}
             <div className="flex-grow bg-[#12121A] border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col relative">
@@ -380,9 +406,17 @@ const ComicStudio: React.FC = () => {
                                 </SettingsBlock>
 
                                 <div className="bg-gradient-to-b from-indigo-900/30 to-purple-900/30 p-5 rounded-2xl border border-indigo-500/30 shadow-lg">
-                                    <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
-                                        <i className="ph-fill ph-lightbulb text-indigo-400"></i> Ý Tưởng Cốt Truyện
-                                    </h3>
+                                    <div className="flex justify-between items-center mb-3">
+                                        <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                                            <i className="ph-fill ph-lightbulb text-indigo-400"></i> Ý Tưởng Cốt Truyện
+                                        </h3>
+                                        <button 
+                                            onClick={() => setIsPremiseModalOpen(true)}
+                                            className="text-xs bg-indigo-500/20 hover:bg-indigo-500/40 text-indigo-300 border border-indigo-500/50 px-2 py-1 rounded-full flex items-center gap-1 transition-colors"
+                                        >
+                                            <i className="ph-fill ph-sparkle"></i> Gợi ý mẫu
+                                        </button>
+                                    </div>
                                     <textarea 
                                         className="w-full bg-black/30 border border-white/10 rounded-xl p-4 text-sm text-white focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 transition resize-none placeholder-gray-500" 
                                         rows={6}

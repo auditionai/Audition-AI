@@ -12,12 +12,13 @@ import AnnouncementManager from './admin/AnnouncementManager';
 import ApiKeyManager from './admin/ApiKeyManager';
 import GameConfigManager from './admin/GameConfigManager'; 
 import LuckyWheelManager from './admin/LuckyWheelManager'; 
+import SystemMessageManager from './admin/SystemMessageManager'; // NEW IMPORT
 import { resizeImage } from '../utils/imageUtils';
 import { useTranslation } from '../hooks/useTranslation';
 import UserAvatar from './common/UserAvatar';
 import UserBadge from './common/UserBadge';
 import RedeemGiftCode from './user/RedeemGiftCode'; 
-import TransactionHistory from './user/TransactionHistory'; // ADDED THIS
+import TransactionHistory from './user/TransactionHistory';
 
 // Referral Panel
 const ReferralPanel: React.FC = () => {
@@ -74,7 +75,7 @@ const ReferralPanel: React.FC = () => {
 // Admin Panel
 const AdminPanel: React.FC = () => {
     const { t } = useTranslation();
-    type AdminTab = 'dashboard' | 'transactions' | 'users' | 'gift_codes' | 'packages' | 'rewards' | 'announcements' | 'api_keys' | 'game_config' | 'lucky_wheel';
+    type AdminTab = 'dashboard' | 'transactions' | 'users' | 'gift_codes' | 'packages' | 'rewards' | 'announcements' | 'api_keys' | 'game_config' | 'lucky_wheel' | 'broadcast';
     const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
 
     const renderContent = () => {
@@ -89,6 +90,7 @@ const AdminPanel: React.FC = () => {
             case 'api_keys': return <ApiKeyManager />;
             case 'game_config': return <GameConfigManager />;
             case 'lucky_wheel': return <LuckyWheelManager />;
+            case 'broadcast': return <SystemMessageManager />; // NEW
             default: return <p className="text-center text-gray-500 py-8">Chức năng này đang được phát triển.</p>;
         }
     };
@@ -98,6 +100,7 @@ const AdminPanel: React.FC = () => {
             <h2 className="text-3xl font-bold mb-6 text-center bg-gradient-to-r from-red-500 to-orange-500 text-transparent bg-clip-text">{t('creator.settings.admin.title')}</h2>
             <div className="flex flex-wrap justify-center gap-2 border-b border-white/10 mb-6 pb-4">
                 <button onClick={() => setActiveTab('dashboard')} className={activeTab === 'dashboard' ? 'admin-tab-active' : 'admin-tab'}>{t('creator.settings.admin.tabs.dashboard')}</button>
+                <button onClick={() => setActiveTab('broadcast')} className={activeTab === 'broadcast' ? 'admin-tab-active' : 'admin-tab'}><i className="ph-fill ph-megaphone mr-1"></i> Gửi Thông Báo</button>
                 <button onClick={() => setActiveTab('game_config')} className={activeTab === 'game_config' ? 'admin-tab-active' : 'admin-tab'}>Quản Lý Shop</button>
                 <button onClick={() => setActiveTab('lucky_wheel')} className={activeTab === 'lucky_wheel' ? 'admin-tab-active' : 'admin-tab'}>{t('creator.settings.admin.tabs.luckyWheel')}</button>
                 <button onClick={() => setActiveTab('transactions')} className={activeTab === 'transactions' ? 'admin-tab-active' : 'admin-tab'}>{t('creator.settings.admin.tabs.transactions')}</button>

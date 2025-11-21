@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import CreatorHeader from '../components/creator/CreatorHeader';
@@ -22,6 +22,9 @@ const UserProfilePage: React.FC = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [selectedPostForComments, setSelectedPostForComments] = useState<Post | null>(null);
     const [isCreatingChat, setIsCreatingChat] = useState(false);
+
+    // 3D Tilt Effect Ref
+    const cardRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         if (!userId || !supabase) return;
@@ -49,7 +52,6 @@ const UserProfilePage: React.FC = () => {
                     .eq('user_id', userId)
                     .order('created_at', { ascending: false });
                 
-                // Check liked status for current user on these posts
                 if (postsData && user) {
                     const postIds = postsData.map(p => p.id);
                     const { data: likes } = await supabase
@@ -82,13 +84,10 @@ const UserProfilePage: React.FC = () => {
         setIsCreatingChat(true);
 
         try {
-            // Use RPC to get or create conversation
             const { data: conversationId, error } = await supabase
                 .rpc('get_or_create_conversation', { other_user_id: viewUser.id });
 
             if (error) throw error;
-
-            // Navigate to messages page with conversation ID
             navigate(`messages?conversationId=${conversationId}`);
         } catch (e: any) {
             showToast("Không thể tạo cuộc trò chuyện.", "error");
@@ -96,6 +95,19 @@ const UserProfilePage: React.FC = () => {
         } finally {
             setIsCreatingChat(false);
         }
+    };
+
+    const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+        if (!cardRef.current) return;
+        const { left, top, width, height } = cardRef.current.getBoundingClientRect();
+        const x = (e.clientX - left - width / 2) / 20;
+        const y = (e.clientY - top - height / 2) / 20;
+        cardRef.current.style.transform = `rotateY(${x}deg) rotateX(${-y}deg)`;
+    };
+
+    const handleMouseLeave = () => {
+        if (!cardRef.current) return;
+        cardRef.current.style.transform = `rotateY(0deg) rotateX(0deg)`;
     };
 
     if (isLoading) {
@@ -109,81 +121,85 @@ const UserProfilePage: React.FC = () => {
             <ThemeEffects />
             <CreatorHeader onTopUpClick={() => navigate('buy-credits')} activeTab="tool" onNavigate={navigate} onCheckInClick={() => {}} />
             
-            <main className="flex-grow pt-20 container mx-auto px-4 max-w-5xl">
-                {/* Cover Photo Area */}
-                <div className="relative h-48 md:h-64 w-full rounded-b-2xl overflow-hidden mb-12">
-                    <img 
-                        src={viewUser.cover_url || "https://images.unsplash.com/photo-1558591710-4b4a1ae0f04d?q=80&w=2574&auto=format&fit=crop"} 
-                        alt="Cover" 
-                        className="w-full h-full object-cover grayscale hover:grayscale-0 transition duration-500"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-skin-fill via-transparent to-transparent"></div>
-                    
-                    <div className="absolute -bottom-10 left-4 md:left-8 flex items-end gap-4">
-                        <div className="relative">
-                            <UserAvatar 
-                                url={viewUser.photo_url} 
-                                alt={viewUser.display_name} 
-                                frameId={viewUser.equipped_frame_id} 
-                                level={viewUser.level} 
-                                size="xl"
-                                className="border-4 border-skin-fill bg-skin-fill rounded-full"
-                            />
-                        </div>
-                        <div className="mb-12 md:mb-10">
-                            <div className="flex items-center gap-2">
-                                <h1 className="text-2xl md:text-3xl font-black text-white drop-shadow-md">{viewUser.display_name}</h1>
-                                <UserBadge titleId={viewUser.equipped_title_id} level={viewUser.level} />
+            <main className="flex-grow pt-24 container mx-auto px-4 max-w-5xl">
+                
+                {/* 3D Profile Card (View Mode) */}
+                <div className="profile-3d-wrapper" onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave}>
+                    <div className="profile-card-glass" ref={cardRef}>
+                        <div className="holo-shine"></div>
+                        
+                        <div className="profile-card-content">
+                            <div className="profile-avatar-wrapper">
+                                <UserAvatar 
+                                    url={viewUser.photo_url} 
+                                    alt={viewUser.display_name} 
+                                    frameId={viewUser.equipped_frame_id} 
+                                    level={viewUser.level} 
+                                    size="xl"
+                                    className="shadow-2xl"
+                                />
                             </div>
-                            <p className="text-skin-muted text-sm max-w-md line-clamp-1">{viewUser.bio || "Người chơi này rất bí ẩn..."}</p>
+
+                            <div>
+                                <h1 className="text-3xl font-black text-white tracking-wide drop-shadow-[0_0_10px_rgba(255,255,255,0.5)] uppercase">
+                                    {viewUser.display_name}
+                                </h1>
+                                <div className="flex justify-center mt-2">
+                                    <UserBadge titleId={viewUser.equipped_title_id} level={viewUser.level} className="scale-110" />
+                                </div>
+                            </div>
+
+                            <p className="profile-bio">
+                                {viewUser.bio || "Người chơi này rất bí ẩn..."}
+                            </p>
+
+                            <div className="profile-stats-row">
+                                <div className="profile-stat-item">
+                                    <span className="profile-stat-value text-pink-400">{viewUser.total_likes || 0}</span>
+                                    <span className="profile-stat-label">Hearts</span>
+                                </div>
+                                <div className="w-px bg-white/10"></div>
+                                <div className="profile-stat-item">
+                                    <span className="profile-stat-value text-cyan-400">{viewUser.profile_views || 0}</span>
+                                    <span className="profile-stat-label">Views</span>
+                                </div>
+                                <div className="w-px bg-white/10"></div>
+                                <div className="profile-stat-item">
+                                    <span className="profile-stat-value text-yellow-400">{viewUser.weekly_points || 0}</span>
+                                    <span className="profile-stat-label">Fame</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                {/* Stats & Actions */}
-                <div className="flex flex-col md:flex-row justify-end items-center gap-4 mb-8 mt-16 md:mt-4">
-                    <div className="flex gap-6 text-center bg-skin-fill-secondary px-6 py-3 rounded-xl border border-skin-border">
-                        <div>
-                            <p className="text-xs text-skin-muted uppercase font-bold">Lượt Thích</p>
-                            <p className="text-xl font-black text-pink-400">{viewUser.total_likes || 0}</p>
-                        </div>
-                        <div className="w-px bg-skin-border"></div>
-                        <div>
-                            <p className="text-xs text-skin-muted uppercase font-bold">Lượt Xem</p>
-                            <p className="text-xl font-black text-cyan-400">{viewUser.profile_views || 0}</p>
-                        </div>
-                        <div className="w-px bg-skin-border"></div>
-                        <div>
-                            <p className="text-xs text-skin-muted uppercase font-bold">Điểm Tuần</p>
-                            <p className="text-xl font-black text-yellow-400">{viewUser.weekly_points || 0}</p>
-                        </div>
+                {/* Public Actions */}
+                {user && user.id !== viewUser.id && (
+                    <div className="flex justify-center gap-4 my-8">
+                        <button 
+                            onClick={handleMessageClick}
+                            disabled={isCreatingChat}
+                            className="px-8 py-3 bg-white/10 hover:bg-white/20 rounded-full font-bold border border-white/20 text-sm flex items-center transition-colors disabled:opacity-50 backdrop-blur-sm"
+                        >
+                            {isCreatingChat ? <i className="ph ph-spinner animate-spin mr-2"></i> : <i className="ph-fill ph-chat-circle-text mr-2"></i>}
+                            Gửi Tin Nhắn
+                        </button>
+                        <button className="px-8 py-3 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-400 hover:to-pink-400 text-white rounded-full font-bold shadow-lg transition-all transform hover:-translate-y-1">
+                            <i className="ph-fill ph-heart mr-2"></i> Kết Bạn
+                        </button>
                     </div>
-                    {user && user.id !== viewUser.id && (
-                        <div className="flex gap-2">
-                            <button 
-                                onClick={handleMessageClick}
-                                disabled={isCreatingChat}
-                                className="px-6 py-3 bg-white/5 hover:bg-white/10 rounded-lg font-bold border border-skin-border text-sm flex items-center transition-colors disabled:opacity-50"
-                            >
-                                {isCreatingChat ? <i className="ph ph-spinner animate-spin mr-2"></i> : <i className="ph-fill ph-chat-circle-text mr-2"></i>}
-                                Nhắn tin
-                            </button>
-                            <button className="px-6 py-3 bg-skin-accent/10 hover:bg-skin-accent/20 text-skin-accent rounded-lg font-bold border border-skin-border-accent text-sm flex items-center transition-colors">
-                                <i className="ph-fill ph-user-plus mr-2"></i> Kết bạn
-                            </button>
-                        </div>
-                    )}
-                </div>
+                )}
 
                 {/* Feed */}
                 <div className="border-b border-skin-border mb-6">
-                    <div className="flex gap-6">
-                        <button className="pb-3 border-b-2 border-skin-accent text-skin-accent font-bold">Bảng Tin</button>
+                    <div className="flex gap-6 justify-center">
+                        <button className="pb-3 border-b-2 border-skin-accent text-skin-accent font-bold px-4">Bảng Tin</button>
                     </div>
                 </div>
 
                 {posts.length === 0 ? (
-                    <div className="text-center py-20 text-skin-muted">
+                    <div className="text-center py-20 text-skin-muted opacity-60">
+                        <i className="ph-fill ph-ghost text-4xl mb-2"></i>
                         <p>Người dùng này chưa đăng bài viết nào.</p>
                     </div>
                 ) : (

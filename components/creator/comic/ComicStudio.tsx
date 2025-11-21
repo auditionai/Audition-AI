@@ -115,7 +115,7 @@ const DraggableBubble = ({
 // --- MAIN COMPONENT ---
 
 const ComicStudio: React.FC = () => {
-    const { session, showToast, updateUserDiamonds } = useAuth();
+    const { session, showToast, updateUserDiamonds, supabase } = useAuth();
     const [activeStep, setActiveStep] = useState<1 | 2 | 3>(1); 
     const [isLoading, setIsLoading] = useState(false);
     const [generationStatus, setGenerationStatus] = useState<string>(""); // To show detailed progress
@@ -136,6 +136,19 @@ const ComicStudio: React.FC = () => {
     
     // Refs for Export
     const panelRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
+
+    // Refs for polling cleanup
+    const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+    useEffect(() => {
+        // Cleanup polling on unmount
+        return () => {
+            if (pollingIntervalRef.current) {
+                clearInterval(pollingIntervalRef.current);
+            }
+            supabase?.removeAllChannels();
+        };
+    }, [supabase]);
 
     const handleAddCharacter = () => {
         if (characters.length >= 4) {
@@ -210,7 +223,6 @@ const ComicStudio: React.FC = () => {
             updateUserDiamonds(data.newDiamondCount);
             
             // Initialize empty panels with loading state
-            // Store plot_summary for retries
             const initialPanels = outline.map((p: any) => ({
                 id: crypto.randomUUID(),
                 panel_number: p.panel_number,
@@ -223,8 +235,7 @@ const ComicStudio: React.FC = () => {
             setPanels(initialPanels);
             setActiveStep(2);
 
-            // PHASE 2: EXPAND EACH PANEL (Detailed, Iterative)
-            // We wrap the loop body in try/catch to ensure one failure doesn't crash the whole UI or loop
+            // PHASE 2: EXPAND EACH PANEL
             for (let i = 0; i < outline.length; i++) {
                 const p = outline[i];
                 setGenerationStatus(`Đang viết chi tiết phân cảnh ${p.panel_number}/${outline.length}...`);
@@ -246,7 +257,6 @@ const ComicStudio: React.FC = () => {
                     
                     if (expandRes.ok) {
                         const details = await expandRes.json();
-                        // Robust update: Ensure dialogue is always an array
                         setPanels(prev => prev.map(panel => 
                             panel.panel_number === p.panel_number 
                             ? { 
@@ -261,7 +271,6 @@ const ComicStudio: React.FC = () => {
                     }
                 } catch (expandErr) {
                     console.error(`Error expanding panel ${p.panel_number}`, expandErr);
-                    // Update state to show error in the specific panel instead of crashing
                     setPanels(prev => prev.map(panel => 
                         panel.panel_number === p.panel_number 
                         ? { 
@@ -273,7 +282,6 @@ const ComicStudio: React.FC = () => {
                     ));
                 }
                 
-                // Small delay to prevent rate limiting
                 await new Promise(r => setTimeout(r, 500));
             }
 
@@ -292,10 +300,8 @@ const ComicStudio: React.FC = () => {
         const panelToRetry = panels.find(p => p.id === panelId);
         if (!panelToRetry) return;
 
-        // Identify the plot summary either from stored prop or fallback to parsing current visual description
         const plotSummary = (panelToRetry as any).plot_summary || panelToRetry.visual_description.replace(/^\[Lỗi\]\s*/, '');
 
-        // Set loading state for this panel
         setPanels(prev => prev.map(p => p.id === panelId ? { 
             ...p, 
             visual_description: `(Đang thử lại: ${plotSummary}...)` 
@@ -349,13 +355,16 @@ const ComicStudio: React.FC = () => {
         }));
     };
 
-    // --- PHASE 3 LOGIC ---
+    // --- PHASE 3 LOGIC (ASYNC JOB PATTERN) ---
 
     const handleRenderPanel = async (panel: ComicPanel) => {
+        if (!supabase) return;
+        
         setPanels(prev => prev.map(p => p.id === panel.id ? { ...p, is_rendering: true } : p));
         
         try {
-            const res = await fetch('/.netlify/functions/comic-render-panel', {
+            // 1. Trigger Job creation (Cost deduction happens here)
+            const triggerRes = await fetch('/.netlify/functions/comic-render-panel', {
                 method: 'POST',
                 headers: { 
                     'Content-Type': 'application/json',
@@ -369,18 +378,52 @@ const ComicStudio: React.FC = () => {
                 })
             });
 
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error);
+            const triggerData = await triggerRes.json();
+            if (!triggerRes.ok) throw new Error(triggerData.error);
 
-            updateUserDiamonds(data.newDiamondCount);
-            setPanels(prev => prev.map(p => p.id === panel.id ? { 
-                ...p, 
-                image_url: data.imageUrl, 
-                is_rendering: false,
-                status: 'completed' 
-            } : p));
-            
-            showToast(`Đã vẽ xong khung tranh #${panel.panel_number}!`, "success");
+            const jobId = triggerData.jobId;
+            updateUserDiamonds(triggerData.newDiamondCount);
+
+            // 2. Subscribe to Job Updates via Supabase Realtime
+            const channel = supabase.channel(`comic-job-${jobId}`)
+                .on('postgres_changes', { 
+                    event: 'UPDATE', 
+                    schema: 'public', 
+                    table: 'generated_images', 
+                    filter: `id=eq.${jobId}` 
+                }, (payload: any) => {
+                    const record = payload.new;
+                    if (record.image_url && record.image_url !== 'PENDING') {
+                        // Success!
+                        setPanels(prev => prev.map(p => p.id === panel.id ? { 
+                            ...p, 
+                            image_url: record.image_url, 
+                            is_rendering: false,
+                            status: 'completed' 
+                        } : p));
+                        showToast(`Đã vẽ xong khung tranh #${panel.panel_number}!`, "success");
+                        supabase.removeChannel(channel);
+                    }
+                })
+                .on('postgres_changes', {
+                    event: 'DELETE',
+                    schema: 'public',
+                    table: 'generated_images',
+                    filter: `id=eq.${jobId}`
+                }, () => {
+                    // Failure/Refund
+                    setPanels(prev => prev.map(p => p.id === panel.id ? { ...p, is_rendering: false } : p));
+                    showToast("Lỗi khi vẽ. Đã hoàn tiền.", "error");
+                    supabase.removeChannel(channel);
+                })
+                .subscribe();
+
+            // 3. Trigger Worker (Fire and Forget)
+            fetch('/.netlify/functions/comic-render-worker', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ jobId })
+            });
 
         } catch (e: any) {
             showToast(e.message, "error");
@@ -740,7 +783,7 @@ const ComicStudio: React.FC = () => {
                                                         className="themed-button-primary px-8 py-3 rounded-full font-bold text-white shadow-xl flex items-center gap-2 transform hover:scale-105 transition-all"
                                                     >
                                                         {panel.is_rendering ? <i className="ph-bold ph-spinner animate-spin text-xl"></i> : <i className="ph-fill ph-paint-brush-broad text-xl"></i>}
-                                                        {panel.is_rendering ? 'Đang vẽ...' : `Vẽ Panel Này (${RENDER_COST} 💎)`}
+                                                        {panel.is_rendering ? 'Đang chờ AI vẽ...' : `Vẽ Panel Này (${RENDER_COST} 💎)`}
                                                     </button>
                                                 </div>
                                             )}

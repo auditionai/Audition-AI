@@ -395,7 +395,7 @@ export const vi = {
           ranks: 'Cấp Bậc',
           frames: 'Khung Avatar',
           titles: 'Danh Hiệu',
-          luckyWheel: 'Vòng Quay' // NEW
+          luckyWheel: 'Vòng Quay'
         },
         dashboard: {
           title: 'Bảng Điều Khiển Dữ Liệu',

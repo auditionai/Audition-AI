@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import Modal from './common/Modal';
 import { useAuth } from '../contexts/AuthContext';
@@ -64,22 +65,25 @@ const LuckyWheelModal: React.FC<LuckyWheelModalProps> = ({ isOpen, onClose }) =>
             }
 
             // Calculate rotation
+            // The result.rewardIndex is the index of the item we land on.
+            // If 0 is at 12 o'clock (0 degrees), then segment i is at (360/count * i).
+            // To land on segment i, we need to rotate BACKWARDS so that segment aligns with the pointer at 0 deg.
             const count = rewards.length;
             const segmentAngle = 360 / count;
             const targetIndex = result.rewardIndex;
             
-            // Random offset within segment to make it look natural
-            const randomOffset = (Math.random() - 0.5) * (segmentAngle * 0.8);
+            // Target position in the circle
+            // We want center of segment to align with top pointer (0deg)
+            const segmentCenterAngle = (targetIndex * segmentAngle) + (segmentAngle / 2);
             
-            // Calculate target angle to land on
-            const targetAngle = (targetIndex * segmentAngle) + (segmentAngle / 2);
+            // Spins: Add random full rotations
             const spins = 5; 
+            const totalDegrees = (360 * spins) + (360 - segmentCenterAngle);
             
-            // Ensure we always rotate forward
-            const nextRotation = rotation + (360 * spins) + (360 - targetAngle % 360) + randomOffset;
+            // Current rotation modulo 360 to keep track
+            const currentRotationMod = rotation % 360;
             
-            const delta = nextRotation - rotation;
-            const finalRotation = rotation + delta + (delta < 0 ? 360 : 0); // Ensure positive
+            const finalRotation = rotation + totalDegrees + ((360 - currentRotationMod) % 360);
 
             setRotation(finalRotation);
             
@@ -144,96 +148,92 @@ const LuckyWheelModal: React.FC<LuckyWheelModalProps> = ({ isOpen, onClose }) =>
 
     if (!isOpen) return null;
 
-    // Calculate segment geometry
-    const count = rewards.length > 0 ? rewards.length : 1;
-    const segmentAngle = 360 / count;
-    const skewAngle = 90 - segmentAngle;
+    // Generate wheel segments style
+    const wheelSegments = rewards.map((r, i) => {
+        const count = rewards.length;
+        const angle = 360 / count;
+        const rotate = i * angle;
+        
+        // Use conic-gradient logic for background colors
+        // But since we map divs, we can use rotation and absolute positioning
+        return { ...r, rotate, angle };
+    });
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title={getTrans('luckyWheel.title')}>
+        <Modal isOpen={isOpen} onClose={onClose} title={t('luckyWheel.title')}>
             <div className="flex flex-col lg:flex-row gap-8 items-center justify-center lg:min-w-[800px] min-h-[500px] p-4">
                 
-                {/* --- LEFT: THE WHEEL --- */}
-                <div className="relative w-[320px] h-[320px] sm:w-[400px] sm:h-[400px] flex-shrink-0 select-none">
-                    {/* Decorative Glow */}
-                    <div className="absolute inset-0 bg-gradient-to-r from-pink-500/30 to-yellow-500/30 rounded-full blur-3xl animate-pulse"></div>
+                {/* --- LEFT: THE WHEEL (NEW RENDER LOGIC) --- */}
+                <div className="relative w-[340px] h-[340px] sm:w-[400px] sm:h-[400px] flex-shrink-0 select-none">
+                    
+                    {/* Glow Behind */}
+                    <div className="absolute inset-0 bg-gradient-to-r from-pink-500/30 to-purple-500/30 rounded-full blur-3xl animate-pulse"></div>
 
-                    {/* Pointer (Arrow) */}
-                    <div className="absolute -top-5 left-1/2 -translate-x-1/2 z-30 filter drop-shadow-lg pointer-events-none">
-                        <div className="w-0 h-0 border-l-[15px] border-l-transparent border-r-[15px] border-r-transparent border-t-[25px] border-t-yellow-400 relative">
-                             <div className="absolute -top-[28px] -left-[8px] w-4 h-4 bg-white rounded-full"></div>
-                        </div>
+                    {/* Pointer (Static at top) */}
+                    <div className="absolute -top-6 left-1/2 -translate-x-1/2 z-30 drop-shadow-lg">
+                        <i className="ph-fill ph-caret-down text-5xl text-yellow-400"></i>
                     </div>
                     
-                    {/* The Rotating Wheel */}
-                    <div 
-                        ref={wheelRef}
-                        className="w-full h-full rounded-full border-8 border-gray-800 shadow-[0_0_0_4px_#fbbf24,inset_0_0_20px_rgba(0,0,0,0.5)] relative overflow-hidden transition-transform cubic-bezier(0.15, 0.85, 0.35, 1)"
-                        style={{ 
-                            transform: `rotate(${rotation}deg)`,
-                            transitionDuration: isSpinning ? '5000ms' : '0ms',
-                            background: '#1f2937'
-                        }}
-                    >
-                        {rewards.map((reward, index) => {
-                            const rotationAngle = segmentAngle * index;
-                            
-                            // Colors palette
-                            const defaultColors = ['#ec4899', '#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ef4444'];
-                            const bgColor = reward.color && reward.color !== '#FF0000' ? reward.color : defaultColors[index % defaultColors.length];
+                    {/* Wheel Container */}
+                    <div className="lucky-wheel-container w-full h-full relative" style={{
+                        transform: `rotate(${rotation}deg)`,
+                        transition: isSpinning ? 'transform 5s cubic-bezier(0.25, 0.1, 0.25, 1)' : 'none'
+                    }}>
+                        {/* Render Segments using Conic Gradient for Backgrounds */}
+                        <div className="absolute inset-0 w-full h-full rounded-full" style={{
+                            background: `conic-gradient(${
+                                rewards.map((r, i) => {
+                                    const start = (i * 360) / rewards.length;
+                                    const end = ((i + 1) * 360) / rewards.length;
+                                    // Fallback colors if not defined
+                                    const colors = ['#ec4899', '#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ef4444'];
+                                    const color = r.color && r.color !== '#FF0000' ? r.color : colors[i % colors.length];
+                                    return `${color} ${start}deg ${end}deg`;
+                                }).join(', ')
+                            })`
+                        }}></div>
 
+                        {/* Render Content (Text/Icons) */}
+                        {wheelSegments.map((item, index) => {
+                            const rotation = item.rotate + (item.angle / 2); // Center of the slice
                             return (
                                 <div 
-                                    key={reward.id}
-                                    className="absolute top-0 right-0 w-1/2 h-1/2 origin-bottom-left border-l border-white/10"
+                                    key={item.id} 
+                                    className="absolute w-full h-full top-0 left-0 flex justify-center"
                                     style={{ 
-                                        transform: `rotate(${rotationAngle}deg) skewY(-${skewAngle}deg)`,
-                                        background: bgColor,
-                                        boxShadow: 'inset 0 0 20px rgba(0,0,0,0.1)'
+                                        transform: `rotate(${rotation}deg)`,
+                                        pointerEvents: 'none'
                                     }}
                                 >
-                                    <div 
-                                        className="absolute bottom-0 left-0 w-full h-full"
-                                        style={{ 
-                                            transformOrigin: 'bottom left',
-                                            transform: `skewY(${skewAngle}deg) rotate(${segmentAngle / 2}deg)`
-                                        }}
-                                    >
-                                        <div 
-                                            className="absolute bottom-0 left-1/2 flex items-center justify-start pl-12 sm:pl-16 gap-2"
-                                            style={{
-                                                bottom: '-20px',
-                                                left: '40px',
-                                                height: '40px',
-                                                width: '140px',
-                                            }}
-                                        >
-                                            <div className="flex items-center gap-2 transform rotate-0" style={{ transformOrigin: 'left center' }}>
-                                                <span className="text-white font-bold text-xs sm:text-sm uppercase drop-shadow-md whitespace-nowrap truncate max-w-[90px]">
-                                                    {reward.label}
-                                                </span>
-                                                <div className="transform -rotate-90">
-                                                    {reward.type === 'diamond' && <i className="ph-fill ph-diamonds-four text-lg text-white drop-shadow-md"></i>}
-                                                    {reward.type === 'xp' && <i className="ph-fill ph-star text-lg text-yellow-200 drop-shadow-md"></i>}
-                                                    {reward.type === 'ticket' && <i className="ph-fill ph-ticket text-lg text-green-200 drop-shadow-md"></i>}
-                                                    {reward.type === 'lucky' && <i className="ph-fill ph-clover text-lg text-gray-200 drop-shadow-md"></i>}
-                                                </div>
-                                            </div>
+                                    {/* Content Container - Pushed out from center */}
+                                    <div className="mt-4 flex flex-col items-center gap-1" style={{ transform: 'translateY(15%)' }}>
+                                        <div className="bg-black/20 p-1.5 rounded-full backdrop-blur-sm">
+                                            {item.type === 'diamond' && <i className="ph-fill ph-diamonds-four text-2xl text-white drop-shadow-md"></i>}
+                                            {item.type === 'xp' && <i className="ph-fill ph-star text-2xl text-yellow-200 drop-shadow-md"></i>}
+                                            {item.type === 'ticket' && <i className="ph-fill ph-ticket text-2xl text-green-200 drop-shadow-md"></i>}
+                                            {item.type === 'lucky' && <i className="ph-fill ph-clover text-2xl text-white drop-shadow-md"></i>}
                                         </div>
+                                        <span className="text-white font-bold text-sm uppercase drop-shadow-md max-w-[80px] text-center leading-tight break-words bg-black/20 px-2 py-0.5 rounded-md backdrop-blur-sm">
+                                            {item.label}
+                                        </span>
+                                        {item.amount > 0 && (
+                                            <span className="text-xs font-black text-yellow-300 drop-shadow-sm">x{item.amount}</span>
+                                        )}
                                     </div>
                                 </div>
-                            );
+                            )
                         })}
                     </div>
 
-                    {/* Center Hub */}
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-yellow-300 to-orange-500 rounded-full shadow-[0_0_15px_rgba(245,158,11,0.6)] z-10 flex items-center justify-center border-4 border-white/80">
+                    {/* Center Hub Button */}
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 rounded-full z-20 flex items-center justify-center">
+                        <div className="absolute inset-0 bg-white rounded-full animate-ping opacity-20"></div>
                         <button 
                             onClick={handleSpin}
                             disabled={isSpinning || tickets <= 0}
-                            className="w-full h-full rounded-full flex items-center justify-center active:scale-95 transition disabled:opacity-80 disabled:cursor-not-allowed group"
+                            className="relative w-full h-full bg-gradient-to-br from-yellow-400 to-orange-600 rounded-full shadow-[0_0_15px_rgba(245,158,11,0.8)] border-4 border-white flex items-center justify-center group transition-transform active:scale-95 disabled:opacity-80 disabled:cursor-not-allowed"
                         >
-                            <span className="font-black text-white text-xs sm:text-sm uppercase leading-tight drop-shadow-md group-hover:animate-pulse text-center px-1">
+                            <span className="text-white font-black text-sm uppercase text-center leading-tight drop-shadow-md group-hover:scale-110 transition-transform">
                                 {isSpinning ? '...' : getTrans('luckyWheel.spin')}
                             </span>
                         </button>
@@ -244,13 +244,14 @@ const LuckyWheelModal: React.FC<LuckyWheelModalProps> = ({ isOpen, onClose }) =>
                 <div className="flex-grow w-full max-w-md flex flex-col gap-4">
                     
                     {/* Ticket Counter */}
-                    <div className="bg-[#1e1b25] border border-yellow-500/30 rounded-2xl p-4 flex justify-between items-center shadow-lg relative overflow-hidden">
-                        <div className="absolute inset-0 bg-gradient-to-r from-yellow-500/5 to-transparent"></div>
-                        <div className="relative z-10">
-                            <p className="text-gray-400 text-xs uppercase font-bold tracking-wider">{getTrans('luckyWheel.tickets')}</p>
-                            <div className="flex items-center gap-2">
-                                <i className="ph-fill ph-ticket text-3xl text-yellow-400"></i>
-                                <span className="text-4xl font-black text-white">{tickets}</span>
+                    <div className="bg-[#1e1b25] border border-yellow-500/30 rounded-2xl p-4 flex justify-between items-center shadow-lg relative overflow-hidden shine-effect">
+                        <div className="relative z-10 flex items-center gap-4">
+                            <div className="w-12 h-12 rounded-full bg-yellow-500/20 flex items-center justify-center border border-yellow-500/50">
+                                <i className="ph-fill ph-ticket text-2xl text-yellow-400"></i>
+                            </div>
+                            <div>
+                                <p className="text-gray-400 text-xs uppercase font-bold tracking-wider">{getTrans('luckyWheel.tickets')}</p>
+                                <span className="text-3xl font-black text-white">{tickets}</span>
                             </div>
                         </div>
                         
@@ -278,37 +279,41 @@ const LuckyWheelModal: React.FC<LuckyWheelModalProps> = ({ isOpen, onClose }) =>
                         </div>
                         <div className="p-2 space-y-2 max-h-[250px] overflow-y-auto custom-scrollbar">
                             {/* Task 1 */}
-                            <div className="bg-[#12121A] p-3 rounded-xl flex justify-between items-center border border-white/5 hover:border-pink-500/30 transition group">
+                            <div className="task-card">
                                 <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 rounded-full bg-blue-600/20 flex items-center justify-center text-blue-400">
-                                        <i className="ph-fill ph-facebook-logo text-lg"></i>
+                                    <div className="w-10 h-10 rounded-full bg-blue-600/20 flex items-center justify-center text-blue-400 flex-shrink-0">
+                                        <i className="ph-fill ph-facebook-logo text-xl"></i>
                                     </div>
                                     <div>
-                                        <p className="text-xs sm:text-sm font-semibold text-gray-200">{getTrans('luckyWheel.tasks.shareApp')}</p>
-                                        <p className="text-[10px] text-green-400 font-bold">+1 Vé quay</p>
+                                        <p className="text-xs sm:text-sm font-bold text-gray-200">{getTrans('luckyWheel.tasks.shareApp')}</p>
+                                        <p className="text-[10px] text-green-400 font-bold flex items-center gap-1">
+                                            <i className="ph-fill ph-ticket"></i> +1 Vé
+                                        </p>
                                     </div>
                                 </div>
-                                <button onClick={() => handleTask('share_app')} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg shadow-md transition transform active:scale-95">
+                                <button onClick={() => handleTask('share_app')} className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg shadow-md transition transform active:scale-95">
                                     {getTrans('luckyWheel.tasks.go')}
                                 </button>
                             </div>
 
                             {/* Task 2 */}
-                            <div className="bg-[#12121A] p-3 rounded-xl flex justify-between items-center border border-white/5 hover:border-pink-500/30 transition group">
+                            <div className="task-card">
                                 <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 rounded-full bg-purple-600/20 flex items-center justify-center text-purple-400">
-                                        <i className="ph-fill ph-users text-lg"></i>
+                                    <div className="w-10 h-10 rounded-full bg-purple-600/20 flex items-center justify-center text-purple-400 flex-shrink-0">
+                                        <i className="ph-fill ph-users text-xl"></i>
                                     </div>
                                     <div>
-                                        <p className="text-xs sm:text-sm font-semibold text-gray-200">{getTrans('luckyWheel.tasks.invite')}</p>
-                                        <p className="text-[10px] text-green-400 font-bold">+3 Vé quay</p>
+                                        <p className="text-xs sm:text-sm font-bold text-gray-200">{getTrans('luckyWheel.tasks.invite')}</p>
+                                        <p className="text-[10px] text-green-400 font-bold flex items-center gap-1">
+                                            <i className="ph-fill ph-ticket"></i> +3 Vé
+                                        </p>
                                     </div>
                                 </div>
                                 <button 
                                     onClick={() => { navigator.clipboard.writeText(user?.id?.substring(0,8).toUpperCase() || ''); showToast('Đã sao chép mã giới thiệu!', 'success'); }} 
-                                    className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-lg shadow-md transition transform active:scale-95"
+                                    className="px-4 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-lg shadow-md transition transform active:scale-95"
                                 >
-                                    Copy Code
+                                    Copy
                                 </button>
                             </div>
                         </div>

@@ -603,8 +603,8 @@
     cursor: pointer;
     transition: all 0.3s ease;
     background-color: var(--color-fill-secondary);
-    flex: 0 0 120px; /* Fixed width for horizontal items */
-    width: 120px;
+    flex: 0 0 140px; /* Increased Width */
+    width: 140px;    /* Increased Width */
     min-height: 160px;
     scroll-snap-align: start;
 }
@@ -619,10 +619,9 @@
     max-width: 100%;
     text-align: center;
     margin-top: 0.5rem;
-    display: -webkit-box;
-    -webkit-line-clamp: 2; /* Limit to 2 lines */
-    -webkit-box-orient: vertical;
-    overflow: hidden;
+    /* REMOVED line clamp to allow full text display */
+    display: block; 
+    white-space: normal;
 }
 
 .cosmetic-item.active {
@@ -908,6 +907,92 @@
 
 .group.flex-row-reverse .message-appear {
     transform-origin: bottom right;
+}
+
+/* --- LUCKY WHEEL STYLES (NEW) --- */
+.lucky-wheel-container {
+    position: relative;
+    border-radius: 50%;
+    border: 8px solid #1f2937;
+    box-shadow: 0 0 0 4px #fbbf24, inset 0 0 20px rgba(0,0,0,0.8);
+    overflow: hidden;
+    transition: transform 5s cubic-bezier(0.15, 0.85, 0.35, 1);
+}
+
+.wheel-segment {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 50%;
+    height: 50%;
+    transform-origin: 100% 100%; /* Spin from center */
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.wheel-text-container {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: 100%;
+    height: 100%;
+    transform-origin: 100% 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.wheel-content {
+    transform: translateY(-80px) rotate(90deg); /* Adjust distance from center */
+    text-align: center;
+    color: white;
+    font-weight: bold;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+}
+
+.task-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 12px;
+    border-radius: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: all 0.2s ease;
+}
+
+.task-card:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(var(--color-accent), 0.4);
+    transform: translateX(4px);
+}
+
+.shine-effect {
+    position: relative;
+    overflow: hidden;
+}
+.shine-effect::after {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: linear-gradient(
+        to bottom right,
+        rgba(255, 255, 255, 0) 0%,
+        rgba(255, 255, 255, 0.1) 40%,
+        rgba(255, 255, 255, 0.3) 50%,
+        rgba(255, 255, 255, 0.1) 60%,
+        rgba(255, 255, 255, 0) 100%
+    );
+    transform: rotate(45deg) translate(-100%, -100%);
+    animation: shine 3s infinite;
+}
+
+@keyframes shine {
+    0% { transform: rotate(45deg) translate(-100%, -100%); }
+    20% { transform: rotate(45deg) translate(100%, 100%); }
+    100% { transform: rotate(45deg) translate(100%, 100%); }
 }
 
 /* Animation Keyframes */

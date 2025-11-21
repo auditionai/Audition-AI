@@ -75,7 +75,8 @@ const BgRemoverTool: React.FC<BgRemoverToolProps> = ({ onMoveToGenerator, onMove
             return;
         }
         setProcessingModel(model);
-        const costPerImage = model === 'pro' ? 2 : 1;
+        // UPDATE: Pro costs 10 diamonds
+        const costPerImage = model === 'pro' ? 10 : 1;
         const totalCost = imagesForBgRemoval.length * costPerImage;
         if (user && user.diamonds < totalCost) {
             showToast(`Bạn cần ${totalCost} kim cương, nhưng chỉ có ${user.diamonds}. Vui lòng nạp thêm.`, 'error');
@@ -126,7 +127,7 @@ const BgRemoverTool: React.FC<BgRemoverToolProps> = ({ onMoveToGenerator, onMove
     };
 
 
-    const totalCost = imagesForBgRemoval.length * (processingModel === 'pro' ? 2 : 1);
+    const totalCost = imagesForBgRemoval.length * (processingModel === 'pro' ? 10 : 1);
 
     return (
         <div className="h-full flex flex-col">
@@ -201,7 +202,7 @@ const BgRemoverTool: React.FC<BgRemoverToolProps> = ({ onMoveToGenerator, onMove
                                 className="flex-1 py-3 font-bold text-sm text-yellow-300 bg-yellow-500/20 border border-yellow-500/50 hover:bg-yellow-500/30 rounded-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-yellow-500/10"
                             >
                                 <i className="ph-fill ph-crown"></i>
-                                <span>{t('creator.aiTool.bgRemover.proButton')}</span>
+                                <span>Tách nền Pro (10 💎)</span>
                             </button>
                         </div>
                         {isProcessing && (

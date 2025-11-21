@@ -241,13 +241,13 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
     };
 
     // Cost Calculation
-    // Base: Pro (1K) = 2, Pro (2K) = 3, Pro (4K) = 4. Flash = 1.
+    // Base: Pro (1K) = 10, Pro (2K) = 15, Pro (4K) = 20. Flash = 1.
     // + Characters count.
     const getBaseCost = () => {
         if (selectedModel === 'pro') {
-            if (imageResolution === '4K') return 4;
-            if (imageResolution === '2K') return 3;
-            return 2;
+            if (imageResolution === '4K') return 20;
+            if (imageResolution === '2K') return 15;
+            return 10; // 1K Base
         }
         return 1;
     };
@@ -643,7 +643,7 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                                         className={`p-2 rounded-lg border-2 text-left transition-all ${selectedModel === 'pro' ? 'border-yellow-500 bg-yellow-500/10 text-yellow-300' : 'border-skin-border bg-skin-fill-secondary text-gray-400'}`}
                                     >
                                         <div className="text-xs font-bold">Pro 4K</div>
-                                        <div className="text-[10px] mt-1 opacity-80">2+ 💎 base</div>
+                                        <div className="text-[10px] mt-1 opacity-80">10+ 💎 base</div>
                                     </button>
                                 </div>
                             </div>
@@ -654,7 +654,7 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                                      <div>
                                         <label className="text-xs font-bold text-yellow-400 mb-2 block flex justify-between">
                                             <span>Resolution (Pro)</span>
-                                            <span className="text-[10px] bg-yellow-500/20 px-2 py-0.5 rounded">{imageResolution === '1K' ? 'Base 2💎' : imageResolution === '2K' ? 'Base 3💎' : 'Base 4💎'}</span>
+                                            <span className="text-[10px] bg-yellow-500/20 px-2 py-0.5 rounded">{imageResolution === '1K' ? 'Base 10💎' : imageResolution === '2K' ? 'Base 15💎' : 'Base 20💎'}</span>
                                         </label>
                                         <div className="grid grid-cols-3 gap-2">
                                             {(['1K', '2K', '4K'] as const).map(res => (

@@ -139,7 +139,8 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
     
     const handleProcessFace = async (modelType: 'flash' | 'pro') => {
         if (!rawFaceImage || !session) return;
-        const cost = modelType === 'pro' ? 2 : 1;
+        // UPDATE: Pro Face Lock cost = 10 diamonds
+        const cost = modelType === 'pro' ? 10 : 1;
 
         if (user && user.diamonds < cost) {
             showToast(t('creator.aiTool.common.errorCredits', { cost, balance: user.diamonds }), 'error');
@@ -178,10 +179,10 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
     const getCost = () => {
         let cost = 0;
         if (selectedModel.apiModel === 'gemini-3-pro-image-preview') {
-             // Pro Pricing Logic
-             if (imageResolution === '4K') cost = 4;
-             else if (imageResolution === '2K') cost = 3;
-             else cost = 2; // 1K Pro
+             // UPDATE: Pro Pricing Logic
+             if (imageResolution === '4K') cost = 20;
+             else if (imageResolution === '2K') cost = 15;
+             else cost = 10; // 1K Pro Base
         } else {
             cost = 1; // Flash
         }
@@ -366,7 +367,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                                             {isProcessingFace ? t('creator.aiTool.singlePhoto.superFaceLockProcessing') : t('creator.aiTool.singlePhoto.superFaceLockActionFlash')}
                                         </button>
                                         <button onClick={() => handleProcessFace('pro')} disabled={isProcessingFace} className="w-full text-xs font-bold py-2 px-2 bg-yellow-500/20 text-yellow-300 border border-yellow-500/50 rounded-lg hover:bg-yellow-500/30 disabled:opacity-50">
-                                            {isProcessingFace ? t('creator.aiTool.singlePhoto.superFaceLockProcessing') : t('creator.aiTool.singlePhoto.superFaceLockActionPro')}
+                                            {isProcessingFace ? t('creator.aiTool.singlePhoto.superFaceLockProcessing') : 'Xử lý Pro (10 💎)'}
                                         </button>
                                     </div>
                                 )}
@@ -417,7 +418,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                                         <p className="text-[10px] text-skin-muted">{selectedModel.id === 'audition-ai-pro-v3' ? 'Gemini 3 Pro (4K)' : 'Flash / Imagen'}</p>
                                     </div>
                                     <span className="text-xs font-bold text-pink-400 bg-pink-500/10 px-2 py-1 rounded">
-                                        {selectedModel.apiModel === 'gemini-3-pro-image-preview' ? '2+ 💎' : '1 💎'}
+                                        {selectedModel.apiModel === 'gemini-3-pro-image-preview' ? '10+ 💎' : '1 💎'}
                                     </span>
                                 </button>
                             </div>
@@ -428,7 +429,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                                      <div>
                                         <label className="text-xs font-bold text-yellow-400 mb-2 block flex justify-between">
                                             <span>Resolution (Pro)</span>
-                                            <span className="text-[10px] bg-yellow-500/20 px-2 py-0.5 rounded">{imageResolution === '1K' ? '2💎' : imageResolution === '2K' ? '3💎' : '4💎'}</span>
+                                            <span className="text-[10px] bg-yellow-500/20 px-2 py-0.5 rounded">{imageResolution === '1K' ? '10💎' : imageResolution === '2K' ? '15💎' : '20💎'}</span>
                                         </label>
                                         <div className="grid grid-cols-3 gap-2">
                                             {(['1K', '2K', '4K'] as const).map(res => (

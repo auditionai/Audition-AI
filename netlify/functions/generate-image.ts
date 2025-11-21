@@ -87,15 +87,15 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         if (!prompt || !apiModel) return { statusCode: 400, body: JSON.stringify({ error: 'Prompt and apiModel are required.' }) };
         
-        // COST CALCULATION
+        // COST CALCULATION (UPDATED)
         let baseCost = 1;
         const isProModel = apiModel === 'gemini-3-pro-image-preview';
 
         if (isProModel) {
-             // Pricing: 1K = 2, 2K = 3, 4K = 4
-             if (imageSize === '4K') baseCost = 4;
-             else if (imageSize === '2K') baseCost = 3;
-             else baseCost = 2; // 1K
+             // Pricing: 1K = 10, 2K = 15, 4K = 20
+             if (imageSize === '4K') baseCost = 20;
+             else if (imageSize === '2K') baseCost = 15;
+             else baseCost = 10; // 1K Base
         }
         const totalCost = baseCost + (useUpscaler ? COST_UPSCALE : 0);
 
@@ -205,9 +205,16 @@ const handler: Handler = async (event: HandlerEvent) => {
         const newDiamondCount = userData.diamonds - totalCost;
         const newXp = userData.xp + XP_PER_GENERATION;
         
-        let logDescription = `Tạo ảnh: ${prompt.substring(0, 30)}...`;
-        if (useUpscaler) logDescription += " (Upscale)";
-        if (isProModel) logDescription += ` (Pro ${imageSize})`;
+        // Create detailed log description
+        let logDescription = `Tạo ảnh`;
+        if (isProModel) {
+            logDescription += ` (Pro ${imageSize})`;
+        } else {
+            logDescription += ` (Flash)`;
+        }
+        
+        if (useUpscaler) logDescription += " + Upscale";
+        logDescription += `: ${prompt.substring(0, 20)}...`;
         
         await Promise.all([
             supabaseAdmin.from('users').update({ diamonds: newDiamondCount, xp: newXp }).eq('id', user.id),

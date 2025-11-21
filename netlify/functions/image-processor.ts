@@ -33,7 +33,8 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         // Validate Cost
         const isPro = model === 'gemini-3-pro-image-preview';
-        const cost = isPro ? 2 : 1;
+        // UPDATE: Pro cost = 10
+        const cost = isPro ? 10 : 1;
 
         const { data: userData, error: userError } = await supabaseAdmin
             .from('users')

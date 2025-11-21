@@ -1,3 +1,4 @@
+
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { GoogleGenAI, Modality } from "@google/genai";
 import { supabaseAdmin } from './utils/supabaseClient';
@@ -21,8 +22,8 @@ const handler: Handler = async (event: HandlerEvent) => {
             aiFont, aiSize, aiIsBold, aiIsItalic, aiCustomColor, model 
         } = JSON.parse(event.body || '{}');
 
-        // Validate cost based on selected model
-        const cost = (model === 'gemini-3-pro-image-preview') ? 2 : 1;
+        // Validate cost based on selected model (Pro = 10, Flash = 1)
+        const cost = (model === 'gemini-3-pro-image-preview') ? 10 : 1;
 
         if (!imageDataUrl || !text || !aiStyle || !aiColor || !signaturePosition || !aiFont || !aiSize || aiIsBold === undefined || aiIsItalic === undefined || !aiCustomColor) {
             return { statusCode: 400, body: JSON.stringify({ error: 'Missing required parameters for AI signature.' }) };

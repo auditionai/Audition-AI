@@ -1,3 +1,4 @@
+
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
 
@@ -19,8 +20,8 @@ const handler: Handler = async (event: HandlerEvent) => {
             return { statusCode: 400, body: JSON.stringify({ error: 'Invalid image data.' }) };
         }
 
-        // Determine Cost based on model
-        const cost = (model === 'gemini-3-pro-image-preview') ? 2 : 1;
+        // Determine Cost based on model (Pro = 10, Flash = 1)
+        const cost = (model === 'gemini-3-pro-image-preview') ? 10 : 1;
 
         const { data: userData, error: userError } = await supabaseAdmin
             .from('users')
@@ -35,7 +36,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             return { statusCode: 402, body: JSON.stringify({ error: `Không đủ kim cương. Cần ${cost} 💎.` }) };
         }
 
-        // 3. Simulate AI processing
+        // 3. Simulate AI processing (or actual implementation if available)
         console.log(`[FACE PROCESS] Simulating AI (${model}) face crop/sharpen for user ${user.id}...`);
         await new Promise(resolve => setTimeout(resolve, 1500)); 
         const [_header, base64] = imageDataUrl.split(',');
@@ -43,13 +44,17 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         // 4. Deduct cost and log transaction
         const newDiamondCount = userData.diamonds - cost;
+        
+        let description = `Xử lý Gương Mặt`;
+        description += (model === 'gemini-3-pro-image-preview') ? ` (Pro)` : ` (Flash)`;
+
         const [userUpdateResult, logResult] = await Promise.all([
             supabaseAdmin.from('users').update({ diamonds: newDiamondCount }).eq('id', user.id),
             supabaseAdmin.from('diamond_transactions_log').insert({
                 user_id: user.id,
                 amount: -cost,
                 transaction_type: 'FACE_ID_PROCESS',
-                description: `Xử lý Gương Mặt (${model === 'gemini-3-pro-image-preview' ? 'Pro 4K' : 'Flash'})`
+                description: description
             })
         ]);
 

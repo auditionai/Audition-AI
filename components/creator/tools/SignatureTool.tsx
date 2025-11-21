@@ -7,7 +7,7 @@ import { useTranslation } from '../../../hooks/useTranslation';
 
 const COST_MANUAL = 0;
 const COST_AI_FLASH = 1;
-const COST_AI_PRO = 2;
+const COST_AI_PRO = 10; // UPDATE: Changed to 10
 
 const FONTS = [
     { name: 'Poppins', class: 'font-["Poppins"]' },
@@ -415,7 +415,7 @@ const SignatureTool: React.FC<SignatureToolProps> = ({ initialImage, onClearInit
                                     className="flex-1 py-3 font-bold text-sm text-yellow-300 bg-yellow-500/20 border border-yellow-500/50 hover:bg-yellow-500/30 rounded-lg flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg shadow-yellow-500/10"
                                 >
                                     <DiamondIcon className="w-4 h-4" />
-                                    <span>{t('creator.aiTool.signature.applyAiPro')}</span>
+                                    <span>AI Pro (10 💎)</span>
                                 </button>
                             </div>
                         )}

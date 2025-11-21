@@ -68,11 +68,12 @@ const handler: Handler = async (event: HandlerEvent) => {
         const { characters, referenceImage, prompt, style, aspectRatio, model: selectedModel, imageSize = '1K', useSearch = false } = payload;
         const numCharacters = characters.length;
         
+        // Sync this cost logic with generate-group-image.ts
         let baseCost = 1;
         if (selectedModel === 'pro') {
-            if (imageSize === '4K') baseCost = 4;
-            else if (imageSize === '2K') baseCost = 3;
-            else baseCost = 2;
+            if (imageSize === '4K') baseCost = 20;
+            else if (imageSize === '2K') baseCost = 15;
+            else baseCost = 10;
         }
         totalCost = baseCost + numCharacters;
 

@@ -1,6 +1,5 @@
 
 import React, { useState, useEffect } from 'react';
-import { LeaderboardUser } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { getRankForLevel } from '../utils/rankUtils';
 import XPProgressBar from './common/XPProgressBar';

@@ -1,4 +1,3 @@
-
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
 
@@ -11,17 +10,27 @@ const handler: Handler = async (event: HandlerEvent) => {
         return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
     }
 
+    // 1. Identify the requester (Current User)
     const authHeader = event.headers['authorization'];
-    const token = authHeader?.split(' ')[1];
-    if (!token) return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized' }) };
+    let currentUserId = null;
+    
+    if (authHeader) {
+        const token = authHeader.split(' ')[1];
+        const { data: { user } } = await supabaseAdmin.auth.getUser(token);
+        if (user) currentUserId = user.id;
+    }
 
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
-    if (authError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'Invalid token' }) };
-
+    // 2. Determine whose posts to fetch (Target User)
     const { userId } = event.queryStringParameters || {};
-    const targetUserId = userId || user.id;
+    // If userId param exists, fetch that user's posts. Otherwise fetch requester's posts (My Profile).
+    const targetUserId = userId || currentUserId;
+
+    if (!targetUserId) {
+         return { statusCode: 400, body: JSON.stringify({ error: 'User ID required' }) };
+    }
 
     try {
+        // 3. Fetch Posts
         const { data, error } = await supabaseAdmin
             .from('posts')
             .select(`
@@ -33,10 +42,30 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         if (error) throw error;
 
-        const formattedPosts = (data || []).map((post: any) => {
+        // 4. Process Posts (Add is_liked_by_user flag)
+        const posts = data || [];
+        
+        // If we have a logged-in user, check which posts they liked
+        const postIds = posts.map(p => p.id);
+        let likedPostIds = new Set<string>();
+
+        if (currentUserId && postIds.length > 0) {
+            const { data: likes } = await supabaseAdmin
+                .from('post_likes')
+                .select('post_id')
+                .eq('user_id', currentUserId)
+                .in('post_id', postIds);
+            
+            if (likes) {
+                likes.forEach(l => likedPostIds.add(l.post_id));
+            }
+        }
+
+        const formattedPosts = posts.map((post: any) => {
             const userData = Array.isArray(post.user) ? post.user[0] : post.user;
             return {
                 ...post,
+                is_liked_by_user: likedPostIds.has(post.id), // Server-side check
                 user: userData ? {
                     ...userData,
                     level: calculateLevelFromXp(userData.xp || 0)

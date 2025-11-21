@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import Modal from '../common/Modal';
 import { Post, PostComment } from '../../types';
@@ -13,7 +12,7 @@ interface CommentModalProps {
 }
 
 const CommentModal: React.FC<CommentModalProps> = ({ isOpen, onClose, post }) => {
-    const { supabase, user, showToast } = useAuth();
+    const { supabase, user, showToast, session } = useAuth();
     const [comments, setComments] = useState<PostComment[]>([]);
     const [newComment, setNewComment] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -29,11 +28,10 @@ const CommentModal: React.FC<CommentModalProps> = ({ isOpen, onClose, post }) =>
         if (!post || !supabase) return;
         setIsLoading(true);
         try {
-            // FIX: Fetch 'xp' instead of 'level' because 'level' column does not exist
             const { data, error } = await supabase
                 .from('post_comments')
                 .select(`
-                    id, content, created_at,
+                    id, content, created_at, user_id,
                     user:users (display_name, photo_url, equipped_frame_id, xp)
                 `)
                 .eq('post_id', post.id)
@@ -41,7 +39,6 @@ const CommentModal: React.FC<CommentModalProps> = ({ isOpen, onClose, post }) =>
             
             if (error) throw error;
 
-            // Map xp to level for frontend display
             const formattedComments = data.map((comment: any) => ({
                 ...comment,
                 user: comment.user ? {
@@ -84,6 +81,30 @@ const CommentModal: React.FC<CommentModalProps> = ({ isOpen, onClose, post }) =>
         }
     };
 
+    const handleDeleteComment = async (commentId: string) => {
+        if (!session) return;
+        if (!confirm("Bạn có chắc muốn xóa bình luận này?")) return;
+
+        try {
+            const res = await fetch('/.netlify/functions/delete-comment', {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${session.access_token}` 
+                },
+                body: JSON.stringify({ commentId })
+            });
+            
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error);
+
+            setComments(prev => prev.filter(c => c.id !== commentId));
+            showToast('Đã xóa bình luận', 'success');
+        } catch (e: any) {
+            showToast(e.message, 'error');
+        }
+    };
+
     if (!isOpen || !post) return null;
 
     return (
@@ -96,26 +117,42 @@ const CommentModal: React.FC<CommentModalProps> = ({ isOpen, onClose, post }) =>
                     ) : comments.length === 0 ? (
                         <div className="text-center py-8 text-skin-muted italic">Chưa có bình luận nào. Hãy là người đầu tiên!</div>
                     ) : (
-                        comments.map(comment => (
-                            <div key={comment.id} className="flex gap-3">
-                                <UserAvatar 
-                                    url={comment.user?.photo_url || ''} 
-                                    alt={comment.user?.display_name || 'User'} 
-                                    frameId={comment.user?.equipped_frame_id}
-                                    level={comment.user?.level}
-                                    size="sm" 
-                                />
-                                <div className="flex flex-col">
-                                    <div className="bg-skin-fill-secondary rounded-2xl rounded-tl-none px-4 py-2 border border-skin-border">
-                                        <p className="text-xs font-bold text-skin-base mb-0.5">{comment.user?.display_name}</p>
-                                        <p className="text-sm text-gray-300 break-words">{comment.content}</p>
+                        comments.map(comment => {
+                            const isOwner = user && comment.user_id === user.id;
+                            const isPostOwner = user && post.user_id === user.id;
+                            
+                            return (
+                                <div key={comment.id} className="flex gap-3 group">
+                                    <UserAvatar 
+                                        url={comment.user?.photo_url || ''} 
+                                        alt={comment.user?.display_name || 'User'} 
+                                        frameId={comment.user?.equipped_frame_id}
+                                        level={comment.user?.level}
+                                        size="sm" 
+                                    />
+                                    <div className="flex flex-col flex-grow">
+                                        <div className="bg-skin-fill-secondary rounded-2xl rounded-tl-none px-4 py-2 border border-skin-border relative">
+                                            <p className="text-xs font-bold text-skin-base mb-0.5">{comment.user?.display_name}</p>
+                                            <p className="text-sm text-gray-300 break-words pr-6">{comment.content}</p>
+                                            
+                                            {/* Delete Button */}
+                                            {(isOwner || isPostOwner) && (
+                                                <button 
+                                                    onClick={() => handleDeleteComment(comment.id)}
+                                                    className="absolute top-2 right-2 text-gray-500 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                    title="Xóa bình luận"
+                                                >
+                                                    <i className="ph-fill ph-trash"></i>
+                                                </button>
+                                            )}
+                                        </div>
+                                        <span className="text-[10px] text-skin-muted ml-2 mt-1">
+                                            {new Date(comment.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                        </span>
                                     </div>
-                                    <span className="text-[10px] text-skin-muted ml-2 mt-1">
-                                        {new Date(comment.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                                    </span>
                                 </div>
-                            </div>
-                        ))
+                            );
+                        })
                     )}
                 </div>
 

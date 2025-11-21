@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Post, User } from '../../types';
 import UserAvatar from '../common/UserAvatar';
 import UserBadge from '../common/UserBadge';
@@ -10,13 +9,22 @@ interface PostCardProps {
     currentUser: User | null;
     onCommentClick: (post: Post) => void;
     onUserClick?: (userId: string) => void;
+    onDelete?: (postId: string) => void;
 }
 
-const PostCard: React.FC<PostCardProps> = ({ post, currentUser, onCommentClick, onUserClick }) => {
+const PostCard: React.FC<PostCardProps> = ({ post, currentUser, onCommentClick, onUserClick, onDelete }) => {
     const { supabase } = useAuth();
     const [isLiked, setIsLiked] = useState(post.is_liked_by_user || false);
-    const [likesCount, setLikesCount] = useState(post.likes_count);
+    const [likesCount, setLikesCount] = useState(post.likes_count || 0);
+    const [commentsCount, setCommentsCount] = useState(post.comments_count || 0);
     const [isLikeAnimating, setIsLikeAnimating] = useState(false);
+
+    // Sync state if props change (e.g. after refetch)
+    useEffect(() => {
+        setIsLiked(post.is_liked_by_user || false);
+        setLikesCount(post.likes_count || 0);
+        setCommentsCount(post.comments_count || 0);
+    }, [post]);
 
     const handleLike = async () => {
         if (!currentUser || !supabase) return;
@@ -24,9 +32,12 @@ const PostCard: React.FC<PostCardProps> = ({ post, currentUser, onCommentClick, 
         // Optimistic update
         const newLikedState = !isLiked;
         setIsLiked(newLikedState);
-        setLikesCount(prev => newLikedState ? prev + 1 : prev - 1);
-        setIsLikeAnimating(true);
-        setTimeout(() => setIsLikeAnimating(false), 300);
+        setLikesCount(prev => newLikedState ? prev + 1 : Math.max(0, prev - 1));
+        
+        if (newLikedState) {
+            setIsLikeAnimating(true);
+            setTimeout(() => setIsLikeAnimating(false), 300);
+        }
 
         try {
             if (newLikedState) {
@@ -42,31 +53,46 @@ const PostCard: React.FC<PostCardProps> = ({ post, currentUser, onCommentClick, 
         }
     };
 
+    const isOwner = currentUser && post.user_id === currentUser.id;
+
     return (
-        <div className="bg-skin-fill-secondary rounded-xl border border-skin-border overflow-hidden group transition hover:border-skin-border-accent/50">
+        <div className="bg-skin-fill-secondary rounded-xl border border-skin-border overflow-hidden group transition hover:border-skin-border-accent/50 shadow-md">
             {/* Header */}
-            <div className="p-3 flex items-center gap-3">
-                <div onClick={() => onUserClick && post.user && onUserClick(post.user_id)} className="cursor-pointer">
-                    <UserAvatar 
-                        url={post.user?.photo_url || ''} 
-                        alt={post.user?.display_name || 'User'} 
-                        frameId={post.user?.equipped_frame_id} 
-                        level={post.user?.level} 
-                        size="sm" 
-                    />
-                </div>
-                <div className="flex-grow">
-                    <div className="flex items-center gap-2">
-                        <p 
-                            className="font-bold text-sm text-skin-base cursor-pointer hover:underline"
-                            onClick={() => onUserClick && post.user && onUserClick(post.user_id)}
-                        >
-                            {post.user?.display_name}
-                        </p>
-                        <UserBadge titleId={post.user?.equipped_title_id} level={post.user?.level} className="scale-75 origin-left" />
+            <div className="p-3 flex items-center justify-between">
+                <div className="flex items-center gap-3 flex-grow">
+                    <div onClick={() => onUserClick && post.user && onUserClick(post.user_id)} className="cursor-pointer">
+                        <UserAvatar 
+                            url={post.user?.photo_url || ''} 
+                            alt={post.user?.display_name || 'User'} 
+                            frameId={post.user?.equipped_frame_id} 
+                            level={post.user?.level} 
+                            size="sm" 
+                        />
                     </div>
-                    <p className="text-xs text-skin-muted">{new Date(post.created_at).toLocaleDateString('vi-VN', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}</p>
+                    <div>
+                        <div className="flex items-center gap-2">
+                            <p 
+                                className="font-bold text-sm text-skin-base cursor-pointer hover:underline"
+                                onClick={() => onUserClick && post.user && onUserClick(post.user_id)}
+                            >
+                                {post.user?.display_name}
+                            </p>
+                            <UserBadge titleId={post.user?.equipped_title_id} level={post.user?.level} className="scale-75 origin-left" />
+                        </div>
+                        <p className="text-xs text-skin-muted">{new Date(post.created_at).toLocaleDateString('vi-VN', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}</p>
+                    </div>
                 </div>
+                
+                {/* Delete Button for Owner */}
+                {isOwner && onDelete && (
+                    <button 
+                        onClick={(e) => { e.stopPropagation(); onDelete(post.id); }}
+                        className="p-2 text-skin-muted hover:text-red-500 transition rounded-full hover:bg-red-500/10"
+                        title="Xóa bài viết"
+                    >
+                        <i className="ph-fill ph-trash text-lg"></i>
+                    </button>
+                )}
             </div>
 
             {/* Image */}
@@ -85,28 +111,34 @@ const PostCard: React.FC<PostCardProps> = ({ post, currentUser, onCommentClick, 
 
             {/* Actions & Content */}
             <div className="p-4">
-                <div className="flex items-center gap-4 mb-3">
-                    <button 
-                        onClick={handleLike}
-                        className={`text-2xl transition-all active:scale-90 ${isLiked ? 'text-pink-500' : 'text-skin-muted hover:text-pink-500'}`}
-                    >
-                        <i className={`ph-fill ${isLiked ? 'ph-heart' : 'ph-heart'}`}></i>
-                    </button>
-                    <button 
-                        onClick={() => onCommentClick(post)}
-                        className="text-2xl text-skin-muted hover:text-blue-400 transition"
-                    >
-                        <i className="ph-fill ph-chat-circle"></i>
-                    </button>
+                <div className="flex items-center gap-6 mb-3">
+                    <div className="flex items-center gap-1.5">
+                        <button 
+                            onClick={handleLike}
+                            className={`text-2xl transition-all active:scale-90 ${isLiked ? 'text-pink-500' : 'text-skin-muted hover:text-pink-500'}`}
+                        >
+                            <i className={`ph-fill ${isLiked ? 'ph-heart' : 'ph-heart'}`}></i>
+                        </button>
+                        <span className="text-sm font-bold text-skin-base">{likesCount}</span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                        <button 
+                            onClick={() => onCommentClick(post)}
+                            className="text-2xl text-skin-muted hover:text-blue-400 transition"
+                        >
+                            <i className="ph-fill ph-chat-circle"></i>
+                        </button>
+                        <span className="text-sm font-bold text-skin-base">{commentsCount}</span>
+                    </div>
+
                     <button className="text-2xl text-skin-muted hover:text-green-400 transition ml-auto">
                         <i className="ph-fill ph-share-network"></i>
                     </button>
                 </div>
                 
-                <p className="font-bold text-sm mb-1 text-skin-base">{likesCount} lượt thích</p>
-                
                 {post.caption && (
-                    <p className="text-sm text-skin-base mb-2">
+                    <p className="text-sm text-skin-base mb-2 break-words">
                         <span className="font-bold mr-2 cursor-pointer hover:underline" onClick={() => onUserClick && post.user && onUserClick(post.user_id)}>
                             {post.user?.display_name}
                         </span>
@@ -116,9 +148,9 @@ const PostCard: React.FC<PostCardProps> = ({ post, currentUser, onCommentClick, 
                 
                 <button 
                     onClick={() => onCommentClick(post)}
-                    className="text-xs text-skin-muted hover:text-skin-base transition"
+                    className="text-xs text-skin-muted hover:text-skin-base transition mt-1"
                 >
-                    {post.comments_count > 0 ? `Xem tất cả ${post.comments_count} bình luận` : 'Viết bình luận...'}
+                    {commentsCount > 0 ? `Xem tất cả ${commentsCount} bình luận` : 'Viết bình luận...'}
                 </button>
             </div>
         </div>

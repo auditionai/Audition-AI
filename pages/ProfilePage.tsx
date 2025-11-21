@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -163,7 +162,7 @@ const ProfilePage: React.FC = () => {
             setCaption('');
             setSelectedImageForPost(null);
             
-            // Prepend new post to list without refetching
+            // Prepend new post to list
             if (data.post) {
                 setPosts(prev => [data.post, ...prev]);
             } else {
@@ -179,6 +178,31 @@ const ProfilePage: React.FC = () => {
             showToast(e.message || "Lỗi khi đăng bài", "error");
         } finally {
             setIsPosting(false);
+        }
+    };
+
+    // --- DELETE POST ---
+    const handleDeletePost = async (postId: string) => {
+        if (!session) return;
+        if (!confirm("Bạn có chắc chắn muốn xóa bài viết này không?")) return;
+
+        try {
+            const res = await fetch('/.netlify/functions/delete-post', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${session.access_token}`
+                },
+                body: JSON.stringify({ postId })
+            });
+            
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error);
+
+            setPosts(prev => prev.filter(p => p.id !== postId));
+            showToast("Đã xóa bài viết.", "success");
+        } catch (e: any) {
+            showToast(e.message, "error");
         }
     };
 
@@ -321,6 +345,7 @@ const ProfilePage: React.FC = () => {
                                         post={post} 
                                         currentUser={user} 
                                         onCommentClick={(p) => setSelectedPostForComments(p)} 
+                                        onDelete={handleDeletePost}
                                     />
                                 ))}
                             </div>

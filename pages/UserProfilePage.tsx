@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -42,7 +41,7 @@ const UserProfilePage: React.FC = () => {
                 if (userError) throw userError;
                 setViewUser(userData);
 
-                // 2. Fetch User Posts using Server Function (Bypass RLS)
+                // 2. Fetch User Posts using Server Function (Bypass RLS & Handle Likes)
                 // Use session access token for authorization
                 const response = await fetch(`/.netlify/functions/get-posts?userId=${userId}`, {
                     headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}
@@ -50,21 +49,6 @@ const UserProfilePage: React.FC = () => {
                 
                 if (response.ok) {
                     const postsData = await response.json();
-                    
-                    // Check likes status if user is logged in
-                    if (postsData && user) {
-                        const postIds = postsData.map((p: any) => p.id);
-                        const { data: likes } = await supabase
-                            .from('post_likes')
-                            .select('post_id')
-                            .eq('user_id', user.id)
-                            .in('post_id', postIds);
-                        
-                        const likedSet = new Set(likes?.map(l => l.post_id));
-                        postsData.forEach((p: any) => {
-                            p.is_liked_by_user = likedSet.has(p.id);
-                        });
-                    }
                     setPosts(postsData);
                 } else {
                     console.error("Failed to load posts");

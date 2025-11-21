@@ -17,12 +17,14 @@ const UserProfilePage: React.FC = () => {
     const { navigate, supabase, user, showToast, session } = useAuth();
     const { theme } = useTheme();
     
-    // Robust ID extraction: handles /user/123 and /user/123/
+    // Robust ID extraction: handles /user/123, /user/123/, and query params
     const getUserIdFromUrl = () => {
-        const path = window.location.pathname;
-        const segments = path.split('/').filter(segment => segment.trim() !== '');
-        // Assuming route is like /user/:id, the ID is the last segment
-        return segments[segments.length - 1];
+        const path = window.location.pathname; // e.g. /user/123
+        // Remove trailing slash and split
+        const segments = path.replace(/\/$/, '').split('/');
+        const lastSegment = segments[segments.length - 1];
+        // Ensure we don't accidentally get 'user' if path is just /user
+        return lastSegment === 'user' ? null : lastSegment;
     };
 
     const userId = getUserIdFromUrl();
@@ -30,7 +32,7 @@ const UserProfilePage: React.FC = () => {
     const [viewUser, setViewUser] = useState<User | null>(null);
     const [posts, setPosts] = useState<Post[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [userNotFound, setUserNotFound] = useState(false); // New state for error handling
+    const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [selectedPostForComments, setSelectedPostForComments] = useState<Post | null>(null);
     const [isCreatingChat, setIsCreatingChat] = useState(false);
 
@@ -38,20 +40,22 @@ const UserProfilePage: React.FC = () => {
     const cardRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        if (!userId || userId === 'user') {
-            setUserNotFound(true);
+        if (!userId) {
+            setErrorMsg("Đường dẫn không hợp lệ.");
             setIsLoading(false);
             return;
         }
         
         const fetchData = async () => {
             setIsLoading(true);
-            setUserNotFound(false);
+            setErrorMsg(null);
             try {
                 // 1. Fetch User Profile via Server Function (Bypasses RLS)
                 const userRes = await fetch(`/.netlify/functions/get-public-user?userId=${userId}`);
+                
                 if (!userRes.ok) {
-                    throw new Error("User not found");
+                    const errData = await userRes.json();
+                    throw new Error(errData.error || "Không tìm thấy người dùng");
                 }
                 
                 const userData = await userRes.json();
@@ -73,15 +77,15 @@ const UserProfilePage: React.FC = () => {
                     setPosts(postsData);
                 }
 
-            } catch (e) {
+            } catch (e: any) {
                 console.error("Failed to load user profile", e);
-                setUserNotFound(true); // Set error state instead of navigating away
+                setErrorMsg(e.message || "Lỗi khi tải thông tin người dùng.");
             } finally {
                 setIsLoading(false);
             }
         };
         fetchData();
-    }, [userId, session]); // Removed 'navigate' and 'showToast' from deps to prevent loops
+    }, [userId, session]); 
 
     const handleMessageClick = async () => {
         if (!supabase || !user || !viewUser) return;
@@ -119,7 +123,7 @@ const UserProfilePage: React.FC = () => {
         return <div className="min-h-screen bg-skin-fill flex items-center justify-center"><div className="w-8 h-8 border-4 border-skin-accent border-t-transparent rounded-full animate-spin"></div></div>;
     }
 
-    if (userNotFound || !viewUser) {
+    if (errorMsg || !viewUser) {
         return (
             <div data-theme={theme} className="flex flex-col min-h-screen bg-skin-fill text-skin-base pb-16 md:pb-0">
                 <CreatorHeader onTopUpClick={() => navigate('buy-credits')} activeTab="profile" onNavigate={navigate} onCheckInClick={() => {}} />
@@ -128,7 +132,7 @@ const UserProfilePage: React.FC = () => {
                         <i className="ph-fill ph-user-minus text-4xl text-skin-muted"></i>
                     </div>
                     <h2 className="text-2xl font-bold mb-2">Không tìm thấy người dùng</h2>
-                    <p className="text-skin-muted mb-6 max-w-md">Người dùng này không tồn tại hoặc đường dẫn không chính xác.</p>
+                    <p className="text-skin-muted mb-6 max-w-md">{errorMsg || "Người dùng này không tồn tại hoặc đường dẫn không chính xác."}</p>
                     <button onClick={() => navigate('home')} className="themed-button-primary px-6 py-2">
                         Về Trang Chủ
                     </button>

@@ -15,22 +15,25 @@ const handler: Handler = async (event: HandlerEvent) => {
 
     try {
         // Fetch user public profile data
+        // CHANGED: Use select('*') to be safer against schema mismatches (missing bio, stats columns)
         const { data: user, error } = await supabaseAdmin
             .from('users')
-            .select('id, display_name, photo_url, xp, bio, total_likes, profile_views, weekly_points, equipped_frame_id, equipped_title_id')
+            .select('*')
             .eq('id', userId)
             .single();
 
         if (error) {
             console.error("Error fetching user:", error);
-            return { statusCode: 404, body: JSON.stringify({ error: 'User not found.' }) };
+            return { statusCode: 404, body: JSON.stringify({ error: 'User not found or database error.' }) };
         }
 
         // Optional: Increment profile views asynchronously
-        // We don't await this to keep response fast, but Netlify functions might kill it early.
-        // For robustness in serverless, usually we await or use background functions.
-        // Here we'll just await it as it's a fast RPC or update.
-        await supabaseAdmin.rpc('increment_profile_views', { user_id_param: userId }).catch(console.error);
+        // We wrap this in a try-catch block specifically to ensure it doesn't crash the main request
+        try {
+             await supabaseAdmin.rpc('increment_profile_views', { user_id_param: userId });
+        } catch (rpcError) {
+            console.warn("Failed to increment view count (RPC likely missing):", rpcError);
+        }
 
         return {
             statusCode: 200,
@@ -38,7 +41,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         };
 
     } catch (error: any) {
-        console.error("get-public-user error:", error);
+        console.error("get-public-user fatal error:", error);
         return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
     }
 };

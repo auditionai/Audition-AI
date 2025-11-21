@@ -3,7 +3,6 @@ import React, { useState } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { ComicCharacter } from '../../../types';
 import { resizeImage } from '../../../utils/imageUtils';
-import ConfirmationModal from '../../ConfirmationModal';
 
 // Mock data for dropdowns
 const ART_STYLES = [
@@ -198,7 +197,7 @@ const ComicStudio: React.FC = () => {
                                     </div>
                                 )}
 
-                                {characters.map((char, index) => (
+                                {characters.map((char) => (
                                     <div key={char.id} className="bg-black/20 p-4 rounded-xl border border-white/10 flex flex-col md:flex-row gap-4 items-start">
                                         {/* Image Upload Area */}
                                         <div className="w-full md:w-32 flex-shrink-0">

@@ -2,17 +2,19 @@
 import React from 'react';
 import { useAuth } from './contexts/AuthContext';
 import { GameConfigProvider } from './contexts/GameConfigContext';
-import { ChatProvider } from './contexts/ChatContext'; // NEW
+import { ChatProvider } from './contexts/ChatContext';
 
 // Import Pages
 import HomePage from './pages/HomePage';
 import CreatorPage from './pages/CreatorPage';
 import GalleryPage from './pages/GalleryPage';
 import BuyCreditsPage from './pages/BuyCreditsPage';
+import ProfilePage from './pages/ProfilePage'; // NEW
+import UserProfilePage from './pages/UserProfilePage'; // NEW
 
 // Import Common Components
 import RewardNotification from './components/common/RewardNotification';
-import GlobalChat from './components/chat/GlobalChat'; // NEW
+import GlobalChat from './components/chat/GlobalChat';
 
 const AppContent: React.FC = () => {
     const { user, loading, route, toast, reward, clearReward } = useAuth();
@@ -36,6 +38,13 @@ const AppContent: React.FC = () => {
             case 'admin-gallery':
                 pageComponent = user ? <CreatorPage activeTab={route} /> : <HomePage />;
                 break;
+            case 'profile':
+                pageComponent = user ? <ProfilePage /> : <HomePage />;
+                break;
+            case 'user':
+                // user/:id - we need to extract ID from URL in the component or context
+                pageComponent = user ? <UserProfilePage /> : <HomePage />;
+                break;
             case 'buy-credits':
                 pageComponent = user ? <BuyCreditsPage /> : <HomePage />;
                 break;
@@ -54,8 +63,7 @@ const AppContent: React.FC = () => {
         <>
             {renderPage()}
             
-            {/* Global Chat is always available if logged in, or maybe we restrict to creator page? 
-                Let's make it available everywhere for logged in users */}
+            {/* Global Chat is always available if logged in */}
             {user && <GlobalChat />}
             
             {toast && (

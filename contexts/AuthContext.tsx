@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode, useMemo, useRef } from 'react';
 import { getSupabaseClient } from '../utils/supabaseClient';
 import type { SupabaseClient, Session } from '@supabase/supabase-js';
@@ -14,7 +15,7 @@ const getVNDateString = (date: Date) => {
 
 const getRouteFromPath = (path: string): string => {
     const pathSegment = path.split('/').filter(Boolean)[0];
-    const validRoutes = ['tool', 'leaderboard', 'my-creations', 'settings', 'buy-credits', 'gallery', 'admin-gallery']; // REMOVED: 'ai-love-story'
+    const validRoutes = ['tool', 'leaderboard', 'my-creations', 'settings', 'buy-credits', 'gallery', 'admin-gallery', 'profile', 'user'];
     if (validRoutes.includes(pathSegment)) {
         return pathSegment;
     }
@@ -75,7 +76,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (window.location.pathname !== targetPath) {
             window.history.pushState({}, '', targetPath);
         }
-        setRoute(path);
+        // For dynamic routes (e.g., user/123), we simplify the route state to just the base 'user'
+        // but the URL stays correct.
+        const baseRoute = path.split('/')[0]; 
+        setRoute(baseRoute);
         window.scrollTo(0, 0);
     }, []);
     

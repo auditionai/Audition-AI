@@ -15,7 +15,7 @@ import UserBadge from '../common/UserBadge';
 interface CreatorHeaderProps {
   onTopUpClick: () => void;
   activeTab: CreatorTab | 'admin-gallery'; // Add new admin tab
-  onNavigate: (tab: CreatorTab | 'admin-gallery') => void;
+  onNavigate: (tab: any) => void; // Relaxed type to allow 'profile'
   onCheckInClick: () => void;
 }
 
@@ -55,7 +55,7 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
   
   const rank = getRankForLevel(user.level);
 
-  const handleNavClick = (tab: CreatorTab | 'admin-gallery') => {
+  const handleNavClick = (tab: any) => {
     onNavigate(tab);
     setDropdownOpen(false);
   }
@@ -198,7 +198,16 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
                            <XPProgressBar currentXp={user.xp} currentLevel={user.level} />
                         </div>
                      </div>
+                     
+                     {/* NEW: Profile Link */}
                      <div className="py-1 mt-1">
+                        <button onClick={() => handleNavClick('profile')} className="flex items-center gap-3 w-full text-left px-2 py-2 text-sm rounded-md cursor-pointer text-skin-base hover:bg-white/10 font-bold">
+                            <i className="ph-fill ph-user-circle text-pink-400"></i>
+                            Trang Cá Nhân
+                        </button>
+                     </div>
+
+                     <div className="py-1">
                         <button onClick={() => handleNavClick('settings')} className={`flex items-center gap-3 w-full text-left px-2 py-2 text-sm rounded-md cursor-pointer ${activeTab === 'settings' ? 'bg-skin-accent/20 text-skin-base' : 'text-skin-muted hover:bg-white/10'}`}>
                             <i className="ph-fill ph-gear"></i>
                             {t('creator.header.userMenu.settings')}

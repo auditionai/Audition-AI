@@ -57,6 +57,12 @@ export interface User {
     spin_tickets?: number;
     last_daily_spin_at?: string;
     last_share_app_at?: string; // NEW: Track daily share app task
+    // NEW: Social Profile
+    cover_url?: string | null;
+    bio?: string;
+    total_likes?: number;
+    profile_views?: number;
+    weekly_points?: number;
 }
 
 export interface AdminManagedUser extends User {
@@ -283,4 +289,36 @@ export interface LuckyWheelReward {
     color: string; // Hex code
     is_active: boolean;
     display_order: number;
+}
+
+// NEW: Social Feed Types
+export interface Post {
+    id: string;
+    user_id: string;
+    image_url: string;
+    caption: string;
+    created_at: string;
+    likes_count: number;
+    comments_count: number;
+    is_pinned: boolean;
+    user?: { // Joined info
+        display_name: string;
+        photo_url: string;
+        level: number;
+        equipped_frame_id?: string;
+        equipped_title_id?: string;
+    }
+}
+
+export interface PostComment {
+    id: string;
+    post_id: string;
+    user_id: string;
+    content: string;
+    created_at: string;
+    user?: {
+        display_name: string;
+        photo_url: string;
+        equipped_frame_id?: string;
+    }
 }

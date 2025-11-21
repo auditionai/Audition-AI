@@ -410,8 +410,20 @@ export interface ComicCharacter {
 export interface ComicPage {
     id: string;
     page_number: number;
-    panel_description: string;
-    dialogue: { speaker: string; text: string }[];
+    panels: ComicPanel[];
+    status: 'draft' | 'rendering' | 'completed';
+}
+
+export interface ComicPanel {
+    id: string;
+    panel_number: number;
+    visual_description: string; // Prompt for AI
+    dialogue: ComicDialogue[];
     image_url?: string;
-    status: 'draft' | 'rendering' | 'completed' | 'failed';
+    is_rendering?: boolean;
+}
+
+export interface ComicDialogue {
+    speaker: string;
+    text: string;
 }

@@ -1,6 +1,6 @@
 
 // FIX: Import 'useState' from 'react' to resolve 'Cannot find name' errors.
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
 import ConfirmationModal from '../../ConfirmationModal';
 import ImageUploader from '../../ai-tool/ImageUploader';
@@ -102,10 +102,14 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
     const [imageToProcess, setImageToProcess] = useState<ProcessedImageData | null>(null);
     const [isPromptLibraryOpen, setIsPromptLibraryOpen] = useState(false);
 
+    // Refs for cleanup
+    const pollingInterval = useRef<ReturnType<typeof setInterval> | null>(null);
+
     // Effect to clean up any dangling subscriptions on unmount
     useEffect(() => {
         return () => {
             supabase?.removeAllChannels();
+            if (pollingInterval.current) clearInterval(pollingInterval.current);
         };
     }, [supabase]);
     
@@ -293,8 +297,13 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                 supabase.removeChannel(channel);
                 channel = null as any;
             }
+            if (pollingInterval.current) {
+                clearInterval(pollingInterval.current);
+                pollingInterval.current = null;
+            }
         };
 
+        // 1. Realtime Subscription
         channel
             .on('postgres_changes', {
                 event: 'UPDATE',
@@ -380,6 +389,22 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ jobId }),
                         });
+
+                        // 2. Polling Fallback (in case socket events are missed)
+                        pollingInterval.current = setInterval(async () => {
+                            const { data } = await supabase
+                                .from('generated_images')
+                                .select('image_url')
+                                .eq('id', jobId)
+                                .single();
+                            
+                            if (data && data.image_url && data.image_url !== 'PENDING') {
+                                setGeneratedImage(data.image_url);
+                                showToast(t('creator.aiTool.common.success'), 'success');
+                                setIsGenerating(false);
+                                cleanup();
+                            }
+                        }, 3000); // Check every 3 seconds
 
                     } catch (error: any) {
                         showToast(error.message, 'error');

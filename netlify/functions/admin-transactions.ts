@@ -63,7 +63,7 @@ const handler: Handler = async (event: HandlerEvent) => {
                 .single();
 
             if (action === 'approve') {
-                // Gọi RPC function (đã được cập nhật để xử lý 'pending' status)
+                // Gọi RPC function
                 const { error: rpcError } = await supabaseAdmin
                     .rpc('approve_and_credit_transaction', { transaction_id_param: transactionId });
 
@@ -72,9 +72,9 @@ const handler: Handler = async (event: HandlerEvent) => {
                     return { statusCode: 500, body: JSON.stringify({ error: `Approval failed: ${rpcError.message}` }) };
                 }
 
-                // Send System Message
+                // Send System Message (Inbox)
                 if (tx) {
-                    await sendSystemMessage(tx.user_id, `Nạp thành công! Bạn đã nhận được ${tx.diamonds_received} Kim Cương. Cảm ơn bạn đã ủng hộ Audition AI.`);
+                    await sendSystemMessage(tx.user_id, `[HỆ THỐNG] Nạp tiền thành công! Tài khoản của bạn đã được cộng ${tx.diamonds_received} Kim Cương. Cảm ơn bạn đã ủng hộ.`);
                 }
 
                 return { statusCode: 200, body: JSON.stringify({ message: 'Transaction approved successfully.' }) };
@@ -91,9 +91,9 @@ const handler: Handler = async (event: HandlerEvent) => {
                     return { statusCode: 500, body: JSON.stringify({ error: `Rejection failed: ${deleteError.message}` }) };
                 }
 
-                // Send System Message
+                // Send System Message (Inbox)
                 if (tx) {
-                    await sendSystemMessage(tx.user_id, `Giao dịch nạp tiền của bạn đã bị từ chối hoặc hủy. Vui lòng liên hệ Admin nếu có thắc mắc.`);
+                    await sendSystemMessage(tx.user_id, `[HỆ THỐNG] Giao dịch nạp tiền của bạn đã bị từ chối hoặc hủy. Vui lòng kiểm tra lại hoặc liên hệ Admin nếu có thắc mắc.`);
                 }
 
                 return { statusCode: 200, body: JSON.stringify({ message: 'Transaction rejected successfully.' }) };

@@ -320,12 +320,36 @@ export interface PostComment {
     user_id: string;
     content: string;
     created_at: string;
+    parent_id?: string | null; // For replies
     user?: {
         display_name: string;
         photo_url: string;
         level: number;
         equipped_frame_id?: string;
         equipped_title_id?: string;
+    }
+    // Joined data for parent comment user
+    parent_comment?: {
+        user_id: string;
+        user: {
+            display_name: string;
+        }
+    }
+}
+
+// NEW: Notification Type
+export interface AppNotification {
+    id: string;
+    recipient_id: string;
+    actor_id: string;
+    type: 'like' | 'comment' | 'reply' | 'share' | 'system' | 'follow';
+    entity_id?: string; // post_id, etc.
+    content?: string;
+    is_read: boolean;
+    created_at: string;
+    actor?: {
+        display_name: string;
+        photo_url: string;
     }
 }
 

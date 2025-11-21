@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Post, User } from '../../types';
 import UserAvatar from '../common/UserAvatar';
@@ -13,7 +14,7 @@ interface PostCardProps {
 }
 
 const PostCard: React.FC<PostCardProps> = ({ post, currentUser, onCommentClick, onUserClick, onDelete }) => {
-    const { supabase } = useAuth();
+    const { session, showToast } = useAuth();
     const [isLiked, setIsLiked] = useState(post.is_liked_by_user || false);
     const [likesCount, setLikesCount] = useState(post.likes_count || 0);
     const [commentsCount, setCommentsCount] = useState(post.comments_count || 0);
@@ -27,7 +28,10 @@ const PostCard: React.FC<PostCardProps> = ({ post, currentUser, onCommentClick, 
     }, [post]);
 
     const handleLike = async () => {
-        if (!currentUser || !supabase) return;
+        if (!currentUser || !session) {
+            showToast("Vui lòng đăng nhập để thả tim", "error");
+            return;
+        }
         
         // Optimistic update
         const newLikedState = !isLiked;
@@ -40,10 +44,18 @@ const PostCard: React.FC<PostCardProps> = ({ post, currentUser, onCommentClick, 
         }
 
         try {
-            if (newLikedState) {
-                await supabase.from('post_likes').insert({ post_id: post.id, user_id: currentUser.id });
-            } else {
-                await supabase.from('post_likes').delete().eq('post_id', post.id).eq('user_id', currentUser.id);
+            // Use server function to handle like + notification
+            const response = await fetch('/.netlify/functions/toggle-like', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${session.access_token}`
+                },
+                body: JSON.stringify({ postId: post.id })
+            });
+
+            if (!response.ok) {
+                throw new Error("Like failed");
             }
         } catch (error) {
             console.error("Like error:", error);

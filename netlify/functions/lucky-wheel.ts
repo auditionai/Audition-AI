@@ -1,6 +1,7 @@
 
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
+import { sendSystemMessage } from './utils/chatUtils';
 
 // Helper to get VN Date String (YYYY-MM-DD)
 const getVNDateString = (date: Date = new Date()) => {
@@ -108,6 +109,12 @@ const handler: Handler = async (event: HandlerEvent) => {
                 description: `Quay trúng: ${selectedReward.label}`
             })
         ]);
+
+        // Send System Message for big rewards
+        if (selectedReward.amount > 0 && selectedReward.type !== 'lucky') {
+             const msg = `[HỆ THỐNG] Chúc mừng! Bạn quay trúng ${selectedReward.amount} ${selectedReward.type === 'diamond' ? 'Kim Cương' : selectedReward.type === 'xp' ? 'XP' : 'Vé quay'} từ Vòng Quay May Mắn!`;
+             await sendSystemMessage(user.id, msg);
+        }
 
         return { 
             statusCode: 200, 

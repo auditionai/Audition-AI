@@ -17,6 +17,7 @@ import { useTranslation } from '../hooks/useTranslation';
 import UserAvatar from './common/UserAvatar';
 import UserBadge from './common/UserBadge';
 import RedeemGiftCode from './user/RedeemGiftCode'; 
+import TransactionHistory from './user/TransactionHistory'; // ADDED THIS
 
 // Referral Panel
 const ReferralPanel: React.FC = () => {
@@ -264,6 +265,11 @@ const Settings: React.FC = () => {
                 
                 <ReferralPanel />
                 <RedeemGiftCode />
+                
+                {/* Transaction History for all users */}
+                <TransactionHistory />
+
+                {/* Admin Panel if applicable */}
                 {user.is_admin && <AdminPanel />}
             </div>
         </div>

@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useRef } from 'react';
 import Modal from '../common/Modal';
 import { Post, PostComment } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
@@ -17,10 +18,15 @@ const CommentModal: React.FC<CommentModalProps> = ({ isOpen, onClose, post }) =>
     const [newComment, setNewComment] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [replyTo, setReplyTo] = useState<{ id: string; name: string } | null>(null);
+    const inputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         if (isOpen && post && supabase) {
             fetchComments();
+        } else {
+            setComments([]);
+            setReplyTo(null);
         }
     }, [isOpen, post]);
 
@@ -31,8 +37,11 @@ const CommentModal: React.FC<CommentModalProps> = ({ isOpen, onClose, post }) =>
             const { data, error } = await supabase
                 .from('post_comments')
                 .select(`
-                    id, content, created_at, user_id,
-                    user:users (display_name, photo_url, equipped_frame_id, xp)
+                    id, content, created_at, user_id, parent_id,
+                    user:users (display_name, photo_url, equipped_frame_id, xp),
+                    parent_comment:post_comments!parent_id (
+                        user:users (display_name)
+                    )
                 `)
                 .eq('post_id', post.id)
                 .order('created_at', { ascending: true });
@@ -57,21 +66,28 @@ const CommentModal: React.FC<CommentModalProps> = ({ isOpen, onClose, post }) =>
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!newComment.trim() || !post || !user || !supabase) return;
+        if (!newComment.trim() || !post || !user || !session) return;
         
         setIsSubmitting(true);
         try {
-            const { error } = await supabase
-                .from('post_comments')
-                .insert({
-                    post_id: post.id,
-                    user_id: user.id,
-                    content: newComment.trim()
-                });
-            
-            if (error) throw error;
+            const response = await fetch('/.netlify/functions/create-comment', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${session.access_token}`,
+                },
+                body: JSON.stringify({
+                    postId: post.id,
+                    content: newComment.trim(),
+                    parentId: replyTo?.id || null
+                }),
+            });
+
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || "Lỗi khi gửi bình luận");
             
             setNewComment('');
+            setReplyTo(null);
             fetchComments(); // Refresh list
             showToast('Đã gửi bình luận', 'success');
         } catch (e: any) {
@@ -105,6 +121,12 @@ const CommentModal: React.FC<CommentModalProps> = ({ isOpen, onClose, post }) =>
         }
     };
 
+    const handleReply = (comment: PostComment) => {
+        if (!comment.user) return;
+        setReplyTo({ id: comment.id, name: comment.user.display_name });
+        inputRef.current?.focus();
+    };
+
     if (!isOpen || !post) return null;
 
     return (
@@ -120,9 +142,10 @@ const CommentModal: React.FC<CommentModalProps> = ({ isOpen, onClose, post }) =>
                         comments.map(comment => {
                             const isOwner = user && comment.user_id === user.id;
                             const isPostOwner = user && post.user_id === user.id;
+                            const isReply = !!comment.parent_id;
                             
                             return (
-                                <div key={comment.id} className="flex gap-3 group">
+                                <div key={comment.id} className={`flex gap-3 group ${isReply ? 'ml-8' : ''}`}>
                                     <UserAvatar 
                                         url={comment.user?.photo_url || ''} 
                                         alt={comment.user?.display_name || 'User'} 
@@ -133,6 +156,14 @@ const CommentModal: React.FC<CommentModalProps> = ({ isOpen, onClose, post }) =>
                                     <div className="flex flex-col flex-grow">
                                         <div className="bg-skin-fill-secondary rounded-2xl rounded-tl-none px-4 py-2 border border-skin-border relative">
                                             <p className="text-xs font-bold text-skin-base mb-0.5">{comment.user?.display_name}</p>
+                                            
+                                            {/* Replying to... */}
+                                            {comment.parent_comment?.user && (
+                                                <p className="text-[10px] text-skin-muted mb-1">
+                                                    Trả lời <span className="font-bold text-skin-accent">{comment.parent_comment.user.display_name}</span>
+                                                </p>
+                                            )}
+
                                             <p className="text-sm text-gray-300 break-words pr-6">{comment.content}</p>
                                             
                                             {/* Delete Button */}
@@ -146,9 +177,10 @@ const CommentModal: React.FC<CommentModalProps> = ({ isOpen, onClose, post }) =>
                                                 </button>
                                             )}
                                         </div>
-                                        <span className="text-[10px] text-skin-muted ml-2 mt-1">
-                                            {new Date(comment.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                                        </span>
+                                        <div className="flex gap-4 text-[10px] text-skin-muted ml-2 mt-1">
+                                            <span>{new Date(comment.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                                            <button onClick={() => handleReply(comment)} className="font-bold hover:text-skin-base transition">Trả lời</button>
+                                        </div>
                                     </div>
                                 </div>
                             );
@@ -156,9 +188,18 @@ const CommentModal: React.FC<CommentModalProps> = ({ isOpen, onClose, post }) =>
                     )}
                 </div>
 
+                {/* Reply Indicator */}
+                {replyTo && (
+                    <div className="flex items-center justify-between bg-skin-fill-secondary px-4 py-2 text-xs border-t border-skin-border">
+                        <span className="text-skin-muted">Đang trả lời <span className="font-bold text-skin-base">{replyTo.name}</span></span>
+                        <button onClick={() => setReplyTo(null)} className="text-skin-muted hover:text-red-400"><i className="ph-fill ph-x-circle text-lg"></i></button>
+                    </div>
+                )}
+
                 {/* Input Area */}
-                <form onSubmit={handleSubmit} className="mt-4 flex gap-2 pt-4 border-t border-skin-border">
+                <form onSubmit={handleSubmit} className="mt-auto flex gap-2 pt-4 border-t border-skin-border">
                     <input 
+                        ref={inputRef}
                         type="text" 
                         value={newComment}
                         onChange={(e) => setNewComment(e.target.value)}

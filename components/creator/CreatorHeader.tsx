@@ -5,7 +5,6 @@ import { CreatorTab } from '../../pages/CreatorPage';
 import { getRankForLevel } from '../../utils/rankUtils';
 import XPProgressBar from '../common/XPProgressBar';
 import NotificationDropdown from './NotificationDropdown';
-import { CHANGELOG_DATA } from '../../constants/changelogData';
 import Logo from '../common/Logo';
 import { useTranslation } from '../../hooks/useTranslation';
 import LanguageSwitcher from '../common/LanguageSwitcher';
@@ -14,29 +13,52 @@ import UserBadge from '../common/UserBadge';
 
 interface CreatorHeaderProps {
   onTopUpClick: () => void;
-  activeTab: CreatorTab | 'admin-gallery' | 'shop' | 'profile' | 'messages'; // Add shop, profile, messages to activeTab type
+  activeTab: CreatorTab | 'admin-gallery' | 'shop' | 'profile' | 'messages'; 
   onNavigate: (tab: any) => void; 
   onCheckInClick: () => void;
 }
 
 const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, onNavigate, onCheckInClick }) => {
-  const { user, logout, hasCheckedInToday } = useAuth();
+  const { user, logout, hasCheckedInToday, supabase } = useAuth();
   const { t } = useTranslation();
   const [isDropdownOpen, setDropdownOpen] = useState(false);
   const [isNotificationOpen, setNotificationOpen] = useState(false);
-  const [hasUnread, setHasUnread] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const dropdownRef = useRef<HTMLDivElement>(null);
   const notificationRef = useRef<HTMLDivElement>(null);
   
-  // Check for unread notifications on mount
+  // Subscribe to Notifications
   useEffect(() => {
-    const lastSeenId = localStorage.getItem('lastSeenChangelogId');
-    const latestId = CHANGELOG_DATA[0]?.id;
-    if (latestId && (!lastSeenId || Number(lastSeenId) < latestId)) {
-      setHasUnread(true);
-    }
-  }, []);
+    if (!user || !supabase) return;
+
+    const fetchUnreadCount = async () => {
+      const { count } = await supabase
+        .from('notifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('recipient_id', user.id)
+        .eq('is_read', false);
+      
+      setUnreadCount(count || 0);
+    };
+
+    fetchUnreadCount();
+
+    const channel = supabase.channel('realtime:notifications')
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'notifications',
+        filter: `recipient_id=eq.${user.id}`
+      }, () => {
+        setUnreadCount(prev => prev + 1);
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user, supabase]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -62,9 +84,10 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
   
   const handleNotificationClick = () => {
     setNotificationOpen(prev => !prev);
-    if (hasUnread) {
-      localStorage.setItem('lastSeenChangelogId', String(CHANGELOG_DATA[0].id));
-      setHasUnread(false);
+    // We will mark as read inside the dropdown when it opens or items are clicked
+    if (!isNotificationOpen) {
+        // Optional: optimistic clear count if we implement "mark all as read" immediately on open
+        // setUnreadCount(0); 
     }
   }
 
@@ -108,7 +131,7 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
                     <span className="hidden md:inline">{t('creator.header.nav.checkIn')}</span>
                 </button>
                 
-                {/* Shop Button (New) */}
+                {/* Shop Button */}
                 <button
                   onClick={() => handleNavClick('shop')}
                   className={`themed-nav-button shop ${activeTab === 'shop' ? 'is-active' : ''}`}
@@ -166,7 +189,7 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
               </button>
             </div>
             
-            {/* Messages Button (New) */}
+            {/* Messages Button */}
             <button
               onClick={() => handleNavClick('messages')}
               className={`themed-notification-button p-2.5 md:p-2 ${activeTab === 'messages' ? 'text-skin-base' : ''}`}
@@ -175,21 +198,20 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
                 <i className="ph-fill ph-chat-centered-text text-xl"></i>
             </button>
 
-            {/* Notification Bell (All sizes) */}
+            {/* Notification Bell */}
             <div className="relative" ref={notificationRef}>
                 <button
                   onClick={handleNotificationClick}
                   className="themed-notification-button p-2.5 md:p-2"
                 >
                     <i className="ph-fill ph-bell text-xl"></i>
-                    {hasUnread && (
-                         <span className="absolute -top-0.5 -right-0.5 flex h-3 w-3">
-                            <span className="notification-dot-ping animate-ping absolute inline-flex h-full w-full rounded-full opacity-75"></span>
-                            <span className="notification-dot relative inline-flex rounded-full h-3 w-3 border-2"></span>
+                    {unreadCount > 0 && (
+                         <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 text-white text-[10px] font-bold flex items-center justify-center rounded-full animate-bounce shadow-lg border border-white">
+                            {unreadCount > 9 ? '9+' : unreadCount}
                         </span>
                     )}
                 </button>
-                {isNotificationOpen && <NotificationDropdown onClose={() => setNotificationOpen(false)} />}
+                {isNotificationOpen && <NotificationDropdown onClose={() => setNotificationOpen(false)} onRead={() => setUnreadCount(0)} />}
             </div>
 
             {/* Desktop User Dropdown */}

@@ -96,13 +96,15 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    // Reset resolution to 1K if switching to Flash
+    // Reset resolution/upscaler based on model
     useEffect(() => {
         if (selectedModel.apiModel === 'gemini-2.5-flash-image') {
             setImageResolution('1K');
             setUseGoogleSearch(false);
         } else {
+            // Pro Model
             setUseGoogleSearch(true); // Auto on for Pro
+            setUseUpscaler(false); // Disable upscaler for Pro as it has built-in resolution
         }
     }, [selectedModel]);
 
@@ -500,10 +502,12 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                                 </div>
                             </div>
                             
-                            <div>
-                                <ToggleSwitch label={t('creator.aiTool.singlePhoto.upscalerLabel')} checked={useUpscaler} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUseUpscaler(e.target.checked)} />
-                                <p className="text-xs text-skin-muted px-1 mt-1 leading-relaxed">{t('creator.aiTool.singlePhoto.upscalerDesc')}</p>
-                            </div>
+                            {!isProModel && (
+                                <div>
+                                    <ToggleSwitch label={t('creator.aiTool.singlePhoto.upscalerLabel')} checked={useUpscaler} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUseUpscaler(e.target.checked)} />
+                                    <p className="text-xs text-skin-muted px-1 mt-1 leading-relaxed">{t('creator.aiTool.singlePhoto.upscalerDesc')}</p>
+                                </div>
+                            )}
                         </div>
                     </SettingsBlock>
                     

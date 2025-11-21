@@ -16,11 +16,21 @@ import { calculateLevelFromXp } from '../utils/rankUtils';
 const UserProfilePage: React.FC = () => {
     const { navigate, supabase, user, showToast, session } = useAuth();
     const { theme } = useTheme();
-    const userId = window.location.pathname.split('/').pop();
+    
+    // Robust ID extraction: handles /user/123 and /user/123/
+    const getUserIdFromUrl = () => {
+        const path = window.location.pathname;
+        const segments = path.split('/').filter(segment => segment.trim() !== '');
+        // Assuming route is like /user/:id, the ID is the last segment
+        return segments[segments.length - 1];
+    };
+
+    const userId = getUserIdFromUrl();
     
     const [viewUser, setViewUser] = useState<User | null>(null);
     const [posts, setPosts] = useState<Post[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [userNotFound, setUserNotFound] = useState(false); // New state for error handling
     const [selectedPostForComments, setSelectedPostForComments] = useState<Post | null>(null);
     const [isCreatingChat, setIsCreatingChat] = useState(false);
 
@@ -28,10 +38,15 @@ const UserProfilePage: React.FC = () => {
     const cardRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        if (!userId) return;
+        if (!userId || userId === 'user') {
+            setUserNotFound(true);
+            setIsLoading(false);
+            return;
+        }
         
         const fetchData = async () => {
             setIsLoading(true);
+            setUserNotFound(false);
             try {
                 // 1. Fetch User Profile via Server Function (Bypasses RLS)
                 const userRes = await fetch(`/.netlify/functions/get-public-user?userId=${userId}`);
@@ -60,14 +75,13 @@ const UserProfilePage: React.FC = () => {
 
             } catch (e) {
                 console.error("Failed to load user profile", e);
-                showToast("Không tìm thấy người dùng này.", "error");
-                navigate('home');
+                setUserNotFound(true); // Set error state instead of navigating away
             } finally {
                 setIsLoading(false);
             }
         };
         fetchData();
-    }, [userId, navigate, user, session, showToast]);
+    }, [userId, session]); // Removed 'navigate' and 'showToast' from deps to prevent loops
 
     const handleMessageClick = async () => {
         if (!supabase || !user || !viewUser) return;
@@ -105,7 +119,24 @@ const UserProfilePage: React.FC = () => {
         return <div className="min-h-screen bg-skin-fill flex items-center justify-center"><div className="w-8 h-8 border-4 border-skin-accent border-t-transparent rounded-full animate-spin"></div></div>;
     }
 
-    if (!viewUser) return null;
+    if (userNotFound || !viewUser) {
+        return (
+            <div data-theme={theme} className="flex flex-col min-h-screen bg-skin-fill text-skin-base pb-16 md:pb-0">
+                <CreatorHeader onTopUpClick={() => navigate('buy-credits')} activeTab="profile" onNavigate={navigate} onCheckInClick={() => {}} />
+                <div className="flex-grow flex flex-col items-center justify-center text-center p-4 pt-24">
+                    <div className="w-24 h-24 bg-skin-fill-secondary rounded-full flex items-center justify-center mb-4 border-2 border-skin-border">
+                        <i className="ph-fill ph-user-minus text-4xl text-skin-muted"></i>
+                    </div>
+                    <h2 className="text-2xl font-bold mb-2">Không tìm thấy người dùng</h2>
+                    <p className="text-skin-muted mb-6 max-w-md">Người dùng này không tồn tại hoặc đường dẫn không chính xác.</p>
+                    <button onClick={() => navigate('home')} className="themed-button-primary px-6 py-2">
+                        Về Trang Chủ
+                    </button>
+                </div>
+                <BottomNavBar activeTab="profile" onTabChange={navigate} onCheckInClick={() => {}} />
+            </div>
+        );
+    }
 
     return (
         <div data-theme={theme} className="flex flex-col min-h-screen bg-skin-fill text-skin-base pb-16 md:pb-0">
@@ -199,6 +230,7 @@ const UserProfilePage: React.FC = () => {
                                 post={post} 
                                 currentUser={user}
                                 onCommentClick={(p) => setSelectedPostForComments(p)}
+                                onUserClick={(id) => navigate(`user/${id}`)}
                             />
                         ))}
                     </div>

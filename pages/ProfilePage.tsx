@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -346,6 +347,7 @@ const ProfilePage: React.FC = () => {
                                         currentUser={user} 
                                         onCommentClick={(p) => setSelectedPostForComments(p)} 
                                         onDelete={handleDeletePost}
+                                        onUserClick={(id) => navigate(`user/${id}`)}
                                     />
                                 ))}
                             </div>

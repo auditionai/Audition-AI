@@ -44,8 +44,8 @@ const AppContent: React.FC = () => {
                 pageComponent = user ? <ProfilePage /> : <HomePage />;
                 break;
             case 'user':
-                // user/:id logic is handled inside UserProfilePage by parsing window.location
-                pageComponent = user ? <UserProfilePage /> : <HomePage />;
+                // FIX: Added key={window.location.pathname} to force remount when switching between users
+                pageComponent = user ? <UserProfilePage key={window.location.pathname} /> : <HomePage />;
                 break;
             case 'messages':
                 pageComponent = user ? <MessagesPage /> : <HomePage />;

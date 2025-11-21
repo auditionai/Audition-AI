@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { ComicCharacter, ComicPanel } from '../../../types';
@@ -27,34 +26,32 @@ const StepIndicator = ({ currentStep }: { currentStep: number }) => {
     ];
 
     return (
-        <div className="flex justify-center mb-8">
-            <div className="bg-[#12121A]/80 backdrop-blur-md border border-white/10 p-1.5 rounded-full flex items-center relative z-10 shadow-xl">
-                {steps.map((step) => {
-                    const isActive = step.num === currentStep;
-                    const isPast = step.num < currentStep;
-                    return (
-                        <div key={step.num} className="flex items-center">
-                            <div 
-                                className={`
-                                    flex items-center gap-2 px-6 py-2.5 rounded-full transition-all duration-300 select-none
-                                    ${isActive 
-                                        ? 'bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-lg shadow-purple-500/30 font-bold' 
-                                        : isPast 
-                                            ? 'text-white/80 hover:bg-white/5' 
-                                            : 'text-gray-500'
-                                    }
-                                `}
-                            >
-                                <i className={`ph-fill ${step.icon} text-lg ${isActive ? 'animate-pulse' : ''}`}></i>
-                                <span className={`text-sm ${isActive ? 'block' : 'hidden sm:block'}`}>{step.label}</span>
-                            </div>
-                            {step.num < 3 && (
-                                <div className={`w-8 h-0.5 mx-1 transition-colors duration-300 ${isPast ? 'bg-purple-500/50' : 'bg-white/5'}`}></div>
-                            )}
+        <div className="bg-[#12121A]/50 border border-white/5 p-1 rounded-full flex items-center shadow-inner">
+            {steps.map((step) => {
+                const isActive = step.num === currentStep;
+                const isPast = step.num < currentStep;
+                return (
+                    <div key={step.num} className="flex items-center">
+                        <div 
+                            className={`
+                                flex items-center gap-2 px-5 py-2 rounded-full transition-all duration-300 select-none
+                                ${isActive 
+                                    ? 'bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-md font-bold' 
+                                    : isPast 
+                                        ? 'text-purple-300 hover:text-white' 
+                                        : 'text-gray-600'
+                                }
+                            `}
+                        >
+                            <i className={`ph-fill ${step.icon} text-lg ${isActive ? 'animate-pulse' : ''}`}></i>
+                            <span className={`text-xs sm:text-sm ${isActive ? 'block' : 'hidden sm:block'}`}>{step.label}</span>
                         </div>
-                    );
-                })}
-            </div>
+                        {step.num < 3 && (
+                            <div className={`w-6 h-0.5 mx-1 transition-colors duration-300 ${isPast ? 'bg-purple-500/30' : 'bg-white/5'}`}></div>
+                        )}
+                    </div>
+                );
+            })}
         </div>
     );
 };
@@ -309,7 +306,7 @@ const ComicStudio: React.FC = () => {
     };
 
     return (
-        <div className="animate-fade-in max-w-[1400px] mx-auto pb-40 pt-2">
+        <div className="animate-fade-in h-[calc(100vh-140px)] min-h-[600px] flex flex-col max-w-7xl mx-auto">
             {/* GLOBAL STYLES */}
             <style>{`
                 .bubble-tail::after {
@@ -335,300 +332,310 @@ const ComicStudio: React.FC = () => {
                 }
             `}</style>
 
-            <StepIndicator currentStep={activeStep} />
+            {/* Main Contained Box */}
+            <div className="flex-grow bg-[#12121A] border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col relative">
+                
+                {/* Header Section */}
+                <div className="px-6 py-4 border-b border-white/10 bg-[#181820] flex justify-center">
+                    <StepIndicator currentStep={activeStep} />
+                </div>
 
-            {/* STEP 1: SETUP & CASTING */}
-            {activeStep === 1 && (
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 px-4">
+                {/* Main Content Scrollable Area */}
+                <div className="flex-grow overflow-y-auto p-6 custom-scrollbar bg-[#0f0f13]">
                     
-                    {/* Left: Settings (4 Cols) */}
-                    <div className="lg:col-span-4 space-y-6">
-                        <SettingsBlock title="Cấu Hình Truyện" instructionKey="group-studio" onInstructionClick={() => {}} >
-                            <div className="space-y-4">
-                                <div>
-                                    <label className="text-xs font-bold text-skin-muted uppercase mb-1 block">Thể loại</label>
-                                    <select className="auth-input w-full" value={storySettings.genre} onChange={e => setStorySettings({...storySettings, genre: e.target.value})}>
-                                        {GENRES.map(g => <option key={g} value={g}>{g}</option>)}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="text-xs font-bold text-skin-muted uppercase mb-1 block">Phong cách vẽ</label>
-                                    <select className="auth-input w-full" value={storySettings.artStyle} onChange={e => setStorySettings({...storySettings, artStyle: e.target.value})}>
-                                        {ART_STYLES.map(s => <option key={s} value={s}>{s}</option>)}
-                                    </select>
-                                </div>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div>
-                                        <label className="text-xs font-bold text-skin-muted uppercase mb-1 block">Lượng thoại</label>
-                                        <select className="auth-input w-full text-xs" value={storySettings.dialogueAmount} onChange={e => setStorySettings({...storySettings, dialogueAmount: e.target.value})}>
-                                            <option value="Ít (Visual Focus)">Ít (Visual)</option>
-                                            <option value="Vừa phải">Vừa phải</option>
-                                            <option value="Nhiều (Story Focus)">Nhiều (Story)</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="text-xs font-bold text-skin-muted uppercase mb-1 block">Số trang</label>
-                                        <input type="number" className="auth-input w-full text-center font-bold" min={1} max={10} value={storySettings.pageCount} onChange={e => setStorySettings({...storySettings, pageCount: parseInt(e.target.value)})} />
-                                    </div>
-                                </div>
-                            </div>
-                        </SettingsBlock>
-
-                        <div className="bg-gradient-to-b from-indigo-900/30 to-purple-900/30 p-5 rounded-2xl border border-indigo-500/30 shadow-lg">
-                            <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
-                                <i className="ph-fill ph-lightbulb text-indigo-400"></i> Ý Tưởng Cốt Truyện
-                            </h3>
-                            <textarea 
-                                className="w-full bg-black/30 border border-white/10 rounded-xl p-4 text-sm text-white focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 transition resize-none placeholder-gray-500" 
-                                rows={6}
-                                placeholder="Nhập ý tưởng của bạn (tiếng Việt)... Ví dụ: Hai vũ công thi đấu tại Club, nam tỏ tình nhưng nữ từ chối vì nhảy Miss nhiều quá..." 
-                                value={storySettings.premise} 
-                                onChange={e => setStorySettings({...storySettings, premise: e.target.value})} 
-                            />
-                        </div>
-                    </div>
-
-                    {/* Right: Casting (8 Cols) - Bento Grid */}
-                    <div className="lg:col-span-8">
-                        <div className="comic-card p-6 h-full flex flex-col">
-                            <div className="flex justify-between items-center mb-6">
-                                <h3 className="text-xl font-bold text-white flex items-center gap-3">
-                                    <span className="w-10 h-10 bg-pink-500/20 rounded-xl flex items-center justify-center text-pink-400">
-                                        <i className="ph-fill ph-users-three text-xl"></i>
-                                    </span>
-                                    Casting Nhân Vật
-                                </h3>
-                                <button 
-                                    onClick={handleAddCharacter} 
-                                    className="themed-button-secondary px-4 py-2 text-sm font-bold flex items-center gap-2 hover:bg-white/10"
-                                >
-                                    <i className="ph-bold ph-plus"></i> Thêm
-                                </button>
-                            </div>
-
-                            {characters.length === 0 ? (
-                                <div className="flex-grow flex flex-col items-center justify-center text-center py-20 border-2 border-dashed border-white/10 rounded-2xl bg-black/20">
-                                    <div className="w-20 h-20 bg-skin-fill-secondary rounded-full flex items-center justify-center mb-4 animate-bounce">
-                                        <i className="ph-fill ph-user-plus text-4xl text-skin-muted"></i>
-                                    </div>
-                                    <p className="text-skin-muted font-medium">Chưa có diễn viên nào.</p>
-                                    <p className="text-xs text-gray-600 mt-1">Thêm nhân vật để bắt đầu câu chuyện.</p>
-                                </div>
-                            ) : (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    {characters.map((char) => (
-                                        <div key={char.id} className="relative bg-black/30 rounded-xl border border-white/5 overflow-hidden flex group hover:border-pink-500/50 transition-all">
-                                            {/* Image Section */}
-                                            <label className="w-28 flex-shrink-0 bg-black/50 cursor-pointer relative">
-                                                {char.image_url ? (
-                                                    <img src={char.image_url} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" alt="Char" />
-                                                ) : (
-                                                    <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-600 gap-1">
-                                                        <i className="ph-fill ph-camera text-2xl"></i>
-                                                        <span className="text-[10px] font-bold">UPLOAD</span>
-                                                    </div>
-                                                )}
-                                                <input type="file" className="hidden" accept="image/*" onChange={(e) => e.target.files?.[0] && handleCharacterImageUpload(char.id, e.target.files[0])} />
-                                            </label>
-
-                                            {/* Info Section */}
-                                            <div className="flex-grow p-3 flex flex-col min-w-0">
-                                                <div className="flex justify-between items-start mb-2">
-                                                    <input 
-                                                        type="text" 
-                                                        value={char.name} 
-                                                        onChange={(e) => setCharacters(chars => chars.map(c => c.id === char.id ? { ...c, name: e.target.value } : c))} 
-                                                        className="bg-transparent border-b border-white/10 focus:border-pink-500 text-white font-bold text-sm focus:outline-none w-32 pb-0.5 transition-colors placeholder-gray-600" 
-                                                        placeholder="Tên..." 
-                                                    />
-                                                    <button onClick={() => handleRemoveCharacter(char.id)} className="text-gray-500 hover:text-red-400 transition"><i className="ph-fill ph-x"></i></button>
-                                                </div>
-                                                
-                                                <div className="relative flex-grow">
-                                                    <textarea 
-                                                        className={`w-full h-full bg-white/5 border border-white/5 rounded-lg p-2 text-xs text-gray-400 focus:text-white focus:bg-black/40 transition resize-none ${char.is_analyzing ? 'opacity-30' : ''}`} 
-                                                        placeholder="Mô tả ngoại hình (AI tự điền)..." 
-                                                        value={char.description} 
-                                                        onChange={(e) => setCharacters(chars => chars.map(c => c.id === char.id ? { ...c, description: e.target.value } : c))} 
-                                                    />
-                                                    {char.is_analyzing && (
-                                                        <div className="absolute inset-0 flex items-center justify-center">
-                                                            <i className="ph-bold ph-spinner animate-spin text-pink-500 text-xl"></i>
-                                                        </div>
-                                                    )}
-                                                </div>
+                    {/* STEP 1: SETUP & CASTING */}
+                    {activeStep === 1 && (
+                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                            {/* Left: Settings */}
+                            <div className="lg:col-span-4 space-y-6">
+                                <SettingsBlock title="Cấu Hình Truyện" instructionKey="group-studio" onInstructionClick={() => {}} >
+                                    <div className="space-y-4">
+                                        <div>
+                                            <label className="text-xs font-bold text-skin-muted uppercase mb-1 block">Thể loại</label>
+                                            <select className="auth-input w-full" value={storySettings.genre} onChange={e => setStorySettings({...storySettings, genre: e.target.value})}>
+                                                {GENRES.map(g => <option key={g} value={g}>{g}</option>)}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-bold text-skin-muted uppercase mb-1 block">Phong cách vẽ</label>
+                                            <select className="auth-input w-full" value={storySettings.artStyle} onChange={e => setStorySettings({...storySettings, artStyle: e.target.value})}>
+                                                {ART_STYLES.map(s => <option key={s} value={s}>{s}</option>)}
+                                            </select>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="text-xs font-bold text-skin-muted uppercase mb-1 block">Lượng thoại</label>
+                                                <select className="auth-input w-full text-xs" value={storySettings.dialogueAmount} onChange={e => setStorySettings({...storySettings, dialogueAmount: e.target.value})}>
+                                                    <option value="Ít (Visual Focus)">Ít (Visual)</option>
+                                                    <option value="Vừa phải">Vừa phải</option>
+                                                    <option value="Nhiều (Story Focus)">Nhiều (Story)</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="text-xs font-bold text-skin-muted uppercase mb-1 block">Số trang</label>
+                                                <input type="number" className="auth-input w-full text-center font-bold" min={1} max={10} value={storySettings.pageCount} onChange={e => setStorySettings({...storySettings, pageCount: parseInt(e.target.value)})} />
                                             </div>
                                         </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* STEP 2: SCRIPT EDITOR */}
-            {activeStep === 2 && (
-                <div className="max-w-5xl mx-auto px-4 space-y-6">
-                    <div className="bg-blue-500/10 border border-blue-500/30 p-4 rounded-xl flex items-center gap-4">
-                        <div className="w-10 h-10 bg-blue-500/20 rounded-full flex items-center justify-center text-blue-400">
-                            <i className="ph-fill ph-magic-wand text-xl"></i>
-                        </div>
-                        <div>
-                            <h4 className="font-bold text-blue-100">Kịch bản AI đã sẵn sàng</h4>
-                            <p className="text-xs text-blue-200/60">Hãy kiểm tra và chỉnh sửa lời thoại trước khi vẽ.</p>
-                        </div>
-                    </div>
-
-                    <div className="space-y-4">
-                        {panels.map((panel) => (
-                            <div key={panel.id} className="comic-card p-0 flex flex-col md:flex-row">
-                                {/* Left: Visual Prompt */}
-                                <div className="md:w-1/2 p-4 border-b md:border-b-0 md:border-r border-white/10 bg-black/20">
-                                    <div className="flex items-center justify-between mb-2">
-                                        <span className="text-xs font-bold bg-blue-600 text-white px-2 py-0.5 rounded">PANEL {panel.panel_number}</span>
-                                        <span className="text-[10px] text-gray-500">Visual Description</span>
                                     </div>
+                                </SettingsBlock>
+
+                                <div className="bg-gradient-to-b from-indigo-900/30 to-purple-900/30 p-5 rounded-2xl border border-indigo-500/30 shadow-lg">
+                                    <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
+                                        <i className="ph-fill ph-lightbulb text-indigo-400"></i> Ý Tưởng Cốt Truyện
+                                    </h3>
                                     <textarea 
-                                        className="w-full h-32 bg-transparent border-none focus:ring-0 text-sm text-gray-300 leading-relaxed resize-none p-0"
-                                        value={panel.visual_description}
-                                        onChange={(e) => handleUpdatePanel(panel.id, 'visual_description', e.target.value)}
+                                        className="w-full bg-black/30 border border-white/10 rounded-xl p-4 text-sm text-white focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 transition resize-none placeholder-gray-500" 
+                                        rows={6}
+                                        placeholder="Nhập ý tưởng của bạn (tiếng Việt)... Ví dụ: Hai vũ công thi đấu tại Club, nam tỏ tình nhưng nữ từ chối vì nhảy Miss nhiều quá..." 
+                                        value={storySettings.premise} 
+                                        onChange={e => setStorySettings({...storySettings, premise: e.target.value})} 
                                     />
                                 </div>
-
-                                {/* Right: Dialogue */}
-                                <div className="md:w-1/2 p-4 bg-skin-fill-secondary">
-                                    <div className="mb-2 text-[10px] font-bold text-gray-500 uppercase">Hội thoại</div>
-                                    <div className="space-y-3">
-                                        {panel.dialogue.map((dia, dIndex) => (
-                                            <div key={dIndex} className="flex gap-2 items-start group">
-                                                <div className="w-24 pt-1">
-                                                    <input 
-                                                        className="w-full bg-transparent border-b border-white/10 text-xs font-bold text-yellow-400 focus:border-yellow-500 focus:outline-none text-right px-1 py-1" 
-                                                        value={dia.speaker} 
-                                                        onChange={(e) => handleUpdateDialogue(panel.id, dIndex, 'speaker', e.target.value)}
-                                                        placeholder="Tên"
-                                                    />
-                                                </div>
-                                                <div className="flex-grow">
-                                                    <textarea 
-                                                        className="w-full bg-white/5 border border-white/5 rounded-lg p-2 text-sm text-white focus:border-green-500/50 focus:outline-none transition resize-none" 
-                                                        value={dia.text} 
-                                                        onChange={(e) => handleUpdateDialogue(panel.id, dIndex, 'text', e.target.value)}
-                                                        rows={2}
-                                                    />
-                                                </div>
-                                            </div>
-                                        ))}
-                                        {panel.dialogue.length === 0 && <p className="text-xs text-gray-600 italic pl-2">Không có lời thoại</p>}
-                                    </div>
-                                </div>
                             </div>
-                        ))}
-                    </div>
-                </div>
-            )}
 
-            {/* STEP 3: RENDER & EXPORT */}
-            {activeStep === 3 && (
-                <div className="max-w-5xl mx-auto px-4 space-y-8">
-                    <div className="flex justify-end gap-3">
-                        <button onClick={() => setActiveStep(2)} className="themed-button-secondary px-4 py-2 text-xs font-bold">Quay lại Kịch bản</button>
-                        <button onClick={handleExportPDF} disabled={isLoading} className="bg-red-600 hover:bg-red-500 text-white px-6 py-2 rounded-full text-sm font-bold shadow-lg flex items-center gap-2 transition-all hover:scale-105">
-                            {isLoading ? <i className="ph-bold ph-spinner animate-spin"></i> : <i className="ph-bold ph-file-pdf"></i>}
-                            Xuất bản PDF
-                        </button>
-                    </div>
+                            {/* Right: Casting */}
+                            <div className="lg:col-span-8">
+                                <div className="comic-card p-6 h-full flex flex-col">
+                                    <div className="flex justify-between items-center mb-6">
+                                        <h3 className="text-xl font-bold text-white flex items-center gap-3">
+                                            <span className="w-10 h-10 bg-pink-500/20 rounded-xl flex items-center justify-center text-pink-400">
+                                                <i className="ph-fill ph-users-three text-xl"></i>
+                                            </span>
+                                            Casting Nhân Vật
+                                        </h3>
+                                        <button 
+                                            onClick={handleAddCharacter} 
+                                            className="themed-button-secondary px-4 py-2 text-sm font-bold flex items-center gap-2 hover:bg-white/10"
+                                        >
+                                            <i className="ph-bold ph-plus"></i> Thêm
+                                        </button>
+                                    </div>
 
-                    <div className="grid grid-cols-1 gap-8">
-                        {panels.map((panel) => (
-                            <div key={panel.id} className="bg-[#1a1a1a] p-2 shadow-2xl rounded-sm">
-                                <div 
-                                    ref={(el) => { panelRefs.current[panel.id] = el; }}
-                                    className="relative w-full aspect-video bg-white overflow-hidden border border-black flex items-center justify-center group"
-                                >
-                                    {/* Draw Button Overlay */}
-                                    {!panel.image_url && (
-                                        <div className="absolute inset-0 bg-skin-fill-secondary/90 flex flex-col items-center justify-center z-20">
-                                            <p className="text-gray-400 text-sm mb-4 max-w-md text-center px-4 line-clamp-2">{panel.visual_description}</p>
-                                            <button 
-                                                onClick={() => handleRenderPanel(panel)} 
-                                                disabled={panel.is_rendering}
-                                                className="themed-button-primary px-8 py-3 rounded-full font-bold text-white shadow-xl flex items-center gap-2 transform hover:scale-105 transition-all"
-                                            >
-                                                {panel.is_rendering ? <i className="ph-bold ph-spinner animate-spin text-xl"></i> : <i className="ph-fill ph-paint-brush-broad text-xl"></i>}
-                                                {panel.is_rendering ? 'Đang vẽ...' : `Vẽ Panel Này (${RENDER_COST} 💎)`}
-                                            </button>
+                                    {characters.length === 0 ? (
+                                        <div className="flex-grow flex flex-col items-center justify-center text-center py-20 border-2 border-dashed border-white/10 rounded-2xl bg-black/20">
+                                            <div className="w-20 h-20 bg-skin-fill-secondary rounded-full flex items-center justify-center mb-4 animate-bounce">
+                                                <i className="ph-fill ph-user-plus text-4xl text-skin-muted"></i>
+                                            </div>
+                                            <p className="text-skin-muted font-medium">Chưa có diễn viên nào.</p>
+                                            <p className="text-xs text-gray-600 mt-1">Thêm nhân vật để bắt đầu câu chuyện.</p>
+                                        </div>
+                                    ) : (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            {characters.map((char) => (
+                                                <div key={char.id} className="relative bg-black/30 rounded-xl border border-white/5 overflow-hidden flex group hover:border-pink-500/50 transition-all">
+                                                    <label className="w-28 flex-shrink-0 bg-black/50 cursor-pointer relative border-r border-white/5">
+                                                        {char.image_url ? (
+                                                            <img src={char.image_url} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" alt="Char" />
+                                                        ) : (
+                                                            <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-600 gap-1">
+                                                                <i className="ph-fill ph-camera text-2xl"></i>
+                                                                <span className="text-[10px] font-bold">UPLOAD</span>
+                                                            </div>
+                                                        )}
+                                                        <input type="file" className="hidden" accept="image/*" onChange={(e) => e.target.files?.[0] && handleCharacterImageUpload(char.id, e.target.files[0])} />
+                                                    </label>
+
+                                                    <div className="flex-grow p-3 flex flex-col min-w-0">
+                                                        <div className="flex justify-between items-start mb-2">
+                                                            <input 
+                                                                type="text" 
+                                                                value={char.name} 
+                                                                onChange={(e) => setCharacters(chars => chars.map(c => c.id === char.id ? { ...c, name: e.target.value } : c))} 
+                                                                className="bg-transparent border-b border-white/10 focus:border-pink-500 text-white font-bold text-sm focus:outline-none w-32 pb-0.5 transition-colors placeholder-gray-600" 
+                                                                placeholder="Tên..." 
+                                                            />
+                                                            <button onClick={() => handleRemoveCharacter(char.id)} className="text-gray-500 hover:text-red-400 transition"><i className="ph-fill ph-x"></i></button>
+                                                        </div>
+                                                        
+                                                        <div className="relative flex-grow">
+                                                            <textarea 
+                                                                className={`w-full h-full bg-white/5 border border-white/5 rounded-lg p-2 text-xs text-gray-400 focus:text-white focus:bg-black/40 transition resize-none ${char.is_analyzing ? 'opacity-30' : ''}`} 
+                                                                placeholder="Mô tả ngoại hình (AI tự điền)..." 
+                                                                value={char.description} 
+                                                                onChange={(e) => setCharacters(chars => chars.map(c => c.id === char.id ? { ...c, description: e.target.value } : c))} 
+                                                            />
+                                                            {char.is_analyzing && (
+                                                                <div className="absolute inset-0 flex items-center justify-center">
+                                                                    <i className="ph-bold ph-spinner animate-spin text-pink-500 text-xl"></i>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
                                         </div>
                                     )}
-
-                                    {panel.image_url ? (
-                                        <>
-                                            <img src={panel.image_url} alt="Panel" className="w-full h-full object-cover" crossOrigin="anonymous" />
-                                            {/* Bubbles */}
-                                            {panel.dialogue.map((dia, idx) => (
-                                                <DraggableBubble 
-                                                    key={idx} 
-                                                    text={`${dia.speaker ? dia.speaker + ': ' : ''}${dia.text}`} 
-                                                    initialX={50 + (idx * 50)} 
-                                                    initialY={50 + (idx * 50)}
-                                                    onUpdate={() => {}} 
-                                                />
-                                            ))}
-                                        </>
-                                    ) : null}
-                                    
-                                    <div className="absolute bottom-2 right-2 bg-white border border-black text-black text-[10px] font-bold px-1.5 py-0.5 z-10 pointer-events-none select-none">
-                                        {panel.panel_number}
-                                    </div>
                                 </div>
                             </div>
-                        ))}
-                    </div>
-                </div>
-            )}
+                        </div>
+                    )}
 
-            {/* FLOATING ACTION BAR (FIXED BOTTOM) */}
-            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[90%] max-w-2xl z-50 animate-fade-in-up">
-                <div className="bg-[#12121A]/90 backdrop-blur-xl border border-white/10 p-2 pl-6 rounded-full shadow-2xl flex items-center justify-between ring-1 ring-white/5">
-                    
-                    {/* Info Left */}
-                    <div className="flex flex-col">
-                        <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Ước tính chi phí</span>
-                        <div className="text-white font-bold flex items-center gap-1.5">
-                            {activeStep === 1 ? (
-                                <>
-                                    <span className="text-pink-400 text-xl">2</span>
-                                    <i className="ph-fill ph-diamonds-four text-pink-400 text-xs"></i>
-                                    <span className="text-xs font-medium text-gray-500 ml-1">cho Kịch bản</span>
-                                </>
-                            ) : (
-                                <>
-                                    <span className="text-purple-400 text-xl">{RENDER_COST}</span>
-                                    <i className="ph-fill ph-diamonds-four text-purple-400 text-xs"></i>
-                                    <span className="text-xs font-medium text-gray-500 ml-1">/ 1 Ảnh</span>
-                                </>
-                            )}
+                    {/* STEP 2: SCRIPT EDITOR */}
+                    {activeStep === 2 && (
+                        <div className="max-w-5xl mx-auto space-y-6">
+                            <div className="bg-blue-500/10 border border-blue-500/30 p-4 rounded-xl flex items-center gap-4">
+                                <div className="w-10 h-10 bg-blue-500/20 rounded-full flex items-center justify-center text-blue-400">
+                                    <i className="ph-fill ph-magic-wand text-xl"></i>
+                                </div>
+                                <div>
+                                    <h4 className="font-bold text-blue-100">Kịch bản AI đã sẵn sàng</h4>
+                                    <p className="text-xs text-blue-200/60">Hãy kiểm tra và chỉnh sửa lời thoại trước khi vẽ.</p>
+                                </div>
+                            </div>
+
+                            <div className="space-y-4">
+                                {panels.map((panel) => (
+                                    <div key={panel.id} className="comic-card p-0 flex flex-col md:flex-row">
+                                        {/* Left: Visual Prompt */}
+                                        <div className="md:w-1/2 p-4 border-b md:border-b-0 md:border-r border-white/10 bg-black/20">
+                                            <div className="flex items-center justify-between mb-2">
+                                                <span className="text-xs font-bold bg-blue-600 text-white px-2 py-0.5 rounded">PANEL {panel.panel_number}</span>
+                                                <span className="text-[10px] text-gray-500">Visual Description</span>
+                                            </div>
+                                            <textarea 
+                                                className="w-full h-32 bg-transparent border-none focus:ring-0 text-sm text-gray-300 leading-relaxed resize-none p-0"
+                                                value={panel.visual_description}
+                                                onChange={(e) => handleUpdatePanel(panel.id, 'visual_description', e.target.value)}
+                                            />
+                                        </div>
+
+                                        {/* Right: Dialogue */}
+                                        <div className="md:w-1/2 p-4 bg-skin-fill-secondary">
+                                            <div className="mb-2 text-[10px] font-bold text-gray-500 uppercase">Hội thoại</div>
+                                            <div className="space-y-3">
+                                                {panel.dialogue.map((dia, dIndex) => (
+                                                    <div key={dIndex} className="flex gap-2 items-start group">
+                                                        <div className="w-24 pt-1">
+                                                            <input 
+                                                                className="w-full bg-transparent border-b border-white/10 text-xs font-bold text-yellow-400 focus:border-yellow-500 focus:outline-none text-right px-1 py-1" 
+                                                                value={dia.speaker} 
+                                                                onChange={(e) => handleUpdateDialogue(panel.id, dIndex, 'speaker', e.target.value)}
+                                                                placeholder="Tên"
+                                                            />
+                                                        </div>
+                                                        <div className="flex-grow">
+                                                            <textarea 
+                                                                className="w-full bg-white/5 border border-white/5 rounded-lg p-2 text-sm text-white focus:border-green-500/50 focus:outline-none transition resize-none" 
+                                                                value={dia.text} 
+                                                                onChange={(e) => handleUpdateDialogue(panel.id, dIndex, 'text', e.target.value)}
+                                                                rows={2}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                                {panel.dialogue.length === 0 && <p className="text-xs text-gray-600 italic pl-2">Không có lời thoại</p>}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* STEP 3: RENDER & EXPORT */}
+                    {activeStep === 3 && (
+                        <div className="max-w-5xl mx-auto space-y-8">
+                            <div className="grid grid-cols-1 gap-8">
+                                {panels.map((panel) => (
+                                    <div key={panel.id} className="bg-[#1a1a1a] p-2 shadow-2xl rounded-sm">
+                                        <div 
+                                            ref={(el) => { panelRefs.current[panel.id] = el; }}
+                                            className="relative w-full aspect-video bg-white overflow-hidden border border-black flex items-center justify-center group"
+                                        >
+                                            {/* Draw Button Overlay */}
+                                            {!panel.image_url && (
+                                                <div className="absolute inset-0 bg-skin-fill-secondary/90 flex flex-col items-center justify-center z-20">
+                                                    <p className="text-gray-400 text-sm mb-4 max-w-md text-center px-4 line-clamp-2">{panel.visual_description}</p>
+                                                    <button 
+                                                        onClick={() => handleRenderPanel(panel)} 
+                                                        disabled={panel.is_rendering}
+                                                        className="themed-button-primary px-8 py-3 rounded-full font-bold text-white shadow-xl flex items-center gap-2 transform hover:scale-105 transition-all"
+                                                    >
+                                                        {panel.is_rendering ? <i className="ph-bold ph-spinner animate-spin text-xl"></i> : <i className="ph-fill ph-paint-brush-broad text-xl"></i>}
+                                                        {panel.is_rendering ? 'Đang vẽ...' : `Vẽ Panel Này (${RENDER_COST} 💎)`}
+                                                    </button>
+                                                </div>
+                                            )}
+
+                                            {panel.image_url ? (
+                                                <>
+                                                    <img src={panel.image_url} alt="Panel" className="w-full h-full object-cover" crossOrigin="anonymous" />
+                                                    {/* Bubbles */}
+                                                    {panel.dialogue.map((dia, idx) => (
+                                                        <DraggableBubble 
+                                                            key={idx} 
+                                                            text={`${dia.speaker ? dia.speaker + ': ' : ''}${dia.text}`} 
+                                                            initialX={50 + (idx * 50)} 
+                                                            initialY={50 + (idx * 50)}
+                                                            onUpdate={() => {}} 
+                                                        />
+                                                    ))}
+                                                </>
+                                            ) : null}
+                                            
+                                            <div className="absolute bottom-2 right-2 bg-white border border-black text-black text-[10px] font-bold px-1.5 py-0.5 z-10 pointer-events-none select-none">
+                                                {panel.panel_number}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* Footer Section */}
+                <div className="px-6 py-4 border-t border-white/10 bg-[#181820] flex flex-col md:flex-row items-center justify-between gap-4 z-20">
+                    {/* Left Info */}
+                    <div className="flex items-center gap-4 w-full md:w-auto justify-center md:justify-start">
+                        <div className="flex flex-col">
+                            <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Ước tính chi phí</span>
+                            <div className="text-white font-bold flex items-center gap-1.5">
+                                {activeStep === 1 ? (
+                                    <>
+                                        <span className="text-pink-400 text-xl">2</span>
+                                        <i className="ph-fill ph-diamonds-four text-pink-400 text-xs"></i>
+                                        <span className="text-xs font-medium text-gray-500 ml-1">cho Kịch bản</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <span className="text-purple-400 text-xl">{RENDER_COST}</span>
+                                        <i className="ph-fill ph-diamonds-four text-purple-400 text-xs"></i>
+                                        <span className="text-xs font-medium text-gray-500 ml-1">/ 1 Ảnh</span>
+                                    </>
+                                )}
+                            </div>
                         </div>
                     </div>
 
-                    {/* Main Action Button */}
-                    <div className="flex gap-2">
+                    {/* Right Actions */}
+                    <div className="flex items-center gap-3 w-full md:w-auto justify-center md:justify-end">
                         {activeStep > 1 && (
                             <button 
                                 onClick={() => setActiveStep(prev => (prev - 1) as any)}
-                                className="w-10 h-10 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-gray-400 transition-colors"
+                                className="px-4 py-2.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 font-bold text-sm transition-colors flex items-center gap-2 border border-white/5"
                             >
-                                <i className="ph-bold ph-caret-left text-lg"></i>
+                                <i className="ph-bold ph-caret-left"></i> Quay lại
                             </button>
                         )}
                         
+                        {activeStep === 3 && (
+                            <button 
+                                onClick={handleExportPDF} 
+                                disabled={isLoading}
+                                className="px-5 py-2.5 rounded-lg bg-red-600/90 hover:bg-red-600 text-white font-bold text-sm transition-all shadow-lg shadow-red-900/20 flex items-center gap-2"
+                            >
+                                {isLoading ? <i className="ph-bold ph-spinner animate-spin"></i> : <i className="ph-bold ph-file-pdf"></i>}
+                                Xuất PDF
+                            </button>
+                        )}
+
                         <button 
                             onClick={activeStep === 1 ? handleGenerateScript : () => setActiveStep(3)}
                             disabled={isLoading || (activeStep === 3)}
                             className={`
-                                px-6 py-3 rounded-full font-bold text-sm transition-all transform hover:-translate-y-0.5 active:scale-95 flex items-center gap-2 shadow-lg
-                                ${activeStep === 3 ? 'bg-green-600 text-white cursor-default' : 'bg-gradient-to-r from-pink-500 to-purple-600 text-white hover:shadow-pink-500/25'}
+                                px-6 py-2.5 rounded-lg font-bold text-sm transition-all transform hover:-translate-y-0.5 active:scale-95 flex items-center gap-2 shadow-lg
+                                ${activeStep === 3 ? 'bg-green-600 text-white cursor-default opacity-50' : 'bg-gradient-to-r from-pink-500 to-purple-600 text-white hover:shadow-pink-500/25'}
                                 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none
                             `}
                         >

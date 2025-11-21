@@ -15,7 +15,7 @@ const GameConfigManager: React.FC = () => {
     const { chatConfig, updateChatConfig } = useChat();
     
     // Tabs
-    const [activeSubTab, setActiveSubTab] = useState<'ranks' | 'frames' | 'titles' | 'chat'>('ranks');
+    const [activeSubTab, setActiveSubTab] = useState<'ranks' | 'frames' | 'titles' | 'chat'>('frames');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     
@@ -35,6 +35,26 @@ const GameConfigManager: React.FC = () => {
 
     // Helper to check valid UUID
     const isUUID = (str?: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str || '');
+
+    // --- SEED DEFAULT ITEMS ---
+    const handleSeed = async () => {
+        if (!confirm("Thao tác này sẽ thêm lại toàn bộ vật phẩm mặc định vào Database. Bạn có chắc chắn không?")) return;
+        setIsSaving(true);
+        try {
+            const res = await fetch('/.netlify/functions/admin-game-config?action=seed', {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${session?.access_token}` }
+            });
+            const data = await res.json();
+            if(!res.ok) throw new Error(data.error);
+            showToast(`Đã khởi tạo ${data.count} vật phẩm mẫu!`, 'success');
+            refreshConfig();
+        } catch(e: any) {
+            showToast(e.message, 'error');
+        } finally {
+            setIsSaving(false);
+        }
+    }
 
     // --- Ranks Logic ---
     const handleEditRank = (rank: Rank | null) => {
@@ -83,7 +103,6 @@ const GameConfigManager: React.FC = () => {
     const handleEditCosmetic = (cosmetic: CosmeticItem | null, defaultType: 'frame' | 'title') => {
         let cosmeticToEdit = cosmetic ? { ...cosmetic } : null;
         
-        // Auto-fill name from translation if available and not set
         if (cosmeticToEdit && !cosmeticToEdit.name && cosmeticToEdit.nameKey) {
              cosmeticToEdit.name = t(cosmeticToEdit.nameKey);
         }
@@ -92,7 +111,7 @@ const GameConfigManager: React.FC = () => {
             type: defaultType,
             name: '', 
             rarity: 'common', 
-            price: 0, // Default price
+            price: 0, 
             unlockCondition: { level: 0 },
             cssClass: defaultType === 'title' ? 'title-basic' : 'frame-none'
         } as any);
@@ -139,7 +158,7 @@ const GameConfigManager: React.FC = () => {
                 type: editingCosmetic.type,
                 name: editingCosmetic.name,
                 rarity: editingCosmetic.rarity,
-                price: editingCosmetic.price, // Include Price
+                price: editingCosmetic.price, // Explicitly saving Price
                 css_class: editingCosmetic.cssClass,
                 image_url: editingCosmetic.imageUrl,
                 icon_url: finalIconUrl,
@@ -169,11 +188,13 @@ const GameConfigManager: React.FC = () => {
     };
     
     const handleDelete = async (id: string, type: 'rank' | 'cosmetic') => {
-        if (!confirm('Are you sure? This cannot be undone.')) return;
+        if (!confirm('Bạn có chắc chắn muốn xóa vĩnh viễn vật phẩm này khỏi Shop?')) return;
+        
         if (!isUUID(id)) {
-            showToast("Cannot delete built-in default items directly. Create a new item to replace them.", "error");
+            showToast("Không thể xóa vật phẩm mặc định từ code. Vui lòng sử dụng tính năng 'Khởi tạo Shop' để chuyển chúng vào Database trước.", "error");
             return;
         }
+
         try {
              await fetch(`/.netlify/functions/admin-game-config?type=${type}`, {
                 method: 'DELETE',
@@ -202,13 +223,13 @@ const GameConfigManager: React.FC = () => {
 
     return (
         <div className="bg-[#12121A]/80 border border-blue-500/20 rounded-2xl shadow-lg p-6">
-            <div className="flex justify-between items-center mb-6">
-                <h3 className="text-2xl font-bold text-blue-400">{t('creator.settings.admin.gameConfig.title')}</h3>
-                <div className="flex gap-2 overflow-x-auto pb-2">
-                     <button onClick={() => setActiveSubTab('ranks')} className={`px-3 py-1 rounded whitespace-nowrap ${activeSubTab === 'ranks' ? 'bg-blue-500 text-white' : 'bg-white/5 text-gray-400'}`}>{t('creator.settings.admin.gameConfig.tabs.ranks')}</button>
-                     <button onClick={() => setActiveSubTab('frames')} className={`px-3 py-1 rounded whitespace-nowrap ${activeSubTab === 'frames' ? 'bg-blue-500 text-white' : 'bg-white/5 text-gray-400'}`}>{t('creator.settings.admin.gameConfig.tabs.frames')}</button>
-                     <button onClick={() => setActiveSubTab('titles')} className={`px-3 py-1 rounded whitespace-nowrap ${activeSubTab === 'titles' ? 'bg-blue-500 text-white' : 'bg-white/5 text-gray-400'}`}>{t('creator.settings.admin.gameConfig.tabs.titles')}</button>
-                     <button onClick={() => setActiveSubTab('chat')} className={`px-3 py-1 rounded whitespace-nowrap ${activeSubTab === 'chat' ? 'bg-blue-500 text-white' : 'bg-white/5 text-gray-400'}`}>Chat Settings</button>
+            <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+                <h3 className="text-2xl font-bold text-blue-400">Quản Lý Shop & Cấu Hình</h3>
+                <div className="flex gap-2 overflow-x-auto pb-2 w-full md:w-auto">
+                     <button onClick={() => setActiveSubTab('frames')} className={`px-3 py-1 rounded whitespace-nowrap ${activeSubTab === 'frames' ? 'bg-blue-500 text-white' : 'bg-white/5 text-gray-400'}`}>Khung Avatar</button>
+                     <button onClick={() => setActiveSubTab('titles')} className={`px-3 py-1 rounded whitespace-nowrap ${activeSubTab === 'titles' ? 'bg-blue-500 text-white' : 'bg-white/5 text-gray-400'}`}>Danh Hiệu</button>
+                     <button onClick={() => setActiveSubTab('ranks')} className={`px-3 py-1 rounded whitespace-nowrap ${activeSubTab === 'ranks' ? 'bg-blue-500 text-white' : 'bg-white/5 text-gray-400'}`}>Cấp Bậc</button>
+                     <button onClick={() => setActiveSubTab('chat')} className={`px-3 py-1 rounded whitespace-nowrap ${activeSubTab === 'chat' ? 'bg-blue-500 text-white' : 'bg-white/5 text-gray-400'}`}>Chat</button>
                 </div>
             </div>
 
@@ -255,34 +276,54 @@ const GameConfigManager: React.FC = () => {
             {/* FRAMES & TITLES LIST VIEW */}
             {(activeSubTab === 'frames' || activeSubTab === 'titles') && (
                 <div>
-                    <button onClick={() => handleEditCosmetic(null, activeSubTab === 'frames' ? 'frame' : 'title')} className="themed-button-primary mb-4 px-4 py-2 text-sm">
-                        + {activeSubTab === 'frames' ? t('creator.settings.admin.gameConfig.buttons.addFrame') : t('creator.settings.admin.gameConfig.buttons.addTitle')}
-                    </button>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-96 overflow-y-auto custom-scrollbar">
+                    <div className="flex justify-between mb-4">
+                        <button onClick={() => handleEditCosmetic(null, activeSubTab === 'frames' ? 'frame' : 'title')} className="themed-button-primary px-4 py-2 text-sm">
+                            + Thêm Mới
+                        </button>
+                        {(frames.length === 0 && titles.length === 0) && (
+                            <button onClick={handleSeed} disabled={isSaving} className="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg animate-pulse">
+                                {isSaving ? 'Đang khởi tạo...' : '⚡ Khởi Tạo Shop Mẫu'}
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Info Alert */}
+                    <div className="bg-blue-500/10 border border-blue-500/30 p-3 rounded-lg mb-4 text-xs text-blue-200">
+                        <i className="ph-fill ph-info mr-2"></i>
+                        Bạn có thể sửa giá bán và xóa vật phẩm tại đây. Thay đổi sẽ áp dụng ngay lập tức cho tất cả người dùng.
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[500px] overflow-y-auto custom-scrollbar">
                         {(activeSubTab === 'frames' ? frames : titles).map(c => (
-                            <div key={c.id} className="flex gap-3 p-2 bg-white/5 rounded items-center">
-                                <div className="w-12 h-12 bg-black/30 rounded flex items-center justify-center overflow-hidden relative">
+                            <div key={c.id} className="flex gap-3 p-3 bg-white/5 border border-white/10 rounded-lg items-center hover:border-blue-500/50 transition">
+                                <div className="w-14 h-14 bg-black/40 rounded-lg flex items-center justify-center overflow-hidden relative flex-shrink-0">
                                      {c.iconUrl ? (
-                                         <img src={c.iconUrl} alt="icon" className="w-8 h-8 object-contain" />
+                                         <img src={c.iconUrl} alt="icon" className="w-10 h-10 object-contain" />
                                      ) : c.imageUrl ? (
                                          <img src={c.imageUrl} className="w-full h-full object-contain" alt="preview"/> 
                                      ) : (
-                                         <span className="text-[10px] text-gray-500">CSS</span>
+                                         <div className={`text-[10px] text-gray-500 ${c.type === 'frame' ? c.cssClass : ''}`}>CSS</div>
                                      )}
                                 </div>
-                                <div className="flex-grow">
-                                    <p className="font-bold text-sm text-white flex items-center gap-1">
+                                <div className="flex-grow min-w-0">
+                                    <p className="font-bold text-sm text-white flex items-center gap-2 truncate">
                                         {c.nameKey ? t(c.nameKey) : c.name}
+                                        {c.price && c.price > 0 && <span className="bg-yellow-500/20 text-yellow-300 text-[10px] px-1.5 py-0.5 rounded font-mono">{c.price}💎</span>}
                                     </p>
-                                    <p className="text-xs text-gray-400 uppercase">{t(`creator.settings.admin.gameConfig.rarities.${c.rarity}`)}</p>
-                                    <div className="flex gap-2 text-xs">
-                                        <span className="text-yellow-500">{t('creator.settings.admin.gameConfig.form.unlockLevel')}: {c.unlockCondition?.level || 0}</span>
-                                        <span className="text-pink-400">{c.price || 0} 💎</span>
+                                    <div className="flex items-center gap-2 mt-1">
+                                        <span className={`text-[10px] font-bold uppercase px-1.5 rounded border ${c.rarity === 'mythic' ? 'border-red-500 text-red-500' : c.rarity === 'legendary' ? 'border-yellow-500 text-yellow-500' : 'border-gray-500 text-gray-500'}`}>
+                                            {c.rarity}
+                                        </span>
+                                        <span className="text-[10px] text-gray-400">Lv.{c.unlockCondition?.level || 0}</span>
                                     </div>
                                 </div>
-                                <div className="flex flex-col gap-1">
-                                     <button onClick={() => handleEditCosmetic(c, c.type)} className="text-blue-400 text-xs">{t('creator.settings.admin.gameConfig.buttons.edit')}</button>
-                                     {c.id && isUUID(c.id) && <button onClick={() => handleDelete(c.id, 'cosmetic')} className="text-red-400 text-xs">{t('creator.settings.admin.gameConfig.buttons.delete')}</button>}
+                                <div className="flex gap-2">
+                                     <button onClick={() => handleEditCosmetic(c, c.type)} className="p-2 bg-blue-500/20 text-blue-400 rounded hover:bg-blue-500/30">
+                                        <i className="ph-fill ph-pencil-simple"></i>
+                                     </button>
+                                     <button onClick={() => handleDelete(c.id, 'cosmetic')} className="p-2 bg-red-500/20 text-red-400 rounded hover:bg-red-500/30">
+                                        <i className="ph-fill ph-trash"></i>
+                                     </button>
                                 </div>
                             </div>
                         ))}
@@ -293,9 +334,8 @@ const GameConfigManager: React.FC = () => {
             {/* MODAL */}
             {isModalOpen && (
                 <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={
-                    activeSubTab === 'ranks' ? t('creator.settings.admin.gameConfig.buttons.addRank') : 
-                    (editingCosmetic?.id ? t('creator.settings.admin.gameConfig.buttons.edit') : 
-                     (activeSubTab === 'frames' ? t('creator.settings.admin.gameConfig.buttons.addFrame') : t('creator.settings.admin.gameConfig.buttons.addTitle')))
+                    activeSubTab === 'ranks' ? 'Sửa Cấp Bậc' : 
+                    (editingCosmetic?.id ? 'Sửa Vật Phẩm Shop' : 'Thêm Vật Phẩm Mới')
                 }>
                     {/* Rank Form */}
                     {activeSubTab === 'ranks' && editingRank && (
@@ -322,22 +362,22 @@ const GameConfigManager: React.FC = () => {
                             <div>
                                 <label className="text-sm text-gray-400">{t('creator.settings.admin.gameConfig.form.type')}</label>
                                 <select value={editingCosmetic.type} onChange={e => setEditingCosmetic({...editingCosmetic, type: e.target.value as any})} className="auth-input mt-1" disabled>
-                                    <option value="frame">{t('creator.settings.admin.gameConfig.types.frame')}</option>
-                                    <option value="title">{t('creator.settings.admin.gameConfig.types.title')}</option>
+                                    <option value="frame">Khung Avatar</option>
+                                    <option value="title">Danh Hiệu</option>
                                 </select>
                             </div>
                             <div>
-                                <label className="text-sm text-gray-400">{t('creator.settings.admin.gameConfig.form.name')}</label>
-                                <input type="text" value={editingCosmetic.name} onChange={e => setEditingCosmetic({...editingCosmetic, name: e.target.value})} className="auth-input mt-1" placeholder="Tên hiển thị (VD: Thần Sấm)" />
+                                <label className="text-sm text-gray-400">Tên hiển thị</label>
+                                <input type="text" value={editingCosmetic.name} onChange={e => setEditingCosmetic({...editingCosmetic, name: e.target.value})} className="auth-input mt-1" placeholder="VD: Huyết Tộc" />
                             </div>
                             <div>
-                                <label className="text-sm text-gray-400">{t('creator.settings.admin.gameConfig.form.rarity')}</label>
+                                <label className="text-sm text-gray-400">Độ hiếm (Quyết định màu sắc viền)</label>
                                 <select value={editingCosmetic.rarity} onChange={e => setEditingCosmetic({...editingCosmetic, rarity: e.target.value as any})} className="auth-input mt-1">
-                                    <option value="common">{t('creator.settings.admin.gameConfig.rarities.common')}</option>
-                                    <option value="rare">{t('creator.settings.admin.gameConfig.rarities.rare')}</option>
-                                    <option value="epic">{t('creator.settings.admin.gameConfig.rarities.epic')}</option>
-                                    <option value="legendary">{t('creator.settings.admin.gameConfig.rarities.legendary')}</option>
-                                    <option value="mythic">{t('creator.settings.admin.gameConfig.rarities.mythic')}</option>
+                                    <option value="common">Thường (Xám)</option>
+                                    <option value="rare">Hiếm (Xanh Dương)</option>
+                                    <option value="epic">Sử Thi (Tím)</option>
+                                    <option value="legendary">Huyền Thoại (Vàng)</option>
+                                    <option value="mythic">Thần Thoại (Đỏ)</option>
                                 </select>
                             </div>
                             <div className="flex gap-4">
@@ -346,8 +386,8 @@ const GameConfigManager: React.FC = () => {
                                     <input type="number" value={editingCosmetic.unlockCondition?.level || 0} onChange={e => setEditingCosmetic({...editingCosmetic, unlockCondition: { level: Number(e.target.value) }})} className="auth-input mt-1" />
                                 </div>
                                 <div className="flex-1">
-                                    <label className="text-sm text-gray-400">Giá bán (Kim cương)</label>
-                                    <input type="number" value={editingCosmetic.price || 0} onChange={e => setEditingCosmetic({...editingCosmetic, price: Number(e.target.value)})} className="auth-input mt-1" />
+                                    <label className="text-sm text-yellow-400 font-bold">Giá bán (Kim cương)</label>
+                                    <input type="number" value={editingCosmetic.price || 0} onChange={e => setEditingCosmetic({...editingCosmetic, price: Number(e.target.value)})} className="auth-input mt-1 border-yellow-500/50 focus:border-yellow-500" />
                                 </div>
                             </div>
                             
@@ -361,11 +401,12 @@ const GameConfigManager: React.FC = () => {
                             </div>
 
                             <div>
-                                <label className="text-sm text-gray-400">{t('creator.settings.admin.gameConfig.form.cssClass')}</label>
-                                <input type="text" value={editingCosmetic.cssClass || ''} onChange={e => setEditingCosmetic({...editingCosmetic, cssClass: e.target.value})} className="auth-input mt-1" />
+                                <label className="text-sm text-gray-400">CSS Class (Hiệu ứng)</label>
+                                <input type="text" value={editingCosmetic.cssClass || ''} onChange={e => setEditingCosmetic({...editingCosmetic, cssClass: e.target.value})} className="auth-input mt-1" placeholder="VD: shop-frame-01" />
+                                <p className="text-[10px] text-gray-500 mt-1">Nhập tên class CSS để áp dụng hiệu ứng đặc biệt.</p>
                             </div>
                             
-                            <button onClick={saveCosmetic} disabled={isSaving} className="themed-button-primary w-full mt-4">{isSaving ? t('creator.settings.admin.gameConfig.buttons.saving') : t('creator.settings.admin.gameConfig.buttons.save')}</button>
+                            <button onClick={saveCosmetic} disabled={isSaving} className="themed-button-primary w-full mt-4">{isSaving ? 'Đang lưu...' : 'Lưu Vật Phẩm'}</button>
                         </div>
                     )}
                 </Modal>

@@ -4,6 +4,7 @@ import Modal from '../common/Modal';
 import { Post, PostComment } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import UserAvatar from '../common/UserAvatar';
+import { calculateLevelFromXp } from '../../utils/rankUtils';
 
 interface CommentModalProps {
     isOpen: boolean;
@@ -28,17 +29,28 @@ const CommentModal: React.FC<CommentModalProps> = ({ isOpen, onClose, post }) =>
         if (!post || !supabase) return;
         setIsLoading(true);
         try {
+            // FIX: Fetch 'xp' instead of 'level' because 'level' column does not exist
             const { data, error } = await supabase
                 .from('post_comments')
                 .select(`
                     id, content, created_at,
-                    user:users (display_name, photo_url, equipped_frame_id, level)
+                    user:users (display_name, photo_url, equipped_frame_id, xp)
                 `)
                 .eq('post_id', post.id)
                 .order('created_at', { ascending: true });
             
             if (error) throw error;
-            setComments(data as any[]); // casting to avoid strict join type issues
+
+            // Map xp to level for frontend display
+            const formattedComments = data.map((comment: any) => ({
+                ...comment,
+                user: comment.user ? {
+                    ...comment.user,
+                    level: calculateLevelFromXp(comment.user.xp || 0)
+                } : null
+            }));
+
+            setComments(formattedComments as PostComment[]); 
         } catch (e) {
             console.error("Fetch comments error:", e);
         } finally {

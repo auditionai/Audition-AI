@@ -14,7 +14,7 @@ import UserBadge from '../common/UserBadge';
 
 interface CreatorHeaderProps {
   onTopUpClick: () => void;
-  activeTab: CreatorTab | 'admin-gallery' | 'shop'; // Add shop to activeTab type
+  activeTab: CreatorTab | 'admin-gallery' | 'shop' | 'profile' | 'messages'; // Add shop, profile, messages to activeTab type
   onNavigate: (tab: any) => void; 
   onCheckInClick: () => void;
 }
@@ -169,7 +169,7 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
             {/* Messages Button (New) */}
             <button
               onClick={() => handleNavClick('messages')}
-              className={`themed-notification-button p-2.5 md:p-2 ${activeTab === 'messages' as any ? 'text-skin-base' : ''}`}
+              className={`themed-notification-button p-2.5 md:p-2 ${activeTab === 'messages' ? 'text-skin-base' : ''}`}
               title="Tin nhắn"
             >
                 <i className="ph-fill ph-chat-centered-text text-xl"></i>

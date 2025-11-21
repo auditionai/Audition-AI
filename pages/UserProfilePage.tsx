@@ -13,7 +13,7 @@ import PostCard from '../components/social/PostCard';
 import CommentModal from '../components/social/CommentModal';
 
 const UserProfilePage: React.FC = () => {
-    const { navigate, supabase, user, showToast } = useAuth();
+    const { navigate, supabase, user, showToast, session } = useAuth();
     const { theme } = useTheme();
     const userId = window.location.pathname.split('/').pop();
     
@@ -42,31 +42,33 @@ const UserProfilePage: React.FC = () => {
                 if (userError) throw userError;
                 setViewUser(userData);
 
-                // 2. Fetch User Posts with joined user data for cards
-                const { data: postsData } = await supabase
-                    .from('posts')
-                    .select(`
-                        *,
-                        user:users (display_name, photo_url, level, equipped_frame_id, equipped_title_id)
-                    `)
-                    .eq('user_id', userId)
-                    .order('created_at', { ascending: false });
+                // 2. Fetch User Posts using Server Function (Bypass RLS)
+                // Use session access token for authorization
+                const response = await fetch(`/.netlify/functions/get-posts?userId=${userId}`, {
+                    headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}
+                });
                 
-                if (postsData && user) {
-                    const postIds = postsData.map(p => p.id);
-                    const { data: likes } = await supabase
-                        .from('post_likes')
-                        .select('post_id')
-                        .eq('user_id', user.id)
-                        .in('post_id', postIds);
+                if (response.ok) {
+                    const postsData = await response.json();
                     
-                    const likedSet = new Set(likes?.map(l => l.post_id));
-                    postsData.forEach(p => {
-                        p.is_liked_by_user = likedSet.has(p.id);
-                    });
+                    // Check likes status if user is logged in
+                    if (postsData && user) {
+                        const postIds = postsData.map((p: any) => p.id);
+                        const { data: likes } = await supabase
+                            .from('post_likes')
+                            .select('post_id')
+                            .eq('user_id', user.id)
+                            .in('post_id', postIds);
+                        
+                        const likedSet = new Set(likes?.map(l => l.post_id));
+                        postsData.forEach((p: any) => {
+                            p.is_liked_by_user = likedSet.has(p.id);
+                        });
+                    }
+                    setPosts(postsData);
+                } else {
+                    console.error("Failed to load posts");
                 }
-
-                setPosts(postsData || []);
 
             } catch (e) {
                 console.error("Failed to load user profile", e);
@@ -76,7 +78,7 @@ const UserProfilePage: React.FC = () => {
             }
         };
         fetchData();
-    }, [userId, supabase, navigate, user]);
+    }, [userId, supabase, navigate, user, session]);
 
     const handleMessageClick = async () => {
         if (!supabase || !user || !viewUser) return;

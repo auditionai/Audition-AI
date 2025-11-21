@@ -39,23 +39,25 @@ const ProfilePage: React.FC = () => {
     // 3D Tilt Effect Ref
     const cardRef = useRef<HTMLDivElement>(null);
 
-    // --- FETCH POSTS ---
+    // --- FETCH POSTS (Server-side) ---
     const fetchPosts = useCallback(async () => {
-        if (!supabase || !user) return;
+        if (!session) return;
         
-        const { data, error } = await supabase
-            .from('posts')
-            .select(`
-                *,
-                user:users (display_name, photo_url, level, equipped_frame_id, equipped_title_id)
-            `)
-            .eq('user_id', user.id)
-            .order('created_at', { ascending: false });
-        
-        if (error) console.error("Error fetching posts:", error);
-        else setPosts(data || []);
-        setIsLoadingPosts(false);
-    }, [supabase, user]);
+        try {
+            const response = await fetch('/.netlify/functions/get-posts', {
+                headers: { Authorization: `Bearer ${session.access_token}` }
+            });
+            
+            if (!response.ok) throw new Error('Failed to load posts');
+            
+            const data = await response.json();
+            setPosts(data);
+        } catch (error) {
+            console.error("Error fetching posts:", error);
+        } finally {
+            setIsLoadingPosts(false);
+        }
+    }, [session]);
 
     useEffect(() => {
         fetchPosts();
@@ -199,7 +201,7 @@ const ProfilePage: React.FC = () => {
     return (
         <div data-theme={theme} className="flex flex-col min-h-screen bg-skin-fill text-skin-base pb-16 md:pb-0">
             <ThemeEffects />
-            <CreatorHeader onTopUpClick={() => navigate('buy-credits')} activeTab="tool" onNavigate={navigate} onCheckInClick={() => {}} />
+            <CreatorHeader onTopUpClick={() => navigate('buy-credits')} activeTab="profile" onNavigate={navigate} onCheckInClick={() => {}} />
             
             <main className="flex-grow pt-24 container mx-auto px-4 max-w-5xl">
                 

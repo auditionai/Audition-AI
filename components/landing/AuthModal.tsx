@@ -14,7 +14,8 @@ type AuthMode = 'login' | 'register' | 'forgot';
 
 const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMode = 'login' }) => {
     const [isLoading, setIsLoading] = useState(false);
-    const { login, loginWithEmail, registerWithEmail, resetPassword, showToast, session } = useAuth();
+    // Removed 'session' as it was unused and causing build errors
+    const { login, loginWithEmail, registerWithEmail, resetPassword, showToast } = useAuth();
     const { t } = useTranslation();
     
     const [mode, setMode] = useState<AuthMode>(initialMode);
@@ -24,7 +25,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMode = 'l
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
-    const [referralCode, setReferralCode] = useState(''); // New State
+    const [referralCode, setReferralCode] = useState(''); 
 
     // Reset loading state and form when modal is closed or mode changes
     useEffect(() => {
@@ -87,13 +88,9 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMode = 'l
                 const success = await registerWithEmail(email, password, displayName);
                 if (success) {
                     // If referral code is provided, process it after successful registration
-                    // NOTE: This logic relies on the user being immediately logged in after registerWithEmail
-                    // or having a valid session. Since registerWithEmail returns success, we try to use the code.
+                    // We store it in localStorage so the Settings component or a background process can pick it up
+                    // once the user session is fully established.
                     if (referralCode.trim()) {
-                        // We might need to wait a moment for session to be set in context, or handle it differently.
-                        // A more robust way is to pass referral code to registerWithEmail, but we are keeping changes minimal.
-                        // For now, we trigger a separate call. It might fail if session isn't ready instantly.
-                        // A safer bet is to store it in localStorage and process it when AuthContext detects a new user.
                         localStorage.setItem('pendingReferralCode', referralCode.trim());
                     }
                     onClose();

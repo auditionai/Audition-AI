@@ -210,10 +210,12 @@ const ComicStudio: React.FC = () => {
             updateUserDiamonds(data.newDiamondCount);
             
             // Initialize empty panels with loading state
+            // Store plot_summary for retries
             const initialPanels = outline.map((p: any) => ({
                 id: crypto.randomUUID(),
                 panel_number: p.panel_number,
                 visual_description: `(Đang tạo chi tiết từ ý tưởng: ${p.plot_summary}...)`,
+                plot_summary: p.plot_summary, // Store for retry
                 dialogue: [],
                 is_rendering: false
             }));
@@ -222,6 +224,7 @@ const ComicStudio: React.FC = () => {
             setActiveStep(2);
 
             // PHASE 2: EXPAND EACH PANEL (Detailed, Iterative)
+            // We wrap the loop body in try/catch to ensure one failure doesn't crash the whole UI or loop
             for (let i = 0; i < outline.length; i++) {
                 const p = outline[i];
                 setGenerationStatus(`Đang viết chi tiết phân cảnh ${p.panel_number}/${outline.length}...`);
@@ -243,15 +246,35 @@ const ComicStudio: React.FC = () => {
                     
                     if (expandRes.ok) {
                         const details = await expandRes.json();
+                        // Robust update: Ensure dialogue is always an array
                         setPanels(prev => prev.map(panel => 
                             panel.panel_number === p.panel_number 
-                            ? { ...panel, visual_description: details.visual_description, dialogue: details.dialogue }
+                            ? { 
+                                ...panel, 
+                                visual_description: details.visual_description || p.plot_summary, 
+                                dialogue: Array.isArray(details.dialogue) ? details.dialogue : [] 
+                              }
                             : panel
                         ));
+                    } else {
+                        throw new Error("API Error");
                     }
                 } catch (expandErr) {
-                    console.error("Error expanding panel", expandErr);
+                    console.error(`Error expanding panel ${p.panel_number}`, expandErr);
+                    // Update state to show error in the specific panel instead of crashing
+                    setPanels(prev => prev.map(panel => 
+                        panel.panel_number === p.panel_number 
+                        ? { 
+                            ...panel, 
+                            visual_description: `[Lỗi] ${p.plot_summary}`, 
+                            dialogue: [] 
+                          }
+                        : panel
+                    ));
                 }
+                
+                // Small delay to prevent rate limiting
+                await new Promise(r => setTimeout(r, 500));
             }
 
             showToast("Tạo kịch bản chi tiết hoàn tất!", "success");
@@ -261,6 +284,55 @@ const ComicStudio: React.FC = () => {
         } finally {
             setIsLoading(false);
             setGenerationStatus("");
+        }
+    };
+
+    // --- RETRY LOGIC ---
+    const handleRetryPanel = async (panelId: string) => {
+        const panelToRetry = panels.find(p => p.id === panelId);
+        if (!panelToRetry) return;
+
+        // Identify the plot summary either from stored prop or fallback to parsing current visual description
+        const plotSummary = (panelToRetry as any).plot_summary || panelToRetry.visual_description.replace(/^\[Lỗi\]\s*/, '');
+
+        // Set loading state for this panel
+        setPanels(prev => prev.map(p => p.id === panelId ? { 
+            ...p, 
+            visual_description: `(Đang thử lại: ${plotSummary}...)` 
+        } : p));
+
+        try {
+            const expandRes = await fetch('/.netlify/functions/comic-expand-panel', {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session?.access_token}`
+                },
+                body: JSON.stringify({ 
+                    plot_summary: plotSummary,
+                    characters: characters,
+                    style: storySettings.artStyle,
+                    genre: storySettings.genre
+                })
+            });
+
+            if (expandRes.ok) {
+                const details = await expandRes.json();
+                setPanels(prev => prev.map(p => p.id === panelId ? { 
+                    ...p, 
+                    visual_description: details.visual_description || plotSummary, 
+                    dialogue: Array.isArray(details.dialogue) ? details.dialogue : [] 
+                } : p));
+                showToast("Đã sửa lỗi thành công!", "success");
+            } else {
+                throw new Error("API Error");
+            }
+        } catch (e) {
+            showToast("Thử lại thất bại. Vui lòng thử lại lần nữa.", "error");
+            setPanels(prev => prev.map(p => p.id === panelId ? { 
+                ...p, 
+                visual_description: `[Lỗi] ${plotSummary}` 
+            } : p));
         }
     };
 
@@ -564,11 +636,30 @@ const ComicStudio: React.FC = () => {
 
                             <div className="space-y-4">
                                 {panels.map((panel) => {
-                                    // Determine if this specific panel is currently generating via the visual description placeholder
+                                    // Determine if this specific panel is currently generating
                                     const isGeneratingDetails = panel.visual_description.startsWith('(Đang tạo chi tiết');
+                                    const isError = panel.visual_description.startsWith('[Lỗi');
                                     
                                     return (
-                                        <div key={panel.id} className="comic-card p-0 flex flex-col md:flex-row">
+                                        <div key={panel.id} className="comic-card p-0 flex flex-col md:flex-row relative overflow-hidden">
+                                            
+                                            {/* Error Overlay */}
+                                            {isError && (
+                                                <div className="absolute inset-0 bg-red-900/40 flex flex-col items-center justify-center z-20 backdrop-blur-sm">
+                                                    <div className="text-center mb-3">
+                                                        <i className="ph-fill ph-warning-circle text-3xl text-red-400 mb-1"></i>
+                                                        <p className="text-red-200 font-bold">Lỗi tạo nội dung</p>
+                                                        <p className="text-red-300/70 text-xs">Vui lòng thử lại phân cảnh này</p>
+                                                    </div>
+                                                    <button 
+                                                        onClick={() => handleRetryPanel(panel.id)}
+                                                        className="px-6 py-2 bg-red-600 hover:bg-red-500 text-white font-bold rounded-full shadow-lg transition-transform transform hover:scale-105 active:scale-95 flex items-center gap-2"
+                                                    >
+                                                        <i className="ph-bold ph-arrow-clockwise"></i> Thử lại
+                                                    </button>
+                                                </div>
+                                            )}
+
                                             {/* Left: Visual Prompt */}
                                             <div className="md:w-1/2 p-4 border-b md:border-b-0 md:border-r border-white/10 bg-black/20">
                                                 <div className="flex items-center justify-between mb-2">
@@ -579,6 +670,7 @@ const ComicStudio: React.FC = () => {
                                                     className="w-full h-32 bg-transparent border-none focus:ring-0 text-sm text-gray-300 leading-relaxed resize-none p-0"
                                                     value={panel.visual_description}
                                                     onChange={(e) => handleUpdatePanel(panel.id, 'visual_description', e.target.value)}
+                                                    disabled={isGeneratingDetails}
                                                 />
                                             </div>
 
@@ -586,7 +678,8 @@ const ComicStudio: React.FC = () => {
                                             <div className="md:w-1/2 p-4 bg-skin-fill-secondary">
                                                 <div className="mb-2 text-[10px] font-bold text-gray-500 uppercase">Hội thoại</div>
                                                 <div className="space-y-3">
-                                                    {panel.dialogue.map((dia, dIndex) => (
+                                                    {/* SAFEGUARD: Check if dialogue is an array before mapping to prevent crash */}
+                                                    {Array.isArray(panel.dialogue) && panel.dialogue.map((dia, dIndex) => (
                                                         <div key={dIndex} className="flex gap-2 items-start group">
                                                             <div className="w-24 pt-1">
                                                                 <input 
@@ -608,14 +701,14 @@ const ComicStudio: React.FC = () => {
                                                     ))}
                                                     
                                                     {/* Loading state specific for dialogue */}
-                                                    {isGeneratingDetails && panel.dialogue.length === 0 && (
+                                                    {isGeneratingDetails && (!panel.dialogue || panel.dialogue.length === 0) && (
                                                         <div className="flex items-center justify-center py-4 text-xs text-gray-500 gap-2">
                                                             <i className="ph-bold ph-spinner animate-spin text-pink-500"></i>
                                                             Đang viết lời thoại...
                                                         </div>
                                                     )}
                                                     
-                                                    {!isGeneratingDetails && panel.dialogue.length === 0 && (
+                                                    {!isGeneratingDetails && !isError && (!panel.dialogue || panel.dialogue.length === 0) && (
                                                         <p className="text-xs text-gray-600 italic pl-2">Không có lời thoại (Cảnh tĩnh/Hành động)</p>
                                                     )}
                                                 </div>
@@ -656,7 +749,7 @@ const ComicStudio: React.FC = () => {
                                                 <>
                                                     <img src={panel.image_url} alt="Panel" className="w-full h-full object-cover" crossOrigin="anonymous" />
                                                     {/* Bubbles */}
-                                                    {panel.dialogue.map((dia, idx) => (
+                                                    {Array.isArray(panel.dialogue) && panel.dialogue.map((dia, idx) => (
                                                         <DraggableBubble 
                                                             key={idx} 
                                                             text={`${dia.speaker ? dia.speaker + ': ' : ''}${dia.text}`} 

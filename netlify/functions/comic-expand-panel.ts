@@ -20,9 +20,6 @@ const handler: Handler = async (event: HandlerEvent) => {
         
         if (!plot_summary) return { statusCode: 400, body: JSON.stringify({ error: 'Missing plot summary.' }) };
 
-        // We don't deduct diamonds here, as it's part of the main script generation flow paid for in step 1.
-        // Or we could charge micro-transactions, but for simplicity, we assume it's covered.
-
         const { data: apiKeyData } = await supabaseAdmin
             .from('api_keys')
             .select('key_value')
@@ -46,27 +43,27 @@ const handler: Handler = async (event: HandlerEvent) => {
             **Genre:** ${genre}
             **Art Style:** ${style}
             
-            **Character Visual Context (Use this to describe characters accurately):**
+            **Character Visual Context:**
             ${characterContext}
             
             **Panel Plot Summary:** "${plot_summary}"
             
             **Requirements:**
-            1.  **visual_description (English):** Write a highly detailed prompt for an AI Image Generator (like Stable Diffusion/Midjourney). 
+            1.  **visual_description (English):** Write a highly detailed prompt for an AI Image Generator. 
                 *   Describe the scene, background, lighting, camera angle.
-                *   **CRITICAL:** You MUST describe the characters' appearance (hair, clothes, colors) explicitly in this prompt based on the Context provided above. Don't just say "Character Name", say "Character Name (blue hair, red jacket)...".
+                *   Describe characters' appearance explicitly in this prompt.
             
             2.  **dialogue (Vietnamese):** Write natural, engaging dialogue for this panel.
-                *   **MANDATORY:** Do NOT return an empty array. Every panel must have some text to drive the story.
+                *   **MANDATORY:** Do NOT return an empty array. Every panel must have some text.
                 *   If characters are speaking, use their names.
-                *   If characters are silent or thinking, use "(Suy nghĩ)" or "(Nghĩ thầm)" as the speaker or in the text.
-                *   If it is an action scene without speech, provide a **Narration Box** (Speaker: "Lời dẫn") describing the action or mood (e.g., "Không khí bỗng trở nên căng thẳng...", "Tiếng nhạc vụt tắt.").
+                *   If characters are silent or thinking, use "(Suy nghĩ)" or "(Nghĩ thầm)".
+                *   If it is an action scene without speech, provide a **Narration Box** (Speaker: "Lời dẫn").
             
             Return a single JSON object.
         `;
 
         const response = await ai.models.generateContent({
-            model: 'gemini-3-pro-preview', // Use PRO for high quality details
+            model: 'gemini-3-pro-preview',
             contents: { parts: [{ text: prompt }] },
             config: {
                 responseMimeType: "application/json",
@@ -93,6 +90,11 @@ const handler: Handler = async (event: HandlerEvent) => {
         try {
             const text = response.text || '{}';
             detailJson = JSON.parse(text);
+            
+            // Robustness check: Ensure dialogue is an array
+            if (!Array.isArray(detailJson.dialogue)) {
+                detailJson.dialogue = [{ speaker: "Lời dẫn", text: "..." }];
+            }
         } catch (e) {
             // Fallback if JSON is broken
             detailJson = { 
@@ -108,6 +110,8 @@ const handler: Handler = async (event: HandlerEvent) => {
 
     } catch (error: any) {
         console.error("Panel expansion failed:", error);
+        // Return a failsafe object instead of 500 to prevent client crash loop if possible, 
+        // or frontend handles 500 safely now. 
         return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
     }
 };

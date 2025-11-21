@@ -42,7 +42,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         const prompt = `
             You are an expert comic artist and writer.
             
-            **Task:** Expand a brief plot summary into a detailed panel description.
+            **Task:** Expand a brief plot summary into a detailed panel description and dialogue.
             **Genre:** ${genre}
             **Art Style:** ${style}
             
@@ -52,16 +52,21 @@ const handler: Handler = async (event: HandlerEvent) => {
             **Panel Plot Summary:** "${plot_summary}"
             
             **Requirements:**
-            1.  **visual_description (English):** Write a highly detailed prompt for an AI Image Generator (like Stable Diffusion). 
+            1.  **visual_description (English):** Write a highly detailed prompt for an AI Image Generator (like Stable Diffusion/Midjourney). 
                 *   Describe the scene, background, lighting, camera angle.
                 *   **CRITICAL:** You MUST describe the characters' appearance (hair, clothes, colors) explicitly in this prompt based on the Context provided above. Don't just say "Character Name", say "Character Name (blue hair, red jacket)...".
-            2.  **dialogue (Vietnamese):** Write natural, engaging dialogue for the characters in this panel based on the plot.
+            
+            2.  **dialogue (Vietnamese):** Write natural, engaging dialogue for this panel.
+                *   **MANDATORY:** Do NOT return an empty array. Every panel must have some text to drive the story.
+                *   If characters are speaking, use their names.
+                *   If characters are silent or thinking, use "(Suy nghĩ)" or "(Nghĩ thầm)" as the speaker or in the text.
+                *   If it is an action scene without speech, provide a **Narration Box** (Speaker: "Lời dẫn") describing the action or mood (e.g., "Không khí bỗng trở nên căng thẳng...", "Tiếng nhạc vụt tắt.").
             
             Return a single JSON object.
         `;
 
         const response = await ai.models.generateContent({
-            model: 'gemini-3-pro-preview', // Use PRO for high quality details, single panel is fast enough
+            model: 'gemini-3-pro-preview', // Use PRO for high quality details
             contents: { parts: [{ text: prompt }] },
             config: {
                 responseMimeType: "application/json",
@@ -90,7 +95,10 @@ const handler: Handler = async (event: HandlerEvent) => {
             detailJson = JSON.parse(text);
         } catch (e) {
             // Fallback if JSON is broken
-            detailJson = { visual_description: plot_summary, dialogue: [] };
+            detailJson = { 
+                visual_description: plot_summary, 
+                dialogue: [{ speaker: "Lời dẫn", text: "..." }] 
+            };
         }
 
         return {

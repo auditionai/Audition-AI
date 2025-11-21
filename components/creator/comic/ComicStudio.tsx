@@ -209,7 +209,7 @@ const ComicStudio: React.FC = () => {
             const outline = data.outline;
             updateUserDiamonds(data.newDiamondCount);
             
-            // Initialize empty panels
+            // Initialize empty panels with loading state
             const initialPanels = outline.map((p: any) => ({
                 id: crypto.randomUUID(),
                 panel_number: p.panel_number,
@@ -563,50 +563,66 @@ const ComicStudio: React.FC = () => {
                             </div>
 
                             <div className="space-y-4">
-                                {panels.map((panel) => (
-                                    <div key={panel.id} className="comic-card p-0 flex flex-col md:flex-row">
-                                        {/* Left: Visual Prompt */}
-                                        <div className="md:w-1/2 p-4 border-b md:border-b-0 md:border-r border-white/10 bg-black/20">
-                                            <div className="flex items-center justify-between mb-2">
-                                                <span className="text-xs font-bold bg-blue-600 text-white px-2 py-0.5 rounded">PANEL {panel.panel_number}</span>
-                                                <span className="text-[10px] text-gray-500">Visual Description</span>
+                                {panels.map((panel) => {
+                                    // Determine if this specific panel is currently generating via the visual description placeholder
+                                    const isGeneratingDetails = panel.visual_description.startsWith('(Đang tạo chi tiết');
+                                    
+                                    return (
+                                        <div key={panel.id} className="comic-card p-0 flex flex-col md:flex-row">
+                                            {/* Left: Visual Prompt */}
+                                            <div className="md:w-1/2 p-4 border-b md:border-b-0 md:border-r border-white/10 bg-black/20">
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <span className="text-xs font-bold bg-blue-600 text-white px-2 py-0.5 rounded">PANEL {panel.panel_number}</span>
+                                                    <span className="text-[10px] text-gray-500">Visual Description</span>
+                                                </div>
+                                                <textarea 
+                                                    className="w-full h-32 bg-transparent border-none focus:ring-0 text-sm text-gray-300 leading-relaxed resize-none p-0"
+                                                    value={panel.visual_description}
+                                                    onChange={(e) => handleUpdatePanel(panel.id, 'visual_description', e.target.value)}
+                                                />
                                             </div>
-                                            <textarea 
-                                                className="w-full h-32 bg-transparent border-none focus:ring-0 text-sm text-gray-300 leading-relaxed resize-none p-0"
-                                                value={panel.visual_description}
-                                                onChange={(e) => handleUpdatePanel(panel.id, 'visual_description', e.target.value)}
-                                            />
-                                        </div>
 
-                                        {/* Right: Dialogue */}
-                                        <div className="md:w-1/2 p-4 bg-skin-fill-secondary">
-                                            <div className="mb-2 text-[10px] font-bold text-gray-500 uppercase">Hội thoại</div>
-                                            <div className="space-y-3">
-                                                {panel.dialogue.map((dia, dIndex) => (
-                                                    <div key={dIndex} className="flex gap-2 items-start group">
-                                                        <div className="w-24 pt-1">
-                                                            <input 
-                                                                className="w-full bg-transparent border-b border-white/10 text-xs font-bold text-yellow-400 focus:border-yellow-500 focus:outline-none text-right px-1 py-1" 
-                                                                value={dia.speaker} 
-                                                                onChange={(e) => handleUpdateDialogue(panel.id, dIndex, 'speaker', e.target.value)}
-                                                                placeholder="Tên"
-                                                            />
+                                            {/* Right: Dialogue */}
+                                            <div className="md:w-1/2 p-4 bg-skin-fill-secondary">
+                                                <div className="mb-2 text-[10px] font-bold text-gray-500 uppercase">Hội thoại</div>
+                                                <div className="space-y-3">
+                                                    {panel.dialogue.map((dia, dIndex) => (
+                                                        <div key={dIndex} className="flex gap-2 items-start group">
+                                                            <div className="w-24 pt-1">
+                                                                <input 
+                                                                    className="w-full bg-transparent border-b border-white/10 text-xs font-bold text-yellow-400 focus:border-yellow-500 focus:outline-none text-right px-1 py-1" 
+                                                                    value={dia.speaker} 
+                                                                    onChange={(e) => handleUpdateDialogue(panel.id, dIndex, 'speaker', e.target.value)}
+                                                                    placeholder="Tên"
+                                                                />
+                                                            </div>
+                                                            <div className="flex-grow">
+                                                                <textarea 
+                                                                    className="w-full bg-white/5 border border-white/5 rounded-lg p-2 text-sm text-white focus:border-green-500/50 focus:outline-none transition resize-none" 
+                                                                    value={dia.text} 
+                                                                    onChange={(e) => handleUpdateDialogue(panel.id, dIndex, 'text', e.target.value)}
+                                                                    rows={2}
+                                                                />
+                                                            </div>
                                                         </div>
-                                                        <div className="flex-grow">
-                                                            <textarea 
-                                                                className="w-full bg-white/5 border border-white/5 rounded-lg p-2 text-sm text-white focus:border-green-500/50 focus:outline-none transition resize-none" 
-                                                                value={dia.text} 
-                                                                onChange={(e) => handleUpdateDialogue(panel.id, dIndex, 'text', e.target.value)}
-                                                                rows={2}
-                                                            />
+                                                    ))}
+                                                    
+                                                    {/* Loading state specific for dialogue */}
+                                                    {isGeneratingDetails && panel.dialogue.length === 0 && (
+                                                        <div className="flex items-center justify-center py-4 text-xs text-gray-500 gap-2">
+                                                            <i className="ph-bold ph-spinner animate-spin text-pink-500"></i>
+                                                            Đang viết lời thoại...
                                                         </div>
-                                                    </div>
-                                                ))}
-                                                {panel.dialogue.length === 0 && <p className="text-xs text-gray-600 italic pl-2">Không có lời thoại (Hoặc đang tạo...)</p>}
+                                                    )}
+                                                    
+                                                    {!isGeneratingDetails && panel.dialogue.length === 0 && (
+                                                        <p className="text-xs text-gray-600 italic pl-2">Không có lời thoại (Cảnh tĩnh/Hành động)</p>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         </div>
                     )}

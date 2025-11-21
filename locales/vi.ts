@@ -374,57 +374,25 @@ export const vi = {
         }
       },
     },
-    leaderboard: {
-      title: 'Bảng Xếp Hạng',
-      description: 'Vinh danh những nhà sáng tạo hàng đầu dựa trên cấp độ và số lượng tác phẩm.',
-      loading: 'Đang tải bảng xếp hạng...',
-      tabs: {
-        creation: 'Sáng tạo',
-        level: 'Cấp độ',
-        tycoon: 'Đại gia',
-        hot: 'HOT',
-      },
-      metric: {
-        creation: '{{value}} Ảnh',
-        level: '{{value}} XP',
-        tycoon: '{{value}} 💎 đã tiêu',
-        hot: '{{value}} Điểm',
-      },
-      error: {
-        load: 'Không thể tải bảng xếp hạng.',
-      },
-      empty: {
-        title: 'Bảng xếp hạng đang trống',
-        description: 'Hãy là người đầu tiên sáng tạo và ghi danh nào!',
-      },
-      creations: 'tác phẩm',
+    xpBar: {
+      progress: 'Tiến độ cấp',
+      needed: 'Cần {{xp}} XP nữa để đạt',
+      maxLevel: 'Đã đạt cấp tối đa!',
     },
-    myCreations: {
-      loading: 'Đang tải tác phẩm của bạn...',
-      storageWarning: {
-        title: 'Lưu ý quan trọng về lưu trữ ảnh',
-        description: 'Để đảm bảo hiệu suất, các tác phẩm của bạn sẽ được lưu trữ tối đa 3 ngày. Những tác phẩm được chia sẻ công khai sẽ được giữ lại vĩnh viễn. Vui lòng tải về các ảnh yêu thích trước khi bị hệ thống tự động xóa.',
-        public: 'công khai',
-        download: 'tải về',
+    xpGuide: {
+      title: 'Hướng dẫn Lên Cấp & Nhận XP',
+      checkIn: {
+        title: 'Điểm danh hàng ngày',
+        description: 'Nhận thưởng XP mỗi khi điểm danh. Chuỗi càng dài, thưởng càng lớn!',
       },
-      title: 'Tác Phẩm Của Tôi',
-      description: 'Quản lý tất cả những hình ảnh bạn đã tạo ra với Audition AI.',
-      shareTip: '✨ Nhấn vào một tác phẩm và chọn nút Chia sẻ để khoe những tác phẩm đẹp nhất ra Thư viện cộng đồng! (Chi phí: 1 💎)',
-      share: 'Chia sẻ',
-      empty: {
-        title: 'Bạn chưa có tác phẩm nào',
-        description: 'Hãy vào mục "Tạo Ảnh" và bắt đầu sáng tạo ngay!',
+      createImage: {
+        title: 'Sáng tạo nghệ thuật',
+        description: 'Mỗi lần tạo ảnh đơn hoặc ảnh nhóm thành công, bạn sẽ nhận được điểm kinh nghiệm.',
       },
-      public: 'Công khai',
-      delete: {
-        success: 'Xóa tác phẩm thành công!',
-        error: 'Xóa tác phẩm thất bại.',
-        confirm: 'Bạn có chắc chắn muốn xóa bài viết này không?'
+      active: {
+        title: 'Tích cực hoạt động',
+        description: 'Duy trì hoạt động trên ứng dụng để nhận 1 XP cho mỗi phút online.',
       },
-      shareAction: {
-        success: 'Chia sẻ tác phẩm ra cộng đồng thành công!',
-        error: 'Chia sẻ tác phẩm thất bại.',
-      }
     },
     settings: {
       save: 'Lưu Tên',
@@ -477,21 +445,6 @@ export const vi = {
         copied: 'Đã chép',
         desc: 'Chia sẻ mã này cho bạn bè, khi họ đăng ký và nhập mã, cả hai sẽ cùng nhận được',
         bonus: '5 Kim Cương',
-      },
-      xpGuide: {
-        title: 'Hướng dẫn Lên Cấp & Nhận XP',
-        checkIn: {
-          title: 'Điểm danh hàng ngày',
-          description: 'Nhận thưởng XP mỗi khi điểm danh. Chuỗi càng dài, thưởng càng lớn!',
-        },
-        createImage: {
-          title: 'Sáng tạo nghệ thuật',
-          description: 'Mỗi lần tạo ảnh đơn hoặc ảnh nhóm thành công, bạn sẽ nhận được điểm kinh nghiệm.',
-        },
-        active: {
-          title: 'Tích cực hoạt động',
-          description: 'Duy trì hoạt động trên ứng dụng để nhận 1 XP cho mỗi phút online.',
-        },
       },
       admin: {
         title: 'Bảng Điều Khiển Admin',

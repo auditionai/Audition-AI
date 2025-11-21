@@ -374,6 +374,26 @@ export const en = {
         }
       },
     },
+    xpBar: {
+      progress: 'Level Progress',
+      needed: '{{xp}} XP to',
+      maxLevel: 'Max Level!',
+    },
+    xpGuide: {
+      title: 'How to Level Up & Get XP',
+      checkIn: {
+        title: 'Daily Check-in',
+        description: 'Get XP rewards every time you check in. Longer streaks mean bigger rewards!',
+      },
+      createImage: {
+        title: 'Create Art',
+        description: 'Every time you create a single or group photo successfully, you will receive experience points.',
+      },
+      active: {
+        title: 'Stay Active',
+        description: 'Stay active on the app to receive 1 XP for every minute online.',
+      },
+    },
     settings: {
       save: 'Save Name',
       saving: 'Saving...',

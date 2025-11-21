@@ -38,14 +38,20 @@ export const GameConfigProvider: React.FC<{ children: ReactNode }> = ({ children
                 // 2. Process Cosmetics (Merge with Defaults to keep nameKeys)
                 if (data.cosmetics) {
                     // Build Reverse Lookup Maps for Titles to fix key issues
-                    const enTitles = translations.en.cosmetics.titles as Record<string, string>;
-                    const viTitles = translations.vi.cosmetics.titles as Record<string, string>;
+                    // We use 'any' cast because the types of translations are generic
+                    const enTitles = (translations.en.cosmetics as any)?.titles || {};
+                    const viTitles = (translations.vi.cosmetics as any)?.titles || {};
                     
+                    // Map of "lowercase name" -> "translation key suffix"
                     const titleKeyMap = new Map<string, string>();
                     
                     // Normalize lookup: "English Name" -> "key", "Vietnamese Name" -> "key"
-                    Object.entries(enTitles).forEach(([key, val]) => titleKeyMap.set(val.toLowerCase().trim(), key));
-                    Object.entries(viTitles).forEach(([key, val]) => titleKeyMap.set(val.toLowerCase().trim(), key));
+                    Object.entries(enTitles).forEach(([key, val]) => {
+                        if (typeof val === 'string') titleKeyMap.set(val.toLowerCase().trim(), key);
+                    });
+                    Object.entries(viTitles).forEach(([key, val]) => {
+                        if (typeof val === 'string') titleKeyMap.set(val.toLowerCase().trim(), key);
+                    });
 
                     // Create a map of DB items for faster lookup by ID
                     const dbMapById = new Map<string, any>(data.cosmetics.map((c: any) => [c.id, c]));
@@ -84,13 +90,14 @@ export const GameConfigProvider: React.FC<{ children: ReactNode }> = ({ children
                                  const key = titleKeyMap.get(lowerName);
                                  if (key) nameKey = `cosmetics.titles.${key}`;
                              } 
-                             // Strategy 2: Handle "CODE.KEY" cases if saved in DB erroneously
+                             // Strategy 2: Handle "CODE.KEY" cases if saved in DB erroneously (e.g. CREATOR.COSMETICS.TITLES.AUDITIONGOD)
                              else {
                                  // Attempt to clean up common prefixes if any
                                  const cleanName = lowerName.replace('creator.cosmetics.titles.', '');
-                                 // Check if this cleaned name exists as a key directly
-                                 if (enTitles[cleanName] || viTitles[cleanName]) {
-                                     nameKey = `cosmetics.titles.${cleanName}`;
+                                 // Check if this cleaned name exists as a key directly (case-insensitive check)
+                                 const matchingKey = Object.keys(enTitles).find(k => k.toLowerCase() === cleanName);
+                                 if (matchingKey) {
+                                     nameKey = `cosmetics.titles.${matchingKey}`;
                                  }
                              }
                         }

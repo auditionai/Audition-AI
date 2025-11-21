@@ -455,7 +455,10 @@ export const en = {
             diamond: 'Diamonds',
             xp: 'XP',
             ticket: 'Ticket',
-            lucky: 'Good luck next time!'
+            lucky: 'Good luck next time!',
+            lucky_short: 'Lucky',
+            diamond_short: 'Diamonds',
+            ticket_short: 'Tickets',
         }
     },
 };

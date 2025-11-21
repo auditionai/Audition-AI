@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import Modal from './common/Modal';
 import { useAuth } from '../contexts/AuthContext';
@@ -11,7 +12,7 @@ interface LuckyWheelModalProps {
 
 const LuckyWheelModal: React.FC<LuckyWheelModalProps> = ({ isOpen, onClose }) => {
     const { user, session, showToast, updateUserProfile } = useAuth();
-    const { t } = useTranslation();
+    const { t, language } = useTranslation();
     const [rewards, setRewards] = useState<LuckyWheelReward[]>([]);
     const [isSpinning, setIsSpinning] = useState(false);
     const [tickets, setTickets] = useState(0);
@@ -142,6 +143,17 @@ const LuckyWheelModal: React.FC<LuckyWheelModalProps> = ({ isOpen, onClose }) =>
         return text === key ? key.split('.').pop() : text;
     }
 
+    // Helper to get localized label for wheel segments
+    const getRewardLabel = (reward: LuckyWheelReward) => {
+        switch (reward.type) {
+            case 'diamond': return t('luckyWheel.win.diamond');
+            case 'xp': return 'XP';
+            case 'ticket': return t('luckyWheel.win.ticket');
+            case 'lucky': return t('luckyWheel.win.lucky_short');
+            default: return reward.label;
+        }
+    };
+
     if (!isOpen) return null;
 
     // Generate wheel segments style
@@ -164,9 +176,12 @@ const LuckyWheelModal: React.FC<LuckyWheelModalProps> = ({ isOpen, onClose }) =>
                     {/* Glow Behind */}
                     <div className="absolute inset-0 bg-gradient-to-r from-pink-500/30 to-purple-500/30 rounded-full blur-3xl animate-pulse"></div>
 
-                    {/* Pointer (Static at top) */}
-                    <div className="absolute -top-6 left-1/2 -translate-x-1/2 z-30 drop-shadow-lg">
-                        <i className="ph-fill ph-caret-down text-5xl text-yellow-400"></i>
+                    {/* Pointer (Custom SVG for better visibility) */}
+                    <div className="absolute -top-8 left-1/2 -translate-x-1/2 z-30 drop-shadow-2xl filter">
+                        <svg width="60" height="60" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="drop-shadow-lg">
+                            <path d="M12 22L4 4H20L12 22Z" fill="#FBBF24" stroke="#FFF" strokeWidth="2" strokeLinejoin="round"/>
+                            <circle cx="12" cy="4" r="2" fill="#FFF"/>
+                        </svg>
                     </div>
                     
                     {/* Wheel Container */}
@@ -189,7 +204,7 @@ const LuckyWheelModal: React.FC<LuckyWheelModalProps> = ({ isOpen, onClose }) =>
                         }}></div>
 
                         {/* Render Content (Text/Icons) */}
-                        {wheelSegments.map((item) => { 
+                        {wheelSegments.map((item, index) => { 
                             const rotation = item.rotate + (item.angle / 2); // Center of the slice
                             return (
                                 <div 
@@ -200,19 +215,21 @@ const LuckyWheelModal: React.FC<LuckyWheelModalProps> = ({ isOpen, onClose }) =>
                                         pointerEvents: 'none'
                                     }}
                                 >
-                                    {/* Content Container - Pushed out from center */}
-                                    <div className="mt-4 flex flex-col items-center gap-1" style={{ transform: 'translateY(15%)' }}>
-                                        <div className="bg-black/20 p-1.5 rounded-full backdrop-blur-sm">
+                                    {/* Content Container - Pushed to OUTER RIM */}
+                                    <div className="absolute top-4 sm:top-6 flex flex-col items-center gap-0.5">
+                                        <span className="text-white font-black text-sm sm:text-base uppercase drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] max-w-[80px] text-center leading-tight break-words px-1">
+                                            {getRewardLabel(item)}
+                                        </span>
+                                        
+                                        <div className="p-1">
                                             {item.type === 'diamond' && <i className="ph-fill ph-diamonds-four text-2xl text-white drop-shadow-md"></i>}
                                             {item.type === 'xp' && <i className="ph-fill ph-star text-2xl text-yellow-200 drop-shadow-md"></i>}
                                             {item.type === 'ticket' && <i className="ph-fill ph-ticket text-2xl text-green-200 drop-shadow-md"></i>}
                                             {item.type === 'lucky' && <i className="ph-fill ph-clover text-2xl text-white drop-shadow-md"></i>}
                                         </div>
-                                        <span className="text-white font-bold text-sm uppercase drop-shadow-md max-w-[80px] text-center leading-tight break-words bg-black/20 px-2 py-0.5 rounded-md backdrop-blur-sm">
-                                            {item.label}
-                                        </span>
+                                        
                                         {item.amount > 0 && (
-                                            <span className="text-xs font-black text-yellow-300 drop-shadow-sm">x{item.amount}</span>
+                                            <span className="text-xs sm:text-sm font-black text-yellow-300 drop-shadow-md bg-black/40 px-2 rounded-full">x{item.amount}</span>
                                         )}
                                     </div>
                                 </div>
@@ -338,7 +355,7 @@ const LuckyWheelModal: React.FC<LuckyWheelModalProps> = ({ isOpen, onClose }) =>
                         <p className="text-gray-300 text-base mb-6">
                             {winningReward.type === 'lucky' 
                                 ? getTrans('luckyWheel.win.lucky')
-                                : <>{getTrans('luckyWheel.win.desc')} <span className="text-xl font-bold text-white block mt-1">{winningReward.amount} {winningReward.label}</span></>
+                                : <>{getTrans('luckyWheel.win.desc')} <span className="text-xl font-bold text-white block mt-1">{winningReward.amount} {getRewardLabel(winningReward)}</span></>
                             }
                         </p>
                         

@@ -597,7 +597,10 @@ export const vi = {
             diamond: 'Kim Cương',
             xp: 'XP',
             ticket: 'Vé Quay',
-            lucky: 'Chúc bạn may mắn lần sau!'
+            lucky: 'Chúc bạn may mắn lần sau!',
+            lucky_short: 'May Mắn',
+            diamond_short: 'Kim Cương',
+            ticket_short: 'Vé Quay',
         }
     },
     buyCredits: {
@@ -1080,4 +1083,32 @@ export const vi = {
       description: 'Thêm công cụ Tách Nền và tính năng "Siêu Khóa Gương Mặt" giúp giữ nét nhân vật chính xác hơn.',
     },
   },
+  luckyWheel: {
+        title: 'Vòng Quay May Mắn',
+        spin: 'QUAY NGAY',
+        spinning: 'Đang quay...',
+        tickets: 'Vé quay',
+        getMore: 'Nhận thêm vé',
+        daily: 'Nhận vé mỗi ngày',
+        claimed: 'Đã nhận hôm nay',
+        claim: 'Nhận vé miễn phí',
+        tasks: {
+            title: 'Nhiệm vụ nhận vé',
+            shareApp: 'Chia sẻ ứng dụng lên Facebook (+1 Vé)',
+            shareImage: 'Chia sẻ ảnh đã tạo (+1 Vé)',
+            invite: 'Mời 1 người bạn (+3 Vé)',
+            go: 'Làm ngay'
+        },
+        win: {
+            title: 'Chúc mừng!',
+            desc: 'Bạn đã nhận được',
+            diamond: 'Kim Cương',
+            xp: 'XP',
+            ticket: 'Vé Quay',
+            lucky: 'Chúc bạn may mắn lần sau!',
+            lucky_short: 'May Mắn',
+            diamond_short: 'Kim Cương',
+            ticket_short: 'Vé Quay',
+        }
+    },
 };

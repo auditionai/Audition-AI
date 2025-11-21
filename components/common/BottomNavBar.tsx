@@ -4,8 +4,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useTranslation } from '../../hooks/useTranslation';
 
 interface BottomNavBarProps {
-  activeTab: CreatorTab | 'buy-credits';
-  onTabChange: (tab: CreatorTab) => void;
+  activeTab: CreatorTab | 'buy-credits' | 'profile' | 'shop' | 'messages' | 'admin-gallery';
+  onTabChange: (tab: any) => void;
   onCheckInClick: () => void;
 }
 

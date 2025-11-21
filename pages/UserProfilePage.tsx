@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -10,6 +11,7 @@ import { User, Post } from '../types';
 import BottomNavBar from '../components/common/BottomNavBar';
 import PostCard from '../components/social/PostCard';
 import CommentModal from '../components/social/CommentModal';
+import { calculateLevelFromXp } from '../utils/rankUtils';
 
 const UserProfilePage: React.FC = () => {
     const { navigate, supabase, user, showToast, session } = useAuth();
@@ -26,23 +28,27 @@ const UserProfilePage: React.FC = () => {
     const cardRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        if (!userId || !supabase) return;
+        if (!userId) return;
         
         const fetchData = async () => {
             setIsLoading(true);
             try {
-                // 1. Fetch User Profile
-                const { data: userData, error: userError } = await supabase
-                    .from('users')
-                    .select('*')
-                    .eq('id', userId)
-                    .single();
+                // 1. Fetch User Profile via Server Function (Bypasses RLS)
+                const userRes = await fetch(`/.netlify/functions/get-public-user?userId=${userId}`);
+                if (!userRes.ok) {
+                    throw new Error("User not found");
+                }
                 
-                if (userError) throw userError;
+                const userData = await userRes.json();
+                
+                // Calculate level since it's not in DB
+                if (userData) {
+                    userData.level = calculateLevelFromXp(userData.xp || 0);
+                }
+                
                 setViewUser(userData);
 
-                // 2. Fetch User Posts using Server Function (Bypass RLS & Handle Likes)
-                // Use session access token for authorization
+                // 2. Fetch User Posts
                 const response = await fetch(`/.netlify/functions/get-posts?userId=${userId}`, {
                     headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}
                 });
@@ -50,19 +56,18 @@ const UserProfilePage: React.FC = () => {
                 if (response.ok) {
                     const postsData = await response.json();
                     setPosts(postsData);
-                } else {
-                    console.error("Failed to load posts");
                 }
 
             } catch (e) {
                 console.error("Failed to load user profile", e);
+                showToast("Không tìm thấy người dùng này.", "error");
                 navigate('home');
             } finally {
                 setIsLoading(false);
             }
         };
         fetchData();
-    }, [userId, supabase, navigate, user, session]);
+    }, [userId, navigate, user, session, showToast]);
 
     const handleMessageClick = async () => {
         if (!supabase || !user || !viewUser) return;
@@ -105,7 +110,7 @@ const UserProfilePage: React.FC = () => {
     return (
         <div data-theme={theme} className="flex flex-col min-h-screen bg-skin-fill text-skin-base pb-16 md:pb-0">
             <ThemeEffects />
-            <CreatorHeader onTopUpClick={() => navigate('buy-credits')} activeTab="tool" onNavigate={navigate} onCheckInClick={() => {}} />
+            <CreatorHeader onTopUpClick={() => navigate('buy-credits')} activeTab="profile" onNavigate={navigate} onCheckInClick={() => {}} />
             
             <main className="flex-grow pt-24 container mx-auto px-4 max-w-5xl">
                 
@@ -170,9 +175,7 @@ const UserProfilePage: React.FC = () => {
                             {isCreatingChat ? <i className="ph ph-spinner animate-spin mr-2"></i> : <i className="ph-fill ph-chat-circle-text mr-2"></i>}
                             Gửi Tin Nhắn
                         </button>
-                        <button className="px-8 py-3 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-400 hover:to-pink-400 text-white rounded-full font-bold shadow-lg transition-all transform hover:-translate-y-1">
-                            <i className="ph-fill ph-heart mr-2"></i> Kết Bạn
-                        </button>
+                        {/* Friend request logic can be implemented here later */}
                     </div>
                 )}
 
@@ -203,7 +206,7 @@ const UserProfilePage: React.FC = () => {
             </main>
 
             <CreatorFooter onInfoLinkClick={() => {}} />
-            <BottomNavBar activeTab="tool" onTabChange={navigate} onCheckInClick={() => {}} />
+            <BottomNavBar activeTab="profile" onTabChange={navigate} onCheckInClick={() => {}} />
 
             <CommentModal 
                 isOpen={!!selectedPostForComments} 

@@ -184,7 +184,7 @@ const ProfilePage: React.FC = () => {
     // --- DELETE POST ---
     const handleDeletePost = async (postId: string) => {
         if (!session) return;
-        if (!confirm(t('creator.myCreations.delete.confirm') || "Bạn có chắc chắn muốn xóa bài viết này không?")) return;
+        if (!confirm(t('creator.myCreations.delete.confirm'))) return;
 
         try {
             const res = await fetch('/.netlify/functions/delete-post', {
@@ -367,6 +367,7 @@ const ProfilePage: React.FC = () => {
                                     <div className="grid grid-cols-3 sm:grid-cols-4 gap-4 max-h-[500px] overflow-y-auto custom-scrollbar pr-2">
                                         {inventoryItems.filter(i => i.type === 'frame').map(frame => {
                                             const isActive = user.equipped_frame_id === frame.id;
+                                            // Use the new safe logic: if nameKey is available, translate it. If not, use raw name.
                                             const displayName = frame.nameKey ? t(frame.nameKey) : frame.name;
                                             return (
                                                 <div 
@@ -417,7 +418,7 @@ const ProfilePage: React.FC = () => {
             </main>
 
             <CreatorFooter onInfoLinkClick={() => {}} />
-            <BottomNavBar activeTab="tool" onTabChange={navigate} onCheckInClick={() => {}} />
+            <BottomNavBar activeTab="profile" onTabChange={navigate} onCheckInClick={() => {}} />
 
             {/* Post Modal */}
             <Modal isOpen={isPostModalOpen} onClose={() => setIsPostModalOpen(false)} title={t('creator.profile.postModal.title')}>

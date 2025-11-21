@@ -31,18 +31,25 @@ const TransactionHistory: React.FC = () => {
     const translateDescription = (desc: string) => {
         if (!desc) return '';
         
-        // Map static strings to keys or partial matches
-        // Note: Ideally descriptions should be stored as codes in DB, but for now we map string patterns.
-        if (desc.includes('Mua vật phẩm:')) return desc.replace('Mua vật phẩm:', t('creator.settings.transactionHistory.types.buy') + ':');
-        if (desc.includes('Nạp tiền')) return t('creator.settings.transactionHistory.types.topup');
-        if (desc.includes('Tạo ảnh')) return desc.replace('Tạo ảnh', t('creator.settings.transactionHistory.types.generate'));
-        if (desc.includes('Tách nền')) return desc.replace('Tách nền', t('creator.settings.transactionHistory.types.bgRemoval'));
-        if (desc.includes('Chia sẻ')) return t('creator.settings.transactionHistory.types.share');
-        if (desc.includes('Điểm danh')) return t('creator.settings.transactionHistory.types.checkIn');
-        if (desc.includes('giới thiệu') || desc.includes('Referral')) return t('creator.settings.transactionHistory.types.referral');
-        if (desc.includes('Quay trúng')) return desc.replace('Quay trúng:', t('creator.settings.transactionHistory.types.luckyWheel') + ':');
-        if (desc.includes('Chèn chữ ký')) return t('creator.settings.transactionHistory.types.signature');
-        if (desc.includes('Xử lý Gương Mặt')) return desc.replace('Xử lý Gương Mặt', 'Face Lock Process'); 
+        // Helper to safely get string from translation object
+        const getT = (key: string) => t(`creator.settings.transactionHistory.types.${key}`);
+
+        // Map DB description patterns to localized strings
+        if (desc.includes('Mua vật phẩm:') || desc.includes('Mua "')) {
+             // Extract item name if possible or just return localized "Buy Item"
+             return desc.replace(/Mua vật phẩm:|Mua "/, getT('buy') + ': ').replace('"', '');
+        }
+        if (desc.includes('Nạp tiền') || desc.includes('NAP AUAI')) return getT('topup');
+        if (desc.includes('Tạo ảnh nhóm')) return getT('groupGenerate');
+        if (desc.includes('Tạo ảnh')) return getT('generate'); // Matches "Tạo ảnh" but not "Tạo ảnh nhóm" (checked above)
+        if (desc.includes('Tách nền')) return getT('bgRemoval');
+        if (desc.includes('Chia sẻ')) return getT('share');
+        if (desc.includes('Điểm danh')) return getT('checkIn');
+        if (desc.includes('giới thiệu') || desc.includes('Referral')) return getT('referral');
+        if (desc.includes('Quay trúng')) return desc.replace('Quay trúng:', getT('luckyWheel') + ':');
+        if (desc.includes('Chèn chữ ký')) return getT('signature');
+        if (desc.includes('Xử lý Gương Mặt')) return getT('faceLock');
+        if (desc.includes('Hoàn tiền')) return getT('refund');
 
         return desc;
     };

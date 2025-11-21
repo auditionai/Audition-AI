@@ -3,6 +3,7 @@ import { Rank, CosmeticItem } from '../types';
 import { RANKS as DEFAULT_RANKS } from '../constants/ranks';
 import { ALL_COSMETICS as DEFAULT_COSMETICS } from '../constants/cosmetics';
 import { useTranslation } from '../hooks/useTranslation';
+import { translations } from '../locales'; // Import translations for reverse lookup
 
 interface GameConfigContextType {
     ranks: Rank[];
@@ -37,6 +38,19 @@ export const GameConfigProvider: React.FC<{ children: ReactNode }> = ({ children
 
                 // 2. Process Cosmetics (Merge with Defaults to keep nameKeys)
                 if (data.cosmetics) {
+                    // Build Reverse Lookup Maps for Titles
+                    // This helps recover the correct translation key (e.g., 'auditionGod') 
+                    // from a database name string (e.g., "Thánh AU" or "AUDITIONGOD")
+                    const enTitles = translations.en.cosmetics.titles as Record<string, string>;
+                    const viTitles = translations.vi.cosmetics.titles as Record<string, string>;
+                    
+                    const titleKeyMap = new Map<string, string>();
+                    
+                    // Map "English Name" -> "key"
+                    Object.entries(enTitles).forEach(([key, val]) => titleKeyMap.set(val.toLowerCase(), key));
+                    // Map "Vietnamese Name" -> "key"
+                    Object.entries(viTitles).forEach(([key, val]) => titleKeyMap.set(val.toLowerCase(), key));
+
                     // Create a map of DB items for faster lookup by ID
                     const dbMapById = new Map<string, any>(data.cosmetics.map((c: any) => [c.id, c]));
                     
@@ -66,22 +80,25 @@ export const GameConfigProvider: React.FC<{ children: ReactNode }> = ({ children
                     const customItems = Array.from(dbMapById.values()).map((dbItem: any) => {
                         let nameKey: string | null = null;
                         
-                        // HEURISTIC: Try to recover a translation key if the name is uppercase (likely from a previous bad seed/save)
-                        // or if it matches a default key structure.
-                        if (dbItem.name) {
-                             // Check if it matches a default key's simplified form ignoring case and spaces
-                             const matchedDefault = DEFAULT_COSMETICS.find(d => 
-                                d.nameKey && d.nameKey.toLowerCase().endsWith(dbItem.name.toLowerCase().replace(/ /g, ''))
-                             );
+                        if (dbItem.name && dbItem.type === 'title') {
+                             const lowerName = dbItem.name.toLowerCase().trim();
                              
-                             if (matchedDefault && matchedDefault.nameKey) {
-                                 nameKey = matchedDefault.nameKey;
-                             } else if (dbItem.name.includes('.') && dbItem.name === dbItem.name.toUpperCase()) {
-                                // If it looks like a raw key string in uppercase (e.g. CREATOR.COSMETICS...), force lowercase it
-                                // But we must ensure we preserve camelCase parts if possible. 
-                                // Actually, just finding the matching default item by ID usually solves this, 
-                                // but if ID was lost or changed, this is a fallback.
-                                nameKey = dbItem.name.toLowerCase();
+                             // Strategy 1: Lookup by exact name match (EN or VI)
+                             if (titleKeyMap.has(lowerName)) {
+                                 const key = titleKeyMap.get(lowerName);
+                                 if (key) nameKey = `cosmetics.titles.${key}`;
+                             } 
+                             // Strategy 2: Heuristic for Uppercase Keys (e.g. CREATOR.COSMETICS.TITLES.AUDITIONGOD)
+                             else {
+                                 // Extract last part of dot-notation
+                                 const possibleSuffix = lowerName.split('.').pop(); 
+                                 if (possibleSuffix) {
+                                     // Find actual camelCase key that matches case-insensitively
+                                     const realKey = Object.keys(enTitles).find(k => k.toLowerCase() === possibleSuffix);
+                                     if (realKey) {
+                                         nameKey = `cosmetics.titles.${realKey}`;
+                                     }
+                                 }
                              }
                         }
 
@@ -107,10 +124,12 @@ export const GameConfigProvider: React.FC<{ children: ReactNode }> = ({ children
         }
     };
 
-    // Reload config when language changes to ensure name matching works
+    // Reload config when language changes is NOT needed for the logic above, 
+    // but we want to ensure the UI updates.
+    // Actually, we only need to load once effectively, UI updates reactively via `t`.
     useEffect(() => {
         refreshConfig();
-    }, [t]);
+    }, []);
 
     const getRankForLevel = (level: number): Rank => {
         let currentRank = ranks[0];

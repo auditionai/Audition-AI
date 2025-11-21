@@ -63,10 +63,17 @@ export const GameConfigProvider: React.FC<{ children: ReactNode }> = ({ children
                     });
 
                     // Add remaining custom items from DB (those that didn't match any default item)
-                    const customItems = Array.from(dbMapById.values()).map((c: any) => ({
-                        ...c,
-                        nameKey: null // Custom items don't have translation keys
-                    }));
+                    const customItems = Array.from(dbMapById.values()).map((dbItem: any) => {
+                        let nameKey: string | null = null;
+                        // Heuristic: If the name from the DB looks like a translation key, treat it as such.
+                        if (dbItem.name && dbItem.name.includes('.') && dbItem.name.toUpperCase() === dbItem.name) {
+                            nameKey = dbItem.name.toLowerCase();
+                        }
+                        return {
+                            ...dbItem,
+                            nameKey: nameKey,
+                        };
+                    });
 
                     const allCosmetics = [...mergedDefaultCosmetics, ...customItems];
 

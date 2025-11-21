@@ -62,7 +62,7 @@ const ShopPage: React.FC = () => {
             showToast(data.message, 'success');
             updateUserDiamonds(data.newDiamonds);
             
-            // Update local state
+            // Update local state: Mark as owned (which effectively hides it due to filtering)
             setItems(prev => prev.map(i => i.id === selectedItem.id ? { ...i, owned: true } : i));
             setSelectedItem(null);
 
@@ -73,7 +73,8 @@ const ShopPage: React.FC = () => {
         }
     };
 
-    const filteredItems = items.filter(i => i.type === activeTab);
+    // Filter Logic: Show only UNOWNED items for the current tab
+    const filteredItems = items.filter(i => i.type === activeTab && !i.owned);
 
     // Rarity color helper
     const getRarityColor = (rarity: string) => {
@@ -147,6 +148,12 @@ const ShopPage: React.FC = () => {
                 {/* Items Grid */}
                 {isLoading ? (
                     <div className="flex justify-center py-20"><div className="w-12 h-12 border-4 border-t-skin-accent border-white/10 rounded-full animate-spin"></div></div>
+                ) : filteredItems.length === 0 ? (
+                    <div className="text-center py-20 text-skin-muted opacity-70">
+                        <i className="ph-fill ph-shopping-bag-open text-6xl mb-4"></i>
+                        <p className="text-lg font-semibold">Bạn đã sở hữu tất cả vật phẩm trong danh mục này!</p>
+                        <p className="text-sm">Hãy kiểm tra bên Tủ Đồ trong trang cá nhân.</p>
+                    </div>
                 ) : (
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-6 pb-12">
                         {filteredItems.map(item => (
@@ -174,23 +181,15 @@ const ShopPage: React.FC = () => {
 
                                 {/* Info */}
                                 <h3 className="font-bold text-white text-center mb-1 truncate w-full">{item.name || item.nameKey}</h3>
-                                {item.unlockCondition?.level ? (
-                                    <p className="text-xs text-skin-muted mb-3">Yêu cầu Lv.{item.unlockCondition.level}</p>
-                                ) : <div className="mb-3 h-4"></div>}
+                                <div className="mb-3 h-4"></div>
 
                                 {/* Action Button */}
-                                {item.owned ? (
-                                    <button disabled className="w-full py-2 bg-green-500/20 text-green-400 font-bold rounded-lg border border-green-500/50 flex items-center justify-center gap-1 cursor-default">
-                                        <i className="ph-fill ph-check-circle"></i> Đã sở hữu
-                                    </button>
-                                ) : (
-                                    <button 
-                                        onClick={() => setSelectedItem(item)}
-                                        className="w-full py-2 bg-white/10 hover:bg-skin-accent hover:text-white text-white font-bold rounded-lg border border-white/20 transition-colors flex items-center justify-center gap-1"
-                                    >
-                                        <i className="ph-fill ph-shopping-cart"></i> {item.price} 💎
-                                    </button>
-                                )}
+                                <button 
+                                    onClick={() => setSelectedItem(item)}
+                                    className="w-full py-2 bg-white/10 hover:bg-skin-accent hover:text-white text-white font-bold rounded-lg border border-white/20 transition-colors flex items-center justify-center gap-1"
+                                >
+                                    <i className="ph-fill ph-shopping-cart"></i> {item.price} 💎
+                                </button>
                             </div>
                         ))}
                     </div>

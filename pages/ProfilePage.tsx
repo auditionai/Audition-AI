@@ -7,32 +7,39 @@ import CreatorFooter from '../components/creator/CreatorFooter';
 import ThemeEffects from '../components/themes/ThemeEffects';
 import UserAvatar from '../components/common/UserAvatar';
 import UserBadge from '../components/common/UserBadge';
-import { Post, GalleryImage } from '../types';
+import { Post, GalleryImage, CosmeticItem } from '../types';
 import BottomNavBar from '../components/common/BottomNavBar';
 import Modal from '../components/common/Modal';
 import PostCard from '../components/social/PostCard';
 import CommentModal from '../components/social/CommentModal';
+import { useTranslation } from '../hooks/useTranslation';
 
 const ProfilePage: React.FC = () => {
     const { user, session, supabase, showToast, navigate, updateUserProfile } = useAuth();
     const { theme } = useTheme();
+    const { t } = useTranslation();
+    
+    // Tabs
+    const [activeTab, setActiveTab] = useState<'feed' | 'inventory'>('feed');
+
+    // Feed Logic
     const [posts, setPosts] = useState<Post[]>([]);
     const [isLoadingPosts, setIsLoadingPosts] = useState(true);
-    
-    // Posting Logic
     const [isPostModalOpen, setIsPostModalOpen] = useState(false);
     const [myImages, setMyImages] = useState<GalleryImage[]>([]);
     const [selectedImageForPost, setSelectedImageForPost] = useState<GalleryImage | null>(null);
     const [caption, setCaption] = useState('');
     const [isPosting, setIsPosting] = useState(false);
-
-    // Comment Logic
     const [selectedPostForComments, setSelectedPostForComments] = useState<Post | null>(null);
+
+    // Inventory Logic
+    const [inventoryItems, setInventoryItems] = useState<CosmeticItem[]>([]);
+    const [isLoadingInventory, setIsLoadingInventory] = useState(false);
 
     // 3D Tilt Effect Ref
     const cardRef = useRef<HTMLDivElement>(null);
 
-    // Fetch Posts
+    // --- FETCH POSTS ---
     const fetchPosts = useCallback(async () => {
         if (!supabase || !user) return;
         
@@ -54,7 +61,58 @@ const ProfilePage: React.FC = () => {
         fetchPosts();
     }, [fetchPosts]);
 
-    // Fetch user's generated images for the picker
+    // --- FETCH INVENTORY ---
+    const fetchInventory = useCallback(async () => {
+        if (!session) return;
+        setIsLoadingInventory(true);
+        try {
+            const res = await fetch('/.netlify/functions/get-shop-items', {
+                headers: { Authorization: `Bearer ${session.access_token}` }
+            });
+            if (!res.ok) throw new Error('Failed to load inventory');
+            const allItems: CosmeticItem[] = await res.json();
+            
+            // Filter: Show ONLY owned items or default items (price 0)
+            const ownedItems = allItems.filter(item => item.owned || item.price === 0);
+            setInventoryItems(ownedItems);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setIsLoadingInventory(false);
+        }
+    }, [session]);
+
+    useEffect(() => {
+        if (activeTab === 'inventory') {
+            fetchInventory();
+        }
+    }, [activeTab, fetchInventory]);
+
+    // --- EQUIP ITEM ---
+    const handleEquip = async (type: 'frame' | 'title', itemId: string) => {
+        if (!session) return;
+        try {
+            const res = await fetch('/.netlify/functions/update-appearance', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${session.access_token}`,
+                },
+                body: JSON.stringify({ type, itemId }),
+            });
+            
+            if (!res.ok) throw new Error('Failed to update appearance');
+            
+            if (type === 'frame') updateUserProfile({ equipped_frame_id: itemId });
+            if (type === 'title') updateUserProfile({ equipped_title_id: itemId });
+            
+            showToast(t('creator.settings.personalization.success'), 'success');
+        } catch (error: any) {
+            showToast(error.message, 'error');
+        }
+    };
+
+    // --- POSTING LOGIC ---
     const fetchMyImages = async () => {
         if (!session) return;
         try {
@@ -104,7 +162,7 @@ const ProfilePage: React.FC = () => {
         }
     };
 
-    // Handle 3D Tilt Effect
+    // --- 3D CARD EFFECT ---
     const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
         if (!cardRef.current) return;
         const { left, top, width, height } = cardRef.current.getBoundingClientRect();
@@ -127,7 +185,7 @@ const ProfilePage: React.FC = () => {
             
             <main className="flex-grow pt-24 container mx-auto px-4 max-w-5xl">
                 
-                {/* NEW: 3D Profile Card Section */}
+                {/* 3D Profile Card Section */}
                 <div className="profile-3d-wrapper" onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave}>
                     <div className="profile-card-glass" ref={cardRef}>
                         <div className="holo-shine"></div>
@@ -188,45 +246,128 @@ const ProfilePage: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Actions Bar */}
-                <div className="flex justify-center my-8">
-                    <button 
-                        onClick={handleOpenPostModal}
-                        className="themed-button-primary px-8 py-3 font-bold flex items-center gap-2 rounded-full shadow-[0_0_20px_rgba(236,72,153,0.4)] hover:shadow-[0_0_30px_rgba(236,72,153,0.6)] transition-all transform hover:-translate-y-1"
-                    >
-                        <i className="ph-fill ph-plus-circle text-xl"></i> Đăng Ảnh Mới
-                    </button>
-                </div>
-
-                {/* Content Tabs */}
-                <div className="border-b border-skin-border mb-6">
-                    <div className="flex gap-6 justify-center">
-                        <button className="pb-3 border-b-2 border-skin-accent text-skin-accent font-bold px-4">Bảng Tin</button>
-                        <button className="pb-3 border-b-2 border-transparent text-skin-muted hover:text-skin-base font-semibold transition px-4" onClick={() => navigate('my-creations')}>Tủ Đồ</button>
-                    </div>
-                </div>
-
-                {/* Feed Grid */}
-                {isLoadingPosts ? (
-                    <div className="text-center py-12"><div className="w-8 h-8 border-4 border-skin-accent border-t-transparent rounded-full animate-spin mx-auto"></div></div>
-                ) : posts.length === 0 ? (
-                    <div className="text-center py-20 bg-skin-fill-secondary rounded-xl border border-skin-border border-dashed opacity-60">
-                        <i className="ph-fill ph-camera text-6xl text-skin-muted mb-4"></i>
-                        <p className="text-lg font-semibold">Nhà cửa vắng quá!</p>
-                        <p className="text-skin-muted">Hãy đăng tấm ảnh đầu tiên để khoe với mọi người nào.</p>
-                    </div>
-                ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-8">
-                        {posts.map(post => (
-                            <PostCard 
-                                key={post.id} 
-                                post={post} 
-                                currentUser={user} 
-                                onCommentClick={(p) => setSelectedPostForComments(p)} 
-                            />
-                        ))}
+                {/* Actions Bar (Only visible in Feed tab) */}
+                {activeTab === 'feed' && (
+                    <div className="flex justify-center my-8">
+                        <button 
+                            onClick={handleOpenPostModal}
+                            className="themed-button-primary px-8 py-3 font-bold flex items-center gap-2 rounded-full shadow-[0_0_20px_rgba(236,72,153,0.4)] hover:shadow-[0_0_30px_rgba(236,72,153,0.6)] transition-all transform hover:-translate-y-1"
+                        >
+                            <i className="ph-fill ph-plus-circle text-xl"></i> Đăng Ảnh Mới
+                        </button>
                     </div>
                 )}
+
+                {/* Content Tabs */}
+                <div className="border-b border-skin-border mb-6 mt-8">
+                    <div className="flex gap-6 justify-center">
+                        <button 
+                            onClick={() => setActiveTab('feed')}
+                            className={`pb-3 border-b-2 font-bold px-4 transition ${activeTab === 'feed' ? 'border-skin-accent text-skin-accent' : 'border-transparent text-skin-muted hover:text-skin-base'}`}
+                        >
+                            Bảng Tin
+                        </button>
+                        <button 
+                            onClick={() => setActiveTab('inventory')}
+                            className={`pb-3 border-b-2 font-bold px-4 transition ${activeTab === 'inventory' ? 'border-skin-accent text-skin-accent' : 'border-transparent text-skin-muted hover:text-skin-base'}`}
+                        >
+                            Tủ Đồ
+                        </button>
+                        <button 
+                            className="pb-3 border-b-2 border-transparent text-skin-muted hover:text-skin-base font-semibold transition px-4" 
+                            onClick={() => navigate('my-creations')}
+                        >
+                            Tác Phẩm
+                        </button>
+                    </div>
+                </div>
+
+                {/* --- TAB CONTENT: FEED --- */}
+                {activeTab === 'feed' && (
+                    <>
+                        {isLoadingPosts ? (
+                            <div className="text-center py-12"><div className="w-8 h-8 border-4 border-skin-accent border-t-transparent rounded-full animate-spin mx-auto"></div></div>
+                        ) : posts.length === 0 ? (
+                            <div className="text-center py-20 bg-skin-fill-secondary rounded-xl border border-skin-border border-dashed opacity-60">
+                                <i className="ph-fill ph-camera text-6xl text-skin-muted mb-4"></i>
+                                <p className="text-lg font-semibold">Nhà cửa vắng quá!</p>
+                                <p className="text-skin-muted">Hãy đăng tấm ảnh đầu tiên để khoe với mọi người nào.</p>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-8">
+                                {posts.map(post => (
+                                    <PostCard 
+                                        key={post.id} 
+                                        post={post} 
+                                        currentUser={user} 
+                                        onCommentClick={(p) => setSelectedPostForComments(p)} 
+                                    />
+                                ))}
+                            </div>
+                        )}
+                    </>
+                )}
+
+                {/* --- TAB CONTENT: INVENTORY --- */}
+                {activeTab === 'inventory' && (
+                    <div className="animate-fade-in">
+                        {isLoadingInventory ? (
+                            <div className="text-center py-12"><div className="w-8 h-8 border-4 border-skin-accent border-t-transparent rounded-full animate-spin mx-auto"></div></div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                {/* Frames Section */}
+                                <div>
+                                    <h3 className="text-xl font-bold text-white mb-4 border-b border-white/10 pb-2">Khung Avatar</h3>
+                                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-4 max-h-[500px] overflow-y-auto custom-scrollbar pr-2">
+                                        {inventoryItems.filter(i => i.type === 'frame').map(frame => {
+                                            const isActive = user.equipped_frame_id === frame.id;
+                                            const displayName = frame.nameKey ? t(frame.nameKey) : frame.name;
+                                            return (
+                                                <div 
+                                                    key={frame.id}
+                                                    onClick={() => handleEquip('frame', frame.id)}
+                                                    className={`aspect-square bg-skin-fill-secondary rounded-xl border-2 flex flex-col items-center justify-center cursor-pointer relative transition hover:scale-105 ${isActive ? 'border-skin-accent shadow-lg shadow-skin-accent/20' : 'border-transparent hover:border-white/20'}`}
+                                                >
+                                                    {isActive && <div className="absolute top-2 right-2 w-2 h-2 bg-green-500 rounded-full shadow-sm"></div>}
+                                                    <div className="relative w-12 h-12 mb-2">
+                                                        {/* Render plain avatar inside frame context */}
+                                                        <div className={`absolute inset-0 rounded-full overflow-hidden ${frame.cssClass}`}>
+                                                            <img src={user.photo_url} alt="preview" className="w-full h-full object-cover opacity-80" />
+                                                        </div>
+                                                    </div>
+                                                    <span className="text-[10px] text-center px-1 truncate w-full text-gray-300">{displayName}</span>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
+                                {/* Titles Section */}
+                                <div>
+                                    <h3 className="text-xl font-bold text-white mb-4 border-b border-white/10 pb-2">Danh Hiệu</h3>
+                                    <div className="grid grid-cols-2 gap-3 max-h-[500px] overflow-y-auto custom-scrollbar pr-2">
+                                        {inventoryItems.filter(i => i.type === 'title').map(title => {
+                                            const isActive = user.equipped_title_id === title.id;
+                                            return (
+                                                <div 
+                                                    key={title.id}
+                                                    onClick={() => handleEquip('title', title.id)}
+                                                    className={`p-3 bg-skin-fill-secondary rounded-xl border-2 flex flex-col items-center justify-center cursor-pointer relative transition hover:scale-105 ${isActive ? 'border-skin-accent shadow-lg shadow-skin-accent/20' : 'border-transparent hover:border-white/20'}`}
+                                                >
+                                                    {isActive && <div className="absolute top-2 right-2 w-2 h-2 bg-green-500 rounded-full shadow-sm"></div>}
+                                                    <div className="mb-2">
+                                                        <UserBadge titleId={title.id} />
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+
             </main>
 
             <CreatorFooter onInfoLinkClick={() => {}} />

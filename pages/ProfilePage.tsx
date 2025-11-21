@@ -10,6 +10,8 @@ import UserBadge from '../components/common/UserBadge';
 import { Post, GalleryImage } from '../types';
 import BottomNavBar from '../components/common/BottomNavBar';
 import Modal from '../components/common/Modal';
+import PostCard from '../components/social/PostCard';
+import CommentModal from '../components/social/CommentModal';
 
 const ProfilePage: React.FC = () => {
     const { user, session, supabase, showToast, navigate, updateUserProfile } = useAuth();
@@ -24,12 +26,24 @@ const ProfilePage: React.FC = () => {
     const [caption, setCaption] = useState('');
     const [isPosting, setIsPosting] = useState(false);
 
+    // Comment Logic
+    const [selectedPostForComments, setSelectedPostForComments] = useState<Post | null>(null);
+
     // Fetch Posts
     const fetchPosts = useCallback(async () => {
         if (!supabase || !user) return;
+        
+        // Check for likes using a subquery or separate fetch would be better, 
+        // but for now let's just fetch posts and we'll assume 'is_liked_by_user' isn't perfectly synced 
+        // on self-profile without a complex join or rpc.
+        // Actually, we can do a quick check if needed, but standard SELECT * is fine for MVP.
+        
         const { data, error } = await supabase
             .from('posts')
-            .select('*')
+            .select(`
+                *,
+                user:users (display_name, photo_url, level, equipped_frame_id, equipped_title_id)
+            `)
             .eq('user_id', user.id)
             .order('created_at', { ascending: false });
         
@@ -46,7 +60,6 @@ const ProfilePage: React.FC = () => {
     const fetchMyImages = async () => {
         if (!session) return;
         try {
-            // Reuse the existing endpoint logic or call supabase directly
             const { data, error } = await supabase!
                 .from('generated_images')
                 .select('*')
@@ -84,7 +97,7 @@ const ProfilePage: React.FC = () => {
             setSelectedImageForPost(null);
             fetchPosts(); // Refresh feed
             
-            // Optimistically update stats (actual logic is in DB trigger)
+            // Optimistically update stats
             updateUserProfile({ weekly_points: (user.weekly_points || 0) + 20 });
 
         } catch (e: any) {
@@ -160,7 +173,7 @@ const ProfilePage: React.FC = () => {
                     </button>
                 </div>
 
-                {/* Content Tabs (Simplified for now) */}
+                {/* Content Tabs */}
                 <div className="border-b border-skin-border mb-6">
                     <div className="flex gap-6">
                         <button className="pb-3 border-b-2 border-skin-accent text-skin-accent font-bold">Bảng Tin</button>
@@ -181,30 +194,12 @@ const ProfilePage: React.FC = () => {
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-8">
                         {posts.map(post => (
-                            <div key={post.id} className="bg-skin-fill-secondary rounded-xl border border-skin-border overflow-hidden group">
-                                <div className="p-4 flex items-center gap-3">
-                                    <UserAvatar url={user.photo_url} alt={user.display_name} frameId={user.equipped_frame_id} level={user.level} size="sm" />
-                                    <div>
-                                        <p className="font-bold text-sm">{user.display_name}</p>
-                                        <p className="text-xs text-skin-muted">{new Date(post.created_at).toLocaleDateString('vi-VN')}</p>
-                                    </div>
-                                </div>
-                                <div className="aspect-[3/4] bg-black relative overflow-hidden">
-                                    <img src={post.image_url} alt="" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
-                                </div>
-                                <div className="p-4">
-                                    <div className="flex items-center gap-4 mb-3">
-                                        <button className="text-2xl text-skin-muted hover:text-pink-500 transition"><i className="ph-fill ph-heart"></i></button>
-                                        <button className="text-2xl text-skin-muted hover:text-blue-400 transition"><i className="ph-fill ph-chat-circle"></i></button>
-                                        <button className="text-2xl text-skin-muted hover:text-green-400 transition ml-auto"><i className="ph-fill ph-share-network"></i></button>
-                                    </div>
-                                    <p className="font-bold text-sm mb-1">{post.likes_count} lượt thích</p>
-                                    <p className="text-sm text-skin-base">
-                                        <span className="font-bold mr-2">{user.display_name}</span>
-                                        {post.caption}
-                                    </p>
-                                </div>
-                            </div>
+                            <PostCard 
+                                key={post.id} 
+                                post={post} 
+                                currentUser={user} 
+                                onCommentClick={(p) => setSelectedPostForComments(p)} 
+                            />
                         ))}
                     </div>
                 )}
@@ -250,6 +245,12 @@ const ProfilePage: React.FC = () => {
                     )}
                 </div>
             </Modal>
+
+            <CommentModal 
+                isOpen={!!selectedPostForComments} 
+                onClose={() => setSelectedPostForComments(null)} 
+                post={selectedPostForComments} 
+            />
         </div>
     );
 };

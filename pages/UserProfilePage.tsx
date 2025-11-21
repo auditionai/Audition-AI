@@ -9,16 +9,19 @@ import UserAvatar from '../components/common/UserAvatar';
 import UserBadge from '../components/common/UserBadge';
 import { User, Post } from '../types';
 import BottomNavBar from '../components/common/BottomNavBar';
+import PostCard from '../components/social/PostCard';
+import CommentModal from '../components/social/CommentModal';
 
 const UserProfilePage: React.FC = () => {
-    const { navigate, supabase } = useAuth();
+    const { navigate, supabase, user, showToast } = useAuth();
     const { theme } = useTheme();
-    // Simplified ID extraction since we don't have react-router hooks
     const userId = window.location.pathname.split('/').pop();
     
     const [viewUser, setViewUser] = useState<User | null>(null);
     const [posts, setPosts] = useState<Post[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [selectedPostForComments, setSelectedPostForComments] = useState<Post | null>(null);
+    const [isCreatingChat, setIsCreatingChat] = useState(false);
 
     useEffect(() => {
         if (!userId || !supabase) return;
@@ -36,13 +39,31 @@ const UserProfilePage: React.FC = () => {
                 if (userError) throw userError;
                 setViewUser(userData);
 
-                // 2. Fetch User Posts
+                // 2. Fetch User Posts with joined user data for cards
                 const { data: postsData } = await supabase
                     .from('posts')
-                    .select('*')
+                    .select(`
+                        *,
+                        user:users (display_name, photo_url, level, equipped_frame_id, equipped_title_id)
+                    `)
                     .eq('user_id', userId)
                     .order('created_at', { ascending: false });
                 
+                // Check liked status for current user on these posts
+                if (postsData && user) {
+                    const postIds = postsData.map(p => p.id);
+                    const { data: likes } = await supabase
+                        .from('post_likes')
+                        .select('post_id')
+                        .eq('user_id', user.id)
+                        .in('post_id', postIds);
+                    
+                    const likedSet = new Set(likes?.map(l => l.post_id));
+                    postsData.forEach(p => {
+                        p.is_liked_by_user = likedSet.has(p.id);
+                    });
+                }
+
                 setPosts(postsData || []);
 
             } catch (e) {
@@ -53,7 +74,29 @@ const UserProfilePage: React.FC = () => {
             }
         };
         fetchData();
-    }, [userId, supabase, navigate]);
+    }, [userId, supabase, navigate, user]);
+
+    const handleMessageClick = async () => {
+        if (!supabase || !user || !viewUser) return;
+        if (isCreatingChat) return;
+        setIsCreatingChat(true);
+
+        try {
+            // Use RPC to get or create conversation
+            const { data: conversationId, error } = await supabase
+                .rpc('get_or_create_conversation', { other_user_id: viewUser.id });
+
+            if (error) throw error;
+
+            // Navigate to messages page with conversation ID
+            navigate(`messages?conversationId=${conversationId}`);
+        } catch (e: any) {
+            showToast("Không thể tạo cuộc trò chuyện.", "error");
+            console.error(e);
+        } finally {
+            setIsCreatingChat(false);
+        }
+    };
 
     if (isLoading) {
         return <div className="min-h-screen bg-skin-fill flex items-center justify-center"><div className="w-8 h-8 border-4 border-skin-accent border-t-transparent rounded-full animate-spin"></div></div>;
@@ -115,14 +158,21 @@ const UserProfilePage: React.FC = () => {
                             <p className="text-xl font-black text-yellow-400">{viewUser.weekly_points || 0}</p>
                         </div>
                     </div>
-                    <div className="flex gap-2">
-                        <button className="px-6 py-3 bg-white/5 hover:bg-white/10 rounded-lg font-bold border border-skin-border text-sm">
-                            <i className="ph-fill ph-chat-circle-text mr-2"></i> Nhắn tin
-                        </button>
-                        <button className="px-6 py-3 bg-skin-accent/10 hover:bg-skin-accent/20 text-skin-accent rounded-lg font-bold border border-skin-border-accent text-sm">
-                            <i className="ph-fill ph-user-plus mr-2"></i> Kết bạn
-                        </button>
-                    </div>
+                    {user && user.id !== viewUser.id && (
+                        <div className="flex gap-2">
+                            <button 
+                                onClick={handleMessageClick}
+                                disabled={isCreatingChat}
+                                className="px-6 py-3 bg-white/5 hover:bg-white/10 rounded-lg font-bold border border-skin-border text-sm flex items-center transition-colors disabled:opacity-50"
+                            >
+                                {isCreatingChat ? <i className="ph ph-spinner animate-spin mr-2"></i> : <i className="ph-fill ph-chat-circle-text mr-2"></i>}
+                                Nhắn tin
+                            </button>
+                            <button className="px-6 py-3 bg-skin-accent/10 hover:bg-skin-accent/20 text-skin-accent rounded-lg font-bold border border-skin-border-accent text-sm flex items-center transition-colors">
+                                <i className="ph-fill ph-user-plus mr-2"></i> Kết bạn
+                            </button>
+                        </div>
+                    )}
                 </div>
 
                 {/* Feed */}
@@ -139,28 +189,12 @@ const UserProfilePage: React.FC = () => {
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-8">
                         {posts.map(post => (
-                            <div key={post.id} className="bg-skin-fill-secondary rounded-xl border border-skin-border overflow-hidden">
-                                <div className="p-4 flex items-center gap-3">
-                                    <UserAvatar url={viewUser.photo_url} alt={viewUser.display_name} frameId={viewUser.equipped_frame_id} level={viewUser.level} size="sm" />
-                                    <div>
-                                        <p className="font-bold text-sm">{viewUser.display_name}</p>
-                                        <p className="text-xs text-skin-muted">{new Date(post.created_at).toLocaleDateString('vi-VN')}</p>
-                                    </div>
-                                </div>
-                                <div className="aspect-[3/4] bg-black relative">
-                                    <img src={post.image_url} alt="" className="w-full h-full object-cover" />
-                                </div>
-                                <div className="p-4">
-                                    <div className="flex items-center gap-4 mb-3 text-skin-muted">
-                                        <i className="ph-fill ph-heart"></i> {post.likes_count}
-                                        <i className="ph-fill ph-chat-circle ml-2"></i> {post.comments_count}
-                                    </div>
-                                    <p className="text-sm text-skin-base">
-                                        <span className="font-bold mr-2">{viewUser.display_name}</span>
-                                        {post.caption}
-                                    </p>
-                                </div>
-                            </div>
+                            <PostCard 
+                                key={post.id} 
+                                post={post} 
+                                currentUser={user}
+                                onCommentClick={(p) => setSelectedPostForComments(p)}
+                            />
                         ))}
                     </div>
                 )}
@@ -168,6 +202,12 @@ const UserProfilePage: React.FC = () => {
 
             <CreatorFooter onInfoLinkClick={() => {}} />
             <BottomNavBar activeTab="tool" onTabChange={navigate} onCheckInClick={() => {}} />
+
+            <CommentModal 
+                isOpen={!!selectedPostForComments} 
+                onClose={() => setSelectedPostForComments(null)} 
+                post={selectedPostForComments} 
+            />
         </div>
     );
 };

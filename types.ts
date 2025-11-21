@@ -308,6 +308,8 @@ export interface Post {
         equipped_frame_id?: string;
         equipped_title_id?: string;
     }
+    // Helper for UI state (not in DB)
+    is_liked_by_user?: boolean; 
 }
 
 export interface PostComment {
@@ -319,6 +321,40 @@ export interface PostComment {
     user?: {
         display_name: string;
         photo_url: string;
+        level: number;
         equipped_frame_id?: string;
+        equipped_title_id?: string;
     }
+}
+
+// NEW: Messaging System Types
+export interface Conversation {
+    id: string;
+    created_at: string;
+    updated_at: string;
+    participants: {
+        user_id: string;
+        user: {
+            display_name: string;
+            photo_url: string;
+            is_online?: boolean; // Optional for future online status
+        }
+    }[];
+    last_message?: {
+        content: string;
+        created_at: string;
+        type: string;
+        is_read: boolean;
+        sender_id: string;
+    };
+}
+
+export interface DirectMessage {
+    id: string;
+    conversation_id: string;
+    sender_id: string;
+    content: string;
+    type: 'text' | 'image';
+    is_read: boolean;
+    created_at: string;
 }

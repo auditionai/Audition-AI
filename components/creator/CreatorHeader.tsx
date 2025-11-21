@@ -157,6 +157,15 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
               </button>
             </div>
             
+            {/* Messages Button (New) */}
+            <button
+              onClick={() => handleNavClick('messages')}
+              className={`themed-notification-button p-2.5 md:p-2 ${activeTab === 'messages' as any ? 'text-skin-base' : ''}`}
+              title="Tin nhắn"
+            >
+                <i className="ph-fill ph-chat-centered-text text-xl"></i>
+            </button>
+
             {/* Notification Bell (All sizes) */}
             <div className="relative" ref={notificationRef}>
                 <button

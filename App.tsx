@@ -11,6 +11,7 @@ import GalleryPage from './pages/GalleryPage';
 import BuyCreditsPage from './pages/BuyCreditsPage';
 import ProfilePage from './pages/ProfilePage'; // NEW
 import UserProfilePage from './pages/UserProfilePage'; // NEW
+import MessagesPage from './pages/MessagesPage'; // NEW
 
 // Import Common Components
 import RewardNotification from './components/common/RewardNotification';
@@ -42,8 +43,11 @@ const AppContent: React.FC = () => {
                 pageComponent = user ? <ProfilePage /> : <HomePage />;
                 break;
             case 'user':
-                // user/:id - we need to extract ID from URL in the component or context
+                // user/:id logic is handled inside UserProfilePage by parsing window.location
                 pageComponent = user ? <UserProfilePage /> : <HomePage />;
+                break;
+            case 'messages':
+                pageComponent = user ? <MessagesPage /> : <HomePage />;
                 break;
             case 'buy-credits':
                 pageComponent = user ? <BuyCreditsPage /> : <HomePage />;

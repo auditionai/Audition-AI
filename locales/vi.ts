@@ -133,7 +133,7 @@ export const vi = {
       quickGuide: 'Xem Hướng Dẫn Nhanh',
       upgradeBanner: {
         title: 'Nâng cấp: Đã có Nano Banana Pro (Gemini 3)!',
-        desc: 'Ứng dụng đang mặc định sử dụng Gemini 3 Pro (Nano Banana Pro) để ảnh siêu nét (4K). Phí: 2 Kim Cương/ảnh. Bạn có thể đổi về bản thường (1 KC) bằng nút bên cạnh hoặc trong Cài đặt nâng cao.',
+        desc: 'Ứng dụng đang mặc định sử dụng Gemini 3 Pro (Nano Banana Pro) để ảnh siêu nét (4K). Phí: 10-20 Kim Cương/ảnh. Bạn có thể đổi về bản thường (1 KC) bằng nút bên cạnh hoặc trong Cài đặt nâng cao.',
         button: 'Đổi Ngay',
       },
       tabs: {
@@ -181,7 +181,7 @@ export const vi = {
         superFaceLockProcessed: 'Gương mặt đã được khóa',
         superFaceLockDesc: 'Tải ảnh chân dung rõ nét, sau đó bắt buộc phải nhấn nút "Xử lý" để AI làm nét và khóa gương mặt.',
         superFaceLockActionFlash: 'Xử lý Flash (1 💎)',
-        superFaceLockActionPro: 'Xử lý Pro (2 💎)',
+        superFaceLockActionPro: 'Xử lý Pro (10 💎)',
         styleTitle: 'Ảnh Phong Cách',
         styleUploadText: 'Style Reference',
         styleDesc: 'AI sẽ học hỏi dải màu, ánh sáng và bố cục từ ảnh này để áp dụng vào tác phẩm của bạn.',
@@ -241,7 +241,7 @@ export const vi = {
         placeholder: 'Ảnh sau khi xử lý sẽ hiện ở đây',
         viewDetails: 'Xem chi tiết',
         flashButton: 'Tách nền Flash (1 💎)',
-        proButton: 'Tách nền Pro (2 💎)',
+        proButton: 'Tách nền Pro (10 💎)',
       },
       signature: {
         title: 'Công Cụ Chèn Chữ Ký',
@@ -257,7 +257,7 @@ export const vi = {
         applyButton: 'Áp dụng Chữ ký',
         applyAiButton: 'Áp dụng AI ({{cost}} 💎)',
         applyAiFlash: 'AI Flash (1 💎)',
-        applyAiPro: 'AI Pro (2 💎)',
+        applyAiPro: 'AI Pro (10 💎)',
         downloadButton: 'Tải ảnh',
         uploadPlaceholder: 'Nhấn để chọn ảnh',
         position: 'Vị trí',

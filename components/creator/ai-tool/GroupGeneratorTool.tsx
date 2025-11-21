@@ -210,10 +210,17 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
         setImageToProcess(imageData);
     };
 
-    const handleProcessFace = async (index: number) => {
+    const handleProcessFace = async (index: number, modelType: 'flash' | 'pro') => {
         const char = characters[index];
         if (!char.faceImage || !session) return;
         
+        // Cost check
+        const cost = modelType === 'pro' ? 10 : 1;
+        if (user && user.diamonds < cost) {
+             showToast(t('creator.aiTool.common.errorCredits', { cost, balance: user.diamonds }), 'error');
+             return;
+        }
+
         setProcessingFaceIndex(index);
         try {
             const reader = new FileReader();
@@ -223,8 +230,10 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                 const response = await fetch('/.netlify/functions/process-face', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-                    // Face lock in Group Studio currently defaults to Flash for simplicity
-                    body: JSON.stringify({ image: base64Image, model: 'gemini-2.5-flash-image' }),
+                    body: JSON.stringify({ 
+                        image: base64Image, 
+                        model: modelType === 'pro' ? 'gemini-3-pro-image-preview' : 'gemini-2.5-flash-image' 
+                    }),
                 });
                 const result = await response.json();
                 if (!response.ok) throw new Error(result.error || t('creator.aiTool.singlePhoto.superFaceLockProcessing'));
@@ -590,14 +599,29 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                                         </button>
                                     </div>
                                 </div>
-                                <button 
-                                    onClick={() => handleProcessFace(index)}
-                                    disabled={processingFaceIndex === index || !char.faceImage || !!char.processedFace}
-                                    className={`w-full text-sm font-bold py-2 px-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-wait
-                                        ${char.processedFace ? 'bg-green-500/20 text-green-300' : 'bg-yellow-500/20 text-yellow-300 hover:bg-yellow-500/30'}`}
-                                >
-                                    {processingFaceIndex === index ? t('creator.aiTool.singlePhoto.superFaceLockProcessing') : char.processedFace ? t('creator.aiTool.singlePhoto.superFaceLockProcessed') : t('creator.aiTool.singlePhoto.superFaceLockActionFlash')}
-                                </button>
+                                {/* Face Lock Buttons */}
+                                {char.processedFace ? (
+                                     <div className="w-full text-sm font-bold py-2 px-3 bg-green-500/20 text-green-300 rounded-lg text-center">
+                                        <i className="ph-fill ph-check-circle mr-1"></i> {t('creator.aiTool.singlePhoto.superFaceLockProcessed')}
+                                    </div>
+                                ) : (
+                                    <div className="flex flex-col gap-2">
+                                        <button 
+                                            onClick={() => handleProcessFace(index, 'flash')}
+                                            disabled={processingFaceIndex === index || !char.faceImage}
+                                            className="w-full text-xs font-bold py-2 px-2 bg-blue-500/20 text-blue-300 border border-blue-500/50 rounded-lg hover:bg-blue-500/30 disabled:opacity-50 disabled:cursor-wait"
+                                        >
+                                            {processingFaceIndex === index ? t('creator.aiTool.singlePhoto.superFaceLockProcessing') : t('creator.aiTool.singlePhoto.superFaceLockActionFlash')}
+                                        </button>
+                                        <button 
+                                            onClick={() => handleProcessFace(index, 'pro')}
+                                            disabled={processingFaceIndex === index || !char.faceImage}
+                                            className="w-full text-xs font-bold py-2 px-2 bg-yellow-500/20 text-yellow-300 border border-yellow-500/50 rounded-lg hover:bg-yellow-500/30 disabled:opacity-50 disabled:cursor-wait shadow-lg shadow-yellow-500/10"
+                                        >
+                                            {processingFaceIndex === index ? t('creator.aiTool.singlePhoto.superFaceLockProcessing') : t('creator.aiTool.singlePhoto.superFaceLockActionPro')}
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         ))}
                     </div>

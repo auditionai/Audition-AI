@@ -6,7 +6,6 @@ import { resizeImage } from '../../../utils/imageUtils';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import SettingsBlock from '../ai-tool/SettingsBlock';
-import { useTranslation } from '../../../hooks/useTranslation';
 
 // --- CONSTANTS ---
 const ART_STYLES = [
@@ -117,7 +116,6 @@ const DraggableBubble = ({
 
 const ComicStudio: React.FC = () => {
     const { session, showToast, updateUserDiamonds } = useAuth();
-    const { t } = useTranslation();
     const [activeStep, setActiveStep] = useState<1 | 2 | 3>(1); 
     const [isLoading, setIsLoading] = useState(false);
     

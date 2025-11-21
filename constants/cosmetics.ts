@@ -45,9 +45,9 @@ export const ACHIEVEMENT_TITLES: CosmeticItem[] = [
     { id: 'audition-god', type: 'title', nameKey: 'creator.cosmetics.titles.auditionGod', rarity: 'mythic', cssClass: 'title-mythic-fire', unlockCondition: { level: 100 } }
 ];
 
-// --- SHOP EXCLUSIVE ITEMS (NEW) ---
+// --- SHOP EXCLUSIVE ITEMS (NEW PREMIUM) ---
 export const SHOP_EXCLUSIVE_COSMETICS: CosmeticItem[] = [
-    // FRAMES
+    // FRAMES - Premium Redesigned
     { id: 'shop-frame-01', type: 'frame', name: 'Neon Cyan Pulse', rarity: 'rare', cssClass: 'shop-frame-01', price: 50 },
     { id: 'shop-frame-02', type: 'frame', name: 'Neon Purple Pulse', rarity: 'rare', cssClass: 'shop-frame-02', price: 50 },
     { id: 'shop-frame-03', type: 'frame', name: 'Vòng Lửa Địa Ngục', rarity: 'epic', cssClass: 'shop-frame-03', price: 150 },
@@ -69,14 +69,13 @@ export const SHOP_EXCLUSIVE_COSMETICS: CosmeticItem[] = [
     { id: 'shop-frame-19', type: 'frame', name: 'Đại Dương Sâu Thẳm', rarity: 'epic', cssClass: 'shop-frame-19', price: 220 },
     { id: 'shop-frame-20', type: 'frame', name: 'Chúa Tể Vũ Trụ', rarity: 'mythic', cssClass: 'shop-frame-20', price: 1500 },
 
-    // TITLES
+    // TITLES - Premium Redesigned (Removed "Newbie" variants)
     { id: 'shop-title-01', type: 'title', name: 'Cyan Neon', rarity: 'rare', cssClass: 'shop-title-01', price: 50 },
     { id: 'shop-title-02', type: 'title', name: 'Magenta Neon', rarity: 'rare', cssClass: 'shop-title-02', price: 50 },
     { id: 'shop-title-03', type: 'title', name: 'Hỏa Long', rarity: 'epic', cssClass: 'shop-title-03', price: 150 },
     { id: 'shop-title-04', type: 'title', name: 'Thủy Quái', rarity: 'epic', cssClass: 'shop-title-04', price: 150 },
     { id: 'shop-title-05', type: 'title', name: 'Hacker', rarity: 'rare', cssClass: 'shop-title-05', price: 100 },
     { id: 'shop-title-06', type: 'title', name: 'Đại Gia', rarity: 'legendary', cssClass: 'shop-title-06', price: 500 },
-    { id: 'shop-title-07', type: 'title', name: 'Cute Phô Mai Que', rarity: 'common', cssClass: 'shop-title-07', price: 30 },
     { id: 'shop-title-08', type: 'title', name: 'Bóng Tối', rarity: 'rare', cssClass: 'shop-title-08', price: 80 },
     { id: 'shop-title-09', type: 'title', name: 'Hư Không', rarity: 'epic', cssClass: 'shop-title-09', price: 200 },
     { id: 'shop-title-10', type: 'title', name: 'Minimalist', rarity: 'common', cssClass: 'shop-title-10', price: 20 },
@@ -84,7 +83,6 @@ export const SHOP_EXCLUSIVE_COSMETICS: CosmeticItem[] = [
     { id: 'shop-title-12', type: 'title', name: 'Huyết Tộc', rarity: 'legendary', cssClass: 'shop-title-12', price: 400 },
     { id: 'shop-title-13', type: 'title', name: 'Glassmorphism', rarity: 'rare', cssClass: 'shop-title-13', price: 100 },
     { id: 'shop-title-14', type: 'title', name: 'Cosmic Voyager', rarity: 'epic', cssClass: 'shop-title-14', price: 220 },
-    { id: 'shop-title-15', type: 'title', name: 'Yêu Thiên Nhiên', rarity: 'common', cssClass: 'shop-title-15', price: 30 },
     { id: 'shop-title-16', type: 'title', name: 'Super Idol', rarity: 'legendary', cssClass: 'shop-title-16', price: 450 },
     { id: 'shop-title-17', type: 'title', name: 'Phù Thủy', rarity: 'epic', cssClass: 'shop-title-17', price: 180 },
     { id: 'shop-title-18', type: 'title', name: 'Bóng Ma', rarity: 'rare', cssClass: 'shop-title-18', price: 90 },

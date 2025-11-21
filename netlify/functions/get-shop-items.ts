@@ -1,9 +1,8 @@
 
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
-// Import SHOP_EXCLUSIVE_COSMETICS by hardcoding them here since imports from src/constants might fail in Netlify function context
-// This is a simulation of DB items.
 
+// PREMIUM SHOP ITEMS (Simulated DB default data)
 const SHOP_EXCLUSIVE_COSMETICS = [
     // FRAMES
     { id: 'shop-frame-01', type: 'frame', name: 'Neon Cyan Pulse', rarity: 'rare', css_class: 'shop-frame-01', price: 50 },
@@ -27,14 +26,13 @@ const SHOP_EXCLUSIVE_COSMETICS = [
     { id: 'shop-frame-19', type: 'frame', name: 'Đại Dương Sâu Thẳm', rarity: 'epic', css_class: 'shop-frame-19', price: 220 },
     { id: 'shop-frame-20', type: 'frame', name: 'Chúa Tể Vũ Trụ', rarity: 'mythic', css_class: 'shop-frame-20', price: 1500 },
 
-    // TITLES
+    // TITLES - Removed low-tier duplicates
     { id: 'shop-title-01', type: 'title', name: 'Cyan Neon', rarity: 'rare', css_class: 'shop-title-01', price: 50 },
     { id: 'shop-title-02', type: 'title', name: 'Magenta Neon', rarity: 'rare', css_class: 'shop-title-02', price: 50 },
     { id: 'shop-title-03', type: 'title', name: 'Hỏa Long', rarity: 'epic', css_class: 'shop-title-03', price: 150 },
     { id: 'shop-title-04', type: 'title', name: 'Thủy Quái', rarity: 'epic', css_class: 'shop-title-04', price: 150 },
     { id: 'shop-title-05', type: 'title', name: 'Hacker', rarity: 'rare', css_class: 'shop-title-05', price: 100 },
     { id: 'shop-title-06', type: 'title', name: 'Đại Gia', rarity: 'legendary', css_class: 'shop-title-06', price: 500 },
-    { id: 'shop-title-07', type: 'title', name: 'Cute Phô Mai Que', rarity: 'common', css_class: 'shop-title-07', price: 30 },
     { id: 'shop-title-08', type: 'title', name: 'Bóng Tối', rarity: 'rare', css_class: 'shop-title-08', price: 80 },
     { id: 'shop-title-09', type: 'title', name: 'Hư Không', rarity: 'epic', css_class: 'shop-title-09', price: 200 },
     { id: 'shop-title-10', type: 'title', name: 'Minimalist', rarity: 'common', css_class: 'shop-title-10', price: 20 },
@@ -42,7 +40,6 @@ const SHOP_EXCLUSIVE_COSMETICS = [
     { id: 'shop-title-12', type: 'title', name: 'Huyết Tộc', rarity: 'legendary', css_class: 'shop-title-12', price: 400 },
     { id: 'shop-title-13', type: 'title', name: 'Glassmorphism', rarity: 'rare', css_class: 'shop-title-13', price: 100 },
     { id: 'shop-title-14', type: 'title', name: 'Cosmic Voyager', rarity: 'epic', css_class: 'shop-title-14', price: 220 },
-    { id: 'shop-title-15', type: 'title', name: 'Yêu Thiên Nhiên', rarity: 'common', css_class: 'shop-title-15', price: 30 },
     { id: 'shop-title-16', type: 'title', name: 'Super Idol', rarity: 'legendary', css_class: 'shop-title-16', price: 450 },
     { id: 'shop-title-17', type: 'title', name: 'Phù Thủy', rarity: 'epic', css_class: 'shop-title-17', price: 180 },
     { id: 'shop-title-18', type: 'title', name: 'Bóng Ma', rarity: 'rare', css_class: 'shop-title-18', price: 90 },
@@ -83,8 +80,13 @@ const handler: Handler = async (event: HandlerEvent) => {
         const ownedItemIds = new Set(inventory?.map(i => i.item_id) || []);
 
         // 3. Merge DB Items with Constant Shop Items (Simulating DB)
-        // We prioritize DB items if IDs clash, but here we use unique IDs.
-        const allItems = [...(dbCosmetics || []), ...SHOP_EXCLUSIVE_COSMETICS];
+        // Note: If DB contains item with same ID as constant, DB wins in normal merging logic, 
+        // but here we simply concatenate since we assume they are distinct or managed via DB mostly.
+        // We filter out SHOP_EXCLUSIVE items from hardcoded list if they already exist in DB to avoid duplicates
+        const dbIds = new Set(dbCosmetics?.map(i => i.id) || []);
+        const filteredConstants = SHOP_EXCLUSIVE_COSMETICS.filter(i => !dbIds.has(i.id));
+
+        const allItems = [...(dbCosmetics || []), ...filteredConstants];
 
         // 4. Map ownership status
         const processedItems = allItems.map(item => ({
@@ -101,6 +103,9 @@ const handler: Handler = async (event: HandlerEvent) => {
             iconUrl: item.icon_url || item.iconUrl,
             unlockCondition: { level: item.unlock_level || 0 }
         }));
+
+        // Sort by Price
+        processedItems.sort((a, b) => a.price - b.price);
 
         return {
             statusCode: 200,

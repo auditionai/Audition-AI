@@ -92,6 +92,7 @@ const GameConfigManager: React.FC = () => {
             type: defaultType,
             name: '', 
             rarity: 'common', 
+            price: 0, // Default price
             unlockCondition: { level: 0 },
             cssClass: defaultType === 'title' ? 'title-basic' : 'frame-none'
         } as any);
@@ -138,6 +139,7 @@ const GameConfigManager: React.FC = () => {
                 type: editingCosmetic.type,
                 name: editingCosmetic.name,
                 rarity: editingCosmetic.rarity,
+                price: editingCosmetic.price, // Include Price
                 css_class: editingCosmetic.cssClass,
                 image_url: editingCosmetic.imageUrl,
                 icon_url: finalIconUrl,
@@ -273,7 +275,10 @@ const GameConfigManager: React.FC = () => {
                                         {c.nameKey ? t(c.nameKey) : c.name}
                                     </p>
                                     <p className="text-xs text-gray-400 uppercase">{t(`creator.settings.admin.gameConfig.rarities.${c.rarity}`)}</p>
-                                    <p className="text-xs text-yellow-500">{t('creator.settings.admin.gameConfig.form.unlockLevel')}: {c.unlockCondition?.level || 0}</p>
+                                    <div className="flex gap-2 text-xs">
+                                        <span className="text-yellow-500">{t('creator.settings.admin.gameConfig.form.unlockLevel')}: {c.unlockCondition?.level || 0}</span>
+                                        <span className="text-pink-400">{c.price || 0} 💎</span>
+                                    </div>
                                 </div>
                                 <div className="flex flex-col gap-1">
                                      <button onClick={() => handleEditCosmetic(c, c.type)} className="text-blue-400 text-xs">{t('creator.settings.admin.gameConfig.buttons.edit')}</button>
@@ -335,9 +340,15 @@ const GameConfigManager: React.FC = () => {
                                     <option value="mythic">{t('creator.settings.admin.gameConfig.rarities.mythic')}</option>
                                 </select>
                             </div>
-                            <div className="flex items-center gap-2">
-                                <label className="text-sm text-gray-400">{t('creator.settings.admin.gameConfig.form.unlockLevel')}:</label>
-                                <input type="number" value={editingCosmetic.unlockCondition?.level || 0} onChange={e => setEditingCosmetic({...editingCosmetic, unlockCondition: { level: Number(e.target.value) }})} className="auth-input w-20" />
+                            <div className="flex gap-4">
+                                <div className="flex-1">
+                                    <label className="text-sm text-gray-400">{t('creator.settings.admin.gameConfig.form.unlockLevel')}</label>
+                                    <input type="number" value={editingCosmetic.unlockCondition?.level || 0} onChange={e => setEditingCosmetic({...editingCosmetic, unlockCondition: { level: Number(e.target.value) }})} className="auth-input mt-1" />
+                                </div>
+                                <div className="flex-1">
+                                    <label className="text-sm text-gray-400">Giá bán (Kim cương)</label>
+                                    <input type="number" value={editingCosmetic.price || 0} onChange={e => setEditingCosmetic({...editingCosmetic, price: Number(e.target.value)})} className="auth-input mt-1" />
+                                </div>
                             </div>
                             
                             {/* Upload Icon Only */}

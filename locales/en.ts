@@ -394,7 +394,8 @@ export const en = {
           apiKeys: 'API Keys',
           ranks: 'Ranks',
           frames: 'Avatar Frames',
-          titles: 'Title Badges'
+          titles: 'Title Badges',
+          luckyWheel: 'Lucky Wheel' // NEW
         },
         dashboard: {
           title: 'Data Dashboard',
@@ -548,8 +549,58 @@ export const en = {
             },
             types: { frame: 'Avatar Frame', title: 'Title Badge' },
             rarities: { common: 'Common', rare: 'Rare', epic: 'Epic', legendary: 'Legendary', mythic: 'Mythic' }
+        },
+        // NEW LUCKY WHEEL TRANSLATIONS
+        luckyWheel: {
+            title: 'Lucky Wheel Config',
+            form: {
+                label: 'Reward Name',
+                type: 'Type',
+                amount: 'Amount',
+                probability: 'Probability (%)',
+                color: 'Color (Hex)',
+                add: 'Add Reward',
+                types: { diamond: 'Diamond', xp: 'XP', ticket: 'Ticket', lucky: 'Good Luck' }
+            },
+            table: {
+                label: 'Reward',
+                value: 'Value',
+                rate: 'Rate',
+                active: 'Status',
+                actions: 'Actions'
+            },
+            error: {
+                totalRate: 'Total probability must equal 100%',
+                load: 'Failed to load wheel config'
+            },
+            success: 'Wheel configuration saved!'
         }
       },
+    },
+    luckyWheel: {
+        title: 'Lucky Wheel',
+        spin: 'SPIN NOW',
+        spinning: 'Spinning...',
+        tickets: 'Tickets',
+        getMore: 'Get More Tickets',
+        daily: 'Daily Ticket',
+        claimed: 'Claimed Today',
+        claim: 'Claim Free Ticket',
+        tasks: {
+            title: 'Earn Tickets',
+            shareApp: 'Share App to Facebook (+1 Ticket)',
+            shareImage: 'Share Created Image (+1 Ticket)',
+            invite: 'Invite a Friend (+3 Tickets)',
+            go: 'Go'
+        },
+        win: {
+            title: 'Congratulations!',
+            desc: 'You won',
+            diamond: 'Diamonds',
+            xp: 'XP',
+            ticket: 'Ticket',
+            lucky: 'Good luck next time!'
+        }
     },
     buyCredits: {
       title: 'Top Up Diamonds',

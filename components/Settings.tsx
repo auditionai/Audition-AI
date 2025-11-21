@@ -11,6 +11,7 @@ import CheckInRewardManager from './admin/CheckInRewardManager';
 import AnnouncementManager from './admin/AnnouncementManager';
 import ApiKeyManager from './admin/ApiKeyManager';
 import GameConfigManager from './admin/GameConfigManager'; 
+import LuckyWheelManager from './admin/LuckyWheelManager'; // NEW
 import { resizeImage } from '../utils/imageUtils';
 import { useTranslation } from '../hooks/useTranslation';
 import UserAvatar from './common/UserAvatar';
@@ -181,7 +182,7 @@ const PersonalizationPanel: React.FC = () => {
 // Admin Panel
 const AdminPanel: React.FC = () => {
     const { t } = useTranslation();
-    type AdminTab = 'dashboard' | 'transactions' | 'users' | 'gift_codes' | 'packages' | 'rewards' | 'announcements' | 'api_keys' | 'game_config';
+    type AdminTab = 'dashboard' | 'transactions' | 'users' | 'gift_codes' | 'packages' | 'rewards' | 'announcements' | 'api_keys' | 'game_config' | 'lucky_wheel';
     const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
 
     const renderContent = () => {
@@ -195,6 +196,7 @@ const AdminPanel: React.FC = () => {
             case 'announcements': return <AnnouncementManager />;
             case 'api_keys': return <ApiKeyManager />;
             case 'game_config': return <GameConfigManager />;
+            case 'lucky_wheel': return <LuckyWheelManager />; // NEW
             default: return <p className="text-center text-gray-500 py-8">Chức năng này đang được phát triển.</p>;
         }
     };
@@ -205,6 +207,7 @@ const AdminPanel: React.FC = () => {
             <div className="flex flex-wrap justify-center gap-2 border-b border-white/10 mb-6 pb-4">
                 <button onClick={() => setActiveTab('dashboard')} className={activeTab === 'dashboard' ? 'admin-tab-active' : 'admin-tab'}>{t('creator.settings.admin.tabs.dashboard')}</button>
                 <button onClick={() => setActiveTab('game_config')} className={activeTab === 'game_config' ? 'admin-tab-active' : 'admin-tab'}>Game Config</button>
+                <button onClick={() => setActiveTab('lucky_wheel')} className={activeTab === 'lucky_wheel' ? 'admin-tab-active' : 'admin-tab'}>{t('creator.settings.admin.tabs.luckyWheel')}</button>
                 <button onClick={() => setActiveTab('transactions')} className={activeTab === 'transactions' ? 'admin-tab-active' : 'admin-tab'}>{t('creator.settings.admin.tabs.transactions')}</button>
                 <button onClick={() => setActiveTab('users')} className={activeTab === 'users' ? 'admin-tab-active' : 'admin-tab'}>{t('creator.settings.admin.tabs.users')}</button>
                 <button onClick={() => setActiveTab('gift_codes')} className={activeTab === 'gift_codes' ? 'admin-tab-active' : 'admin-tab'}>{t('creator.settings.admin.tabs.giftCodes')}</button>

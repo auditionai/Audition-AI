@@ -394,7 +394,8 @@ export const vi = {
           apiKeys: 'API Keys',
           ranks: 'Cấp Bậc',
           frames: 'Khung Avatar',
-          titles: 'Danh Hiệu'
+          titles: 'Danh Hiệu',
+          luckyWheel: 'Vòng Quay' // NEW
         },
         dashboard: {
           title: 'Bảng Điều Khiển Dữ Liệu',
@@ -546,8 +547,58 @@ export const vi = {
             },
             types: { frame: 'Khung Avatar', title: 'Danh Hiệu' },
             rarities: { common: 'Thường', rare: 'Hiếm', epic: 'Sử Thi', legendary: 'Huyền Thoại', mythic: 'Thần Thoại' }
+        },
+        // NEW LUCKY WHEEL TRANSLATIONS
+        luckyWheel: {
+            title: 'Cấu Hình Vòng Quay',
+            form: {
+                label: 'Tên phần thưởng',
+                type: 'Loại',
+                amount: 'Số lượng',
+                probability: 'Tỷ lệ (%)',
+                color: 'Màu ô (Hex)',
+                add: 'Thêm Ô',
+                types: { diamond: 'Kim Cương', xp: 'XP', ticket: 'Vé Quay', lucky: 'May Mắn (Trượt)' }
+            },
+            table: {
+                label: 'Phần thưởng',
+                value: 'Giá trị',
+                rate: 'Tỷ lệ',
+                active: 'Trạng thái',
+                actions: 'Hành động'
+            },
+            error: {
+                totalRate: 'Tổng tỷ lệ phải bằng 100%',
+                load: 'Lỗi tải cấu hình vòng quay'
+            },
+            success: 'Lưu cấu hình vòng quay thành công!'
         }
       },
+    },
+    luckyWheel: {
+        title: 'Vòng Quay May Mắn',
+        spin: 'QUAY NGAY',
+        spinning: 'Đang quay...',
+        tickets: 'Vé quay',
+        getMore: 'Nhận thêm vé',
+        daily: 'Nhận vé mỗi ngày',
+        claimed: 'Đã nhận hôm nay',
+        claim: 'Nhận vé miễn phí',
+        tasks: {
+            title: 'Nhiệm vụ nhận vé',
+            shareApp: 'Chia sẻ ứng dụng lên Facebook (+1 Vé)',
+            shareImage: 'Chia sẻ ảnh đã tạo (+1 Vé)',
+            invite: 'Mời 1 người bạn (+3 Vé)',
+            go: 'Làm ngay'
+        },
+        win: {
+            title: 'Chúc mừng!',
+            desc: 'Bạn đã nhận được',
+            diamond: 'Kim Cương',
+            xp: 'XP',
+            ticket: 'Vé Quay',
+            lucky: 'Chúc bạn may mắn lần sau!'
+        }
     },
     buyCredits: {
       title: 'Nạp Kim Cương',

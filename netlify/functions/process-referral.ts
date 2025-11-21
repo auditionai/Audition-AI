@@ -3,6 +3,7 @@ import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
 
 const REFERRAL_BONUS = 5;
+const REFERRER_SPIN_BONUS = 3; // +3 spins for referrer
 
 const handler: Handler = async (event: HandlerEvent) => {
     if (event.httpMethod !== 'POST') {
@@ -23,7 +24,6 @@ const handler: Handler = async (event: HandlerEvent) => {
 
     try {
         // 1. Check if current user already claimed referral bonus
-        // We check for any transaction of type 'REFERRAL_BONUS_RECEIVED' for this user
         const { data: existingTx } = await supabaseAdmin
             .from('diamond_transactions_log')
             .select('id')
@@ -36,21 +36,10 @@ const handler: Handler = async (event: HandlerEvent) => {
             return { statusCode: 400, body: JSON.stringify({ error: 'You have already used a referral code.' }) };
         }
 
-        // 2. Find the referrer based on the code (first 8 chars of ID uppercase)
-        // Since we don't have a dedicated 'referral_code' column, we search by ID prefix logic
-        // This is inefficient for large DBs but fine for this setup.
-        // Better approach: Use a function or select all IDs where substring matches.
-        // Since Supabase doesn't support 'substring' match easily in client lib without RPC, 
-        // we will assume the code IS the ID prefix.
-        // HOWEVER, searching by ID substring is hard.
-        // Alternative: Fetch user by exact ID if the code IS the ID? No, code is 8 chars.
-        // Workaround: Fetch all users? No.
-        // Let's try to find exact match. We need to find a user whose ID starts with the code.
-        // We'll use 'ilike' with pattern.
-        
+        // 2. Find the referrer
         const { data: referrers, error: referrerError } = await supabaseAdmin
             .from('users')
-            .select('id, diamonds')
+            .select('id, diamonds, spin_tickets')
             .ilike('id', `${referralCode}%`)
             .limit(1);
 
@@ -60,12 +49,11 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         const referrer = referrers[0];
 
-        // Self-referral check
         if (referrer.id === user.id) {
             return { statusCode: 400, body: JSON.stringify({ error: 'Cannot refer yourself.' }) };
         }
 
-        // 3. Award Diamonds to NEW USER (Invitee)
+        // 3. Award Diamonds to NEW USER (Invitee) - 5 Diamonds
         const { data: inviteeData } = await supabaseAdmin.from('users').select('diamonds').eq('id', user.id).single();
         await Promise.all([
             supabaseAdmin.from('users').update({ diamonds: (inviteeData?.diamonds || 0) + REFERRAL_BONUS }).eq('id', user.id),
@@ -77,14 +65,17 @@ const handler: Handler = async (event: HandlerEvent) => {
             })
         ]);
 
-        // 4. Award Diamonds to REFERRER (Inviter)
+        // 4. Award REFERRER: 5 Diamonds + 3 Spin Tickets
         await Promise.all([
-            supabaseAdmin.from('users').update({ diamonds: referrer.diamonds + REFERRAL_BONUS }).eq('id', referrer.id),
+            supabaseAdmin.from('users').update({ 
+                diamonds: referrer.diamonds + REFERRAL_BONUS,
+                spin_tickets: (referrer.spin_tickets || 0) + REFERRER_SPIN_BONUS 
+            }).eq('id', referrer.id),
             supabaseAdmin.from('diamond_transactions_log').insert({
                 user_id: referrer.id,
                 amount: REFERRAL_BONUS,
                 transaction_type: 'REFERRAL_BONUS_GIVEN',
-                description: `Mời thành công người dùng mới`
+                description: `Mời thành công người dùng mới (+${REFERRER_SPIN_BONUS} Vé quay)`
             })
         ]);
 

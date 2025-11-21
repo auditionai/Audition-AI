@@ -53,6 +53,9 @@ export interface User {
     // NEW: Cosmetics
     equipped_title_id?: string;
     equipped_frame_id?: string;
+    // NEW: Lucky Wheel
+    spin_tickets?: number;
+    last_daily_spin_at?: string;
 }
 
 export interface AdminManagedUser extends User {
@@ -267,4 +270,16 @@ export interface ChatBan {
     user_id: string;
     banned_until: string;
     reason?: string;
+}
+
+// NEW: Lucky Wheel Reward
+export interface LuckyWheelReward {
+    id: string;
+    label: string;
+    type: 'diamond' | 'xp' | 'ticket' | 'lucky';
+    amount: number;
+    probability: number; // Percentage 0-100
+    color: string; // Hex code
+    is_active: boolean;
+    display_order: number;
 }

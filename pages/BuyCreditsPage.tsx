@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useRef } from 'react';
 import CreatorHeader from '../components/creator/CreatorHeader';
 import CreatorFooter from '../components/creator/CreatorFooter';
 import { useAuth } from '../contexts/AuthContext';
@@ -10,6 +11,101 @@ import { useTheme } from '../contexts/ThemeContext';
 import ThemeEffects from '../components/themes/ThemeEffects';
 import { useTranslation } from '../hooks/useTranslation';
 
+// --- Enhanced 3D Pricing Card Component ---
+const PricingCard: React.FC<{ pkg: CreditPackage; onBuy: () => void; isProcessing: boolean }> = ({ pkg, onBuy, isProcessing }) => {
+    const { t } = useTranslation();
+    const totalCredits = pkg.credits_amount + pkg.bonus_credits;
+    
+    // Determine visual tier based on price for gradient styling
+    let tierClass = 'from-blue-500/20 to-purple-500/20 border-blue-500/30';
+    let accentColor = 'text-blue-400';
+    let glowColor = 'shadow-blue-500/20';
+    
+    if (pkg.price_vnd >= 50000) {
+        tierClass = 'from-purple-500/20 to-pink-500/20 border-purple-500/30';
+        accentColor = 'text-purple-400';
+        glowColor = 'shadow-purple-500/20';
+    }
+    if (pkg.price_vnd >= 100000) {
+        tierClass = 'from-yellow-500/20 to-orange-500/20 border-yellow-500/30';
+        accentColor = 'text-yellow-400';
+        glowColor = 'shadow-yellow-500/20';
+    }
+    if (pkg.price_vnd >= 500000) {
+        tierClass = 'from-red-500/20 to-rose-600/20 border-red-500/30';
+        accentColor = 'text-red-400';
+        glowColor = 'shadow-red-500/40';
+    }
+
+    return (
+        <div 
+            className={`group relative rounded-2xl p-1 transition-all duration-500 hover:-translate-y-2 interactive-3d h-full flex flex-col`}
+        >
+            {/* Glow Effect */}
+            <div className={`absolute inset-0 bg-gradient-to-br ${tierClass} rounded-2xl blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-500`}></div>
+            
+            <div className={`relative h-full bg-skin-fill-secondary/80 backdrop-blur-xl border ${tierClass.split(' ')[2]} rounded-xl p-6 flex flex-col items-center text-center overflow-hidden shadow-lg ${glowColor}`}>
+                
+                {/* Shine Effect */}
+                <div className="absolute inset-0 bg-gradient-to-br from-white/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
+
+                {/* Best Seller / Tag */}
+                {pkg.tag && (
+                    <div className="absolute top-0 right-0">
+                        <div className="bg-gradient-to-bl from-pink-500 to-purple-600 text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl rounded-tr-xl shadow-md uppercase tracking-wider">
+                            {pkg.tag}
+                        </div>
+                    </div>
+                )}
+
+                {/* Icon */}
+                <div className="mb-4 relative">
+                    <div className={`absolute inset-0 bg-current opacity-20 blur-xl rounded-full transform scale-150 ${accentColor}`}></div>
+                    <i className={`ph-fill ph-diamonds-four text-5xl ${accentColor} drop-shadow-[0_0_10px_rgba(255,255,255,0.3)] transform transition-transform duration-700 group-hover:rotate-[360deg]`}></i>
+                </div>
+
+                {/* Content */}
+                <h3 className="text-lg font-bold text-white mb-1">{pkg.name}</h3>
+                
+                <div className="flex items-baseline gap-1 mb-1">
+                    <span className={`text-3xl font-black ${accentColor}`}>{totalCredits.toLocaleString()}</span>
+                    <span className="text-xs text-skin-muted font-bold">{t('creator.buyCredits.card.diamonds')}</span>
+                </div>
+
+                {pkg.bonus_credits > 0 && (
+                    <div className="bg-white/5 px-2 py-0.5 rounded text-[10px] font-bold text-green-400 mb-4 border border-white/5">
+                        +{pkg.bonus_credits.toLocaleString()} Bonus
+                    </div>
+                )}
+
+                <div className="mt-auto w-full pt-4 border-t border-white/5">
+                    <button
+                        onClick={onBuy}
+                        disabled={isProcessing}
+                        className={`w-full py-3 rounded-lg font-bold text-sm transition-all duration-300 transform active:scale-95 flex items-center justify-center gap-2
+                            ${isProcessing 
+                                ? 'bg-gray-600 cursor-not-allowed text-gray-400' 
+                                : `bg-gradient-to-r ${tierClass.replace('/20', '')} text-white hover:brightness-110 shadow-lg`
+                            }
+                        `}
+                    >
+                        {isProcessing ? (
+                            <>
+                                <i className="ph ph-spinner animate-spin"></i>
+                                {t('creator.buyCredits.processing')}
+                            </>
+                        ) : (
+                            <>
+                                {pkg.price_vnd.toLocaleString('vi-VN')} đ
+                            </>
+                        )}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 const BuyCreditsPage: React.FC = () => {
     const { session, navigate, showToast } = useAuth();
     const { t } = useTranslation();
@@ -19,6 +115,9 @@ const BuyCreditsPage: React.FC = () => {
     const [isProcessingPayment, setIsProcessingPayment] = useState<string | null>(null);
     const [infoModalKey, setInfoModalKey] = useState<'terms' | 'policy' | 'contact' | null>(null);
     const [isCheckInModalOpen, setCheckInModalOpen] = useState(false);
+
+    // Tilt Effect
+    const containerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         const fetchPackages = async () => {
@@ -81,13 +180,27 @@ const BuyCreditsPage: React.FC = () => {
         }
     }, [showToast, t]);
 
+    const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+        if (!containerRef.current) return;
+        const { left, top, width, height } = containerRef.current.getBoundingClientRect();
+        const x = (e.clientX - left) / width - 0.5;
+        const y = (e.clientY - top) / height - 0.5;
+        
+        containerRef.current.style.setProperty('--mouse-x', `${x}`);
+        containerRef.current.style.setProperty('--mouse-y', `${y}`);
+    };
+
     return (
         <div data-theme={theme} className="flex flex-col min-h-screen bg-skin-fill text-skin-base pb-16 md:pb-0">
             <ThemeEffects />
             <CreatorHeader onTopUpClick={() => {}} activeTab={'tool'} onNavigate={navigate} onCheckInClick={() => setCheckInModalOpen(true)} />
-            <main className="flex-grow pt-24 md:pt-28">
-                <div className="container mx-auto px-4">
-                    <div className="themed-main-title-container text-center max-w-4xl mx-auto mb-12">
+            <main className="flex-grow pt-24 md:pt-28 relative overflow-hidden" onMouseMove={handleMouseMove} ref={containerRef}>
+                
+                {/* Background Decor */}
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-4xl h-96 bg-skin-accent/10 blur-[100px] rounded-full pointer-events-none -z-10"></div>
+
+                <div className="container mx-auto px-4 relative z-10">
+                    <div className="themed-main-title-container text-center max-w-4xl mx-auto mb-12 animate-fade-in-down">
                          <h1 
                             className="themed-main-title text-4xl md:text-5xl font-black mb-4 leading-tight"
                             data-text={t('creator.buyCredits.title')}
@@ -99,78 +212,62 @@ const BuyCreditsPage: React.FC = () => {
                         </p>
                     </div>
 
-                    <div className="max-w-4xl mx-auto mb-8">
-                        <div className="bg-yellow-500/10 border border-yellow-500/30 text-yellow-300 p-4 rounded-lg flex items-center justify-between gap-4">
+                    {/* Support Banner */}
+                    <div className="max-w-4xl mx-auto mb-8 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
+                        <div className="bg-blue-500/10 border border-blue-500/30 text-blue-200 p-4 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-lg backdrop-blur-sm">
                             <div className="flex items-start gap-3">
-                                <i className="ph-fill ph-chat-circle-dots text-2xl text-yellow-400 mt-1 flex-shrink-0"></i>
+                                <div className="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center flex-shrink-0">
+                                    <i className="ph-fill ph-chat-circle-dots text-xl text-blue-400"></i>
+                                </div>
                                 <p className="text-sm leading-relaxed">{t('creator.buyCredits.paymentSupport.note')}</p>
                             </div>
                             <a 
                                 href="https://www.facebook.com/iam.cody.real/" 
                                 target="_blank" 
                                 rel="noopener noreferrer"
-                                className="flex-shrink-0 px-4 py-2 text-sm font-bold bg-blue-500/80 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2"
+                                className="flex-shrink-0 px-5 py-2.5 text-sm font-bold bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors flex items-center gap-2 shadow-md"
                             >
-                                <i className="ph-fill ph-facebook-logo"></i>
+                                <i className="ph-fill ph-facebook-logo text-lg"></i>
                                 {t('creator.buyCredits.paymentSupport.button')}
                             </a>
                         </div>
                     </div>
 
-                    <div className="max-w-4xl mx-auto mb-12">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div className="themed-info-box">
-                                <i className="ph-fill ph-prohibit text-2xl"></i>
-                                <p><strong>{t('creator.buyCredits.info.noRefund')}</strong></p>
-                            </div>
-                            <div className="themed-info-box">
-                                <i className="ph-fill ph-calendar-x text-2xl"></i>
-                                <p>{t('creator.buyCredits.info.expiry')}</p>
-                            </div>
-                            <div className="themed-info-box is-link" onClick={() => setInfoModalKey('terms')}>
-                                <i className="ph-fill ph-book-open text-2xl"></i>
-                                <a>{t('creator.buyCredits.info.policy')}</a>
-                            </div>
+                    {/* Info Pills */}
+                    <div className="max-w-4xl mx-auto mb-12 flex flex-wrap justify-center gap-4 animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
+                        <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-xs font-semibold text-skin-muted">
+                            <i className="ph-fill ph-prohibit text-red-400"></i>
+                            {t('creator.buyCredits.info.noRefund')}
                         </div>
+                        <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-xs font-semibold text-skin-muted">
+                            <i className="ph-fill ph-calendar-check text-green-400"></i>
+                            {t('creator.buyCredits.info.expiry')}
+                        </div>
+                        <button 
+                            onClick={() => setInfoModalKey('terms')}
+                            className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-xs font-semibold text-skin-muted hover:text-white hover:bg-white/10 transition cursor-pointer"
+                        >
+                            <i className="ph-fill ph-book-open text-blue-400"></i>
+                            {t('creator.buyCredits.info.policy')}
+                        </button>
                     </div>
 
+                    {/* Loading State */}
                     {isLoading ? (
                          <div className="flex justify-center items-center py-20">
-                            <div className="w-12 h-12 border-4 border-t-pink-400 border-white/20 rounded-full animate-spin"></div>
+                            <div className="w-12 h-12 border-4 border-t-skin-accent border-skin-border rounded-full animate-spin"></div>
                          </div>
                     ) : (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 mt-12 max-w-6xl mx-auto">
-                            {packages.map(pkg => {
-                                const totalCredits = pkg.credits_amount + pkg.bonus_credits;
-                                return (
-                                <div key={pkg.id} className="themed-credit-package interactive-3d group">
-                                    {pkg.tag && (
-                                        <div className="themed-credit-package__tag">{pkg.tag}</div>
-                                    )}
-                                    <div className="themed-credit-package__content">
-                                        <div className="flex-grow">
-                                            <div className="themed-credit-package__amount">
-                                                <i className="ph-fill ph-diamonds-four"></i>
-                                                <p>{totalCredits.toLocaleString('vi-VN')}</p>
-                                            </div>
-                                            <p className="themed-credit-package__label">{t('landing.pricing.card.diamonds')}</p>
-                                            {pkg.bonus_credits > 0 && (
-                                                <p className="themed-credit-package__bonus">
-                                                    Tổng: {pkg.credits_amount.toLocaleString('vi-VN')} + {pkg.bonus_credits.toLocaleString('vi-VN')} Thưởng
-                                                </p>
-                                            )}
-                                        </div>
-                                        <p className="themed-credit-package__price">{pkg.price_vnd.toLocaleString('vi-VN')} đ</p>
-                                        <button
-                                            onClick={() => handleBuyClick(pkg)}
-                                            disabled={isProcessingPayment === pkg.id}
-                                            className="themed-credit-package__button"
-                                        >
-                                            {isProcessingPayment === pkg.id ? t('creator.buyCredits.processing') : t('creator.buyCredits.buy')}
-                                        </button>
-                                    </div>
-                                </div>
-                            )})}
+                        /* Pricing Grid */
+                        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-6 mt-8 max-w-6xl mx-auto pb-12 animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
+                            {packages.map((pkg, index) => (
+                                <PricingCard 
+                                    key={pkg.id} 
+                                    pkg={pkg} 
+                                    onBuy={() => handleBuyClick(pkg)}
+                                    isProcessing={isProcessingPayment === pkg.id}
+                                />
+                            ))}
                         </div>
                     )}
                 </div>

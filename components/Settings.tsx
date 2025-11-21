@@ -100,8 +100,8 @@ const AdminPanel: React.FC = () => {
             <h2 className="text-3xl font-bold mb-6 text-center bg-gradient-to-r from-red-500 to-orange-500 text-transparent bg-clip-text">{t('creator.settings.admin.title')}</h2>
             <div className="flex flex-wrap justify-center gap-2 border-b border-white/10 mb-6 pb-4">
                 <button onClick={() => setActiveTab('dashboard')} className={activeTab === 'dashboard' ? 'admin-tab-active' : 'admin-tab'}>{t('creator.settings.admin.tabs.dashboard')}</button>
-                <button onClick={() => setActiveTab('broadcast')} className={activeTab === 'broadcast' ? 'admin-tab-active' : 'admin-tab'}><i className="ph-fill ph-megaphone mr-1"></i> Gửi Thông Báo</button>
-                <button onClick={() => setActiveTab('game_config')} className={activeTab === 'game_config' ? 'admin-tab-active' : 'admin-tab'}>Quản Lý Shop</button>
+                <button onClick={() => setActiveTab('broadcast')} className={activeTab === 'broadcast' ? 'admin-tab-active' : 'admin-tab'}><i className="ph-fill ph-megaphone mr-1"></i> {t('creator.settings.admin.tabs.broadcast')}</button>
+                <button onClick={() => setActiveTab('game_config')} className={activeTab === 'game_config' ? 'admin-tab-active' : 'admin-tab'}>{t('creator.settings.admin.gameConfig.title')}</button>
                 <button onClick={() => setActiveTab('lucky_wheel')} className={activeTab === 'lucky_wheel' ? 'admin-tab-active' : 'admin-tab'}>{t('creator.settings.admin.tabs.luckyWheel')}</button>
                 <button onClick={() => setActiveTab('transactions')} className={activeTab === 'transactions' ? 'admin-tab-active' : 'admin-tab'}>{t('creator.settings.admin.tabs.transactions')}</button>
                 <button onClick={() => setActiveTab('users')} className={activeTab === 'users' ? 'admin-tab-active' : 'admin-tab'}>{t('creator.settings.admin.tabs.users')}</button>

@@ -13,10 +13,10 @@ const SystemMessageManager: React.FC = () => {
 
     const handleSend = async (msgContent: string = message) => {
         if (!msgContent.trim()) {
-            showToast('Vui lòng nhập nội dung tin nhắn.', 'error');
+            showToast(t('creator.settings.admin.broadcast.errorMsg'), 'error');
             return;
         }
-        if (!confirm(target === 'inbox_all' ? 'Gửi tin nhắn đến Hộp thư của TẤT CẢ người dùng?' : 'Gửi thông báo lên kênh Chat Thế Giới?')) {
+        if (!confirm(target === 'inbox_all' ? t('creator.settings.admin.broadcast.confirmInbox') : t('creator.settings.admin.broadcast.confirmGlobal'))) {
             return;
         }
 
@@ -46,7 +46,7 @@ const SystemMessageManager: React.FC = () => {
     return (
         <div className="bg-[#12121A]/80 border border-pink-500/20 rounded-2xl shadow-lg p-6">
             <h3 className="text-2xl font-bold mb-6 text-pink-400 flex items-center gap-2">
-                <i className="ph-fill ph-megaphone"></i> Gửi Thông Báo Hệ Thống
+                <i className="ph-fill ph-megaphone"></i> {t('creator.settings.admin.broadcast.title')}
             </h3>
             
             <div className="space-y-6">
@@ -58,8 +58,8 @@ const SystemMessageManager: React.FC = () => {
                     >
                         <i className="ph-fill ph-envelope-open text-2xl"></i>
                         <div className="text-left">
-                            <div className="font-bold text-base">Gửi Hộp Thư (Inbox)</div>
-                            <div className="text-xs opacity-70">Gửi riêng cho tất cả User</div>
+                            <div className="font-bold text-base">{t('creator.settings.admin.broadcast.target.inbox')}</div>
+                            <div className="text-xs opacity-70">{t('creator.settings.admin.broadcast.target.inboxDesc')}</div>
                         </div>
                     </button>
                     
@@ -69,21 +69,21 @@ const SystemMessageManager: React.FC = () => {
                     >
                         <i className="ph-fill ph-chats-circle text-2xl"></i>
                         <div className="text-left">
-                            <div className="font-bold text-base">Kênh Chat Thế Giới</div>
-                            <div className="text-xs opacity-70">Hiển thị màu vàng nổi bật</div>
+                            <div className="font-bold text-base">{t('creator.settings.admin.broadcast.target.global')}</div>
+                            <div className="text-xs opacity-70">{t('creator.settings.admin.broadcast.target.globalDesc')}</div>
                         </div>
                     </button>
                 </div>
 
                 {/* Manual Message Input */}
                 <div className="bg-black/20 p-4 rounded-xl border border-white/10">
-                    <label className="block text-sm font-bold text-gray-300 mb-2">Soạn tin nhắn thủ công</label>
+                    <label className="block text-sm font-bold text-gray-300 mb-2">{t('creator.settings.admin.broadcast.manualTitle')}</label>
                     <textarea 
                         value={message}
                         onChange={(e) => setMessage(e.target.value)}
                         placeholder={target === 'inbox_all' 
-                            ? "VD: [CẬP NHẬT] Ra mắt tính năng Studio Nhóm mới! Hãy thử ngay..." 
-                            : "VD: Server bảo trì trong 5 phút nữa. Vui lòng lưu tác phẩm."}
+                            ? t('creator.settings.admin.broadcast.placeholderInbox') 
+                            : t('creator.settings.admin.broadcast.placeholderGlobal')}
                         className="auth-input min-h-[100px] text-base mb-3"
                     />
                     <div className="flex justify-end">
@@ -93,7 +93,7 @@ const SystemMessageManager: React.FC = () => {
                             className="themed-button-primary px-6 py-2 font-bold flex items-center gap-2 disabled:opacity-50 text-sm"
                         >
                             {isSending ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : <i className="ph-fill ph-paper-plane-right"></i>}
-                            Gửi Ngay
+                            {t('creator.settings.admin.broadcast.sendButton')}
                         </button>
                     </div>
                 </div>
@@ -102,7 +102,7 @@ const SystemMessageManager: React.FC = () => {
                 <div className="border-t border-white/10 pt-6">
                     <h4 className="font-bold text-white mb-4 flex items-center gap-2">
                         <i className="ph-fill ph-clock-counter-clockwise text-cyan-400"></i>
-                        Lịch sử Cập nhật (Gửi lại thông báo)
+                        {t('creator.settings.admin.broadcast.historyTitle')}
                     </h4>
                     <div className="space-y-3 max-h-80 overflow-y-auto custom-scrollbar pr-2">
                         {CHANGELOG_DATA.map((log) => (
@@ -117,13 +117,13 @@ const SystemMessageManager: React.FC = () => {
                                 </div>
                                 <button 
                                     onClick={() => {
-                                        const content = `[CẬP NHẬT ${log.version}] ${t(log.title)}\n\n${t(log.description)}`;
+                                        const content = `[UPDATE ${log.version}] ${t(log.title)}\n\n${t(log.description)}`;
                                         handleSend(content);
                                     }}
                                     disabled={isSending}
                                     className="px-3 py-1.5 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 text-xs font-bold rounded border border-cyan-500/30 transition-colors flex-shrink-0 opacity-0 group-hover:opacity-100"
                                 >
-                                    Gửi Lại
+                                    {t('creator.settings.admin.broadcast.resend')}
                                 </button>
                             </div>
                         ))}
@@ -131,7 +131,7 @@ const SystemMessageManager: React.FC = () => {
                 </div>
                 
                 <p className="text-xs text-gray-500 italic text-center">
-                    * Lưu ý: Nếu User hệ thống chưa được tạo, tin nhắn sẽ được gửi dưới tên của bạn (Admin) nhưng hiển thị là "HỆ THỐNG".
+                    {t('creator.settings.admin.broadcast.note')}
                 </p>
             </div>
         </div>

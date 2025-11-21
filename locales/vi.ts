@@ -127,6 +127,19 @@ export const vi = {
         community: 'Cộng Đồng AU AI',
       }
     },
+    shop: {
+      title: 'Cửa Hàng Thời Trang',
+      subtitle: 'Nâng tầm đẳng cấp - Thể hiện cá tính',
+      balance: 'Số dư của bạn:',
+      tabs: {
+        frames: 'Khung Avatar',
+        titles: 'Danh Hiệu',
+      },
+      empty: 'Bạn đã sở hữu tất cả vật phẩm trong danh mục này!',
+      emptyDesc: 'Hãy kiểm tra bên Tủ Đồ trong trang cá nhân.',
+      buy: 'Mua',
+      owned: 'Đã sở hữu',
+    },
     aiTool: {
       title: 'Audition AI Studio',
       description: 'Nền tảng sáng tạo ảnh 3D AI theo phong cách Audition độc đáo.',
@@ -395,7 +408,8 @@ export const vi = {
           ranks: 'Cấp Bậc',
           frames: 'Khung Avatar',
           titles: 'Danh Hiệu',
-          luckyWheel: 'Vòng Quay'
+          luckyWheel: 'Vòng Quay',
+          broadcast: 'Gửi Thông Báo'
         },
         dashboard: {
           title: 'Bảng Điều Khiển Dữ Liệu',
@@ -572,6 +586,25 @@ export const vi = {
                 load: 'Lỗi tải cấu hình vòng quay'
             },
             success: 'Lưu cấu hình vòng quay thành công!'
+        },
+        broadcast: {
+            title: 'Gửi Thông Báo Hệ Thống',
+            target: {
+                inbox: 'Gửi Hộp Thư (Inbox)',
+                inboxDesc: 'Gửi riêng cho tất cả User',
+                global: 'Kênh Chat Thế Giới',
+                globalDesc: 'Hiển thị màu vàng nổi bật',
+            },
+            manualTitle: 'Soạn tin nhắn thủ công',
+            placeholderInbox: 'VD: [CẬP NHẬT] Ra mắt tính năng Studio Nhóm mới! Hãy thử ngay...',
+            placeholderGlobal: 'VD: Server bảo trì trong 5 phút nữa. Vui lòng lưu tác phẩm.',
+            sendButton: 'Gửi Ngay',
+            historyTitle: 'Lịch sử Cập nhật (Gửi lại thông báo)',
+            resend: 'Gửi Lại',
+            note: '* Lưu ý: Nếu User hệ thống chưa được tạo, tin nhắn sẽ được gửi dưới tên của bạn (Admin) nhưng hiển thị là "HỆ THỐNG".',
+            confirmInbox: 'Gửi tin nhắn đến Hộp thư của TẤT CẢ người dùng?',
+            confirmGlobal: 'Gửi thông báo lên kênh Chat Thế Giới?',
+            errorMsg: 'Vui lòng nhập nội dung tin nhắn.',
         }
       },
     },
@@ -1018,97 +1051,4 @@ export const vi = {
       pixel_art: 'Pixel Art',
     }
   },
-  common: {
-    loading: 'Loading...',
-    processing: 'Processing...',
-    understand: 'I Understand',
-    close: 'Close',
-    save: 'Save',
-    saving: 'Saving...',
-    edit: 'Edit',
-    delete: 'Delete',
-    cancel: 'Cancel',
-    confirm: 'Confirm',
-    download: 'Download',
-    copied: 'Copied!',
-    level: 'Level',
-    creator: 'Creator',
-  },
-  themes: {
-    'cyber-punk': 'Vũ Điệu Neon',
-    'solar-flare': 'Kẹo Ngọt Pastel',
-    'classic-dark': 'Giáng Sinh',
-    'dreamy-galaxy': 'Dải Ngân Hà',
-    'neon-vibe': 'Lâu Đài Pha Lê',
-  },
-  changelog: {
-    10: {
-      title: 'Ra mắt Studio Nhóm & Nâng cấp Giao diện',
-      description: 'Giới thiệu Group Studio cho phép tạo ảnh nhiều nhân vật. Sửa lỗi hiển thị nút "Dùng Prompt có sẵn". Thêm tính năng "Tải thêm" cho Thư viện Prompt.',
-    },
-    9: {
-      title: 'Ra mắt Thư viện Prompt & Hỗ trợ tốt hơn',
-      description: 'Tích hợp thư viện prompt từ caulenhau.io.vn. Thêm kênh hỗ trợ Facebook tại trang nạp tiền.',
-    },
-    8: {
-      title: 'Toàn cầu hóa & Sửa lỗi nghiêm trọng',
-      description: 'Dịch toàn bộ giao diện sang tiếng Anh, hỗ trợ chuyển đổi ngôn ngữ linh hoạt. Sửa lỗi treo ứng dụng khi khởi động và các lỗi hiển thị khác.',
-    },
-    7: {
-      title: 'Nâng cấp toàn diện Công cụ Chữ ký',
-      description: 'Sửa lỗi vị trí chữ ký AI, thêm tùy chọn Font, kích thước, in đậm/nghiêng. Mở rộng thư viện hiệu ứng và thêm bộ chọn màu tùy chỉnh.',
-    },
-    6: {
-      title: 'Cách mạng Giao diện',
-      description: 'Thay đổi hoàn toàn hệ thống giao diện! Mỗi chủ đề có bản sắc riêng. Chủ đề mặc định thay bằng "Vũ Điệu Neon". Thêm tính năng ngẫu nhiên chủ đề mỗi lần truy cập.',
-    },
-    5: {
-      title: 'Siêu Khóa Gương Mặt & Cải tiến UI',
-      description: 'Nâng cấp tính năng Siêu Khóa Gương Mặt (Face ID+) cho độ chính xác cao hơn. Tích hợp công cụ Tách Nền vào tab chính để thuận tiện hơn.',
-    },
-    4: {
-      title: 'Hệ thống Giftcode & Thông báo',
-      description: 'Ra mắt hệ thống Giftcode nhận thưởng. Thêm tính năng thông báo cập nhật trên thanh điều hướng. Thêm trang quản lý Gallery cho Admin.',
-    },
-    3: {
-      title: 'Bảng điều khiển Admin',
-      description: 'Thêm trang thống kê dữ liệu thời gian thực cho Admin trong phần Cài đặt. Sửa lỗi hiển thị và múi giờ.',
-    },
-    2: {
-      title: 'Sửa lỗi và Cải thiện hiệu năng',
-      description: 'Tối ưu quy trình trên các nhánh và sửa lỗi trang Preview không hiển thị trên Netlify.',
-    },
-    1: {
-      title: 'Ra mắt Tách Nền & Khóa Mặt',
-      description: 'Thêm công cụ Tách Nền và tính năng "Siêu Khóa Gương Mặt" giúp giữ nét nhân vật chính xác hơn.',
-    },
-  },
-  luckyWheel: {
-        title: 'Vòng Quay May Mắn',
-        spin: 'QUAY NGAY',
-        spinning: 'Đang quay...',
-        tickets: 'Vé quay',
-        getMore: 'Nhận thêm vé',
-        daily: 'Nhận vé mỗi ngày',
-        claimed: 'Đã nhận hôm nay',
-        claim: 'Nhận vé miễn phí',
-        tasks: {
-            title: 'Nhiệm vụ nhận vé',
-            shareApp: 'Chia sẻ ứng dụng lên Facebook (+1 Vé)',
-            shareImage: 'Chia sẻ ảnh đã tạo (+1 Vé)',
-            invite: 'Mời 1 người bạn (+3 Vé)',
-            go: 'Làm ngay'
-        },
-        win: {
-            title: 'Chúc mừng!',
-            desc: 'Bạn đã nhận được',
-            diamond: 'Kim Cương',
-            xp: 'XP',
-            ticket: 'Vé Quay',
-            lucky: 'Chúc bạn may mắn lần sau!',
-            lucky_short: 'May Mắn',
-            diamond_short: 'Kim Cương',
-            ticket_short: 'Vé Quay',
-        }
-    },
 };

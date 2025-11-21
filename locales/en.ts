@@ -127,6 +127,19 @@ export const en = {
         community: 'AU AI Community',
       }
     },
+    shop: {
+      title: 'Fashion Shop',
+      subtitle: 'Level Up - Express Yourself',
+      balance: 'Your Balance:',
+      tabs: {
+        frames: 'Avatar Frames',
+        titles: 'Titles',
+      },
+      empty: 'You own all items in this category!',
+      emptyDesc: 'Check your Inventory in the Profile page.',
+      buy: 'Buy',
+      owned: 'Owned',
+    },
     aiTool: {
       title: 'Audition AI Studio',
       description: 'The creative platform for 3D AI photos in the unique Audition style.',
@@ -459,6 +472,50 @@ export const en = {
             lucky_short: 'Lucky',
             diamond_short: 'Diamonds',
             ticket_short: 'Tickets',
+        }
+    },
+    buyCredits: {
+      title: 'Top Up Diamonds',
+      description: 'Don\'t forget to check-in daily to receive free Diamonds and other exciting rewards!',
+      info: {
+        noRefund: 'No refunds & non-transferable.',
+        expiry: 'Expiry: 2 years',
+        policy: 'View Policy',
+      },
+      buy: 'Buy',
+      processing: 'Processing...',
+      success: 'Payment successful! Your transaction is pending administrator approval.',
+      cancelled: 'You cancelled payment for order #{{orderCode}}.',
+      error: {
+        load: 'Cannot load packages.',
+        login: 'Please log in to buy diamonds.',
+        createLink: 'Could not create payment link.',
+        parse: 'Error processing payment result.',
+      },
+      paymentSupport: {
+        note: 'If you don\'t receive diamonds after payment, please message my Facebook to check.',
+        button: 'Message Facebook',
+      },
+    },
+    admin: {
+        broadcast: {
+            title: 'Send System Notification',
+            target: {
+                inbox: 'Send to Inbox',
+                inboxDesc: 'Send individually to all Users',
+                global: 'Global Chat Channel',
+                globalDesc: 'Show prominent yellow text',
+            },
+            manualTitle: 'Compose Manual Message',
+            placeholderInbox: 'e.g., [UPDATE] Group Studio is live! Try it now...',
+            placeholderGlobal: 'e.g., Server maintenance in 5 minutes.',
+            sendButton: 'Send Now',
+            historyTitle: 'Update History (Resend)',
+            resend: 'Resend',
+            note: '* Note: If System User is not created, messages will be sent as you (Admin) but display as "SYSTEM".',
+            confirmInbox: 'Send message to ALL users\' Inboxes?',
+            confirmGlobal: 'Send notification to Global Chat?',
+            errorMsg: 'Please enter message content.',
         }
     },
 };

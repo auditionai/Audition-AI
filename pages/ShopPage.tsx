@@ -10,10 +10,12 @@ import { CosmeticItem } from '../types';
 import ConfirmationModal from '../components/ConfirmationModal';
 import UserAvatar from '../components/common/UserAvatar';
 import UserBadge from '../components/common/UserBadge';
+import { useTranslation } from '../hooks/useTranslation';
 
 const ShopPage: React.FC = () => {
     const { user, session, navigate, showToast, updateUserDiamonds } = useAuth();
     const { theme } = useTheme();
+    const { t } = useTranslation();
     
     const [items, setItems] = useState<CosmeticItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -113,12 +115,12 @@ const ShopPage: React.FC = () => {
                     <div className="relative z-10 p-8 md:p-12 flex flex-col md:flex-row items-center justify-between gap-6">
                         <div className="text-center md:text-left">
                             <h1 className="text-4xl md:text-5xl font-black text-white mb-2 drop-shadow-lg tracking-tight uppercase">
-                                Cửa Hàng <span className="text-yellow-400">Thời Trang</span>
+                                {t('creator.shop.title')}
                             </h1>
-                            <p className="text-pink-200 text-lg">Nâng tầm đẳng cấp - Thể hiện cá tính</p>
+                            <p className="text-pink-200 text-lg">{t('creator.shop.subtitle')}</p>
                         </div>
                         <div className="flex items-center gap-4 bg-black/30 px-6 py-3 rounded-full border border-white/10 backdrop-blur-sm">
-                            <span className="text-sm text-gray-300">Số dư của bạn:</span>
+                            <span className="text-sm text-gray-300">{t('creator.shop.balance')}</span>
                             <span className="text-2xl font-black text-white flex items-center gap-2">
                                 {user.diamonds.toLocaleString()} <i className="ph-fill ph-diamonds-four text-pink-400"></i>
                             </span>
@@ -135,13 +137,13 @@ const ShopPage: React.FC = () => {
                         onClick={() => setActiveTab('frame')}
                         className={`px-8 py-3 rounded-full font-bold text-lg transition-all ${activeTab === 'frame' ? 'bg-skin-accent text-white shadow-lg shadow-skin-accent/30 scale-105' : 'bg-skin-fill-secondary text-skin-muted hover:bg-white/10'}`}
                     >
-                        Khung Avatar
+                        {t('creator.shop.tabs.frames')}
                     </button>
                     <button 
                         onClick={() => setActiveTab('title')}
                         className={`px-8 py-3 rounded-full font-bold text-lg transition-all ${activeTab === 'title' ? 'bg-skin-accent text-white shadow-lg shadow-skin-accent/30 scale-105' : 'bg-skin-fill-secondary text-skin-muted hover:bg-white/10'}`}
                     >
-                        Danh Hiệu
+                        {t('creator.shop.tabs.titles')}
                     </button>
                 </div>
 
@@ -151,8 +153,8 @@ const ShopPage: React.FC = () => {
                 ) : filteredItems.length === 0 ? (
                     <div className="text-center py-20 text-skin-muted opacity-70">
                         <i className="ph-fill ph-shopping-bag-open text-6xl mb-4"></i>
-                        <p className="text-lg font-semibold">Bạn đã sở hữu tất cả vật phẩm trong danh mục này!</p>
-                        <p className="text-sm">Hãy kiểm tra bên Tủ Đồ trong trang cá nhân.</p>
+                        <p className="text-lg font-semibold">{t('creator.shop.empty')}</p>
+                        <p className="text-sm">{t('creator.shop.emptyDesc')}</p>
                     </div>
                 ) : (
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-6 pb-12">

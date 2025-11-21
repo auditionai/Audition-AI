@@ -27,9 +27,6 @@ const LuckyWheelManager: React.FC = () => {
     }, [session]);
 
     const handleSave = async () => {
-        const totalProb = rewards.reduce((acc, r) => acc + r.probability, 0) + (newReward.probability || 0);
-        // Optional: Check if > 100, but server should handle logic or auto-normalize
-        
         try {
             const res = await fetch('/.netlify/functions/admin-lucky-wheel', {
                 method: 'POST',

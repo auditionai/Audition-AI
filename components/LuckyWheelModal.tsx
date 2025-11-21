@@ -65,44 +65,8 @@ const LuckyWheelModal: React.FC<LuckyWheelModalProps> = ({ isOpen, onClose }) =>
             }
 
             // Calculate rotation
-            // The API returns the index of the winning reward.
-            // We need to calculate how many degrees to rotate to land on that index.
-            // Assuming index 0 is at 0 degrees (top).
-            // To land on index i, we rotate:
-            // 360 / N * i -> target angle relative to start
-            // But we want to spin multiple times (e.g., 5 full spins + target)
-            // And we need to account for the pointer being at the top (usually -90deg offset in CSS or similar)
-            
             const segmentAngle = 360 / rewards.length;
             const targetIndex = result.rewardIndex;
-            const randomOffset = Math.random() * (segmentAngle - 10) + 5; // Add some randomness within the segment
-            
-            // Calculate the exact angle to stop at.
-            // We want the target index to be at the top (pointer).
-            // If index 0 is at [0, segmentAngle], rotating -segmentAngle moves index 1 to top?
-            // Let's assume clockwise rotation.
-            // To bring index `i` to top (270deg or -90deg visually, but let's use 0 as pointer for simplicity in logic)
-            // Actually, usually 0 deg is East. Pointer is North (270 deg).
-            // Let's simplify: We rotate the wheel so the segment `i` aligns with the pointer.
-            // Pointer is fixed at top.
-            
-            // Current logic:
-            // Wheel starts with Index 0 at:
-            // If we draw segments 0..N clockwise.
-            // 0 is at [0, angle].
-            // To bring 0 to Top (270deg or -90deg), we rotate -90 - (0 + angle/2).
-            
-            // Simpler: Just spin a lot, and stop at:
-            // 360 * 5 (5 spins) - (targetIndex * segmentAngle) - (segmentAngle / 2);
-            // We subtract because we rotate CLOCKWISE, so to bring a positive index to top (which is "backwards" on the circle), we reduce rotation?
-            
-            // Let's try:
-            // Extra spins: 360 * 5 = 1800
-            // Target angle: We want segment `targetIndex` at the top.
-            // Top is 0 degrees in CSS (if we center it).
-            // Segment `targetIndex` center is at: `targetIndex * segmentAngle + segmentAngle / 2`.
-            // So we need to rotate BACKWARDS by that amount to bring it to 0?
-            // Or rotate FORWARDS by `360 - center`?
             
             const segmentCenter = (targetIndex * segmentAngle) + (segmentAngle / 2);
             const finalRotation = 3600 + (360 - segmentCenter); // 10 full spins + alignment
@@ -115,10 +79,6 @@ const LuckyWheelModal: React.FC<LuckyWheelModalProps> = ({ isOpen, onClose }) =>
                 setWinningReward(result.reward);
                 setTickets(result.remainingTickets);
                 updateUserProfile({ diamonds: result.newDiamondCount, xp: result.newXp });
-                
-                // Reset rotation visually without spinning back (trick: disable transition, reset to mod 360)
-                // Actually, just keeping it is fine, we add to current rotation next time.
-                // For simplicity in this demo code, we just let it stay.
                 
             }, 5000); // 5s animation
 
@@ -206,10 +166,6 @@ const LuckyWheelModal: React.FC<LuckyWheelModalProps> = ({ isOpen, onClose }) =>
                                         style={{
                                             background: index % 2 === 0 ? reward.color : `${reward.color}CC`, // Slight variation or custom
                                             transform: `skewY(-${90 - angle}deg)`, // Only works for specific counts, better use conic-gradient if fully dynamic.
-                                            // Fallback simple rendering for demo:
-                                            // For robust dynamic segments, conic-gradient background on parent + labels absolute positioned is better.
-                                            // Let's use a simpler approach for the visual blocks:
-                                            // Use conic-gradient on the parent container instead of divs if possible.
                                         }}
                                     >
                                     </div>

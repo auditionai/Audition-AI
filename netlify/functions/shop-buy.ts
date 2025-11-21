@@ -30,16 +30,16 @@ const handler: Handler = async (event: HandlerEvent) => {
         if (!item.is_active) return { statusCode: 400, body: JSON.stringify({ error: 'Vật phẩm này đã ngừng bán.' }) };
 
         // 2. Check User Balance
-        const { data: userData } = await supabaseAdmin.from('users').select('diamonds, level').eq('id', user.id).single();
+        // FIX: Removed 'level' from select because it is a computed property, not a DB column.
+        // This fixes the "User not found" error.
+        const { data: userData } = await supabaseAdmin.from('users').select('diamonds').eq('id', user.id).single();
+        
         if (!userData) return { statusCode: 404, body: JSON.stringify({ error: 'User not found' }) };
 
         const price = item.price || 0;
-        const unlockLevel = item.unlock_level || 0;
-
-        // Check level requirement
-        if (userData.level < unlockLevel) {
-            return { statusCode: 403, body: JSON.stringify({ error: `Bạn cần đạt cấp độ ${unlockLevel} để mua vật phẩm này.` }) };
-        }
+        
+        // REMOVED: Level requirement check as requested.
+        // Any user can buy if they have enough diamonds.
 
         // Check balance
         if (userData.diamonds < price) {
@@ -71,7 +71,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         ]);
 
         // 5. Send System Message Notification
-        const msgContent = `Chúc mừng! Bạn đã mua thành công vật phẩm "${item.name}". Hãy vào Cài đặt -> Trang trí để sử dụng ngay nhé!`;
+        const msgContent = `Chúc mừng! Bạn đã mua thành công vật phẩm "${item.name}". Hãy vào Tủ Đồ trong Trang Cá Nhân để sử dụng ngay nhé!`;
         await sendSystemMessage(user.id, msgContent);
 
         return {

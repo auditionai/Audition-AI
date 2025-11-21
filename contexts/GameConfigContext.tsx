@@ -65,10 +65,24 @@ export const GameConfigProvider: React.FC<{ children: ReactNode }> = ({ children
                     // Add remaining custom items from DB (those that didn't match any default item)
                     const customItems = Array.from(dbMapById.values()).map((dbItem: any) => {
                         let nameKey: string | null = null;
-                        // Heuristic: If the name from the DB looks like a translation key, treat it as such.
-                        if (dbItem.name && dbItem.name.includes('.') && dbItem.name.toUpperCase() === dbItem.name) {
-                            nameKey = dbItem.name.toLowerCase();
+                        
+                        // HEURISTIC: Try to recover a translation key if the name is uppercase (likely from a previous bad seed/save)
+                        // by checking if a default item has a key that translates to this name (case-insensitive) or is similar.
+                        // This is a fallback to fix the "CREATOR.COSMETICS..." display issue.
+                        if (dbItem.name) {
+                             // Check if it matches a default key's simplified form
+                             const matchedDefault = DEFAULT_COSMETICS.find(d => 
+                                d.nameKey && d.nameKey.toLowerCase().endsWith(dbItem.name.toLowerCase().replace(/ /g, ''))
+                             );
+                             
+                             if (matchedDefault && matchedDefault.nameKey) {
+                                 nameKey = matchedDefault.nameKey;
+                             } else if (dbItem.name.includes('.') && dbItem.name === dbItem.name.toUpperCase()) {
+                                // If it looks like a raw key string in uppercase, force lowercase it
+                                nameKey = dbItem.name.toLowerCase();
+                             }
                         }
+
                         return {
                             ...dbItem,
                             nameKey: nameKey,

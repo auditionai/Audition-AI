@@ -28,6 +28,23 @@ const TransactionHistory: React.FC = () => {
         fetchLogs();
     }, [session]);
 
+    const translateDescription = (desc: string) => {
+        if (!desc) return '';
+        
+        // Common patterns mapping
+        if (desc.includes('Mua vật phẩm:')) return desc.replace('Mua vật phẩm:', t('creator.settings.transactionHistory.types.buy') + ':');
+        if (desc.includes('Nạp tiền')) return t('creator.settings.transactionHistory.types.topup');
+        if (desc.includes('Tạo ảnh')) return desc.replace('Tạo ảnh', t('creator.settings.transactionHistory.types.generate'));
+        if (desc.includes('Tách nền')) return desc.replace('Tách nền', t('creator.settings.transactionHistory.types.bgRemoval'));
+        if (desc.includes('Chia sẻ')) return t('creator.settings.transactionHistory.types.share');
+        if (desc.includes('Điểm danh')) return t('creator.settings.transactionHistory.types.checkIn');
+        if (desc.includes('giới thiệu')) return t('creator.settings.transactionHistory.types.referral');
+        if (desc.includes('Quay trúng')) return desc.replace('Quay trúng:', t('creator.settings.transactionHistory.types.luckyWheel') + ':');
+        if (desc.includes('Chèn chữ ký')) return t('creator.settings.transactionHistory.types.signature');
+
+        return desc;
+    };
+
     return (
         <div className="bg-[#12121A]/80 border border-white/10 rounded-2xl shadow-lg p-6 mb-8">
             <h3 className="text-2xl font-bold mb-4 text-white flex items-center gap-2">
@@ -42,7 +59,7 @@ const TransactionHistory: React.FC = () => {
                     {logs.map(log => (
                         <div key={log.id} className="flex justify-between items-center p-3 bg-white/5 rounded-lg border border-white/5 text-sm">
                             <div>
-                                <p className="font-semibold text-white">{log.description}</p>
+                                <p className="font-semibold text-white">{translateDescription(log.description)}</p>
                                 <p className="text-xs text-gray-500">{new Date(log.created_at).toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US')}</p>
                             </div>
                             <div className={`font-bold ${log.amount >= 0 ? 'text-green-400' : 'text-red-400'}`}>

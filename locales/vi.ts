@@ -403,6 +403,17 @@ export const vi = {
         loading: 'Đang tải lịch sử...',
         error: 'Không thể tải lịch sử giao dịch.',
         empty: 'Chưa có giao dịch nào.',
+        types: {
+            buy: 'Mua vật phẩm',
+            topup: 'Nạp tiền',
+            generate: 'Tạo ảnh',
+            bgRemoval: 'Tách nền',
+            share: 'Chia sẻ',
+            checkIn: 'Điểm danh',
+            referral: 'Giới thiệu',
+            luckyWheel: 'Vòng quay',
+            signature: 'Chữ ký'
+        }
       },
       redeem: {
         title: 'Nhập Giftcode',
@@ -545,9 +556,8 @@ export const vi = {
             add: 'Thêm',
           },
           confirmDelete: 'Bạn có chắc muốn xóa mốc thưởng này?',
-          success: {
-            create: 'Tạo mốc thưởng thành công!',
-            delete: 'Xóa mốc thưởng thành công.',
+          success: 'Tạo mốc thưởng thành công!',
+          delete: 'Xóa mốc thưởng thành công.',
           },
           error: {
             load: 'Không thể tải phần thưởng điểm danh.',

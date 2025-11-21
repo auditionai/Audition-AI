@@ -403,6 +403,17 @@ export const en = {
         loading: 'Loading history...',
         error: 'Could not load transaction history.',
         empty: 'No transactions yet.',
+        types: {
+            buy: 'Buy item',
+            topup: 'Top Up',
+            generate: 'Generate Image',
+            bgRemoval: 'BG Removal',
+            share: 'Share',
+            checkIn: 'Check-in',
+            referral: 'Referral',
+            luckyWheel: 'Lucky Wheel',
+            signature: 'Signature'
+        }
       },
       redeem: {
         title: 'Redeem Giftcode',

@@ -19,7 +19,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     if (authError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'Invalid token.' }) };
 
     // 2. Admin Check
-    const { data: userData } = await supabaseAdmin.from('users').select('is_admin').eq('id', user.id).single();
+    const { data: userData } = await supabaseAdmin.from('users').select('is_admin, display_name').eq('id', user.id).single();
     if (!userData?.is_admin) return { statusCode: 403, body: JSON.stringify({ error: 'Forbidden' }) };
 
     const { message, target } = JSON.parse(event.body || '{}');
@@ -29,16 +29,42 @@ const handler: Handler = async (event: HandlerEvent) => {
     }
 
     try {
+        // --- DETERMINE SENDER ID ---
+        let senderId = SYSTEM_BOT_ID;
+        
+        // Check if System Bot exists in public.users
+        const { data: botUser } = await supabaseAdmin.from('users').select('id').eq('id', SYSTEM_BOT_ID).single();
+        
+        if (!botUser) {
+            // Try to create System Bot
+            const { error: createError } = await supabaseAdmin.from('users').insert({
+                id: SYSTEM_BOT_ID,
+                email: 'system@auditionai.io.vn',
+                display_name: 'Hệ Thống',
+                photo_url: 'https://api.dicebear.com/7.x/bottts/svg?seed=System',
+                level: 999,
+                xp: 9999999,
+                diamonds: 9999999
+            });
+
+            if (createError) {
+                console.warn("Could not create System Bot user (likely due to auth FK constraint). Falling back to Admin ID.", createError.message);
+                // Fallback: Use current Admin ID as sender
+                senderId = user.id;
+            }
+        }
+
         // --- CASE 1: SEND TO GLOBAL CHAT ---
         if (target === 'global') {
             const { error } = await supabaseAdmin.from('global_chat_messages').insert({
-                user_id: SYSTEM_BOT_ID, // Sent as System
+                user_id: senderId, 
                 content: message,
                 type: 'system',
                 metadata: {
-                    sender_name: 'SYSTEM',
+                    sender_name: 'HỆ THỐNG',
                     sender_avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=System',
-                    sender_level: 999
+                    sender_level: 999,
+                    sender_title_id: 'admin' // Special styling if supported or just fallback
                 }
             });
             
@@ -48,12 +74,11 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         // --- CASE 2: SEND TO ALL USERS (INBOX) ---
         if (target === 'inbox_all') {
-            // Fetch all users (limit to recent 1000 to avoid timeouts in this demo environment)
-            // In production, this should be a background job or queue.
+            // Fetch all users (limit to recent 500 to avoid timeouts in this demo environment)
             const { data: users, error: userFetchError } = await supabaseAdmin
                 .from('users')
                 .select('id')
-                .order('last_check_in_at', { ascending: false, nullsFirst: false }) // Prioritize active users
+                .order('last_check_in_at', { ascending: false, nullsFirst: false }) 
                 .limit(500); 
 
             if (userFetchError) throw userFetchError;
@@ -62,15 +87,18 @@ const handler: Handler = async (event: HandlerEvent) => {
                 return { statusCode: 200, body: JSON.stringify({ success: true, message: 'No users found.' }) };
             }
 
-            console.log(`[Broadcast] Sending to ${users.length} users...`);
+            console.log(`[Broadcast] Sending to ${users.length} users from ${senderId}...`);
 
-            // Process in batches of 20 to avoid overwhelming the DB connection
             const batchSize = 20;
             let successCount = 0;
 
             for (let i = 0; i < users.length; i += batchSize) {
                 const batch = users.slice(i, i + batchSize);
-                const promises = batch.map(u => sendSystemMessage(u.id, message));
+                // Skip sending to self if sender is admin
+                const promises = batch
+                    .filter(u => u.id !== senderId) 
+                    .map(u => sendSystemMessage(u.id, message, senderId));
+                
                 const results = await Promise.all(promises);
                 successCount += results.filter(r => r).length;
             }

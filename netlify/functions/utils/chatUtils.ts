@@ -4,16 +4,13 @@ import { supabaseAdmin } from './supabaseClient';
 const SYSTEM_BOT_ID = '00000000-0000-0000-0000-000000000000';
 
 /**
- * Sends a direct message from the System Bot to a specific user.
+ * Sends a direct message to a specific user.
  * Automatically creates a conversation if one does not exist.
  */
-export const sendSystemMessage = async (userId: string, content: string) => {
+export const sendSystemMessage = async (userId: string, content: string, senderId: string = SYSTEM_BOT_ID) => {
     try {
-        // 1. Check if a conversation exists between System and User
-        // We search for a conversation where the current user is a participant
-        // and the other participant is the System Bot.
-        
-        // Optimized approach: Find conversations the target user is in
+        // 1. Find existing conversation between sender and target user
+        // Get all conversations the target user is in
         const { data: userConvs, error: userConvsError } = await supabaseAdmin
             .from('conversation_participants')
             .select('conversation_id')
@@ -25,11 +22,11 @@ export const sendSystemMessage = async (userId: string, content: string) => {
 
         if (userConvs && userConvs.length > 0) {
             const convIds = userConvs.map(c => c.conversation_id);
-            // Check if System Bot is in any of these conversations
+            // Check if Sender is in any of these conversations
             const { data: existing } = await supabaseAdmin
                 .from('conversation_participants')
                 .select('conversation_id')
-                .eq('user_id', SYSTEM_BOT_ID)
+                .eq('user_id', senderId)
                 .in('conversation_id', convIds)
                 .limit(1)
                 .single();
@@ -52,7 +49,7 @@ export const sendSystemMessage = async (userId: string, content: string) => {
 
             // Add participants
             await supabaseAdmin.from('conversation_participants').insert([
-                { conversation_id: conversationId, user_id: SYSTEM_BOT_ID },
+                { conversation_id: conversationId, user_id: senderId },
                 { conversation_id: conversationId, user_id: userId }
             ]);
         }
@@ -60,7 +57,7 @@ export const sendSystemMessage = async (userId: string, content: string) => {
         // 3. Send the message
         await supabaseAdmin.from('direct_messages').insert({
             conversation_id: conversationId,
-            sender_id: SYSTEM_BOT_ID,
+            sender_id: senderId,
             content: content,
             type: 'text',
             is_read: false
@@ -71,11 +68,11 @@ export const sendSystemMessage = async (userId: string, content: string) => {
             .update({ updated_at: new Date().toISOString() })
             .eq('id', conversationId);
 
-        console.log(`[System Message] Sent to ${userId}: ${content}`);
+        console.log(`[Message] Sent from ${senderId} to ${userId}: ${content.substring(0, 20)}...`);
         return true;
 
     } catch (error: any) {
-        console.error("[System Message] Failed:", error.message);
+        console.error("[Message] Failed:", error.message);
         return false;
     }
 };

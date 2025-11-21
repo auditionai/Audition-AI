@@ -25,6 +25,15 @@ const handler: Handler = async (event: HandlerEvent) => {
         return { statusCode: 201, body: JSON.stringify(data) };
     }
 
+    if (event.httpMethod === 'PUT') {
+        const { id, ...updates } = JSON.parse(event.body || '{}');
+        if (!id) return { statusCode: 400, body: JSON.stringify({ error: 'ID is required for update.' }) };
+        
+        const { data, error } = await supabaseAdmin.from('lucky_wheel_rewards').update(updates).eq('id', id).select().single();
+        if (error) return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
+        return { statusCode: 200, body: JSON.stringify(data) };
+    }
+
     if (event.httpMethod === 'DELETE') {
         const { id } = JSON.parse(event.body || '{}');
         const { error } = await supabaseAdmin.from('lucky_wheel_rewards').delete().eq('id', id);

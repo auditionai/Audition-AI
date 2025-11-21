@@ -265,7 +265,7 @@ const ComicStudio: React.FC = () => {
     };
 
     return (
-        <div className="animate-fade-in max-w-7xl mx-auto pb-32">
+        <div className="animate-fade-in max-w-7xl mx-auto pb-40">
             <style>{`
                 .bubble-tail::after {
                     content: '';

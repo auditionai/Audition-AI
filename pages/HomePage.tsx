@@ -27,7 +27,7 @@ import AuroraBackground from '../components/common/AuroraBackground';
 import { GalleryImage, CreditPackage, DashboardStats } from '../types';
 
 const HomePage: React.FC = () => {
-    const { user, login, navigate, showToast, updateUserDiamonds, supabase } = useAuth();
+    const { user, navigate, showToast, updateUserDiamonds, supabase } = useAuth();
     
     // State for Modals
     const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);

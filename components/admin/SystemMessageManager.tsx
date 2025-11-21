@@ -1,11 +1,9 @@
 
 import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { useTranslation } from '../../hooks/useTranslation';
 
 const SystemMessageManager: React.FC = () => {
     const { session, showToast } = useAuth();
-    const { t } = useTranslation();
     const [message, setMessage] = useState('');
     const [isSending, setIsSending] = useState(false);
     const [target, setTarget] = useState<'inbox_all' | 'global'>('inbox_all');

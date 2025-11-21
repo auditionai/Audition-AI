@@ -74,8 +74,8 @@ const PricingCard: React.FC<{ pkg: CreditPackage; onBuy: () => void; isProcessin
                     <i className={`ph-fill ph-diamonds-four text-5xl ${accentColor} drop-shadow-[0_0_10px_rgba(255,255,255,0.3)] transform transition-transform duration-700 group-hover:rotate-[360deg]`}></i>
                 </div>
 
-                {/* Content */}
-                <h3 className="text-lg font-bold text-white mb-1">{pkg.name}</h3>
+                {/* Content - Fixed Name Format */}
+                <h3 className="text-lg font-bold text-white mb-1">AU AI {pkg.credits_amount}</h3>
                 
                 <div className="flex items-baseline gap-1 mb-1">
                     <span className={`text-3xl font-black ${accentColor}`}>{totalCredits.toLocaleString()}</span>

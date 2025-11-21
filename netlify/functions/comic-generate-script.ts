@@ -16,7 +16,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     if (authError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'Invalid token.' }) };
 
     try {
-        const { premise, genre, artStyle, dialogueAmount, pageCount, characters } = JSON.parse(event.body || '{}');
+        const { premise, genre, artStyle, pageCount, characters } = JSON.parse(event.body || '{}');
         
         if (!premise) return { statusCode: 400, body: JSON.stringify({ error: 'Missing premise.' }) };
 
@@ -40,39 +40,28 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
 
-        // 3. Construct Prompt
-        const characterDescriptions = characters.map((c: any) => 
-            `- ${c.name}: ${c.description}`
-        ).join('\n');
+        // 3. Construct Prompt - PHASE 1: OUTLINE ONLY
+        // We ask for a skeletal structure. This is very fast.
+        const characterNames = characters.map((c: any) => c.name).join(', ');
 
         const prompt = `
-            You are a professional comic book writer and director.
-            
-            **Task:** Create a panel-by-panel comic script based on the user's idea.
+            You are a professional comic book writer.
+            **Task:** Create a structural outline for a comic script based on the user's idea.
             
             **Input Story:** "${premise}"
             **Genre:** ${genre}
-            **Style:** ${artStyle}
-            **Dialogue Density:** ${dialogueAmount}
-            **Target Length:** Approximately ${pageCount} pages (each page typically has 4-6 panels).
+            **Target Length:** Approximately ${pageCount} pages (Total 4-6 panels).
+            **Characters:** ${characterNames}
             
-            **Characters (VISUAL CONTEXT - STRICTLY ENFORCE):**
-            ${characterDescriptions}
+            **Requirement:**
+            Break the story down into a sequence of panels. For each panel, provide a brief 'plot_summary' of what happens.
+            Do NOT write detailed visual descriptions or dialogue yet. Just the story beats.
             
-            **Requirements:**
-            1.  **Structure:** Break the story down into a logical sequence of panels.
-            2.  **Visuals:** For each panel, write a highly detailed "visual_description" in English (optimized for AI Image Generators like Stable Diffusion/Midjourney). 
-                *   IMPORTANT: You MUST include the character's physical appearance details (hair, clothes) in every single panel description to ensure consistency. Do not just say "Character A", say "Character A (blue hair, red hoodie)...".
-                *   Describe the background, lighting, and camera angle.
-            3.  **Dialogue:** Write natural, engaging dialogue in **VIETNAMESE** matching the character's personality.
-            
-            **Output Format:** Return a JSON Array where each item is a Panel.
+            **Output Format:** JSON Array of objects.
         `;
 
-        // 4. Call AI with JSON Schema
-        // Switch to 'gemini-2.5-flash' for speed to avoid 10s Netlify timeout
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash', 
+            model: 'gemini-2.5-flash', // Flash is perfect for outlining
             contents: {
                 parts: [{ text: prompt }]
             },
@@ -84,17 +73,7 @@ const handler: Handler = async (event: HandlerEvent) => {
                         type: Type.OBJECT,
                         properties: {
                             panel_number: { type: Type.INTEGER },
-                            visual_description: { type: Type.STRING },
-                            dialogue: {
-                                type: Type.ARRAY,
-                                items: {
-                                    type: Type.OBJECT,
-                                    properties: {
-                                        speaker: { type: Type.STRING },
-                                        text: { type: Type.STRING }
-                                    }
-                                }
-                            }
+                            plot_summary: { type: Type.STRING, description: "Brief summary of the action in this panel" },
                         }
                     }
                 }
@@ -104,7 +83,6 @@ const handler: Handler = async (event: HandlerEvent) => {
         let scriptJson;
         try {
             const text = response.text || '[]';
-            // Clean up any potential markdown formatting even in JSON mode
             const cleanText = text.replace(/```json|```/g, '').trim();
             scriptJson = JSON.parse(cleanText);
         } catch (parseError) {
@@ -123,11 +101,11 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         return {
             statusCode: 200,
-            body: JSON.stringify({ script: scriptJson, newDiamondCount: userData.diamonds - COST }),
+            body: JSON.stringify({ outline: scriptJson, newDiamondCount: userData.diamonds - COST }),
         };
 
     } catch (error: any) {
-        console.error("Script generation failed:", error);
+        console.error("Script outline failed:", error);
         return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
     }
 };

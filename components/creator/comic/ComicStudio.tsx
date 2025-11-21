@@ -118,6 +118,7 @@ const ComicStudio: React.FC = () => {
     const { session, showToast, updateUserDiamonds } = useAuth();
     const [activeStep, setActiveStep] = useState<1 | 2 | 3>(1); 
     const [isLoading, setIsLoading] = useState(false);
+    const [generationStatus, setGenerationStatus] = useState<string>(""); // To show detailed progress
     const [isPremiseModalOpen, setIsPremiseModalOpen] = useState(false);
     
     // State for Step 1: Setup
@@ -189,7 +190,10 @@ const ComicStudio: React.FC = () => {
         if (missingDesc) return showToast(`Vui lòng upload ảnh cho ${missingDesc.name} để AI phân tích ngoại hình.`, "error");
 
         setIsLoading(true);
+        setGenerationStatus("Đang lên cấu trúc cốt truyện...");
+
         try {
+            // PHASE 1: GENERATE OUTLINE (Fast)
             const res = await fetch('/.netlify/functions/comic-generate-script', {
                 method: 'POST',
                 headers: { 
@@ -199,34 +203,64 @@ const ComicStudio: React.FC = () => {
                 body: JSON.stringify({ ...storySettings, characters })
             });
 
-            const text = await res.text();
-            let data;
-            try {
-                data = JSON.parse(text);
-            } catch (e) {
-                // If parsing fails, usually it's an HTML 502/500 error from Netlify Timeout
-                throw new Error("Hệ thống đang quá tải hoặc kết nối bị gián đoạn. Vui lòng thử lại!");
-            }
-
+            const data = await res.json();
             if (!res.ok) throw new Error(data.error);
 
-            const generatedPanels = data.script.map((p: any) => ({
+            const outline = data.outline;
+            updateUserDiamonds(data.newDiamondCount);
+            
+            // Initialize empty panels
+            const initialPanels = outline.map((p: any) => ({
                 id: crypto.randomUUID(),
                 panel_number: p.panel_number,
-                visual_description: p.visual_description,
-                dialogue: p.dialogue,
+                visual_description: `(Đang tạo chi tiết từ ý tưởng: ${p.plot_summary}...)`,
+                dialogue: [],
                 is_rendering: false
             }));
-
-            setPanels(generatedPanels);
-            updateUserDiamonds(data.newDiamondCount);
+            
+            setPanels(initialPanels);
             setActiveStep(2);
-            showToast("Tạo kịch bản thành công!", "success");
+
+            // PHASE 2: EXPAND EACH PANEL (Detailed, Iterative)
+            for (let i = 0; i < outline.length; i++) {
+                const p = outline[i];
+                setGenerationStatus(`Đang viết chi tiết phân cảnh ${p.panel_number}/${outline.length}...`);
+                
+                try {
+                    const expandRes = await fetch('/.netlify/functions/comic-expand-panel', {
+                        method: 'POST',
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${session?.access_token}`
+                        },
+                        body: JSON.stringify({ 
+                            plot_summary: p.plot_summary,
+                            characters: characters,
+                            style: storySettings.artStyle,
+                            genre: storySettings.genre
+                        })
+                    });
+                    
+                    if (expandRes.ok) {
+                        const details = await expandRes.json();
+                        setPanels(prev => prev.map(panel => 
+                            panel.panel_number === p.panel_number 
+                            ? { ...panel, visual_description: details.visual_description, dialogue: details.dialogue }
+                            : panel
+                        ));
+                    }
+                } catch (expandErr) {
+                    console.error("Error expanding panel", expandErr);
+                }
+            }
+
+            showToast("Tạo kịch bản chi tiết hoàn tất!", "success");
 
         } catch (e: any) {
             showToast(e.message, "error");
         } finally {
             setIsLoading(false);
+            setGenerationStatus("");
         }
     };
 
@@ -521,7 +555,9 @@ const ComicStudio: React.FC = () => {
                                     <i className="ph-fill ph-magic-wand text-xl"></i>
                                 </div>
                                 <div>
-                                    <h4 className="font-bold text-blue-100">Kịch bản AI đã sẵn sàng</h4>
+                                    <h4 className="font-bold text-blue-100">
+                                        {generationStatus ? generationStatus : 'Kịch bản AI đã sẵn sàng'}
+                                    </h4>
                                     <p className="text-xs text-blue-200/60">Hãy kiểm tra và chỉnh sửa lời thoại trước khi vẽ.</p>
                                 </div>
                             </div>
@@ -566,7 +602,7 @@ const ComicStudio: React.FC = () => {
                                                         </div>
                                                     </div>
                                                 ))}
-                                                {panel.dialogue.length === 0 && <p className="text-xs text-gray-600 italic pl-2">Không có lời thoại</p>}
+                                                {panel.dialogue.length === 0 && <p className="text-xs text-gray-600 italic pl-2">Không có lời thoại (Hoặc đang tạo...)</p>}
                                             </div>
                                         </div>
                                     </div>
@@ -649,6 +685,12 @@ const ComicStudio: React.FC = () => {
                                 )}
                             </div>
                         </div>
+                        {isLoading && activeStep === 1 && (
+                            <span className="text-xs text-yellow-400 animate-pulse ml-4 flex items-center gap-1">
+                                <i className="ph-bold ph-spinner animate-spin"></i>
+                                {generationStatus || "Đang xử lý..."}
+                            </span>
+                        )}
                     </div>
 
                     {/* Right Actions */}

@@ -1,3 +1,4 @@
+
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
 
@@ -22,7 +23,6 @@ const handler: Handler = async (event: HandlerEvent) => {
 
     // 2. Determine whose posts to fetch (Target User)
     const { userId } = event.queryStringParameters || {};
-    // If userId param exists, fetch that user's posts. Otherwise fetch requester's posts (My Profile).
     const targetUserId = userId || currentUserId;
 
     if (!targetUserId) {
@@ -30,22 +30,23 @@ const handler: Handler = async (event: HandlerEvent) => {
     }
 
     try {
-        // 3. Fetch Posts
+        // 3. Fetch Posts with Dynamic Counts
+        // We use post_likes(count) and post_comments(count) to get real-time numbers
         const { data, error } = await supabaseAdmin
             .from('posts')
             .select(`
                 *,
-                user:users (display_name, photo_url, xp, equipped_frame_id, equipped_title_id)
+                user:users (display_name, photo_url, xp, equipped_frame_id, equipped_title_id),
+                likes_count:post_likes(count),
+                comments_count:post_comments(count)
             `)
             .eq('user_id', targetUserId)
             .order('created_at', { ascending: false });
 
         if (error) throw error;
 
-        // 4. Process Posts (Add is_liked_by_user flag)
+        // 4. Check "Is Liked By User" manually
         const posts = data || [];
-        
-        // If we have a logged-in user, check which posts they liked
         const postIds = posts.map(p => p.id);
         let likedPostIds = new Set<string>();
 
@@ -63,9 +64,18 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         const formattedPosts = posts.map((post: any) => {
             const userData = Array.isArray(post.user) ? post.user[0] : post.user;
+            
+            // Extract counts from the response object (Supabase returns [{count: N}] or similar depending on version)
+            // With the syntax above, likes_count should be an array of objects or a number depending on exact TS config,
+            // but typically in this setup it comes as [{count: 5}]
+            const realLikesCount = post.likes_count?.[0]?.count ?? 0;
+            const realCommentsCount = post.comments_count?.[0]?.count ?? 0;
+
             return {
                 ...post,
-                is_liked_by_user: likedPostIds.has(post.id), // Server-side check
+                likes_count: realLikesCount,
+                comments_count: realCommentsCount,
+                is_liked_by_user: likedPostIds.has(post.id),
                 user: userData ? {
                     ...userData,
                     level: calculateLevelFromXp(userData.xp || 0)

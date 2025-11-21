@@ -29,6 +29,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             .single();
 
         // 2. Insert Comment
+        // Note: Database MUST have 'parent_id' column in 'post_comments' table.
         const { data: comment, error: insertError } = await supabaseAdmin
             .from('post_comments')
             .insert({
@@ -43,7 +44,6 @@ const handler: Handler = async (event: HandlerEvent) => {
         if (insertError) throw insertError;
 
         // 3. Create Notifications
-        
         // 3a. Notify Post Owner
         const { data: postData } = await supabaseAdmin
             .from('posts')
@@ -70,7 +70,6 @@ const handler: Handler = async (event: HandlerEvent) => {
                 .eq('id', parentId)
                 .single();
             
-            // Only notify if parent owner is NOT the current user AND NOT the post owner (to avoid duplicate notifs)
             if (parentComment && parentComment.user_id !== user.id && parentComment.user_id !== postData?.user_id) {
                  await supabaseAdmin.from('notifications').insert({
                     recipient_id: parentComment.user_id,

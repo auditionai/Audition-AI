@@ -10,6 +10,9 @@ interface LuckyWheelModalProps {
     onClose: () => void;
 }
 
+// Define states for the task buttons
+type TaskStatus = 'idle' | 'waiting' | 'ready';
+
 const LuckyWheelModal: React.FC<LuckyWheelModalProps> = ({ isOpen, onClose }) => {
     const { user, session, showToast, updateUserProfile } = useAuth();
     const { t } = useTranslation();
@@ -20,6 +23,11 @@ const LuckyWheelModal: React.FC<LuckyWheelModalProps> = ({ isOpen, onClose }) =>
     const [canClaimDaily, setCanClaimDaily] = useState(false);
     const [winningReward, setWinningReward] = useState<LuckyWheelReward | null>(null);
     
+    // State to track task status: { 'share_app': 'idle', 'share_image': 'waiting' }
+    const [taskStates, setTaskStates] = useState<Record<string, TaskStatus>>({});
+    // State to track countdowns: { 'share_app': 10 }
+    const [countdowns, setCountdowns] = useState<Record<string, number>>({});
+
     // Fetch Config & User Status
     useEffect(() => {
         if (isOpen && session) {
@@ -40,6 +48,32 @@ const LuckyWheelModal: React.FC<LuckyWheelModalProps> = ({ isOpen, onClose }) =>
             fetchData();
         }
     }, [isOpen, session]);
+
+    // Countdown Timer Effect
+    useEffect(() => {
+        const timer = setInterval(() => {
+            setCountdowns(prev => {
+                const newCounts = { ...prev };
+                let hasChanges = false;
+                
+                Object.keys(newCounts).forEach(key => {
+                    if (newCounts[key] > 0) {
+                        newCounts[key] -= 1;
+                        hasChanges = true;
+                        
+                        // If countdown hits 0, change status to ready
+                        if (newCounts[key] === 0) {
+                            setTaskStates(prevStates => ({ ...prevStates, [key]: 'ready' }));
+                        }
+                    }
+                });
+                
+                return hasChanges ? newCounts : prev;
+            });
+        }, 1000);
+
+        return () => clearInterval(timer);
+    }, []);
 
     const handleSpin = async () => {
         if (tickets <= 0) {
@@ -114,12 +148,25 @@ const LuckyWheelModal: React.FC<LuckyWheelModalProps> = ({ isOpen, onClose }) =>
         } catch (e) { console.error(e); }
     };
 
-    const handleTask = async (taskType: 'share_app' | 'share_image') => {
+    // Step 1: User clicks Go -> Open Share -> Start Timer
+    const handleTaskStart = (taskType: 'share_app' | 'share_image') => {
+        if (taskStates[taskType] === 'waiting' || taskStates[taskType] === 'ready') return;
+
         if (taskType === 'share_app') {
              const url = encodeURIComponent(window.location.origin);
              window.open(`https://www.facebook.com/sharer/sharer.php?u=${url}`, '_blank');
         }
-        
+        // Note: share_image usually needs a specific image URL, here assuming app share or generic flow
+        // If share_image logic exists elsewhere (e.g. My Creations), this button might just redirect there.
+        // For this component, we simulate the task flow.
+
+        // Set waiting state and 10s countdown
+        setTaskStates(prev => ({ ...prev, [taskType]: 'waiting' }));
+        setCountdowns(prev => ({ ...prev, [taskType]: 10 })); // 10 seconds verification delay
+    };
+
+    // Step 2: User clicks Claim after timer
+    const handleTaskClaim = async (taskType: 'share_app' | 'share_image') => {
         try {
             const res = await fetch('/.netlify/functions/task-reward', {
                 method: 'POST',
@@ -130,10 +177,46 @@ const LuckyWheelModal: React.FC<LuckyWheelModalProps> = ({ isOpen, onClose }) =>
             if (res.ok) {
                 setTickets(data.tickets);
                 showToast('Đã nhận thêm vé quay!', 'success');
+                // Reset to idle so they can do it again tomorrow (or dependent on backend logic)
+                setTaskStates(prev => ({ ...prev, [taskType]: 'idle' }));
             } else {
                 console.log(data.error);
+                showToast(data.error, 'error');
             }
         } catch (e) { console.error(e); }
+    };
+
+    const renderTaskButton = (taskType: 'share_app' | 'share_image') => {
+        const status = taskStates[taskType] || 'idle';
+        const countdown = countdowns[taskType] || 0;
+
+        if (status === 'waiting') {
+            return (
+                <button disabled className="px-4 py-1.5 bg-gray-600 text-gray-300 text-xs font-bold rounded-lg shadow-md cursor-wait">
+                    Kiểm tra... ({countdown}s)
+                </button>
+            );
+        }
+
+        if (status === 'ready') {
+            return (
+                <button 
+                    onClick={() => handleTaskClaim(taskType)} 
+                    className="px-4 py-1.5 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 text-white text-xs font-bold rounded-lg shadow-md transition transform active:scale-95 animate-pulse"
+                >
+                    Nhận thưởng
+                </button>
+            );
+        }
+
+        return (
+            <button 
+                onClick={() => handleTaskStart(taskType)} 
+                className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg shadow-md transition transform active:scale-95"
+            >
+                {getTrans('luckyWheel.tasks.go')}
+            </button>
+        );
     };
 
     const getTrans = (key: string) => {
@@ -301,9 +384,7 @@ const LuckyWheelModal: React.FC<LuckyWheelModalProps> = ({ isOpen, onClose }) =>
                                         </p>
                                     </div>
                                 </div>
-                                <button onClick={() => handleTask('share_app')} className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg shadow-md transition transform active:scale-95">
-                                    {getTrans('luckyWheel.tasks.go')}
-                                </button>
+                                {renderTaskButton('share_app')}
                             </div>
 
                             {/* Task 2 */}

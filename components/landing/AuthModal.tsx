@@ -284,6 +284,10 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMode = 'l
                                                     placeholder="VD: X8J9K2L1"
                                                 />
                                             </div>
+                                            <p className="text-[11px] text-yellow-400 mt-1.5 flex items-center gap-1">
+                                                <i className="ph-fill ph-sparkle"></i>
+                                                {t('modals.auth.form.referralHint')}
+                                            </p>
                                         </div>
                                     </>
                                 )}

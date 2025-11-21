@@ -672,6 +672,7 @@ export const en = {
         backToLogin: 'Back to Sign In',
         resetSuccess: 'Password reset link sent to your email!',
         referralCode: 'Referral Code (Optional)',
+        referralHint: 'Enter friend\'s code to get 5 Diamonds',
       },
       errors: {
         fillAll: 'Please fill in all fields.',

@@ -670,6 +670,7 @@ export const vi = {
         backToLogin: 'Quay lại đăng nhập',
         resetSuccess: 'Đã gửi link đặt lại mật khẩu vào email của bạn!',
         referralCode: 'Mã giới thiệu (Nếu có)',
+        referralHint: 'Nhập mã từ bạn bè để nhận ngay 5 Kim Cương',
       },
       errors: {
         fillAll: 'Vui lòng điền đầy đủ thông tin.',

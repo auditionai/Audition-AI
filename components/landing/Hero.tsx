@@ -41,13 +41,6 @@ const Hero: React.FC<HeroProps> = ({ onCtaClick, onGoogleLoginClick }) => {
                         {t('landing.hero.cta')}
                     </span>
                 </button>
-                <button
-                    onClick={onGoogleLoginClick} 
-                    className="group relative px-8 py-4 font-bold text-lg text-white bg-white/5 backdrop-blur-sm border border-white/20 rounded-full transition-all duration-300 hover:border-white/50 interactive-3d"
-                >
-                     <div className="absolute -inset-px bg-gradient-to-r from-pink-500 to-purple-600 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300 blur-sm"></div>
-                     <span className="relative">{t('landing.hero.login')}</span>
-                </button>
             </div>
         </div>
     </section>

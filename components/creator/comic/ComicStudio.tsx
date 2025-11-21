@@ -1,8 +1,10 @@
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { ComicCharacter, ComicPanel } from '../../../types';
 import { resizeImage } from '../../../utils/imageUtils';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 
 // Mock data for dropdowns
 const ART_STYLES = [
@@ -11,6 +13,62 @@ const ART_STYLES = [
 const GENRES = [
     'Hài hước', 'Ngôn tình', 'Kinh dị', 'Hành động', 'Đời thường', 'Học đường', 'Xuyên không'
 ];
+
+const RENDER_COST = 10;
+
+// Draggable Bubble Component
+const DraggableBubble = ({ 
+    text, 
+    initialX, 
+    initialY, 
+    onUpdate 
+}: { 
+    text: string; 
+    initialX: number; 
+    initialY: number; 
+    onUpdate: (x: number, y: number) => void 
+}) => {
+    const [position, setPosition] = useState({ x: initialX, y: initialY });
+    const [isDragging, setIsDragging] = useState(false);
+    const dragStart = useRef({ x: 0, y: 0 });
+
+    const handleMouseDown = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setIsDragging(true);
+        dragStart.current = { x: e.clientX - position.x, y: e.clientY - position.y };
+    };
+
+    useEffect(() => {
+        const handleMouseMove = (e: MouseEvent) => {
+            if (!isDragging) return;
+            const newX = e.clientX - dragStart.current.x;
+            const newY = e.clientY - dragStart.current.y;
+            setPosition({ x: newX, y: newY });
+        };
+        const handleMouseUp = () => {
+            if (isDragging) {
+                setIsDragging(false);
+                onUpdate(position.x, position.y);
+            }
+        };
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+        };
+    }, [isDragging, onUpdate, position.x, position.y]);
+
+    return (
+        <div 
+            onMouseDown={handleMouseDown}
+            style={{ left: position.x, top: position.y }}
+            className="absolute cursor-move bg-white text-black px-4 py-2 rounded-[20px] border-2 border-black shadow-lg text-sm font-bold max-w-[200px] text-center z-10 select-none bubble-tail"
+        >
+            {text}
+        </div>
+    );
+};
 
 const ComicStudio: React.FC = () => {
     const { session, showToast, updateUserDiamonds } = useAuth();
@@ -27,8 +85,11 @@ const ComicStudio: React.FC = () => {
         premise: ''
     });
 
-    // State for Step 2: Script
+    // State for Step 2 & 3
     const [panels, setPanels] = useState<ComicPanel[]>([]);
+    
+    // Refs for Export
+    const panelRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
 
     const handleAddCharacter = () => {
         if (characters.length >= 4) {
@@ -79,7 +140,6 @@ const ComicStudio: React.FC = () => {
         if (characters.length === 0) return showToast("Cần ít nhất 1 nhân vật.", "error");
         if (!storySettings.premise.trim()) return showToast("Vui lòng nhập ý tưởng câu chuyện.", "error");
         
-        // Validate description
         const missingDesc = characters.find(c => !c.description);
         if (missingDesc) return showToast(`Vui lòng upload ảnh cho ${missingDesc.name} để AI phân tích ngoại hình.`, "error");
 
@@ -97,7 +157,6 @@ const ComicStudio: React.FC = () => {
             const data = await res.json();
             if (!res.ok) throw new Error(data.error);
 
-            // Map response to internal state format
             const generatedPanels = data.script.map((p: any) => ({
                 id: crypto.randomUUID(),
                 panel_number: p.panel_number,
@@ -131,17 +190,117 @@ const ComicStudio: React.FC = () => {
         }));
     };
 
+    // --- PHASE 3 LOGIC ---
+
+    const handleRenderPanel = async (panel: ComicPanel) => {
+        setPanels(prev => prev.map(p => p.id === panel.id ? { ...p, is_rendering: true } : p));
+        
+        try {
+            const res = await fetch('/.netlify/functions/comic-render-panel', {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session?.access_token}`
+                },
+                body: JSON.stringify({ 
+                    panel, 
+                    characters, 
+                    style: storySettings.artStyle,
+                    aspectRatio: '16:9' // Or dynamic based on layout
+                })
+            });
+
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error);
+
+            updateUserDiamonds(data.newDiamondCount);
+            setPanels(prev => prev.map(p => p.id === panel.id ? { 
+                ...p, 
+                image_url: data.imageUrl, 
+                is_rendering: false,
+                status: 'completed' 
+            } : p));
+            
+            showToast(`Đã vẽ xong khung tranh #${panel.panel_number}!`, "success");
+
+        } catch (e: any) {
+            showToast(e.message, "error");
+            setPanels(prev => prev.map(p => p.id === panel.id ? { ...p, is_rendering: false } : p));
+        }
+    };
+
+    const handleExportPDF = async () => {
+        setIsLoading(true);
+        try {
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            let yOffset = 10;
+            
+            for (let i = 0; i < panels.length; i++) {
+                const panelEl = panelRefs.current[panels[i].id];
+                if (panelEl && panels[i].image_url) {
+                    const canvas = await html2canvas(panelEl, { useCORS: true, scale: 2 });
+                    const imgData = canvas.toDataURL('image/jpeg', 0.8);
+                    
+                    const imgWidth = 190; // A4 width - margins
+                    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+                    
+                    if (yOffset + imgHeight > 280) {
+                        pdf.addPage();
+                        yOffset = 10;
+                    }
+                    
+                    pdf.addImage(imgData, 'JPEG', 10, yOffset, imgWidth, imgHeight);
+                    yOffset += imgHeight + 10;
+                }
+            }
+            
+            pdf.save('audition-comic.pdf');
+            showToast("Xuất file PDF thành công!", "success");
+        } catch (e: any) {
+            console.error(e);
+            showToast("Lỗi khi xuất file.", "error");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     return (
         <div className="animate-fade-in max-w-7xl mx-auto">
+            <style>{`
+                .bubble-tail::after {
+                    content: '';
+                    position: absolute;
+                    bottom: -8px;
+                    left: 20px;
+                    border-width: 8px 8px 0;
+                    border-style: solid;
+                    border-color: black transparent;
+                    display: block;
+                    width: 0;
+                }
+                .bubble-tail::before {
+                    content: '';
+                    position: absolute;
+                    bottom: -5px;
+                    left: 22px;
+                    border-width: 6px 6px 0;
+                    border-style: solid;
+                    border-color: white transparent;
+                    display: block;
+                    width: 0;
+                    z-index: 1;
+                }
+            `}</style>
+
             {/* Header / Steps */}
             <div className="mb-8 flex justify-center">
                 <div className="flex items-center gap-4 bg-skin-fill-secondary p-2 rounded-full border border-skin-border">
                     <div className={`px-4 py-2 rounded-full text-sm font-bold transition-all ${activeStep === 1 ? 'bg-pink-500 text-white' : 'text-gray-400'}`}>
-                        1. Thiết lập & Casting
+                        1. Thiết lập
                     </div>
                     <div className={`w-8 h-0.5 ${activeStep >= 2 ? 'bg-pink-500' : 'bg-gray-700'}`}></div>
                     <div className={`px-4 py-2 rounded-full text-sm font-bold transition-all ${activeStep === 2 ? 'bg-blue-500 text-white' : 'text-gray-400'}`}>
-                        2. Kịch bản AI
+                        2. Kịch bản
                     </div>
                     <div className={`w-8 h-0.5 ${activeStep >= 3 ? 'bg-blue-500' : 'bg-gray-700'}`}></div>
                     <div className={`px-4 py-2 rounded-full text-sm font-bold transition-all ${activeStep === 3 ? 'bg-purple-500 text-white' : 'text-gray-400'}`}>
@@ -150,7 +309,7 @@ const ComicStudio: React.FC = () => {
                 </div>
             </div>
 
-            {/* STEP 1: SETUP */}
+            {/* STEP 1: SETUP (Kept same as before) */}
             {activeStep === 1 && (
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     <div className="lg:col-span-1 space-y-6">
@@ -249,7 +408,6 @@ const ComicStudio: React.FC = () => {
                                     <span className="text-xs text-gray-500">ID: {panel.id.slice(0,8)}</span>
                                 </div>
                                 <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    {/* Left: Visual Description */}
                                     <div>
                                         <label className="block text-xs font-bold text-gray-400 mb-2 uppercase">Mô tả cảnh (Cho AI Vẽ)</label>
                                         <textarea 
@@ -259,8 +417,6 @@ const ComicStudio: React.FC = () => {
                                         />
                                         <p className="text-[10px] text-gray-500 mt-1">* Gợi ý: Giữ nguyên các từ khóa mô tả ngoại hình nhân vật.</p>
                                     </div>
-
-                                    {/* Right: Dialogue */}
                                     <div>
                                         <label className="block text-xs font-bold text-gray-400 mb-2 uppercase">Lời thoại</label>
                                         <div className="space-y-2">
@@ -290,12 +446,69 @@ const ComicStudio: React.FC = () => {
                 </div>
             )}
 
-            {/* STEP 3: RENDER (Placeholder) */}
+            {/* STEP 3: RENDERING & POST-PROCESSING */}
             {activeStep === 3 && (
-                <div className="text-center py-20">
-                    <h2 className="text-2xl font-bold text-white mb-4">Giai đoạn 3: Xưởng Vẽ</h2>
-                    <p className="text-gray-400">Tính năng vẽ tranh đang được phát triển. Vui lòng quay lại sau!</p>
-                    <button onClick={() => setActiveStep(2)} className="mt-4 text-pink-400 underline">Quay lại Kịch bản</button>
+                <div className="space-y-8">
+                    <div className="flex justify-between items-center">
+                        <h2 className="text-2xl font-bold text-white flex items-center gap-2"><i className="ph-fill ph-paint-brush-broad text-purple-400"></i> Xưởng Vẽ & Hậu Kỳ</h2>
+                        <div className="flex gap-3">
+                            <button onClick={() => setActiveStep(2)} className="px-4 py-2 bg-white/10 rounded-lg text-sm font-bold text-gray-300 hover:bg-white/20 transition">Quay lại Kịch bản</button>
+                            <button onClick={handleExportPDF} disabled={isLoading} className="px-6 py-2 bg-green-600 hover:bg-green-500 rounded-lg text-sm font-bold text-white transition shadow-lg flex items-center gap-2">
+                                <i className="ph-fill ph-file-pdf"></i> Xuất bản PDF
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-8">
+                        {panels.map((panel) => (
+                            <div 
+                                key={panel.id} 
+                                ref={(el) => { panelRefs.current[panel.id] = el; }}
+                                className="bg-white text-black p-4 rounded-sm shadow-xl border border-gray-300 relative"
+                            >
+                                {/* Panel Header (Hidden in Export) */}
+                                <div className="flex justify-between items-center mb-2 border-b border-gray-200 pb-2">
+                                    <span className="font-bold text-sm text-gray-500">Trang {panel.panel_number}</span>
+                                    {!panel.image_url && (
+                                        <button 
+                                            onClick={() => handleRenderPanel(panel)} 
+                                            disabled={panel.is_rendering}
+                                            className="px-4 py-1 bg-purple-600 text-white text-xs font-bold rounded hover:bg-purple-700 transition flex items-center gap-1"
+                                        >
+                                            {panel.is_rendering ? <i className="ph-bold ph-spinner animate-spin"></i> : <i className="ph-fill ph-paint-brush"></i>}
+                                            {panel.is_rendering ? 'Đang vẽ...' : `Vẽ Tranh (${RENDER_COST} 💎)`}
+                                        </button>
+                                    )}
+                                </div>
+
+                                {/* Canvas Area */}
+                                <div className="relative w-full aspect-video bg-gray-100 flex items-center justify-center overflow-hidden border-2 border-black">
+                                    {panel.image_url ? (
+                                        <>
+                                            <img src={panel.image_url} alt="Panel" className="w-full h-full object-cover" crossOrigin="anonymous" />
+                                            
+                                            {/* Bubbles Overlay */}
+                                            {panel.dialogue.map((dia, idx) => (
+                                                <DraggableBubble 
+                                                    key={idx} 
+                                                    text={`${dia.speaker ? dia.speaker + ': ' : ''}${dia.text}`} 
+                                                    initialX={50 + (idx * 150)} // Staggered positions
+                                                    initialY={50 + (idx * 50)}
+                                                    onUpdate={() => {}} 
+                                                />
+                                            ))}
+                                        </>
+                                    ) : (
+                                        <div className="text-center text-gray-400">
+                                            <i className="ph-fill ph-image text-6xl mb-2 opacity-50"></i>
+                                            <p>Chưa có hình ảnh.</p>
+                                            <p className="text-xs mt-1">{panel.visual_description.substring(0, 50)}...</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 </div>
             )}
 
@@ -304,15 +517,15 @@ const ComicStudio: React.FC = () => {
                 <div className="container mx-auto flex justify-between items-center max-w-7xl">
                     <div className="text-sm text-gray-400">
                         {activeStep === 1 && <>Chi phí: <span className="text-pink-400 font-bold">2 💎</span> (Tạo kịch bản)</>}
-                        {activeStep === 2 && <>Chi phí: <span className="text-pink-400 font-bold">10 💎/Trang</span> (Vẽ tranh)</>}
+                        {activeStep === 2 && <>Chi phí: <span className="text-pink-400 font-bold">{RENDER_COST} 💎/Trang</span> (Vẽ tranh)</>}
                     </div>
                     <button 
                         onClick={activeStep === 1 ? handleGenerateScript : () => setActiveStep(3)}
-                        disabled={isLoading}
-                        className="themed-button-primary px-8 py-3 font-bold text-lg rounded-full shadow-lg shadow-pink-500/20 hover:shadow-pink-500/40 transform hover:-translate-y-1 transition-all disabled:opacity-50 flex items-center gap-2"
+                        disabled={isLoading || (activeStep === 3)}
+                        className={`themed-button-primary px-8 py-3 font-bold text-lg rounded-full shadow-lg shadow-pink-500/20 hover:shadow-pink-500/40 transform hover:-translate-y-1 transition-all disabled:opacity-50 flex items-center gap-2 ${activeStep === 3 ? 'hidden' : ''}`}
                     >
                         {isLoading && <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>}
-                        {activeStep === 1 ? 'Tạo Kịch Bản AI' : activeStep === 2 ? 'Duyệt & Vẽ Tranh' : 'Hoàn Tất'} 
+                        {activeStep === 1 ? 'Tạo Kịch Bản AI' : 'Duyệt & Vào Xưởng Vẽ'} 
                         {!isLoading && <i className="ph-bold ph-arrow-right"></i>}
                     </button>
                 </div>

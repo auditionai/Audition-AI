@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Rank, CosmeticItem } from '../types';
 import { RANKS as DEFAULT_RANKS } from '../constants/ranks';
@@ -41,24 +40,14 @@ export const GameConfigProvider: React.FC<{ children: ReactNode }> = ({ children
                     // Create a map of DB items for faster lookup by ID
                     const dbMapById = new Map<string, any>(data.cosmetics.map((c: any) => [c.id, c]));
                     
-                    // Create a map of DB items for lookup by Name (for legacy item matching)
-                    // We normalize names to lower case for better matching
-                    const dbMapByName = new Map<string, any>(data.cosmetics.map((c: any) => [c.name.toLowerCase().trim(), c]));
-
                     // Merge Default Items with DB overrides
                     const mergedDefaultCosmetics = DEFAULT_COSMETICS.map(defaultItem => {
-                        // 1. Try to find by exact ID (if we ever migrate IDs)
+                        // Match by ID first. This is the primary and most reliable method.
                         let dbItem = dbMapById.get(defaultItem.id);
-                        
-                        // 2. If not found, try to find by Translated Name (This fixes the Icon issue for default items)
-                        if (!dbItem && defaultItem.nameKey) {
-                            const translatedName = t(defaultItem.nameKey).toLowerCase().trim();
-                            dbItem = dbMapByName.get(translatedName);
-                        }
 
                         if (dbItem) {
-                            // Remove from map to track what's left (custom items) if matched by ID
-                            if (dbMapById.has(dbItem.id)) dbMapById.delete(dbItem.id);
+                            // Remove from map to track what's left (custom items)
+                            dbMapById.delete(dbItem.id);
                             
                             return {
                                 ...defaultItem, // Keep defaults like nameKey, id, type
@@ -67,13 +56,13 @@ export const GameConfigProvider: React.FC<{ children: ReactNode }> = ({ children
                                 nameKey: defaultItem.nameKey, // Ensure nameKey persists
                                 cssClass: dbItem.cssClass || defaultItem.cssClass, 
                                 imageUrl: dbItem.imageUrl || defaultItem.imageUrl,
-                                iconUrl: dbItem.iconUrl || defaultItem.iconUrl // This will apply the uploaded icon
+                                iconUrl: dbItem.iconUrl || defaultItem.iconUrl
                             };
                         }
                         return defaultItem;
                     });
 
-                    // Add remaining custom items from DB
+                    // Add remaining custom items from DB (those that didn't match any default item)
                     const customItems = Array.from(dbMapById.values()).map((c: any) => ({
                         ...c,
                         nameKey: null // Custom items don't have translation keys

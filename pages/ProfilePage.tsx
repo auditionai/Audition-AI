@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -260,24 +259,24 @@ const ProfilePage: React.FC = () => {
 
                             {/* Bio */}
                             <p className="profile-bio">
-                                {user.bio || "Dân chơi Audition sành điệu - Chưa cập nhật tiểu sử."}
+                                {user.bio || t('creator.profile.bioPlaceholder')}
                             </p>
 
                             {/* Stats Row */}
                             <div className="profile-stats-row">
                                 <div className="profile-stat-item">
                                     <span className="profile-stat-value text-pink-400">{user.total_likes || 0}</span>
-                                    <span className="profile-stat-label">Hearts</span>
+                                    <span className="profile-stat-label">{t('creator.profile.hearts')}</span>
                                 </div>
                                 <div className="w-px bg-white/10"></div>
                                 <div className="profile-stat-item">
                                     <span className="profile-stat-value text-cyan-400">{user.profile_views || 0}</span>
-                                    <span className="profile-stat-label">Views</span>
+                                    <span className="profile-stat-label">{t('creator.profile.views')}</span>
                                 </div>
                                 <div className="w-px bg-white/10"></div>
                                 <div className="profile-stat-item">
                                     <span className="profile-stat-value text-yellow-400">{user.weekly_points || 0}</span>
-                                    <span className="profile-stat-label">Fame</span>
+                                    <span className="profile-stat-label">{t('creator.profile.fame')}</span>
                                 </div>
                             </div>
                         </div>
@@ -298,7 +297,7 @@ const ProfilePage: React.FC = () => {
                             onClick={handleOpenPostModal}
                             className="themed-button-primary px-8 py-3 font-bold flex items-center gap-2 rounded-full shadow-[0_0_20px_rgba(236,72,153,0.4)] hover:shadow-[0_0_30px_rgba(236,72,153,0.6)] transition-all transform hover:-translate-y-1"
                         >
-                            <i className="ph-fill ph-plus-circle text-xl"></i> Đăng Ảnh Mới
+                            <i className="ph-fill ph-plus-circle text-xl"></i> {t('creator.profile.newPost')}
                         </button>
                     </div>
                 )}
@@ -310,19 +309,19 @@ const ProfilePage: React.FC = () => {
                             onClick={() => setActiveTab('feed')}
                             className={`pb-3 border-b-2 font-bold px-4 transition ${activeTab === 'feed' ? 'border-skin-accent text-skin-accent' : 'border-transparent text-skin-muted hover:text-skin-base'}`}
                         >
-                            Bảng Tin
+                            {t('creator.profile.tabs.feed')}
                         </button>
                         <button 
                             onClick={() => setActiveTab('inventory')}
                             className={`pb-3 border-b-2 font-bold px-4 transition ${activeTab === 'inventory' ? 'border-skin-accent text-skin-accent' : 'border-transparent text-skin-muted hover:text-skin-base'}`}
                         >
-                            Tủ Đồ
+                            {t('creator.profile.tabs.inventory')}
                         </button>
                         <button 
                             className="pb-3 border-b-2 border-transparent text-skin-muted hover:text-skin-base font-semibold transition px-4" 
                             onClick={() => navigate('my-creations')}
                         >
-                            Tác Phẩm
+                            {t('creator.profile.tabs.creations')}
                         </button>
                     </div>
                 </div>
@@ -335,8 +334,8 @@ const ProfilePage: React.FC = () => {
                         ) : posts.length === 0 ? (
                             <div className="text-center py-20 bg-skin-fill-secondary rounded-xl border border-skin-border border-dashed opacity-60">
                                 <i className="ph-fill ph-camera text-6xl text-skin-muted mb-4"></i>
-                                <p className="text-lg font-semibold">Nhà cửa vắng quá!</p>
-                                <p className="text-skin-muted">Hãy đăng tấm ảnh đầu tiên để khoe với mọi người nào.</p>
+                                <p className="text-lg font-semibold">{t('creator.profile.feedEmpty')}</p>
+                                <p className="text-skin-muted">{t('creator.profile.feedEmptyDesc')}</p>
                             </div>
                         ) : (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-8">
@@ -364,7 +363,7 @@ const ProfilePage: React.FC = () => {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                 {/* Frames Section */}
                                 <div>
-                                    <h3 className="text-xl font-bold text-white mb-4 border-b border-white/10 pb-2">Khung Avatar</h3>
+                                    <h3 className="text-xl font-bold text-white mb-4 border-b border-white/10 pb-2">{t('creator.profile.inventory.frames')}</h3>
                                     <div className="grid grid-cols-3 sm:grid-cols-4 gap-4 max-h-[500px] overflow-y-auto custom-scrollbar pr-2">
                                         {inventoryItems.filter(i => i.type === 'frame').map(frame => {
                                             const isActive = user.equipped_frame_id === frame.id;
@@ -391,7 +390,7 @@ const ProfilePage: React.FC = () => {
 
                                 {/* Titles Section */}
                                 <div>
-                                    <h3 className="text-xl font-bold text-white mb-4 border-b border-white/10 pb-2">Danh Hiệu</h3>
+                                    <h3 className="text-xl font-bold text-white mb-4 border-b border-white/10 pb-2">{t('creator.profile.inventory.titles')}</h3>
                                     <div className="grid grid-cols-2 gap-3 max-h-[500px] overflow-y-auto custom-scrollbar pr-2">
                                         {inventoryItems.filter(i => i.type === 'title').map(title => {
                                             const isActive = user.equipped_title_id === title.id;
@@ -421,11 +420,11 @@ const ProfilePage: React.FC = () => {
             <BottomNavBar activeTab="tool" onTabChange={navigate} onCheckInClick={() => {}} />
 
             {/* Post Modal */}
-            <Modal isOpen={isPostModalOpen} onClose={() => setIsPostModalOpen(false)} title="Đăng bài mới">
+            <Modal isOpen={isPostModalOpen} onClose={() => setIsPostModalOpen(false)} title={t('creator.profile.postModal.title')}>
                 <div className="space-y-4">
                     {!selectedImageForPost ? (
                         <div>
-                            <p className="mb-2 text-sm text-skin-muted">Chọn một ảnh từ kho tác phẩm của bạn:</p>
+                            <p className="mb-2 text-sm text-skin-muted">{t('creator.profile.postModal.select')}</p>
                             <div className="grid grid-cols-3 gap-2 max-h-60 overflow-y-auto custom-scrollbar">
                                 {myImages.map(img => (
                                     <div key={img.id} onClick={() => setSelectedImageForPost(img)} className="aspect-[3/4] cursor-pointer rounded-md overflow-hidden border-2 border-transparent hover:border-skin-accent hover:scale-105 transition">
@@ -442,14 +441,14 @@ const ProfilePage: React.FC = () => {
                             <div className="w-2/3 flex flex-col gap-3">
                                 <textarea 
                                     className="auth-input w-full h-24 resize-none" 
-                                    placeholder="Viết chú thích cho ảnh này..."
+                                    placeholder={t('creator.profile.postModal.caption')}
                                     value={caption}
                                     onChange={e => setCaption(e.target.value)}
                                 />
                                 <div className="flex gap-2 mt-auto">
-                                    <button onClick={() => setSelectedImageForPost(null)} className="themed-button-secondary flex-1 text-sm">Chọn ảnh khác</button>
+                                    <button onClick={() => setSelectedImageForPost(null)} className="themed-button-secondary flex-1 text-sm">{t('creator.profile.postModal.change')}</button>
                                     <button onClick={handlePost} disabled={isPosting} className="themed-button-primary flex-1 text-sm">
-                                        {isPosting ? 'Đang đăng...' : 'Đăng bài'}
+                                        {isPosting ? t('creator.profile.postModal.posting') : t('creator.profile.postModal.post')}
                                     </button>
                                 </div>
                             </div>

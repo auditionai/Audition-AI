@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useImageGenerator } from '../../../hooks/useImageGenerator';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -144,8 +143,8 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
         const cost = modelType === 'pro' ? 10 : 1;
 
         if (user && user.diamonds < cost) {
-            showToast(t('creator.aiTool.common.errorCredits', { cost, balance: user.diamonds }), 'error');
-            return;
+             showToast(t('creator.aiTool.common.errorCredits', { cost, balance: user.diamonds }), 'error');
+             return;
         }
 
         setIsProcessingFace(true);
@@ -392,18 +391,18 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                         title={t('creator.aiTool.singlePhoto.promptTitle')} 
                         instructionKey="prompt" 
                         onInstructionClick={() => openInstructionModal('prompt')}
-                    >
-                        <div className="relative">
-                             <textarea value={prompt} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setPrompt(e.target.value)} placeholder={t('creator.aiTool.singlePhoto.promptPlaceholder')} className="w-full p-3 bg-black/30 rounded-md border border-gray-600 focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition text-base text-white flex-grow resize-none min-h-[150px] auth-input" />
-                             <button
+                        extraHeaderContent={
+                            <button
                                 onClick={() => setIsPromptLibraryOpen(true)}
-                                className="absolute top-2 right-2 flex items-center gap-1.5 text-xs text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 rounded-full px-3 py-1.5 font-semibold transition"
+                                className="flex items-center gap-1.5 text-xs text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 rounded-full px-3 py-1.5 font-semibold transition whitespace-nowrap"
                                 title={t('modals.promptLibrary.buttonTooltip')}
                             >
                                 <i className="ph-fill ph-scroll"></i>
                                 {t('modals.promptLibrary.button')}
                             </button>
-                        </div>
+                        }
+                    >
+                        <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder={t('creator.aiTool.singlePhoto.promptPlaceholder')} className="w-full p-3 bg-black/30 rounded-md border border-gray-600 focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition text-base text-white flex-grow resize-none min-h-[150px] auth-input" />
                     </SettingsBlock>
                 </div>
 

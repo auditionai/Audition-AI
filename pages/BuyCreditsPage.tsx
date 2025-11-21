@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import CreatorHeader from '../components/creator/CreatorHeader';
 import CreatorFooter from '../components/creator/CreatorFooter';
@@ -13,7 +12,7 @@ import { useTranslation } from '../hooks/useTranslation';
 
 // --- Enhanced 3D Pricing Card Component ---
 const PricingCard: React.FC<{ pkg: CreditPackage; onBuy: () => void; isProcessing: boolean }> = ({ pkg, onBuy, isProcessing }) => {
-    const { t } = useTranslation();
+    const { t, language } = useTranslation();
     const totalCredits = pkg.credits_amount + pkg.bonus_credits;
     
     // Determine visual tier based on price for gradient styling
@@ -96,7 +95,7 @@ const PricingCard: React.FC<{ pkg: CreditPackage; onBuy: () => void; isProcessin
                             </>
                         ) : (
                             <>
-                                {pkg.price_vnd.toLocaleString('vi-VN')} đ
+                                {pkg.price_vnd.toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US')} đ
                             </>
                         )}
                     </button>

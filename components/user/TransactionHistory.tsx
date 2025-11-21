@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTranslation } from '../../hooks/useTranslation';
@@ -6,7 +5,7 @@ import { TransactionLogEntry } from '../../types';
 
 const TransactionHistory: React.FC = () => {
     const { session } = useAuth();
-    const { t } = useTranslation();
+    const { t, language } = useTranslation();
     const [logs, setLogs] = useState<TransactionLogEntry[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
@@ -44,7 +43,7 @@ const TransactionHistory: React.FC = () => {
                         <div key={log.id} className="flex justify-between items-center p-3 bg-white/5 rounded-lg border border-white/5 text-sm">
                             <div>
                                 <p className="font-semibold text-white">{log.description}</p>
-                                <p className="text-xs text-gray-500">{new Date(log.created_at).toLocaleString('vi-VN')}</p>
+                                <p className="text-xs text-gray-500">{new Date(log.created_at).toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US')}</p>
                             </div>
                             <div className={`font-bold ${log.amount >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                                 {log.amount >= 0 ? '+' : ''}{log.amount} 💎

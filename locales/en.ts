@@ -129,6 +129,32 @@ export const en = {
         community: 'AU AI Community',
       }
     },
+    profile: {
+      bioPlaceholder: "Stylish Audition player - Bio not updated yet.",
+      hearts: "Hearts",
+      views: "Views",
+      fame: "Fame",
+      newPost: "New Post",
+      tabs: {
+          feed: "Feed",
+          inventory: "Inventory",
+          creations: "Creations"
+      },
+      feedEmpty: "It's quiet here!",
+      feedEmptyDesc: "Post your first photo to show everyone.",
+      inventory: {
+          frames: "Avatar Frames",
+          titles: "Titles"
+      },
+      postModal: {
+          title: "New Post",
+          select: "Choose a photo from your creations:",
+          caption: "Write a caption for this photo...",
+          change: "Change Photo",
+          posting: "Posting...",
+          post: "Post"
+      }
+    },
     shop: {
       title: 'Fashion Shop',
       subtitle: 'Level Up - Express Yourself',
@@ -231,7 +257,7 @@ export const en = {
         settingsTitle: 'Group Settings',
         refImageTitle: '2. Reference Image (Optional)',
         refImageUploadText: 'Upload Reference (Layout, pose...)',
-        refImageDesc: 'The AI will learn the layout, pose, scene, and style from this image. You can skip this if you want the AI to create a scene from your prompt.',
+        refImageDesc: 'The AI will learn the layout, pose, scene, and style from this image to create the final photo. You can skip this if you want the AI to create a scene from your prompt.',
         promptTitle: '3. Prompt',
         promptPlaceholder: 'Add details about the scene, actions...',
         styleTitle: '4. Art Style',

@@ -1,10 +1,7 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import LuckyWheelModal from './LuckyWheelModal';
-import { useTranslation } from '../hooks/useTranslation';
 
 const FloatingLuckyWheel: React.FC = () => {
-    const { t } = useTranslation();
     const [isOpen, setIsOpen] = useState(false);
     const [isVisible, setIsVisible] = useState(true); // Controls button visibility
     

@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import Modal from './common/Modal';
 import { useAuth } from '../contexts/AuthContext';
 import { useTranslation } from '../hooks/useTranslation';
@@ -19,7 +18,8 @@ const LuckyWheelModal: React.FC<LuckyWheelModalProps> = ({ isOpen, onClose }) =>
     const [rotation, setRotation] = useState(0);
     const [canClaimDaily, setCanClaimDaily] = useState(false);
     const [winningReward, setWinningReward] = useState<LuckyWheelReward | null>(null);
-    const wheelRef = useRef<HTMLDivElement>(null);
+    
+    // Removed unused wheelRef to fix TS6133 error
 
     // Fetch Config & User Status
     useEffect(() => {
@@ -65,15 +65,11 @@ const LuckyWheelModal: React.FC<LuckyWheelModalProps> = ({ isOpen, onClose }) =>
             }
 
             // Calculate rotation
-            // The result.rewardIndex is the index of the item we land on.
-            // If 0 is at 12 o'clock (0 degrees), then segment i is at (360/count * i).
-            // To land on segment i, we need to rotate BACKWARDS so that segment aligns with the pointer at 0 deg.
             const count = rewards.length;
             const segmentAngle = 360 / count;
             const targetIndex = result.rewardIndex;
             
             // Target position in the circle
-            // We want center of segment to align with top pointer (0deg)
             const segmentCenterAngle = (targetIndex * segmentAngle) + (segmentAngle / 2);
             
             // Spins: Add random full rotations
@@ -155,7 +151,6 @@ const LuckyWheelModal: React.FC<LuckyWheelModalProps> = ({ isOpen, onClose }) =>
         const rotate = i * angle;
         
         // Use conic-gradient logic for background colors
-        // But since we map divs, we can use rotation and absolute positioning
         return { ...r, rotate, angle };
     });
 
@@ -163,7 +158,7 @@ const LuckyWheelModal: React.FC<LuckyWheelModalProps> = ({ isOpen, onClose }) =>
         <Modal isOpen={isOpen} onClose={onClose} title={t('luckyWheel.title')}>
             <div className="flex flex-col lg:flex-row gap-8 items-center justify-center lg:min-w-[800px] min-h-[500px] p-4">
                 
-                {/* --- LEFT: THE WHEEL (NEW RENDER LOGIC) --- */}
+                {/* --- LEFT: THE WHEEL --- */}
                 <div className="relative w-[340px] h-[340px] sm:w-[400px] sm:h-[400px] flex-shrink-0 select-none">
                     
                     {/* Glow Behind */}
@@ -194,7 +189,7 @@ const LuckyWheelModal: React.FC<LuckyWheelModalProps> = ({ isOpen, onClose }) =>
                         }}></div>
 
                         {/* Render Content (Text/Icons) */}
-                        {wheelSegments.map((item, index) => {
+                        {wheelSegments.map((item, index) => { // Index is used here for key and color cycling implicitly via map
                             const rotation = item.rotate + (item.angle / 2); // Center of the slice
                             return (
                                 <div 

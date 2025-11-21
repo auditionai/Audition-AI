@@ -7,6 +7,8 @@ import BottomNavBar from '../components/common/BottomNavBar';
 import UserAvatar from '../components/common/UserAvatar';
 import { Conversation, DirectMessage } from '../types';
 
+const SYSTEM_BOT_ID = '00000000-0000-0000-0000-000000000000';
+
 const MessagesPage: React.FC = () => {
     const { user, supabase, navigate } = useAuth();
     const { theme } = useTheme();
@@ -18,7 +20,6 @@ const MessagesPage: React.FC = () => {
     const [isLoadingConvs, setIsLoadingConvs] = useState(true);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
-    // Parse URL query param
     useEffect(() => {
         const urlParams = new URLSearchParams(window.location.search);
         const convId = urlParams.get('conversationId');
@@ -27,7 +28,6 @@ const MessagesPage: React.FC = () => {
         }
     }, []);
 
-    // Fetch Conversations
     useEffect(() => {
         if (!supabase || !user) return;
         const fetchConversations = async () => {
@@ -44,7 +44,6 @@ const MessagesPage: React.FC = () => {
             
             if (error) console.error("Error fetching conversations:", error);
             else {
-                // Filter out current user from participants list for display
                 const formatted = data.map((c: any) => ({
                     ...c,
                     participants: c.participants.filter((p: any) => p.user.id !== user.id)
@@ -55,7 +54,6 @@ const MessagesPage: React.FC = () => {
         };
         fetchConversations();
 
-        // Subscribe to new messages to update conversation list ordering
         const channel = supabase.channel('public:conversations')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, 
                 () => fetchConversations()
@@ -65,7 +63,6 @@ const MessagesPage: React.FC = () => {
         return () => { supabase.removeChannel(channel); };
     }, [supabase, user]);
 
-    // Fetch Messages for Active Conversation
     useEffect(() => {
         if (!activeConversationId || !supabase) return;
         
@@ -118,7 +115,6 @@ const MessagesPage: React.FC = () => {
                 type: 'text'
             });
             
-            // Update conversation timestamp
             await supabase.from('conversations')
                 .update({ updated_at: new Date().toISOString() })
                 .eq('id', activeConversationId);
@@ -130,6 +126,7 @@ const MessagesPage: React.FC = () => {
 
     const activeConv = conversations.find(c => c.id === activeConversationId);
     const chatPartner = activeConv?.participants[0]?.user;
+    const isSystemChat = chatPartner?.id === SYSTEM_BOT_ID;
 
     return (
         <div data-theme={theme} className="flex flex-col h-screen bg-skin-fill text-skin-base">
@@ -137,9 +134,9 @@ const MessagesPage: React.FC = () => {
             
             <div className="flex flex-grow pt-20 overflow-hidden container mx-auto max-w-6xl px-0 md:px-4 pb-16 md:pb-4 gap-4">
                 
-                {/* Sidebar: Conversation List */}
+                {/* Sidebar */}
                 <div className={`w-full md:w-80 bg-skin-fill-secondary md:rounded-xl border-r md:border border-skin-border flex flex-col ${activeConversationId ? 'hidden md:flex' : 'flex'}`}>
-                    <div className="p-4 border-b border-skin-border font-bold text-lg">Tin Nhắn</div>
+                    <div className="p-4 border-b border-skin-border font-bold text-lg">Hộp Thư</div>
                     <div className="flex-grow overflow-y-auto custom-scrollbar">
                         {isLoadingConvs ? (
                             <div className="p-4 text-center text-skin-muted">Đang tải...</div>
@@ -148,6 +145,7 @@ const MessagesPage: React.FC = () => {
                         ) : (
                             conversations.map(conv => {
                                 const partner = conv.participants[0]?.user;
+                                const isSystem = partner?.id === SYSTEM_BOT_ID;
                                 return (
                                     <div 
                                         key={conv.id}
@@ -156,8 +154,11 @@ const MessagesPage: React.FC = () => {
                                     >
                                         <UserAvatar url={partner?.photo_url || ''} alt={partner?.display_name || 'User'} size="md" />
                                         <div className="flex-grow min-w-0">
-                                            <p className="font-bold text-sm truncate">{partner?.display_name}</p>
-                                            <p className="text-xs text-skin-muted truncate">Nhấn để xem tin nhắn</p>
+                                            <div className="flex items-center gap-1">
+                                                <p className={`font-bold text-sm truncate ${isSystem ? 'text-yellow-400' : ''}`}>{partner?.display_name}</p>
+                                                {isSystem && <i className="ph-fill ph-seal-check text-blue-400 text-xs"></i>}
+                                            </div>
+                                            <p className="text-xs text-skin-muted truncate">{isSystem ? 'Thông báo từ hệ thống' : 'Nhấn để xem tin nhắn'}</p>
                                         </div>
                                     </div>
                                 );
@@ -170,11 +171,17 @@ const MessagesPage: React.FC = () => {
                 <div className={`flex-grow flex flex-col bg-skin-fill-secondary md:rounded-xl border border-skin-border overflow-hidden ${!activeConversationId ? 'hidden md:flex' : 'flex'}`}>
                     {activeConversationId && chatPartner ? (
                         <>
-                            {/* Chat Header */}
+                            {/* Header */}
                             <div className="p-3 border-b border-skin-border flex items-center gap-3 bg-skin-fill/50">
                                 <button onClick={() => setActiveConversationId(null)} className="md:hidden text-xl p-2"><i className="ph-fill ph-caret-left"></i></button>
                                 <UserAvatar url={chatPartner.photo_url} alt={chatPartner.display_name} size="sm" />
-                                <span className="font-bold">{chatPartner.display_name}</span>
+                                <div className="flex flex-col">
+                                    <div className="flex items-center gap-1">
+                                        <span className={`font-bold ${isSystemChat ? 'text-yellow-400' : ''}`}>{chatPartner.display_name}</span>
+                                        {isSystemChat && <span className="bg-blue-500 text-white text-[10px] px-1 rounded font-bold">OFFICIAL</span>}
+                                    </div>
+                                    {isSystemChat && <span className="text-[10px] text-skin-muted">Kênh thông báo tự động</span>}
+                                </div>
                             </div>
 
                             {/* Messages */}
@@ -183,7 +190,10 @@ const MessagesPage: React.FC = () => {
                                     const isOwn = msg.sender_id === user?.id;
                                     return (
                                         <div key={msg.id} className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
-                                            <div className={`max-w-[70%] px-4 py-2 rounded-2xl text-sm ${isOwn ? 'bg-skin-accent text-white rounded-br-none' : 'bg-skin-fill border border-skin-border rounded-bl-none'}`}>
+                                            <div className={`max-w-[80%] px-4 py-2 rounded-2xl text-sm shadow-sm ${
+                                                isOwn ? 'bg-skin-accent text-white rounded-br-none' : 
+                                                (isSystemChat ? 'bg-yellow-500/10 border border-yellow-500/30 text-yellow-100 rounded-bl-none' : 'bg-skin-fill border border-skin-border rounded-bl-none')
+                                            }`}>
                                                 {msg.content}
                                             </div>
                                         </div>
@@ -192,23 +202,25 @@ const MessagesPage: React.FC = () => {
                                 <div ref={messagesEndRef} />
                             </div>
 
-                            {/* Input */}
-                            <form onSubmit={handleSendMessage} className="p-3 border-t border-skin-border flex gap-2 bg-skin-fill/50">
-                                <input 
-                                    type="text" 
-                                    value={input}
-                                    onChange={(e) => setInput(e.target.value)}
-                                    placeholder="Nhập tin nhắn..."
-                                    className="flex-grow bg-skin-fill border border-skin-border rounded-full px-4 py-2 text-sm focus:border-skin-accent focus:outline-none"
-                                />
-                                <button 
-                                    type="submit"
-                                    disabled={!input.trim()}
-                                    className="bg-skin-accent text-white p-2 rounded-full w-10 h-10 flex items-center justify-center disabled:opacity-50"
-                                >
-                                    <i className="ph-fill ph-paper-plane-right"></i>
-                                </button>
-                            </form>
+                            {/* Input (Hide for System Chat) */}
+                            {!isSystemChat ? (
+                                <form onSubmit={handleSendMessage} className="p-3 border-t border-skin-border flex gap-2 bg-skin-fill/50">
+                                    <input 
+                                        type="text" 
+                                        value={input}
+                                        onChange={(e) => setInput(e.target.value)}
+                                        placeholder="Nhập tin nhắn..."
+                                        className="flex-grow bg-skin-fill border border-skin-border rounded-full px-4 py-2 text-sm focus:border-skin-accent focus:outline-none"
+                                    />
+                                    <button type="submit" disabled={!input.trim()} className="bg-skin-accent text-white p-2 rounded-full w-10 h-10 flex items-center justify-center disabled:opacity-50">
+                                        <i className="ph-fill ph-paper-plane-right"></i>
+                                    </button>
+                                </form>
+                            ) : (
+                                <div className="p-3 border-t border-skin-border text-center text-xs text-skin-muted bg-skin-fill/50">
+                                    Đây là kênh thông báo một chiều từ hệ thống.
+                                </div>
+                            )}
                         </>
                     ) : (
                         <div className="flex-grow flex items-center justify-center text-skin-muted">

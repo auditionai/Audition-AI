@@ -1,6 +1,7 @@
 
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
+import { sendSystemMessage } from './utils/chatUtils';
 
 const handler: Handler = async (event: HandlerEvent) => {
     if (event.httpMethod !== 'POST') {
@@ -68,6 +69,10 @@ const handler: Handler = async (event: HandlerEvent) => {
                 description: `Mua vật phẩm: ${item.name}`
             })
         ]);
+
+        // 5. Send System Message Notification
+        const msgContent = `Chúc mừng! Bạn đã mua thành công vật phẩm "${item.name}". Hãy vào Cài đặt -> Trang trí để sử dụng ngay nhé!`;
+        await sendSystemMessage(user.id, msgContent);
 
         return {
             statusCode: 200,

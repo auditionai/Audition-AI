@@ -1,5 +1,5 @@
 
-import type { Handler } from "@netlify/functions";
+import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
 
 // Hàm tính cấp bậc từ XP, đảm bảo logic đồng bộ với client
@@ -8,20 +8,55 @@ const calculateLevelFromXp = (xp: number): number => {
   return Math.floor(xp / 100) + 1;
 };
 
-const handler: Handler = async () => {
+const handler: Handler = async (event: HandlerEvent) => {
     try {
-        // TỐI ƯU HÓA: Gọi một hàm RPC duy nhất để database tự thực hiện
-        // tất cả các công việc nặng nhọc: đếm, nhóm, sắp xếp và kết nối bảng.
+        const { type } = event.queryStringParameters || {};
+
+        // --- WEEKLY HOT LEADERBOARD (Based on weekly_points) ---
+        if (type === 'weekly') {
+            const { data: topUsers, error } = await supabaseAdmin
+                .from('users')
+                .select('id, display_name, photo_url, xp, weekly_points, equipped_frame_id, equipped_title_id')
+                .order('weekly_points', { ascending: false })
+                .limit(50);
+
+            if (error) throw error;
+
+            // Đếm số lượng tác phẩm (creations_count) cho mỗi user để hiển thị
+            // Lưu ý: Trong thực tế nên cache hoặc denormalize field này nếu data lớn.
+            const usersWithStats = await Promise.all(topUsers.map(async (user, index) => {
+                const { count } = await supabaseAdmin
+                    .from('generated_images')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('user_id', user.id);
+
+                return {
+                    id: user.id,
+                    rank: index + 1,
+                    display_name: user.display_name,
+                    photo_url: user.photo_url,
+                    level: calculateLevelFromXp(user.xp),
+                    xp: user.xp,
+                    weekly_points: user.weekly_points || 0, // Field quan trọng cho tab này
+                    creations_count: count || 0,
+                    equipped_title_id: user.equipped_title_id,
+                    equipped_frame_id: user.equipped_frame_id
+                };
+            }));
+
+            return {
+                statusCode: 200,
+                body: JSON.stringify(usersWithStats),
+            };
+        }
+
+        // --- DEFAULT LEVEL LEADERBOARD (Existing Logic) ---
         const { data: topUsers, error: rpcError } = await supabaseAdmin.rpc('get_leaderboard');
 
         if (rpcError) {
-            // If the RPC fails, it is a critical error (e.g., function not created).
-            // Guide the developer on how to fix it in the error message.
-            throw new Error(`Database RPC error: ${rpcError.message}. Please ensure the 'get_leaderboard' function exists in your Supabase SQL Editor.`);
+            throw new Error(`Database RPC error: ${rpcError.message}`);
         }
 
-        // Dữ liệu trả về từ RPC đã được xử lý sẵn.
-        // Chỉ cần định dạng lại một chút cho client.
         const leaderboardData = (topUsers || []).map((user, index) => ({
             id: user.user_id,
             rank: index + 1,
@@ -30,7 +65,6 @@ const handler: Handler = async () => {
             level: calculateLevelFromXp(user.xp),
             xp: user.xp,
             creations_count: Number(user.creations_count),
-            // Add these fields to support badges in leaderboard
             equipped_title_id: user.equipped_title_id,
             equipped_frame_id: user.equipped_frame_id
         }));

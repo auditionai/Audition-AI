@@ -161,7 +161,7 @@ const HomePage: React.FC = () => {
             
             <main>
                 <section id="hero">
-                    <Hero onCtaClick={() => handleAuthClick('register')} onGoogleLoginClick={login} />
+                    <Hero onCtaClick={() => handleAuthClick('register')} />
                 </section>
                 
                 <AnimatedSection id="features">

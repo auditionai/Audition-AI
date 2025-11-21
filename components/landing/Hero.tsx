@@ -3,10 +3,9 @@ import { useTranslation } from '../../hooks/useTranslation';
 
 interface HeroProps {
   onCtaClick: () => void;
-  onGoogleLoginClick: () => void;
 }
 
-const Hero: React.FC<HeroProps> = ({ onCtaClick, onGoogleLoginClick }) => {
+const Hero: React.FC<HeroProps> = ({ onCtaClick }) => {
   const { t } = useTranslation();
 
   return (

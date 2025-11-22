@@ -44,7 +44,7 @@ const Leaderboard: React.FC = () => {
     };
 
     const handleUserClick = (userId: string) => {
-        navigate(`user/${userId}`);
+        if (userId) navigate(`user/${userId}`);
     };
 
     return (
@@ -126,7 +126,8 @@ const Leaderboard: React.FC = () => {
                                         }
 
                                         return (
-                                            <div key={user.id || idx} className={`podium-card ${rankClass} ${orderClass} cursor-pointer transition-transform hover:-translate-y-2`} onClick={() => handleUserClick(user.id)}>
+                                            // FIX: Unique key using ID + index + tab
+                                            <div key={`${activeTab}-podium-${user.id || idx}`} className={`podium-card ${rankClass} ${orderClass} cursor-pointer transition-transform hover:-translate-y-2`} onClick={() => handleUserClick(user.id)}>
                                                 <div className="podium-rank-icon">{rankIcon}</div>
                                                 <div className="podium-rank-number">{user.rank}</div>
                                                 <div className="mb-4">
@@ -151,7 +152,8 @@ const Leaderboard: React.FC = () => {
                                     {theRest.map((user, idx) => {
                                         const rank = getRankForLevel(user.level);
                                         return (
-                                            <div key={user.id || idx} className="leaderboard-item cursor-pointer hover:bg-white/5" onClick={() => handleUserClick(user.id)}>
+                                            // FIX: Unique key using ID + index + tab
+                                            <div key={`${activeTab}-list-${user.id || idx}`} className="leaderboard-item cursor-pointer hover:bg-white/5" onClick={() => handleUserClick(user.id)}>
                                                 <div className="leaderboard-rank">{user.rank}</div>
                                                 <UserAvatar url={user.photo_url} alt={user.display_name} frameId={user.equipped_frame_id} level={user.level} size="md" />
                                                 <div className="flex-grow">

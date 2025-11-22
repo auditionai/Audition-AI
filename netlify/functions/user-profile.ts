@@ -19,35 +19,45 @@ const handler: Handler = async (event: HandlerEvent) => {
             return { statusCode: 401, body: JSON.stringify({ error: `Unauthorized: ${authError?.message || 'Invalid token.'}` }) };
         }
 
-        // --- GET Method: Fetch or Create User Profile ---
+        // --- GET Method: Fetch User Profile ---
         if (event.httpMethod === 'GET') {
-            // Step 1: Call RPC to handle "new user" logic (create if not exists, insert defaults)
-            // We rely on this mainly for the side-effect of creation/initialization.
-            const { error: rpcError } = await supabaseAdmin
-                .rpc('handle_new_user', {
-                    p_id: authUser.id,
-                    p_email: authUser.email!,
-                    p_display_name: authUser.user_metadata?.full_name || 'Tân Binh',
-                    p_photo_url: authUser.user_metadata?.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${authUser.id}`,
-                });
-
-            if (rpcError) {
-                console.warn(`RPC 'handle_new_user' warning: ${rpcError.message}`);
-                // Continue execution, as the user might already exist and RPC just failed on duplicate key or similar, 
-                // or we can try to fetch anyway.
-            }
+            // OPTIMIZATION: Try to fetch the user directly first.
+            // This prevents the 'handle_new_user' RPC from running unnecessarily and potentially 
+            // resetting user fields (like equipped items) to default values on every page load.
             
-            // Step 2: CRITICAL FIX - Fetch directly from 'users' table.
-            // The RPC return value might be cached or stale (missing new columns like equipped_name_effect_id).
-            // Selecting '*' ensures we get the absolute latest schema structure.
-            const { data: profile, error: fetchError } = await supabaseAdmin
+            let { data: profile, error: fetchError } = await supabaseAdmin
                 .from('users')
                 .select('*')
                 .eq('id', authUser.id)
                 .single();
 
-            if (fetchError || !profile) {
-                 throw new Error(`Failed to fetch user profile: ${fetchError?.message || 'Profile not found'}`);
+            // If user doesn't exist, THEN try to create/init via RPC
+            if (!profile || fetchError) {
+                console.log("User not found in public table, initializing via RPC...");
+                
+                const { error: rpcError } = await supabaseAdmin
+                    .rpc('handle_new_user', {
+                        p_id: authUser.id,
+                        p_email: authUser.email!,
+                        p_display_name: authUser.user_metadata?.full_name || 'Tân Binh',
+                        p_photo_url: authUser.user_metadata?.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${authUser.id}`,
+                    });
+
+                if (rpcError) {
+                    console.warn(`RPC 'handle_new_user' warning: ${rpcError.message}`);
+                }
+                
+                // Retry fetch after RPC
+                const { data: newProfile, error: retryError } = await supabaseAdmin
+                    .from('users')
+                    .select('*')
+                    .eq('id', authUser.id)
+                    .single();
+                
+                if (retryError || !newProfile) {
+                     throw new Error(`Failed to fetch/create user profile: ${retryError?.message || 'Unknown error'}`);
+                }
+                profile = newProfile;
             }
 
             return { statusCode: 200, body: JSON.stringify(profile) };

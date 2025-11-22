@@ -17,7 +17,8 @@ const UserName: React.FC<UserNameProps> = ({ name, effectId, className = '', use
     const { getCosmeticById } = useGameConfig();
     
     const displayName = user?.display_name || name || 'Unknown';
-    const activeEffectId = user ? user.equipped_name_effect_id : effectId;
+    // FIX: Handle case where user exists but equipped_name_effect_id is missing in DB response
+    const activeEffectId = user ? (user.equipped_name_effect_id || undefined) : effectId;
     
     const effect = getCosmeticById(activeEffectId, 'name_effect');
     const cssClass = effect?.cssClass || 'name-effect-base';

@@ -231,14 +231,38 @@ const GameConfigManager: React.FC = () => {
         }
     };
 
-    const sqlFixScript = `
--- SQL Fix for Missing Columns in Users Table
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS equipped_name_effect_id UUID REFERENCES public.game_cosmetics(id);
+    const sqlFixScript = `-- CHẠY SCRIPT NÀY TRONG SUPABASE SQL EDITOR ĐỂ SỬA LỖI CẤU TRÚC
+
+-- 1. Tạo Enum Type (nếu chưa có)
+DO $$ BEGIN
+    CREATE TYPE public.cosmetic_type AS ENUM ('frame', 'title', 'name_effect');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+-- 2. Cập nhật bảng game_cosmetics để hỗ trợ name_effect (nếu check constraint cũ cản trở)
+ALTER TABLE public.game_cosmetics DROP CONSTRAINT IF EXISTS game_cosmetics_type_check;
+ALTER TABLE public.game_cosmetics ADD CONSTRAINT game_cosmetics_type_check CHECK (type::text = ANY (ARRAY['frame'::text, 'title'::text, 'name_effect'::text]));
+
+-- 3. Bổ sung cột còn thiếu vào bảng Users
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS equipped_frame_id UUID;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS equipped_title_id UUID;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS equipped_name_effect_id UUID;
+
+-- Thêm các cột thông kê profile (nếu thiếu)
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS weekly_points INTEGER DEFAULT 0;
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS profile_views INTEGER DEFAULT 0;
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS total_likes INTEGER DEFAULT 0;
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS bio TEXT;
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS cover_url TEXT;
+
+-- 4. Làm mới quyền truy cập (để đảm bảo API có thể đọc/ghi các cột mới)
+GRANT ALL ON public.users TO service_role;
+GRANT SELECT, UPDATE ON public.users TO authenticated;
+GRANT SELECT ON public.users TO anon;
+
+-- 5. Thông báo
+SELECT 'Database updated successfully. equipped_name_effect_id column added.' as result;
 `;
 
     return (
@@ -259,12 +283,12 @@ ALTER TABLE public.users ADD COLUMN IF NOT EXISTS cover_url TEXT;
             {activeSubTab === 'db_tools' && (
                 <div className="space-y-4">
                     <div className="bg-yellow-500/10 border border-yellow-500/30 p-4 rounded-lg">
-                        <h4 className="text-yellow-400 font-bold mb-2 flex items-center gap-2"><i className="ph-fill ph-warning-circle"></i> Cập Nhật Cấu Trúc Database</h4>
+                        <h4 className="text-yellow-400 font-bold mb-2 flex items-center gap-2"><i className="ph-fill ph-warning-circle"></i> Cập Nhật Cấu Trúc Database (Bắt Buộc)</h4>
                         <p className="text-sm text-gray-300 mb-4">
-                            Nếu bạn gặp lỗi "Tải lại trang mất hiệu ứng" hoặc "Lỗi Code Key", hãy copy đoạn mã SQL bên dưới và chạy trong <strong>Supabase SQL Editor</strong>.
+                            Nếu bạn gặp lỗi <strong>"Tải lại trang mất hiệu ứng"</strong> hoặc <strong>"Failed to update appearance"</strong>, hãy copy đoạn mã SQL bên dưới và chạy trong <strong>Supabase SQL Editor</strong> để thêm cột còn thiếu.
                         </p>
                         <div className="relative">
-                            <pre className="bg-black/50 p-3 rounded-lg text-xs text-green-400 overflow-x-auto font-mono border border-white/10">
+                            <pre className="bg-black/50 p-3 rounded-lg text-xs text-green-400 overflow-x-auto font-mono border border-white/10 h-64 custom-scrollbar">
                                 {sqlFixScript}
                             </pre>
                             <button 
@@ -273,6 +297,9 @@ ALTER TABLE public.users ADD COLUMN IF NOT EXISTS cover_url TEXT;
                             >
                                 Sao Chép
                             </button>
+                        </div>
+                        <div className="mt-4 text-xs text-gray-400">
+                            <strong>Hướng dẫn:</strong> Đăng nhập Supabase {'>'} Chọn Project {'>'} SQL Editor (bên trái) {'>'} New Query {'>'} Dán code {'>'} Run.
                         </div>
                     </div>
                 </div>

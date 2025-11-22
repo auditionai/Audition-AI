@@ -7,51 +7,56 @@ import Jimp from 'jimp';
 
 const XP_PER_CHARACTER = 5;
 
-// Stable Font URLs
-const FONT_WHITE_16 = "https://raw.githubusercontent.com/jimp-dev/jimp/main/packages/plugin-print/fonts/open-sans/open-sans-16-white/open-sans-16-white.fnt";
-const FONT_WHITE_32 = "https://raw.githubusercontent.com/jimp-dev/jimp/main/packages/plugin-print/fonts/open-sans/open-sans-32-white/open-sans-32-white.fnt";
-const FONT_BLACK_16 = "https://raw.githubusercontent.com/jimp-dev/jimp/main/packages/plugin-print/fonts/open-sans/open-sans-16-black/open-sans-16-black.fnt";
-const FONT_BLACK_32 = "https://raw.githubusercontent.com/jimp-dev/jimp/main/packages/plugin-print/fonts/open-sans/open-sans-32-black/open-sans-32-black.fnt";
+// Stable Font URLs via Unpkg (CDN)
+const FONT_WHITE_16 = "https://unpkg.com/@jimp/plugin-print@0.10.6/fonts/open-sans/open-sans-16-white/open-sans-16-white.fnt";
+const FONT_WHITE_32 = "https://unpkg.com/@jimp/plugin-print@0.10.6/fonts/open-sans/open-sans-32-white/open-sans-32-white.fnt";
 
-// Add Watermark Function (Text with Shadow)
+// Add Watermark Function (Gradient Overlay + Text)
 const addWatermark = async (imageBuffer: Buffer): Promise<Buffer> => {
     try {
-        console.log("Starting watermark process (Group/Text Rendering)...");
+        console.log("Starting watermark process (Group/Gradient+Text)...");
         const image = await (Jimp as any).read(imageBuffer);
         
         const width = image.getWidth();
         const height = image.getHeight();
 
-        // Load fonts in parallel
-        const [f16w, f32w, f16b, f32b] = await Promise.all([
+        // 1. Apply Gradient Vignette at the bottom (Darken bottom 120px)
+        const gradientHeight = 120;
+        const startY = Math.max(0, height - gradientHeight);
+        
+        image.scan(0, startY, width, height - startY, function (x: number, y: number, idx: number) {
+            const factor = (y - startY) / gradientHeight;
+            const darkness = 1 - (factor * 0.7); // Max 70% dark at bottom
+
+            this.bitmap.data[idx + 0] = this.bitmap.data[idx + 0] * darkness; // R
+            this.bitmap.data[idx + 1] = this.bitmap.data[idx + 1] * darkness; // G
+            this.bitmap.data[idx + 2] = this.bitmap.data[idx + 2] * darkness; // B
+        });
+
+        // 2. Load fonts
+        const [f16w, f32w] = await Promise.all([
             (Jimp as any).loadFont(FONT_WHITE_16),
             (Jimp as any).loadFont(FONT_WHITE_32),
-            (Jimp as any).loadFont(FONT_BLACK_16),
-            (Jimp as any).loadFont(FONT_BLACK_32),
         ]);
 
         const text1 = "Created by";
         const text2 = "AUDITION AI";
 
-        // Measure text to align right
+        // 3. Measure text to align right
         const text1Width = (Jimp as any).measureText(f16w, text1);
         const text2Width = (Jimp as any).measureText(f32w, text2);
         
         const margin = 20;
-        const maxWidth = Math.max(text1Width, text2Width);
+        const x1 = width - text1Width - margin;
+        const x2 = width - text2Width - margin;
         
-        const x = width - maxWidth - margin;
-        const y = height - 70; // Bottom positioning
+        const yText = height - 60; 
 
-        // Render Shadow (Black) first with offset
-        image.print(f16b, x + 1, y + 1, text1);
-        image.print(f32b, x + 2, y + 20 + 2, text2);
+        // 4. Render Text (White)
+        image.print(f16w, x1, yText - 20, text1);
+        image.print(f32w, x2, yText, text2);
 
-        // Render Main Text (White) on top
-        image.print(f16w, x, y, text1);
-        image.print(f32w, x, y + 20, text2);
-
-        console.log("Group watermark text rendered.");
+        console.log("Group watermark rendered successfully.");
         return await image.getBufferAsync((Jimp as any).MIME_PNG);
     } catch (error) {
         console.error("Failed to add watermark in group worker (Returning original):", error);
@@ -261,7 +266,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         const finalImageBase64 = finalImagePart.inlineData.data;
         const finalImageMimeType = finalImagePart.inlineData.mimeType;
 
-        // --- WATERMARK LOGIC (Text Rendering) ---
+        // --- WATERMARK LOGIC (Gradient + Text) ---
         let imageBuffer = Buffer.from(finalImageBase64, 'base64');
         if (!removeWatermark) {
             imageBuffer = await addWatermark(imageBuffer);

@@ -9,11 +9,9 @@ const COST_UPSCALE = 1;
 const COST_REMOVE_WATERMARK = 1; // Cost for removing watermark
 const XP_PER_GENERATION = 10;
 
-// Stable Font URLs
-const FONT_WHITE_16 = "https://raw.githubusercontent.com/jimp-dev/jimp/main/packages/plugin-print/fonts/open-sans/open-sans-16-white/open-sans-16-white.fnt";
-const FONT_WHITE_32 = "https://raw.githubusercontent.com/jimp-dev/jimp/main/packages/plugin-print/fonts/open-sans/open-sans-32-white/open-sans-32-white.fnt";
-const FONT_BLACK_16 = "https://raw.githubusercontent.com/jimp-dev/jimp/main/packages/plugin-print/fonts/open-sans/open-sans-16-black/open-sans-16-black.fnt";
-const FONT_BLACK_32 = "https://raw.githubusercontent.com/jimp-dev/jimp/main/packages/plugin-print/fonts/open-sans/open-sans-32-black/open-sans-32-black.fnt";
+// Stable Font URLs via Unpkg (CDN)
+const FONT_WHITE_16 = "https://unpkg.com/@jimp/plugin-print@0.10.6/fonts/open-sans/open-sans-16-white/open-sans-16-white.fnt";
+const FONT_WHITE_32 = "https://unpkg.com/@jimp/plugin-print@0.10.6/fonts/open-sans/open-sans-32-white/open-sans-32-white.fnt";
 
 /**
  * Pre-processes an image by placing it onto a new canvas of a target aspect ratio.
@@ -60,49 +58,59 @@ const processImageForGemini = async (imageDataUrl: string | null, targetAspectRa
     }
 };
 
-// Add Watermark Function (Text with Shadow)
+// Add Watermark Function (Gradient Overlay + Text)
 const addWatermark = async (imageBuffer: Buffer): Promise<Buffer> => {
     try {
-        console.log("Starting watermark process (Text Rendering)...");
+        console.log("Starting watermark process (Gradient + Text)...");
         const image = await (Jimp as any).read(imageBuffer);
         
         const width = image.getWidth();
         const height = image.getHeight();
 
-        // Load fonts in parallel
-        const [f16w, f32w, f16b, f32b] = await Promise.all([
+        // 1. Apply Gradient Vignette at the bottom (Darken bottom 120px)
+        const gradientHeight = 120;
+        const startY = Math.max(0, height - gradientHeight);
+        
+        // Scan pixels in the bottom area and darken them
+        image.scan(0, startY, width, height - startY, function (x: number, y: number, idx: number) {
+            // Calculate opacity factor (0 at startY, up to 0.7 at bottom)
+            const factor = (y - startY) / gradientHeight;
+            const darkness = 1 - (factor * 0.7); // Keep 30% brightness at most at the very bottom
+
+            // Darken RGB channels
+            this.bitmap.data[idx + 0] = this.bitmap.data[idx + 0] * darkness; // Red
+            this.bitmap.data[idx + 1] = this.bitmap.data[idx + 1] * darkness; // Green
+            this.bitmap.data[idx + 2] = this.bitmap.data[idx + 2] * darkness; // Blue
+            // Alpha (idx + 3) remains unchanged
+        });
+
+        // 2. Load fonts
+        const [f16w, f32w] = await Promise.all([
             (Jimp as any).loadFont(FONT_WHITE_16),
             (Jimp as any).loadFont(FONT_WHITE_32),
-            (Jimp as any).loadFont(FONT_BLACK_16),
-            (Jimp as any).loadFont(FONT_BLACK_32),
         ]);
 
         const text1 = "Created by";
         const text2 = "AUDITION AI";
 
-        // Measure text to align right
+        // 3. Measure text to align right with margin
         const text1Width = (Jimp as any).measureText(f16w, text1);
         const text2Width = (Jimp as any).measureText(f32w, text2);
         
         const margin = 20;
-        const maxWidth = Math.max(text1Width, text2Width);
+        const x1 = width - text1Width - margin;
+        const x2 = width - text2Width - margin;
         
-        const x = width - maxWidth - margin;
-        const y = height - 70; // Bottom positioning
+        const yText = height - 60; // Position text near bottom
 
-        // Render Shadow (Black) first with offset
-        image.print(f16b, x + 1, y + 1, text1);
-        image.print(f32b, x + 2, y + 20 + 2, text2);
+        // 4. Render Text (White) on top of the darkened gradient
+        image.print(f16w, x1, yText - 20, text1);
+        image.print(f32w, x2, yText, text2);
 
-        // Render Main Text (White) on top
-        image.print(f16w, x, y, text1);
-        image.print(f32w, x, y + 20, text2);
-
-        console.log("Watermark text rendered.");
+        console.log("Watermark rendered successfully.");
         return await image.getBufferAsync((Jimp as any).MIME_PNG);
     } catch (error) {
         console.error("Failed to add watermark (Returning original):", error);
-        // Fallback: return original image if composition fails
         return imageBuffer; 
     }
 };

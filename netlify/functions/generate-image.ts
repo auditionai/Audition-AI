@@ -55,28 +55,48 @@ const processImageForGemini = async (imageDataUrl: string | null, targetAspectRa
     }
 };
 
-// Add Watermark Function
+// Add Watermark Function (Updated for 2-line layout)
 const addWatermark = async (imageBuffer: Buffer): Promise<Buffer> => {
     try {
         const image = await (Jimp as any).read(imageBuffer);
-        const font = await (Jimp as any).loadFont((Jimp as any).FONT_SANS_32_WHITE);
-        const width = image.getWidth();
-        const height = image.getHeight();
         
-        const text = "Created by Audition AI";
-        const textWidth = (Jimp as any).measureText(font, text);
-        const textHeight = (Jimp as any).measureTextHeight(font, text, width);
+        // Load fonts: Small for "Created by", Large for "AUDITION AI"
+        // Note: Standard Jimp fonts do not support Vietnamese accents well. 
+        // Using "Created by" ensures readability and professional look.
+        const fontSmall = await (Jimp as any).loadFont((Jimp as any).FONT_SANS_16_WHITE);
+        const fontLarge = await (Jimp as any).loadFont((Jimp as any).FONT_SANS_32_WHITE);
         
+        const textTop = "Created by";
+        const textBottom = "AUDITION AI";
+        
+        const widthTop = (Jimp as any).measureText(fontSmall, textTop);
+        const widthBottom = (Jimp as any).measureText(fontLarge, textBottom);
+        
+        const heightTop = (Jimp as any).measureTextHeight(fontSmall, textTop, 1000);
+        const heightBottom = (Jimp as any).measureTextHeight(fontLarge, textBottom, 1000);
+        
+        const padding = 12;
+        const boxWidth = Math.max(widthTop, widthBottom) + (padding * 2);
+        const boxHeight = heightTop + heightBottom + (padding * 1.5); 
+        
+        // Position: Bottom Right with margin
         const margin = 20;
-        const x = width - textWidth - margin;
-        const y = height - textHeight - margin;
-
-        // Add a subtle semi-transparent background block behind text for readability
-        const bgImage = new (Jimp as any)(textWidth + 20, textHeight + 10, '#000000');
-        bgImage.opacity(0.5);
+        const x = image.getWidth() - boxWidth - margin;
+        const y = image.getHeight() - boxHeight - margin;
         
-        image.composite(bgImage, x - 10, y - 5);
-        image.print(font, x, y, text);
+        // Create semi-transparent black background (Hex + Alpha)
+        // 0x00000080 is Black with ~50% opacity
+        const bgImage = new (Jimp as any)(boxWidth, boxHeight, 0x00000090);
+        
+        // Composite background
+        image.composite(bgImage, x, y);
+        
+        // Print Text (Centered horizontally within the box)
+        const xTop = x + (boxWidth - widthTop) / 2;
+        const xBottom = x + (boxWidth - widthBottom) / 2;
+        
+        image.print(fontSmall, xTop, y + padding, textTop);
+        image.print(fontLarge, xBottom, y + padding + heightTop - 5, textBottom); // -5 to tighten gap
 
         return await image.getBufferAsync((Jimp as any).MIME_PNG);
     } catch (error) {
@@ -106,7 +126,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         const token = authHeader.split(' ')[1];
         if (!token) return { statusCode: 401, body: JSON.stringify({ error: 'Bearer token is missing.' }) };
 
-        const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+        const { data: { user }, error: authError } = await (supabaseAdmin.auth as any).getUser(token);
         if (authError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized: Invalid token.' }) };
 
         const body = JSON.parse(event.body || '{}');

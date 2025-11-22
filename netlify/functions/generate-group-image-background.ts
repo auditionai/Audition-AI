@@ -8,27 +8,40 @@ import Jimp from 'jimp';
 
 const XP_PER_CHARACTER = 5;
 
-// Watermark Function (Duplicate from generate-image for consistency in worker)
+// Watermark Function (Updated for 2-line layout)
 const addWatermark = async (imageBuffer: Buffer): Promise<Buffer> => {
     try {
         const image = await (Jimp as any).read(imageBuffer);
-        const font = await (Jimp as any).loadFont((Jimp as any).FONT_SANS_32_WHITE);
-        const width = image.getWidth();
-        const height = image.getHeight();
         
-        const text = "Created by Audition AI";
-        const textWidth = (Jimp as any).measureText(font, text);
-        const textHeight = (Jimp as any).measureTextHeight(font, text, width);
+        const fontSmall = await (Jimp as any).loadFont((Jimp as any).FONT_SANS_16_WHITE);
+        const fontLarge = await (Jimp as any).loadFont((Jimp as any).FONT_SANS_32_WHITE);
+        
+        const textTop = "Created by";
+        const textBottom = "AUDITION AI";
+        
+        const widthTop = (Jimp as any).measureText(fontSmall, textTop);
+        const widthBottom = (Jimp as any).measureText(fontLarge, textBottom);
+        
+        const heightTop = (Jimp as any).measureTextHeight(fontSmall, textTop, 1000);
+        const heightBottom = (Jimp as any).measureTextHeight(fontLarge, textBottom, 1000);
+        
+        const padding = 12;
+        const boxWidth = Math.max(widthTop, widthBottom) + (padding * 2);
+        const boxHeight = heightTop + heightBottom + (padding * 1.5); 
         
         const margin = 20;
-        const x = width - textWidth - margin;
-        const y = height - textHeight - margin;
-
-        const bgImage = new (Jimp as any)(textWidth + 20, textHeight + 10, '#000000');
-        bgImage.opacity(0.5);
+        const x = image.getWidth() - boxWidth - margin;
+        const y = image.getHeight() - boxHeight - margin;
         
-        image.composite(bgImage, x - 10, y - 5);
-        image.print(font, x, y, text);
+        const bgImage = new (Jimp as any)(boxWidth, boxHeight, 0x00000090);
+        
+        image.composite(bgImage, x, y);
+        
+        const xTop = x + (boxWidth - widthTop) / 2;
+        const xBottom = x + (boxWidth - widthBottom) / 2;
+        
+        image.print(fontSmall, xTop, y + padding, textTop);
+        image.print(fontLarge, xBottom, y + padding + heightTop - 5, textBottom); 
 
         return await image.getBufferAsync((Jimp as any).MIME_PNG);
     } catch (error) {

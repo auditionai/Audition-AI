@@ -231,17 +231,17 @@ const GameConfigManager: React.FC = () => {
         }
     };
 
-    const sqlFixScript = `-- SCRIPT SỬA LỖI TIN NHẮN & TẠO BOT HỆ THỐNG (UPDATE)
+    const sqlFixScript = `-- SCRIPT SỬA LỖI DB (PHIÊN BẢN V2)
+-- Sửa lỗi cột 'level' không tồn tại và cập nhật quyền truy cập
 
 -- 1. BẬT CHẾ ĐỘ XEM CÔNG KHAI CHO BẢNG USERS
--- Điều này rất quan trọng để mọi người có thể thấy tên và avatar của nhau (kể cả Bot)
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 
 -- Xóa policy cũ nếu có để tránh lỗi
 DROP POLICY IF EXISTS "Users can view their own data" ON public.users;
 DROP POLICY IF EXISTS "Public profiles are viewable by everyone" ON public.users;
 
--- Tạo policy mới: Ai cũng có thể xem (SELECT) thông tin user khác (cần thiết cho Chat)
+-- Tạo policy mới: Ai cũng có thể xem (SELECT) thông tin user khác (cần thiết cho Chat & Ranking)
 CREATE POLICY "Public profiles are viewable by everyone" 
 ON public.users FOR SELECT 
 USING (true);
@@ -252,16 +252,15 @@ ON public.users FOR UPDATE
 USING (auth.uid() = id);
 
 -- 2. TẠO USER "HỆ THỐNG" (BOT)
--- User này sẽ dùng để gửi tin nhắn tự động
-INSERT INTO public.users (id, email, display_name, photo_url, diamonds, xp, level)
+-- Lưu ý: Đã loại bỏ cột 'level' gây lỗi. Level sẽ được tính toán từ XP.
+INSERT INTO public.users (id, email, display_name, photo_url, diamonds, xp)
 VALUES (
     '00000000-0000-0000-0000-000000000000',
     'system@auditionai.io.vn',
     'HỆ THỐNG',
     'https://api.dicebear.com/7.x/bottts/svg?seed=System',
     999999,
-    999999,
-    999
+    999999
 ) ON CONFLICT (id) DO NOTHING;
 
 -- 3. ĐẢM BẢO CÁC BẢNG CHAT TỒN TẠI VÀ CÓ QUYỀN
@@ -289,19 +288,26 @@ CREATE TABLE IF NOT EXISTS public.direct_messages (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
 
--- Bật RLS
+-- 4. CẬP NHẬT BẢNG HỆ THỐNG TIN NHẮN BROADCAST
+CREATE TABLE IF NOT EXISTS public.system_broadcasts (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    content TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+);
+GRANT ALL ON public.system_broadcasts TO service_role;
+
+-- Bật RLS cho Chat
 ALTER TABLE public.conversations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.conversation_participants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.direct_messages ENABLE ROW LEVEL SECURITY;
 
--- Xóa policy cũ của chat
+-- Xóa policy cũ của chat (để reset sạch sẽ)
 DROP POLICY IF EXISTS "Users can view conversations they are in" ON public.conversations;
 DROP POLICY IF EXISTS "Users can view participants of their conversations" ON public.conversation_participants;
 DROP POLICY IF EXISTS "Users can view messages in their conversations" ON public.direct_messages;
 DROP POLICY IF EXISTS "Users can insert messages in their conversations" ON public.direct_messages;
 
--- Tạo lại Policy chuẩn
--- 1. Conversations
+-- Tạo lại Policy chuẩn cho Chat
 CREATE POLICY "Users can view conversations they are in" ON public.conversations
 FOR SELECT USING (
     exists (
@@ -311,7 +317,6 @@ FOR SELECT USING (
     )
 );
 
--- 2. Participants
 CREATE POLICY "Users can view participants of their conversations" ON public.conversation_participants
 FOR SELECT USING (
     exists (
@@ -321,7 +326,6 @@ FOR SELECT USING (
     )
 );
 
--- 3. Messages (View)
 CREATE POLICY "Users can view messages in their conversations" ON public.direct_messages
 FOR SELECT USING (
     exists (
@@ -331,7 +335,6 @@ FOR SELECT USING (
     )
 );
 
--- 4. Messages (Insert)
 CREATE POLICY "Users can insert messages in their conversations" ON public.direct_messages
 FOR INSERT WITH CHECK (
     auth.uid() = sender_id AND
@@ -359,7 +362,7 @@ BEGIN
   END IF;
 END $$;
 
-SELECT 'Sửa lỗi thành công! Đã tạo Bot Hệ Thống và mở quyền xem Profile.' as ket_qua;
+SELECT 'Sửa lỗi thành công! Đã cập nhật User Hệ Thống và phân quyền.' as ket_qua;
 `;
 
     return (

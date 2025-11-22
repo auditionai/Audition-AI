@@ -137,7 +137,7 @@ const AITool: React.FC = () => {
                         onClick={() => setActiveTab('comic-studio')}
                         className={`
                             px-4 py-3 font-bold text-sm md:text-base rounded-xl md:rounded-none md:rounded-t-lg transition-all
-                            flex flex-col md:flex-row items-center justify-center gap-2 relative overflow-hidden border-2 md:border-0 md:border-b-2
+                            flex flex-col md:flex-row items-center justify-center gap-2 border-2 md:border-0 md:border-b-2 relative
                             ${activeTab === 'comic-studio' 
                                 ? 'bg-skin-accent text-white border-transparent md:bg-transparent md:text-skin-accent md:border-skin-accent shadow-lg md:shadow-none' 
                                 : 'bg-skin-fill-secondary text-skin-muted border-skin-border hover:text-skin-base hover:bg-white/5'
@@ -146,7 +146,7 @@ const AITool: React.FC = () => {
                     >
                         <i className="ph-fill ph-book-open-text text-xl md:text-lg"></i>
                         Truyện Tranh
-                        <span className="absolute top-0 right-0 md:top-auto md:bottom-full md:mb-1 md:right-auto md:left-full md:ml-1 bg-gradient-to-r from-yellow-400 to-red-500 text-white text-[8px] px-1.5 py-0.5 rounded-bl-md md:rounded font-bold shadow-sm">HOT</span>
+                        <span className="absolute -top-2 -right-2 md:-top-3 md:-right-3 bg-gradient-to-r from-red-500 to-orange-600 text-white text-[9px] px-2 py-0.5 rounded-full font-black shadow-sm border border-white/20 animate-pulse z-10">HOT</span>
                     </button>
                     <button
                         onClick={() => setActiveTab('utilities')}

@@ -276,7 +276,11 @@ const DraggableBubble: React.FC<DraggableBubbleProps> = ({
 
 // --- MAIN COMPONENT ---
 
-const ComicStudio: React.FC = () => {
+interface ComicStudioProps {
+    onInstructionClick?: () => void;
+}
+
+const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
     const { session, showToast, updateUserDiamonds, supabase } = useAuth();
     const [activeStep, setActiveStep] = useState<1 | 2 | 3>(1); 
     const [isLoading, setIsLoading] = useState(false);
@@ -820,7 +824,11 @@ const ComicStudio: React.FC = () => {
                         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                             {/* Left: Detailed Settings */}
                             <div className="lg:col-span-5 space-y-6">
-                                <SettingsBlock title="Cấu Hình Truyện" instructionKey="group-studio" onInstructionClick={() => {}} >
+                                <SettingsBlock 
+                                    title="Cấu Hình Truyện" 
+                                    instructionKey="comic-studio" // Changed key to correct one
+                                    onInstructionClick={() => onInstructionClick && onInstructionClick()} 
+                                >
                                     <div className="space-y-4">
                                         <div className="grid grid-cols-2 gap-4">
                                             <ComicSelect 

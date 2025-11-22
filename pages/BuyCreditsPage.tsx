@@ -47,6 +47,9 @@ const PricingCard: React.FC<{ pkg: CreditPackage; onBuy: () => void; isProcessin
         return translated !== key ? translated : t(tag);
     };
 
+    // Correctly remove opacity modifier from all gradient colors for the button
+    const buttonGradientClass = tierClass.replace(/\/20/g, '');
+
     return (
         <div 
             className={`group relative rounded-2xl p-1 transition-all duration-500 hover:-translate-y-2 interactive-3d h-full flex flex-col`}
@@ -95,7 +98,7 @@ const PricingCard: React.FC<{ pkg: CreditPackage; onBuy: () => void; isProcessin
                         className={`w-full py-3 rounded-lg font-bold text-sm transition-all duration-300 transform active:scale-95 flex items-center justify-center gap-2
                             ${isProcessing 
                                 ? 'bg-gray-600 cursor-not-allowed text-gray-400' 
-                                : `bg-gradient-to-r ${tierClass.replace('/20', '')} text-white hover:brightness-110 shadow-lg`
+                                : `bg-gradient-to-r ${buttonGradientClass} text-white hover:brightness-110 shadow-lg`
                             }
                         `}
                     >

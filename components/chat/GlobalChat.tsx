@@ -28,7 +28,7 @@ const GlobalChat: React.FC = () => {
     const [previewImage, setPreviewImage] = useState<string | null>(null);
 
     // Drag State
-    const bubbleRef = useRef<HTMLButtonElement>(null);
+    const buttonContainerRef = useRef<HTMLDivElement>(null);
     const [position, setPosition] = useState({ x: 20, y: 20 }); // Bottom-Right offset
     const [isDragging, setIsDragging] = useState(false);
     const dragStart = useRef({ x: 0, y: 0 });
@@ -82,12 +82,15 @@ const GlobalChat: React.FC = () => {
 
     // --- Drag Logic (Mouse) ---
     const handleMouseDown = (e: React.MouseEvent) => {
+        // Stop propagation to avoid closing chat if dragging
+        e.stopPropagation();
         setIsDragging(true);
         dragStart.current = { x: e.clientX, y: e.clientY };
     };
 
     // --- Drag Logic (Touch/Mobile) ---
     const handleTouchStart = (e: React.TouchEvent) => {
+        e.stopPropagation();
         setIsDragging(true);
         const touch = e.touches[0];
         dragStart.current = { x: touch.clientX, y: touch.clientY };
@@ -140,17 +143,6 @@ const GlobalChat: React.FC = () => {
         };
     }, [isDragging]);
 
-    // Dynamic Icon based on Theme
-    const getThemeIcon = () => {
-        switch(theme) {
-            case 'cyber-punk': return 'ph-robot';
-            case 'solar-flare': return 'ph-sun-horizon';
-            case 'neon-vibe': return 'ph-lightning';
-            case 'dreamy-galaxy': return 'ph-planet';
-            default: return 'ph-chats-teardrop';
-        }
-    }
-
     if (!user) return null;
 
     // Mock Image Object for Modal
@@ -183,35 +175,60 @@ const GlobalChat: React.FC = () => {
                 isLoading={isDeleting}
             />
 
-            {/* Draggable Chat Toggle Button */}
-            <button
-                ref={bubbleRef}
+            {/* Draggable Chat Toggle Button Container */}
+            <div
+                ref={buttonContainerRef}
                 onMouseDown={handleMouseDown}
                 onTouchStart={handleTouchStart}
-                onClick={() => !isDragging && toggleChat()}
+                onClick={(e) => {
+                    e.stopPropagation(); // Stop from closing
+                    if (!isDragging) toggleChat();
+                }}
                 style={{ bottom: `${position.y}px`, right: `${position.x}px` }}
-                className={`fixed z-[90] w-14 h-14 md:w-16 md:h-16 rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(236,72,153,0.6)] transition-transform duration-200 hover:scale-110 cursor-move active:cursor-grabbing touch-none
-                    ${isOpen ? 'bg-gradient-to-br from-red-500 to-pink-600 rotate-90' : 'chat-bubble-user border-2 border-white/20 backdrop-blur-md'}`}
+                className="fixed z-[90] cursor-move active:cursor-grabbing touch-none group flex flex-col items-center justify-center gap-1"
             >
-                {isOpen ? (
-                    <i className="ph-fill ph-x text-white text-2xl"></i>
-                ) : (
-                    <i className={`ph-fill ${getThemeIcon()} text-white text-3xl animate-pulse`}></i>
-                )}
-                
-                {!isOpen && unreadCount > 0 && (
-                    <span className="absolute -top-1 -right-1 w-6 h-6 bg-red-500 text-white text-xs font-bold flex items-center justify-center rounded-full animate-bounce shadow-lg border border-white">
-                        {unreadCount > 99 ? '99+' : unreadCount}
+                {/* Main Button */}
+                <div className={`relative w-16 h-16 md:w-20 md:h-20 rounded-full flex items-center justify-center transition-transform duration-200 hover:scale-110
+                    ${isOpen 
+                        ? 'bg-gradient-to-br from-red-500 to-pink-600 shadow-[0_0_30px_rgba(239,68,68,0.6)]' 
+                        : 'bg-gradient-to-br from-cyan-400 via-blue-500 to-purple-600 shadow-[0_0_30px_rgba(6,182,212,0.6)]'
+                    } border-2 border-white/50 backdrop-blur-md`}>
+                    
+                    {/* Ripple Effect */}
+                    {!isOpen && (
+                        <span className="absolute inset-0 rounded-full border-2 border-cyan-400 opacity-75 animate-ping"></span>
+                    )}
+
+                    {isOpen ? (
+                        <i className="ph-fill ph-x text-white text-3xl"></i>
+                    ) : (
+                        <i className="ph-fill ph-chats-teardrop text-white text-4xl animate-pulse drop-shadow-md"></i>
+                    )}
+                    
+                    {/* Badge */}
+                    {!isOpen && unreadCount > 0 && (
+                        <span className="absolute -top-1 -right-1 w-6 h-6 bg-red-500 text-white text-xs font-bold flex items-center justify-center rounded-full animate-bounce shadow-lg border-2 border-white">
+                            {unreadCount > 99 ? '99+' : unreadCount}
+                        </span>
+                    )}
+                </div>
+
+                {/* Label */}
+                {!isOpen && (
+                    <span className="px-2 py-0.5 bg-black/60 backdrop-blur-sm rounded-md text-[10px] font-bold text-white shadow-sm border border-white/10 pointer-events-none select-none">
+                        Chatbox
                     </span>
                 )}
-            </button>
+            </div>
 
             {/* Chat Window (Glassmorphism) */}
             <div 
                 className={`fixed top-0 right-0 h-full w-full sm:w-[380px] z-[80] chat-glass shadow-2xl transition-transform duration-300 ease-in-out transform flex flex-col
                     ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}
-                // Stop propagation to prevent unintended closes from parent click listeners (if any)
-                onClick={(e) => e.stopPropagation()} 
+                // Stop propagation to prevent unintended closes from ANY parent click listeners
+                onClick={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
+                onTouchStart={(e) => e.stopPropagation()}
             >
                 {/* Header */}
                 <div className="h-16 flex items-center justify-between px-4 border-b border-white/10 bg-gradient-to-r from-transparent via-white/5 to-transparent">

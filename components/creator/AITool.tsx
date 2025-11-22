@@ -22,14 +22,14 @@ const AITool: React.FC = () => {
     
     // NEW: State for utility-specific instruction modal
     const [isUtilHelpOpen, setUtilHelpOpen] = useState(false);
-    const [utilHelpKey, setUtilHelpKey] = useState<'bg-remover' | 'signature' | 'group-studio' | null>(null);
+    const [utilHelpKey, setUtilHelpKey] = useState<'bg-remover' | 'signature' | 'group-studio' | 'comic-studio' | null>(null);
 
     // State to pass images between tools
     const [poseImage, setPoseImage] = useState<{ url: string; file: File } | null>(null);
     const [rawFaceImage, setRawFaceImage] = useState<{ url: string; file: File } | null>(null);
     const [imageForUtility, setImageForUtility] = useState<string | null>(null);
 
-    const openUtilHelp = (key: 'bg-remover' | 'signature' | 'group-studio') => {
+    const openUtilHelp = (key: 'bg-remover' | 'signature' | 'group-studio' | 'comic-studio') => {
         setUtilHelpKey(key);
         setUtilHelpOpen(true);
     };
@@ -139,7 +139,9 @@ const AITool: React.FC = () => {
                 {/* Content */}
                 {activeTab === 'comic-studio' ? (
                     // Comic Studio has its own container logic, no wrapper needed
-                    <ComicStudio />
+                    <ComicStudio 
+                        onInstructionClick={() => openUtilHelp('comic-studio')}
+                    />
                 ) : (
                     <div className="p-4 bg-skin-fill-secondary rounded-2xl border border-skin-border shadow-lg">
                         {activeTab === 'generator' && (

@@ -1,4 +1,3 @@
-
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { GoogleGenAI, Modality } from "@google/genai";
 import { supabaseAdmin } from './utils/supabaseClient';
@@ -8,40 +7,51 @@ import Jimp from 'jimp';
 
 const XP_PER_CHARACTER = 5;
 
-// Add Watermark Function (Robust Image Composition)
+// Stable Font URLs
+const FONT_WHITE_16 = "https://raw.githubusercontent.com/jimp-dev/jimp/main/packages/plugin-print/fonts/open-sans/open-sans-16-white/open-sans-16-white.fnt";
+const FONT_WHITE_32 = "https://raw.githubusercontent.com/jimp-dev/jimp/main/packages/plugin-print/fonts/open-sans/open-sans-32-white/open-sans-32-white.fnt";
+const FONT_BLACK_16 = "https://raw.githubusercontent.com/jimp-dev/jimp/main/packages/plugin-print/fonts/open-sans/open-sans-16-black/open-sans-16-black.fnt";
+const FONT_BLACK_32 = "https://raw.githubusercontent.com/jimp-dev/jimp/main/packages/plugin-print/fonts/open-sans/open-sans-32-black/open-sans-32-black.fnt";
+
+// Add Watermark Function (Text with Shadow)
 const addWatermark = async (imageBuffer: Buffer): Promise<Buffer> => {
     try {
-        console.log("Starting watermark process (Group/Image Composition)...");
+        console.log("Starting watermark process (Group/Text Rendering)...");
         const image = await (Jimp as any).read(imageBuffer);
         
-        const mainWidth = image.getWidth();
-        const mainHeight = image.getHeight();
+        const width = image.getWidth();
+        const height = image.getHeight();
 
-        // Use a pre-generated badge image from a reliable service
-        // Text: "Created by AUDITION AI"
-        const badgeUrl = "https://placehold.co/400x120/000000/ffffff/png?text=Created+by%0AAUDITION+AI&font=montserrat";
+        // Load fonts in parallel
+        const [f16w, f32w, f16b, f32b] = await Promise.all([
+            (Jimp as any).loadFont(FONT_WHITE_16),
+            (Jimp as any).loadFont(FONT_WHITE_32),
+            (Jimp as any).loadFont(FONT_BLACK_16),
+            (Jimp as any).loadFont(FONT_BLACK_32),
+        ]);
+
+        const text1 = "Created by";
+        const text2 = "AUDITION AI";
+
+        // Measure text to align right
+        const text1Width = (Jimp as any).measureText(f16w, text1);
+        const text2Width = (Jimp as any).measureText(f32w, text2);
         
-        const watermark = await (Jimp as any).read(badgeUrl);
+        const margin = 20;
+        const maxWidth = Math.max(text1Width, text2Width);
+        
+        const x = width - maxWidth - margin;
+        const y = height - 70; // Bottom positioning
 
-        // Scale watermark to 30% of the main image width
-        const targetWidth = Math.max(mainWidth * 0.3, 200);
-        watermark.resize(targetWidth, (Jimp as any).AUTO);
+        // Render Shadow (Black) first with offset
+        image.print(f16b, x + 1, y + 1, text1);
+        image.print(f32b, x + 2, y + 20 + 2, text2);
 
-        const wmWidth = watermark.getWidth();
-        const wmHeight = watermark.getHeight();
+        // Render Main Text (White) on top
+        image.print(f16w, x, y, text1);
+        image.print(f32w, x, y + 20, text2);
 
-        // Position: Bottom Right with margin
-        const margin = 30;
-        const x = mainWidth - wmWidth - margin;
-        const y = mainHeight - wmHeight - margin;
-
-        // Apply slight transparency
-        watermark.opacity(0.9);
-
-        // Composite
-        image.composite(watermark, x, y);
-
-        console.log("Group watermark composite successful.");
+        console.log("Group watermark text rendered.");
         return await image.getBufferAsync((Jimp as any).MIME_PNG);
     } catch (error) {
         console.error("Failed to add watermark in group worker (Returning original):", error);
@@ -251,7 +261,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         const finalImageBase64 = finalImagePart.inlineData.data;
         const finalImageMimeType = finalImagePart.inlineData.mimeType;
 
-        // --- WATERMARK LOGIC (New Image Composite Approach) ---
+        // --- WATERMARK LOGIC (Text Rendering) ---
         let imageBuffer = Buffer.from(finalImageBase64, 'base64');
         if (!removeWatermark) {
             imageBuffer = await addWatermark(imageBuffer);

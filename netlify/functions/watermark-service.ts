@@ -13,7 +13,7 @@ export const addSmartWatermark = async (imageBuffer: Buffer, _unusedUrl: string)
         const width = image.getWidth();
         const height = image.getHeight();
 
-        // 1. Hiệu ứng làm tối góc (Vignette) để logo nổi bật hơn
+        // 1. Hiệu ứng làm tối góc (Vignette)
         const gradientHeight = Math.floor(height * 0.25); 
         const startY = height - gradientHeight;
         
@@ -26,21 +26,27 @@ export const addSmartWatermark = async (imageBuffer: Buffer, _unusedUrl: string)
             this.bitmap.data[idx + 2] *= (1 - darkness);
         });
 
-        // 2. Đọc file Logo trực tiếp từ thư mục functions
-        // Chúng ta thử vài đường dẫn khác nhau vì Netlify đóng gói file có thể thay đổi cấu trúc thư mục
+        // 2. Tìm file logo trong môi trường Serverless
+        // Netlify có thể thay đổi cấu trúc thư mục khi deploy, nên ta cần thử nhiều đường dẫn
         const possiblePaths = [
-            path.join(__dirname, 'watermark.png'),
+            // Đường dẫn chuẩn khi có netlify.toml included_files
+            path.resolve(process.cwd(), 'netlify/functions/watermark.png'),
+            // Đường dẫn khi chạy local hoặc một số cấu hình build khác
             path.resolve(__dirname, 'watermark.png'),
-            path.join(process.cwd(), 'netlify', 'functions', 'watermark.png'),
+            // Đường dẫn dự phòng trong container
+            '/var/task/netlify/functions/watermark.png',
+            // Đường dẫn gốc
             path.join(process.cwd(), 'watermark.png')
         ];
 
         let logoBuffer: Buffer | null = null;
+        let foundPath = '';
         
         for (const p of possiblePaths) {
             if (fs.existsSync(p)) {
                 console.log(`[Watermark] Found local logo at: ${p}`);
                 logoBuffer = fs.readFileSync(p);
+                foundPath = p;
                 break;
             }
         }
@@ -63,15 +69,25 @@ export const addSmartWatermark = async (imageBuffer: Buffer, _unusedUrl: string)
                 opacityDest: 1
             });
             
-            console.log("[Watermark] Local logo applied successfully.");
+            console.log(`[Watermark] Applied successfully using file from: ${foundPath}`);
         } else {
-            console.error(`[Watermark] Failed to find 'watermark.png'. Checked paths: ${possiblePaths.join(', ')}`);
-            console.error(`[Watermark] Current Dir: ${__dirname}, CWD: ${process.cwd()}`);
+            console.error(`[Watermark] FAILED to find 'watermark.png'. Searched in:`);
+            possiblePaths.forEach(p => console.error(` - ${p}`));
+            
+            // Debug: Liệt kê file để xem cấu trúc thực tế trên server là gì
             try {
-                // List files in current dir to help debug
-                const files = fs.readdirSync(__dirname);
-                console.log('[Watermark] Files in __dirname:', files);
+                console.log('[Watermark Debug] Current Dir files:', fs.readdirSync(__dirname));
+                console.log('[Watermark Debug] CWD files:', fs.readdirSync(process.cwd()));
             } catch (e) {}
+            
+            // Fallback: Vẽ chữ nếu không tìm thấy ảnh (Cơ chế chống lỗi cuối cùng)
+            try {
+                const font = await (Jimp as any).loadFont((Jimp as any).FONT_SANS_32_WHITE);
+                image.print(font, width - 200, height - 50, "AUDITION AI");
+                console.log("[Watermark] Fallback text applied.");
+            } catch (e) {
+                console.error("[Watermark] Fallback text failed too.");
+            }
         }
 
         return await image.getBufferAsync((Jimp as any).MIME_PNG);

@@ -119,6 +119,27 @@ export const en = {
         close: 'Close',
       },
     },
+    leaderboard: {
+      title: 'Leaderboard',
+      description: 'Honoring the best creators and dancers.',
+      loading: 'Loading leaderboard...',
+      tabs: {
+        creation: 'Creation',
+        level: 'Level',
+        tycoon: 'Tycoon',
+        hot: 'Hot',
+      },
+      metric: {
+        creation: '{{value}} Creations',
+        level: '{{value}} XP',
+        tycoon: '{{value}} Diamonds',
+        hot: '{{value}} Points',
+      },
+      empty: {
+        title: 'No data yet',
+        description: 'Be the first to make your mark!',
+      }
+    },
     footer: {
       theme: 'Theme',
       terms: 'Terms',

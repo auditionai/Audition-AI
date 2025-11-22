@@ -119,6 +119,27 @@ export const vi = {
         close: 'Đóng',
       },
     },
+    leaderboard: {
+      title: 'Bảng Xếp Hạng',
+      description: 'Vinh danh những nhà sáng tạo và vũ công xuất sắc nhất.',
+      loading: 'Đang tải bảng xếp hạng...',
+      tabs: {
+        creation: 'Sáng Tạo',
+        level: 'Cấp Độ',
+        tycoon: 'Đại Gia',
+        hot: 'Nổi Bật',
+      },
+      metric: {
+        creation: '{{value}} Tác phẩm',
+        level: '{{value}} XP',
+        tycoon: '{{value}} Kim Cương',
+        hot: '{{value}} Điểm',
+      },
+      empty: {
+        title: 'Chưa có dữ liệu',
+        description: 'Hãy là người đầu tiên ghi danh lên bảng vàng!',
+      }
+    },
     footer: {
       theme: 'Giao diện',
       terms: 'Điều khoản',

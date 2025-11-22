@@ -1,17 +1,15 @@
+
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { GoogleGenAI, Modality } from "@google/genai";
 import { supabaseAdmin } from './utils/supabaseClient';
 import { Buffer } from 'buffer';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import Jimp from 'jimp';
+import { addSmartWatermark } from './utils/watermarkService'; // Import mới
 
 const COST_UPSCALE = 1;
-const COST_REMOVE_WATERMARK = 1; // Cost for removing watermark
+const COST_REMOVE_WATERMARK = 1; 
 const XP_PER_GENERATION = 10;
-
-// Stable Font URLs via Unpkg (CDN)
-const FONT_WHITE_16 = "https://unpkg.com/@jimp/plugin-print@0.10.6/fonts/open-sans/open-sans-16-white/open-sans-16-white.fnt";
-const FONT_WHITE_32 = "https://unpkg.com/@jimp/plugin-print@0.10.6/fonts/open-sans/open-sans-32-white/open-sans-32-white.fnt";
 
 /**
  * Pre-processes an image by placing it onto a new canvas of a target aspect ratio.
@@ -58,64 +56,6 @@ const processImageForGemini = async (imageDataUrl: string | null, targetAspectRa
     }
 };
 
-// Add Watermark Function (Gradient Overlay + Text)
-const addWatermark = async (imageBuffer: Buffer): Promise<Buffer> => {
-    try {
-        console.log("Starting watermark process (Gradient + Text)...");
-        const image = await (Jimp as any).read(imageBuffer);
-        
-        const width = image.getWidth();
-        const height = image.getHeight();
-
-        // 1. Apply Gradient Vignette at the bottom (Darken bottom 120px)
-        const gradientHeight = 120;
-        const startY = Math.max(0, height - gradientHeight);
-        
-        // Scan pixels in the bottom area and darken them
-        image.scan(0, startY, width, height - startY, function (x: number, y: number, idx: number) {
-            // Calculate opacity factor (0 at startY, up to 0.7 at bottom)
-            const factor = (y - startY) / gradientHeight;
-            const darkness = 1 - (factor * 0.7); // Keep 30% brightness at most at the very bottom
-
-            // Darken RGB channels
-            this.bitmap.data[idx + 0] = this.bitmap.data[idx + 0] * darkness; // Red
-            this.bitmap.data[idx + 1] = this.bitmap.data[idx + 1] * darkness; // Green
-            this.bitmap.data[idx + 2] = this.bitmap.data[idx + 2] * darkness; // Blue
-            // Alpha (idx + 3) remains unchanged
-        });
-
-        // 2. Load fonts
-        const [f16w, f32w] = await Promise.all([
-            (Jimp as any).loadFont(FONT_WHITE_16),
-            (Jimp as any).loadFont(FONT_WHITE_32),
-        ]);
-
-        const text1 = "Created by";
-        const text2 = "AUDITION AI";
-
-        // 3. Measure text to align right with margin
-        const text1Width = (Jimp as any).measureText(f16w, text1);
-        const text2Width = (Jimp as any).measureText(f32w, text2);
-        
-        const margin = 20;
-        const x1 = width - text1Width - margin;
-        const x2 = width - text2Width - margin;
-        
-        const yText = height - 60; // Position text near bottom
-
-        // 4. Render Text (White) on top of the darkened gradient
-        image.print(f16w, x1, yText - 20, text1);
-        image.print(f32w, x2, yText, text2);
-
-        console.log("Watermark rendered successfully.");
-        return await image.getBufferAsync((Jimp as any).MIME_PNG);
-    } catch (error) {
-        console.error("Failed to add watermark (Returning original):", error);
-        return imageBuffer; 
-    }
-};
-
-
 const handler: Handler = async (event: HandlerEvent) => {
     const s3Client = new S3Client({
         region: "auto",
@@ -144,7 +84,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             prompt, apiModel, characterImage, faceReferenceImage, styleImage, 
             aspectRatio, negativePrompt, seed, useUpscaler,
             imageSize = '1K', useGoogleSearch = false,
-            removeWatermark = false // Get param
+            removeWatermark = false 
         } = body;
 
         if (!prompt || !apiModel) return { statusCode: 400, body: JSON.stringify({ error: 'Prompt and apiModel are required.' }) };
@@ -162,7 +102,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         
         let totalCost = baseCost;
         if (useUpscaler) totalCost += COST_UPSCALE;
-        if (removeWatermark) totalCost += COST_REMOVE_WATERMARK; // Charge for watermark removal
+        if (removeWatermark) totalCost += COST_REMOVE_WATERMARK; 
 
         const { data: userData, error: userError } = await supabaseAdmin.from('users').select('diamonds, xp').eq('id', user.id).single();
         if (userError || !userData) return { statusCode: 404, body: JSON.stringify({ error: 'User not found.' }) };
@@ -187,10 +127,8 @@ const handler: Handler = async (event: HandlerEvent) => {
             fullPrompt += ` --no ${negativePrompt}`;
         }
 
-        // Gemini (Flash or Pro) logic
         const parts: any[] = [];
         
-        // Pre-process ALL images to match target aspect ratio
         const [
             processedCharacterImage,
             processedStyleImage,
@@ -201,10 +139,8 @@ const handler: Handler = async (event: HandlerEvent) => {
             processImageForGemini(faceReferenceImage, aspectRatio)
         ]);
         
-        // The text prompt is ALWAYS the first part.
         parts.push({ text: fullPrompt });
 
-        // Helper to add processed image parts
         const addImagePart = (imageDataUrl: string | null) => {
             if (!imageDataUrl) return;
             const [header, base64] = imageDataUrl.split(',');
@@ -216,17 +152,15 @@ const handler: Handler = async (event: HandlerEvent) => {
         addImagePart(processedStyleImage);
         addImagePart(processedFaceImage);
         
-        // --- STRICT CONFIGURATION CONSTRUCTION ---
         const config: any = { 
             responseModalities: [Modality.IMAGE],
             seed: seed ? Number(seed) : undefined,
         };
 
         if (isProModel) {
-            // Gemini 3 Pro Config
             config.imageConfig = {
                 aspectRatio: aspectRatio,
-                imageSize: imageSize // "1K", "2K", "4K"
+                imageSize: imageSize 
             };
             if (useGoogleSearch) {
                 config.tools = [{ googleSearch: {} }]; 
@@ -248,12 +182,17 @@ const handler: Handler = async (event: HandlerEvent) => {
         finalImageBase64 = imagePartResponse.inlineData.data;
         finalImageMimeType = imagePartResponse.inlineData.mimeType.includes('png') ? 'image/png' : 'image/jpeg';
         
-        // --- R2 Upload & Watermarking Logic ---
+        // --- WATERMARK LOGIC ---
         let imageBuffer = Buffer.from(finalImageBase64, 'base64');
 
-        // Apply Watermark if user did NOT choose to remove it
         if (!removeWatermark) {
-            imageBuffer = await addWatermark(imageBuffer);
+            // Construct URL for the watermark.png
+            // Assumes site is deployed or running locally on standard port.
+            // Fallback to relative path for consistency if deployed
+            const siteUrl = process.env.URL || 'http://localhost:8888';
+            const watermarkUrl = `${siteUrl}/watermark.png`;
+            
+            imageBuffer = await addSmartWatermark(imageBuffer, watermarkUrl);
         }
 
         const fileExtension = finalImageMimeType.split('/')[1] || 'png';
@@ -271,17 +210,10 @@ const handler: Handler = async (event: HandlerEvent) => {
         const newDiamondCount = userData.diamonds - totalCost;
         const newXp = userData.xp + XP_PER_GENERATION;
         
-        // Create detailed log description
         let logDescription = `Tạo ảnh`;
-        if (isProModel) {
-            logDescription += ` (Pro ${imageSize})`;
-        } else {
-            logDescription += ` (Flash)`;
-        }
-        
+        if (isProModel) logDescription += ` (Pro ${imageSize})`; else logDescription += ` (Flash)`;
         if (useUpscaler) logDescription += " + Upscale";
         if (removeWatermark) logDescription += " + NoWatermark";
-        
         logDescription += `: ${prompt.substring(0, 20)}...`;
         
         await Promise.all([

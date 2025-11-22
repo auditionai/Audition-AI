@@ -1,75 +1,12 @@
+
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { GoogleGenAI, Modality } from "@google/genai";
 import { supabaseAdmin } from './utils/supabaseClient';
 import { Buffer } from 'buffer';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
-import Jimp from 'jimp';
+import { addSmartWatermark } from './utils/watermarkService'; // Import mới
 
 const XP_PER_CHARACTER = 5;
-
-const FONT_URL_32 = "https://raw.githubusercontent.com/jimp-dev/jimp/main/packages/plugin-print/fonts/open-sans/open-sans-32-white/open-sans-32-white.fnt";
-const FONT_URL_16 = "https://raw.githubusercontent.com/jimp-dev/jimp/main/packages/plugin-print/fonts/open-sans/open-sans-16-white/open-sans-16-white.fnt";
-
-const loadFontSafe = async (url: string) => {
-    try {
-        return await (Jimp as any).loadFont(url);
-    } catch (e) {
-        console.error(`Failed to load font ${url}:`, e);
-        return null;
-    }
-};
-
-// Add Watermark Function (Gradient Vignette + Text)
-const addWatermark = async (imageBuffer: Buffer): Promise<Buffer> => {
-    try {
-        console.log("Starting watermark process (Group/Gradient)...");
-        const image = await (Jimp as any).read(imageBuffer);
-        
-        const width = image.getWidth();
-        const height = image.getHeight();
-
-        // 1. Create Gradient Vignette
-        const gradientHeight = 140;
-        const startY = Math.max(0, height - gradientHeight);
-        
-        image.scan(0, startY, width, gradientHeight, function (x: number, y: number, idx: number) {
-            const ratio = (y - startY) / gradientHeight;
-            const opacity = Math.pow(ratio, 1.5) * 0.85; 
-
-            this.bitmap.data[idx + 0] = this.bitmap.data[idx + 0] * (1 - opacity);
-            this.bitmap.data[idx + 1] = this.bitmap.data[idx + 1] * (1 - opacity);
-            this.bitmap.data[idx + 2] = this.bitmap.data[idx + 2] * (1 - opacity);
-        });
-
-        // 2. Load fonts
-        const font32 = await loadFontSafe(FONT_URL_32);
-        const font16 = await loadFontSafe(FONT_URL_16);
-
-        if (font32 && font16) {
-            const text1 = "Created by";
-            const text2 = "AUDITION AI";
-
-            const text1Width = (Jimp as any).measureText(font16, text1);
-            const text2Width = (Jimp as any).measureText(font32, text2);
-            
-            const margin = 24;
-            const x1 = width - text1Width - margin;
-            const x2 = width - text2Width - margin;
-            
-            const yText = height - 55; 
-
-            // Print Text
-            image.print(font16, x1, yText - 22, text1);
-            image.print(font32, x2, yText, text2);
-            console.log("Group watermark rendered.");
-        }
-
-        return await image.getBufferAsync((Jimp as any).MIME_PNG);
-    } catch (error) {
-        console.error("Failed to add watermark in group worker:", error);
-        return imageBuffer;
-    }
-};
 
 const failJob = async (jobId: string, reason: string, userId: string, cost: number) => {
     console.error(`[WORKER] Failing job ${jobId}: ${reason}`);
@@ -194,7 +131,6 @@ const handler: Handler = async (event: HandlerEvent) => {
             await updateJobProgress(jobId, jobPromptData, 'Đang tạo bối cảnh từ prompt...');
             const bgPrompt = `Create a high-quality, cinematic background scene described as: "${prompt}". The scene should have a style of "${style}". Do NOT include any people or characters.`;
             
-            // Ensure proper config for background generation
             const bgConfig: any = { responseModalities: [Modality.IMAGE] };
             if (isPro) {
                  bgConfig.imageConfig = { imageSize, aspectRatio };
@@ -207,7 +143,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             finalBackgroundData = bgImagePart.inlineData;
             await new Promise(resolve => setTimeout(resolve, 2000));
 
-            // Generate characters (standard model)
+            // Generate characters
             for (let i = 0; i < numCharacters; i++) {
                 await updateJobProgress(jobId, jobPromptData, `Đang xử lý nhân vật ${i + 1}/${numCharacters}...`);
                 const char = characters[i];
@@ -246,7 +182,6 @@ const handler: Handler = async (event: HandlerEvent) => {
             ...generatedCharacters.map(charData => ({ inlineData: charData }))
         ];
         
-        // Final Config: Apply strict Pro config if selected
         const finalConfig: any = { 
             responseModalities: [Modality.IMAGE] 
         };
@@ -273,10 +208,12 @@ const handler: Handler = async (event: HandlerEvent) => {
         const finalImageBase64 = finalImagePart.inlineData.data;
         const finalImageMimeType = finalImagePart.inlineData.mimeType;
 
-        // --- WATERMARK LOGIC (Gradient + Text) ---
+        // --- WATERMARK LOGIC ---
         let imageBuffer = Buffer.from(finalImageBase64, 'base64');
         if (!removeWatermark) {
-            imageBuffer = await addWatermark(imageBuffer);
+            const siteUrl = process.env.URL || 'http://localhost:8888';
+            const watermarkUrl = `${siteUrl}/watermark.png`;
+            imageBuffer = await addSmartWatermark(imageBuffer, watermarkUrl);
         }
         // --- END WATERMARK LOGIC ---
 

@@ -2,7 +2,7 @@
 import Jimp from 'jimp';
 import { Buffer } from 'buffer';
 
-// Danh sách các domain dự phòng để tải logo nếu domain chính bị lỗi
+// Danh sách các domain dự phòng để tải logo
 const FALLBACK_LOGOS = [
     'https://auditionai.io.vn/watermark.png',
     'https://audition-ai.netlify.app/watermark.png',
@@ -11,12 +11,11 @@ const FALLBACK_LOGOS = [
 
 const fetchImageBuffer = async (url: string): Promise<Buffer | null> => {
     try {
-        console.log(`[Watermark] Trying to fetch logo from: ${url}`);
-        const response = await fetch(url);
-        if (!response.ok) {
-            console.warn(`[Watermark] Failed to fetch ${url}: ${response.status} ${response.statusText}`);
-            return null;
-        }
+        // Add User-Agent to avoid being blocked by some CDNs/Firewalls
+        const response = await fetch(url, {
+            headers: { 'User-Agent': 'Mozilla/5.0 (AuditionAI-Serverless)' }
+        });
+        if (!response.ok) return null;
         const arrayBuffer = await response.arrayBuffer();
         return Buffer.from(arrayBuffer);
     } catch (error) {
@@ -27,55 +26,46 @@ const fetchImageBuffer = async (url: string): Promise<Buffer | null> => {
 
 export const addSmartWatermark = async (imageBuffer: Buffer, primaryUrl: string): Promise<Buffer> => {
     try {
-        console.log(`--- [Watermark Service] Processing ---`);
+        console.log(`--- [Watermark Service] Processing Image Size: ${imageBuffer.length} bytes ---`);
         const image = await (Jimp as any).read(imageBuffer);
         
         const width = image.getWidth();
         const height = image.getHeight();
 
-        // 1. Safe Gradient Vignette (Làm tối phần dưới ảnh để logo nổi bật)
-        const gradientHeight = Math.floor(height * 0.3); // Tăng lên 30%
+        // 1. Gradient Vignette (Darken bottom for better visibility)
+        const gradientHeight = Math.floor(height * 0.3); 
         const startY = height - gradientHeight;
         
         image.scan(0, startY, width, gradientHeight, function (x: number, y: number, idx: number) {
             const ratio = (y - startY) / gradientHeight;
-            const darkness = Math.pow(ratio, 1.2) * 0.7; // Tối hơn một chút (0.7)
+            const darkness = Math.pow(ratio, 1.2) * 0.7; 
             
-            const r = this.bitmap.data[idx + 0];
-            const g = this.bitmap.data[idx + 1];
-            const b = this.bitmap.data[idx + 2];
-
-            this.bitmap.data[idx + 0] = r * (1 - darkness);
-            this.bitmap.data[idx + 1] = g * (1 - darkness);
-            this.bitmap.data[idx + 2] = b * (1 - darkness);
+            this.bitmap.data[idx + 0] *= (1 - darkness); // R
+            this.bitmap.data[idx + 1] *= (1 - darkness); // G
+            this.bitmap.data[idx + 2] *= (1 - darkness); // B
         });
 
-        // 2. Load Logo with Fallbacks
+        // 2. Try Loading Logo
         let logo: any = null;
-        
-        // Tạo danh sách URL cần thử: URL truyền vào -> Fallback 1 -> Fallback 2...
-        // Loại bỏ trùng lặp
         const urlsToTry = Array.from(new Set([primaryUrl, ...FALLBACK_LOGOS]));
 
         for (const url of urlsToTry) {
+            if (!url) continue;
             const buffer = await fetchImageBuffer(url);
             if (buffer) {
                 try {
                     logo = await (Jimp as any).read(buffer);
-                    console.log(`[Watermark] Successfully loaded logo from: ${url}`);
-                    break; // Đã tải được, thoát vòng lặp
-                } catch (readError) {
-                    console.warn(`[Watermark] Buffer loaded but Jimp failed to read from: ${url}`);
-                }
+                    console.log(`[Watermark] Loaded logo from: ${url}`);
+                    break; 
+                } catch (e) {}
             }
         }
 
         if (logo) {
-            // Resize logo (30% chiều rộng ảnh chính)
-            const targetLogoWidth = width * 0.3;
+            // --- IMAGE LOGO MODE ---
+            const targetLogoWidth = width * 0.35; // 35% width
             logo.resize(targetLogoWidth, (Jimp as any).AUTO);
 
-            // Vị trí: Góc dưới phải
             const margin = width * 0.05;
             const x = width - logo.getWidth() - margin;
             const y = height - logo.getHeight() - margin;
@@ -86,9 +76,11 @@ export const addSmartWatermark = async (imageBuffer: Buffer, primaryUrl: string)
                 opacityDest: 1
             });
         } else {
-            // 3. Text Fallback (Nếu KHÔNG tải được bất kỳ logo nào)
-            console.warn("[Watermark] All logo URLs failed. Using Text Fallback.");
+            // --- TEXT FALLBACK MODE (When logo fails) ---
+            console.warn("[Watermark] Logo load failed. Using Text Fallback.");
+            
             try {
+                // Try loading font
                 const font = await (Jimp as any).loadFont((Jimp as any).FONT_SANS_32_WHITE);
                 const text = "AUDITION AI";
                 
@@ -99,12 +91,15 @@ export const addSmartWatermark = async (imageBuffer: Buffer, primaryUrl: string)
                 const x = width - textWidth - margin;
                 const y = height - textHeight - margin;
 
-                // In text bóng đổ
-                const fontBlack = await (Jimp as any).loadFont((Jimp as any).FONT_SANS_32_BLACK);
-                image.print(fontBlack, x + 2, y + 2, text);
+                // Draw a subtle background for the text to ensure readability
+                // (Optional: Draw a semi-transparent box behind text if needed, 
+                // but the vignette step above should handle it)
+
                 image.print(font, x, y, text);
+                
             } catch (fontError) {
-                 console.error("[Watermark] Failed to add text watermark fallback", fontError);
+                console.error("[Watermark] Font load failed:", fontError);
+                // Absolute Last Resort: Draw simple pixels or ignore
             }
         }
 
@@ -112,6 +107,6 @@ export const addSmartWatermark = async (imageBuffer: Buffer, primaryUrl: string)
 
     } catch (error) {
         console.error("[Watermark Service] Critical Error:", error);
-        return imageBuffer; 
+        return imageBuffer; // Return original on crash
     }
 };

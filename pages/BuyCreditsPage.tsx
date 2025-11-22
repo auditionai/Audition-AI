@@ -16,39 +16,41 @@ const PricingCard: React.FC<{ pkg: CreditPackage; onBuy: () => void; isProcessin
     const { t, language } = useTranslation();
     const totalCredits = pkg.credits_amount + pkg.bonus_credits;
     
-    // Determine visual tier based on price for gradient styling
+    // Determine visual tier based on price for gradient styling (Background Card)
     let tierClass = 'from-blue-500/20 to-purple-500/20 border-blue-500/30';
     let accentColor = 'text-blue-400';
     let glowColor = 'shadow-blue-500/20';
     
+    // Button Style Logic - Explicitly defined for high contrast
+    let buttonStyle = "bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-blue-500/40";
+
     if (pkg.price_vnd >= 50000) {
         tierClass = 'from-purple-500/20 to-pink-500/20 border-purple-500/30';
         accentColor = 'text-purple-400';
         glowColor = 'shadow-purple-500/20';
+        // Fix: Solid vibrant pink/purple for the 50k tier
+        buttonStyle = "bg-gradient-to-r from-fuchsia-600 to-pink-600 text-white shadow-pink-500/40";
     }
     if (pkg.price_vnd >= 100000) {
         tierClass = 'from-yellow-500/20 to-orange-500/20 border-yellow-500/30';
         accentColor = 'text-yellow-400';
         glowColor = 'shadow-yellow-500/20';
+        buttonStyle = "bg-gradient-to-r from-amber-500 to-yellow-500 text-black font-black shadow-yellow-500/40";
     }
     if (pkg.price_vnd >= 500000) {
         tierClass = 'from-red-500/20 to-rose-600/20 border-red-500/30';
         accentColor = 'text-red-400';
         glowColor = 'shadow-red-500/40';
+        buttonStyle = "bg-gradient-to-r from-rose-600 to-red-600 text-white shadow-red-500/40";
     }
 
     // Helper to translate tags safely
     const getTranslatedTag = (tag: string | null | undefined) => {
         if (!tag) return null;
-        // Try to translate using known tags key
         const key = `creator.buyCredits.tags.${tag}`;
         const translated = t(key);
-        // If key exists in translation map (i.e. not returned as key string), use it
         return translated !== key ? translated : t(tag);
     };
-
-    // Correctly remove opacity modifier from all gradient colors for the button
-    const buttonGradientClass = tierClass.replace(/\/20/g, '');
 
     return (
         <div 
@@ -77,7 +79,7 @@ const PricingCard: React.FC<{ pkg: CreditPackage; onBuy: () => void; isProcessin
                     <i className={`ph-fill ph-diamonds-four text-5xl ${accentColor} drop-shadow-[0_0_10px_rgba(255,255,255,0.3)] transform transition-transform duration-700 group-hover:rotate-[360deg]`}></i>
                 </div>
 
-                {/* Content - Fixed Name Format */}
+                {/* Content */}
                 <h3 className="text-lg font-bold text-white mb-1">AU AI {pkg.credits_amount}</h3>
                 
                 <div className="flex items-baseline gap-1 mb-1">
@@ -93,12 +95,13 @@ const PricingCard: React.FC<{ pkg: CreditPackage; onBuy: () => void; isProcessin
 
                 <div className="mt-auto w-full pt-4 border-t border-white/5">
                     <button
+                        type="button"
                         onClick={onBuy}
                         disabled={isProcessing}
-                        className={`w-full py-3 rounded-lg font-bold text-sm transition-all duration-300 transform active:scale-95 flex items-center justify-center gap-2
+                        className={`w-full py-3 rounded-lg font-bold text-sm transition-all duration-300 transform active:scale-95 flex items-center justify-center gap-2 shadow-lg
                             ${isProcessing 
                                 ? 'bg-gray-600 cursor-not-allowed text-gray-400' 
-                                : `bg-gradient-to-r ${buttonGradientClass} text-white hover:brightness-110 shadow-lg`
+                                : `${buttonStyle} hover:brightness-110 hover:shadow-xl`
                             }
                         `}
                     >

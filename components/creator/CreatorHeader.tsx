@@ -112,6 +112,7 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
           {/* Center: Desktop Navigation */}
            <nav className="hidden md:flex items-center gap-2">
                 <button
+                  type="button"
                   onClick={() => handleNavClick('leaderboard')}
                   className={`themed-nav-button leaderboard ${activeTab === 'leaderboard' ? 'is-active' : ''}`}
                   >
@@ -119,6 +120,7 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
                     <span className="hidden md:inline">{t('creator.header.nav.leaderboard')}</span>
                 </button>
                 <button
+                  type="button"
                   onClick={onCheckInClick}
                   className="themed-nav-button checkin"
                 >
@@ -134,6 +136,7 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
                 
                 {/* Shop Button */}
                 <button
+                  type="button"
                   onClick={() => handleNavClick('shop')}
                   className={`themed-nav-button shop ${activeTab === 'shop' ? 'is-active' : ''}`}
                   >
@@ -142,6 +145,7 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
                 </button>
 
                 <button
+                  type="button"
                   onClick={() => handleNavClick('my-creations')}
                   className={`themed-nav-button creations ${activeTab === 'my-creations' ? 'is-active' : ''}`}
                   >
@@ -152,6 +156,7 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
                 {/* Admin Gallery Button */}
                 {user.is_admin && (
                     <button
+                      type="button"
                       onClick={() => handleNavClick('admin-gallery')}
                       className={`themed-nav-button admin ${activeTab === 'admin-gallery' ? 'is-active' : ''}`}
                       >
@@ -170,6 +175,7 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
 
             {/* Mobile Top Up */}
             <button
+              type="button"
               onClick={onTopUpClick}
               className="md:hidden flex items-center gap-1.5 px-3 py-1.5 rounded-full cursor-pointer transition-transform active:scale-95 bg-skin-fill-secondary border border-skin-border"
             >
@@ -179,7 +185,7 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
             
             {/* Desktop Top Up */}
             <div className="hidden md:block">
-              <button onClick={onTopUpClick} className="themed-top-up-button">
+              <button type="button" onClick={onTopUpClick} className="themed-top-up-button">
                   <div className="themed-top-up-button__icon-wrapper">
                       <i className="ph-fill ph-diamonds-four"></i>
                   </div>
@@ -192,6 +198,7 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
             
             {/* Messages Button */}
             <button
+              type="button"
               onClick={() => handleNavClick('messages')}
               className={`themed-notification-button p-2.5 md:p-2 ${activeTab === 'messages' ? 'text-skin-base' : ''}`}
               title={t('creator.header.nav.messages')}
@@ -202,6 +209,7 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
             {/* Notification Bell */}
             <div className="relative" ref={notificationRef}>
                 <button
+                  type="button"
                   onClick={handleNotificationClick}
                   className="themed-notification-button p-2.5 md:p-2"
                 >
@@ -223,7 +231,7 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
                     </span>
                     <UserBadge titleId={user.equipped_title_id} level={user.level} className="scale-90 origin-right" />
                 </div>
-                <button onClick={() => setDropdownOpen(!isDropdownOpen)} className="flex items-center gap-3 cursor-pointer">
+                <button type="button" onClick={() => setDropdownOpen(!isDropdownOpen)} className="flex items-center gap-3 cursor-pointer">
                   <UserAvatar url={user.photo_url} alt={user.display_name} frameId={user.equipped_frame_id} level={user.level} size="md" />
                 </button>
               {isDropdownOpen && (
@@ -244,20 +252,20 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
                      
                      {/* NEW: Profile Link */}
                      <div className="py-1 mt-1">
-                        <button onClick={() => handleNavClick('profile')} className="flex items-center gap-3 w-full text-left px-2 py-2 text-sm rounded-md cursor-pointer text-skin-base hover:bg-white/10 font-bold">
+                        <button type="button" onClick={() => handleNavClick('profile')} className="flex items-center gap-3 w-full text-left px-2 py-2 text-sm rounded-md cursor-pointer text-skin-base hover:bg-white/10 font-bold">
                             <i className="ph-fill ph-user-circle text-pink-400"></i>
                             {t('creator.header.nav.profile')}
                         </button>
                      </div>
 
                      <div className="py-1">
-                        <button onClick={() => handleNavClick('settings')} className={`flex items-center gap-3 w-full text-left px-2 py-2 text-sm rounded-md cursor-pointer ${activeTab === 'settings' ? 'bg-skin-accent/20 text-skin-base' : 'text-skin-muted hover:bg-white/10'}`}>
+                        <button type="button" onClick={() => handleNavClick('settings')} className={`flex items-center gap-3 w-full text-left px-2 py-2 text-sm rounded-md cursor-pointer ${activeTab === 'settings' ? 'bg-skin-accent/20 text-skin-base' : 'text-skin-muted hover:bg-white/10'}`}>
                             <i className="ph-fill ph-gear"></i>
                             {t('creator.header.userMenu.settings')}
                         </button>
                      </div>
                      <div className="py-1 border-t border-skin-border mt-1">
-                        <button onClick={handleLogout} className="flex items-center gap-3 w-full text-left px-2 py-2 text-sm text-skin-muted rounded-md hover:bg-red-500/20 hover:text-red-400 transition-colors cursor-pointer">
+                        <button type="button" onClick={handleLogout} className="flex items-center gap-3 w-full text-left px-2 py-2 text-sm text-skin-muted rounded-md hover:bg-red-500/20 hover:text-red-400 transition-colors cursor-pointer">
                           <i className="ph-fill ph-sign-out"></i>
                           {t('creator.header.userMenu.logout')}
                         </button>

@@ -1,11 +1,14 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode, useMemo, useRef } from 'react';
 import { getSupabaseClient } from '../utils/supabaseClient';
-import type { SupabaseClient, Session } from '@supabase/supabase-js';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { User, Announcement } from '../types';
 import { calculateLevelFromXp } from '../utils/rankUtils';
 
 declare const google: any; // Declare the google object for Google Identity Services
+
+// Fix: Session type from older @supabase/supabase-js might not be exported or compatible with v2 logic
+type Session = any;
 
 const getVNDateString = (date: Date) => {
     // UTC+7
@@ -15,7 +18,7 @@ const getVNDateString = (date: Date) => {
 
 const getRouteFromPath = (path: string): string => {
     const pathSegment = path.split('/').filter(Boolean)[0];
-    const validRoutes = ['tool', 'leaderboard', 'my-creations', 'settings', 'buy-credits', 'gallery', 'admin-gallery', 'profile', 'user'];
+    const validRoutes = ['tool', 'leaderboard', 'my-creations', 'settings', 'buy-credits', 'gallery', 'admin-gallery', 'profile', 'user', 'shop', 'messages'];
     if (validRoutes.includes(pathSegment)) {
         return pathSegment;
     }
@@ -55,7 +58,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+    
+    // Initial route handling
     const [route, setRoute] = useState(() => getRouteFromPath(window.location.pathname));
+    
     const [reward, setReward] = useState<{ diamonds: number; xp: number } | null>(null);
     const [announcement, setAnnouncement] = useState<Announcement | null>(null);
     const [showAnnouncementModal, setShowAnnouncementModal] = useState(false);
@@ -71,15 +77,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }, 4000); 
     }, []);
     
+    // FIX: Improved navigate function to be more responsive
     const navigate = useCallback((path: string) => {
+        const baseRoute = path.split('/')[0];
         const targetPath = path === 'home' ? '/' : `/${path}`;
+        
+        // 1. Immediate State Update (Responsiveness)
+        setRoute(baseRoute);
+        
+        // 2. Update URL (Consistency)
         if (window.location.pathname !== targetPath) {
             window.history.pushState({}, '', targetPath);
         }
-        // For dynamic routes (e.g., user/123), we simplify the route state to just the base 'user'
-        // but the URL stays correct.
-        const baseRoute = path.split('/')[0]; 
-        setRoute(baseRoute);
+        
+        // 3. Reset Scroll
         window.scrollTo(0, 0);
     }, []);
     
@@ -115,7 +126,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 },
             });
             
-            // Any non-OK response from the now-robust server function is a genuine error.
             if (!response.ok) {
                 const errorData = await response.json();
                 throw new Error(errorData.error || `Server responded with ${response.status}`);
@@ -131,18 +141,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             return null;
         } catch (error: any) {
             console.error('Error fetching user profile via function:', error);
-            // This toast is now shown only on a definitive failure from the server.
-            showToast(error.message || "Không thể tải hồ sơ người dùng. Vui lòng thử đăng nhập lại.", "error");
+            showToast(error.message || "Không thể tải hồ sơ người dùng.", "error");
             return null;
         }
     }, [showToast]);
 
     const fetchAndSetUser = useCallback(async (session: Session) => {
-        // The server-side function now handles retries, so we just call it once.
         const profile = await fetchUserProfile(session);
         
         if (!profile) {
-            // The error toast is already shown inside fetchUserProfile on failure.
             console.error("CRITICAL: Server function failed to return a user profile.");
             setUser(null);
             return;
@@ -150,7 +157,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         
         let finalProfile = { ...profile };
 
-        // If it's a new user (diamonds is at default 25), call function to update to 10
         if (finalProfile.diamonds === 25) {
              try {
                 const response = await fetch('/.netlify/functions/set-initial-diamonds', {
@@ -160,7 +166,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 if (response.ok) {
                     const data = await response.json();
                     if (data.diamonds !== undefined) {
-                        // Mutate the profile object before setting state to prevent UI flicker
                         finalProfile.diamonds = data.diamonds;
                     }
                 }
@@ -183,27 +188,29 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 }
                 setSupabase(supabaseClient);
 
-                // Log app visit once per session
                 if (!visitLogged.current) {
                     visitLogged.current = true;
-                    // We don't need to await this, let it run in the background
                     fetch('/.netlify/functions/log-app-visit', { method: 'POST' });
                 }
 
-                // FIX: Use Supabase v2 async method `getSession()`.
-                const { data: { session: currentSession } } = await supabaseClient.auth.getSession();
+                // Use 'any' cast to support v2 method
+                const { data: { session: currentSession } } = await (supabaseClient.auth as any).getSession();
                 setSession(currentSession);
                 
                 if (currentSession) {
                     await fetchAndSetUser(currentSession);
-                    if (getRouteFromPath(window.location.pathname) === 'home') {
+                    // Ensure route logic respects logged-in state
+                    const currentRoute = getRouteFromPath(window.location.pathname);
+                    if (currentRoute === 'home') {
                         navigate('tool');
+                    } else {
+                        setRoute(currentRoute);
                     }
                 }
 
-                // FIX: Use Supabase v2 destructuring for onAuthStateChange.
-                const { data: { subscription } } = supabaseClient.auth.onAuthStateChange(
-                    async (_event, newSession) => {
+                // Use 'any' cast to support v2 method
+                const { data: { subscription } } = (supabaseClient.auth as any).onAuthStateChange(
+                    async (_event: string, newSession: any) => {
                         setSession(newSession);
                         if (newSession?.user) {
                             await fetchAndSetUser(newSession);
@@ -224,10 +231,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         };
 
         initialize();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
     
-    // Effect to check for new announcements when user logs in or data changes
+    // Effect to check for new announcements
     useEffect(() => {
         const checkAnnouncement = async () => {
             if (user && session) {
@@ -251,10 +257,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const markAnnouncementAsRead = useCallback(async () => {
         if (!announcement || !session) return;
-        
-        setShowAnnouncementModal(false); // Close modal immediately for better UX
-        
-        // Update local state optimistically
+        setShowAnnouncementModal(false); 
         updateUserProfile({ last_announcement_seen_id: announcement.id });
         
         try {
@@ -268,7 +271,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             });
         } catch (e) {
             console.error("Failed to mark announcement as read:", e);
-            // Optionally, revert the optimistic update on failure, though it's low-risk
         }
     }, [announcement, session, updateUserProfile]);
 
@@ -296,7 +298,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (session && supabase) {
             activityInterval = setInterval(async () => {
                 try {
-                    // This now handles both XP and activity logging
                     await fetch('/.netlify/functions/record-user-activity', {
                         method: 'POST',
                         headers: { Authorization: `Bearer ${session.access_token}` },
@@ -325,7 +326,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const login = useCallback(async (): Promise<boolean> => {
         const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
         if (!supabase || !googleClientId || typeof google === 'undefined') {
-            showToast("Chức năng đăng nhập chưa được cấu hình. Vui lòng liên hệ quản trị viên.", "error");
+            showToast("Chức năng đăng nhập chưa được cấu hình.", "error");
             return false;
         }
 
@@ -335,13 +336,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 return;
             }
             try {
-                // FIX: Use Supabase v2 method `signInWithIdToken`.
-                const { error } = await supabase.auth.signInWithIdToken({
+                // Use 'any' cast to support v2 method
+                const { error } = await (supabase.auth as any).signInWithIdToken({
                     provider: 'google',
                     token: response.credential,
                 });
                 if (error) throw error;
-                // Auth state change will handle navigation and user profile fetching.
             } catch (error: any) {
                 showToast(`Đăng nhập thất bại: ${error.message}`, 'error');
             }
@@ -356,16 +356,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             return true;
         } catch (error: any) {
             console.error("Google One Tap prompt error:", error);
-            showToast("Không thể hiển thị cửa sổ đăng nhập. Vui lòng thử lại.", "error");
+            showToast("Không thể hiển thị cửa sổ đăng nhập.", "error");
             return false;
         }
     }, [supabase, showToast]);
 
-    // --- New Email Auth Methods ---
     const loginWithEmail = useCallback(async (email: string, password: string): Promise<boolean> => {
         if (!supabase) return false;
         try {
-            const { error } = await supabase.auth.signInWithPassword({ email, password });
+            // Use 'any' cast to support v2 method
+            const { error } = await (supabase.auth as any).signInWithPassword({ email, password });
             if (error) throw error;
             return true;
         } catch (error: any) {
@@ -377,10 +377,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const registerWithEmail = useCallback(async (email: string, password: string, displayName: string): Promise<boolean> => {
         if (!supabase) return false;
         try {
-             // Using a default avatar
             const defaultAvatar = `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(email)}`;
             
-            const { error } = await supabase.auth.signUp({
+            // Use 'any' cast to support v2 method
+            const { error } = await (supabase.auth as any).signUp({
                 email,
                 password,
                 options: {
@@ -391,8 +391,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 }
             });
             if (error) throw error;
-            // If email confirmation is disabled, they are logged in.
-            // If enabled, they need to check email. We assume disabled for demo flow or handle notification.
             return true;
         } catch (error: any) {
             showToast(error.message || "Đăng ký thất bại.", "error");
@@ -403,8 +401,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const resetPassword = useCallback(async (email: string): Promise<boolean> => {
         if (!supabase) return false;
         try {
-            // Redirect user to the app after clicking the reset link
-            const { error } = await supabase.auth.resetPasswordForEmail(email, {
+            // Use 'any' cast to support v2 method
+            const { error } = await (supabase.auth as any).resetPasswordForEmail(email, {
                 redirectTo: window.location.origin,
             });
             if (error) throw error;
@@ -418,8 +416,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const logout = useCallback(async () => {
         if (!supabase) return;
-        // The `signOut` method is correct for v2.
-        await supabase.auth.signOut();
+        // Use 'any' cast to support v2 method
+        await (supabase.auth as any).signOut();
     }, [supabase]);
 
     const value = useMemo(() => ({

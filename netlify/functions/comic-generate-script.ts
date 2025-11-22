@@ -16,7 +16,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     if (authError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'Invalid token.' }) };
 
     try {
-        const { premise, genre, artStyle, pageCount, characters } = JSON.parse(event.body || '{}');
+        const { premise, genre, artStyle, pageCount, characters, language } = JSON.parse(event.body || '{}');
         
         if (!premise) return { statusCode: 400, body: JSON.stringify({ error: 'Missing premise.' }) };
 
@@ -43,6 +43,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         // 3. Construct Prompt - PHASE 1: OUTLINE ONLY
         // We ask for a skeletal structure. This is very fast.
         const characterNames = characters.map((c: any) => c.name).join(', ');
+        const targetLanguage = language || 'Tiếng Việt';
 
         const prompt = `
             You are a professional comic book writer.
@@ -52,10 +53,12 @@ const handler: Handler = async (event: HandlerEvent) => {
             **Genre:** ${genre}
             **Target Length:** Approximately ${pageCount} pages (Total 4-6 panels).
             **Characters:** ${characterNames}
+            **Language for Summary:** ${targetLanguage}
             
             **Requirement:**
             Break the story down into a sequence of panels. For each panel, provide a brief 'plot_summary' of what happens.
             Do NOT write detailed visual descriptions or dialogue yet. Just the story beats.
+            The 'plot_summary' MUST be written in ${targetLanguage}.
             
             **Output Format:** JSON Array of objects.
         `;

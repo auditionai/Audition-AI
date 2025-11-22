@@ -48,7 +48,8 @@ const handler: Handler = async (event: HandlerEvent) => {
         if (creatorsError) throw creatorsError;
 
         // Step 3: Combine Data
-        const creatorMap = new Map((creators || []).map((c: any) => [c.id, c]));
+        // Explicitly type Map to return 'any' for values so properties can be accessed
+        const creatorMap = new Map<string, any>((creators || []).map((c: any) => [c.id, c]));
 
         const processedData = images.map((image: any) => {
             const creatorData = creatorMap.get(image.user_id);

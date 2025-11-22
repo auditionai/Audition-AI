@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useGameConfig } from '../../contexts/GameConfigContext';
@@ -100,7 +99,7 @@ const GameConfigManager: React.FC = () => {
     };
 
     // --- Cosmetics Logic ---
-    const handleEditCosmetic = (cosmetic: CosmeticItem | null, defaultType: 'frame' | 'title') => {
+    const handleEditCosmetic = (cosmetic: CosmeticItem | null, defaultType: 'frame' | 'title' | 'name_effect') => {
         let cosmeticToEdit = cosmetic ? { ...cosmetic } : null;
         
         if (cosmeticToEdit && !cosmeticToEdit.name && cosmeticToEdit.nameKey) {
@@ -113,7 +112,7 @@ const GameConfigManager: React.FC = () => {
             rarity: 'common', 
             price: 0, 
             unlockCondition: { level: 0 },
-            cssClass: defaultType === 'title' ? 'title-basic' : 'frame-none'
+            cssClass: defaultType === 'title' ? 'title-basic' : (defaultType === 'name_effect' ? 'name-effect-base' : 'frame-none')
         } as any);
         
         setUploadIconFile(null);
@@ -365,6 +364,7 @@ const GameConfigManager: React.FC = () => {
                                 <select value={editingCosmetic.type} onChange={e => setEditingCosmetic({...editingCosmetic, type: e.target.value as any})} className="auth-input mt-1" disabled>
                                     <option value="frame">Khung Avatar</option>
                                     <option value="title">Danh Hiệu</option>
+                                    <option value="name_effect">Hiệu Ứng Tên</option>
                                 </select>
                             </div>
                             <div>

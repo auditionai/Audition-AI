@@ -10,6 +10,7 @@ import { CosmeticItem } from '../types';
 import ConfirmationModal from '../components/ConfirmationModal';
 import UserAvatar from '../components/common/UserAvatar';
 import UserBadge from '../components/common/UserBadge';
+import UserName from '../components/common/UserName'; // Import UserName
 import { useTranslation } from '../hooks/useTranslation';
 
 const ShopPage: React.FC = () => {
@@ -19,7 +20,7 @@ const ShopPage: React.FC = () => {
     
     const [items, setItems] = useState<CosmeticItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<'frame' | 'title'>('frame');
+    const [activeTab, setActiveTab] = useState<'frame' | 'title' | 'name_effect'>('frame');
     const [selectedItem, setSelectedItem] = useState<CosmeticItem | null>(null);
     const [isBuying, setIsBuying] = useState(false);
 
@@ -132,18 +133,25 @@ const ShopPage: React.FC = () => {
                 </div>
 
                 {/* Tabs */}
-                <div className="flex justify-center gap-4 mb-8">
+                <div className="flex justify-center gap-2 md:gap-4 mb-8 overflow-x-auto pb-2">
                     <button 
                         onClick={() => setActiveTab('frame')}
-                        className={`px-8 py-3 rounded-full font-bold text-lg transition-all ${activeTab === 'frame' ? 'bg-skin-accent text-white shadow-lg shadow-skin-accent/30 scale-105' : 'bg-skin-fill-secondary text-skin-muted hover:bg-white/10'}`}
+                        className={`px-4 md:px-8 py-3 rounded-full font-bold text-sm md:text-lg transition-all whitespace-nowrap ${activeTab === 'frame' ? 'bg-skin-accent text-white shadow-lg shadow-skin-accent/30 scale-105' : 'bg-skin-fill-secondary text-skin-muted hover:bg-white/10'}`}
                     >
                         {t('creator.shop.tabs.frames')}
                     </button>
                     <button 
                         onClick={() => setActiveTab('title')}
-                        className={`px-8 py-3 rounded-full font-bold text-lg transition-all ${activeTab === 'title' ? 'bg-skin-accent text-white shadow-lg shadow-skin-accent/30 scale-105' : 'bg-skin-fill-secondary text-skin-muted hover:bg-white/10'}`}
+                        className={`px-4 md:px-8 py-3 rounded-full font-bold text-sm md:text-lg transition-all whitespace-nowrap ${activeTab === 'title' ? 'bg-skin-accent text-white shadow-lg shadow-skin-accent/30 scale-105' : 'bg-skin-fill-secondary text-skin-muted hover:bg-white/10'}`}
                     >
                         {t('creator.shop.tabs.titles')}
+                    </button>
+                    {/* NEW TAB */}
+                    <button 
+                        onClick={() => setActiveTab('name_effect')}
+                        className={`px-4 md:px-8 py-3 rounded-full font-bold text-sm md:text-lg transition-all whitespace-nowrap ${activeTab === 'name_effect' ? 'bg-skin-accent text-white shadow-lg shadow-skin-accent/30 scale-105' : 'bg-skin-fill-secondary text-skin-muted hover:bg-white/10'}`}
+                    >
+                        Hiệu Ứng Tên
                     </button>
                 </div>
 
@@ -173,10 +181,14 @@ const ShopPage: React.FC = () => {
                                     <div className="absolute inset-0 bg-gradient-to-b from-white/5 to-transparent rounded-lg opacity-0 group-hover:opacity-100 transition"></div>
                                     {item.type === 'frame' ? (
                                         <UserAvatar url={user.photo_url} alt="preview" size="lg" frameId={item.id} className="scale-110" />
-                                    ) : (
-                                        // Manually constructing title preview for shop to force use of this specific title
+                                    ) : item.type === 'title' ? (
                                         <div className="scale-125">
                                             <UserBadge titleId={item.id} level={user.level} />
+                                        </div>
+                                    ) : (
+                                        // Name Effect Preview
+                                        <div className="scale-125 p-2 bg-black/40 rounded-lg">
+                                            <UserName name={user.display_name} effectId={item.id} className="text-lg" />
                                         </div>
                                     )}
                                 </div>

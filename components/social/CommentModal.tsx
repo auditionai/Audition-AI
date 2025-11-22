@@ -4,6 +4,7 @@ import Modal from '../common/Modal';
 import { Post, PostComment } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import UserAvatar from '../common/UserAvatar';
+import UserName from '../common/UserName'; // Import UserName
 import { calculateLevelFromXp } from '../../utils/rankUtils';
 
 interface CommentModalProps {
@@ -38,7 +39,7 @@ const CommentModal: React.FC<CommentModalProps> = ({ isOpen, onClose, post }) =>
                 .from('post_comments')
                 .select(`
                     id, content, created_at, user_id, parent_id,
-                    user:users (display_name, photo_url, equipped_frame_id, xp),
+                    user:users (display_name, photo_url, equipped_frame_id, equipped_name_effect_id, xp),
                     parent_comment:post_comments!parent_id (
                         user:users (display_name)
                     )
@@ -155,7 +156,9 @@ const CommentModal: React.FC<CommentModalProps> = ({ isOpen, onClose, post }) =>
                                     />
                                     <div className="flex flex-col flex-grow">
                                         <div className="bg-skin-fill-secondary rounded-2xl rounded-tl-none px-4 py-2 border border-skin-border relative">
-                                            <p className="text-xs font-bold text-skin-base mb-0.5">{comment.user?.display_name}</p>
+                                            <p className="text-xs font-bold text-skin-base mb-0.5">
+                                                <UserName user={comment.user} />
+                                            </p>
                                             
                                             {/* Replying to... */}
                                             {comment.parent_comment?.user && (

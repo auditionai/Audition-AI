@@ -147,6 +147,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             sender_level: user.level,
             sender_frame_id: user.equipped_frame_id,
             sender_title_id: user.equipped_title_id,
+            sender_name_effect_id: user.equipped_name_effect_id, // NEW
             ...extraMetadata
         };
 

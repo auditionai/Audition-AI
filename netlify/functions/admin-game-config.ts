@@ -45,6 +45,28 @@ const DEFAULT_PREMIUM_ITEMS = [
     { type: 'title', name: 'Bóng Ma', rarity: 'rare', css_class: 'shop-title-18', price: 90, is_active: true, unlock_level: 5 },
     { type: 'title', name: 'Vua Trò Chơi', rarity: 'mythic', css_class: 'shop-title-19', price: 1000, is_active: true, unlock_level: 50 },
     { type: 'title', name: 'RGB God', rarity: 'mythic', css_class: 'shop-title-20', price: 2000, is_active: true, unlock_level: 60 },
+
+    // --- NAME EFFECTS (20 New Items) ---
+    { type: 'name_effect', name: 'Cầu Vồng Flow', rarity: 'epic', css_class: 'name-rainbow-flow', price: 150, is_active: true, unlock_level: 5 },
+    { type: 'name_effect', name: 'Hỏa Diệm Sơn', rarity: 'rare', css_class: 'name-fire', price: 100, is_active: true, unlock_level: 5 },
+    { type: 'name_effect', name: 'Băng Giá Vĩnh Cửu', rarity: 'rare', css_class: 'name-ice', price: 100, is_active: true, unlock_level: 5 },
+    { type: 'name_effect', name: 'Neon Xanh Lá (Ma Trận)', rarity: 'epic', css_class: 'name-neon-green', price: 150, is_active: true, unlock_level: 10 },
+    { type: 'name_effect', name: 'Vàng Lấp Lánh', rarity: 'legendary', css_class: 'name-golden-sparkle', price: 300, is_active: true, unlock_level: 20 },
+    { type: 'name_effect', name: 'Nhiễu Sóng (Glitch)', rarity: 'mythic', css_class: 'name-glitch', price: 500, is_active: true, unlock_level: 30 },
+    { type: 'name_effect', name: 'Sấm Sét', rarity: 'epic', css_class: 'name-thunder', price: 200, is_active: true, unlock_level: 15 },
+    { type: 'name_effect', name: 'Phân Thân', rarity: 'rare', css_class: 'name-shadow-clone', price: 120, is_active: true, unlock_level: 10 },
+    { type: 'name_effect', name: 'Nhịp Đập Trái Tim', rarity: 'rare', css_class: 'name-heartbeat', price: 80, is_active: true, unlock_level: 5 },
+    { type: 'name_effect', name: 'Sóng Nước', rarity: 'rare', css_class: 'name-water', price: 80, is_active: true, unlock_level: 5 },
+    { type: 'name_effect', name: 'Bóng Ma', rarity: 'epic', css_class: 'name-ghost', price: 180, is_active: true, unlock_level: 15 },
+    { type: 'name_effect', name: 'Hoa Anh Đào', rarity: 'rare', css_class: 'name-sakura', price: 90, is_active: true, unlock_level: 5 },
+    { type: 'name_effect', name: 'Huyết Tộc', rarity: 'legendary', css_class: 'name-blood', price: 350, is_active: true, unlock_level: 25 },
+    { type: 'name_effect', name: 'Kim Loại', rarity: 'rare', css_class: 'name-metallic', price: 80, is_active: true, unlock_level: 5 },
+    { type: 'name_effect', name: 'Độc Dược', rarity: 'epic', css_class: 'name-poison', price: 150, is_active: true, unlock_level: 10 },
+    { type: 'name_effect', name: 'Đại Dương Sâu', rarity: 'rare', css_class: 'name-ocean', price: 100, is_active: true, unlock_level: 5 },
+    { type: 'name_effect', name: 'Kẹo Ngọt', rarity: 'rare', css_class: 'name-candy', price: 80, is_active: true, unlock_level: 0 },
+    { type: 'name_effect', name: 'Hoàng Gia (Tím Vàng)', rarity: 'legendary', css_class: 'name-royal', price: 400, is_active: true, unlock_level: 20 },
+    { type: 'name_effect', name: 'Bóng Đổ 3D', rarity: 'common', css_class: 'name-shadow', price: 50, is_active: true, unlock_level: 0 },
+    { type: 'name_effect', name: 'Gương Soi', rarity: 'rare', css_class: 'name-mirror', price: 70, is_active: true, unlock_level: 0 },
 ];
 
 const handler: Handler = async (event: HandlerEvent) => {

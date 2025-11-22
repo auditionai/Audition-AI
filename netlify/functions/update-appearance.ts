@@ -27,6 +27,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         const updates: any = {};
         if (type === 'frame') updates.equipped_frame_id = itemId;
         if (type === 'title') updates.equipped_title_id = itemId;
+        if (type === 'name_effect') updates.equipped_name_effect_id = itemId; // NEW
 
         const { error: updateError } = await supabaseAdmin
             .from('users')

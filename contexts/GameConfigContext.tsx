@@ -9,10 +9,11 @@ interface GameConfigContextType {
     ranks: Rank[];
     frames: CosmeticItem[];
     titles: CosmeticItem[];
+    nameEffects: CosmeticItem[]; // NEW
     isLoading: boolean;
     refreshConfig: () => Promise<void>;
     getRankForLevel: (level: number) => Rank;
-    getCosmeticById: (id: string | undefined, type: 'frame' | 'title') => CosmeticItem | undefined;
+    getCosmeticById: (id: string | undefined, type: 'frame' | 'title' | 'name_effect') => CosmeticItem | undefined;
 }
 
 const GameConfigContext = createContext<GameConfigContextType | undefined>(undefined);
@@ -21,6 +22,7 @@ export const GameConfigProvider: React.FC<{ children: ReactNode }> = ({ children
     const [ranks, setRanks] = useState<Rank[]>(DEFAULT_RANKS);
     const [frames, setFrames] = useState<CosmeticItem[]>(DEFAULT_COSMETICS.filter(c => c.type === 'frame'));
     const [titles, setTitles] = useState<CosmeticItem[]>(DEFAULT_COSMETICS.filter(c => c.type === 'title'));
+    const [nameEffects, setNameEffects] = useState<CosmeticItem[]>([]); // NEW
     const [isLoading, setIsLoading] = useState(true);
 
     const refreshConfig = async () => {
@@ -112,9 +114,11 @@ export const GameConfigProvider: React.FC<{ children: ReactNode }> = ({ children
 
                     const finalFrames = allCosmetics.filter((c: CosmeticItem) => c.type === 'frame');
                     const finalTitles = allCosmetics.filter((c: CosmeticItem) => c.type === 'title');
+                    const finalNameEffects = allCosmetics.filter((c: CosmeticItem) => c.type === 'name_effect');
                     
                     setFrames(finalFrames);
                     setTitles(finalTitles);
+                    setNameEffects(finalNameEffects);
                 }
             }
         } catch (error) {
@@ -140,14 +144,18 @@ export const GameConfigProvider: React.FC<{ children: ReactNode }> = ({ children
         return currentRank;
     };
 
-    const getCosmeticById = (id: string | undefined, type: 'frame' | 'title'): CosmeticItem | undefined => {
-        const list = type === 'frame' ? frames : titles;
+    const getCosmeticById = (id: string | undefined, type: 'frame' | 'title' | 'name_effect'): CosmeticItem | undefined => {
+        let list;
+        if (type === 'frame') list = frames;
+        else if (type === 'title') list = titles;
+        else list = nameEffects;
+        
         const found = list.find(item => item.id === id);
         return found;
     };
 
     return (
-        <GameConfigContext.Provider value={{ ranks, frames, titles, isLoading, refreshConfig, getRankForLevel, getCosmeticById }}>
+        <GameConfigContext.Provider value={{ ranks, frames, titles, nameEffects, isLoading, refreshConfig, getRankForLevel, getCosmeticById }}>
             {children}
         </GameConfigContext.Provider>
     );

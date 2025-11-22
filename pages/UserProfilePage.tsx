@@ -7,6 +7,7 @@ import CreatorFooter from '../components/creator/CreatorFooter';
 import ThemeEffects from '../components/themes/ThemeEffects';
 import UserAvatar from '../components/common/UserAvatar';
 import UserBadge from '../components/common/UserBadge';
+import UserName from '../components/common/UserName'; // Import UserName
 import { User, Post } from '../types';
 import BottomNavBar from '../components/common/BottomNavBar';
 import PostCard from '../components/social/PostCard';
@@ -168,7 +169,7 @@ const UserProfilePage: React.FC = () => {
 
                             <div>
                                 <h1 className="text-3xl font-black text-white tracking-wide drop-shadow-[0_0_10px_rgba(255,255,255,0.5)] uppercase">
-                                    {viewUser.display_name}
+                                    <UserName user={viewUser} />
                                 </h1>
                                 <div className="flex justify-center mt-2">
                                     <UserBadge titleId={viewUser.equipped_title_id} level={viewUser.level} className="scale-110" />

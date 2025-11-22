@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Post, User } from '../../types';
 import UserAvatar from '../common/UserAvatar';
 import UserBadge from '../common/UserBadge';
+import UserName from '../common/UserName'; // Import UserName
 import { useAuth } from '../../contexts/AuthContext';
 
 interface PostCardProps {
@@ -83,12 +84,12 @@ const PostCard: React.FC<PostCardProps> = ({ post, currentUser, onCommentClick, 
                     </div>
                     <div>
                         <div className="flex items-center gap-2">
-                            <p 
+                            <div 
                                 className="font-bold text-sm text-skin-base cursor-pointer hover:underline"
                                 onClick={() => onUserClick && post.user && onUserClick(post.user_id)}
                             >
-                                {post.user?.display_name}
-                            </p>
+                                <UserName user={post.user} />
+                            </div>
                             <UserBadge titleId={post.user?.equipped_title_id} level={post.user?.level} className="scale-75 origin-left" />
                         </div>
                         <p className="text-xs text-skin-muted">{new Date(post.created_at).toLocaleDateString('vi-VN', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}</p>
@@ -152,7 +153,7 @@ const PostCard: React.FC<PostCardProps> = ({ post, currentUser, onCommentClick, 
                 {post.caption && (
                     <p className="text-sm text-skin-base mb-2 break-words">
                         <span className="font-bold mr-2 cursor-pointer hover:underline" onClick={() => onUserClick && post.user && onUserClick(post.user_id)}>
-                            {post.user?.display_name}
+                            <UserName user={post.user} />
                         </span>
                         {post.caption}
                     </p>

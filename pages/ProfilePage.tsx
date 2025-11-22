@@ -7,6 +7,7 @@ import CreatorFooter from '../components/creator/CreatorFooter';
 import ThemeEffects from '../components/themes/ThemeEffects';
 import UserAvatar from '../components/common/UserAvatar';
 import UserBadge from '../components/common/UserBadge';
+import UserName from '../components/common/UserName'; // Import UserName
 import { Post, GalleryImage, CosmeticItem } from '../types';
 import BottomNavBar from '../components/common/BottomNavBar';
 import Modal from '../components/common/Modal';
@@ -91,7 +92,7 @@ const ProfilePage: React.FC = () => {
     }, [activeTab, fetchInventory]);
 
     // --- EQUIP ITEM ---
-    const handleEquip = async (type: 'frame' | 'title', itemId: string) => {
+    const handleEquip = async (type: 'frame' | 'title' | 'name_effect', itemId: string) => {
         if (!session) return;
         try {
             const res = await fetch('/.netlify/functions/update-appearance', {
@@ -107,6 +108,7 @@ const ProfilePage: React.FC = () => {
             
             if (type === 'frame') updateUserProfile({ equipped_frame_id: itemId });
             if (type === 'title') updateUserProfile({ equipped_title_id: itemId });
+            if (type === 'name_effect') updateUserProfile({ equipped_name_effect_id: itemId });
             
             showToast(t('creator.settings.personalization.success'), 'success');
         } catch (error: any) {
@@ -251,7 +253,7 @@ const ProfilePage: React.FC = () => {
                             {/* Name & Title */}
                             <div>
                                 <h1 className="text-3xl font-black text-white tracking-wide drop-shadow-[0_0_10px_rgba(255,255,255,0.5)] uppercase">
-                                    {user.display_name}
+                                    <UserName user={user} />
                                 </h1>
                                 <div className="flex justify-center mt-2">
                                     <UserBadge titleId={user.equipped_title_id} level={user.level} className="scale-110" />
@@ -361,11 +363,11 @@ const ProfilePage: React.FC = () => {
                         {isLoadingInventory ? (
                             <div className="text-center py-12"><div className="w-8 h-8 border-4 border-skin-accent border-t-transparent rounded-full animate-spin mx-auto"></div></div>
                         ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                                 {/* Frames Section */}
                                 <div>
                                     <h3 className="text-xl font-bold text-white mb-4 border-b border-white/10 pb-2">{t('creator.profile.inventory.frames')}</h3>
-                                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-4 max-h-[500px] overflow-y-auto custom-scrollbar pr-2">
+                                    <div className="grid grid-cols-3 gap-4 max-h-[500px] overflow-y-auto custom-scrollbar pr-2">
                                         {inventoryItems.filter(i => i.type === 'frame').map(frame => {
                                             const isActive = user.equipped_frame_id === frame.id;
                                             const displayName = frame.nameKey ? t(frame.nameKey) : frame.name;
@@ -377,7 +379,6 @@ const ProfilePage: React.FC = () => {
                                                 >
                                                     {isActive && <div className="absolute top-2 right-2 w-2 h-2 bg-green-500 rounded-full shadow-sm"></div>}
                                                     <div className="relative w-12 h-12 mb-2">
-                                                        {/* Render plain avatar inside frame context */}
                                                         <div className={`absolute inset-0 rounded-full overflow-hidden ${frame.cssClass}`}>
                                                             <img src={user.photo_url} alt="preview" className="w-full h-full object-cover opacity-80" />
                                                         </div>
@@ -408,6 +409,36 @@ const ProfilePage: React.FC = () => {
                                                 </div>
                                             );
                                         })}
+                                    </div>
+                                </div>
+
+                                {/* Name Effects Section (NEW) */}
+                                <div>
+                                    <h3 className="text-xl font-bold text-white mb-4 border-b border-white/10 pb-2">Hiệu Ứng Tên</h3>
+                                    <div className="grid grid-cols-1 gap-3 max-h-[500px] overflow-y-auto custom-scrollbar pr-2">
+                                        {inventoryItems.filter(i => i.type === 'name_effect').map(effect => {
+                                            const isActive = user.equipped_name_effect_id === effect.id;
+                                            return (
+                                                <div 
+                                                    key={effect.id}
+                                                    onClick={() => handleEquip('name_effect', effect.id)}
+                                                    className={`p-3 bg-skin-fill-secondary rounded-xl border-2 flex flex-col items-center justify-center cursor-pointer relative transition hover:scale-105 ${isActive ? 'border-skin-accent shadow-lg shadow-skin-accent/20' : 'border-transparent hover:border-white/20'}`}
+                                                >
+                                                    {isActive && <div className="absolute top-2 right-2 w-2 h-2 bg-green-500 rounded-full shadow-sm"></div>}
+                                                    <div className="mb-1">
+                                                        <UserName name={user.display_name} effectId={effect.id} className="text-lg" />
+                                                    </div>
+                                                    <span className="text-[10px] text-gray-400">{effect.name}</span>
+                                                </div>
+                                            );
+                                        })}
+                                        {/* Option to unequip */}
+                                        <div 
+                                            onClick={() => handleEquip('name_effect', 'default')}
+                                            className={`p-3 bg-skin-fill-secondary rounded-xl border-2 flex flex-col items-center justify-center cursor-pointer relative transition hover:scale-105 border-transparent hover:border-white/20`}
+                                        >
+                                            <span className="text-gray-400">Mặc định (Không hiệu ứng)</span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>

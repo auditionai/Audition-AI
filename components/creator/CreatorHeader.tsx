@@ -10,6 +10,7 @@ import { useTranslation } from '../../hooks/useTranslation';
 import LanguageSwitcher from '../common/LanguageSwitcher';
 import UserAvatar from '../common/UserAvatar';
 import UserBadge from '../common/UserBadge';
+import UserName from '../common/UserName'; // Import UserName
 
 interface CreatorHeaderProps {
   onTopUpClick: () => void;
@@ -217,7 +218,9 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
             {/* Desktop User Dropdown */}
             <div className="hidden md:flex relative items-center gap-3" ref={dropdownRef}>
                 <div className="hidden sm:flex flex-col items-end gap-0 text-right">
-                    <span className="font-semibold text-skin-base text-sm">{user.display_name}</span>
+                    <span className="font-semibold text-skin-base text-sm">
+                        <UserName user={user} />
+                    </span>
                     <UserBadge titleId={user.equipped_title_id} level={user.level} className="scale-90 origin-right" />
                 </div>
                 <button onClick={() => setDropdownOpen(!isDropdownOpen)} className="flex items-center gap-3 cursor-pointer">
@@ -230,7 +233,7 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
                         <div className="flex items-center gap-3">
                            <span className="text-2xl">{rank.icon}</span>
                            <div>
-                               <p className="font-semibold text-sm text-skin-base">{user.display_name}</p>
+                               <p className="font-semibold text-sm text-skin-base"><UserName user={user} /></p>
                                <p className="text-xs text-skin-muted truncate">{rank.title} - {t('creator.header.level')} {user.level}</p>
                            </div>
                         </div>

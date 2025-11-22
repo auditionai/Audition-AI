@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ChatMessage } from '../../types';
 import UserAvatar from '../common/UserAvatar';
 import UserBadge from '../common/UserBadge';
+import UserName from '../common/UserName'; // Import UserName
 import { useAuth } from '../../contexts/AuthContext';
 import { useChat } from '../../contexts/ChatContext';
 
@@ -26,6 +27,7 @@ const ChatMessageItem: React.FC<ChatMessageProps> = ({ message, isOwn, onImageCl
     const senderLevel = metadata?.sender_level || 1;
     const senderFrame = metadata?.sender_frame_id;
     const senderTitle = metadata?.sender_title_id;
+    const senderNameEffect = metadata?.sender_name_effect_id; // NEW
     const deletedBy = metadata?.deleted_by;
 
     const isAdmin = user?.is_admin;
@@ -88,8 +90,8 @@ const ChatMessageItem: React.FC<ChatMessageProps> = ({ message, isOwn, onImageCl
                     className={`flex items-center gap-1 mb-1 ${isOwn ? 'mr-1 flex-row-reverse' : 'ml-1'} cursor-pointer`}
                     onClick={handleProfileClick}
                 >
-                        <span className="text-[10px] font-bold text-cyan-300 drop-shadow-sm tracking-wide uppercase hover:underline">
-                        {senderName}
+                    <span className="text-[10px] font-bold text-cyan-300 drop-shadow-sm tracking-wide uppercase hover:underline">
+                        <UserName name={senderName} effectId={senderNameEffect} />
                     </span>
                     <UserBadge titleId={senderTitle} level={senderLevel} className={`scale-75 ${isOwn ? 'origin-right' : 'origin-left'}`} />
                 </div>

@@ -6,6 +6,7 @@ import XPProgressBar from './common/XPProgressBar';
 import { useTranslation } from '../hooks/useTranslation';
 import UserAvatar from './common/UserAvatar';
 import UserBadge from './common/UserBadge';
+import UserName from './common/UserName'; // Import UserName
 
 type LeaderboardType = 'creation' | 'level' | 'tycoon' | 'hot';
 
@@ -131,7 +132,9 @@ const Leaderboard: React.FC = () => {
                                                 <div className="mb-4">
                                                     <UserAvatar url={user.photo_url} alt={user.display_name} frameId={user.equipped_frame_id} level={user.level} size="lg" />
                                                 </div>
-                                                <p className="podium-name hover:underline">{user.display_name}</p>
+                                                <p className="podium-name hover:underline">
+                                                    <UserName user={user} />
+                                                </p>
                                                 <UserBadge titleId={user.equipped_title_id} level={user.level} className="mb-2" />
                                                 
                                                 <p className="text-yellow-400 font-black text-lg">{getMetricLabel(user.metric_value)}</p>
@@ -153,7 +156,9 @@ const Leaderboard: React.FC = () => {
                                                 <UserAvatar url={user.photo_url} alt={user.display_name} frameId={user.equipped_frame_id} level={user.level} size="md" />
                                                 <div className="flex-grow">
                                                     <div className="flex items-center gap-2">
-                                                        <p className={`font-bold text-lg truncate ${rank.color} neon-text-glow hover:underline`}>{user.display_name}</p>
+                                                        <div className={`font-bold text-lg truncate ${rank.color} neon-text-glow hover:underline`}>
+                                                            <UserName user={user} />
+                                                        </div>
                                                         <UserBadge titleId={user.equipped_title_id} level={user.level} />
                                                     </div>
                                                     <div className="flex items-center gap-2 text-yellow-400 font-bold">

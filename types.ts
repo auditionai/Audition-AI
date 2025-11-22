@@ -53,6 +53,7 @@ export interface User {
     // NEW: Cosmetics
     equipped_title_id?: string;
     equipped_frame_id?: string;
+    equipped_name_effect_id?: string; // NEW: Name Effect
     // NEW: Lucky Wheel
     spin_tickets?: number;
     last_daily_spin_at?: string;
@@ -115,6 +116,7 @@ export interface GalleryImage {
     // NEW: Cosmetics in gallery view
     equipped_frame_id?: string;
     equipped_title_id?: string;
+    equipped_name_effect_id?: string; // NEW
   };
 }
 
@@ -141,6 +143,7 @@ export interface LeaderboardUser {
     // NEW: Cosmetics
     equipped_title_id?: string;
     equipped_frame_id?: string;
+    equipped_name_effect_id?: string; // NEW
 }
 
 // Dành cho các gói nạp kim cương
@@ -231,7 +234,7 @@ export type CosmeticRarity = 'common' | 'rare' | 'epic' | 'legendary' | 'mythic'
 
 export interface CosmeticItem {
     id: string;
-    type: 'frame' | 'title';
+    type: 'frame' | 'title' | 'name_effect'; // Added name_effect
     nameKey?: string; // Legacy Translation key
     name?: string; // DB Name
     rarity: CosmeticRarity;
@@ -260,6 +263,7 @@ export interface ChatMessage {
         sender_level?: number;
         sender_frame_id?: string;
         sender_title_id?: string;
+        sender_name_effect_id?: string; // NEW
         image_url?: string;
         sticker_id?: string;
         deleted_by?: string;
@@ -309,6 +313,7 @@ export interface Post {
         level: number;
         equipped_frame_id?: string;
         equipped_title_id?: string;
+        equipped_name_effect_id?: string; // NEW
     }
     // Helper for UI state (not in DB)
     is_liked_by_user?: boolean; 
@@ -327,6 +332,7 @@ export interface PostComment {
         level: number;
         equipped_frame_id?: string;
         equipped_title_id?: string;
+        equipped_name_effect_id?: string; // NEW
     }
     // Joined data for parent comment user
     parent_comment?: {

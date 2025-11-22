@@ -231,26 +231,40 @@ const GameConfigManager: React.FC = () => {
         }
     };
 
-    const sqlFixScript = `-- CHẠY TOÀN BỘ SCRIPT NÀY TRONG SQL EDITOR ĐỂ SỬA LỖI CHAT & INBOX
+    const sqlFixScript = `-- SCRIPT SỬA LỖI TIN NHẮN & TẠO BOT HỆ THỐNG (UPDATE)
 
--- 1. TẠO CÁC BẢNG CẦN THIẾT
-CREATE TABLE IF NOT EXISTS public.notifications (
-    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    recipient_id UUID NOT NULL,
-    actor_id UUID,
-    type TEXT NOT NULL,
-    entity_id TEXT,
-    content TEXT,
-    is_read BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
-);
+-- 1. BẬT CHẾ ĐỘ XEM CÔNG KHAI CHO BẢNG USERS
+-- Điều này rất quan trọng để mọi người có thể thấy tên và avatar của nhau (kể cả Bot)
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 
-CREATE TABLE IF NOT EXISTS public.system_broadcasts (
-    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    content TEXT NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
-);
+-- Xóa policy cũ nếu có để tránh lỗi
+DROP POLICY IF EXISTS "Users can view their own data" ON public.users;
+DROP POLICY IF EXISTS "Public profiles are viewable by everyone" ON public.users;
 
+-- Tạo policy mới: Ai cũng có thể xem (SELECT) thông tin user khác (cần thiết cho Chat)
+CREATE POLICY "Public profiles are viewable by everyone" 
+ON public.users FOR SELECT 
+USING (true);
+
+-- Policy cập nhật: Chỉ chủ sở hữu mới được sửa
+CREATE POLICY "Users can update own profile" 
+ON public.users FOR UPDATE 
+USING (auth.uid() = id);
+
+-- 2. TẠO USER "HỆ THỐNG" (BOT)
+-- User này sẽ dùng để gửi tin nhắn tự động
+INSERT INTO public.users (id, email, display_name, photo_url, diamonds, xp, level)
+VALUES (
+    '00000000-0000-0000-0000-000000000000',
+    'system@auditionai.io.vn',
+    'HỆ THỐNG',
+    'https://api.dicebear.com/7.x/bottts/svg?seed=System',
+    999999,
+    999999,
+    999
+) ON CONFLICT (id) DO NOTHING;
+
+-- 3. ĐẢM BẢO CÁC BẢNG CHAT TỒN TẠI VÀ CÓ QUYỀN
 CREATE TABLE IF NOT EXISTS public.conversations (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
@@ -275,42 +289,19 @@ CREATE TABLE IF NOT EXISTS public.direct_messages (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
 
--- 2. THIẾT LẬP BẢO MẬT (RLS)
-ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.system_broadcasts ENABLE ROW LEVEL SECURITY;
+-- Bật RLS
 ALTER TABLE public.conversations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.conversation_participants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.direct_messages ENABLE ROW LEVEL SECURITY;
 
--- Cấp quyền Service Role (Quan trọng cho Admin Functions)
-GRANT ALL ON public.notifications TO service_role;
-GRANT ALL ON public.system_broadcasts TO service_role;
-GRANT ALL ON public.conversations TO service_role;
-GRANT ALL ON public.conversation_participants TO service_role;
-GRANT ALL ON public.direct_messages TO service_role;
-
--- Cấp quyền Authenticated Users
-GRANT SELECT, UPDATE ON public.notifications TO authenticated;
-GRANT SELECT ON public.system_broadcasts TO authenticated;
-GRANT ALL ON public.conversations TO authenticated;
-GRANT ALL ON public.conversation_participants TO authenticated;
-GRANT ALL ON public.direct_messages TO authenticated;
-
--- 3. CHÍNH SÁCH BẢO MẬT (POLICIES) - Sửa lỗi không thấy tin nhắn
--- Drop cũ để tránh lỗi duplicate
-DROP POLICY IF EXISTS "Users can see their own notifications" ON public.notifications;
+-- Xóa policy cũ của chat
 DROP POLICY IF EXISTS "Users can view conversations they are in" ON public.conversations;
 DROP POLICY IF EXISTS "Users can view participants of their conversations" ON public.conversation_participants;
 DROP POLICY IF EXISTS "Users can view messages in their conversations" ON public.direct_messages;
 DROP POLICY IF EXISTS "Users can insert messages in their conversations" ON public.direct_messages;
 
--- Policy: Notifications
-CREATE POLICY "Users can see their own notifications" 
-ON public.notifications FOR SELECT 
-TO authenticated 
-USING (auth.uid() = recipient_id);
-
--- Policy: Conversations (Thấy nếu là thành viên)
+-- Tạo lại Policy chuẩn
+-- 1. Conversations
 CREATE POLICY "Users can view conversations they are in" ON public.conversations
 FOR SELECT USING (
     exists (
@@ -320,7 +311,7 @@ FOR SELECT USING (
     )
 );
 
--- Policy: Participants
+-- 2. Participants
 CREATE POLICY "Users can view participants of their conversations" ON public.conversation_participants
 FOR SELECT USING (
     exists (
@@ -330,7 +321,7 @@ FOR SELECT USING (
     )
 );
 
--- Policy: Messages (View)
+-- 3. Messages (View)
 CREATE POLICY "Users can view messages in their conversations" ON public.direct_messages
 FOR SELECT USING (
     exists (
@@ -340,7 +331,7 @@ FOR SELECT USING (
     )
 );
 
--- Policy: Messages (Insert)
+-- 4. Messages (Insert)
 CREATE POLICY "Users can insert messages in their conversations" ON public.direct_messages
 FOR INSERT WITH CHECK (
     auth.uid() = sender_id AND
@@ -351,12 +342,15 @@ FOR INSERT WITH CHECK (
     )
 );
 
--- 4. KÍCH HOẠT REALTIME (Cho tin nhắn nhảy ngay lập tức)
+-- Cấp quyền cho Service Role (cho các hàm Admin chạy nền)
+GRANT ALL ON public.users TO service_role;
+GRANT ALL ON public.conversations TO service_role;
+GRANT ALL ON public.conversation_participants TO service_role;
+GRANT ALL ON public.direct_messages TO service_role;
+
+-- Refresh Realtime
 DO $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'notifications') THEN
-    ALTER PUBLICATION supabase_realtime ADD TABLE notifications;
-  END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'direct_messages') THEN
     ALTER PUBLICATION supabase_realtime ADD TABLE direct_messages;
   END IF;
@@ -365,18 +359,7 @@ BEGIN
   END IF;
 END $$;
 
--- 5. CẤP QUYỀN CƠ BẢN KHÁC
-GRANT ALL ON public.users TO service_role;
-GRANT SELECT, UPDATE, INSERT ON public.users TO authenticated;
-GRANT SELECT ON public.users TO anon;
-
-DO $$ BEGIN
-    CREATE TYPE public.cosmetic_type AS ENUM ('frame', 'title', 'name_effect');
-EXCEPTION
-    WHEN duplicate_object THEN null;
-END $$;
-
-SELECT 'Đã sửa lỗi Database thành công! Tin nhắn sẽ hoạt động.' as ket_qua;
+SELECT 'Sửa lỗi thành công! Đã tạo Bot Hệ Thống và mở quyền xem Profile.' as ket_qua;
 `;
 
     return (
@@ -399,7 +382,7 @@ SELECT 'Đã sửa lỗi Database thành công! Tin nhắn sẽ hoạt động.'
                     <div className="bg-yellow-500/10 border border-yellow-500/30 p-4 rounded-lg">
                         <h4 className="text-yellow-400 font-bold mb-2 flex items-center gap-2"><i className="ph-fill ph-warning-circle"></i> Cập Nhật Database (BẮT BUỘC)</h4>
                         <p className="text-sm text-gray-300 mb-4">
-                            Để sửa lỗi <strong>"Gửi tin nhắn thành công nhưng người khác không nhận được"</strong>, bạn phải chạy đoạn mã SQL này để tạo các bảng tin nhắn và cấp quyền truy cập.
+                            Để sửa lỗi <strong>"Gửi tin nhắn thành công nhưng người khác không nhận được"</strong>, bạn phải chạy đoạn mã SQL này. Nó sẽ tạo User Hệ Thống và mở quyền xem Profile công khai.
                         </p>
                         <div className="relative">
                             <pre className="bg-black/50 p-3 rounded-lg text-xs text-green-400 overflow-x-auto font-mono border border-white/10 h-64 custom-scrollbar">

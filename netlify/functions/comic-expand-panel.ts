@@ -32,9 +32,11 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
 
+        // Inject the detailed AI analysis of characters here
         const characterContext = characters.map((c: any) => 
-            `- ${c.name}: ${c.description}`
-        ).join('\n');
+            `### Character: ${c.name}
+             Visual Traits (Strictly adhere to this): ${c.description || "No specific description provided."}`
+        ).join('\n\n');
 
         const prompt = `
             You are an expert comic artist and writer.
@@ -43,7 +45,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             **Genre:** ${genre}
             **Art Style:** ${style}
             
-            **Character Visual Context:**
+            **Character Visual Guide (MUST FOLLOW):**
             ${characterContext}
             
             **Panel Plot Summary:** "${plot_summary}"
@@ -51,7 +53,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             **Requirements:**
             1.  **visual_description (English):** Write a highly detailed prompt for an AI Image Generator. 
                 *   Describe the scene, background, lighting, camera angle.
-                *   Describe characters' appearance explicitly in this prompt.
+                *   **CRITICAL:** When mentioning a character name (e.g., "${characters[0]?.name}"), you MUST explicitly include their visual traits from the guide above (e.g., "wearing white bucket hat", "pink hair"). Do not assume the renderer knows who they are.
             
             2.  **dialogue (Vietnamese):** Write natural, engaging dialogue for this panel.
                 *   **MANDATORY:** Do NOT return an empty array. Every panel must have some text.

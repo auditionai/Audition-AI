@@ -978,7 +978,10 @@ const ComicStudio: React.FC = () => {
                                                         <div className="relative flex-grow">
                                                             <textarea className={`w-full h-full bg-white/5 border border-white/5 rounded-lg p-2 text-xs text-gray-400 focus:text-white focus:bg-black/40 transition resize-none ${char.is_analyzing ? 'opacity-30' : ''}`} placeholder="Mô tả ngoại hình (AI tự điền)..." value={char.description} onChange={(e) => setCharacters(chars => chars.map(c => c.id === char.id ? { ...c, description: e.target.value } : c))} />
                                                             {char.is_analyzing && (
-                                                                <div className="absolute inset-0 flex items-center justify-center"><i className="ph-bold ph-spinner animate-spin text-pink-500 text-xl"></i></div>
+                                                                <div className="absolute inset-0 flex items-center justify-center flex-col bg-black/60 backdrop-blur-sm text-white">
+                                                                    <i className="ph-bold ph-scan animate-spin text-pink-500 text-xl mb-1"></i>
+                                                                    <span className="text-[10px] font-bold">Đang phân tích...</span>
+                                                                </div>
                                                             )}
                                                         </div>
                                                     </div>

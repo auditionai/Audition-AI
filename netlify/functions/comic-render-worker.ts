@@ -72,12 +72,22 @@ const handler: Handler = async (event: HandlerEvent) => {
             effectInstruction = `- Apply this specific visual effect: ${visualEffect}`;
         }
 
+        // Construct character reference text to reinforce images
+        const characterRefText = characters.map((c: any) => 
+            `Reference Image provided is for character "${c.name}". Visual description: ${c.description || "Follow image strictly"}`
+        ).join('\n');
+
         const systemPrompt = `
             You are a master comic artist specialized in ${style} style.
             Generate a single high-quality comic panel based on the description.
             
             **Visual Description:**
             ${panel.visual_description}
+            
+            **Character References:**
+            ${characterRefText}
+            
+            **IMPORTANT:** Use the provided reference images to ground the character appearance. Do NOT mix up details between characters.
             
             **Style Constraints:**
             - Art Style: ${style}
@@ -95,7 +105,8 @@ const handler: Handler = async (event: HandlerEvent) => {
                 if (char.image_url) {
                     const imgData = processDataUrl(char.image_url);
                     if (imgData) {
-                        parts.push({ text: `Reference for character "${char.name}":` });
+                        // Explicitly label the image part
+                        parts.push({ text: `Reference Image for character: ${char.name}` });
                         parts.push({ inlineData: { data: imgData.base64, mimeType: imgData.mimeType } });
                     }
                 }

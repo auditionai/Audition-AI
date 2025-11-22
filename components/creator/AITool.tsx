@@ -82,19 +82,19 @@ const AITool: React.FC = () => {
                 onClose={() => setUtilHelpOpen(false)}
                 instructionKey={utilHelpKey}
             />
-            <div className="themed-main-title-container text-center max-w-4xl mx-auto mb-12">
+            <div className="themed-main-title-container text-center max-w-4xl mx-auto mb-8 md:mb-12">
                 <h1 
-                    className="themed-main-title text-4xl md:text-5xl lg:text-6xl font-black mb-4 leading-tight"
+                    className="themed-main-title text-3xl md:text-5xl lg:text-6xl font-black mb-2 md:mb-4 leading-tight"
                     data-text={t('creator.aiTool.title')}
                 >
                     {t('creator.aiTool.title')}
                 </h1>
-                <p className="themed-main-subtitle text-lg md:text-xl max-w-2xl mx-auto">
+                <p className="themed-main-subtitle text-sm md:text-xl max-w-2xl mx-auto">
                     {t('creator.aiTool.description')}
                 </p>
                 <button
                     onClick={() => setInstructionModalOpen(true)}
-                    className="themed-guide-button"
+                    className="themed-guide-button mt-4"
                 >
                     <i className="ph-fill ph-book-open"></i>
                     <span>{t('creator.aiTool.quickGuide')}</span>
@@ -102,36 +102,64 @@ const AITool: React.FC = () => {
             </div>
             
             <div className="max-w-7xl mx-auto">
-                {/* Main Tabs */}
-                <div className="flex justify-center border-b border-white/10 mb-6 overflow-x-auto">
+                {/* Main Tabs - Updated to Grid for Mobile, Flex for Desktop */}
+                <div className="grid grid-cols-2 gap-3 mb-6 md:flex md:justify-center md:gap-0 md:border-b md:border-white/10 md:mb-8">
                     <button
                         onClick={() => setActiveTab('generator')}
-                        className={`px-6 py-3 font-semibold whitespace-nowrap transition-colors ${activeTab === 'generator' ? 'text-pink-400 border-b-2 border-pink-400' : 'text-gray-400 hover:text-white'}`}
+                        className={`
+                            px-4 py-3 font-bold text-sm md:text-base rounded-lg md:rounded-none md:rounded-t-lg transition-all
+                            flex items-center justify-center gap-2
+                            ${activeTab === 'generator' 
+                                ? 'bg-skin-accent text-white md:bg-transparent md:text-skin-accent md:border-b-2 md:border-skin-accent shadow-lg md:shadow-none' 
+                                : 'bg-skin-fill-secondary text-skin-muted hover:text-skin-base hover:bg-white/5'
+                            }
+                        `}
                     >
-                       <i className="ph-fill ph-magic-wand mr-2"></i>
+                       <i className="ph-fill ph-magic-wand text-lg"></i>
                         {t('creator.aiTool.tabs.single')}
                     </button>
                      <button
                         onClick={() => setActiveTab('group-studio')}
-                        className={`px-6 py-3 font-semibold whitespace-nowrap transition-colors ${activeTab === 'group-studio' ? 'text-pink-400 border-b-2 border-pink-400' : 'text-gray-400 hover:text-white'}`}
+                        className={`
+                            px-4 py-3 font-bold text-sm md:text-base rounded-lg md:rounded-none md:rounded-t-lg transition-all
+                            flex items-center justify-center gap-2
+                            ${activeTab === 'group-studio' 
+                                ? 'bg-skin-accent text-white md:bg-transparent md:text-skin-accent md:border-b-2 md:border-skin-accent shadow-lg md:shadow-none' 
+                                : 'bg-skin-fill-secondary text-skin-muted hover:text-skin-base hover:bg-white/5'
+                            }
+                        `}
                     >
-                        <i className="ph-fill ph-users-three mr-2"></i>
+                        <i className="ph-fill ph-users-three text-lg"></i>
                         {t('creator.aiTool.tabs.group')}
                     </button>
                     {/* NEW COMIC TAB */}
                     <button
                         onClick={() => setActiveTab('comic-studio')}
-                        className={`px-6 py-3 font-semibold whitespace-nowrap transition-colors ${activeTab === 'comic-studio' ? 'text-pink-400 border-b-2 border-pink-400' : 'text-gray-400 hover:text-white'}`}
+                        className={`
+                            px-4 py-3 font-bold text-sm md:text-base rounded-lg md:rounded-none md:rounded-t-lg transition-all
+                            flex items-center justify-center gap-2 relative overflow-hidden
+                            ${activeTab === 'comic-studio' 
+                                ? 'bg-skin-accent text-white md:bg-transparent md:text-skin-accent md:border-b-2 md:border-skin-accent shadow-lg md:shadow-none' 
+                                : 'bg-skin-fill-secondary text-skin-muted hover:text-skin-base hover:bg-white/5'
+                            }
+                        `}
                     >
-                        <i className="ph-fill ph-book-open-text mr-2"></i>
+                        <i className="ph-fill ph-book-open-text text-lg"></i>
                         Truyện Tranh
-                        <span className="ml-2 bg-gradient-to-r from-yellow-400 to-red-500 text-white text-[9px] px-1.5 py-0.5 rounded font-bold">HOT</span>
+                        <span className="absolute top-0 right-0 md:top-auto md:bottom-full md:mb-1 md:right-auto md:left-full md:ml-1 bg-gradient-to-r from-yellow-400 to-red-500 text-white text-[8px] px-1.5 py-0.5 rounded-bl-md md:rounded font-bold shadow-sm">HOT</span>
                     </button>
                     <button
                         onClick={() => setActiveTab('utilities')}
-                        className={`px-6 py-3 font-semibold whitespace-nowrap transition-colors ${activeTab === 'utilities' ? 'text-pink-400 border-b-2 border-pink-400' : 'text-gray-400 hover:text-white'}`}
+                        className={`
+                            px-4 py-3 font-bold text-sm md:text-base rounded-lg md:rounded-none md:rounded-t-lg transition-all
+                            flex items-center justify-center gap-2
+                            ${activeTab === 'utilities' 
+                                ? 'bg-skin-accent text-white md:bg-transparent md:text-skin-accent md:border-b-2 md:border-skin-accent shadow-lg md:shadow-none' 
+                                : 'bg-skin-fill-secondary text-skin-muted hover:text-skin-base hover:bg-white/5'
+                            }
+                        `}
                     >
-                        <i className="ph-fill ph-wrench mr-2"></i>
+                        <i className="ph-fill ph-wrench text-lg"></i>
                         {t('creator.aiTool.tabs.utilities')}
                     </button>
                 </div>

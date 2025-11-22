@@ -644,7 +644,7 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                                 title={t('modals.promptLibrary.buttonTooltip')}
                             >
                                 <i className="ph-fill ph-scroll"></i>
-                                {t('modals.promptLibrary.button')}
+                                <span className="hidden sm:inline">{t('modals.promptLibrary.button')}</span>
                             </button>
                         }
                     >

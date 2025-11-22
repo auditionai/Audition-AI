@@ -57,8 +57,6 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
     if (!user || !supabase) return;
 
     // USE A UNIQUE CHANNEL NAME PER USER
-    // This is critical. 'global' channels often get flooded or hit limits.
-    // Filtering at the source (Postgres) is cleaner than filtering in JS for RLS compliance.
     const channel = supabase.channel(`user-notifs-${user.id}`)
       .on('postgres_changes', {
         event: 'INSERT', // We mostly care about new notifications
@@ -100,11 +98,6 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
   
   const handleNotificationClick = () => {
     setNotificationOpen(prev => !prev);
-    // Optional: Reset count locally for better UX, though data sync will handle it
-    if (!isNotificationOpen) {
-        // When opening, we might want to keep the count until they read, 
-        // or clear it. Usually, we keep it until read action.
-    }
   }
 
   const handleLogout = (e: React.MouseEvent) => {
@@ -114,13 +107,13 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
   };
 
   return (
-    <header className="fixed top-0 left-0 w-full z-40 bg-skin-fill/80 backdrop-blur-lg border-b border-skin-border">
+    <header className="fixed top-0 left-0 w-full z-40 bg-skin-fill/90 backdrop-blur-lg border-b border-skin-border shadow-lg transition-all">
       
-      <div className="container mx-auto px-4">
-        <div className="flex justify-between items-center h-20">
+      <div className="container mx-auto px-3 md:px-4">
+        <div className="flex justify-between items-center h-16 md:h-20">
           
           {/* Left: Logo */}
-          <div>
+          <div className="flex-shrink-0 transform scale-90 md:scale-100 origin-left">
              <Logo onClick={() => handleNavClick('tool')} />
           </div>
           
@@ -183,19 +176,21 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
           
           {/* Right: Actions */}
           <div className="flex items-center gap-2 md:gap-4">
-            {/* Language Switcher */}
+            {/* Language Switcher (Desktop Only) */}
             <div className="hidden md:block">
                 <LanguageSwitcher />
             </div>
 
-            {/* Mobile Top Up */}
+            {/* Mobile Top Up (Redesigned Pill) */}
             <button
               type="button"
               onClick={onTopUpClick}
-              className="md:hidden flex items-center gap-1.5 px-3 py-1.5 rounded-full cursor-pointer transition-transform active:scale-95 bg-skin-fill-secondary border border-skin-border"
+              className="md:hidden flex items-center gap-1.5 pl-2 pr-3 py-1 rounded-full cursor-pointer active:scale-95 bg-black/30 border border-skin-accent/30 shadow-sm"
             >
-              <i className="ph-fill ph-diamonds-four text-lg text-skin-accent"></i>
-              <span className="font-bold text-sm text-skin-base">{user.diamonds}</span>
+              <div className="w-5 h-5 bg-skin-accent rounded-full flex items-center justify-center shadow-md">
+                  <i className="ph-fill ph-diamonds-four text-white text-xs"></i>
+              </div>
+              <span className="font-bold text-sm text-white">{user.diamonds}</span>
             </button>
             
             {/* Desktop Top Up */}
@@ -211,31 +206,32 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
               </button>
             </div>
             
-            {/* Messages Button */}
-            <button
-              type="button"
-              onClick={() => handleNavClick('messages')}
-              className={`themed-notification-button p-2.5 md:p-2 ${activeTab === 'messages' ? 'text-skin-base' : ''}`}
-              title={t('creator.header.nav.messages')}
-            >
-                <i className="ph-fill ph-chat-centered-text text-xl"></i>
-            </button>
-
-            {/* Notification Bell */}
-            <div className="relative" ref={notificationRef}>
+            {/* Notification & Messages Group */}
+            <div className="flex items-center gap-1 bg-white/5 rounded-full p-1 border border-white/5">
+                {/* Messages Button */}
                 <button
                   type="button"
-                  onClick={handleNotificationClick}
-                  className="themed-notification-button p-2.5 md:p-2"
+                  onClick={() => handleNavClick('messages')}
+                  className={`relative w-9 h-9 flex items-center justify-center rounded-full transition-colors ${activeTab === 'messages' ? 'bg-skin-accent text-white' : 'text-skin-muted hover:text-skin-base hover:bg-white/10'}`}
+                  title={t('creator.header.nav.messages')}
                 >
-                    <i className={`ph-fill ${isNotificationOpen ? 'ph-bell-ringing text-skin-accent' : 'ph-bell'} text-xl`}></i>
-                    {unreadCount > 0 && (
-                         <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 text-white text-[10px] font-bold flex items-center justify-center rounded-full animate-bounce shadow-lg border border-white">
-                            {unreadCount > 9 ? '9+' : unreadCount}
-                        </span>
-                    )}
+                    <i className="ph-fill ph-chat-centered-text text-lg"></i>
                 </button>
-                {isNotificationOpen && <NotificationDropdown onClose={() => setNotificationOpen(false)} onRead={() => setUnreadCount(0)} />}
+
+                {/* Notification Bell */}
+                <div className="relative" ref={notificationRef}>
+                    <button
+                      type="button"
+                      onClick={handleNotificationClick}
+                      className={`relative w-9 h-9 flex items-center justify-center rounded-full transition-colors ${isNotificationOpen ? 'bg-skin-fill-secondary text-skin-accent' : 'text-skin-muted hover:text-skin-base hover:bg-white/10'}`}
+                    >
+                        <i className={`ph-fill ${isNotificationOpen ? 'ph-bell-ringing' : 'ph-bell'} text-lg`}></i>
+                        {unreadCount > 0 && (
+                             <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.6)] border border-[#12121A]"></span>
+                        )}
+                    </button>
+                    {isNotificationOpen && <NotificationDropdown onClose={() => setNotificationOpen(false)} onRead={() => setUnreadCount(0)} />}
+                </div>
             </div>
 
             {/* Desktop User Dropdown */}
@@ -287,9 +283,6 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
                   </div>
                 </div>
               )}
-            </div>
-             <div className="md:hidden">
-                 <LanguageSwitcher />
             </div>
           </div>
         </div>

@@ -234,11 +234,13 @@ const GameConfigManager: React.FC = () => {
     const sqlFixScript = `-- CHẠY SCRIPT NÀY TRONG SUPABASE SQL EDITOR ĐỂ SỬA LỖI THÔNG BÁO & UNKNOWN USER
 
 -- 1. Kích hoạt Realtime cho bảng Notifications (QUAN TRỌNG NHẤT)
--- Bước này giúp chuông thông báo nhảy số ngay lập tức
-BEGIN;
-  ALTER PUBLICATION supabase_realtime DROP TABLE IF EXISTS notifications;
-  ALTER PUBLICATION supabase_realtime ADD TABLE notifications;
-COMMIT;
+-- Bước này giúp chuông thông báo nhảy số ngay lập tức. Code được viết trong khối DO để tránh lỗi cú pháp.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'notifications') THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE notifications;
+  END IF;
+END $$;
 
 -- 2. Đảm bảo bảng Users cho phép Insert/Update (Sửa lỗi 'Unknown User')
 GRANT ALL ON public.users TO service_role;

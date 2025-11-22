@@ -4,7 +4,7 @@ import { supabaseAdmin } from './utils/supabaseClient';
 import { S3Client, DeleteObjectCommand } from "@aws-sdk/client-s3";
 
 const handler: Handler = async (event: HandlerEvent) => {
-    // 1. Initialize S3 client for R2
+    // 1. Initialize S3 client for R2 inside handler to ensure env vars are ready
     const s3Client = new S3Client({
         region: "auto",
         endpoint: process.env.R2_ENDPOINT || '',
@@ -88,7 +88,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         }
 
         // 6. DELETE image record from Supabase (Hard Delete)
-        // We delete the row entirely instead of updating image_url to null to avoid NOT NULL constraints
+        // IMPORTANT: We MUST delete the row entirely. Updating to NULL causes "violates not-null constraint".
         const { error: deleteDbError } = await supabaseAdmin
             .from('generated_images')
             .delete()

@@ -928,11 +928,11 @@ export const en = {
         contactContent: {
             intro: 'If you need support, please contact us via:',
             founder: 'Developer',
-            founderName: 'CodyCN (Thanh Au)',
+            founderName: 'Nguyen Quoc Cuong (CodyCN)',
             phone: 'Phone / Zalo',
-            phoneNumber: '0969.160.450',
+            phoneNumber: '0824.280.497',
             email: 'Email',
-            emailAddress: 'codycn89@gmail.com',
+            emailAddress: 'admin@auditionai.io.vn',
             facebook: 'Facebook',
             facebookLink: 'https://www.facebook.com/iam.cody.real/',
         }

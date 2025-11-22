@@ -66,7 +66,6 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
         // If UPDATE: Check if it became unread (e.g. re-like bumping the notification)
         else if (payload.eventType === 'UPDATE') {
             const newRec = payload.new;
-            const oldRec = payload.old;
             // If it was read and now is unread (re-notified)
             if (newRec && !newRec.is_read) {
                  // We fetch count again to be accurate, or just increment if we track local state strictly

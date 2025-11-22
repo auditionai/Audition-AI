@@ -178,6 +178,43 @@ export const en = {
       buy: 'Buy',
       owned: 'Owned',
     },
+    myCreations: {
+      title: 'Your Creations',
+      description: 'A place to store your unique creative moments.',
+      shareTip: 'Tip: Share your creations with the community to get more Diamonds and Spin Tickets!',
+      loading: 'Loading creations...',
+      empty: {
+        title: 'No creations yet',
+        description: 'Create your first photo today!',
+      },
+      public: 'Public',
+      delete: {
+        confirm: 'Are you sure you want to delete this creation? This action cannot be undone.',
+        success: 'Creation deleted successfully.',
+        error: 'Error deleting creation.',
+      },
+      shareAction: {
+        success: 'Shared successfully! (+1 💎)',
+        error: 'Error sharing creation.',
+      },
+      storageWarning: {
+        title: 'Storage Notice',
+        description: 'Images in this section are stored permanently. However, please download important creations to avoid unexpected data loss.',
+      },
+    },
+    adminGallery: {
+      title: 'Community Gallery Review',
+      description: 'Manage and moderate images shared by users.',
+      loading: 'Loading gallery...',
+      empty: {
+        title: 'All Clean!',
+        description: 'No images to review or display.',
+      },
+      deleteSuccess: 'Image deleted from gallery.',
+      error: {
+        load: 'Could not load gallery.',
+      },
+    },
     buyCredits: {
       title: 'Top Up Diamonds',
       description: 'Don\'t forget to check in daily for free Diamonds and other exciting rewards!',
@@ -557,9 +594,8 @@ export const en = {
             add: 'Add',
           },
           confirmDelete: 'Are you sure you want to delete this reward tier?',
-          success: {
-            create: 'Reward tier created successfully!',
-            delete: 'Reward tier deleted successfully.',
+          success: 'Reward tier created successfully!',
+          delete: 'Reward tier deleted successfully.',
           },
           error: {
             load: 'Could not load check-in rewards.',

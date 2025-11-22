@@ -5,9 +5,16 @@ import StatCard from './StatCard';
 import { DashboardStats } from '../../types';
 import { useTranslation } from '../../hooks/useTranslation';
 
+// Define explicit interface for usage stats to fix type errors
+interface UsageStats {
+    flashCount: number;
+    proCount: number;
+    totalDiamonds: number;
+}
+
 // Extended interface for local usage
 interface DetailedDashboardStats extends DashboardStats {
-    detailedUsage?: Record<string, { flashCount: number; proCount: number; totalDiamonds: number }>;
+    detailedUsage?: Record<string, UsageStats>;
 }
 
 const Dashboard: React.FC = () => {
@@ -164,7 +171,7 @@ const Dashboard: React.FC = () => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {Object.entries(stats.detailedUsage).map(([category, data]) => (
+                                {Object.entries(stats.detailedUsage as Record<string, UsageStats>).map(([category, data]) => (
                                     <tr key={category} className="border-b border-white/5 hover:bg-white/5 transition-colors">
                                         <td className="px-4 py-3 font-semibold text-white">{category}</td>
                                         <td className="px-4 py-3 text-center text-cyan-300">{data.flashCount.toLocaleString()}</td>
@@ -175,10 +182,10 @@ const Dashboard: React.FC = () => {
                                 ))}
                                 <tr className="bg-white/10 font-bold">
                                     <td className="px-4 py-3 text-white">TỔNG CỘNG</td>
-                                    <td className="px-4 py-3 text-center">{Object.values(stats.detailedUsage).reduce((acc, curr) => acc + curr.flashCount, 0).toLocaleString()}</td>
-                                    <td className="px-4 py-3 text-center">{Object.values(stats.detailedUsage).reduce((acc, curr) => acc + curr.proCount, 0).toLocaleString()}</td>
-                                    <td className="px-4 py-3 text-right text-pink-400">{Object.values(stats.detailedUsage).reduce((acc, curr) => acc + curr.totalDiamonds, 0).toLocaleString()} 💎</td>
-                                    <td className="px-4 py-3 text-right text-green-400">{(Object.values(stats.detailedUsage).reduce((acc, curr) => acc + curr.totalDiamonds, 0) * 1000).toLocaleString()} đ</td>
+                                    <td className="px-4 py-3 text-center">{Object.values(stats.detailedUsage as Record<string, UsageStats>).reduce((acc, curr) => acc + curr.flashCount, 0).toLocaleString()}</td>
+                                    <td className="px-4 py-3 text-center">{Object.values(stats.detailedUsage as Record<string, UsageStats>).reduce((acc, curr) => acc + curr.proCount, 0).toLocaleString()}</td>
+                                    <td className="px-4 py-3 text-right text-pink-400">{Object.values(stats.detailedUsage as Record<string, UsageStats>).reduce((acc, curr) => acc + curr.totalDiamonds, 0).toLocaleString()} 💎</td>
+                                    <td className="px-4 py-3 text-right text-green-400">{(Object.values(stats.detailedUsage as Record<string, UsageStats>).reduce((acc, curr) => acc + curr.totalDiamonds, 0) * 1000).toLocaleString()} đ</td>
                                 </tr>
                             </tbody>
                         </table>

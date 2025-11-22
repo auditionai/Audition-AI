@@ -158,12 +158,12 @@ const handler: Handler = async (event: HandlerEvent) => {
         await new Promise(resolve => setTimeout(resolve, 2000));
 
         // 6. Finalize Job (Update DB)
-        // We restore the prompt to just the visual description or keep it clean, 
-        // and set the real image_url.
+        // CRITICAL FIX: We restore the prompt to just the visual description so it appears nicely in the gallery
+        // The original 'prompt' was a JSON blob configuration.
         await Promise.all([
             supabaseAdmin.from('generated_images').update({ 
                 image_url: publicUrl,
-                prompt: panel.visual_description // Clean up the prompt column
+                prompt: panel.visual_description || "Comic Panel" // Clean up the prompt column with readable text
             }).eq('id', jobId),
             supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id })
         ]);

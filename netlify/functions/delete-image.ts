@@ -1,3 +1,4 @@
+
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
 import { S3Client, DeleteObjectCommand } from "@aws-sdk/client-s3";
@@ -61,15 +62,32 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         // 5. Attempt to delete image from R2 storage, but don't fail if it's already gone.
         const imageUrl = imageData.image_url;
-        if (imageUrl) {
+        if (imageUrl && imageUrl !== 'PENDING') {
             try {
-                const key = imageUrl.replace(`${process.env.R2_PUBLIC_URL}/`, '');
-                const deleteCommand = new DeleteObjectCommand({
-                    Bucket: process.env.R2_BUCKET_NAME!,
-                    Key: key,
-                });
-                await (s3Client as any).send(deleteCommand);
-                console.log(`[delete-image] Successfully deleted ${key} from R2.`);
+                // Improved URL parsing to handle encoded characters and different structures
+                let key = '';
+                try {
+                    // If it's a valid URL, extract pathname
+                    const urlObj = new URL(imageUrl);
+                    // Remove leading slash to get key relative to bucket root
+                    key = urlObj.pathname.substring(1); 
+                } catch (e) {
+                    // Fallback string replacement if URL parsing fails (legacy or relative paths)
+                    const publicUrl = process.env.R2_PUBLIC_URL || '';
+                    key = imageUrl.replace(`${publicUrl}/`, '');
+                }
+                
+                // Decode URI component to handle spaces or special chars in filename
+                key = decodeURIComponent(key);
+
+                if (key) {
+                    const deleteCommand = new DeleteObjectCommand({
+                        Bucket: process.env.R2_BUCKET_NAME!,
+                        Key: key,
+                    });
+                    await (s3Client as any).send(deleteCommand);
+                    console.log(`[delete-image] Successfully deleted ${key} from R2.`);
+                }
             } catch (r2Error: any) {
                 // Log the error but do not stop the function. This is key to fixing the bug.
                 console.warn(`[delete-image] Could not delete image from R2 (it might already be gone). Image ID: ${imageId}. Error: ${r2Error.message}`);

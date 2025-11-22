@@ -217,18 +217,20 @@ const StepIndicator = ({ currentStep }: { currentStep: number }) => {
     );
 };
 
-const DraggableBubble = ({ 
+interface DraggableBubbleProps {
+    text: string;
+    initialX: number;
+    initialY: number;
+    onUpdate: (x: number, y: number) => void;
+    fontFamily: string;
+}
+
+const DraggableBubble: React.FC<DraggableBubbleProps> = ({ 
     text, 
     initialX, 
     initialY, 
     onUpdate,
     fontFamily
-}: { 
-    text: string; 
-    initialX: number; 
-    initialY: number; 
-    onUpdate: (x: number, y: number) => void;
-    fontFamily: string;
 }) => {
     const [position, setPosition] = useState({ x: initialX, y: initialY });
     const [isDragging, setIsDragging] = useState(false);

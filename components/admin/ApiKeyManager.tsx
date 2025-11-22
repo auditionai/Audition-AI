@@ -4,8 +4,14 @@ import { useAuth } from '../../contexts/AuthContext';
 import { ApiKey } from '../../types';
 import { useTranslation } from '../../hooks/useTranslation';
 
+interface UsageStats {
+    flashCount: number;
+    proCount: number;
+    totalDiamonds: number;
+}
+
 interface DetailedUsageStats {
-    detailedUsage: Record<string, { flashCount: number; proCount: number; totalDiamonds: number }>;
+    detailedUsage: Record<string, UsageStats>;
 }
 
 const ApiKeyManager: React.FC = () => {
@@ -52,14 +58,6 @@ const ApiKeyManager: React.FC = () => {
             setIsLoading(false);
         };
         init();
-
-        // Auto-refresh every 30 seconds to keep stats sync
-        const interval = setInterval(() => {
-            fetchApiKeys();
-            fetchStats();
-        }, 30000);
-
-        return () => clearInterval(interval);
     }, [fetchApiKeys, fetchStats]);
 
     const handleCreate = async (e: React.FormEvent) => {
@@ -77,7 +75,6 @@ const ApiKeyManager: React.FC = () => {
             setApiKeys([newKey, ...apiKeys]);
             setNewName(''); setNewKeyValue('');
             showToast(t('creator.settings.admin.apiKeys.success'), 'success');
-            fetchStats(); // Refresh stats after creating key
         } catch (e: any) {
             showToast(e.message, 'error');
         } finally {
@@ -151,16 +148,10 @@ const ApiKeyManager: React.FC = () => {
             {/* Detailed AI Usage Statistics Section */}
             {stats?.detailedUsage && (
                 <div className="bg-[#12121A]/80 border border-blue-500/20 rounded-2xl shadow-lg p-6">
-                    <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-2xl font-bold text-blue-400 flex items-center gap-2">
-                            <i className="ph-fill ph-chart-pie-slice"></i>
-                            Thống Kê Chi Tiết Sử Dụng AI
-                        </h3>
-                        <span className="flex items-center gap-2 text-xs text-green-400 animate-pulse bg-green-500/10 px-2 py-1 rounded">
-                            <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                            Live Update (30s)
-                        </span>
-                    </div>
+                    <h3 className="text-2xl font-bold mb-4 text-blue-400 flex items-center gap-2">
+                        <i className="ph-fill ph-chart-pie-slice"></i>
+                        Thống Kê Chi Tiết Sử Dụng AI
+                    </h3>
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm text-left text-gray-300">
                             <thead className="text-xs text-gray-400 uppercase bg-white/5">
@@ -173,7 +164,7 @@ const ApiKeyManager: React.FC = () => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {Object.entries(stats.detailedUsage).map(([category, data]) => (
+                                {Object.entries(stats.detailedUsage as Record<string, UsageStats>).map(([category, data]) => (
                                     <tr key={category} className="border-b border-white/5 hover:bg-white/5 transition-colors">
                                         <td className="px-4 py-3 font-semibold text-white">{category}</td>
                                         <td className="px-4 py-3 text-center text-cyan-300">{data.flashCount.toLocaleString()}</td>
@@ -184,17 +175,15 @@ const ApiKeyManager: React.FC = () => {
                                 ))}
                                 <tr className="bg-white/10 font-bold border-t-2 border-white/20">
                                     <td className="px-4 py-4 text-white text-base">TỔNG CỘNG</td>
-                                    <td className="px-4 py-4 text-center text-cyan-300">{Object.values(stats.detailedUsage).reduce((acc, curr) => acc + curr.flashCount, 0).toLocaleString()}</td>
-                                    <td className="px-4 py-4 text-center text-yellow-300">{Object.values(stats.detailedUsage).reduce((acc, curr) => acc + curr.proCount, 0).toLocaleString()}</td>
-                                    <td className="px-4 py-4 text-right text-pink-400 text-lg">{Object.values(stats.detailedUsage).reduce((acc, curr) => acc + curr.totalDiamonds, 0).toLocaleString()} 💎</td>
-                                    <td className="px-4 py-4 text-right text-green-400 text-lg">{(Object.values(stats.detailedUsage).reduce((acc, curr) => acc + curr.totalDiamonds, 0) * 1000).toLocaleString()} đ</td>
+                                    <td className="px-4 py-4 text-center text-cyan-300">{Object.values(stats.detailedUsage as Record<string, UsageStats>).reduce((acc, curr) => acc + curr.flashCount, 0).toLocaleString()}</td>
+                                    <td className="px-4 py-4 text-center text-yellow-300">{Object.values(stats.detailedUsage as Record<string, UsageStats>).reduce((acc, curr) => acc + curr.proCount, 0).toLocaleString()}</td>
+                                    <td className="px-4 py-4 text-right text-pink-400 text-lg">{Object.values(stats.detailedUsage as Record<string, UsageStats>).reduce((acc, curr) => acc + curr.totalDiamonds, 0).toLocaleString()} 💎</td>
+                                    <td className="px-4 py-4 text-right text-green-400 text-lg">{(Object.values(stats.detailedUsage as Record<string, UsageStats>).reduce((acc, curr) => acc + curr.totalDiamonds, 0) * 1000).toLocaleString()} đ</td>
                                 </tr>
                             </tbody>
                         </table>
                     </div>
-                    <p className="text-xs text-gray-500 mt-4 italic">
-                        * Hệ thống tự động đồng bộ: Mọi chi phí phát sinh từ API Key nhưng không nằm trong 10.000 giao dịch gần nhất sẽ được cộng dồn vào mục "Single Image" (Flash) để đảm bảo tổng doanh thu khớp 100% với chi phí thực tế.
-                    </p>
+                    <p className="text-xs text-gray-500 mt-4 italic">* Dữ liệu được tổng hợp từ 5000 giao dịch gần nhất trong hệ thống. Flash: Các model tốc độ cao giá rẻ. Pro: Các model chất lượng cao (Gemini 3 Pro, Imagen Ultra).</p>
                 </div>
             )}
         </div>

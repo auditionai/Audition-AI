@@ -39,8 +39,8 @@ export const GameConfigProvider: React.FC<{ children: ReactNode }> = ({ children
                 if (data.cosmetics) {
                     // Build Reverse Lookup Maps for Titles to fix key issues
                     // We use 'any' cast because the types of translations are generic
-                    const enTitles = (translations.en.cosmetics as any)?.titles || {};
-                    const viTitles = (translations.vi.cosmetics as any)?.titles || {};
+                    const enTitles = (translations.en as any).cosmetics?.titles || {};
+                    const viTitles = (translations.vi as any).cosmetics?.titles || {};
                     
                     // Map of "lowercase name" -> "translation key suffix"
                     const titleKeyMap = new Map<string, string>();

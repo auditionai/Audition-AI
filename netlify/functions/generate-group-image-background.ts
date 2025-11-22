@@ -11,17 +11,18 @@ const XP_PER_CHARACTER = 5;
 // Watermark Function (Text with Drop Shadow)
 const addWatermark = async (imageBuffer: Buffer): Promise<Buffer> => {
     try {
-        console.log("Starting text watermark process (group)...");
+        console.log("Starting text watermark process (group/GitHub Raw)...");
         const image = await (Jimp as any).read(imageBuffer);
         
         const mainWidth = image.getWidth();
         const mainHeight = image.getHeight();
 
-        // Use stable unpkg URLs for Jimp fonts
-        const FONT_WHITE_16 = 'https://unpkg.com/@jimp/plugin-print/fonts/open-sans/open-sans-16-white/open-sans-16-white.fnt';
-        const FONT_WHITE_32 = 'https://unpkg.com/@jimp/plugin-print/fonts/open-sans/open-sans-32-white/open-sans-32-white.fnt';
-        const FONT_BLACK_16 = 'https://unpkg.com/@jimp/plugin-print/fonts/open-sans/open-sans-16-black/open-sans-16-black.fnt';
-        const FONT_BLACK_32 = 'https://unpkg.com/@jimp/plugin-print/fonts/open-sans/open-sans-32-black/open-sans-32-black.fnt';
+        // Use stable GitHub Raw URLs for Jimp fonts (more reliable than unpkg)
+        const BASE_FONT_URL = 'https://raw.githubusercontent.com/jimp-dev/jimp/master/packages/plugin-print/fonts/open-sans';
+        const FONT_WHITE_16 = `${BASE_FONT_URL}/open-sans-16-white/open-sans-16-white.fnt`;
+        const FONT_WHITE_32 = `${BASE_FONT_URL}/open-sans-32-white/open-sans-32-white.fnt`;
+        const FONT_BLACK_16 = `${BASE_FONT_URL}/open-sans-16-black/open-sans-16-black.fnt`;
+        const FONT_BLACK_32 = `${BASE_FONT_URL}/open-sans-32-black/open-sans-32-black.fnt`;
 
         // Load fonts in parallel
         const [f16w, f16b, f32w, f32b] = await Promise.all([
@@ -38,16 +39,15 @@ const addWatermark = async (imageBuffer: Buffer): Promise<Buffer> => {
         const wTop = (Jimp as any).measureText(f16w, textTop);
         const wBottom = (Jimp as any).measureText(f32w, textBottom);
 
-        // Margins
+        // Margins & Positioning (Bottom Right)
         const marginX = 20;
         const marginY = 20;
 
-        // Coordinates
         const xTop = mainWidth - wTop - marginX;
-        const yTop = mainHeight - 60 - marginY; // Higher up
-
         const xBottom = mainWidth - wBottom - marginX;
-        const yBottom = mainHeight - 35 - marginY; // Below top text
+        
+        const yBottom = mainHeight - 40 - marginY; 
+        const yTop = yBottom - 25;
 
         // Print Drop Shadow (Black) first - offset by 2px
         image.print(f16b, xTop + 2, yTop + 2, textTop);

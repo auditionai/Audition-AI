@@ -19,23 +19,35 @@ const handler: Handler = async (event: HandlerEvent) => {
             return { statusCode: 401, body: JSON.stringify({ error: `Unauthorized: ${authError?.message || 'Invalid token.'}` }) };
         }
 
-        // --- GET Method: Fetch or Create User Profile via RPC ---
+        // --- GET Method: Fetch or Create User Profile ---
         if (event.httpMethod === 'GET') {
-            const { data: profile, error: rpcError } = await supabaseAdmin
+            // Step 1: Call RPC to handle "new user" logic (create if not exists, insert defaults)
+            // We rely on this mainly for the side-effect of creation/initialization.
+            const { error: rpcError } = await supabaseAdmin
                 .rpc('handle_new_user', {
                     p_id: authUser.id,
                     p_email: authUser.email!,
                     p_display_name: authUser.user_metadata?.full_name || 'Tân Binh',
                     p_photo_url: authUser.user_metadata?.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${authUser.id}`,
-                })
-                .single(); // Ensure we get a single object, not an array
+                });
 
             if (rpcError) {
-                throw new Error(`RPC 'handle_new_user' failed: ${rpcError.message}`);
+                console.warn(`RPC 'handle_new_user' warning: ${rpcError.message}`);
+                // Continue execution, as the user might already exist and RPC just failed on duplicate key or similar, 
+                // or we can try to fetch anyway.
             }
             
-            if (!profile) {
-                 throw new Error('RPC function returned no profile. This should not happen.');
+            // Step 2: CRITICAL FIX - Fetch directly from 'users' table.
+            // The RPC return value might be cached or stale (missing new columns like equipped_name_effect_id).
+            // Selecting '*' ensures we get the absolute latest schema structure.
+            const { data: profile, error: fetchError } = await supabaseAdmin
+                .from('users')
+                .select('*')
+                .eq('id', authUser.id)
+                .single();
+
+            if (fetchError || !profile) {
+                 throw new Error(`Failed to fetch user profile: ${fetchError?.message || 'Profile not found'}`);
             }
 
             return { statusCode: 200, body: JSON.stringify(profile) };

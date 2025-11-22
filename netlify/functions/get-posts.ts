@@ -1,4 +1,3 @@
-
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
 
@@ -30,20 +29,32 @@ const handler: Handler = async (event: HandlerEvent) => {
     }
 
     try {
-        // 3. Fetch Posts with Dynamic Counts
-        // We use post_likes(count) and post_comments(count) to get real-time numbers
+        // 3. Fetch Posts
+        // We explicitly select fields to avoid issues if schema drifts, but '*' is generally safe if table exists.
+        // JOINING users table to get creator info.
         const { data, error } = await supabaseAdmin
             .from('posts')
             .select(`
                 *,
-                user:users (display_name, photo_url, xp, equipped_frame_id, equipped_title_id, equipped_name_effect_id),
+                user:users (
+                    id, 
+                    display_name, 
+                    photo_url, 
+                    xp, 
+                    equipped_frame_id, 
+                    equipped_title_id, 
+                    equipped_name_effect_id
+                ),
                 likes_count:post_likes(count),
                 comments_count:post_comments(count)
             `)
             .eq('user_id', targetUserId)
             .order('created_at', { ascending: false });
 
-        if (error) throw error;
+        if (error) {
+            console.error("Supabase get-posts error:", error);
+            throw error;
+        }
 
         // 4. Check "Is Liked By User" manually
         const posts = data || [];
@@ -65,7 +76,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         const formattedPosts = posts.map((post: any) => {
             const userData = Array.isArray(post.user) ? post.user[0] : post.user;
             
-            // Extract counts from the response object (Supabase returns [{count: N}] or similar depending on version)
+            // Extract counts
             const realLikesCount = post.likes_count?.[0]?.count ?? 0;
             const realCommentsCount = post.comments_count?.[0]?.count ?? 0;
 
@@ -87,7 +98,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         };
 
     } catch (error: any) {
-        console.error("Fetch posts error:", error);
+        console.error("Fetch posts fatal error:", error);
         return { statusCode: 500, body: JSON.stringify({ error: error.message || 'Server error' }) };
     }
 };

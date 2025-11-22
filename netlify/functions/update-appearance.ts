@@ -20,14 +20,17 @@ const handler: Handler = async (event: HandlerEvent) => {
 
     try {
         const { type, itemId } = JSON.parse(event.body || '{}');
-        if (!type || !itemId) {
+        if (!type || itemId === undefined) {
             return { statusCode: 400, body: JSON.stringify({ error: 'Missing type or itemId.' }) };
         }
 
+        // Convert 'default' string to null for DB compatibility (UUID expected)
+        const dbValue = (itemId === 'default' || itemId === '') ? null : itemId;
+
         const updates: any = {};
-        if (type === 'frame') updates.equipped_frame_id = itemId;
-        if (type === 'title') updates.equipped_title_id = itemId;
-        if (type === 'name_effect') updates.equipped_name_effect_id = itemId; // NEW
+        if (type === 'frame') updates.equipped_frame_id = dbValue;
+        if (type === 'title') updates.equipped_title_id = dbValue;
+        if (type === 'name_effect') updates.equipped_name_effect_id = dbValue;
 
         const { error: updateError } = await supabaseAdmin
             .from('users')

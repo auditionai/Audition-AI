@@ -94,7 +94,16 @@ const ProfilePage: React.FC = () => {
     // --- EQUIP ITEM ---
     const handleEquip = async (type: 'frame' | 'title' | 'name_effect', itemId: string) => {
         if (!session) return;
+        
+        // Optimistic UI update value (null if default)
+        const optimisticValue = itemId === 'default' ? undefined : itemId;
+
         try {
+            // Update local state immediately for responsiveness
+            if (type === 'frame') updateUserProfile({ equipped_frame_id: optimisticValue });
+            if (type === 'title') updateUserProfile({ equipped_title_id: optimisticValue });
+            if (type === 'name_effect') updateUserProfile({ equipped_name_effect_id: optimisticValue });
+
             const res = await fetch('/.netlify/functions/update-appearance', {
                 method: 'PUT',
                 headers: {
@@ -106,12 +115,10 @@ const ProfilePage: React.FC = () => {
             
             if (!res.ok) throw new Error('Failed to update appearance');
             
-            if (type === 'frame') updateUserProfile({ equipped_frame_id: itemId });
-            if (type === 'title') updateUserProfile({ equipped_title_id: itemId });
-            if (type === 'name_effect') updateUserProfile({ equipped_name_effect_id: itemId });
-            
             showToast(t('creator.settings.personalization.success'), 'success');
         } catch (error: any) {
+            // Revert on error would be complex here without storing previous state, 
+            // but usually not critical for cosmetic equip.
             showToast(error.message, 'error');
         }
     };

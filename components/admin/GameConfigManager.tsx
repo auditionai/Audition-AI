@@ -233,8 +233,19 @@ const GameConfigManager: React.FC = () => {
 
     const sqlFixScript = `-- CHẠY SCRIPT NÀY TRONG SUPABASE SQL EDITOR ĐỂ SỬA LỖI THÔNG BÁO & UNKNOWN USER
 
+-- 0. TẠO BẢNG NOTIFICATIONS NẾU CHƯA CÓ (Sửa lỗi 'relation does not exist')
+CREATE TABLE IF NOT EXISTS public.notifications (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    recipient_id UUID NOT NULL, -- Người nhận
+    actor_id UUID, -- Người gây ra hành động (người like/comment)
+    type TEXT NOT NULL, -- 'like', 'comment', 'system', etc.
+    entity_id TEXT, -- ID của bài viết hoặc đối tượng liên quan
+    content TEXT,
+    is_read BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+);
+
 -- 1. Kích hoạt Realtime cho bảng Notifications (QUAN TRỌNG NHẤT)
--- Bước này giúp chuông thông báo nhảy số ngay lập tức. Code được viết trong khối DO để tránh lỗi cú pháp.
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'notifications') THEN
@@ -278,7 +289,7 @@ EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
 
-SELECT 'Cấu hình Database thành công! Hãy thử lại tính năng Thông báo.' as ket_qua;
+SELECT 'Cấu hình Database và Bảng Notifications thành công!' as ket_qua;
 `;
 
     return (

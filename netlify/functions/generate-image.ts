@@ -55,16 +55,18 @@ const processImageForGemini = async (imageDataUrl: string | null, targetAspectRa
     }
 };
 
-// Add Watermark Function (Updated for 2-line layout)
+// Add Watermark Function (Fixed for Serverless/Netlify)
 const addWatermark = async (imageBuffer: Buffer): Promise<Buffer> => {
     try {
+        console.log("Starting watermark process...");
         const image = await (Jimp as any).read(imageBuffer);
         
-        // Load fonts: Small for "Created by", Large for "AUDITION AI"
-        // Note: Standard Jimp fonts do not support Vietnamese accents well. 
-        // Using "Created by" ensures readability and professional look.
-        const fontSmall = await (Jimp as any).loadFont((Jimp as any).FONT_SANS_16_WHITE);
-        const fontLarge = await (Jimp as any).loadFont((Jimp as any).FONT_SANS_32_WHITE);
+        // FIX: Use CDN URLs for fonts because local node_modules paths often fail in Netlify Functions bundling
+        const FONT_SMALL_URL = "https://unpkg.com/@jimp/plugin-print@0.10.6/fonts/open-sans/open-sans-16-white/open-sans-16-white.fnt";
+        const FONT_LARGE_URL = "https://unpkg.com/@jimp/plugin-print@0.10.6/fonts/open-sans/open-sans-32-white/open-sans-32-white.fnt";
+
+        const fontSmall = await (Jimp as any).loadFont(FONT_SMALL_URL);
+        const fontLarge = await (Jimp as any).loadFont(FONT_LARGE_URL);
         
         const textTop = "Created by";
         const textBottom = "AUDITION AI";
@@ -75,7 +77,7 @@ const addWatermark = async (imageBuffer: Buffer): Promise<Buffer> => {
         const heightTop = (Jimp as any).measureTextHeight(fontSmall, textTop, 1000);
         const heightBottom = (Jimp as any).measureTextHeight(fontLarge, textBottom, 1000);
         
-        const padding = 12;
+        const padding = 10;
         const boxWidth = Math.max(widthTop, widthBottom) + (padding * 2);
         const boxHeight = heightTop + heightBottom + (padding * 1.5); 
         
@@ -85,7 +87,7 @@ const addWatermark = async (imageBuffer: Buffer): Promise<Buffer> => {
         const y = image.getHeight() - boxHeight - margin;
         
         // Create semi-transparent black background (Hex + Alpha)
-        // 0x00000080 is Black with ~50% opacity
+        // 0x00000090 is Black with ~56% opacity
         const bgImage = new (Jimp as any)(boxWidth, boxHeight, 0x00000090);
         
         // Composite background
@@ -96,11 +98,12 @@ const addWatermark = async (imageBuffer: Buffer): Promise<Buffer> => {
         const xBottom = x + (boxWidth - widthBottom) / 2;
         
         image.print(fontSmall, xTop, y + padding, textTop);
-        image.print(fontLarge, xBottom, y + padding + heightTop - 5, textBottom); // -5 to tighten gap
+        image.print(fontLarge, xBottom, y + padding + heightTop - 4, textBottom); 
 
+        console.log("Watermark added successfully.");
         return await image.getBufferAsync((Jimp as any).MIME_PNG);
     } catch (error) {
-        console.error("Failed to add watermark:", error);
+        console.error("Failed to add watermark (Returning original image):", error);
         return imageBuffer; // Return original if watermark fails
     }
 };

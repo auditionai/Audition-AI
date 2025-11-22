@@ -127,7 +127,14 @@ const handler: Handler = async (event: HandlerEvent) => {
             ContentType: 'image/png'
         }));
 
+        if (!process.env.R2_PUBLIC_URL) {
+            throw new Error("Server configuration error: Missing R2_PUBLIC_URL");
+        }
+
         const publicUrl = `${process.env.R2_PUBLIC_URL}/${fileName}`;
+
+        // Add a small delay to ensure CDN propagation
+        await new Promise(resolve => setTimeout(resolve, 1000));
 
         // 6. Finalize Job (Update DB)
         // We restore the prompt to just the visual description or keep it clean, 

@@ -133,6 +133,8 @@ const ComicStudio: React.FC = () => {
 
     // State for Step 2 & 3
     const [panels, setPanels] = useState<ComicPanel[]>([]);
+    // Track image loading states separately to prevent white flashes/broken images
+    const [imageLoadStates, setImageLoadStates] = useState<{[key: string]: 'loading' | 'loaded' | 'error'}>({});
     
     // Refs for Export
     const panelRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
@@ -360,7 +362,9 @@ const ComicStudio: React.FC = () => {
     const handleRenderPanel = async (panel: ComicPanel) => {
         if (!supabase) return;
         
+        // Update state to rendering
         setPanels(prev => prev.map(p => p.id === panel.id ? { ...p, is_rendering: true } : p));
+        setImageLoadStates(prev => ({ ...prev, [panel.id]: 'loading' })); // Reset load state
         
         try {
             // 1. Trigger Job creation (Cost deduction happens here)
@@ -393,6 +397,7 @@ const ComicStudio: React.FC = () => {
                     filter: `id=eq.${jobId}` 
                 }, (payload: any) => {
                     const record = payload.new;
+                    // IMPORTANT: Check against 'PENDING' to avoid showing broken image before it's ready
                     if (record.image_url && record.image_url !== 'PENDING') {
                         // Success!
                         setPanels(prev => prev.map(p => p.id === panel.id ? { 
@@ -413,6 +418,7 @@ const ComicStudio: React.FC = () => {
                 }, () => {
                     // Failure/Refund
                     setPanels(prev => prev.map(p => p.id === panel.id ? { ...p, is_rendering: false } : p));
+                    setImageLoadStates(prev => ({ ...prev, [panel.id]: 'error' }));
                     showToast("Lỗi khi vẽ. Đã hoàn tiền.", "error");
                     supabase.removeChannel(channel);
                 })
@@ -469,6 +475,14 @@ const ComicStudio: React.FC = () => {
     const handleSelectPremise = (premise: string) => {
         setStorySettings({ ...storySettings, premise });
         setIsPremiseModalOpen(false);
+    };
+
+    const handleImageLoad = (panelId: string) => {
+        setImageLoadStates(prev => ({ ...prev, [panelId]: 'loaded' }));
+    };
+
+    const handleImageError = (panelId: string) => {
+        setImageLoadStates(prev => ({ ...prev, [panelId]: 'error' }));
     };
 
     return (
@@ -767,49 +781,89 @@ const ComicStudio: React.FC = () => {
                     {activeStep === 3 && (
                         <div className="max-w-5xl mx-auto space-y-8">
                             <div className="grid grid-cols-1 gap-8">
-                                {panels.map((panel) => (
-                                    <div key={panel.id} className="bg-[#1a1a1a] p-2 shadow-2xl rounded-sm">
-                                        <div 
-                                            ref={(el) => { panelRefs.current[panel.id] = el; }}
-                                            className="relative w-full aspect-video bg-white overflow-hidden border border-black flex items-center justify-center group"
-                                        >
-                                            {/* Draw Button Overlay */}
-                                            {!panel.image_url && (
-                                                <div className="absolute inset-0 bg-skin-fill-secondary/90 flex flex-col items-center justify-center z-20">
-                                                    <p className="text-gray-400 text-sm mb-4 max-w-md text-center px-4 line-clamp-2">{panel.visual_description}</p>
-                                                    <button 
-                                                        onClick={() => handleRenderPanel(panel)} 
-                                                        disabled={panel.is_rendering}
-                                                        className="themed-button-primary px-8 py-3 rounded-full font-bold text-white shadow-xl flex items-center gap-2 transform hover:scale-105 transition-all"
-                                                    >
-                                                        {panel.is_rendering ? <i className="ph-bold ph-spinner animate-spin text-xl"></i> : <i className="ph-fill ph-paint-brush-broad text-xl"></i>}
-                                                        {panel.is_rendering ? 'Đang chờ AI vẽ...' : `Vẽ Panel Này (${RENDER_COST} 💎)`}
-                                                    </button>
-                                                </div>
-                                            )}
+                                {panels.map((panel) => {
+                                    // A panel has a URL if it's defined AND not 'PENDING'.
+                                    // 'PENDING' means the worker is still processing.
+                                    const isPending = panel.image_url === 'PENDING';
+                                    const hasUrl = !!panel.image_url && !isPending;
+                                    const loadState = imageLoadStates[panel.id] || 'loading';
+                                    const isLoadingImage = loadState === 'loading' && hasUrl;
+                                    const isErrorImage = loadState === 'error';
 
-                                            {panel.image_url ? (
-                                                <>
-                                                    <img src={panel.image_url} alt="Panel" className="w-full h-full object-cover" crossOrigin="anonymous" />
-                                                    {/* Bubbles */}
-                                                    {Array.isArray(panel.dialogue) && panel.dialogue.map((dia, idx) => (
-                                                        <DraggableBubble 
-                                                            key={idx} 
-                                                            text={`${dia.speaker ? dia.speaker + ': ' : ''}${dia.text}`} 
-                                                            initialX={50 + (idx * 50)} 
-                                                            initialY={50 + (idx * 50)}
-                                                            onUpdate={() => {}} 
-                                                        />
-                                                    ))}
-                                                </>
-                                            ) : null}
-                                            
-                                            <div className="absolute bottom-2 right-2 bg-white border border-black text-black text-[10px] font-bold px-1.5 py-0.5 z-10 pointer-events-none select-none">
-                                                {panel.panel_number}
+                                    return (
+                                        <div key={panel.id} className="bg-[#1a1a1a] p-2 shadow-2xl rounded-sm">
+                                            <div 
+                                                ref={(el) => { panelRefs.current[panel.id] = el; }}
+                                                className="relative w-full aspect-video bg-white overflow-hidden border border-black flex items-center justify-center group"
+                                            >
+                                                {/* Draw Button Overlay (Show if no URL and not rendering) */}
+                                                {(!hasUrl && !panel.is_rendering && !isPending) && (
+                                                    <div className="absolute inset-0 bg-skin-fill-secondary/90 flex flex-col items-center justify-center z-20">
+                                                        <p className="text-gray-400 text-sm mb-4 max-w-md text-center px-4 line-clamp-2">{panel.visual_description}</p>
+                                                        <button 
+                                                            onClick={() => handleRenderPanel(panel)} 
+                                                            className="themed-button-primary px-8 py-3 rounded-full font-bold text-white shadow-xl flex items-center gap-2 transform hover:scale-105 transition-all"
+                                                        >
+                                                            <i className="ph-fill ph-paint-brush-broad text-xl"></i>
+                                                            Vẽ Panel Này ({RENDER_COST} 💎)
+                                                        </button>
+                                                    </div>
+                                                )}
+
+                                                {/* Processing State (Rendering or Pending or Image Loading) */}
+                                                {(panel.is_rendering || isPending || isLoadingImage) && !isErrorImage && (
+                                                    <div className="absolute inset-0 bg-skin-fill-secondary/90 flex flex-col items-center justify-center z-20">
+                                                        <i className="ph-bold ph-spinner animate-spin text-3xl text-pink-500 mb-2"></i>
+                                                        <p className="text-sm text-gray-300">
+                                                            {isLoadingImage ? 'Đang tải ảnh...' : 'AI đang vẽ...'}
+                                                        </p>
+                                                    </div>
+                                                )}
+                                                
+                                                {/* Image Error State */}
+                                                {isErrorImage && hasUrl && (
+                                                     <div className="absolute inset-0 bg-skin-fill-secondary/90 flex flex-col items-center justify-center z-20">
+                                                        <i className="ph-fill ph-warning-circle text-3xl text-red-500 mb-2"></i>
+                                                        <p className="text-sm text-gray-300 mb-2">Lỗi tải ảnh</p>
+                                                        <button 
+                                                            onClick={() => setImageLoadStates(prev => ({...prev, [panel.id]: 'loading'}))} 
+                                                            className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-full text-xs font-bold"
+                                                        >
+                                                            Thử lại
+                                                        </button>
+                                                    </div>
+                                                )}
+
+                                                {/* The Image */}
+                                                {hasUrl && (
+                                                    <img 
+                                                        src={panel.image_url} 
+                                                        alt="Panel" 
+                                                        className={`w-full h-full object-cover ${isLoadingImage || isErrorImage ? 'opacity-0' : 'opacity-100'}`} 
+                                                        crossOrigin="anonymous" 
+                                                        onLoad={() => handleImageLoad(panel.id)}
+                                                        onError={() => handleImageError(panel.id)}
+                                                    />
+                                                )}
+                                                
+                                                {/* Bubbles (Only show if image is loaded to prevent floating on white) */}
+                                                {hasUrl && !isLoadingImage && !isErrorImage && Array.isArray(panel.dialogue) && panel.dialogue.map((dia, idx) => (
+                                                    <DraggableBubble 
+                                                        key={idx} 
+                                                        text={`${dia.speaker ? dia.speaker + ': ' : ''}${dia.text}`} 
+                                                        initialX={50 + (idx * 50)} 
+                                                        initialY={50 + (idx * 50)}
+                                                        onUpdate={() => {}} 
+                                                    />
+                                                ))}
+                                                
+                                                <div className="absolute bottom-2 right-2 bg-white border border-black text-black text-[10px] font-bold px-1.5 py-0.5 z-10 pointer-events-none select-none">
+                                                    {panel.panel_number}
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         </div>
                     )}

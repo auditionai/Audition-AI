@@ -1,3 +1,4 @@
+
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
 
@@ -23,24 +24,33 @@ const handler: Handler = async (event: HandlerEvent) => {
     
     // 2. Fetch all public images with creator info
     try {
+        // Modified query to be safer. Removed strict foreign key hint just in case.
+        // Using left join implicitly via standard Supabase syntax.
         const { data, error } = await supabaseAdmin
             .from('generated_images')
             .select(`
                 id, user_id, prompt, image_url, created_at, is_public,
-                creator:users (display_name, photo_url, xp)
+                users (display_name, photo_url, xp)
             `)
             .eq('is_public', true)
+            .not('image_url', 'is', null) // Filter out deleted images
             .order('created_at', { ascending: false });
 
         if (error) throw error;
 
-        const processedData = data.map(image => {
-            const creatorData = Array.isArray(image.creator) ? image.creator[0] : image.creator;
+        const processedData = data.map((image: any) => {
+            // Handle joined data which might be returned as 'users' object or array
+            const creatorData = Array.isArray(image.users) ? image.users[0] : image.users;
             return {
-                ...image,
+                id: image.id,
+                user_id: image.user_id,
+                prompt: image.prompt,
+                image_url: image.image_url,
+                created_at: image.created_at,
+                is_public: image.is_public,
                 creator: {
                     display_name: creatorData?.display_name || 'Vô danh',
-                    photo_url: creatorData?.photo_url || '',
+                    photo_url: creatorData?.photo_url || 'https://api.dicebear.com/7.x/bottts/svg?seed=Unknown',
                     level: calculateLevelFromXp(creatorData?.xp || 0)
                 }
             };
@@ -51,6 +61,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             body: JSON.stringify(processedData),
         };
     } catch (error: any) {
+        console.error("Admin Gallery Load Error:", error.message);
         return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
     }
 };

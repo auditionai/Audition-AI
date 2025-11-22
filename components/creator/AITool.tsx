@@ -102,64 +102,64 @@ const AITool: React.FC = () => {
             </div>
             
             <div className="max-w-7xl mx-auto">
-                {/* Main Tabs - Updated to Grid for Mobile, Flex for Desktop */}
-                <div className="grid grid-cols-2 gap-3 mb-6 md:flex md:justify-center md:gap-0 md:border-b md:border-white/10 md:mb-8">
+                {/* Main Tabs - GRID LAYOUT FOR MOBILE */}
+                <div className="grid grid-cols-2 gap-2 mb-6 md:flex md:justify-center md:gap-0 md:border-b md:border-white/10 md:mb-8">
                     <button
                         onClick={() => setActiveTab('generator')}
                         className={`
-                            px-4 py-3 font-bold text-sm md:text-base rounded-lg md:rounded-none md:rounded-t-lg transition-all
-                            flex items-center justify-center gap-2
+                            px-4 py-3 font-bold text-sm md:text-base rounded-xl md:rounded-none md:rounded-t-lg transition-all
+                            flex flex-col md:flex-row items-center justify-center gap-2 border-2 md:border-0 md:border-b-2
                             ${activeTab === 'generator' 
-                                ? 'bg-skin-accent text-white md:bg-transparent md:text-skin-accent md:border-b-2 md:border-skin-accent shadow-lg md:shadow-none' 
-                                : 'bg-skin-fill-secondary text-skin-muted hover:text-skin-base hover:bg-white/5'
+                                ? 'bg-skin-accent text-white border-transparent md:bg-transparent md:text-skin-accent md:border-skin-accent shadow-lg md:shadow-none' 
+                                : 'bg-skin-fill-secondary text-skin-muted border-skin-border hover:text-skin-base hover:bg-white/5'
                             }
                         `}
                     >
-                       <i className="ph-fill ph-magic-wand text-lg"></i>
+                       <i className="ph-fill ph-magic-wand text-xl md:text-lg"></i>
                         {t('creator.aiTool.tabs.single')}
                     </button>
                      <button
                         onClick={() => setActiveTab('group-studio')}
                         className={`
-                            px-4 py-3 font-bold text-sm md:text-base rounded-lg md:rounded-none md:rounded-t-lg transition-all
-                            flex items-center justify-center gap-2
+                            px-4 py-3 font-bold text-sm md:text-base rounded-xl md:rounded-none md:rounded-t-lg transition-all
+                            flex flex-col md:flex-row items-center justify-center gap-2 border-2 md:border-0 md:border-b-2
                             ${activeTab === 'group-studio' 
-                                ? 'bg-skin-accent text-white md:bg-transparent md:text-skin-accent md:border-b-2 md:border-skin-accent shadow-lg md:shadow-none' 
-                                : 'bg-skin-fill-secondary text-skin-muted hover:text-skin-base hover:bg-white/5'
+                                ? 'bg-skin-accent text-white border-transparent md:bg-transparent md:text-skin-accent md:border-skin-accent shadow-lg md:shadow-none' 
+                                : 'bg-skin-fill-secondary text-skin-muted border-skin-border hover:text-skin-base hover:bg-white/5'
                             }
                         `}
                     >
-                        <i className="ph-fill ph-users-three text-lg"></i>
+                        <i className="ph-fill ph-users-three text-xl md:text-lg"></i>
                         {t('creator.aiTool.tabs.group')}
                     </button>
                     {/* NEW COMIC TAB */}
                     <button
                         onClick={() => setActiveTab('comic-studio')}
                         className={`
-                            px-4 py-3 font-bold text-sm md:text-base rounded-lg md:rounded-none md:rounded-t-lg transition-all
-                            flex items-center justify-center gap-2 relative overflow-hidden
+                            px-4 py-3 font-bold text-sm md:text-base rounded-xl md:rounded-none md:rounded-t-lg transition-all
+                            flex flex-col md:flex-row items-center justify-center gap-2 relative overflow-hidden border-2 md:border-0 md:border-b-2
                             ${activeTab === 'comic-studio' 
-                                ? 'bg-skin-accent text-white md:bg-transparent md:text-skin-accent md:border-b-2 md:border-skin-accent shadow-lg md:shadow-none' 
-                                : 'bg-skin-fill-secondary text-skin-muted hover:text-skin-base hover:bg-white/5'
+                                ? 'bg-skin-accent text-white border-transparent md:bg-transparent md:text-skin-accent md:border-skin-accent shadow-lg md:shadow-none' 
+                                : 'bg-skin-fill-secondary text-skin-muted border-skin-border hover:text-skin-base hover:bg-white/5'
                             }
                         `}
                     >
-                        <i className="ph-fill ph-book-open-text text-lg"></i>
+                        <i className="ph-fill ph-book-open-text text-xl md:text-lg"></i>
                         Truyện Tranh
                         <span className="absolute top-0 right-0 md:top-auto md:bottom-full md:mb-1 md:right-auto md:left-full md:ml-1 bg-gradient-to-r from-yellow-400 to-red-500 text-white text-[8px] px-1.5 py-0.5 rounded-bl-md md:rounded font-bold shadow-sm">HOT</span>
                     </button>
                     <button
                         onClick={() => setActiveTab('utilities')}
                         className={`
-                            px-4 py-3 font-bold text-sm md:text-base rounded-lg md:rounded-none md:rounded-t-lg transition-all
-                            flex items-center justify-center gap-2
+                            px-4 py-3 font-bold text-sm md:text-base rounded-xl md:rounded-none md:rounded-t-lg transition-all
+                            flex flex-col md:flex-row items-center justify-center gap-2 border-2 md:border-0 md:border-b-2
                             ${activeTab === 'utilities' 
-                                ? 'bg-skin-accent text-white md:bg-transparent md:text-skin-accent md:border-b-2 md:border-skin-accent shadow-lg md:shadow-none' 
-                                : 'bg-skin-fill-secondary text-skin-muted hover:text-skin-base hover:bg-white/5'
+                                ? 'bg-skin-accent text-white border-transparent md:bg-transparent md:text-skin-accent md:border-skin-accent shadow-lg md:shadow-none' 
+                                : 'bg-skin-fill-secondary text-skin-muted border-skin-border hover:text-skin-base hover:bg-white/5'
                             }
                         `}
                     >
-                        <i className="ph-fill ph-wrench text-lg"></i>
+                        <i className="ph-fill ph-wrench text-xl md:text-lg"></i>
                         {t('creator.aiTool.tabs.utilities')}
                     </button>
                 </div>

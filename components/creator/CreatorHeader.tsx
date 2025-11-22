@@ -107,7 +107,7 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
   };
 
   return (
-    <header className="fixed top-0 left-0 w-full z-40 bg-skin-fill/90 backdrop-blur-lg border-b border-skin-border shadow-lg transition-all">
+    <header className="fixed top-0 left-0 w-full z-40 bg-skin-fill/95 backdrop-blur-lg border-b border-skin-border shadow-lg transition-all">
       
       <div className="container mx-auto px-3 md:px-4">
         <div className="flex justify-between items-center h-16 md:h-20">
@@ -175,22 +175,22 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
             </nav>
           
           {/* Right: Actions */}
-          <div className="flex items-center gap-2 md:gap-4">
-            {/* Language Switcher (Desktop Only) */}
+          <div className="flex items-center gap-3 md:gap-4">
+            {/* Language Switcher (Desktop Only - Hidden on Mobile) */}
             <div className="hidden md:block">
                 <LanguageSwitcher />
             </div>
 
-            {/* Mobile Top Up (Redesigned Pill) */}
+            {/* Mobile Top Up (Pill Style) */}
             <button
               type="button"
               onClick={onTopUpClick}
-              className="md:hidden flex items-center gap-1.5 pl-2 pr-3 py-1 rounded-full cursor-pointer active:scale-95 bg-black/30 border border-skin-accent/30 shadow-sm"
+              className="md:hidden flex items-center gap-1.5 pl-1.5 pr-2.5 py-1 rounded-full bg-[#1E1B25] border border-skin-border shadow-sm active:scale-95 transition-transform"
             >
-              <div className="w-5 h-5 bg-skin-accent rounded-full flex items-center justify-center shadow-md">
-                  <i className="ph-fill ph-diamonds-four text-white text-xs"></i>
+              <div className="w-5 h-5 bg-gradient-to-br from-pink-500 to-purple-600 rounded-full flex items-center justify-center shadow-inner">
+                  <i className="ph-fill ph-diamonds-four text-white text-[10px]"></i>
               </div>
-              <span className="font-bold text-sm text-white">{user.diamonds}</span>
+              <span className="font-black text-xs text-white">{user.diamonds}</span>
             </button>
             
             {/* Desktop Top Up */}
@@ -206,16 +206,31 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
               </button>
             </div>
             
+            {/* Mobile Check-in Button (Icon Only) */}
+            <button 
+                type="button" 
+                onClick={onCheckInClick}
+                className="md:hidden relative text-skin-muted hover:text-skin-base active:scale-95 transition-transform"
+            >
+                <i className="ph-fill ph-calendar-check text-2xl"></i>
+                {!hasCheckedInToday && (
+                    <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500 border border-[#12121A]"></span>
+                    </span>
+                )}
+            </button>
+
             {/* Notification & Messages Group */}
-            <div className="flex items-center gap-1 bg-white/5 rounded-full p-1 border border-white/5">
+            <div className="flex items-center gap-1 md:bg-white/5 md:rounded-full md:p-1 md:border md:border-white/5">
                 {/* Messages Button */}
                 <button
                   type="button"
                   onClick={() => handleNavClick('messages')}
-                  className={`relative w-9 h-9 flex items-center justify-center rounded-full transition-colors ${activeTab === 'messages' ? 'bg-skin-accent text-white' : 'text-skin-muted hover:text-skin-base hover:bg-white/10'}`}
+                  className={`relative w-9 h-9 flex items-center justify-center rounded-full transition-colors ${activeTab === 'messages' ? 'bg-skin-accent text-white' : 'text-skin-muted hover:text-skin-base md:hover:bg-white/10'}`}
                   title={t('creator.header.nav.messages')}
                 >
-                    <i className="ph-fill ph-chat-centered-text text-lg"></i>
+                    <i className="ph-fill ph-chat-centered-text text-2xl md:text-lg"></i>
                 </button>
 
                 {/* Notification Bell */}
@@ -223,9 +238,9 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
                     <button
                       type="button"
                       onClick={handleNotificationClick}
-                      className={`relative w-9 h-9 flex items-center justify-center rounded-full transition-colors ${isNotificationOpen ? 'bg-skin-fill-secondary text-skin-accent' : 'text-skin-muted hover:text-skin-base hover:bg-white/10'}`}
+                      className={`relative w-9 h-9 flex items-center justify-center rounded-full transition-colors ${isNotificationOpen ? 'md:bg-skin-fill-secondary text-skin-accent' : 'text-skin-muted hover:text-skin-base md:hover:bg-white/10'}`}
                     >
-                        <i className={`ph-fill ${isNotificationOpen ? 'ph-bell-ringing' : 'ph-bell'} text-lg`}></i>
+                        <i className={`ph-fill ${isNotificationOpen ? 'ph-bell-ringing' : 'ph-bell'} text-2xl md:text-lg`}></i>
                         {unreadCount > 0 && (
                              <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.6)] border border-[#12121A]"></span>
                         )}

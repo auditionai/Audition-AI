@@ -110,23 +110,24 @@ const Leaderboard: React.FC = () => {
                             {topThree.length > 0 && (
                                 <div className="mb-12">
                                     {/* Mobile Podium Layout */}
-                                    <div className="md:hidden bg-skin-fill-secondary/50 rounded-2xl p-4 border border-white/5">
-                                        <div className="flex items-end justify-center gap-2">
+                                    <div className="md:hidden bg-skin-fill-secondary/50 rounded-2xl p-4 border border-white/5 backdrop-blur-sm mb-4">
+                                        <div className="flex items-end justify-center gap-2 h-48">
                                             {/* Rank 2 */}
                                             {topThree[1] && (
-                                                <div className="flex flex-col items-center w-1/3" onClick={() => handleUserClick(topThree[1].id)}>
+                                                <div className="flex flex-col items-center w-1/3 cursor-pointer" onClick={() => handleUserClick(topThree[1].id)}>
                                                     <div className="relative mb-2">
                                                         <UserAvatar url={topThree[1].photo_url} alt="" frameId={topThree[1].equipped_frame_id} level={topThree[1].level} size="md" />
                                                         <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-gray-400 text-black font-bold text-[10px] px-2 rounded-full border border-white shadow-sm">2</div>
                                                     </div>
                                                     <p className="font-bold text-xs text-center truncate w-full px-1"><UserName user={topThree[1]} /></p>
                                                     <p className="text-[10px] text-yellow-400 font-bold mt-0.5">{topThree[1].metric_value.toLocaleString()}</p>
+                                                    <div className="w-full h-16 bg-gray-700/30 rounded-t-lg mt-1 border-t-2 border-gray-500"></div>
                                                 </div>
                                             )}
                                             
                                             {/* Rank 1 */}
                                             {topThree[0] && (
-                                                <div className="flex flex-col items-center w-1/3 -mt-4" onClick={() => handleUserClick(topThree[0].id)}>
+                                                <div className="flex flex-col items-center w-1/3 -mt-6 z-10 cursor-pointer" onClick={() => handleUserClick(topThree[0].id)}>
                                                     <i className="ph-fill ph-crown text-yellow-400 text-2xl mb-1 animate-bounce"></i>
                                                     <div className="relative mb-2">
                                                         <UserAvatar url={topThree[0].photo_url} alt="" frameId={topThree[0].equipped_frame_id} level={topThree[0].level} size="lg" className="ring-2 ring-yellow-400 ring-offset-2 ring-offset-black" />
@@ -134,18 +135,20 @@ const Leaderboard: React.FC = () => {
                                                     </div>
                                                     <p className="font-bold text-sm text-center truncate w-full px-1 text-yellow-300"><UserName user={topThree[0]} /></p>
                                                     <p className="text-xs text-yellow-400 font-black mt-0.5">{topThree[0].metric_value.toLocaleString()}</p>
+                                                    <div className="w-full h-24 bg-yellow-600/30 rounded-t-lg mt-1 border-t-2 border-yellow-500 shadow-[0_-5px_20px_rgba(234,179,8,0.2)]"></div>
                                                 </div>
                                             )}
 
                                             {/* Rank 3 */}
                                             {topThree[2] && (
-                                                <div className="flex flex-col items-center w-1/3" onClick={() => handleUserClick(topThree[2].id)}>
+                                                <div className="flex flex-col items-center w-1/3 cursor-pointer" onClick={() => handleUserClick(topThree[2].id)}>
                                                     <div className="relative mb-2">
                                                         <UserAvatar url={topThree[2].photo_url} alt="" frameId={topThree[2].equipped_frame_id} level={topThree[2].level} size="md" />
                                                         <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-orange-700 text-white font-bold text-[10px] px-2 rounded-full border border-white shadow-sm">3</div>
                                                     </div>
                                                     <p className="font-bold text-xs text-center truncate w-full px-1"><UserName user={topThree[2]} /></p>
                                                     <p className="text-[10px] text-yellow-400 font-bold mt-0.5">{topThree[2].metric_value.toLocaleString()}</p>
+                                                    <div className="w-full h-12 bg-orange-800/30 rounded-t-lg mt-1 border-t-2 border-orange-700"></div>
                                                 </div>
                                             )}
                                         </div>

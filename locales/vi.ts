@@ -1,4 +1,5 @@
 
+
 export const vi = {
   langName: 'Tiếng Việt',
   landing: {
@@ -818,6 +819,16 @@ export const vi = {
     'neon-vibe': 'Cung Điện Pha Lê',
   },
   modals: {
+    styles: {
+        none: 'Mặc định',
+        cinematic: 'Điện ảnh',
+        photographic: 'Nhiếp ảnh',
+        anime: 'Anime',
+        fantasy: 'Kỳ ảo',
+        '3d_model': 'Mô hình 3D',
+        dival_art: 'Digital Art',
+        pixel_art: 'Pixel Art',
+    },
     image: {
       prompt: 'Câu lệnh (Prompt)',
       copy: 'Sao chép Prompt',

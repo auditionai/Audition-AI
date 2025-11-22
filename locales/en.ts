@@ -1,4 +1,5 @@
 
+
 export const en = {
   langName: 'English',
   landing: {
@@ -818,6 +819,16 @@ export const en = {
     'neon-vibe': 'Crystal Palace',
   },
   modals: {
+    styles: {
+        none: 'Default',
+        cinematic: 'Cinematic',
+        photographic: 'Photographic',
+        anime: 'Anime',
+        fantasy: 'Fantasy',
+        '3d_model': '3D Model',
+        dival_art: 'Digital Art',
+        pixel_art: 'Pixel Art',
+    },
     image: {
       prompt: 'Prompt',
       copy: 'Copy Prompt',

@@ -658,8 +658,8 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                                         title={t('modals.promptLibrary.buttonTooltip')}
                                     >
                                         <i className="ph-fill ph-scroll"></i>
-                                        <span className="hidden sm:inline">{t('modals.promptLibrary.button')}</span>
-                                        <span className="sm:hidden">Prompt</span>
+                                        {/* ALWAYS SHOW FULL TEXT */}
+                                        <span>Sử dụng Prompt</span>
                                     </button>
                                 </div>
                                 <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder={t('creator.aiTool.groupStudio.promptPlaceholder')} className="w-full p-2 bg-skin-input-bg rounded-md border border-skin-border focus:border-skin-border-accent transition text-xs text-skin-base resize-none" rows={3}/>

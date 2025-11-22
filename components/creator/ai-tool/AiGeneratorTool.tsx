@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useImageGenerator } from '../../../hooks/useImageGenerator';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -403,9 +402,8 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                                     title={t('modals.promptLibrary.buttonTooltip')}
                                 >
                                     <i className="ph-fill ph-scroll"></i>
-                                    {/* Show only icon on mobile if text gets clipped, or rely on whitespace-nowrap */}
-                                    <span className="hidden sm:inline">{t('modals.promptLibrary.button')}</span>
-                                    <span className="sm:hidden">Prompt</span>
+                                    {/* ALWAYS SHOW FULL TEXT */}
+                                    <span>Sử dụng Prompt</span>
                                 </button>
                             </div>
                             <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder={t('creator.aiTool.singlePhoto.promptPlaceholder')} className="w-full p-3 bg-black/30 rounded-md border border-gray-600 focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition text-base text-white flex-grow resize-none min-h-[150px] auth-input" />

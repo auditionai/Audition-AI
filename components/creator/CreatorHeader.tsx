@@ -47,20 +47,26 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
     fetchUnreadCount();
 
     // 2. Subscribe to Realtime changes
-    // Use a completely unique channel name to prevent conflicts
-    const channelName = `public:notifications:${user.id}`;
+    // Removing server-side filter to ensure event delivery (Client-side filtering applied)
+    const channelName = `notifications-listener-${user.id}`;
     
     const channel = supabase.channel(channelName)
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
         table: 'notifications',
-        filter: `recipient_id=eq.${user.id}`
-      }, (payload) => {
-        console.log('New notification received:', payload);
-        setUnreadCount(prev => prev + 1);
+      }, (payload: any) => {
+        // Filter specifically for this user
+        if (payload.new && payload.new.recipient_id === user.id) {
+            console.log('New notification received:', payload);
+            setUnreadCount(prev => prev + 1);
+        }
       })
-      .subscribe();
+      .subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+              console.log("Notification channel subscribed");
+          }
+      });
 
     return () => {
       supabase.removeChannel(channel);

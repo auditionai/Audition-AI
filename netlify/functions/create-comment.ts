@@ -55,7 +55,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         
         // Notify Post Owner (if not self)
         if (postData && postData.user_id !== user.id) {
-            await supabaseAdmin.from('notifications').insert({
+            const { error: notifError } = await supabaseAdmin.from('notifications').insert({
                 recipient_id: postData.user_id,
                 actor_id: user.id,
                 type: 'comment',
@@ -63,6 +63,7 @@ const handler: Handler = async (event: HandlerEvent) => {
                 content: `${senderName} đã bình luận về bài viết của bạn.`,
                 is_read: false
             });
+            if (notifError) console.error("Failed to insert comment notification:", notifError);
         }
 
         // 3b. Notify Parent Comment Owner (if replying)
@@ -75,7 +76,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             
             // Only notify if the parent comment owner is NOT the current user AND NOT the post owner (to avoid double notification)
             if (parentComment && parentComment.user_id !== user.id && parentComment.user_id !== postData?.user_id) {
-                 await supabaseAdmin.from('notifications').insert({
+                 const { error: replyError } = await supabaseAdmin.from('notifications').insert({
                     recipient_id: parentComment.user_id,
                     actor_id: user.id,
                     type: 'reply',
@@ -83,6 +84,7 @@ const handler: Handler = async (event: HandlerEvent) => {
                     content: `${senderName} đã trả lời bình luận của bạn.`,
                     is_read: false
                 });
+                if (replyError) console.error("Failed to insert reply notification:", replyError);
             }
         }
 

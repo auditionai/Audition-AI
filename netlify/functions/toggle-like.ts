@@ -35,9 +35,11 @@ const handler: Handler = async (event: HandlerEvent) => {
                 .eq('user_id', user.id);
         } else {
             // Like
-            await supabaseAdmin
+            const { error: likeError } = await supabaseAdmin
                 .from('post_likes')
                 .insert({ post_id: postId, user_id: user.id });
+            
+            if (likeError) throw likeError;
 
             // Create Notification
             const { data: post } = await supabaseAdmin.from('posts').select('user_id').eq('id', postId).single();
@@ -56,10 +58,10 @@ const handler: Handler = async (event: HandlerEvent) => {
                     .eq('type', 'like')
                     .eq('entity_id', postId)
                     .limit(1)
-                    .single();
+                    .maybeSingle(); // Use maybeSingle to return null instead of error if not found
 
                 if (!existingNotif) {
-                    await supabaseAdmin.from('notifications').insert({
+                    const { error: insertError } = await supabaseAdmin.from('notifications').insert({
                         recipient_id: post.user_id,
                         actor_id: user.id,
                         type: 'like',
@@ -67,6 +69,9 @@ const handler: Handler = async (event: HandlerEvent) => {
                         content: `${senderName} đã thích bài viết của bạn.`,
                         is_read: false
                     });
+                    if (insertError) {
+                        console.error("Failed to insert like notification:", insertError);
+                    }
                 }
             }
         }

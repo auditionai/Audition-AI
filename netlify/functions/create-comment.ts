@@ -11,7 +11,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     const token = authHeader?.split(' ')[1];
     if (!token) return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized' }) };
 
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+    const { data: { user }, error: authError } = await (supabaseAdmin.auth as any).getUser(token);
     if (authError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'Invalid token' }) };
 
     try {
@@ -21,15 +21,16 @@ const handler: Handler = async (event: HandlerEvent) => {
             return { statusCode: 400, body: JSON.stringify({ error: 'Post ID and Content are required' }) };
         }
 
-        // 1. Fetch User Profile
+        // 1. Fetch User Profile (sender info)
         const { data: userProfile } = await supabaseAdmin
             .from('users')
             .select('display_name, photo_url')
             .eq('id', user.id)
             .single();
+            
+        const senderName = userProfile?.display_name || 'Ai đó';
 
         // 2. Insert Comment
-        // Note: Database MUST have 'parent_id' column in 'post_comments' table.
         const { data: comment, error: insertError } = await supabaseAdmin
             .from('post_comments')
             .insert({
@@ -44,25 +45,27 @@ const handler: Handler = async (event: HandlerEvent) => {
         if (insertError) throw insertError;
 
         // 3. Create Notifications
-        // 3a. Notify Post Owner
+        
+        // 3a. Fetch Post Owner Info
         const { data: postData } = await supabaseAdmin
             .from('posts')
             .select('user_id')
             .eq('id', postId)
             .single();
         
+        // Notify Post Owner (if not self)
         if (postData && postData.user_id !== user.id) {
             await supabaseAdmin.from('notifications').insert({
                 recipient_id: postData.user_id,
                 actor_id: user.id,
                 type: 'comment',
                 entity_id: postId,
-                content: `${userProfile?.display_name} đã bình luận về bài viết của bạn.`,
+                content: `${senderName} đã bình luận về bài viết của bạn.`,
                 is_read: false
             });
         }
 
-        // 3b. Notify Parent Comment Owner (if reply)
+        // 3b. Notify Parent Comment Owner (if replying)
         if (parentId) {
             const { data: parentComment } = await supabaseAdmin
                 .from('post_comments')
@@ -70,13 +73,14 @@ const handler: Handler = async (event: HandlerEvent) => {
                 .eq('id', parentId)
                 .single();
             
+            // Only notify if the parent comment owner is NOT the current user AND NOT the post owner (to avoid double notification)
             if (parentComment && parentComment.user_id !== user.id && parentComment.user_id !== postData?.user_id) {
                  await supabaseAdmin.from('notifications').insert({
                     recipient_id: parentComment.user_id,
                     actor_id: user.id,
                     type: 'reply',
                     entity_id: postId,
-                    content: `${userProfile?.display_name} đã trả lời bình luận của bạn.`,
+                    content: `${senderName} đã trả lời bình luận của bạn.`,
                     is_read: false
                 });
             }

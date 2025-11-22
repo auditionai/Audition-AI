@@ -11,7 +11,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     const token = authHeader?.split(' ')[1];
     if (!token) return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized' }) };
 
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+    const { data: { user }, error: authError } = await (supabaseAdmin.auth as any).getUser(token);
     if (authError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'Invalid token' }) };
 
     try {
@@ -33,9 +33,6 @@ const handler: Handler = async (event: HandlerEvent) => {
                 .delete()
                 .eq('post_id', postId)
                 .eq('user_id', user.id);
-            
-            // Note: We usually don't delete notifications for unlikes to keep history simpler, 
-            // or we could delete if we want "clean" history. For now, keep it simple.
         } else {
             // Like
             await supabaseAdmin
@@ -45,17 +42,32 @@ const handler: Handler = async (event: HandlerEvent) => {
             // Create Notification
             const { data: post } = await supabaseAdmin.from('posts').select('user_id').eq('id', postId).single();
             
+            // Only notify if liking someone else's post
             if (post && post.user_id !== user.id) {
                 const { data: userProfile } = await supabaseAdmin.from('users').select('display_name').eq('id', user.id).single();
+                const senderName = userProfile?.display_name || "Ai đó";
                 
-                await supabaseAdmin.from('notifications').insert({
-                    recipient_id: post.user_id,
-                    actor_id: user.id,
-                    type: 'like',
-                    entity_id: postId,
-                    content: `${userProfile?.display_name} đã thích bài viết của bạn.`,
-                    is_read: false
-                });
+                // Check if a like notification from this user for this post already exists to avoid spamming
+                const { data: existingNotif } = await supabaseAdmin
+                    .from('notifications')
+                    .select('id')
+                    .eq('recipient_id', post.user_id)
+                    .eq('actor_id', user.id)
+                    .eq('type', 'like')
+                    .eq('entity_id', postId)
+                    .limit(1)
+                    .single();
+
+                if (!existingNotif) {
+                    await supabaseAdmin.from('notifications').insert({
+                        recipient_id: post.user_id,
+                        actor_id: user.id,
+                        type: 'like',
+                        entity_id: postId,
+                        content: `${senderName} đã thích bài viết của bạn.`,
+                        is_read: false
+                    });
+                }
             }
         }
 

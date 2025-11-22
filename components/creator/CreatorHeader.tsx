@@ -33,6 +33,7 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
   useEffect(() => {
     if (!user || !supabase) return;
 
+    // 1. Fetch initial unread count
     const fetchUnreadCount = async () => {
       const { count } = await supabase
         .from('notifications')
@@ -45,13 +46,18 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
 
     fetchUnreadCount();
 
-    const channel = supabase.channel('realtime:notifications')
+    // 2. Subscribe to Realtime changes
+    // Use a completely unique channel name to prevent conflicts
+    const channelName = `public:notifications:${user.id}`;
+    
+    const channel = supabase.channel(channelName)
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
         table: 'notifications',
         filter: `recipient_id=eq.${user.id}`
-      }, () => {
+      }, (payload) => {
+        console.log('New notification received:', payload);
         setUnreadCount(prev => prev + 1);
       })
       .subscribe();
@@ -85,9 +91,9 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
   
   const handleNotificationClick = () => {
     setNotificationOpen(prev => !prev);
-    // We will mark as read inside the dropdown when it opens or items are clicked
     if (!isNotificationOpen) {
-        // Optional: optimistic clear count if we implement "mark all as read" immediately on open
+        // Optional: Reset count locally if we want it to clear on open, 
+        // but usually we wait for "Mark all read" or individual clicks.
         // setUnreadCount(0); 
     }
   }
@@ -213,7 +219,7 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
                   onClick={handleNotificationClick}
                   className="themed-notification-button p-2.5 md:p-2"
                 >
-                    <i className="ph-fill ph-bell text-xl"></i>
+                    <i className={`ph-fill ${isNotificationOpen ? 'ph-bell-ringing text-skin-accent' : 'ph-bell'} text-xl`}></i>
                     {unreadCount > 0 && (
                          <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 text-white text-[10px] font-bold flex items-center justify-center rounded-full animate-bounce shadow-lg border border-white">
                             {unreadCount > 9 ? '9+' : unreadCount}

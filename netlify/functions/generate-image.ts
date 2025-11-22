@@ -61,12 +61,15 @@ const addWatermark = async (imageBuffer: Buffer): Promise<Buffer> => {
         console.log("Starting watermark process...");
         const image = await (Jimp as any).read(imageBuffer);
         
-        // FIX: Use CDN URLs for fonts because local node_modules paths often fail in Netlify Functions bundling
+        // FIX: Use reliable CDN URLs for fonts
         const FONT_SMALL_URL = "https://unpkg.com/@jimp/plugin-print@0.10.6/fonts/open-sans/open-sans-16-white/open-sans-16-white.fnt";
         const FONT_LARGE_URL = "https://unpkg.com/@jimp/plugin-print@0.10.6/fonts/open-sans/open-sans-32-white/open-sans-32-white.fnt";
 
-        const fontSmall = await (Jimp as any).loadFont(FONT_SMALL_URL);
-        const fontLarge = await (Jimp as any).loadFont(FONT_LARGE_URL);
+        // Load fonts in parallel
+        const [fontSmall, fontLarge] = await Promise.all([
+            (Jimp as any).loadFont(FONT_SMALL_URL),
+            (Jimp as any).loadFont(FONT_LARGE_URL)
+        ]);
         
         const textTop = "Created by";
         const textBottom = "AUDITION AI";
@@ -87,7 +90,8 @@ const addWatermark = async (imageBuffer: Buffer): Promise<Buffer> => {
         const y = image.getHeight() - boxHeight - margin;
         
         // Create semi-transparent black background (Hex + Alpha)
-        // 0x00000090 is Black with ~56% opacity
+        // 0x00000090 is Black with ~56% opacity. Use a safe integer or string logic if needed.
+        // Jimp color: 0x00000090 is valid.
         const bgImage = new (Jimp as any)(boxWidth, boxHeight, 0x00000090);
         
         // Composite background
@@ -246,6 +250,7 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         // Apply Watermark if user did NOT choose to remove it
         if (!removeWatermark) {
+            // Await the watermark process directly here
             imageBuffer = await addWatermark(imageBuffer);
         }
 

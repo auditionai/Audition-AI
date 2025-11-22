@@ -30,21 +30,12 @@ const handler: Handler = async (event: HandlerEvent) => {
 
     try {
         // 3. Fetch Posts
-        // We explicitly select fields to avoid issues if schema drifts, but '*' is generally safe if table exists.
-        // JOINING users table to get creator info.
+        // FIX: Use user:users(*) wildcard to avoid errors if specific columns (like equipped_name_effect_id) don't exist yet.
         const { data, error } = await supabaseAdmin
             .from('posts')
             .select(`
                 *,
-                user:users (
-                    id, 
-                    display_name, 
-                    photo_url, 
-                    xp, 
-                    equipped_frame_id, 
-                    equipped_title_id, 
-                    equipped_name_effect_id
-                ),
+                user:users(*),
                 likes_count:post_likes(count),
                 comments_count:post_comments(count)
             `)

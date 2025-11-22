@@ -40,9 +40,10 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         // Step 2: Fetch Creators
         const userIds = [...new Set(images.map(img => img.user_id))];
+        // FIX: Use wildcard select
         const { data: creators, error: creatorsError } = await supabaseAdmin
             .from('users')
-            .select('id, display_name, photo_url, xp, equipped_frame_id, equipped_title_id, equipped_name_effect_id')
+            .select('*')
             .in('id', userIds);
 
         if (creatorsError) throw creatorsError;

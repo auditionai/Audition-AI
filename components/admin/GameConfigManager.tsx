@@ -16,7 +16,7 @@ const GameConfigManager: React.FC = () => {
     const { chatConfig, updateChatConfig } = useChat();
     
     // Tabs
-    const [activeSubTab, setActiveSubTab] = useState<'ranks' | 'frames' | 'titles' | 'name_effects' | 'chat'>('frames');
+    const [activeSubTab, setActiveSubTab] = useState<'ranks' | 'frames' | 'titles' | 'name_effects' | 'chat' | 'db_tools'>('frames');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     
@@ -231,6 +231,16 @@ const GameConfigManager: React.FC = () => {
         }
     };
 
+    const sqlFixScript = `
+-- SQL Fix for Missing Columns in Users Table
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS equipped_name_effect_id UUID REFERENCES public.game_cosmetics(id);
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS weekly_points INTEGER DEFAULT 0;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS profile_views INTEGER DEFAULT 0;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS total_likes INTEGER DEFAULT 0;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS bio TEXT;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS cover_url TEXT;
+`;
+
     return (
         <div className="bg-[#12121A]/80 border border-blue-500/20 rounded-2xl shadow-lg p-6">
             <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
@@ -241,8 +251,32 @@ const GameConfigManager: React.FC = () => {
                      <button onClick={() => setActiveSubTab('name_effects')} className={`px-3 py-1 rounded whitespace-nowrap ${activeSubTab === 'name_effects' ? 'bg-blue-500 text-white' : 'bg-white/5 text-gray-400'}`}>Hiệu Ứng Tên</button>
                      <button onClick={() => setActiveSubTab('ranks')} className={`px-3 py-1 rounded whitespace-nowrap ${activeSubTab === 'ranks' ? 'bg-blue-500 text-white' : 'bg-white/5 text-gray-400'}`}>Cấp Bậc</button>
                      <button onClick={() => setActiveSubTab('chat')} className={`px-3 py-1 rounded whitespace-nowrap ${activeSubTab === 'chat' ? 'bg-blue-500 text-white' : 'bg-white/5 text-gray-400'}`}>Chat</button>
+                     <button onClick={() => setActiveSubTab('db_tools')} className={`px-3 py-1 rounded whitespace-nowrap ${activeSubTab === 'db_tools' ? 'bg-red-500 text-white' : 'bg-white/5 text-gray-400'}`}>Sửa Lỗi DB</button>
                 </div>
             </div>
+
+            {/* DB TOOLS TAB */}
+            {activeSubTab === 'db_tools' && (
+                <div className="space-y-4">
+                    <div className="bg-yellow-500/10 border border-yellow-500/30 p-4 rounded-lg">
+                        <h4 className="text-yellow-400 font-bold mb-2 flex items-center gap-2"><i className="ph-fill ph-warning-circle"></i> Cập Nhật Cấu Trúc Database</h4>
+                        <p className="text-sm text-gray-300 mb-4">
+                            Nếu bạn gặp lỗi "Tải lại trang mất hiệu ứng" hoặc "Lỗi Code Key", hãy copy đoạn mã SQL bên dưới và chạy trong <strong>Supabase SQL Editor</strong>.
+                        </p>
+                        <div className="relative">
+                            <pre className="bg-black/50 p-3 rounded-lg text-xs text-green-400 overflow-x-auto font-mono border border-white/10">
+                                {sqlFixScript}
+                            </pre>
+                            <button 
+                                onClick={() => { navigator.clipboard.writeText(sqlFixScript); showToast("Đã sao chép SQL!", "success"); }}
+                                className="absolute top-2 right-2 bg-blue-500/20 hover:bg-blue-500/40 text-blue-300 px-3 py-1 rounded text-xs font-bold"
+                            >
+                                Sao Chép
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* CHAT CONFIG TAB */}
             {activeSubTab === 'chat' && (

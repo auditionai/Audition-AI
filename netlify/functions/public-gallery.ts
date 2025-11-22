@@ -29,10 +29,11 @@ const handler: Handler = async () => {
         // 2. Collect unique user IDs
         const userIds = [...new Set(images.map(img => img.user_id))];
 
-        // 3. Fetch creator profiles for those IDs - ADDED EQUIPPED ITEMS
+        // 3. Fetch creator profiles for those IDs
+        // FIX: Use select('*') to be safe against missing columns in the schema
         const { data: creators, error: creatorsError } = await supabaseAdmin
             .from('users')
-            .select('id, display_name, photo_url, xp, equipped_frame_id, equipped_title_id, equipped_name_effect_id')
+            .select('*')
             .in('id', userIds);
 
         if (creatorsError) {

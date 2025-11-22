@@ -14,11 +14,13 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         let users: any[] = [];
 
+        // FIX: Use select('*') for all queries to ensure robustness if new columns are missing
+
         // --- 1. HOT (Top Profile Points / Weekly Points) ---
         if (type === 'hot') {
             const { data, error } = await supabaseAdmin
                 .from('users')
-                .select('id, display_name, photo_url, xp, weekly_points, equipped_frame_id, equipped_title_id, equipped_name_effect_id')
+                .select('*')
                 .order('weekly_points', { ascending: false })
                 .limit(50);
             
@@ -30,7 +32,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         else if (type === 'level') {
             const { data, error } = await supabaseAdmin
                 .from('users')
-                .select('id, display_name, photo_url, xp, equipped_frame_id, equipped_title_id, equipped_name_effect_id')
+                .select('*')
                 .order('xp', { ascending: false })
                 .limit(50);
 
@@ -45,6 +47,7 @@ const handler: Handler = async (event: HandlerEvent) => {
              // Assuming get_leaderboard RPC (from previous code) does exactly this.
              const { data, error } = await supabaseAdmin.rpc('get_leaderboard');
              if (error) throw error;
+             // Note: RPC results map directly
              users = data.map((u: any) => ({
                  id: u.user_id,
                  display_name: u.display_name,
@@ -85,7 +88,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             if (userIds.length > 0) {
                 const { data: userInfos } = await supabaseAdmin
                     .from('users')
-                    .select('id, display_name, photo_url, xp, equipped_frame_id, equipped_title_id, equipped_name_effect_id')
+                    .select('*')
                     .in('id', userIds);
                 
                 const userInfoMap = new Map(userInfos?.map(u => [u.id, u]));
@@ -105,7 +108,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         else {
              const { data, error } = await supabaseAdmin
                 .from('users')
-                .select('id, display_name, photo_url, xp, equipped_frame_id, equipped_title_id, equipped_name_effect_id')
+                .select('*')
                 .order('xp', { ascending: false })
                 .limit(50);
             if (error) throw error;

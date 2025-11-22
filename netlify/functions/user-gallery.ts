@@ -35,9 +35,10 @@ const handler: Handler = async (event: HandlerEvent) => {
         }
         
         // 3. Fetch latest user profile data to get consistent name/avatar/badges
+        // FIX: Use wildcard select to be robust against schema changes
         const { data: userProfile } = await supabaseAdmin
             .from('users')
-            .select('display_name, photo_url, equipped_title_id, equipped_frame_id, equipped_name_effect_id')
+            .select('*')
             .eq('id', user.id)
             .single();
 

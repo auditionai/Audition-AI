@@ -1,4 +1,3 @@
-
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { GoogleGenAI, Modality } from "@google/genai";
 import { supabaseAdmin } from './utils/supabaseClient';
@@ -9,6 +8,22 @@ import Jimp from 'jimp';
 const COST_UPSCALE = 1;
 const COST_REMOVE_WATERMARK = 1; // Cost for removing watermark
 const XP_PER_GENERATION = 10;
+
+// Font URLs - Using specific version to ensure stability
+const FONT_URL_32 = "https://raw.githubusercontent.com/jimp-dev/jimp/main/packages/plugin-print/fonts/open-sans/open-sans-32-white/open-sans-32-white.fnt";
+const FONT_URL_16 = "https://raw.githubusercontent.com/jimp-dev/jimp/main/packages/plugin-print/fonts/open-sans/open-sans-16-white/open-sans-16-white.fnt";
+
+/**
+ * Helper to load font with retry
+ */
+const loadFontSafe = async (url: string) => {
+    try {
+        return await (Jimp as any).loadFont(url);
+    } catch (e) {
+        console.error(`Failed to load font ${url}:`, e);
+        return null;
+    }
+};
 
 /**
  * Pre-processes an image by placing it onto a new canvas of a target aspect ratio.
@@ -55,33 +70,65 @@ const processImageForGemini = async (imageDataUrl: string | null, targetAspectRa
     }
 };
 
-// Add Watermark Function
+// Add Watermark Function (Gradient Vignette + Text)
 const addWatermark = async (imageBuffer: Buffer): Promise<Buffer> => {
     try {
+        console.log("Starting watermark process (Gradient)...");
         const image = await (Jimp as any).read(imageBuffer);
-        const font = await (Jimp as any).loadFont((Jimp as any).FONT_SANS_32_WHITE);
+        
         const width = image.getWidth();
         const height = image.getHeight();
-        
-        const text = "Created by Audition AI";
-        const textWidth = (Jimp as any).measureText(font, text);
-        const textHeight = (Jimp as any).measureTextHeight(font, text, width);
-        
-        const margin = 20;
-        const x = width - textWidth - margin;
-        const y = height - textHeight - margin;
 
-        // Add a subtle semi-transparent background block behind text for readability
-        const bgImage = new (Jimp as any)(textWidth + 20, textHeight + 10, '#000000');
-        bgImage.opacity(0.5);
+        // 1. Create Gradient Vignette (Darken bottom area)
+        // This ensures white text is visible on light images without a solid black box.
+        const gradientHeight = 140; // Height of the fade area
+        const startY = Math.max(0, height - gradientHeight);
         
-        image.composite(bgImage, x - 10, y - 5);
-        image.print(font, x, y, text);
+        image.scan(0, startY, width, gradientHeight, function (x: number, y: number, idx: number) {
+            // Normalized vertical position in gradient (0 to 1)
+            const ratio = (y - startY) / gradientHeight;
+            
+            // Darkening Factor: 0 (top of gradient) -> 0.85 (bottom of image)
+            // Using cubic curve for a smoother, more natural fade
+            const opacity = Math.pow(ratio, 1.5) * 0.85; 
+            
+            // Apply darkening to RGB channels
+            this.bitmap.data[idx + 0] = this.bitmap.data[idx + 0] * (1 - opacity); // Red
+            this.bitmap.data[idx + 1] = this.bitmap.data[idx + 1] * (1 - opacity); // Green
+            this.bitmap.data[idx + 2] = this.bitmap.data[idx + 2] * (1 - opacity); // Blue
+            // Alpha channel (idx + 3) is left untouched
+        });
+
+        // 2. Load fonts
+        const font32 = await loadFontSafe(FONT_URL_32);
+        const font16 = await loadFontSafe(FONT_URL_16);
+
+        if (font32 && font16) {
+            const text1 = "Created by";
+            const text2 = "AUDITION AI";
+
+            // Calculate positions (Right aligned with margin)
+            const text1Width = (Jimp as any).measureText(font16, text1);
+            const text2Width = (Jimp as any).measureText(font32, text2);
+            
+            const margin = 24;
+            const x1 = width - text1Width - margin;
+            const x2 = width - text2Width - margin;
+            
+            const yText = height - 55; 
+
+            // Print Text
+            image.print(font16, x1, yText - 22, text1);
+            image.print(font32, x2, yText, text2);
+            console.log("Watermark text rendered.");
+        } else {
+            console.warn("Fonts failed to load, skipping text render.");
+        }
 
         return await image.getBufferAsync((Jimp as any).MIME_PNG);
     } catch (error) {
         console.error("Failed to add watermark:", error);
-        return imageBuffer; // Return original if watermark fails
+        return imageBuffer; // Return original on failure
     }
 };
 
@@ -106,7 +153,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         const token = authHeader.split(' ')[1];
         if (!token) return { statusCode: 401, body: JSON.stringify({ error: 'Bearer token is missing.' }) };
 
-        const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+        const { data: { user }, error: authError } = await (supabaseAdmin.auth as any).getUser(token);
         if (authError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized: Invalid token.' }) };
 
         const body = JSON.parse(event.body || '{}');

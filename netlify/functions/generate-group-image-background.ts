@@ -7,59 +7,66 @@ import Jimp from 'jimp';
 
 const XP_PER_CHARACTER = 5;
 
-// Stable Font URLs via Unpkg (CDN)
-const FONT_WHITE_16 = "https://unpkg.com/@jimp/plugin-print@0.10.6/fonts/open-sans/open-sans-16-white/open-sans-16-white.fnt";
-const FONT_WHITE_32 = "https://unpkg.com/@jimp/plugin-print@0.10.6/fonts/open-sans/open-sans-32-white/open-sans-32-white.fnt";
+const FONT_URL_32 = "https://raw.githubusercontent.com/jimp-dev/jimp/main/packages/plugin-print/fonts/open-sans/open-sans-32-white/open-sans-32-white.fnt";
+const FONT_URL_16 = "https://raw.githubusercontent.com/jimp-dev/jimp/main/packages/plugin-print/fonts/open-sans/open-sans-16-white/open-sans-16-white.fnt";
 
-// Add Watermark Function (Gradient Overlay + Text)
+const loadFontSafe = async (url: string) => {
+    try {
+        return await (Jimp as any).loadFont(url);
+    } catch (e) {
+        console.error(`Failed to load font ${url}:`, e);
+        return null;
+    }
+};
+
+// Add Watermark Function (Gradient Vignette + Text)
 const addWatermark = async (imageBuffer: Buffer): Promise<Buffer> => {
     try {
-        console.log("Starting watermark process (Group/Gradient+Text)...");
+        console.log("Starting watermark process (Group/Gradient)...");
         const image = await (Jimp as any).read(imageBuffer);
         
         const width = image.getWidth();
         const height = image.getHeight();
 
-        // 1. Apply Gradient Vignette at the bottom (Darken bottom 120px)
-        const gradientHeight = 120;
+        // 1. Create Gradient Vignette
+        const gradientHeight = 140;
         const startY = Math.max(0, height - gradientHeight);
         
-        image.scan(0, startY, width, height - startY, function (x: number, y: number, idx: number) {
-            const factor = (y - startY) / gradientHeight;
-            const darkness = 1 - (factor * 0.7); // Max 70% dark at bottom
+        image.scan(0, startY, width, gradientHeight, function (x: number, y: number, idx: number) {
+            const ratio = (y - startY) / gradientHeight;
+            const opacity = Math.pow(ratio, 1.5) * 0.85; 
 
-            this.bitmap.data[idx + 0] = this.bitmap.data[idx + 0] * darkness; // R
-            this.bitmap.data[idx + 1] = this.bitmap.data[idx + 1] * darkness; // G
-            this.bitmap.data[idx + 2] = this.bitmap.data[idx + 2] * darkness; // B
+            this.bitmap.data[idx + 0] = this.bitmap.data[idx + 0] * (1 - opacity);
+            this.bitmap.data[idx + 1] = this.bitmap.data[idx + 1] * (1 - opacity);
+            this.bitmap.data[idx + 2] = this.bitmap.data[idx + 2] * (1 - opacity);
         });
 
         // 2. Load fonts
-        const [f16w, f32w] = await Promise.all([
-            (Jimp as any).loadFont(FONT_WHITE_16),
-            (Jimp as any).loadFont(FONT_WHITE_32),
-        ]);
+        const font32 = await loadFontSafe(FONT_URL_32);
+        const font16 = await loadFontSafe(FONT_URL_16);
 
-        const text1 = "Created by";
-        const text2 = "AUDITION AI";
+        if (font32 && font16) {
+            const text1 = "Created by";
+            const text2 = "AUDITION AI";
 
-        // 3. Measure text to align right
-        const text1Width = (Jimp as any).measureText(f16w, text1);
-        const text2Width = (Jimp as any).measureText(f32w, text2);
-        
-        const margin = 20;
-        const x1 = width - text1Width - margin;
-        const x2 = width - text2Width - margin;
-        
-        const yText = height - 60; 
+            const text1Width = (Jimp as any).measureText(font16, text1);
+            const text2Width = (Jimp as any).measureText(font32, text2);
+            
+            const margin = 24;
+            const x1 = width - text1Width - margin;
+            const x2 = width - text2Width - margin;
+            
+            const yText = height - 55; 
 
-        // 4. Render Text (White)
-        image.print(f16w, x1, yText - 20, text1);
-        image.print(f32w, x2, yText, text2);
+            // Print Text
+            image.print(font16, x1, yText - 22, text1);
+            image.print(font32, x2, yText, text2);
+            console.log("Group watermark rendered.");
+        }
 
-        console.log("Group watermark rendered successfully.");
         return await image.getBufferAsync((Jimp as any).MIME_PNG);
     } catch (error) {
-        console.error("Failed to add watermark in group worker (Returning original):", error);
+        console.error("Failed to add watermark in group worker:", error);
         return imageBuffer;
     }
 };

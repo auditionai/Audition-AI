@@ -63,31 +63,47 @@ const Leaderboard: React.FC = () => {
                 </p>
             </div>
 
-            {/* Tabs */}
-            <div className="flex justify-center gap-2 mb-8 md:mb-12 flex-wrap">
+            {/* Tabs - COMPACT MOBILE GRID */}
+            <div className="grid grid-cols-4 gap-1.5 mb-6 md:flex md:justify-center md:gap-2 md:mb-12">
                 <button 
                     onClick={() => setActiveTab('creation')}
-                    className={`px-4 py-2 rounded-full font-bold transition-all text-xs md:text-base ${activeTab === 'creation' ? 'bg-pink-500 text-white shadow-lg shadow-pink-500/30' : 'bg-skin-fill-secondary text-skin-muted hover:bg-white/10'}`}
+                    className={`
+                        flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 px-1 py-2 md:px-4 md:py-2 rounded-lg md:rounded-full font-bold transition-all h-full
+                        ${activeTab === 'creation' ? 'bg-pink-500 text-white shadow-lg shadow-pink-500/30' : 'bg-skin-fill-secondary text-skin-muted hover:bg-white/10'}
+                    `}
                 >
-                    <i className="ph-fill ph-image mr-2"></i> {t('creator.leaderboard.tabs.creation')}
+                    <i className="ph-fill ph-image text-xl md:text-base"></i>
+                    <span className="text-[10px] md:text-base whitespace-nowrap">{t('creator.leaderboard.tabs.creation')}</span>
                 </button>
                 <button 
                     onClick={() => setActiveTab('level')}
-                    className={`px-4 py-2 rounded-full font-bold transition-all text-xs md:text-base ${activeTab === 'level' ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30' : 'bg-skin-fill-secondary text-skin-muted hover:bg-white/10'}`}
+                    className={`
+                        flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 px-1 py-2 md:px-4 md:py-2 rounded-lg md:rounded-full font-bold transition-all h-full
+                        ${activeTab === 'level' ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30' : 'bg-skin-fill-secondary text-skin-muted hover:bg-white/10'}
+                    `}
                 >
-                    <i className="ph-fill ph-star mr-2"></i> {t('creator.leaderboard.tabs.level')}
+                    <i className="ph-fill ph-star text-xl md:text-base"></i>
+                    <span className="text-[10px] md:text-base whitespace-nowrap">{t('creator.leaderboard.tabs.level')}</span>
                 </button>
                 <button 
                     onClick={() => setActiveTab('tycoon')}
-                    className={`px-4 py-2 rounded-full font-bold transition-all text-xs md:text-base ${activeTab === 'tycoon' ? 'bg-yellow-500 text-black shadow-lg shadow-yellow-500/30' : 'bg-skin-fill-secondary text-skin-muted hover:bg-white/10'}`}
+                    className={`
+                        flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 px-1 py-2 md:px-4 md:py-2 rounded-lg md:rounded-full font-bold transition-all h-full
+                        ${activeTab === 'tycoon' ? 'bg-yellow-500 text-black shadow-lg shadow-yellow-500/30' : 'bg-skin-fill-secondary text-skin-muted hover:bg-white/10'}
+                    `}
                 >
-                    <i className="ph-fill ph-crown mr-2"></i> {t('creator.leaderboard.tabs.tycoon')}
+                    <i className="ph-fill ph-crown text-xl md:text-base"></i>
+                    <span className="text-[10px] md:text-base whitespace-nowrap">{t('creator.leaderboard.tabs.tycoon')}</span>
                 </button>
                 <button 
                     onClick={() => setActiveTab('hot')}
-                    className={`px-4 py-2 rounded-full font-bold transition-all text-xs md:text-base ${activeTab === 'hot' ? 'bg-red-500 text-white shadow-lg shadow-red-500/30' : 'bg-skin-fill-secondary text-skin-muted hover:bg-white/10'}`}
+                    className={`
+                        flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 px-1 py-2 md:px-4 md:py-2 rounded-lg md:rounded-full font-bold transition-all h-full
+                        ${activeTab === 'hot' ? 'bg-red-500 text-white shadow-lg shadow-red-500/30' : 'bg-skin-fill-secondary text-skin-muted hover:bg-white/10'}
+                    `}
                 >
-                    <i className="ph-fill ph-fire mr-2"></i> {t('creator.leaderboard.tabs.hot')}
+                    <i className="ph-fill ph-fire text-xl md:text-base"></i>
+                    <span className="text-[10px] md:text-base whitespace-nowrap">{t('creator.leaderboard.tabs.hot')}</span>
                 </button>
             </div>
 

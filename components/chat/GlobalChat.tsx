@@ -17,6 +17,7 @@ const GlobalChat: React.FC = () => {
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const [showEmotes, setShowEmotes] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
+    const [isVisible, setIsVisible] = useState(true);
 
     // Deletion State
     const [messageToDelete, setMessageToDelete] = useState<string | null>(null);
@@ -142,6 +143,7 @@ const GlobalChat: React.FC = () => {
     }, [isDragging]);
 
     if (!user) return null;
+    if (!isVisible && !isOpen) return null; // Hide trigger if dismissed and chat is closed
 
     // Mock Image Object for Modal
     const modalImage = previewImage ? {
@@ -185,6 +187,20 @@ const GlobalChat: React.FC = () => {
                 style={{ bottom: `${position.y}px`, right: `${position.x}px` }}
                 className="fixed z-[90] cursor-move active:cursor-grabbing touch-none group flex flex-col items-center justify-center gap-1"
             >
+                {/* Close Button (Similar to Lucky Wheel) */}
+                {!isOpen && (
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setIsVisible(false);
+                        }}
+                        className="absolute -top-2 -right-2 w-5 h-5 bg-gray-700 text-white rounded-full flex items-center justify-center shadow-md z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-red-500"
+                        title="Tắt nút Chat"
+                    >
+                        <i className="ph-fill ph-x text-[10px]"></i>
+                    </button>
+                )}
+
                 {/* Main Button */}
                 <div className={`relative w-16 h-16 md:w-20 md:h-20 rounded-full flex items-center justify-center transition-transform duration-200 hover:scale-110
                     ${isOpen 

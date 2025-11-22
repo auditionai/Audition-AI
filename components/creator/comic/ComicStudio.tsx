@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { ComicCharacter, ComicPanel } from '../../../types';
@@ -89,9 +90,86 @@ const VISUAL_EFFECTS = [
     { label: 'Kinh dị tâm lý', value: 'Psychological Horror vignette' }
 ];
 
+const DIALOGUE_AMOUNTS = [
+    { label: 'Ít (Visual Focus)', value: 'Ít (Visual Focus)' },
+    { label: 'Vừa phải', value: 'Vừa phải' },
+    { label: 'Nhiều (Story Focus)', value: 'Nhiều (Story Focus)' }
+];
+
 const RENDER_COST = 10; // 10 Diamonds per page render (Pro Model)
 
 // --- SUB-COMPONENTS ---
+
+// New Custom Select Component for better UI
+interface ComicSelectProps {
+    label: string;
+    value: string;
+    onChange: (value: string) => void;
+    options: (string | { label: string, value: string, family?: string })[];
+    className?: string;
+    previewFont?: boolean;
+}
+
+const ComicSelect: React.FC<ComicSelectProps> = ({ label, value, onChange, options, className = "", previewFont = false }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const ref = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (ref.current && !ref.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    // Helper to normalize options
+    const normalizedOptions = options.map(opt => 
+        typeof opt === 'string' ? { label: opt, value: opt } : opt
+    );
+
+    const selectedOption = normalizedOptions.find(o => o.value === value) || normalizedOptions[0];
+
+    return (
+        <div className={`relative ${className}`} ref={ref}>
+            <label className="text-xs font-bold text-skin-muted uppercase mb-1.5 block tracking-wide">{label}</label>
+            <button 
+                onClick={() => setIsOpen(!isOpen)}
+                className={`w-full flex items-center justify-between bg-[#1E1B25] border ${isOpen ? 'border-pink-500 ring-1 ring-pink-500/50' : 'border-white/10 hover:border-white/30'} rounded-lg px-3 py-2.5 text-sm text-white transition-all duration-200`}
+            >
+                <span className="truncate" style={previewFont && (selectedOption as any).family ? { fontFamily: (selectedOption as any).family } : {}}>
+                    {selectedOption.label}
+                </span>
+                <i className={`ph-fill ph-caret-down text-gray-400 transition-transform duration-200 ${isOpen ? 'rotate-180 text-pink-500' : ''}`}></i>
+            </button>
+
+            {isOpen && (
+                <div className="absolute top-full left-0 right-0 mt-2 bg-[#181820]/95 backdrop-blur-xl border border-white/10 rounded-lg shadow-2xl z-50 max-h-60 overflow-y-auto custom-scrollbar animate-fade-in-up">
+                    {normalizedOptions.map((opt) => (
+                        <button
+                            key={opt.value}
+                            onClick={() => {
+                                onChange(opt.value);
+                                setIsOpen(false);
+                            }}
+                            className={`w-full text-left px-3 py-2.5 text-sm transition-colors flex items-center justify-between group
+                                ${value === opt.value 
+                                    ? 'bg-pink-500/20 text-pink-300 font-semibold' 
+                                    : 'text-gray-300 hover:bg-white/10 hover:text-white'
+                                }
+                            `}
+                            style={previewFont && (opt as any).family ? { fontFamily: (opt as any).family } : {}}
+                        >
+                            <span>{opt.label}</span>
+                            {value === opt.value && <i className="ph-fill ph-check text-pink-500"></i>}
+                        </button>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
 
 const StepIndicator = ({ currentStep }: { currentStep: number }) => {
     const steps = [
@@ -201,7 +279,7 @@ const ComicStudio: React.FC = () => {
         genre: GENRES[0],
         artStyle: ART_STYLES[0].value,
         language: LANGUAGES[0],
-        dialogueAmount: 'Vừa phải',
+        dialogueAmount: DIALOGUE_AMOUNTS[1].value,
         pageCount: 1,
         premise: '',
         colorFormat: COLOR_FORMATS[0].value,
@@ -595,7 +673,6 @@ const ComicStudio: React.FC = () => {
                     border-color: var(--color-border-accent);
                     box-shadow: var(--shadow-accent);
                 }
-                /* Font specific classes via style injection if needed, but inline style used */
             `}</style>
 
             <Modal isOpen={isPremiseModalOpen} onClose={() => setIsPremiseModalOpen(false)} title={`Gợi ý: ${storySettings.genre}`}>
@@ -632,78 +709,86 @@ const ComicStudio: React.FC = () => {
                                 <SettingsBlock title="Cấu Hình Truyện" instructionKey="group-studio" onInstructionClick={() => {}} >
                                     <div className="space-y-4">
                                         <div className="grid grid-cols-2 gap-4">
-                                            <div>
-                                                <label className="text-xs font-bold text-skin-muted uppercase mb-1 block">LOẠI CÂU CHUYỆN</label>
-                                                <select className="auth-input w-full" value={storySettings.genre} onChange={e => setStorySettings({...storySettings, genre: e.target.value})}>
-                                                    {GENRES.map(g => <option key={g} value={g}>{g}</option>)}
-                                                </select>
-                                            </div>
-                                            <div>
-                                                <label className="text-xs font-bold text-skin-muted uppercase mb-1 block">Ngôn ngữ</label>
-                                                <select className="auth-input w-full" value={storySettings.language} onChange={e => setStorySettings({...storySettings, language: e.target.value})}>
-                                                    {LANGUAGES.map(l => <option key={l} value={l}>{l}</option>)}
-                                                </select>
-                                            </div>
+                                            <ComicSelect 
+                                                label="THỂ LOẠI" 
+                                                value={storySettings.genre} 
+                                                onChange={(val) => setStorySettings({...storySettings, genre: val})}
+                                                options={GENRES}
+                                            />
+                                            <ComicSelect 
+                                                label="NGÔN NGỮ" 
+                                                value={storySettings.language} 
+                                                onChange={(val) => setStorySettings({...storySettings, language: val})}
+                                                options={LANGUAGES}
+                                            />
                                         </div>
 
-                                        <div>
-                                            <label className="text-xs font-bold text-skin-muted uppercase mb-1 block">Phong cách nghệ thuật</label>
-                                            <select className="auth-input w-full" value={storySettings.artStyle} onChange={e => setStorySettings({...storySettings, artStyle: e.target.value})}>
-                                                {ART_STYLES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-                                            </select>
+                                        <ComicSelect 
+                                            label="PHONG CÁCH VẼ" 
+                                            value={storySettings.artStyle} 
+                                            onChange={(val) => setStorySettings({...storySettings, artStyle: val})}
+                                            options={ART_STYLES}
+                                        />
+
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <ComicSelect 
+                                                label="ĐỊNH DẠNG MÀU" 
+                                                value={storySettings.colorFormat} 
+                                                onChange={(val) => setStorySettings({...storySettings, colorFormat: val})}
+                                                options={COLOR_FORMATS}
+                                            />
+                                            <ComicSelect 
+                                                label="KIỂU PHÔNG CHỮ BONG BÓNG" 
+                                                value={storySettings.bubbleFont.value} 
+                                                onChange={(val) => setStorySettings({...storySettings, bubbleFont: BUBBLE_FONTS.find(f => f.value === val) || BUBBLE_FONTS[0]})}
+                                                options={BUBBLE_FONTS}
+                                                previewFont={true}
+                                            />
                                         </div>
 
                                         <div className="grid grid-cols-2 gap-4">
-                                            <div>
-                                                <label className="text-xs font-bold text-skin-muted uppercase mb-1 block">Định dạng màu</label>
-                                                <select className="auth-input w-full text-xs" value={storySettings.colorFormat} onChange={e => setStorySettings({...storySettings, colorFormat: e.target.value})}>
-                                                    {COLOR_FORMATS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-                                                </select>
-                                            </div>
-                                            <div>
-                                                <label className="text-xs font-bold text-skin-muted uppercase mb-1 block">Kiểu phông chữ bong bóng</label>
-                                                <select className="auth-input w-full text-xs" value={storySettings.bubbleFont.value} onChange={e => setStorySettings({...storySettings, bubbleFont: BUBBLE_FONTS.find(f => f.value === e.target.value) || BUBBLE_FONTS[0]})}>
-                                                    {BUBBLE_FONTS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
-                                                </select>
-                                            </div>
+                                            <ComicSelect 
+                                                label="TỶ LỆ KHUNG HÌNH" 
+                                                value={storySettings.aspectRatio} 
+                                                onChange={(val) => setStorySettings({...storySettings, aspectRatio: val})}
+                                                options={ASPECT_RATIOS}
+                                            />
+                                            <ComicSelect 
+                                                label="HIỆU ỨNG HÌNH ẢNH" 
+                                                value={storySettings.visualEffect} 
+                                                onChange={(val) => setStorySettings({...storySettings, visualEffect: val})}
+                                                options={VISUAL_EFFECTS}
+                                            />
                                         </div>
 
                                         <div className="grid grid-cols-2 gap-4">
+                                            <ComicSelect 
+                                                label="LƯỢNG THOẠI" 
+                                                value={storySettings.dialogueAmount} 
+                                                onChange={(val) => setStorySettings({...storySettings, dialogueAmount: val})}
+                                                options={DIALOGUE_AMOUNTS}
+                                            />
                                             <div>
-                                                <label className="text-xs font-bold text-skin-muted uppercase mb-1 block">Tỷ lệ khung hình</label>
-                                                <select className="auth-input w-full text-xs" value={storySettings.aspectRatio} onChange={e => setStorySettings({...storySettings, aspectRatio: e.target.value})}>
-                                                    {ASPECT_RATIOS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-                                                </select>
-                                            </div>
-                                            <div>
-                                                <label className="text-xs font-bold text-skin-muted uppercase mb-1 block">Hiệu ứng hình ảnh</label>
-                                                <select className="auth-input w-full text-xs" value={storySettings.visualEffect} onChange={e => setStorySettings({...storySettings, visualEffect: e.target.value})}>
-                                                    {VISUAL_EFFECTS.map(v => <option key={v.value} value={v.value}>{v.label}</option>)}
-                                                </select>
-                                            </div>
-                                        </div>
-
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div>
-                                                <label className="text-xs font-bold text-skin-muted uppercase mb-1 block">Lượng thoại</label>
-                                                <select className="auth-input w-full text-xs" value={storySettings.dialogueAmount} onChange={e => setStorySettings({...storySettings, dialogueAmount: e.target.value})}>
-                                                    <option value="Ít (Visual Focus)">Ít (Visual)</option>
-                                                    <option value="Vừa phải">Vừa phải</option>
-                                                    <option value="Nhiều (Story Focus)">Nhiều (Story)</option>
-                                                </select>
-                                            </div>
-                                            <div>
-                                                <label className="text-xs font-bold text-skin-muted uppercase mb-1 block">Số trang (Panel)</label>
-                                                <input type="number" className="auth-input w-full text-center font-bold" min={1} max={10} value={storySettings.pageCount} onChange={e => setStorySettings({...storySettings, pageCount: parseInt(e.target.value)})} />
+                                                <label className="text-xs font-bold text-skin-muted uppercase mb-1.5 block tracking-wide">SỐ TRANG</label>
+                                                <div className="flex items-center bg-[#1E1B25] border border-white/10 rounded-lg px-3 py-2.5">
+                                                    <input 
+                                                        type="number" 
+                                                        className="bg-transparent text-white text-sm w-full focus:outline-none font-bold text-center" 
+                                                        min={1} 
+                                                        max={10} 
+                                                        value={storySettings.pageCount} 
+                                                        onChange={e => setStorySettings({...storySettings, pageCount: parseInt(e.target.value)})} 
+                                                    />
+                                                </div>
                                             </div>
                                         </div>
 
-                                        <div>
-                                            <label className="text-xs font-bold text-skin-muted uppercase mb-1 block">Vị trí số trang</label>
-                                            <select className="auth-input w-full text-xs" value={storySettings.pageNumbering} onChange={e => setStorySettings({...storySettings, pageNumbering: e.target.value})}>
-                                                {PAGE_NUMBERING.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
-                                            </select>
-                                        </div>
+                                        <ComicSelect 
+                                            label="VỊ TRÍ SỐ TRANG" 
+                                            value={storySettings.pageNumbering} 
+                                            onChange={(val) => setStorySettings({...storySettings, pageNumbering: val})}
+                                            options={PAGE_NUMBERING}
+                                        />
                                     </div>
                                 </SettingsBlock>
 

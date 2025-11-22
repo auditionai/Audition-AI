@@ -41,7 +41,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             
             if (likeError) throw likeError;
 
-            // Create Notification
+            // Create or Update Notification
             const { data: post } = await supabaseAdmin.from('posts').select('user_id').eq('id', postId).single();
             
             // Only notify if liking someone else's post
@@ -49,7 +49,7 @@ const handler: Handler = async (event: HandlerEvent) => {
                 const { data: userProfile } = await supabaseAdmin.from('users').select('display_name').eq('id', user.id).single();
                 const senderName = userProfile?.display_name || "Ai đó";
                 
-                // Check if a like notification from this user for this post already exists to avoid spamming
+                // Check if a notification for this action exists (even if read)
                 const { data: existingNotif } = await supabaseAdmin
                     .from('notifications')
                     .select('id')
@@ -58,9 +58,23 @@ const handler: Handler = async (event: HandlerEvent) => {
                     .eq('type', 'like')
                     .eq('entity_id', postId)
                     .limit(1)
-                    .maybeSingle(); // Use maybeSingle to return null instead of error if not found
+                    .maybeSingle();
 
-                if (!existingNotif) {
+                if (existingNotif) {
+                    // If exists, UPDATE it to be unread and fresh timestamp. 
+                    // This triggers 'UPDATE' event in realtime, so client knows to show notification again.
+                    const { error: updateError } = await supabaseAdmin
+                        .from('notifications')
+                        .update({
+                            is_read: false,
+                            created_at: new Date().toISOString(),
+                            content: `${senderName} đã thích bài viết của bạn.` // Update content in case name changed
+                        })
+                        .eq('id', existingNotif.id);
+                        
+                    if (updateError) console.error("Failed to update like notification:", updateError);
+                } else {
+                    // If not exists, INSERT new
                     const { error: insertError } = await supabaseAdmin.from('notifications').insert({
                         recipient_id: post.user_id,
                         actor_id: user.id,
@@ -69,9 +83,7 @@ const handler: Handler = async (event: HandlerEvent) => {
                         content: `${senderName} đã thích bài viết của bạn.`,
                         is_read: false
                     });
-                    if (insertError) {
-                        console.error("Failed to insert like notification:", insertError);
-                    }
+                    if (insertError) console.error("Failed to insert like notification:", insertError);
                 }
             }
         }

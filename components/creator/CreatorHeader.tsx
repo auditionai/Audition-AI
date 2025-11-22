@@ -46,27 +46,36 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
 
     fetchUnreadCount();
 
-    // 2. Subscribe to Realtime changes
-    // Removing server-side filter to ensure event delivery (Client-side filtering applied)
-    const channelName = `notifications-listener-${user.id}`;
+    // 2. Subscribe to Realtime changes (INSERT and UPDATE)
+    // Using explicit filter is generally more performant and reliable for RLS
+    const channelName = `notifications:${user.id}`;
     
     const channel = supabase.channel(channelName)
       .on('postgres_changes', {
-        event: 'INSERT',
+        event: '*', // Listen to ALL events (INSERT, UPDATE) to catch re-likes or new comments
         schema: 'public',
         table: 'notifications',
+        filter: `recipient_id=eq.${user.id}`
       }, (payload: any) => {
-        // Filter specifically for this user
-        if (payload.new && payload.new.recipient_id === user.id) {
-            console.log('New notification received:', payload);
-            setUnreadCount(prev => prev + 1);
+        // If INSERT: Increment count
+        if (payload.eventType === 'INSERT') {
+            if (!payload.new.is_read) {
+                setUnreadCount(prev => prev + 1);
+            }
+        } 
+        // If UPDATE: Check if it became unread (e.g. re-like bumping the notification)
+        else if (payload.eventType === 'UPDATE') {
+            const newRec = payload.new;
+            const oldRec = payload.old;
+            // If it was read and now is unread (re-notified)
+            if (newRec && !newRec.is_read) {
+                 // We fetch count again to be accurate, or just increment if we track local state strictly
+                 // Ideally, fetch count to sync
+                 fetchUnreadCount();
+            }
         }
       })
-      .subscribe((status) => {
-          if (status === 'SUBSCRIBED') {
-              console.log("Notification channel subscribed");
-          }
-      });
+      .subscribe();
 
     return () => {
       supabase.removeChannel(channel);

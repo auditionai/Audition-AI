@@ -5,7 +5,6 @@ import { S3Client, DeleteObjectCommand } from "@aws-sdk/client-s3";
 
 const handler: Handler = async (event: HandlerEvent) => {
     // 1. Initialize S3 client for R2
-    // Use fallbacks ('') to prevent build-time TS errors if env vars are undefined
     const s3Client = new S3Client({
         region: "auto",
         endpoint: process.env.R2_ENDPOINT || '',
@@ -67,6 +66,7 @@ const handler: Handler = async (event: HandlerEvent) => {
                     const urlObj = new URL(imageUrl);
                     key = urlObj.pathname.substring(1); 
                 } catch (e) {
+                    // Fallback for manual URL construction if needed
                     const publicUrl = process.env.R2_PUBLIC_URL || '';
                     key = imageUrl.replace(`${publicUrl}/`, '');
                 }
@@ -87,14 +87,15 @@ const handler: Handler = async (event: HandlerEvent) => {
             }
         }
 
-        // 6. Update image record in Supabase to set URL to null
-        const { error: updateDbError } = await supabaseAdmin
+        // 6. DELETE image record from Supabase (Hard Delete)
+        // We delete the row entirely instead of updating image_url to null to avoid NOT NULL constraints
+        const { error: deleteDbError } = await supabaseAdmin
             .from('generated_images')
-            .update({ image_url: null })
+            .delete()
             .eq('id', imageId);
 
-        if (updateDbError) {
-            throw new Error(`Failed to update database record: ${updateDbError.message}`);
+        if (deleteDbError) {
+            throw new Error(`Failed to delete database record: ${deleteDbError.message}`);
         }
 
         return {

@@ -231,9 +231,9 @@ const GameConfigManager: React.FC = () => {
         }
     };
 
-    const sqlFixScript = `-- CHẠY TOÀN BỘ SCRIPT NÀY TRONG SQL EDITOR ĐỂ SỬA LỖI (Đã sắp xếp đúng thứ tự)
+    const sqlFixScript = `-- CHẠY TOÀN BỘ SCRIPT NÀY TRONG SQL EDITOR ĐỂ SỬA LỖI (Đã cập nhật tính năng Broadcast)
 
--- 1. TẠO BẢNG NOTIFICATIONS (QUAN TRỌNG: CHẠY ĐẦU TIÊN)
+-- 1. TẠO BẢNG NOTIFICATIONS
 CREATE TABLE IF NOT EXISTS public.notifications (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     recipient_id UUID NOT NULL,
@@ -245,22 +245,31 @@ CREATE TABLE IF NOT EXISTS public.notifications (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
 
--- 2. THIẾT LẬP BẢO MẬT (RLS) CHO BẢNG NOTIFICATIONS
-ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
+-- 2. TẠO BẢNG SYSTEM_BROADCASTS (MỚI)
+CREATE TABLE IF NOT EXISTS public.system_broadcasts (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    content TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+);
 
--- Cấp quyền truy cập cơ bản
+-- 3. THIẾT LẬP BẢO MẬT (RLS)
+ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.system_broadcasts ENABLE ROW LEVEL SECURITY;
+
+-- Cấp quyền
 GRANT ALL ON public.notifications TO service_role;
 GRANT SELECT, UPDATE ON public.notifications TO authenticated;
+GRANT ALL ON public.system_broadcasts TO service_role;
+GRANT SELECT ON public.system_broadcasts TO authenticated;
 
--- Tạo Policy: Người dùng chỉ thấy thông báo của chính mình
+-- Tạo Policy Notifications
 DROP POLICY IF EXISTS "Users can see their own notifications" ON public.notifications;
 CREATE POLICY "Users can see their own notifications" 
 ON public.notifications FOR SELECT 
 TO authenticated 
 USING (auth.uid() = recipient_id);
 
--- 3. KÍCH HOẠT REALTIME (CHẠY SAU KHI BẢNG ĐÃ TỒN TẠI)
--- Block này kiểm tra an toàn, nếu đã bật rồi thì bỏ qua
+-- 4. KÍCH HOẠT REALTIME
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'notifications') THEN
@@ -268,19 +277,18 @@ BEGIN
   END IF;
 END $$;
 
--- 4. SỬA LỖI UNKNOWN USER (Cấp quyền cho bảng users)
+-- 5. CẤP QUYỀN CƠ BẢN KHÁC
 GRANT ALL ON public.users TO service_role;
 GRANT SELECT, UPDATE, INSERT ON public.users TO authenticated;
 GRANT SELECT ON public.users TO anon;
 
--- 5. ĐẢM BẢO ENUM COSMETIC
 DO $$ BEGIN
     CREATE TYPE public.cosmetic_type AS ENUM ('frame', 'title', 'name_effect');
 EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
 
-SELECT 'Đã sửa lỗi thành công! Hãy tải lại App.' as ket_qua;
+SELECT 'Cập nhật Database thành công!' as ket_qua;
 `;
 
     return (
@@ -303,7 +311,7 @@ SELECT 'Đã sửa lỗi thành công! Hãy tải lại App.' as ket_qua;
                     <div className="bg-yellow-500/10 border border-yellow-500/30 p-4 rounded-lg">
                         <h4 className="text-yellow-400 font-bold mb-2 flex items-center gap-2"><i className="ph-fill ph-warning-circle"></i> Cập Nhật Database (BẮT BUỘC)</h4>
                         <p className="text-sm text-gray-300 mb-4">
-                            Để sửa lỗi <strong>"Không hiện thông báo"</strong>, <strong>"Lỗi Unknown User"</strong> và kích hoạt tính năng Realtime, bạn phải chạy đoạn mã SQL này.
+                            Để sửa lỗi <strong>"Không hiện thông báo"</strong>, kích hoạt <strong>Broadcast</strong> và tính năng Realtime, bạn phải chạy đoạn mã SQL này.
                         </p>
                         <div className="relative">
                             <pre className="bg-black/50 p-3 rounded-lg text-xs text-green-400 overflow-x-auto font-mono border border-white/10 h-64 custom-scrollbar">

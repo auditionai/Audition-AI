@@ -1,5 +1,7 @@
+
 import { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
+import { sendSystemMessage } from './utils/chatUtils';
 
 const handler: Handler = async (event: HandlerEvent) => {
     // 1. Authenticate user (common for all methods)
@@ -13,8 +15,8 @@ const handler: Handler = async (event: HandlerEvent) => {
     }
 
     try {
-        // FIX: Use Supabase v2 `auth.getUser` as `auth.api` is from v1.
-        const { data: { user: authUser }, error: authError } = await supabaseAdmin.auth.getUser(token);
+        // FIX: Use Supabase v2 `auth.getUser` by casting to any
+        const { data: { user: authUser }, error: authError } = await (supabaseAdmin.auth as any).getUser(token);
         if (authError || !authUser) {
             return { statusCode: 401, body: JSON.stringify({ error: `Unauthorized: ${authError?.message || 'Invalid token.'}` }) };
         }
@@ -45,6 +47,25 @@ const handler: Handler = async (event: HandlerEvent) => {
 
                 if (rpcError) {
                     console.warn(`RPC 'handle_new_user' warning: ${rpcError.message}`);
+                } else {
+                    // --- NEW USER ONBOARDING LOGIC ---
+                    // Send all historical system broadcasts to this new user
+                    try {
+                        const { data: broadcasts } = await supabaseAdmin
+                            .from('system_broadcasts')
+                            .select('content')
+                            .order('created_at', { ascending: true }); // Chronological order
+
+                        if (broadcasts && broadcasts.length > 0) {
+                            console.log(`Sending ${broadcasts.length} historical broadcasts to new user ${authUser.id}`);
+                            // Send sequentially to maintain order
+                            for (const msg of broadcasts) {
+                                await sendSystemMessage(authUser.id, msg.content);
+                            }
+                        }
+                    } catch (broadcastError) {
+                        console.error("Failed to send historical broadcasts:", broadcastError);
+                    }
                 }
                 
                 // Retry fetch after RPC

@@ -14,7 +14,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     const authHeader = event.headers['authorization'];
     if (!authHeader) return { statusCode: 401, body: JSON.stringify({ error: 'Authorization required.' }) };
     const token = authHeader.split(' ')[1];
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+    const { data: { user }, error: authError } = await (supabaseAdmin.auth as any).getUser(token);
     
     if (authError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'Invalid token.' }) };
 
@@ -52,6 +52,16 @@ const handler: Handler = async (event: HandlerEvent) => {
                 // Fallback: Use current Admin ID as sender
                 senderId = user.id;
             }
+        }
+
+        // --- LOG TO SYSTEM BROADCASTS (For future users) ---
+        // Only log if targeting "Inbox All" to avoid cluttering global chat logic
+        if (target === 'inbox_all') {
+            const { error: logError } = await supabaseAdmin
+                .from('system_broadcasts')
+                .insert({ content: message });
+            
+            if (logError) console.error("Failed to log broadcast:", logError.message);
         }
 
         // --- CASE 1: SEND TO GLOBAL CHAT ---
@@ -103,7 +113,7 @@ const handler: Handler = async (event: HandlerEvent) => {
                 successCount += results.filter(r => r).length;
             }
 
-            return { statusCode: 200, body: JSON.stringify({ success: true, message: `Sent to ${successCount} users.` }) };
+            return { statusCode: 200, body: JSON.stringify({ success: true, message: `Sent to ${successCount} users. Saved to history.` }) };
         }
 
         return { statusCode: 400, body: JSON.stringify({ error: 'Invalid target.' }) };

@@ -231,38 +231,52 @@ const GameConfigManager: React.FC = () => {
         }
     };
 
-    const sqlFixScript = `-- CHẠY SCRIPT NÀY TRONG SUPABASE SQL EDITOR ĐỂ SỬA LỖI CẤU TRÚC
+    const sqlFixScript = `-- CHẠY SCRIPT NÀY TRONG SUPABASE SQL EDITOR ĐỂ SỬA LỖI THÔNG BÁO & UNKNOWN USER
 
--- 1. Tạo Enum Type (nếu chưa có)
+-- 1. Kích hoạt Realtime cho bảng Notifications (QUAN TRỌNG NHẤT)
+-- Bước này giúp chuông thông báo nhảy số ngay lập tức
+BEGIN;
+  ALTER PUBLICATION supabase_realtime DROP TABLE IF EXISTS notifications;
+  ALTER PUBLICATION supabase_realtime ADD TABLE notifications;
+COMMIT;
+
+-- 2. Đảm bảo bảng Users cho phép Insert/Update (Sửa lỗi 'Unknown User')
+GRANT ALL ON public.users TO service_role;
+GRANT SELECT, UPDATE, INSERT ON public.users TO authenticated;
+GRANT SELECT ON public.users TO anon;
+
+-- 3. Cấp quyền truy cập bảng Notifications cho Server và Client
+GRANT ALL ON public.notifications TO service_role;
+GRANT SELECT, UPDATE ON public.notifications TO authenticated;
+
+-- 4. Thiết lập Policy bảo mật (RLS) cho Notifications
+ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
+
+-- Xóa policy cũ nếu có để tránh lỗi trùng
+DROP POLICY IF EXISTS "Users can see their own notifications" ON public.notifications;
+
+-- Tạo policy mới: Người dùng chỉ được xem thông báo của chính mình
+CREATE POLICY "Users can see their own notifications" 
+ON public.notifications FOR SELECT 
+TO authenticated 
+USING (auth.uid() = recipient_id);
+
+-- Cho phép server (service_role) làm mọi thứ
+DROP POLICY IF EXISTS "Service role full access notifications" ON public.notifications;
+CREATE POLICY "Service role full access notifications" 
+ON public.notifications FOR ALL 
+TO service_role 
+USING (true) 
+WITH CHECK (true);
+
+-- 5. Kiểm tra lại Enum Type Cosmetic (cho Shop)
 DO $$ BEGIN
     CREATE TYPE public.cosmetic_type AS ENUM ('frame', 'title', 'name_effect');
 EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
 
--- 2. Cập nhật bảng game_cosmetics để hỗ trợ name_effect (nếu check constraint cũ cản trở)
-ALTER TABLE public.game_cosmetics DROP CONSTRAINT IF EXISTS game_cosmetics_type_check;
-ALTER TABLE public.game_cosmetics ADD CONSTRAINT game_cosmetics_type_check CHECK (type::text = ANY (ARRAY['frame'::text, 'title'::text, 'name_effect'::text]));
-
--- 3. Bổ sung cột còn thiếu vào bảng Users
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS equipped_frame_id UUID;
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS equipped_title_id UUID;
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS equipped_name_effect_id UUID;
-
--- Thêm các cột thông kê profile (nếu thiếu)
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS weekly_points INTEGER DEFAULT 0;
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS profile_views INTEGER DEFAULT 0;
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS total_likes INTEGER DEFAULT 0;
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS bio TEXT;
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS cover_url TEXT;
-
--- 4. Làm mới quyền truy cập (để đảm bảo API có thể đọc/ghi các cột mới)
-GRANT ALL ON public.users TO service_role;
-GRANT SELECT, UPDATE ON public.users TO authenticated;
-GRANT SELECT ON public.users TO anon;
-
--- 5. Thông báo
-SELECT 'Database updated successfully. equipped_name_effect_id column added.' as result;
+SELECT 'Cấu hình Database thành công! Hãy thử lại tính năng Thông báo.' as ket_qua;
 `;
 
     return (
@@ -283,9 +297,9 @@ SELECT 'Database updated successfully. equipped_name_effect_id column added.' as
             {activeSubTab === 'db_tools' && (
                 <div className="space-y-4">
                     <div className="bg-yellow-500/10 border border-yellow-500/30 p-4 rounded-lg">
-                        <h4 className="text-yellow-400 font-bold mb-2 flex items-center gap-2"><i className="ph-fill ph-warning-circle"></i> Cập Nhật Cấu Trúc Database (Bắt Buộc)</h4>
+                        <h4 className="text-yellow-400 font-bold mb-2 flex items-center gap-2"><i className="ph-fill ph-warning-circle"></i> Cập Nhật Database (BẮT BUỘC)</h4>
                         <p className="text-sm text-gray-300 mb-4">
-                            Nếu bạn gặp lỗi <strong>"Tải lại trang mất hiệu ứng"</strong> hoặc <strong>"Failed to update appearance"</strong>, hãy copy đoạn mã SQL bên dưới và chạy trong <strong>Supabase SQL Editor</strong> để thêm cột còn thiếu.
+                            Để sửa lỗi <strong>"Không hiện thông báo"</strong>, <strong>"Lỗi Unknown User"</strong> và kích hoạt tính năng Realtime, bạn phải chạy đoạn mã SQL này.
                         </p>
                         <div className="relative">
                             <pre className="bg-black/50 p-3 rounded-lg text-xs text-green-400 overflow-x-auto font-mono border border-white/10 h-64 custom-scrollbar">
@@ -299,7 +313,14 @@ SELECT 'Database updated successfully. equipped_name_effect_id column added.' as
                             </button>
                         </div>
                         <div className="mt-4 text-xs text-gray-400">
-                            <strong>Hướng dẫn:</strong> Đăng nhập Supabase {'>'} Chọn Project {'>'} SQL Editor (bên trái) {'>'} New Query {'>'} Dán code {'>'} Run.
+                            <strong>Hướng dẫn thực hiện:</strong>
+                            <ol className="list-decimal list-inside mt-1 space-y-1">
+                                <li>Đăng nhập <a href="https://supabase.com/dashboard" target="_blank" className="text-blue-400 underline">Supabase Dashboard</a>.</li>
+                                <li>Chọn Project của bạn.</li>
+                                <li>Bấm vào biểu tượng <strong>SQL Editor</strong> ở thanh bên trái.</li>
+                                <li>Bấm <strong>New Query</strong>.</li>
+                                <li>Dán đoạn code trên vào và bấm <strong>Run</strong>.</li>
+                            </ol>
                         </div>
                     </div>
                 </div>

@@ -18,7 +18,22 @@ const handler: Handler = async (event: HandlerEvent) => {
         const { postId } = JSON.parse(event.body || '{}');
         if (!postId) return { statusCode: 400, body: JSON.stringify({ error: 'Post ID required' }) };
 
-        // 1. Check if already liked
+        // --- 1. FORCE SYNC: AGGRESSIVELY ENSURE USER EXISTS ---
+        // Use data from the Auth token to repair/create the public user record immediately
+        const meta = user.user_metadata || {};
+        const displayName = meta.full_name || meta.name || `User ${user.id.substring(0,4)}`;
+        const avatarUrl = meta.avatar_url || meta.picture || `https://api.dicebear.com/7.x/bottts/svg?seed=${user.id}`;
+
+        const { error: upsertError } = await supabaseAdmin.from('users').upsert({
+            id: user.id,
+            email: user.email || '',
+            display_name: displayName,
+            photo_url: avatarUrl,
+        }, { onConflict: 'id', ignoreDuplicates: false }); // Force update to ensure latest info
+
+        if (upsertError) console.warn("Like: User sync warning:", upsertError.message);
+
+        // --- 2. TOGGLE LIKE ---
         const { data: existingLike } = await supabaseAdmin
             .from('post_likes')
             .select('*')
@@ -41,29 +56,14 @@ const handler: Handler = async (event: HandlerEvent) => {
             
             if (likeError) throw likeError;
 
-            // Create or Update Notification
+            // --- 3. NOTIFICATION LOGIC ---
             const { data: post } = await supabaseAdmin.from('posts').select('user_id').eq('id', postId).single();
             
             // Only notify if liking someone else's post
             if (post && post.user_id !== user.id) {
-                // --- CRITICAL FIX: Ensure User Exists in Public Table ---
-                let { data: userProfile } = await supabaseAdmin.from('users').select('display_name').eq('id', user.id).single();
                 
-                if (!userProfile) {
-                    console.log(`[Auto-Sync Like] User ${user.id} missing in public table. Syncing...`);
-                    await supabaseAdmin.rpc('handle_new_user', {
-                        p_id: user.id,
-                        p_email: user.email || '',
-                        p_display_name: user.user_metadata?.full_name || 'Người dùng mới',
-                        p_photo_url: user.user_metadata?.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${user.id}`
-                    });
-                    const { data: retryProfile } = await supabaseAdmin.from('users').select('display_name').eq('id', user.id).single();
-                    userProfile = retryProfile;
-                }
-
-                const senderName = userProfile?.display_name || "Ai đó";
-                
-                // Check if a notification for this action exists (even if read)
+                // Check if a notification already exists (to avoid spamming or duplicates)
+                // We use .maybeSingle() to avoid 406 errors if 0 rows
                 const { data: existingNotif } = await supabaseAdmin
                     .from('notifications')
                     .select('id')
@@ -75,29 +75,27 @@ const handler: Handler = async (event: HandlerEvent) => {
                     .maybeSingle();
 
                 if (existingNotif) {
-                    // If exists, UPDATE it to be unread and fresh timestamp. 
-                    // This triggers 'UPDATE' event in realtime, so client knows to show notification again.
-                    const { error: updateError } = await supabaseAdmin
+                    // Recycle existing notification: Mark unread + Update time
+                    // This ensures it pops up again without creating DB clutter
+                    await supabaseAdmin
                         .from('notifications')
                         .update({
                             is_read: false,
                             created_at: new Date().toISOString(),
-                            content: `${senderName} đã thích bài viết của bạn.` // Update content in case name changed
+                            content: `${displayName} đã thích bài viết của bạn.`
                         })
                         .eq('id', existingNotif.id);
-                        
-                    if (updateError) console.error("Failed to update like notification:", updateError);
                 } else {
-                    // If not exists, INSERT new
-                    const { error: insertError } = await supabaseAdmin.from('notifications').insert({
+                    // Insert new notification
+                    await supabaseAdmin.from('notifications').insert({
                         recipient_id: post.user_id,
                         actor_id: user.id,
                         type: 'like',
                         entity_id: postId,
-                        content: `${senderName} đã thích bài viết của bạn.`,
-                        is_read: false
+                        content: `${displayName} đã thích bài viết của bạn.`,
+                        is_read: false,
+                        created_at: new Date().toISOString()
                     });
-                    if (insertError) console.error("Failed to insert like notification:", insertError);
                 }
             }
         }

@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { CreatorTab } from '../../pages/CreatorPage';
 import { getRankForLevel } from '../../utils/rankUtils';
@@ -29,12 +29,9 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
   const dropdownRef = useRef<HTMLDivElement>(null);
   const notificationRef = useRef<HTMLDivElement>(null);
   
-  // Subscribe to Notifications
-  useEffect(() => {
-    if (!user || !supabase) return;
-
-    // 1. Fetch initial unread count
-    const fetchUnreadCount = async () => {
+  // 1. Fetch Unread Count Function
+  const fetchUnreadCount = useCallback(async () => {
+      if (!user || !supabase) return;
       const { count } = await supabase
         .from('notifications')
         .select('*', { count: 'exact', head: true })
@@ -42,35 +39,42 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
         .eq('is_read', false);
       
       setUnreadCount(count || 0);
-    };
+  }, [user, supabase]);
 
-    fetchUnreadCount();
+  // 2. Polling Strategy (Backup Layer) - Checks every 15 seconds
+  useEffect(() => {
+      fetchUnreadCount(); // Initial fetch
+      
+      const intervalId = setInterval(() => {
+          fetchUnreadCount();
+      }, 15000); // 15 seconds
 
-    // 2. Subscribe to Realtime changes
-    // FIX: Remove specific filter string to avoid RLS/Type mismatches. 
-    // Listen to the table and filter in the callback.
-    const channel = supabase.channel('global-notifications-watcher')
+      return () => clearInterval(intervalId);
+  }, [fetchUnreadCount]);
+
+  // 3. Realtime Strategy (Instant Layer)
+  useEffect(() => {
+    if (!user || !supabase) return;
+
+    // USE A UNIQUE CHANNEL NAME PER USER
+    // This is critical. 'global' channels often get flooded or hit limits.
+    // Filtering at the source (Postgres) is cleaner than filtering in JS for RLS compliance.
+    const channel = supabase.channel(`user-notifs-${user.id}`)
       .on('postgres_changes', {
-        event: '*', // Listen to ALL events
+        event: 'INSERT', // We mostly care about new notifications
         schema: 'public',
-        table: 'notifications'
-      }, (payload: any) => {
-        // Client-side filtering: strictly check if this notification belongs to current user
-        const newRecord = payload.new;
-        if (newRecord && newRecord.recipient_id === user.id) {
-             // If it's a new notification or an update that makes it unread
-             if (payload.eventType === 'INSERT' || (payload.eventType === 'UPDATE' && !newRecord.is_read)) {
-                 // Instead of just incrementing, we refetch to be accurate and handle race conditions
-                 fetchUnreadCount();
-             }
-        }
+        table: 'notifications',
+        filter: `recipient_id=eq.${user.id}` // Explicitly filter by recipient_id
+      }, (payload) => {
+         console.log('New notification received!', payload);
+         fetchUnreadCount(); // Refresh count immediately
       })
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user, supabase]);
+  }, [user?.id, supabase, fetchUnreadCount]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -96,7 +100,11 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
   
   const handleNotificationClick = () => {
     setNotificationOpen(prev => !prev);
-    // When opening, we can optionally reset count visually, but best to wait for read actions
+    // Optional: Reset count locally for better UX, though data sync will handle it
+    if (!isNotificationOpen) {
+        // When opening, we might want to keep the count until they read, 
+        // or clear it. Usually, we keep it until read action.
+    }
   }
 
   const handleLogout = (e: React.MouseEvent) => {

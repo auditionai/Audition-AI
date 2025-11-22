@@ -21,37 +21,27 @@ const handler: Handler = async (event: HandlerEvent) => {
             return { statusCode: 400, body: JSON.stringify({ error: 'Post ID and Content are required' }) };
         }
 
-        // --- CRITICAL FIX: Ensure User Exists in Public Table ---
-        // Sometimes user is in Auth but not Public due to trigger failure.
-        // We manually check and sync here to prevent "Unknown" comments.
-        let { data: userProfile } = await supabaseAdmin
-            .from('users')
-            .select('display_name, photo_url')
-            .eq('id', user.id)
-            .single();
-            
-        if (!userProfile) {
-            console.log(`[Auto-Sync] User ${user.id} missing in public table. Syncing now...`);
-            // Call the handle_new_user RPC manually
-            await supabaseAdmin.rpc('handle_new_user', {
-                p_id: user.id,
-                p_email: user.email || '',
-                p_display_name: user.user_metadata?.full_name || 'Người dùng mới',
-                p_photo_url: user.user_metadata?.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${user.id}`
-            });
-            
-            // Refetch
-            const { data: retryProfile } = await supabaseAdmin
-                .from('users')
-                .select('display_name, photo_url')
-                .eq('id', user.id)
-                .single();
-            userProfile = retryProfile;
+        // --- 1. FORCE SYNC: AGGRESSIVELY ENSURE USER EXISTS IN PUBLIC TABLE ---
+        // We fetch metadata from the Auth User object (which is the source of truth)
+        const meta = user.user_metadata || {};
+        const displayName = meta.full_name || meta.name || `User ${user.id.substring(0,4)}`;
+        const avatarUrl = meta.avatar_url || meta.picture || `https://api.dicebear.com/7.x/bottts/svg?seed=${user.id}`;
+
+        // Perform UPSERT to public.users. This fixes the "Unknown" issue by forcing the data to exist.
+        const { error: upsertError } = await supabaseAdmin.from('users').upsert({
+            id: user.id,
+            email: user.email || '',
+            display_name: displayName,
+            photo_url: avatarUrl,
+            // We generally preserve existing XP/Diamonds, but if it's a new insert, defaults will apply from DB definition or be null
+        }, { onConflict: 'id', ignoreDuplicates: false }); // update it to ensure fresh name/avatar
+
+        if (upsertError) {
+            console.error("User Sync Failed:", upsertError);
+            // Don't throw, try to proceed, maybe the user exists
         }
 
-        const senderName = userProfile?.display_name || 'Người dùng';
-
-        // 2. Insert Comment
+        // --- 2. INSERT COMMENT ---
         const { data: comment, error: insertError } = await supabaseAdmin
             .from('post_comments')
             .insert({
@@ -65,29 +55,34 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         if (insertError) throw insertError;
 
-        // 3. Create Notifications
+        // --- 3. ROBUST NOTIFICATION LOGIC ---
         
-        // 3a. Fetch Post Owner Info
+        // Fetch Post Owner
         const { data: postData } = await supabaseAdmin
             .from('posts')
             .select('user_id')
             .eq('id', postId)
             .single();
         
-        // Notify Post Owner (if not self)
+        // A. Notify Post Owner
         if (postData && postData.user_id !== user.id) {
+            // Delete old unread notifications of same type to prevent spamming if they spam comments? 
+            // No, for comments we usually keep all of them.
+            
             const { error: notifError } = await supabaseAdmin.from('notifications').insert({
                 recipient_id: postData.user_id,
-                actor_id: user.id, // Ensure this links to the public user we just verified
+                actor_id: user.id, 
                 type: 'comment',
                 entity_id: postId,
-                content: `${senderName} đã bình luận về bài viết của bạn.`,
-                is_read: false
+                content: `${displayName} đã bình luận về bài viết của bạn.`,
+                is_read: false,
+                created_at: new Date().toISOString()
             });
+            
             if (notifError) console.error("Failed to insert comment notification:", notifError);
         }
 
-        // 3b. Notify Parent Comment Owner (if replying)
+        // B. Notify Parent Comment Owner (Reply)
         if (parentId) {
             const { data: parentComment } = await supabaseAdmin
                 .from('post_comments')
@@ -95,15 +90,15 @@ const handler: Handler = async (event: HandlerEvent) => {
                 .eq('id', parentId)
                 .single();
             
-            // Only notify if the parent comment owner is NOT the current user AND NOT the post owner (to avoid double notification)
             if (parentComment && parentComment.user_id !== user.id && parentComment.user_id !== postData?.user_id) {
                  const { error: replyError } = await supabaseAdmin.from('notifications').insert({
                     recipient_id: parentComment.user_id,
                     actor_id: user.id,
                     type: 'reply',
                     entity_id: postId,
-                    content: `${senderName} đã trả lời bình luận của bạn.`,
-                    is_read: false
+                    content: `${displayName} đã trả lời bình luận của bạn.`,
+                    is_read: false,
+                    created_at: new Date().toISOString()
                 });
                 if (replyError) console.error("Failed to insert reply notification:", replyError);
             }

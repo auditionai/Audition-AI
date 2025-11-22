@@ -1,4 +1,7 @@
-
+<change>
+    <file>netlify/functions/delete-image.ts</file>
+    <description>Switch from soft delete (update null) to hard delete to fix database constraint violation</description>
+    <content><![CDATA[
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
 import { S3Client, DeleteObjectCommand } from "@aws-sdk/client-s3";
@@ -94,15 +97,15 @@ const handler: Handler = async (event: HandlerEvent) => {
             }
         }
 
-        // 6. ALWAYS update image record in Supabase to set URL to null. This is the crucial step.
-        const { error: updateDbError } = await supabaseAdmin
+        // 6. HARD DELETE the record to avoid not-null constraint on image_url
+        const { error: deleteDbError } = await supabaseAdmin
             .from('generated_images')
-            .update({ image_url: null })
+            .delete()
             .eq('id', imageId);
 
-        if (updateDbError) {
+        if (deleteDbError) {
             // This is a more critical error, so we should throw.
-            throw new Error(`Failed to update database record: ${updateDbError.message}`);
+            throw new Error(`Failed to delete database record: ${deleteDbError.message}`);
         }
 
         return {
@@ -117,3 +120,5 @@ const handler: Handler = async (event: HandlerEvent) => {
 };
 
 export { handler };
+]]></content>
+</change>

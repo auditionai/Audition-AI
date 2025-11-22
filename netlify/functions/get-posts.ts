@@ -1,3 +1,4 @@
+
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
 
@@ -16,7 +17,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     
     if (authHeader) {
         const token = authHeader.split(' ')[1];
-        const { data: { user } } = await supabaseAdmin.auth.getUser(token);
+        const { data: { user } } = await (supabaseAdmin.auth as any).getUser(token);
         if (user) currentUserId = user.id;
     }
 
@@ -29,13 +30,11 @@ const handler: Handler = async (event: HandlerEvent) => {
     }
 
     try {
-        // 3. Fetch Posts
-        // FIX: Use user:users(*) wildcard to avoid errors if specific columns (like equipped_name_effect_id) don't exist yet.
-        const { data, error } = await supabaseAdmin
+        // 3. Fetch Posts (Raw)
+        const { data: posts, error } = await supabaseAdmin
             .from('posts')
             .select(`
                 *,
-                user:users(*),
                 likes_count:post_likes(count),
                 comments_count:post_comments(count)
             `)
@@ -47,9 +46,21 @@ const handler: Handler = async (event: HandlerEvent) => {
             throw error;
         }
 
-        // 4. Check "Is Liked By User" manually
-        const posts = data || [];
-        const postIds = posts.map(p => p.id);
+        if (!posts || posts.length === 0) {
+             return { statusCode: 200, body: JSON.stringify([]) };
+        }
+
+        // 4. Fetch User Data Manually (Safe against missing FKs)
+        const userIds = [...new Set(posts.map((p: any) => p.user_id))];
+        const { data: users } = await supabaseAdmin
+            .from('users')
+            .select('*')
+            .in('id', userIds);
+            
+        const userMap = new Map<string, any>((users || []).map((u: any) => [u.id, u]));
+
+        // 5. Check "Is Liked By User" manually
+        const postIds = posts.map((p: any) => p.id);
         let likedPostIds = new Set<string>();
 
         if (currentUserId && postIds.length > 0) {
@@ -60,12 +71,12 @@ const handler: Handler = async (event: HandlerEvent) => {
                 .in('post_id', postIds);
             
             if (likes) {
-                likes.forEach(l => likedPostIds.add(l.post_id));
+                likes.forEach((l: any) => likedPostIds.add(l.post_id));
             }
         }
 
         const formattedPosts = posts.map((post: any) => {
-            const userData = Array.isArray(post.user) ? post.user[0] : post.user;
+            const userData = userMap.get(post.user_id);
             
             // Extract counts
             const realLikesCount = post.likes_count?.[0]?.count ?? 0;
@@ -79,7 +90,11 @@ const handler: Handler = async (event: HandlerEvent) => {
                 user: userData ? {
                     ...userData,
                     level: calculateLevelFromXp(userData.xp || 0)
-                } : null
+                } : {
+                    display_name: 'Unknown User',
+                    photo_url: null,
+                    level: 1
+                }
             };
         });
 

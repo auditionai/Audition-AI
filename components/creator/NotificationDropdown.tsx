@@ -68,17 +68,19 @@ const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ onClose, on
       } else {
           // Navigate to profile or specific post if we had a dedicated post page
           // For now, go to profile page of the user (or just close)
-          // Ideal: navigate(`post/${notification.entity_id}`);
-          // Fallback:
-          navigate('profile'); // Or user profile if actor exists
-          
+          navigate('profile'); 
           showToast("Tính năng xem chi tiết bài viết từ thông báo đang phát triển.", "success");
       }
       onClose();
   };
 
   const getNotificationContent = (n: AppNotification) => {
+      // Safety fallback: if actor is missing, use 'Ai đó'
       const actorName = n.actor?.display_name || 'Ai đó';
+      
+      // Fallback to DB content string if specialized rendering fails or actor is missing,
+      // but usually we want to reconstruct it for better styling.
+      
       switch (n.type) {
           case 'like': return <span><span className="font-bold text-white">{actorName}</span> đã thích bài viết của bạn.</span>;
           case 'comment': return <span><span className="font-bold text-white">{actorName}</span> đã bình luận về bài viết của bạn.</span>;
@@ -86,7 +88,7 @@ const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ onClose, on
           case 'share': return <span><span className="font-bold text-white">{actorName}</span> đã chia sẻ bài viết của bạn.</span>;
           case 'system': return <span className="text-yellow-300">{n.content}</span>;
           case 'follow': return <span><span className="font-bold text-white">{actorName}</span> đã theo dõi bạn.</span>;
-          default: return <span>{n.content}</span>;
+          default: return <span>{n.content || 'Thông báo mới'}</span>;
       }
   };
 

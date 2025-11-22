@@ -55,65 +55,45 @@ const processImageForGemini = async (imageDataUrl: string | null, targetAspectRa
     }
 };
 
-// Add Watermark Function (Text with Drop Shadow)
+// Add Watermark Function (Robust Image Composition)
 const addWatermark = async (imageBuffer: Buffer): Promise<Buffer> => {
     try {
-        console.log("Starting text watermark process (GitHub Raw Fonts)...");
+        console.log("Starting watermark process (Image Composition)...");
         const image = await (Jimp as any).read(imageBuffer);
         
         const mainWidth = image.getWidth();
         const mainHeight = image.getHeight();
 
-        // Use stable GitHub Raw URLs for Jimp fonts (more reliable than unpkg)
-        const BASE_FONT_URL = 'https://raw.githubusercontent.com/jimp-dev/jimp/master/packages/plugin-print/fonts/open-sans';
-        const FONT_WHITE_16 = `${BASE_FONT_URL}/open-sans-16-white/open-sans-16-white.fnt`;
-        const FONT_WHITE_32 = `${BASE_FONT_URL}/open-sans-32-white/open-sans-32-white.fnt`;
-        const FONT_BLACK_16 = `${BASE_FONT_URL}/open-sans-16-black/open-sans-16-black.fnt`;
-        const FONT_BLACK_32 = `${BASE_FONT_URL}/open-sans-32-black/open-sans-32-black.fnt`;
-
-        // Load fonts in parallel
-        const [f16w, f16b, f32w, f32b] = await Promise.all([
-            (Jimp as any).loadFont(FONT_WHITE_16),
-            (Jimp as any).loadFont(FONT_BLACK_16),
-            (Jimp as any).loadFont(FONT_WHITE_32),
-            (Jimp as any).loadFont(FONT_BLACK_32),
-        ]);
-
-        const textTop = "Created by";
-        const textBottom = "AUDITION AI";
-
-        // Measure text width to align right
-        const wTop = (Jimp as any).measureText(f16w, textTop);
-        const wBottom = (Jimp as any).measureText(f32w, textBottom);
-
-        // Margins & Positioning (Bottom Right)
-        const marginX = 20;
-        const marginY = 20;
-
-        // Calculate coordinates (Bottom Right aligned)
-        // textTop is above textBottom
-        // textBottom is at (Height - marginY - textHeight)
-        // textTop is at (Height - marginY - textHeight - gap - textTopHeight)
+        // Use a pre-generated badge image from a reliable service to avoid font loading issues
+        // Text: "Created by AUDITION AI" (2 lines)
+        // Style: White text on Black background, Font Montserrat
+        const badgeUrl = "https://placehold.co/400x120/000000/ffffff/png?text=Created+by%0AAUDITION+AI&font=montserrat";
         
-        const xTop = mainWidth - wTop - marginX;
-        const xBottom = mainWidth - wBottom - marginX;
-        
-        const yBottom = mainHeight - 40 - marginY; // 40px approx height for 32pt font
-        const yTop = yBottom - 25; // 25px gap upwards
+        const watermark = await (Jimp as any).read(badgeUrl);
 
-        // Print Drop Shadow (Black) first - offset by 2px
-        image.print(f16b, xTop + 2, yTop + 2, textTop);
-        image.print(f32b, xBottom + 2, yBottom + 2, textBottom);
+        // Scale watermark to 30% of the main image width for visibility
+        const targetWidth = Math.max(mainWidth * 0.3, 200); // At least 200px wide
+        watermark.resize(targetWidth, (Jimp as any).AUTO);
 
-        // Print Main Text (White) on top
-        image.print(f16w, xTop, yTop, textTop);
-        image.print(f32w, xBottom, yBottom, textBottom);
+        const wmWidth = watermark.getWidth();
+        const wmHeight = watermark.getHeight();
 
-        console.log("Text watermark added successfully.");
+        // Position: Bottom Right with margin
+        const margin = 30;
+        const x = mainWidth - wmWidth - margin;
+        const y = mainHeight - wmHeight - margin;
+
+        // Apply slight transparency for better blend
+        watermark.opacity(0.9);
+
+        // Composite the watermark onto the main image
+        image.composite(watermark, x, y);
+
+        console.log("Watermark composite successful.");
         return await image.getBufferAsync((Jimp as any).MIME_PNG);
     } catch (error) {
-        console.error("Failed to add watermark (Returning original image):", error);
-        // Fallback: return original image if font loading fails
+        console.error("Failed to add watermark (Returning original):", error);
+        // Fallback: return original image if composition fails
         return imageBuffer; 
     }
 };

@@ -8,59 +8,43 @@ import Jimp from 'jimp';
 
 const XP_PER_CHARACTER = 5;
 
-// Watermark Function (Text with Drop Shadow)
+// Add Watermark Function (Robust Image Composition)
 const addWatermark = async (imageBuffer: Buffer): Promise<Buffer> => {
     try {
-        console.log("Starting text watermark process (group/GitHub Raw)...");
+        console.log("Starting watermark process (Group/Image Composition)...");
         const image = await (Jimp as any).read(imageBuffer);
         
         const mainWidth = image.getWidth();
         const mainHeight = image.getHeight();
 
-        // Use stable GitHub Raw URLs for Jimp fonts (more reliable than unpkg)
-        const BASE_FONT_URL = 'https://raw.githubusercontent.com/jimp-dev/jimp/master/packages/plugin-print/fonts/open-sans';
-        const FONT_WHITE_16 = `${BASE_FONT_URL}/open-sans-16-white/open-sans-16-white.fnt`;
-        const FONT_WHITE_32 = `${BASE_FONT_URL}/open-sans-32-white/open-sans-32-white.fnt`;
-        const FONT_BLACK_16 = `${BASE_FONT_URL}/open-sans-16-black/open-sans-16-black.fnt`;
-        const FONT_BLACK_32 = `${BASE_FONT_URL}/open-sans-32-black/open-sans-32-black.fnt`;
-
-        // Load fonts in parallel
-        const [f16w, f16b, f32w, f32b] = await Promise.all([
-            (Jimp as any).loadFont(FONT_WHITE_16),
-            (Jimp as any).loadFont(FONT_BLACK_16),
-            (Jimp as any).loadFont(FONT_WHITE_32),
-            (Jimp as any).loadFont(FONT_BLACK_32),
-        ]);
-
-        const textTop = "Created by";
-        const textBottom = "AUDITION AI";
-
-        // Measure text width to align right
-        const wTop = (Jimp as any).measureText(f16w, textTop);
-        const wBottom = (Jimp as any).measureText(f32w, textBottom);
-
-        // Margins & Positioning (Bottom Right)
-        const marginX = 20;
-        const marginY = 20;
-
-        const xTop = mainWidth - wTop - marginX;
-        const xBottom = mainWidth - wBottom - marginX;
+        // Use a pre-generated badge image from a reliable service
+        // Text: "Created by AUDITION AI"
+        const badgeUrl = "https://placehold.co/400x120/000000/ffffff/png?text=Created+by%0AAUDITION+AI&font=montserrat";
         
-        const yBottom = mainHeight - 40 - marginY; 
-        const yTop = yBottom - 25;
+        const watermark = await (Jimp as any).read(badgeUrl);
 
-        // Print Drop Shadow (Black) first - offset by 2px
-        image.print(f16b, xTop + 2, yTop + 2, textTop);
-        image.print(f32b, xBottom + 2, yBottom + 2, textBottom);
+        // Scale watermark to 30% of the main image width
+        const targetWidth = Math.max(mainWidth * 0.3, 200);
+        watermark.resize(targetWidth, (Jimp as any).AUTO);
 
-        // Print Main Text (White) on top
-        image.print(f16w, xTop, yTop, textTop);
-        image.print(f32w, xBottom, yBottom, textBottom);
+        const wmWidth = watermark.getWidth();
+        const wmHeight = watermark.getHeight();
 
-        console.log("Text watermark added successfully (group).");
+        // Position: Bottom Right with margin
+        const margin = 30;
+        const x = mainWidth - wmWidth - margin;
+        const y = mainHeight - wmHeight - margin;
+
+        // Apply slight transparency
+        watermark.opacity(0.9);
+
+        // Composite
+        image.composite(watermark, x, y);
+
+        console.log("Group watermark composite successful.");
         return await image.getBufferAsync((Jimp as any).MIME_PNG);
     } catch (error) {
-        console.error("Failed to add watermark in group worker:", error);
+        console.error("Failed to add watermark in group worker (Returning original):", error);
         return imageBuffer;
     }
 };
@@ -267,7 +251,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         const finalImageBase64 = finalImagePart.inlineData.data;
         const finalImageMimeType = finalImagePart.inlineData.mimeType;
 
-        // --- WATERMARK LOGIC ---
+        // --- WATERMARK LOGIC (New Image Composite Approach) ---
         let imageBuffer = Buffer.from(finalImageBase64, 'base64');
         if (!removeWatermark) {
             imageBuffer = await addWatermark(imageBuffer);

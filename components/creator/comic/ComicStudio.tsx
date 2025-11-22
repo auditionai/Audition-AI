@@ -96,6 +96,13 @@ const DIALOGUE_AMOUNTS = [
     { label: 'Nhiều (Story Focus)', value: 'Nhiều (Story Focus)' }
 ];
 
+const COVER_OPTIONS = [
+    { label: 'Không có', value: 'none' },
+    { label: 'Bắt đầu (Trang 1)', value: 'start' },
+    { label: 'Kết thúc (Trang cuối)', value: 'end' },
+    { label: 'Bắt đầu - Kết thúc', value: 'both' }
+];
+
 const RENDER_COST = 10; // 10 Diamonds per page render (Pro Model)
 
 // --- SUB-COMPONENTS ---
@@ -286,7 +293,8 @@ const ComicStudio: React.FC = () => {
         bubbleFont: BUBBLE_FONTS[0],
         aspectRatio: ASPECT_RATIOS[0].value,
         visualEffect: VISUAL_EFFECTS[0].value,
-        pageNumbering: PAGE_NUMBERING[0].value
+        pageNumbering: PAGE_NUMBERING[0].value,
+        coverPage: COVER_OPTIONS[0].value // Added Cover Page State
     });
 
     // State for Step 2 & 3
@@ -783,12 +791,20 @@ const ComicStudio: React.FC = () => {
                                             </div>
                                         </div>
 
-                                        <ComicSelect 
-                                            label="VỊ TRÍ SỐ TRANG" 
-                                            value={storySettings.pageNumbering} 
-                                            onChange={(val) => setStorySettings({...storySettings, pageNumbering: val})}
-                                            options={PAGE_NUMBERING}
-                                        />
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <ComicSelect 
+                                                label="VỊ TRÍ SỐ TRANG" 
+                                                value={storySettings.pageNumbering} 
+                                                onChange={(val) => setStorySettings({...storySettings, pageNumbering: val})}
+                                                options={PAGE_NUMBERING}
+                                            />
+                                            <ComicSelect 
+                                                label="TẠO TRANG BÌA" 
+                                                value={storySettings.coverPage} 
+                                                onChange={(val) => setStorySettings({...storySettings, coverPage: val})}
+                                                options={COVER_OPTIONS}
+                                            />
+                                        </div>
                                     </div>
                                 </SettingsBlock>
 

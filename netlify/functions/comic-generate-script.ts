@@ -16,7 +16,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     if (authError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'Invalid token.' }) };
 
     try {
-        const { premise, genre, artStyle, pageCount, characters, language } = JSON.parse(event.body || '{}');
+        const { premise, genre, artStyle, pageCount, characters, language, coverPage } = JSON.parse(event.body || '{}');
         
         if (!premise) return { statusCode: 400, body: JSON.stringify({ error: 'Missing premise.' }) };
 
@@ -45,6 +45,14 @@ const handler: Handler = async (event: HandlerEvent) => {
         const characterNames = characters.map((c: any) => c.name).join(', ');
         const targetLanguage = language || 'Tiếng Việt';
 
+        let coverInstruction = "";
+        if (coverPage === 'start' || coverPage === 'both') {
+            coverInstruction += `\n- Panel 1 MUST be a 'Title Cover Page' (Trang bìa). Summary: 'Trang bìa với tên truyện: [Insert Title Here] và hình ảnh minh họa chính'.`;
+        }
+        if (coverPage === 'end' || coverPage === 'both') {
+            coverInstruction += `\n- The LAST Panel MUST be a 'The End Page' (Trang kết). Summary: 'Trang kết thúc với dòng chữ Hết/The End'.`;
+        }
+
         const prompt = `
             You are a professional comic book writer.
             **Task:** Create a structural outline for a comic script based on the user's idea.
@@ -54,6 +62,9 @@ const handler: Handler = async (event: HandlerEvent) => {
             **Target Length:** Approximately ${pageCount} pages (Total 4-6 panels).
             **Characters:** ${characterNames}
             **Language for Summary:** ${targetLanguage}
+            
+            **Cover Page Settings:** ${coverPage}
+            ${coverInstruction}
             
             **Requirement:**
             Break the story down into a sequence of panels. For each panel, provide a brief 'plot_summary' of what happens.

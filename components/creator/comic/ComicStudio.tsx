@@ -485,6 +485,20 @@ const ComicStudio: React.FC = () => {
         setImageLoadStates(prev => ({ ...prev, [panelId]: 'error' }));
     };
 
+    const handleReloadImage = (panelId: string) => {
+        setPanels(prev => prev.map(p => {
+            if (p.id !== panelId || !p.image_url) return p;
+            try {
+                const url = new URL(p.image_url);
+                url.searchParams.set('t', Date.now().toString());
+                return { ...p, image_url: url.toString() };
+            } catch (e) {
+                return p;
+            }
+        }));
+        setImageLoadStates(prev => ({ ...prev, [panelId]: 'loading' }));
+    };
+
     return (
         <div className="animate-fade-in h-[calc(100vh-140px)] min-h-[600px] flex flex-col max-w-7xl mx-auto">
             {/* GLOBAL STYLES */}
@@ -822,15 +836,24 @@ const ComicStudio: React.FC = () => {
                                                 
                                                 {/* Image Error State */}
                                                 {isErrorImage && hasUrl && (
-                                                     <div className="absolute inset-0 bg-skin-fill-secondary/90 flex flex-col items-center justify-center z-20">
-                                                        <i className="ph-fill ph-warning-circle text-3xl text-red-500 mb-2"></i>
-                                                        <p className="text-sm text-gray-300 mb-2">Lỗi tải ảnh</p>
-                                                        <button 
-                                                            onClick={() => setImageLoadStates(prev => ({...prev, [panel.id]: 'loading'}))} 
-                                                            className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-full text-xs font-bold"
-                                                        >
-                                                            Thử lại
-                                                        </button>
+                                                     <div className="absolute inset-0 bg-skin-fill-secondary/95 flex flex-col items-center justify-center z-20 p-4 text-center">
+                                                        <i className="ph-fill ph-warning-circle text-4xl text-red-500 mb-2"></i>
+                                                        <p className="text-sm font-bold text-white mb-1">Không thể tải ảnh</p>
+                                                        <p className="text-xs text-gray-400 mb-4">Có thể do mạng chậm hoặc ảnh chưa sẵn sàng.</p>
+                                                        <div className="flex flex-wrap justify-center gap-2">
+                                                            <button 
+                                                                onClick={() => handleReloadImage(panel.id)} 
+                                                                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-xs font-bold text-white flex items-center gap-2"
+                                                            >
+                                                                <i className="ph-bold ph-arrow-clockwise"></i> Tải lại ảnh
+                                                            </button>
+                                                            <button 
+                                                                onClick={() => handleRenderPanel(panel)} 
+                                                                className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-bold text-gray-300 flex items-center gap-2"
+                                                            >
+                                                                <i className="ph-bold ph-paint-brush-broad"></i> Vẽ lại
+                                                            </button>
+                                                        </div>
                                                     </div>
                                                 )}
 
@@ -840,7 +863,7 @@ const ComicStudio: React.FC = () => {
                                                         src={panel.image_url} 
                                                         alt="Panel" 
                                                         className={`w-full h-full object-cover ${isLoadingImage || isErrorImage ? 'opacity-0' : 'opacity-100'}`} 
-                                                        crossOrigin="anonymous" 
+                                                        // Removed crossOrigin="anonymous"
                                                         onLoad={() => handleImageLoad(panel.id)}
                                                         onError={() => handleImageError(panel.id)}
                                                     />

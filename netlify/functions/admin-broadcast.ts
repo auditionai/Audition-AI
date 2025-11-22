@@ -36,26 +36,12 @@ const handler: Handler = async (event: HandlerEvent) => {
         const { data: botUser } = await supabaseAdmin.from('users').select('id').eq('id', SYSTEM_BOT_ID).single();
         
         if (!botUser) {
-            // Try to create System Bot
-            const { error: createError } = await supabaseAdmin.from('users').insert({
-                id: SYSTEM_BOT_ID,
-                email: 'system@auditionai.io.vn',
-                display_name: 'Hệ Thống',
-                photo_url: 'https://api.dicebear.com/7.x/bottts/svg?seed=System',
-                level: 999,
-                xp: 9999999,
-                diamonds: 9999999
-            });
-
-            if (createError) {
-                console.warn("Could not create System Bot user (likely due to auth FK constraint). Falling back to Admin ID.", createError.message);
-                // Fallback: Use current Admin ID as sender
-                senderId = user.id;
-            }
+            // If System bot doesn't exist (likely due to auth constraints), fallback to the Admin's ID
+            console.warn("System Bot user not found. Falling back to Admin ID for broadcast.");
+            senderId = user.id;
         }
 
         // --- LOG TO SYSTEM BROADCASTS (For future users) ---
-        // Only log if targeting "Inbox All" to avoid cluttering global chat logic
         if (target === 'inbox_all') {
             const { error: logError } = await supabaseAdmin
                 .from('system_broadcasts')
@@ -74,7 +60,7 @@ const handler: Handler = async (event: HandlerEvent) => {
                     sender_name: 'HỆ THỐNG',
                     sender_avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=System',
                     sender_level: 999,
-                    sender_title_id: 'admin' // Special styling if supported or just fallback
+                    sender_title_id: 'admin'
                 }
             });
             
@@ -84,7 +70,7 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         // --- CASE 2: SEND TO ALL USERS (INBOX) ---
         if (target === 'inbox_all') {
-            // Fetch all users (limit to recent 500 to avoid timeouts in this demo environment)
+            // Fetch all users (limit to recent 500 to avoid timeouts)
             const { data: users, error: userFetchError } = await supabaseAdmin
                 .from('users')
                 .select('id')

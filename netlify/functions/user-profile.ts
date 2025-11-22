@@ -3,6 +3,8 @@ import { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
 import { sendSystemMessage } from './utils/chatUtils';
 
+const SYSTEM_BOT_ID = '00000000-0000-0000-0000-000000000000';
+
 const handler: Handler = async (event: HandlerEvent) => {
     // 1. Authenticate user (common for all methods)
     const authHeader = event.headers['authorization'];
@@ -24,9 +26,6 @@ const handler: Handler = async (event: HandlerEvent) => {
         // --- GET Method: Fetch User Profile ---
         if (event.httpMethod === 'GET') {
             // OPTIMIZATION: Try to fetch the user directly first.
-            // This prevents the 'handle_new_user' RPC from running unnecessarily and potentially 
-            // resetting user fields (like equipped items) to default values on every page load.
-            
             let { data: profile, error: fetchError } = await supabaseAdmin
                 .from('users')
                 .select('*')
@@ -51,16 +50,26 @@ const handler: Handler = async (event: HandlerEvent) => {
                     // --- NEW USER ONBOARDING LOGIC ---
                     // Send all historical system broadcasts to this new user
                     try {
+                        // 1. Determine valid sender (Admin or System Bot)
+                        let senderId = SYSTEM_BOT_ID;
+                        // Check if System Bot exists, otherwise find an Admin
+                        const { data: botUser } = await supabaseAdmin.from('users').select('id').eq('id', SYSTEM_BOT_ID).single();
+                        if (!botUser) {
+                            const { data: adminUser } = await supabaseAdmin.from('users').select('id').eq('is_admin', true).limit(1).single();
+                            if (adminUser) senderId = adminUser.id;
+                        }
+
+                        // 2. Fetch history
                         const { data: broadcasts } = await supabaseAdmin
                             .from('system_broadcasts')
                             .select('content')
-                            .order('created_at', { ascending: true }); // Chronological order
+                            .order('created_at', { ascending: true });
 
+                        // 3. Send messages
                         if (broadcasts && broadcasts.length > 0) {
-                            console.log(`Sending ${broadcasts.length} historical broadcasts to new user ${authUser.id}`);
-                            // Send sequentially to maintain order
+                            console.log(`Sending ${broadcasts.length} historical broadcasts to new user ${authUser.id} from ${senderId}`);
                             for (const msg of broadcasts) {
-                                await sendSystemMessage(authUser.id, msg.content);
+                                await sendSystemMessage(authUser.id, msg.content, senderId);
                             }
                         }
                     } catch (broadcastError) {

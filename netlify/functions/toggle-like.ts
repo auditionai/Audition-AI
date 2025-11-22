@@ -46,7 +46,21 @@ const handler: Handler = async (event: HandlerEvent) => {
             
             // Only notify if liking someone else's post
             if (post && post.user_id !== user.id) {
-                const { data: userProfile } = await supabaseAdmin.from('users').select('display_name').eq('id', user.id).single();
+                // --- CRITICAL FIX: Ensure User Exists in Public Table ---
+                let { data: userProfile } = await supabaseAdmin.from('users').select('display_name').eq('id', user.id).single();
+                
+                if (!userProfile) {
+                    console.log(`[Auto-Sync Like] User ${user.id} missing in public table. Syncing...`);
+                    await supabaseAdmin.rpc('handle_new_user', {
+                        p_id: user.id,
+                        p_email: user.email || '',
+                        p_display_name: user.user_metadata?.full_name || 'Người dùng mới',
+                        p_photo_url: user.user_metadata?.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${user.id}`
+                    });
+                    const { data: retryProfile } = await supabaseAdmin.from('users').select('display_name').eq('id', user.id).single();
+                    userProfile = retryProfile;
+                }
+
                 const senderName = userProfile?.display_name || "Ai đó";
                 
                 // Check if a notification for this action exists (even if read)

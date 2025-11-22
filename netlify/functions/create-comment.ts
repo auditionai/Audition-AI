@@ -21,14 +21,35 @@ const handler: Handler = async (event: HandlerEvent) => {
             return { statusCode: 400, body: JSON.stringify({ error: 'Post ID and Content are required' }) };
         }
 
-        // 1. Fetch User Profile (sender info)
-        const { data: userProfile } = await supabaseAdmin
+        // --- CRITICAL FIX: Ensure User Exists in Public Table ---
+        // Sometimes user is in Auth but not Public due to trigger failure.
+        // We manually check and sync here to prevent "Unknown" comments.
+        let { data: userProfile } = await supabaseAdmin
             .from('users')
             .select('display_name, photo_url')
             .eq('id', user.id)
             .single();
             
-        const senderName = userProfile?.display_name || 'Ai đó';
+        if (!userProfile) {
+            console.log(`[Auto-Sync] User ${user.id} missing in public table. Syncing now...`);
+            // Call the handle_new_user RPC manually
+            await supabaseAdmin.rpc('handle_new_user', {
+                p_id: user.id,
+                p_email: user.email || '',
+                p_display_name: user.user_metadata?.full_name || 'Người dùng mới',
+                p_photo_url: user.user_metadata?.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${user.id}`
+            });
+            
+            // Refetch
+            const { data: retryProfile } = await supabaseAdmin
+                .from('users')
+                .select('display_name, photo_url')
+                .eq('id', user.id)
+                .single();
+            userProfile = retryProfile;
+        }
+
+        const senderName = userProfile?.display_name || 'Người dùng';
 
         // 2. Insert Comment
         const { data: comment, error: insertError } = await supabaseAdmin
@@ -57,7 +78,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         if (postData && postData.user_id !== user.id) {
             const { error: notifError } = await supabaseAdmin.from('notifications').insert({
                 recipient_id: postData.user_id,
-                actor_id: user.id,
+                actor_id: user.id, // Ensure this links to the public user we just verified
                 type: 'comment',
                 entity_id: postId,
                 content: `${senderName} đã bình luận về bài viết của bạn.`,

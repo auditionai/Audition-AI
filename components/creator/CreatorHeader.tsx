@@ -46,32 +46,23 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
 
     fetchUnreadCount();
 
-    // 2. Subscribe to Realtime changes (INSERT and UPDATE)
-    // Using explicit filter is generally more performant and reliable for RLS
-    const channelName = `notifications:${user.id}`;
-    
-    const channel = supabase.channel(channelName)
+    // 2. Subscribe to Realtime changes
+    // FIX: Remove specific filter string to avoid RLS/Type mismatches. 
+    // Listen to the table and filter in the callback.
+    const channel = supabase.channel('global-notifications-watcher')
       .on('postgres_changes', {
-        event: '*', // Listen to ALL events (INSERT, UPDATE) to catch re-likes or new comments
+        event: '*', // Listen to ALL events
         schema: 'public',
-        table: 'notifications',
-        filter: `recipient_id=eq.${user.id}`
+        table: 'notifications'
       }, (payload: any) => {
-        // If INSERT: Increment count
-        if (payload.eventType === 'INSERT') {
-            if (!payload.new.is_read) {
-                setUnreadCount(prev => prev + 1);
-            }
-        } 
-        // If UPDATE: Check if it became unread (e.g. re-like bumping the notification)
-        else if (payload.eventType === 'UPDATE') {
-            const newRec = payload.new;
-            // If it was read and now is unread (re-notified)
-            if (newRec && !newRec.is_read) {
-                 // We fetch count again to be accurate, or just increment if we track local state strictly
-                 // Ideally, fetch count to sync
+        // Client-side filtering: strictly check if this notification belongs to current user
+        const newRecord = payload.new;
+        if (newRecord && newRecord.recipient_id === user.id) {
+             // If it's a new notification or an update that makes it unread
+             if (payload.eventType === 'INSERT' || (payload.eventType === 'UPDATE' && !newRecord.is_read)) {
+                 // Instead of just incrementing, we refetch to be accurate and handle race conditions
                  fetchUnreadCount();
-            }
+             }
         }
       })
       .subscribe();
@@ -105,11 +96,7 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
   
   const handleNotificationClick = () => {
     setNotificationOpen(prev => !prev);
-    if (!isNotificationOpen) {
-        // Optional: Reset count locally if we want it to clear on open, 
-        // but usually we wait for "Mark all read" or individual clicks.
-        // setUnreadCount(0); 
-    }
+    // When opening, we can optionally reset count visually, but best to wait for read actions
   }
 
   const handleLogout = (e: React.MouseEvent) => {
@@ -270,7 +257,6 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
                         </div>
                      </div>
                      
-                     {/* NEW: Profile Link */}
                      <div className="py-1 mt-1">
                         <button type="button" onClick={() => handleNavClick('profile')} className="flex items-center gap-3 w-full text-left px-2 py-2 text-sm rounded-md cursor-pointer text-skin-base hover:bg-white/10 font-bold">
                             <i className="ph-fill ph-user-circle text-pink-400"></i>

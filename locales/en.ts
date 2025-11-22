@@ -594,8 +594,9 @@ export const en = {
             add: 'Add',
           },
           confirmDelete: 'Are you sure you want to delete this reward tier?',
-          success: 'Reward tier created successfully!',
-          delete: 'Reward tier deleted successfully.',
+          success: {
+            create: 'Reward tier created successfully!',
+            delete: 'Reward tier deleted successfully.',
           },
           error: {
             load: 'Could not load check-in rewards.',

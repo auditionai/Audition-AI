@@ -231,21 +231,36 @@ const GameConfigManager: React.FC = () => {
         }
     };
 
-    const sqlFixScript = `-- CHẠY SCRIPT NÀY TRONG SUPABASE SQL EDITOR ĐỂ SỬA LỖI THÔNG BÁO & UNKNOWN USER
+    const sqlFixScript = `-- CHẠY TOÀN BỘ SCRIPT NÀY TRONG SQL EDITOR ĐỂ SỬA LỖI (Đã sắp xếp đúng thứ tự)
 
--- 0. TẠO BẢNG NOTIFICATIONS NẾU CHƯA CÓ (Sửa lỗi 'relation does not exist')
+-- 1. TẠO BẢNG NOTIFICATIONS (QUAN TRỌNG: CHẠY ĐẦU TIÊN)
 CREATE TABLE IF NOT EXISTS public.notifications (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    recipient_id UUID NOT NULL, -- Người nhận
-    actor_id UUID, -- Người gây ra hành động (người like/comment)
-    type TEXT NOT NULL, -- 'like', 'comment', 'system', etc.
-    entity_id TEXT, -- ID của bài viết hoặc đối tượng liên quan
+    recipient_id UUID NOT NULL,
+    actor_id UUID,
+    type TEXT NOT NULL,
+    entity_id TEXT,
     content TEXT,
     is_read BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
 
--- 1. Kích hoạt Realtime cho bảng Notifications (QUAN TRỌNG NHẤT)
+-- 2. THIẾT LẬP BẢO MẬT (RLS) CHO BẢNG NOTIFICATIONS
+ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
+
+-- Cấp quyền truy cập cơ bản
+GRANT ALL ON public.notifications TO service_role;
+GRANT SELECT, UPDATE ON public.notifications TO authenticated;
+
+-- Tạo Policy: Người dùng chỉ thấy thông báo của chính mình
+DROP POLICY IF EXISTS "Users can see their own notifications" ON public.notifications;
+CREATE POLICY "Users can see their own notifications" 
+ON public.notifications FOR SELECT 
+TO authenticated 
+USING (auth.uid() = recipient_id);
+
+-- 3. KÍCH HOẠT REALTIME (CHẠY SAU KHI BẢNG ĐÃ TỒN TẠI)
+-- Block này kiểm tra an toàn, nếu đã bật rồi thì bỏ qua
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'notifications') THEN
@@ -253,43 +268,19 @@ BEGIN
   END IF;
 END $$;
 
--- 2. Đảm bảo bảng Users cho phép Insert/Update (Sửa lỗi 'Unknown User')
+-- 4. SỬA LỖI UNKNOWN USER (Cấp quyền cho bảng users)
 GRANT ALL ON public.users TO service_role;
 GRANT SELECT, UPDATE, INSERT ON public.users TO authenticated;
 GRANT SELECT ON public.users TO anon;
 
--- 3. Cấp quyền truy cập bảng Notifications cho Server và Client
-GRANT ALL ON public.notifications TO service_role;
-GRANT SELECT, UPDATE ON public.notifications TO authenticated;
-
--- 4. Thiết lập Policy bảo mật (RLS) cho Notifications
-ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
-
--- Xóa policy cũ nếu có để tránh lỗi trùng
-DROP POLICY IF EXISTS "Users can see their own notifications" ON public.notifications;
-
--- Tạo policy mới: Người dùng chỉ được xem thông báo của chính mình
-CREATE POLICY "Users can see their own notifications" 
-ON public.notifications FOR SELECT 
-TO authenticated 
-USING (auth.uid() = recipient_id);
-
--- Cho phép server (service_role) làm mọi thứ
-DROP POLICY IF EXISTS "Service role full access notifications" ON public.notifications;
-CREATE POLICY "Service role full access notifications" 
-ON public.notifications FOR ALL 
-TO service_role 
-USING (true) 
-WITH CHECK (true);
-
--- 5. Kiểm tra lại Enum Type Cosmetic (cho Shop)
+-- 5. ĐẢM BẢO ENUM COSMETIC
 DO $$ BEGIN
     CREATE TYPE public.cosmetic_type AS ENUM ('frame', 'title', 'name_effect');
 EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
 
-SELECT 'Cấu hình Database và Bảng Notifications thành công!' as ket_qua;
+SELECT 'Đã sửa lỗi thành công! Hãy tải lại App.' as ket_qua;
 `;
 
     return (

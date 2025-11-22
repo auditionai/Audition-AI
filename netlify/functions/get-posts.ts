@@ -36,7 +36,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             .from('posts')
             .select(`
                 *,
-                user:users (display_name, photo_url, xp, equipped_frame_id, equipped_title_id),
+                user:users (display_name, photo_url, xp, equipped_frame_id, equipped_title_id, equipped_name_effect_id),
                 likes_count:post_likes(count),
                 comments_count:post_comments(count)
             `)
@@ -66,8 +66,6 @@ const handler: Handler = async (event: HandlerEvent) => {
             const userData = Array.isArray(post.user) ? post.user[0] : post.user;
             
             // Extract counts from the response object (Supabase returns [{count: N}] or similar depending on version)
-            // With the syntax above, likes_count should be an array of objects or a number depending on exact TS config,
-            // but typically in this setup it comes as [{count: 5}]
             const realLikesCount = post.likes_count?.[0]?.count ?? 0;
             const realCommentsCount = post.comments_count?.[0]?.count ?? 0;
 

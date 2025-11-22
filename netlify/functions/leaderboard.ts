@@ -18,7 +18,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         if (type === 'hot') {
             const { data, error } = await supabaseAdmin
                 .from('users')
-                .select('id, display_name, photo_url, xp, weekly_points, equipped_frame_id, equipped_title_id')
+                .select('id, display_name, photo_url, xp, weekly_points, equipped_frame_id, equipped_title_id, equipped_name_effect_id')
                 .order('weekly_points', { ascending: false })
                 .limit(50);
             
@@ -30,7 +30,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         else if (type === 'level') {
             const { data, error } = await supabaseAdmin
                 .from('users')
-                .select('id, display_name, photo_url, xp, equipped_frame_id, equipped_title_id')
+                .select('id, display_name, photo_url, xp, equipped_frame_id, equipped_title_id, equipped_name_effect_id')
                 .order('xp', { ascending: false })
                 .limit(50);
 
@@ -39,13 +39,6 @@ const handler: Handler = async (event: HandlerEvent) => {
         }
 
         // --- 3. CREATION (Top Generated Images) ---
-        // This requires aggregating counts. For performance in this demo, we'll fetch top users 
-        // by a rough estimate or handle it via JS aggregation if table is small, 
-        // OR use a dedicated RPC if possible. 
-        // Workaround: Since we don't have a 'total_images' column on users, we might have to cheat slightly
-        // or fetch all generated_images (slow).
-        // Best robust approach for now without migration: Add a simple counter to users table or 
-        // assume we can count via RPC. Let's try a known RPC approach or fallback to querying.
         else if (type === 'creation') {
              // Fallback: Since we don't have a 'creations_count' column on users, 
              // we will fetch users and their image count using a subquery or RPC.
@@ -59,6 +52,7 @@ const handler: Handler = async (event: HandlerEvent) => {
                  xp: u.xp,
                  equipped_frame_id: u.equipped_frame_id,
                  equipped_title_id: u.equipped_title_id,
+                 equipped_name_effect_id: u.equipped_name_effect_id,
                  metric_value: Number(u.creations_count)
              }));
         }
@@ -66,11 +60,6 @@ const handler: Handler = async (event: HandlerEvent) => {
         // --- 4. TYCOON (Top Spenders) ---
         // Based on diamond_transactions_log where amount < 0
         else if (type === 'tycoon') {
-            // We need to sum negative amounts grouped by user.
-            // Since we can't do complex aggregation easily with standard Supabase client on RLS,
-            // we will try an RPC if exists, or use a Javascript aggregation on recent logs.
-            // Strategy: Fetch heavy spenders from logs.
-            
             const { data: logs, error } = await supabaseAdmin
                 .from('diamond_transactions_log')
                 .select('user_id, amount')
@@ -96,7 +85,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             if (userIds.length > 0) {
                 const { data: userInfos } = await supabaseAdmin
                     .from('users')
-                    .select('id, display_name, photo_url, xp, equipped_frame_id, equipped_title_id')
+                    .select('id, display_name, photo_url, xp, equipped_frame_id, equipped_title_id, equipped_name_effect_id')
                     .in('id', userIds);
                 
                 const userInfoMap = new Map(userInfos?.map(u => [u.id, u]));
@@ -116,7 +105,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         else {
              const { data, error } = await supabaseAdmin
                 .from('users')
-                .select('id, display_name, photo_url, xp, equipped_frame_id, equipped_title_id')
+                .select('id, display_name, photo_url, xp, equipped_frame_id, equipped_title_id, equipped_name_effect_id')
                 .order('xp', { ascending: false })
                 .limit(50);
             if (error) throw error;
@@ -133,7 +122,8 @@ const handler: Handler = async (event: HandlerEvent) => {
             xp: user.xp,
             metric_value: user.metric_value, // Use this generic field for the specific leaderboard value
             equipped_title_id: user.equipped_title_id,
-            equipped_frame_id: user.equipped_frame_id
+            equipped_frame_id: user.equipped_frame_id,
+            equipped_name_effect_id: user.equipped_name_effect_id
         }));
 
         return {

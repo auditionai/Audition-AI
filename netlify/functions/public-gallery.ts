@@ -32,7 +32,7 @@ const handler: Handler = async () => {
         // 3. Fetch creator profiles for those IDs - ADDED EQUIPPED ITEMS
         const { data: creators, error: creatorsError } = await supabaseAdmin
             .from('users')
-            .select('id, display_name, photo_url, xp, equipped_frame_id, equipped_title_id')
+            .select('id, display_name, photo_url, xp, equipped_frame_id, equipped_title_id, equipped_name_effect_id')
             .in('id', userIds);
 
         if (creatorsError) {

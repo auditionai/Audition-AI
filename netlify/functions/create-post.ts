@@ -49,7 +49,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             })
             .select(`
                 *,
-                user:users (display_name, photo_url, xp, equipped_frame_id, equipped_title_id)
+                user:users (display_name, photo_url, xp, equipped_frame_id, equipped_title_id, equipped_name_effect_id)
             `)
             .single();
 

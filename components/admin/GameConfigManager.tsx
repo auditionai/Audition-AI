@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useGameConfig } from '../../contexts/GameConfigContext';
@@ -6,15 +7,16 @@ import { CosmeticItem, Rank } from '../../types';
 import Modal from '../common/Modal';
 import { resizeImage } from '../../utils/imageUtils';
 import { useTranslation } from '../../hooks/useTranslation';
+import UserName from '../common/UserName';
 
 const GameConfigManager: React.FC = () => {
     const { session, showToast } = useAuth();
     const { t } = useTranslation();
-    const { refreshConfig, ranks, frames, titles } = useGameConfig();
+    const { refreshConfig, ranks, frames, titles, nameEffects } = useGameConfig();
     const { chatConfig, updateChatConfig } = useChat();
     
     // Tabs
-    const [activeSubTab, setActiveSubTab] = useState<'ranks' | 'frames' | 'titles' | 'chat'>('frames');
+    const [activeSubTab, setActiveSubTab] = useState<'ranks' | 'frames' | 'titles' | 'name_effects' | 'chat'>('frames');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     
@@ -37,7 +39,7 @@ const GameConfigManager: React.FC = () => {
 
     // --- RESET SHOP ITEMS ---
     const handleResetShop = async () => {
-        if (!confirm("CẢNH BÁO: Thao tác này sẽ XÓA TOÀN BỘ vật phẩm hiện có trong Database và nạp lại danh sách chuẩn. Bạn có chắc chắn muốn làm mới không?")) return;
+        if (!confirm("CẢNH BÁO: Thao tác này sẽ XÓA TOÀN BỘ vật phẩm hiện có trong Database và nạp lại danh sách chuẩn (bao gồm 20 hiệu ứng tên mới). Bạn có chắc chắn muốn làm mới không?")) return;
         setIsSaving(true);
         try {
             const res = await fetch('/.netlify/functions/admin-game-config?action=reset', {
@@ -157,7 +159,7 @@ const GameConfigManager: React.FC = () => {
                 type: editingCosmetic.type,
                 name: editingCosmetic.name,
                 rarity: editingCosmetic.rarity,
-                price: editingCosmetic.price, // Explicitly saving Price
+                price: editingCosmetic.price,
                 css_class: editingCosmetic.cssClass,
                 image_url: editingCosmetic.imageUrl,
                 icon_url: finalIconUrl,
@@ -220,13 +222,23 @@ const GameConfigManager: React.FC = () => {
         }
     };
 
+    const getCosmeticList = () => {
+        switch(activeSubTab) {
+            case 'frames': return frames;
+            case 'titles': return titles;
+            case 'name_effects': return nameEffects;
+            default: return [];
+        }
+    };
+
     return (
         <div className="bg-[#12121A]/80 border border-blue-500/20 rounded-2xl shadow-lg p-6">
             <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
                 <h3 className="text-2xl font-bold text-blue-400">Quản Lý Shop & Cấu Hình</h3>
-                <div className="flex gap-2 overflow-x-auto pb-2 w-full md:w-auto">
+                <div className="flex gap-2 overflow-x-auto pb-2 w-full md:w-auto custom-scrollbar">
                      <button onClick={() => setActiveSubTab('frames')} className={`px-3 py-1 rounded whitespace-nowrap ${activeSubTab === 'frames' ? 'bg-blue-500 text-white' : 'bg-white/5 text-gray-400'}`}>Khung Avatar</button>
                      <button onClick={() => setActiveSubTab('titles')} className={`px-3 py-1 rounded whitespace-nowrap ${activeSubTab === 'titles' ? 'bg-blue-500 text-white' : 'bg-white/5 text-gray-400'}`}>Danh Hiệu</button>
+                     <button onClick={() => setActiveSubTab('name_effects')} className={`px-3 py-1 rounded whitespace-nowrap ${activeSubTab === 'name_effects' ? 'bg-blue-500 text-white' : 'bg-white/5 text-gray-400'}`}>Hiệu Ứng Tên</button>
                      <button onClick={() => setActiveSubTab('ranks')} className={`px-3 py-1 rounded whitespace-nowrap ${activeSubTab === 'ranks' ? 'bg-blue-500 text-white' : 'bg-white/5 text-gray-400'}`}>Cấp Bậc</button>
                      <button onClick={() => setActiveSubTab('chat')} className={`px-3 py-1 rounded whitespace-nowrap ${activeSubTab === 'chat' ? 'bg-blue-500 text-white' : 'bg-white/5 text-gray-400'}`}>Chat</button>
                 </div>
@@ -272,11 +284,14 @@ const GameConfigManager: React.FC = () => {
                 </div>
             )}
 
-            {/* FRAMES & TITLES LIST VIEW */}
-            {(activeSubTab === 'frames' || activeSubTab === 'titles') && (
+            {/* FRAMES, TITLES & NAME EFFECTS LIST VIEW */}
+            {(activeSubTab === 'frames' || activeSubTab === 'titles' || activeSubTab === 'name_effects') && (
                 <div>
                     <div className="flex justify-between mb-4 gap-3">
-                        <button onClick={() => handleEditCosmetic(null, activeSubTab === 'frames' ? 'frame' : 'title')} className="themed-button-primary px-4 py-2 text-sm flex-grow md:flex-grow-0">
+                        <button 
+                            onClick={() => handleEditCosmetic(null, activeSubTab === 'frames' ? 'frame' : activeSubTab === 'titles' ? 'title' : 'name_effect')} 
+                            className="themed-button-primary px-4 py-2 text-sm flex-grow md:flex-grow-0"
+                        >
                             + Thêm Mới
                         </button>
                         
@@ -290,17 +305,21 @@ const GameConfigManager: React.FC = () => {
                     {/* Info Alert */}
                     <div className="bg-blue-500/10 border border-blue-500/30 p-3 rounded-lg mb-4 text-xs text-blue-200">
                         <i className="ph-fill ph-info mr-2"></i>
-                        Nếu thấy vật phẩm trùng lặp hoặc lỗi tên, hãy nhấn nút <strong>"Làm Mới Shop"</strong> để xóa sạch dữ liệu cũ và nạp lại danh sách chuẩn.
+                        Nếu chưa thấy Hiệu Ứng Tên, hãy nhấn nút <strong>"Làm Mới Shop"</strong> để nạp 20 hiệu ứng mặc định vào Database.
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[500px] overflow-y-auto custom-scrollbar">
-                        {(activeSubTab === 'frames' ? frames : titles).map(c => (
+                        {getCosmeticList().map(c => (
                             <div key={c.id} className="flex gap-3 p-3 bg-white/5 border border-white/10 rounded-lg items-center hover:border-blue-500/50 transition">
                                 <div className="w-14 h-14 bg-black/40 rounded-lg flex items-center justify-center overflow-hidden relative flex-shrink-0">
                                      {c.iconUrl ? (
                                          <img src={c.iconUrl} alt="icon" className="w-10 h-10 object-contain" />
                                      ) : c.imageUrl ? (
                                          <img src={c.imageUrl} className="w-full h-full object-contain" alt="preview"/> 
+                                     ) : activeSubTab === 'name_effects' ? (
+                                         <div className="text-[8px] overflow-hidden text-center px-1">
+                                             <UserName name="ABC" effectId={c.id} user={{ display_name: "ABC", equipped_name_effect_id: c.id }} />
+                                         </div>
                                      ) : (
                                          <div className={`text-[10px] text-gray-500 ${c.type === 'frame' ? c.cssClass : ''}`}>CSS</div>
                                      )}
@@ -356,8 +375,8 @@ const GameConfigManager: React.FC = () => {
                          </div>
                     )}
                     
-                    {/* Cosmetics Form (Frames & Titles) */}
-                    {(activeSubTab === 'frames' || activeSubTab === 'titles') && editingCosmetic && (
+                    {/* Cosmetics Form (Frames & Titles & Name Effects) */}
+                    {(activeSubTab === 'frames' || activeSubTab === 'titles' || activeSubTab === 'name_effects') && editingCosmetic && (
                         <div className="space-y-3">
                             <div>
                                 <label className="text-sm text-gray-400">{t('creator.settings.admin.gameConfig.form.type')}</label>
@@ -403,7 +422,7 @@ const GameConfigManager: React.FC = () => {
 
                             <div>
                                 <label className="text-sm text-gray-400">CSS Class (Hiệu ứng)</label>
-                                <input type="text" value={editingCosmetic.cssClass || ''} onChange={e => setEditingCosmetic({...editingCosmetic, cssClass: e.target.value})} className="auth-input mt-1" placeholder="VD: shop-frame-01" />
+                                <input type="text" value={editingCosmetic.cssClass || ''} onChange={e => setEditingCosmetic({...editingCosmetic, cssClass: e.target.value})} className="auth-input mt-1" placeholder="VD: name-fire" />
                                 <p className="text-[10px] text-gray-500 mt-1">Nhập tên class CSS để áp dụng hiệu ứng đặc biệt.</p>
                             </div>
                             

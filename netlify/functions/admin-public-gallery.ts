@@ -42,7 +42,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         const userIds = [...new Set(images.map(img => img.user_id))];
         const { data: creators, error: creatorsError } = await supabaseAdmin
             .from('users')
-            .select('id, display_name, photo_url, xp')
+            .select('id, display_name, photo_url, xp, equipped_frame_id, equipped_title_id, equipped_name_effect_id')
             .in('id', userIds);
 
         if (creatorsError) throw creatorsError;
@@ -63,7 +63,10 @@ const handler: Handler = async (event: HandlerEvent) => {
                 creator: {
                     display_name: creatorData?.display_name || 'Vô danh',
                     photo_url: creatorData?.photo_url || 'https://api.dicebear.com/7.x/bottts/svg?seed=Unknown',
-                    level: calculateLevelFromXp(creatorData?.xp || 0)
+                    level: calculateLevelFromXp(creatorData?.xp || 0),
+                    equipped_frame_id: creatorData?.equipped_frame_id,
+                    equipped_title_id: creatorData?.equipped_title_id,
+                    equipped_name_effect_id: creatorData?.equipped_name_effect_id
                 }
             };
         });

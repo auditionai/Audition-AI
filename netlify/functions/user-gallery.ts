@@ -37,7 +37,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         // 3. Fetch latest user profile data to get consistent name/avatar/badges
         const { data: userProfile } = await supabaseAdmin
             .from('users')
-            .select('display_name, photo_url, equipped_title_id, equipped_frame_id')
+            .select('display_name, photo_url, equipped_title_id, equipped_frame_id, equipped_name_effect_id')
             .eq('id', user.id)
             .single();
 
@@ -47,7 +47,8 @@ const handler: Handler = async (event: HandlerEvent) => {
             photo_url: userProfile?.photo_url || user.user_metadata?.avatar_url || 'https://i.pravatar.cc/150',
             level: 1, 
             equipped_title_id: userProfile?.equipped_title_id,
-            equipped_frame_id: userProfile?.equipped_frame_id
+            equipped_frame_id: userProfile?.equipped_frame_id,
+            equipped_name_effect_id: userProfile?.equipped_name_effect_id
         };
 
         // 4. Combine images with the reliable creator info.

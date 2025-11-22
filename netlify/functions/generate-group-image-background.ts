@@ -4,7 +4,7 @@ import { GoogleGenAI, Modality } from "@google/genai";
 import { supabaseAdmin } from './utils/supabaseClient';
 import { Buffer } from 'buffer';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
-import { addSmartWatermark } from './utils/watermarkService'; // Import mới
+import { addSmartWatermark } from './watermark-service'; // Import đã sửa
 
 const XP_PER_CHARACTER = 5;
 

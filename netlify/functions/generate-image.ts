@@ -5,7 +5,7 @@ import { supabaseAdmin } from './utils/supabaseClient';
 import { Buffer } from 'buffer';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import Jimp from 'jimp';
-import { addSmartWatermark } from './utils/watermarkService'; // Import mới
+import { addSmartWatermark } from './watermark-service'; // Import đã sửa
 
 const COST_UPSCALE = 1;
 const COST_REMOVE_WATERMARK = 1; 
@@ -187,8 +187,6 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         if (!removeWatermark) {
             // Construct URL for the watermark.png
-            // Assumes site is deployed or running locally on standard port.
-            // Fallback to relative path for consistency if deployed
             const siteUrl = process.env.URL || 'http://localhost:8888';
             const watermarkUrl = `${siteUrl}/watermark.png`;
             

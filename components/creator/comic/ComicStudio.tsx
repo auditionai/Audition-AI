@@ -5,6 +5,7 @@ import { ComicCharacter, ComicPanel } from '../../../types';
 import { resizeImage } from '../../../utils/imageUtils';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
+import JSZip from 'jszip'; // Import JSZip
 import SettingsBlock from '../ai-tool/SettingsBlock';
 import Modal from '../../common/Modal';
 import { COMIC_PREMISES } from '../../../constants/comicPremises';
@@ -592,8 +593,55 @@ const ComicStudio: React.FC = () => {
         }));
     };
 
+    /**
+     * Robust method to capture HTML to Canvas by pre-fetching image as Base64
+     * This bypasses CORS issues that cause white pages in html2canvas.
+     */
+    const capturePanel = async (panelId: string, panelEl: HTMLElement): Promise<string | null> => {
+        const imgEl = panelEl.querySelector('img');
+        if (!imgEl) return null;
+
+        const originalSrc = imgEl.src;
+        try {
+            // 1. Fetch image as blob
+            const response = await fetch(originalSrc);
+            const blob = await response.blob();
+            
+            // 2. Create Base64 URL
+            const base64Url = await new Promise<string>((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result as string);
+                reader.readAsDataURL(blob);
+            });
+
+            // 3. Swap source
+            imgEl.src = base64Url;
+            
+            // 4. Wait for image to 'load' (even though it's base64, to be safe)
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            // 5. Capture with html2canvas
+            const canvas = await html2canvas(panelEl, { 
+                useCORS: true, 
+                scale: 2,
+                logging: false,
+                backgroundColor: null
+            });
+
+            // 6. Restore original source
+            imgEl.src = originalSrc;
+
+            return canvas.toDataURL('image/png', 0.9);
+        } catch (e) {
+            console.error(`Failed to capture panel ${panelId}`, e);
+            imgEl.src = originalSrc; // Ensure restore even on error
+            return null;
+        }
+    };
+
     const handleExportPDF = async () => {
         setIsLoading(true);
+        showToast("Đang tạo PDF, vui lòng đợi...", "success");
         try {
             const pdf = new jsPDF('p', 'mm', 'a4');
             let yOffset = 10;
@@ -601,19 +649,25 @@ const ComicStudio: React.FC = () => {
             for (let i = 0; i < panels.length; i++) {
                 const panelEl = panelRefs.current[panels[i].id];
                 if (panelEl && panels[i].image_url) {
-                    const canvas = await html2canvas(panelEl, { useCORS: true, scale: 2 });
-                    const imgData = canvas.toDataURL('image/jpeg', 0.8);
+                    // Use the robust capture method
+                    const imgData = await capturePanel(panels[i].id, panelEl);
                     
-                    const imgWidth = 190; 
-                    const imgHeight = (canvas.height * imgWidth) / canvas.width;
-                    
-                    if (yOffset + imgHeight > 280) {
-                        pdf.addPage();
-                        yOffset = 10;
+                    if (imgData) {
+                        // Calculate dimensions to fit PDF width
+                        // A4 width is 210mm. Margins 10mm each side -> 190mm usable.
+                        const imgProps = pdf.getImageProperties(imgData);
+                        const pdfWidth = 190;
+                        const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+                        
+                        // Check page break
+                        if (yOffset + pdfHeight > 280) {
+                            pdf.addPage();
+                            yOffset = 10;
+                        }
+                        
+                        pdf.addImage(imgData, 'PNG', 10, yOffset, pdfWidth, pdfHeight);
+                        yOffset += pdfHeight + 10;
                     }
-                    
-                    pdf.addImage(imgData, 'JPEG', 10, yOffset, imgWidth, imgHeight);
-                    yOffset += imgHeight + 10;
                 }
             }
             
@@ -626,6 +680,56 @@ const ComicStudio: React.FC = () => {
             setIsLoading(false);
         }
     };
+
+    // NEW: Download ZIP Functionality
+    const handleDownloadZip = async () => {
+        setIsLoading(true);
+        showToast("Đang nén ảnh, vui lòng đợi...", "success");
+        
+        try {
+            const zip = new JSZip();
+            const folder = zip.folder("audition-comic");
+            
+            let count = 0;
+            for (let i = 0; i < panels.length; i++) {
+                const panel = panels[i];
+                const panelEl = panelRefs.current[panel.id];
+                
+                if (panelEl && panel.image_url) {
+                    // Capture the panel WITH bubbles using the robust method
+                    const imgData = await capturePanel(panel.id, panelEl);
+                    
+                    if (imgData) {
+                        // Remove data:image/png;base64, prefix
+                        const base64Data = imgData.split(',')[1];
+                        folder?.file(`panel-${panel.panel_number}.png`, base64Data, { base64: true });
+                        count++;
+                    }
+                }
+            }
+
+            if (count > 0) {
+                const content = await zip.generateAsync({ type: "blob" });
+                const url = URL.createObjectURL(content);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `audition-comic-${Date.now()}.zip`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                showToast("Tải xuống thành công!", "success");
+            } else {
+                showToast("Không có ảnh nào để tải.", "error");
+            }
+
+        } catch (e: any) {
+            console.error("ZIP generation failed:", e);
+            showToast("Lỗi khi tạo file ZIP.", "error");
+        } finally {
+            setIsLoading(false);
+        }
+    }
 
     const handleSelectPremise = (premise: string) => {
         setStorySettings({ ...storySettings, premise });
@@ -1026,7 +1130,10 @@ const ComicStudio: React.FC = () => {
                             <button onClick={() => setActiveStep(prev => (prev - 1) as any)} className="px-4 py-2.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 font-bold text-sm transition-colors flex items-center gap-2 border border-white/5"><i className="ph-bold ph-caret-left"></i> Quay lại</button>
                         )}
                         {activeStep === 3 && (
-                            <button onClick={handleExportPDF} disabled={isLoading} className="px-5 py-2.5 rounded-lg bg-red-600/90 hover:bg-red-600 text-white font-bold text-sm transition-all shadow-lg shadow-red-900/20 flex items-center gap-2">{isLoading ? <i className="ph-bold ph-spinner animate-spin"></i> : <i className="ph-bold ph-file-pdf"></i>} Xuất PDF</button>
+                            <>
+                                <button onClick={handleDownloadZip} disabled={isLoading} className="px-5 py-2.5 rounded-lg bg-blue-600/90 hover:bg-blue-600 text-white font-bold text-sm transition-all shadow-lg shadow-blue-900/20 flex items-center gap-2">{isLoading ? <i className="ph-bold ph-spinner animate-spin"></i> : <i className="ph-bold ph-file-archive"></i>} Tải Ảnh (ZIP)</button>
+                                <button onClick={handleExportPDF} disabled={isLoading} className="px-5 py-2.5 rounded-lg bg-red-600/90 hover:bg-red-600 text-white font-bold text-sm transition-all shadow-lg shadow-red-900/20 flex items-center gap-2">{isLoading ? <i className="ph-bold ph-spinner animate-spin"></i> : <i className="ph-bold ph-file-pdf"></i>} Xuất PDF</button>
+                            </>
                         )}
                         <button onClick={activeStep === 1 ? handleGenerateScript : () => setActiveStep(3)} disabled={isLoading || (activeStep === 3)} className={`px-6 py-2.5 rounded-lg font-bold text-sm transition-all transform hover:-translate-y-0.5 active:scale-95 flex items-center gap-2 shadow-lg ${activeStep === 3 ? 'bg-green-600 text-white cursor-default opacity-50' : 'bg-gradient-to-r from-pink-500 to-purple-600 text-white hover:shadow-pink-500/25'} disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none`}>
                             {isLoading ? <i className="ph-bold ph-spinner animate-spin text-lg"></i> : activeStep === 3 ? <>Hoàn Tất <i className="ph-bold ph-check"></i></> : <>{activeStep === 1 ? 'Tạo Kịch Bản' : 'Vào Xưởng Vẽ'} <i className="ph-bold ph-arrow-right"></i></>}

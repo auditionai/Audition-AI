@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useImageGenerator } from '../../../hooks/useImageGenerator';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -391,22 +392,37 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                         title={t('creator.aiTool.singlePhoto.promptTitle')} 
                         instructionKey="prompt" 
                         onInstructionClick={() => openInstructionModal('prompt')}
-                        /* Removed extraHeaderContent to manually place button inside */
+                        className="flex-grow flex flex-col"
+                        extraHeaderContent={
+                            /* Desktop Button */
+                            <button
+                                onClick={() => setIsPromptLibraryOpen(true)}
+                                className="hidden md:flex items-center gap-1.5 text-xs text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 rounded-full px-3 py-1.5 font-semibold transition whitespace-nowrap"
+                                title={t('modals.promptLibrary.buttonTooltip')}
+                            >
+                                <i className="ph-fill ph-scroll"></i>
+                                <span>Sử dụng Prompt có sẵn</span>
+                            </button>
+                        }
                     >
-                        <div className="flex flex-col gap-2">
-                            {/* Prompt Button Mobile Optimized */}
-                            <div className="flex justify-end">
+                        <div className="flex flex-col flex-grow h-full">
+                            {/* Mobile Button */}
+                            <div className="flex justify-end md:hidden mb-2">
                                 <button
                                     onClick={() => setIsPromptLibraryOpen(true)}
                                     className="flex items-center gap-1.5 text-xs text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 rounded-full px-3 py-1.5 font-semibold transition whitespace-nowrap"
                                     title={t('modals.promptLibrary.buttonTooltip')}
                                 >
                                     <i className="ph-fill ph-scroll"></i>
-                                    {/* ALWAYS SHOW FULL TEXT */}
-                                    <span>Sử dụng Prompt</span>
+                                    <span>Sử dụng Prompt có sẵn</span>
                                 </button>
                             </div>
-                            <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder={t('creator.aiTool.singlePhoto.promptPlaceholder')} className="w-full p-3 bg-black/30 rounded-md border border-gray-600 focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition text-base text-white flex-grow resize-none min-h-[150px] auth-input" />
+                            <textarea 
+                                value={prompt} 
+                                onChange={(e) => setPrompt(e.target.value)} 
+                                placeholder={t('creator.aiTool.singlePhoto.promptPlaceholder')} 
+                                className="w-full p-3 bg-black/30 rounded-md border border-gray-600 focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition text-base text-white flex-grow resize-none h-full min-h-[150px] auth-input" 
+                            />
                         </div>
                     </SettingsBlock>
                 </div>

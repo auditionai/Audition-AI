@@ -637,7 +637,17 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                         title={t('creator.aiTool.groupStudio.settingsTitle')} 
                         instructionKey="group-studio" 
                         onInstructionClick={onInstructionClick}
-                        /* Manually place prompt button below */
+                        /* Desktop Button */
+                        extraHeaderContent={
+                            <button
+                                onClick={() => setIsPromptLibraryOpen(true)}
+                                className="hidden md:flex items-center gap-1.5 text-xs text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 rounded-full px-3 py-1.5 font-semibold transition whitespace-nowrap"
+                                title={t('modals.promptLibrary.buttonTooltip')}
+                            >
+                                <i className="ph-fill ph-scroll"></i>
+                                <span>Sử dụng Prompt có sẵn</span>
+                            </button>
+                        }
                     >
                         <div className="space-y-4">
                              <div>
@@ -650,16 +660,15 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                                 <div className="flex justify-between items-center mb-2">
                                     <label className="text-sm font-semibold text-skin-base">{t('creator.aiTool.groupStudio.promptTitle')}</label>
                                 </div>
-                                {/* Prompt Library Button Mobile Optimized */}
-                                <div className="flex justify-end mb-2">
+                                {/* Mobile Button */}
+                                <div className="flex justify-end mb-2 md:hidden">
                                     <button
                                         onClick={() => setIsPromptLibraryOpen(true)}
                                         className="flex items-center gap-1.5 text-xs text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 rounded-full px-3 py-1.5 font-semibold transition whitespace-nowrap"
                                         title={t('modals.promptLibrary.buttonTooltip')}
                                     >
                                         <i className="ph-fill ph-scroll"></i>
-                                        {/* ALWAYS SHOW FULL TEXT */}
-                                        <span>Sử dụng Prompt</span>
+                                        <span>Sử dụng Prompt có sẵn</span>
                                     </button>
                                 </div>
                                 <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder={t('creator.aiTool.groupStudio.promptPlaceholder')} className="w-full p-2 bg-skin-input-bg rounded-md border border-skin-border focus:border-skin-border-accent transition text-xs text-skin-base resize-none" rows={3}/>

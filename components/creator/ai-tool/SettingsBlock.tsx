@@ -11,14 +11,15 @@ interface SettingsBlockProps {
     step?: number;
     onInstructionClick: (key: InstructionKey) => void;
     extraHeaderContent?: React.ReactNode;
+    className?: string;
 }
 
-const SettingsBlock: React.FC<SettingsBlockProps> = ({ title, instructionKey, children, onInstructionClick, extraHeaderContent }) => {
+const SettingsBlock: React.FC<SettingsBlockProps> = ({ title, instructionKey, children, onInstructionClick, extraHeaderContent, className = '' }) => {
     const { t } = useTranslation();
     return (
-        <div className="themed-settings-block">
+        <div className={`themed-settings-block ${className}`}>
             <div className="flex justify-between items-center mb-4 gap-2">
-                <div className="flex items-center gap-3 overflow-hidden">
+                <div className="flex items-center gap-3 overflow-hidden flex-grow">
                     <label className="themed-heading text-lg font-bold themed-title-glow whitespace-nowrap">{title}</label>
                     {extraHeaderContent}
                 </div>

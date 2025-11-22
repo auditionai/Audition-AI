@@ -55,59 +55,46 @@ const processImageForGemini = async (imageDataUrl: string | null, targetAspectRa
     }
 };
 
-// Add Watermark Function (Fixed for Serverless/Netlify)
+// Add Watermark Function (Robust Image Overlay Method)
 const addWatermark = async (imageBuffer: Buffer): Promise<Buffer> => {
     try {
-        console.log("Starting watermark process...");
+        console.log("Starting robust watermark process...");
         const image = await (Jimp as any).read(imageBuffer);
         
-        // FIX: Use reliable GitHub Raw URLs for fonts to prevent loading failures
-        const FONT_SMALL_URL = "https://raw.githubusercontent.com/jimp-dev/jimp/master/packages/plugin-print/fonts/open-sans/open-sans-16-white/open-sans-16-white.fnt";
-        const FONT_LARGE_URL = "https://raw.githubusercontent.com/jimp-dev/jimp/master/packages/plugin-print/fonts/open-sans/open-sans-32-white/open-sans-32-white.fnt";
+        const mainWidth = image.getWidth();
+        const mainHeight = image.getHeight();
 
-        // Load fonts in parallel
-        const [fontSmall, fontLarge] = await Promise.all([
-            (Jimp as any).loadFont(FONT_SMALL_URL),
-            (Jimp as any).loadFont(FONT_LARGE_URL)
-        ]);
+        // Calculate watermark dimensions (25% of width, min 150px)
+        const wmWidth = Math.max(150, Math.floor(mainWidth * 0.25)); 
         
-        const textTop = "Created by";
-        const textBottom = "AUDITION AI";
-        
-        const widthTop = (Jimp as any).measureText(fontSmall, textTop);
-        const widthBottom = (Jimp as any).measureText(fontLarge, textBottom);
-        
-        const heightTop = (Jimp as any).measureTextHeight(fontSmall, textTop, 1000);
-        const heightBottom = (Jimp as any).measureTextHeight(fontLarge, textBottom, 1000);
-        
-        const padding = 10;
-        const boxWidth = Math.max(widthTop, widthBottom) + (padding * 2);
-        const boxHeight = heightTop + heightBottom + (padding * 1.5); 
-        
-        // Position: Bottom Right with margin
-        const margin = 20;
-        const x = image.getWidth() - boxWidth - margin;
-        const y = image.getHeight() - boxHeight - margin;
-        
-        // Create semi-transparent black background (Hex + Alpha)
-        // 0x000000AA is Black with ~66% opacity for better visibility.
-        const bgImage = new (Jimp as any)(boxWidth, boxHeight, 0x000000AA);
-        
-        // Composite background
-        image.composite(bgImage, x, y);
-        
-        // Print Text (Centered horizontally within the box)
-        const xTop = x + (boxWidth - widthTop) / 2;
-        const xBottom = x + (boxWidth - widthBottom) / 2;
-        
-        image.print(fontSmall, xTop, y + padding, textTop);
-        image.print(fontLarge, xBottom, y + padding + heightTop - 4, textBottom); 
+        // Use a public placeholder service to generate a reliable text image as a PNG.
+        // URL Structure: width x height / bg_color / text_color / format ? text & font
+        // We create a 400x100 badge. Jimp will resize it to fit wmWidth.
+        const watermarkUrl = `https://placehold.co/400x100/000000/FFFFFF/png?text=AUDITION+AI&font=lato`;
 
-        console.log("Watermark added successfully.");
+        console.log("Fetching watermark badge...");
+        const watermark = await (Jimp as any).read(watermarkUrl);
+        
+        // Resize watermark to fit the target image nicely
+        watermark.resize(wmWidth, (Jimp as any).AUTO);
+        
+        // Set opacity to 70% for a sleek look
+        watermark.opacity(0.7);
+
+        // Position: Bottom Right with 3% margin
+        const margin = Math.floor(mainWidth * 0.03);
+        const x = mainWidth - watermark.getWidth() - margin;
+        const y = mainHeight - watermark.getHeight() - margin;
+        
+        // Composite the watermark onto the main image
+        image.composite(watermark, x, y);
+
+        console.log("Watermark added successfully via image composition.");
         return await image.getBufferAsync((Jimp as any).MIME_PNG);
     } catch (error) {
         console.error("Failed to add watermark (Returning original image):", error);
-        return imageBuffer; // Return original if watermark fails
+        // Return original buffer on failure so the user still gets their image
+        return imageBuffer; 
     }
 };
 
@@ -249,7 +236,6 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         // Apply Watermark if user did NOT choose to remove it
         if (!removeWatermark) {
-            // Await the watermark process directly here
             imageBuffer = await addWatermark(imageBuffer);
         }
 

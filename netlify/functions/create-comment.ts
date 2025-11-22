@@ -22,23 +22,35 @@ const handler: Handler = async (event: HandlerEvent) => {
         }
 
         // --- 1. FORCE SYNC: AGGRESSIVELY ENSURE USER EXISTS IN PUBLIC TABLE ---
-        // We fetch metadata from the Auth User object (which is the source of truth)
         const meta = user.user_metadata || {};
-        const displayName = meta.full_name || meta.name || `User ${user.id.substring(0,4)}`;
+        
+        // Determine best display name
+        const displayName = meta.full_name || meta.name || meta.display_name || `User ${user.id.substring(0,4)}`;
+        
+        // Determine best avatar (Google often uses 'picture' or 'avatar_url')
         const avatarUrl = meta.avatar_url || meta.picture || `https://api.dicebear.com/7.x/bottts/svg?seed=${user.id}`;
 
-        // Perform UPSERT to public.users. This fixes the "Unknown" issue by forcing the data to exist.
-        const { error: upsertError } = await supabaseAdmin.from('users').upsert({
-            id: user.id,
+        // Check if user already exists to preserve existing data if possible (don't overwrite valid avatars with defaults unless necessary)
+        const { data: existingUser } = await supabaseAdmin.from('users').select('photo_url').eq('id', user.id).single();
+        
+        const updates: any = {
             email: user.email || '',
             display_name: displayName,
-            photo_url: avatarUrl,
-            // We generally preserve existing XP/Diamonds, but if it's a new insert, defaults will apply from DB definition or be null
-        }, { onConflict: 'id', ignoreDuplicates: false }); // update it to ensure fresh name/avatar
+        };
+        
+        // Only update photo if we have a valid one from auth, or if the DB one is missing
+        if (avatarUrl && (!existingUser || !existingUser.photo_url)) {
+            updates.photo_url = avatarUrl;
+        }
+
+        // Perform UPSERT
+        const { error: upsertError } = await supabaseAdmin.from('users').upsert({
+            id: user.id,
+            ...updates
+        }, { onConflict: 'id' });
 
         if (upsertError) {
             console.error("User Sync Failed:", upsertError);
-            // Don't throw, try to proceed, maybe the user exists
         }
 
         // --- 2. INSERT COMMENT ---
@@ -56,8 +68,6 @@ const handler: Handler = async (event: HandlerEvent) => {
         if (insertError) throw insertError;
 
         // --- 3. ROBUST NOTIFICATION LOGIC ---
-        
-        // Fetch Post Owner
         const { data: postData } = await supabaseAdmin
             .from('posts')
             .select('user_id')
@@ -66,9 +76,6 @@ const handler: Handler = async (event: HandlerEvent) => {
         
         // A. Notify Post Owner
         if (postData && postData.user_id !== user.id) {
-            // Delete old unread notifications of same type to prevent spamming if they spam comments? 
-            // No, for comments we usually keep all of them.
-            
             const { error: notifError } = await supabaseAdmin.from('notifications').insert({
                 recipient_id: postData.user_id,
                 actor_id: user.id, 
@@ -78,7 +85,6 @@ const handler: Handler = async (event: HandlerEvent) => {
                 is_read: false,
                 created_at: new Date().toISOString()
             });
-            
             if (notifError) console.error("Failed to insert comment notification:", notifError);
         }
 

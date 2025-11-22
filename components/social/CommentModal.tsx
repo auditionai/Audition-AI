@@ -5,7 +5,6 @@ import { Post, PostComment } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import UserAvatar from '../common/UserAvatar';
 import UserName from '../common/UserName';
-import { calculateLevelFromXp } from '../../utils/rankUtils';
 
 interface CommentModalProps {
     isOpen: boolean;
@@ -14,7 +13,7 @@ interface CommentModalProps {
 }
 
 const CommentModal: React.FC<CommentModalProps> = ({ isOpen, onClose, post }) => {
-    const { supabase, user, showToast, session } = useAuth();
+    const { user, showToast, session } = useAuth();
     const [comments, setComments] = useState<PostComment[]>([]);
     const [newComment, setNewComment] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -23,7 +22,7 @@ const CommentModal: React.FC<CommentModalProps> = ({ isOpen, onClose, post }) =>
     const inputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
-        if (isOpen && post && supabase) {
+        if (isOpen && post) {
             fetchComments();
         } else {
             setComments([]);
@@ -32,65 +31,18 @@ const CommentModal: React.FC<CommentModalProps> = ({ isOpen, onClose, post }) =>
     }, [isOpen, post]);
 
     const fetchComments = async () => {
-        if (!post || !supabase) return;
+        if (!post) return;
         setIsLoading(true);
         try {
-            // 1. Fetch raw comments
-            const { data: rawComments, error } = await supabase
-                .from('post_comments')
-                .select('*')
-                .eq('post_id', post.id)
-                .order('created_at', { ascending: true });
+            // USE SERVER FUNCTION instead of client query to bypass RLS and guarantee user data
+            const response = await fetch(`/.netlify/functions/get-comments?postId=${post.id}`);
             
-            if (error) throw error;
-
-            if (!rawComments || rawComments.length === 0) {
-                setComments([]);
-                return;
+            if (!response.ok) {
+                throw new Error('Failed to load comments');
             }
 
-            // 2. Collect User IDs
-            const userIds = [...new Set(rawComments.map((c: any) => c.user_id))];
-
-            // 3. Fetch User Data Manually (Avoids JOIN issues if FK missing)
-            const { data: users, error: userError } = await supabase
-                .from('users')
-                .select('*')
-                .in('id', userIds);
-            
-            if (userError) throw userError;
-
-            const userMap = new Map<string, any>((users || []).map((u: any) => [u.id, u]));
-
-            // 4. Merge Data
-            const formattedComments = rawComments.map((comment: any) => {
-                const userData = userMap.get(comment.user_id);
-                
-                // Resolve parent comment user for replies
-                let parentUser = null;
-                if (comment.parent_id) {
-                    const parentComment = rawComments.find((c: any) => c.id === comment.parent_id);
-                    if (parentComment) {
-                        const pUser = userMap.get(parentComment.user_id);
-                        if (pUser) parentUser = { display_name: pUser.display_name };
-                    }
-                }
-
-                return {
-                    ...comment,
-                    user: userData ? {
-                        ...userData,
-                        level: calculateLevelFromXp(userData.xp || 0)
-                    } : {
-                        display_name: 'Người dùng ẩn danh',
-                        photo_url: null,
-                        level: 1
-                    },
-                    parent_comment: parentUser ? { user: parentUser } : null
-                };
-            });
-
-            setComments(formattedComments as PostComment[]); 
+            const data = await response.json();
+            setComments(data); 
         } catch (e) {
             console.error("Fetch comments error:", e);
         } finally {
@@ -122,7 +74,8 @@ const CommentModal: React.FC<CommentModalProps> = ({ isOpen, onClose, post }) =>
             
             setNewComment('');
             setReplyTo(null);
-            fetchComments(); // Refresh list
+            // Re-fetch from server to get the fully populated comment (with user name/avatar)
+            await fetchComments(); 
             showToast('Đã gửi bình luận', 'success');
         } catch (e: any) {
             showToast(e.message, 'error');

@@ -211,7 +211,8 @@ const handler: Handler = async (event: HandlerEvent) => {
         // --- WATERMARK LOGIC ---
         let imageBuffer = Buffer.from(finalImageBase64, 'base64');
         if (!removeWatermark) {
-            const siteUrl = process.env.URL || 'http://localhost:8888';
+            // Use Production URL as default
+            const siteUrl = process.env.URL || 'https://auditionai.io.vn';
             const watermarkUrl = `${siteUrl}/watermark.png`;
             imageBuffer = await addSmartWatermark(imageBuffer, watermarkUrl);
         }

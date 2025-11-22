@@ -1,3 +1,4 @@
+
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
 import crypto from 'crypto';
@@ -30,8 +31,8 @@ const handler: Handler = async (event: HandlerEvent) => {
         return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized.' }) };
     }
 
-    // FIX: Use Supabase v2 `auth.getUser` as `auth.api` is from v1.
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+    // FIX: Use Supabase v2 `auth.getUser` by casting to any
+    const { data: { user }, error: authError } = await (supabaseAdmin.auth as any).getUser(token);
     if (authError || !user) {
         return { statusCode: 401, body: JSON.stringify({ error: 'Invalid token.' }) };
     }
@@ -79,7 +80,7 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         // 3. Prepare data for PayOS, separating signed data from the full payload
         const description = `NAP AUAI ${pkg.credits_amount}KC`;
-        const baseUrl = process.env.URL || 'http://localhost:8888';
+        const baseUrl = process.env.URL || 'https://auditionai.io.vn';
         const returnUrl = `${baseUrl}/buy-credits`;
         const cancelUrl = `${baseUrl}/buy-credits`;
 

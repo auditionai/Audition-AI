@@ -2,7 +2,6 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { useChat } from '../../contexts/ChatContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { useTheme } from '../../contexts/ThemeContext';
 import ChatMessageItem from './ChatMessage';
 import ImageModal from '../common/ImageModal';
 import ConfirmationModal from '../ConfirmationModal'; // Use existing app confirmation modal
@@ -14,7 +13,6 @@ const EMOTES = [
 const GlobalChat: React.FC = () => {
     const { messages, isOpen, toggleChat, unreadCount, sendMessage, isLoading, uploadChatImage, deleteMessage } = useChat();
     const { user } = useAuth();
-    const { theme } = useTheme();
     const [input, setInput] = useState('');
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const [showEmotes, setShowEmotes] = useState(false);

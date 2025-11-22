@@ -4,7 +4,7 @@ import { useChat } from '../../contexts/ChatContext';
 import { useAuth } from '../../contexts/AuthContext';
 import ChatMessageItem from './ChatMessage';
 import ImageModal from '../common/ImageModal';
-import ConfirmationModal from '../ConfirmationModal'; // Use existing app confirmation modal
+import ConfirmationModal from '../ConfirmationModal';
 
 const EMOTES = [
     '😀', '😂', '😍', '😎', '😭', '😡', '👍', '👎', '❤️', '🔥', '✨', '🎉', '💃', '🕺', '🎶'

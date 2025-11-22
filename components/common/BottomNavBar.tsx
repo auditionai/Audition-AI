@@ -1,13 +1,12 @@
 
 import React from 'react';
 import { CreatorTab } from '../../pages/CreatorPage';
-import { useAuth } from '../../contexts/AuthContext';
 import { useTranslation } from '../../hooks/useTranslation';
 
 interface BottomNavBarProps {
   activeTab: CreatorTab | 'buy-credits' | 'profile' | 'shop' | 'messages' | 'admin-gallery';
   onTabChange: (tab: any) => void;
-  onCheckInClick: () => void;
+  onCheckInClick?: () => void;
 }
 
 const NavButton = ({ icon, label, isActive, onClick, hasNotification = false }: { icon: string, label: string, isActive: boolean, onClick: () => void, hasNotification?: boolean }) => (
@@ -23,8 +22,7 @@ const NavButton = ({ icon, label, isActive, onClick, hasNotification = false }: 
     </button>
 );
 
-const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeTab, onTabChange, onCheckInClick }) => {
-  const { user } = useAuth();
+const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeTab, onTabChange }) => {
   const { t } = useTranslation();
   return (
     <div className="fixed bottom-0 left-0 w-full h-16 bg-[#12121A]/90 backdrop-blur-lg border-t border-white/10 z-50 md:hidden pb-safe">

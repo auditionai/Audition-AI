@@ -37,6 +37,7 @@ const MessagesPage: React.FC = () => {
                 .select(`
                     id, updated_at,
                     participants:conversation_participants(
+                        user_id,
                         user:users(id, display_name, photo_url)
                     )
                 `)
@@ -46,38 +47,37 @@ const MessagesPage: React.FC = () => {
             else {
                 // Process conversations
                 const formatted = data.map((c: any) => {
-                    // Find partner. If it's a System message, user object might be null if RLS blocks it or join fails.
-                    // We manually reconstruct if missing.
-                    let partner = c.participants.find((p: any) => p.user?.id !== user.id)?.user;
+                    // Find partner logic:
+                    // 1. Look for participant that is NOT me
+                    // 2. Check if their user object is loaded.
                     
-                    // Fallback for System Bot if partner is missing but we know it's likely system
-                    // (Note: In a real app, we'd check participant ID, but here we just check if valid partner exists)
-                    if (!partner && c.participants.length < 2) {
-                         // Heuristic: If only 1 participant returned (me), the other is hidden. Likely System.
-                         // But since we filter !== user.id above, if that returns empty, we check raw participants
-                         // actually, let's look at the raw c.participants
-                         const hasSystem = c.participants.some((p: any) => p.user_id === SYSTEM_BOT_ID); // user_id column might be needed in select
-                         if (hasSystem || c.participants.length === 1) {
-                             partner = {
+                    // Note: 'participants' is an array of { user_id, user: {...} }
+                    
+                    const otherParticipant = c.participants.find((p: any) => p.user_id !== user.id);
+                    
+                    let partnerUser = otherParticipant?.user;
+
+                    // Handling Missing User Data (RLS hidden or Deleted)
+                    if (!partnerUser) {
+                        if (otherParticipant?.user_id === SYSTEM_BOT_ID) {
+                             partnerUser = {
                                  id: SYSTEM_BOT_ID,
                                  display_name: 'HỆ THỐNG',
                                  photo_url: 'https://api.dicebear.com/7.x/bottts/svg?seed=System'
                              };
-                         }
-                    }
-
-                    // Force System Bot data if ID matches
-                    if (partner?.id === SYSTEM_BOT_ID) {
-                        partner = {
-                            id: SYSTEM_BOT_ID,
-                            display_name: 'HỆ THỐNG',
-                            photo_url: 'https://api.dicebear.com/7.x/bottts/svg?seed=System'
-                        };
+                        } else {
+                             // Generic fallback for unknown users
+                             partnerUser = {
+                                 id: otherParticipant?.user_id || 'unknown',
+                                 display_name: 'Người dùng ẩn',
+                                 photo_url: 'https://api.dicebear.com/7.x/bottts/svg?seed=Unknown'
+                             };
+                        }
                     }
 
                     return {
                         ...c,
-                        participants: [{ user: partner || { display_name: 'Người dùng', photo_url: '' } }] 
+                        participants: [{ user: partnerUser }] 
                     };
                 });
                 setConversations(formatted);
@@ -162,7 +162,7 @@ const MessagesPage: React.FC = () => {
 
     return (
         <div data-theme={theme} className="flex flex-col h-screen bg-skin-fill text-skin-base">
-            <CreatorHeader onTopUpClick={() => navigate('buy-credits')} activeTab="tool" onNavigate={navigate} onCheckInClick={() => {}} />
+            <CreatorHeader onTopUpClick={() => navigate('buy-credits')} activeTab="messages" onNavigate={navigate} onCheckInClick={() => {}} />
             
             <div className="flex flex-grow pt-20 overflow-hidden container mx-auto max-w-6xl px-0 md:px-4 pb-16 md:pb-4 gap-4">
                 

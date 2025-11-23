@@ -231,7 +231,7 @@ const GameConfigManager: React.FC = () => {
         }
     };
 
-    const sqlFixScript = `-- SCRIPT SỬA LỖI DB (ULTIMATE FIX V3)
+    const sqlFixScript = `-- SCRIPT SỬA LỖI DB (ULTIMATE FIX V4)
 -- 1. BẬT CHẾ ĐỘ XEM CÔNG KHAI & SỬA QUYỀN USERS
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Public profiles are viewable by everyone" ON public.users;
@@ -249,11 +249,10 @@ VALUES (
 ) ON CONFLICT (id) DO UPDATE SET display_name = 'HỆ THỐNG', photo_url = 'https://api.dicebear.com/7.x/bottts/svg?seed=System';
 
 -- 3. HÀM RPC MẠNH MẼ ĐỂ TẠO CONVERSATION (AN TOÀN TUYỆT ĐỐI)
--- Hàm này sẽ được gọi từ backend để bỏ qua RLS khi tạo chat
 CREATE OR REPLACE FUNCTION public.get_or_create_conversation(other_user_id UUID)
 RETURNS UUID
 LANGUAGE plpgsql
-SECURITY DEFINER -- Chạy với quyền Admin
+SECURITY DEFINER
 AS $$
 DECLARE
     conv_id UUID;
@@ -283,15 +282,28 @@ BEGIN
 END;
 $$;
 
--- 4. CẤP QUYỀN CHO SERVICE ROLE (Quan trọng cho Admin Broadcast)
+-- 4. CẤP QUYỀN CHO SERVICE ROLE
 GRANT ALL ON public.conversations TO service_role;
 GRANT ALL ON public.conversation_participants TO service_role;
 GRANT ALL ON public.direct_messages TO service_role;
 GRANT ALL ON public.users TO service_role;
 
--- 5. REFRESH REALTIME
-ALTER PUBLICATION supabase_realtime ADD TABLE conversations;
-ALTER PUBLICATION supabase_realtime ADD TABLE direct_messages;
+-- 5. REFRESH REALTIME (Safe Mode - Bỏ qua lỗi nếu đã tồn tại)
+DO $$
+BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE conversations;
+EXCEPTION WHEN duplicate_object THEN
+    RAISE NOTICE 'Table conversations already in publication';
+END;
+$$;
+
+DO $$
+BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE direct_messages;
+EXCEPTION WHEN duplicate_object THEN
+    RAISE NOTICE 'Table direct_messages already in publication';
+END;
+$$;
 
 SELECT 'Đã sửa lỗi DB & Cập nhật hàm RPC thành công!' as ket_qua;
 `;

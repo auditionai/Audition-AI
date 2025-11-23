@@ -100,7 +100,6 @@ const UserProfilePage: React.FC = () => {
             console.log(`[Chat Init] Using RPC to get_or_create_conversation with ${viewUser.id}`);
             
             // STRICTLY use the RPC. Do NOT try to insert manually.
-            // Manual insert will fail RLS because you cannot insert a participant row for ANOTHER user.
             const { data: conversationId, error: rpcError } = await supabase
                 .rpc('get_or_create_conversation', { target_user_id: viewUser.id });
 
@@ -118,8 +117,12 @@ const UserProfilePage: React.FC = () => {
 
         } catch (e: any) {
             console.error("Chat Creation Critical Error:", e);
-            // Only show generic error to user, but log specific one
-            showToast(`Lỗi khởi tạo tin nhắn. Vui lòng báo Admin: ${e.message}`, "error");
+            // If RPC fails, it might be missing. 
+            if (e.message.includes('function public.get_or_create_conversation') && e.message.includes('does not exist')) {
+                 showToast(`Lỗi hệ thống: Database chưa cập nhật hàm xử lý tin nhắn. Vui lòng báo Admin chạy SQL fix.`, "error");
+            } else {
+                 showToast(`Lỗi khởi tạo tin nhắn: ${e.message}`, "error");
+            }
         } finally {
             setIsCreatingChat(false);
         }

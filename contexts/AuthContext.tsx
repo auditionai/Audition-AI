@@ -77,16 +77,21 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }, 4000); 
     }, []);
     
-    // FIX: Improved navigate function to be more responsive
+    // FIX: Improved navigate function to be more responsive and handle query params correctly
     const navigate = useCallback((path: string) => {
-        const baseRoute = path.split('/')[0];
+        // Strip query params to get the route key (e.g., "messages?id=1" -> "messages")
+        const cleanPath = path.split('?')[0];
+        const baseRoute = cleanPath.split('/')[0];
+        
         const targetPath = path === 'home' ? '/' : `/${path}`;
         
         // 1. Immediate State Update (Responsiveness)
+        // Only update route state if it's valid, otherwise 'home' fallback logic in App.tsx handles it, 
+        // but we want to be explicit here for the switch case.
         setRoute(baseRoute);
         
         // 2. Update URL (Consistency)
-        if (window.location.pathname !== targetPath) {
+        if (window.location.pathname + window.location.search !== targetPath) {
             window.history.pushState({}, '', targetPath);
         }
         

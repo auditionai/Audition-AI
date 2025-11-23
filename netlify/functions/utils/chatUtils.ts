@@ -22,7 +22,7 @@ export const sendSystemMessage = async (userId: string, content: string, senderI
         // If sender is a real admin (not the system bot), try to fetch their details to use in the profile
         if (senderId !== SYSTEM_BOT_ID) {
             try {
-                const { data: { user: authUser } } = await supabaseAdmin.auth.admin.getUserById(senderId);
+                const { data: { user: authUser } } = await (supabaseAdmin.auth as any).admin.getUserById(senderId);
                 if (authUser) {
                     senderDisplayName = authUser.user_metadata?.full_name || authUser.user_metadata?.name || 'Admin';
                     senderAvatar = authUser.user_metadata?.avatar_url || senderAvatar;

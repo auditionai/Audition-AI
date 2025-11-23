@@ -208,6 +208,57 @@ const StepIndicator = ({ currentStep }: { currentStep: number }) => {
     );
 };
 
+// -- Script Editor Visualizer --
+const VisualScriptPanel: React.FC<{ text: string }> = ({ text }) => {
+    // Advanced parser for the new "LAYOUT / PANEL" format
+    const lines = text.split('\n');
+    const renderContent = [];
+    let currentItem = { title: 'Layout / Mô tả chung', content: '' };
+    
+    for (const line of lines) {
+        const cleanLine = line.trim();
+        // Check if line starts with "PANEL X:" or "LAYOUT:"
+        if (/^(PANEL\s+\d+|LAYOUT):/i.test(cleanLine)) {
+            // Push previous item if it has content
+            if (currentItem.content.trim()) {
+                renderContent.push(currentItem);
+            }
+            
+            // Start new item
+            const [title, ...rest] = cleanLine.split(':');
+            currentItem = { 
+                title: title.toUpperCase().trim(), 
+                content: rest.join(':').trim() 
+            };
+        } else {
+            // Append to current item
+            if (cleanLine) {
+                currentItem.content += (currentItem.content ? '\n' : '') + cleanLine;
+            }
+        }
+    }
+    // Push the last item
+    if (currentItem.content.trim()) {
+        renderContent.push(currentItem);
+    }
+
+    if (renderContent.length === 0) return <div className="text-gray-500 italic text-sm p-4">Chưa có nội dung chi tiết.</div>;
+
+    return (
+        <div className="space-y-3 p-2">
+            {renderContent.map((item, idx) => (
+                <div key={idx} className={`rounded-lg p-3 border ${item.title.includes('LAYOUT') ? 'bg-blue-500/10 border-blue-500/30' : 'bg-[#1E1B25] border-white/10'}`}>
+                    <h5 className={`text-xs font-bold uppercase mb-1 pb-1 flex items-center gap-2 ${item.title.includes('LAYOUT') ? 'text-blue-400 border-blue-500/20' : 'text-pink-400 border-white/5 border-b'}`}>
+                        {item.title.includes('LAYOUT') ? <i className="ph-fill ph-layout"></i> : <i className="ph-fill ph-frame-corners"></i>} 
+                        {item.title}
+                    </h5>
+                    <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{item.content}</p>
+                </div>
+            ))}
+        </div>
+    );
+}
+
 // --- MAIN COMPONENT ---
 
 interface ComicStudioProps {
@@ -342,7 +393,7 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
         if (missingDesc) return showToast(`Vui lòng upload ảnh cho ${missingDesc.name} để AI phân tích ngoại hình.`, "error");
 
         setIsLoading(true);
-        setGenerationStatus("Đang lên cấu trúc cốt truyện (Đang dùng Gemini 3 Pro)...");
+        setGenerationStatus("Đang lên cấu trúc cốt truyện (Gemini 2.5 Pro - Flash)...");
 
         try {
             // PHASE 1: GENERATE OUTLINE (PAGES)
@@ -378,17 +429,13 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
 
             for (let i = 0; i < outline.length; i++) {
                 const p = outline[i];
-                setGenerationStatus(`Đang viết chi tiết TRANG ${p.panel_number}/${outline.length}... (Vui lòng không tắt tab)`);
+                setGenerationStatus(`Đang viết chi tiết TRANG ${p.panel_number}/${outline.length}...`);
                 
-                // --- CRITICAL FIX: DELAY ---
-                // We add a 3 second delay between requests to avoid hitting rate limits (403 Forbidden / 429 Too Many Requests)
-                // This makes the process slower but MUCH more reliable for 10+ pages.
                 if (i > 0) {
                     await new Promise(resolve => setTimeout(resolve, 3000));
                 }
 
                 try {
-                    // Only send the last 3 completed panels as context to keep payload small
                     const recentContext = completedPanelsData.slice(-3);
                     
                     const details = await processSinglePanelScript(p, recentContext);
@@ -410,7 +457,6 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                         : panel
                     ));
                 } catch (expandErr) {
-                    // If a page fails, mark it as error BUT CONTINUE THE LOOP
                     setPanels(prev => prev.map(panel => 
                         panel.panel_number === p.panel_number 
                         ? { 
@@ -437,23 +483,20 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
         const panel = panels.find(p => p.id === panelId);
         if (!panel || !panel.plot_summary) return;
 
-        // Set loading state for this specific panel UI
         setPanels(prev => prev.map(p => p.id === panelId ? { ...p, visual_description: `(Đang thử lại...) ${p.plot_summary}` } : p));
 
         try {
-            // Gather context from previous SUCCESSFUL panels
             const pIndex = panels.findIndex(p => p.id === panelId);
             
-            // Filter only panels that have valid descriptions (not error messages)
             const validPrevPanels = panels
                 .slice(0, pIndex)
-                .filter(p => !p.visual_description.startsWith('[Lỗi') && !p.visual_description.startsWith('(Đang'))
+                .filter(p => !p.visual_description.startsWith('['))
                 .map(p => ({
                     panel_number: p.panel_number,
                     visual_description: p.visual_description,
                     dialogue: p.dialogue
                 }))
-                .slice(-3); // Take last 3 valid
+                .slice(-3);
 
             const details = await processSinglePanelScript({ plot_summary: panel.plot_summary }, validPrevPanels);
             
@@ -477,8 +520,6 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
             showToast("Thử lại thất bại. Vui lòng kiểm tra kết nối.", "error");
         }
     };
-
-    // --- END NEW LOGIC ---
 
     const handleRenderPanel = async (panel: ComicPanel) => {
         if (!supabase) return;
@@ -571,7 +612,6 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
     const handleDownloadZip = async () => {
         setIsLoading(true);
         showToast("Đang nén ảnh, vui lòng đợi...", "success");
-        
         try {
             const zip = new JSZip();
             const folder = zip.folder("audition-comic");
@@ -585,7 +625,6 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                     count++;
                 }
             }
-
             if (count > 0) {
                 const content = await zip.generateAsync({ type: "blob" });
                 const url = URL.createObjectURL(content);
@@ -712,34 +751,6 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                 </div>
 
                 <div className="flex-grow overflow-y-auto p-6 custom-scrollbar bg-[#0f0f13]">
-                    {/* FEATURE BADGES */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-                        <div className="bg-emerald-500/10 border border-emerald-500/30 p-3 rounded-xl flex items-center gap-3 shadow-lg shadow-emerald-500/5">
-                            <div className="w-10 h-10 bg-emerald-500/20 rounded-full flex items-center justify-center text-emerald-400 shrink-0">
-                                <i className="ph-fill ph-lightning text-xl"></i>
-                            </div>
-                            <div>
-                                <div className="flex items-center gap-2">
-                                    <h4 className="font-bold text-emerald-100 text-sm">Story Memory & Plot Logic</h4>
-                                    <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded animate-pulse">HOT</span>
-                                </div>
-                                <p className="text-[11px] text-emerald-200/70 leading-tight">AI ghi nhớ diễn biến cốt truyện để phát triển tâm lý nhân vật sâu sắc hơn.</p>
-                            </div>
-                        </div>
-                        <div className="bg-orange-500/10 border border-orange-500/30 p-3 rounded-xl flex items-center gap-3 shadow-lg shadow-orange-500/5">
-                            <div className="w-10 h-10 bg-orange-500/20 rounded-full flex items-center justify-center text-orange-400 shrink-0">
-                                <i className="ph-fill ph-fire text-xl"></i>
-                            </div>
-                            <div>
-                                <div className="flex items-center gap-2">
-                                    <h4 className="font-bold text-orange-100 text-sm">Character Consistency</h4>
-                                    <span className="bg-orange-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded">ESSENTIAL</span>
-                                </div>
-                                <p className="text-[11px] text-orange-200/70 leading-tight">Hệ thống hỗ trợ tối đa <strong>{MAX_CHARACTERS} nhân vật</strong> tham chiếu. Độ đồng bộ 95-100%.</p>
-                            </div>
-                        </div>
-                    </div>
-
                     {/* STEP 1: SETUP */}
                     {activeStep === 1 && (
                         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -849,54 +860,83 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                         </div>
                     )}
 
-                    {/* STEP 2: SCRIPT EDITOR */}
+                    {/* STEP 2: SCRIPT EDITOR - IMPROVED VISUALIZATION */}
                     {activeStep === 2 && (
                         <div className="max-w-5xl mx-auto space-y-6">
                             <div className="bg-blue-500/10 border border-blue-500/30 p-4 rounded-xl flex items-center gap-4">
                                 <div className="w-10 h-10 bg-blue-500/20 rounded-full flex items-center justify-center text-blue-400"><i className="ph-fill ph-magic-wand text-xl"></i></div>
                                 <div>
-                                    <h4 className="font-bold text-blue-100">{generationStatus ? generationStatus : 'Kịch bản AI đã sẵn sàng'}</h4>
-                                    <p className="text-xs text-blue-200/60">Hãy kiểm tra và chỉnh sửa lời thoại. AI sẽ tự động chèn lời thoại vào ảnh.</p>
+                                    <h4 className="font-bold text-blue-100">{generationStatus ? generationStatus : 'Kịch bản chi tiết đã sẵn sàng'}</h4>
+                                    <p className="text-xs text-blue-200/60">AI đã chia trang thành các Panel cụ thể. Bạn có thể xem bố cục chi tiết bên dưới.</p>
                                 </div>
                             </div>
-                            <div className="space-y-4">
+                            <div className="space-y-6">
                                 {panels.map((panel) => {
                                     const isGeneratingDetails = panel.visual_description.startsWith('(Đang chờ xử lý');
                                     const isError = panel.visual_description.startsWith('[Lỗi');
                                     
                                     return (
-                                        <div key={panel.id} className="comic-card p-0 flex flex-col md:flex-row relative overflow-hidden">
-                                            <div className="md:w-1/2 p-4 border-b md:border-b-0 md:border-r border-white/10 bg-black/20 relative">
-                                                <div className="flex items-center justify-between mb-2">
-                                                    <span className="text-xs font-bold bg-blue-600 text-white px-2 py-0.5 rounded">TRANG {panel.panel_number}</span>
-                                                    <span className="text-[10px] text-gray-500">Mô tả hình ảnh</span>
-                                                </div>
-                                                <textarea className="w-full h-32 bg-transparent border-none focus:ring-0 text-sm text-gray-300 leading-relaxed resize-none p-0" value={panel.visual_description} onChange={(e) => handleUpdatePanel(panel.id, 'visual_description', e.target.value)} disabled={isGeneratingDetails} />
-                                                
-                                                {/* RETRY OVERLAY FOR SCRIPT ERROR */}
-                                                {isError && (
-                                                    <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center z-10 p-4 backdrop-blur-sm">
-                                                        <i className="ph-fill ph-warning-circle text-red-500 text-3xl mb-2"></i>
-                                                        <p className="text-white text-sm font-bold mb-3 text-center">{panel.visual_description.substring(0, 60)}...</p>
-                                                        <button 
-                                                            onClick={() => handleRetryExpandPanel(panel.id)}
-                                                            className="px-4 py-2 bg-white text-black text-xs font-bold rounded-full hover:bg-gray-200 flex items-center gap-2 transition-transform hover:scale-105 shadow-lg"
-                                                        >
-                                                            <i className="ph-bold ph-arrow-clockwise"></i> Thử lại
-                                                        </button>
-                                                    </div>
-                                                )}
+                                        <div key={panel.id} className="comic-card p-0 relative overflow-hidden border border-white/10 bg-[#12121A]">
+                                            <div className="bg-[#1E1B25] p-3 border-b border-white/10 flex justify-between items-center">
+                                                <span className="text-sm font-bold bg-blue-600 text-white px-3 py-1 rounded-full flex items-center gap-2 shadow-lg shadow-blue-500/20"><i className="ph-fill ph-file"></i> TRANG {panel.panel_number}</span>
+                                                <span className="text-xs text-gray-500 font-mono">Script ID: {panel.id.slice(0,8)}</span>
                                             </div>
-                                            <div className="md:w-1/2 p-4 bg-skin-fill-secondary">
-                                                <div className="mb-2 text-[10px] font-bold text-gray-500 uppercase">Hội thoại (AI sẽ vẽ trực tiếp)</div>
-                                                <div className="space-y-3">
-                                                    {Array.isArray(panel.dialogue) && panel.dialogue.map((dia, dIndex) => (
-                                                        <div key={dIndex} className="flex gap-2 items-start group">
-                                                            <div className="w-24 pt-1"><input className="w-full bg-transparent border-b border-white/10 text-xs font-bold text-yellow-400 focus:border-yellow-500 focus:outline-none text-right px-1 py-1" value={dia.speaker} onChange={(e) => handleUpdateDialogue(panel.id, dIndex, 'speaker', e.target.value)} placeholder="Tên" /></div>
-                                                            <div className="flex-grow"><textarea className="w-full bg-white/5 border border-white/5 rounded-lg p-2 text-sm text-white focus:border-green-500/50 focus:outline-none transition resize-none" value={dia.text} onChange={(e) => handleUpdateDialogue(panel.id, dIndex, 'text', e.target.value)} rows={2} /></div>
+
+                                            <div className="flex flex-col lg:flex-row">
+                                                {/* --- LEFT: RAW EDITOR --- */}
+                                                <div className="lg:w-1/2 p-4 bg-black/20 border-r border-white/10 relative">
+                                                    <div className="flex justify-between items-center mb-2">
+                                                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Mô tả kỹ thuật (Prompt AI)</span>
+                                                        <span className="text-[10px] text-gray-600">Chỉnh sửa nếu cần</span>
+                                                    </div>
+                                                    <textarea 
+                                                        className="w-full h-[300px] bg-[#0F0F13] border border-white/10 rounded-lg p-3 text-sm text-gray-300 leading-relaxed resize-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition font-mono custom-scrollbar" 
+                                                        value={panel.visual_description} 
+                                                        onChange={(e) => handleUpdatePanel(panel.id, 'visual_description', e.target.value)} 
+                                                        disabled={isGeneratingDetails} 
+                                                    />
+                                                    
+                                                    {isError && (
+                                                        <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center z-10 p-4 backdrop-blur-sm">
+                                                            <i className="ph-fill ph-warning-circle text-red-500 text-3xl mb-2"></i>
+                                                            <p className="text-white text-sm font-bold mb-3 text-center">{panel.visual_description.substring(0, 60)}...</p>
+                                                            <button 
+                                                                onClick={() => handleRetryExpandPanel(panel.id)}
+                                                                className="px-4 py-2 bg-white text-black text-xs font-bold rounded-full hover:bg-gray-200 flex items-center gap-2 transition-transform hover:scale-105 shadow-lg"
+                                                            >
+                                                                <i className="ph-bold ph-arrow-clockwise"></i> Thử lại
+                                                            </button>
                                                         </div>
-                                                    ))}
-                                                    {!isGeneratingDetails && !isError && (!panel.dialogue || panel.dialogue.length === 0) && <p className="text-xs text-gray-600 italic pl-2">Không có lời thoại</p>}
+                                                    )}
+                                                </div>
+
+                                                {/* --- RIGHT: VISUALIZATION & DIALOGUE --- */}
+                                                <div className="lg:w-1/2 p-0 flex flex-col">
+                                                    {/* Visualizer */}
+                                                    <div className="flex-1 bg-[#181820] p-4 border-b border-white/5 max-h-[300px] overflow-y-auto custom-scrollbar">
+                                                        <div className="flex justify-between items-center mb-2">
+                                                            <span className="text-[10px] font-bold text-pink-400 uppercase tracking-widest">Phân cảnh chi tiết (Preview)</span>
+                                                        </div>
+                                                        <VisualScriptPanel text={panel.visual_description} />
+                                                    </div>
+
+                                                    {/* Dialogue Editor */}
+                                                    <div className="bg-skin-fill-secondary p-4">
+                                                        <div className="mb-2 text-[10px] font-bold text-gray-500 uppercase tracking-widest">Hội thoại (AI chèn chữ)</div>
+                                                        <div className="space-y-3">
+                                                            {Array.isArray(panel.dialogue) && panel.dialogue.map((dia, dIndex) => (
+                                                                <div key={dIndex} className="flex gap-2 items-start group bg-black/20 p-2 rounded-lg border border-white/5">
+                                                                    <div className="w-24 pt-1">
+                                                                        <input className="w-full bg-transparent border-b border-white/10 text-xs font-bold text-yellow-400 focus:border-yellow-500 focus:outline-none text-right px-1 py-1" value={dia.speaker} onChange={(e) => handleUpdateDialogue(panel.id, dIndex, 'speaker', e.target.value)} placeholder="Tên" />
+                                                                    </div>
+                                                                    <div className="flex-grow">
+                                                                        <textarea className="w-full bg-transparent text-sm text-white focus:outline-none resize-none" value={dia.text} onChange={(e) => handleUpdateDialogue(panel.id, dIndex, 'text', e.target.value)} rows={2} />
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                            {!isGeneratingDetails && !isError && (!panel.dialogue || panel.dialogue.length === 0) && <p className="text-xs text-gray-600 italic pl-2">Không có lời thoại</p>}
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>

@@ -35,7 +35,6 @@ const failJob = async (jobId: string, userId: string, reason: string) => {
 };
 
 const handler: Handler = async (event: HandlerEvent) => {
-    // Fire-and-forget style, return 200 immediately to client
     if (event.httpMethod !== 'POST') return { statusCode: 200 };
 
     const { jobId } = JSON.parse(event.body || '{}');
@@ -44,7 +43,6 @@ const handler: Handler = async (event: HandlerEvent) => {
     let userId = "";
 
     try {
-        // 1. Fetch Job Details
         const { data: jobData, error: fetchError } = await supabaseAdmin
             .from('generated_images')
             .select('prompt, user_id')
@@ -57,108 +55,110 @@ const handler: Handler = async (event: HandlerEvent) => {
         const jobConfig = JSON.parse(jobData.prompt);
         const { panel, characters, storyTitle, style, aspectRatio, colorFormat, visualEffect, isCover } = jobConfig.payload;
 
-        // 2. Get API Key
         const { data: apiKeyData } = await supabaseAdmin.from('api_keys').select('key_value, id').eq('status', 'active').limit(1).single();
         if (!apiKeyData) throw new Error('Hết tài nguyên AI.');
 
         const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
 
-        // 3. Prepare Prompt
         const parts: any[] = [];
         
-        // --- VISUAL QUALITY MODIFIERS ---
-        // Add "Masterpiece" level quality keywords based on style
-        const qualityKeywords = "masterpiece, best quality, high resolution, incredibly detailed, 8k, cinematic lighting, sharp focus, professional manga composition";
-        
+        // --- LAYOUT LOGIC DETERMINATION ---
+        const lowerStyle = style.toLowerCase();
+        const isWebtoon = lowerStyle.includes('webtoon') || lowerStyle.includes('manhwa');
+        const lowerColor = colorFormat.toLowerCase();
+        const wantsColor = lowerColor.includes('color') || lowerColor.includes('màu');
+
+        let layoutInstruction = "";
+        if (isWebtoon) {
+            layoutInstruction = `
+            **MODE: WEBTOON / MANHWA**
+            - Draw a SINGLE, seamless vertical scroll composition.
+            - If the Visual Description mentions multiple 'PANELS', stack them vertically with smooth transitions or white gutters.
+            - Focus on cinematic flow.
+            `;
+        } else {
+            layoutInstruction = `
+            **MODE: COMIC PAGE (MULTIPLE PANELS)**
+            - Draw a COMPLETE COMIC PAGE containing multiple panels as described in the Visual Description.
+            - The image MUST contain a GRID of panels separated by white gutters/lines.
+            - Strictly follow the 'PANEL 1', 'PANEL 2'... structure in the prompt.
+            `;
+        }
+
         // --- DIALOGUE CONSTRUCTION ---
         let dialogueInstruction = "";
         if (panel.dialogue && Array.isArray(panel.dialogue) && panel.dialogue.length > 0) {
             const dialogueList = panel.dialogue.map((d: any) => {
-                const speaker = d.speaker === "Lời dẫn" ? "NARRATION BOX" : `Character ${d.speaker}`;
-                return `- ${speaker}: "${d.text}"`;
+                const speaker = d.speaker || "Character";
+                return `- Speaker (${speaker}): "${d.text}"`;
             }).join('\n');
             
             dialogueInstruction = `
-            **MANDATORY TEXT RENDERING:**
-            You MUST render speech bubbles or narration boxes directly into the image.
-            The text inside the bubbles MUST be EXACTLY:
-            ${dialogueList}
+            **TEXT RENDERING TASK:**
+            You MUST render speech bubbles containing the following Vietnamese text EXACTLY.
+            Place the bubbles correctly in the corresponding panels (Panel 1, Panel 2, etc).
             
-            *   **LANGUAGE RULE:** The text MUST be in **VIETNAMESE** as provided. Spelling must be perfect.
-            *   **PLACEMENT:** Place bubbles intelligently near the speaker's head, but DO NOT cover important facial features.
-            *   **STYLE:** Use professional comic fonts. White bubbles with black text.
+            DIALOGUE LIST:
+            ${dialogueList}
             `;
         } else {
-            dialogueInstruction = "This panel has no dialogue. Focus on visual storytelling.";
+            dialogueInstruction = "No dialogue. Focus on visual storytelling.";
         }
 
-        // --- SPECIAL MODE: COVER PAGE ---
+        // --- NORMAL PAGE MODE ---
         let systemPrompt = "";
         
         if (isCover) {
             systemPrompt = `
-                You are a world-class Graphic Designer and Comic Artist.
-                **TASK:** Create a professional Movie-Poster style Comic Book Cover for a story titled: "${storyTitle}".
-                
-                **REQUIREMENTS:**
-                1.  **TITLE:** Render the title "${storyTitle}" clearly and artistically at the top or bottom. Large, bold, stylized typography.
-                2.  **VISUAL:** ${panel.visual_description}
-                3.  **STYLE:** ${style}. ${qualityKeywords}.
-                4.  **COMPOSITION:** Eye-catching, dynamic, poster-quality.
-                5.  **LANGUAGE:** All text MUST be VIETNAMESE.
+                You are a world-class Illustrator using Gemini 3 Pro Vision.
+                Task: Create a Comic Cover.
+                Title: "${storyTitle}" (Render title clearly).
+                Visuals: ${panel.visual_description}
+                Style: ${style}, ${colorFormat}.
             `;
         } else {
-            // --- NORMAL PANEL MODE ---
-            let effectInstruction = "";
-            if (visualEffect && visualEffect !== 'none') {
-                effectInstruction = `- Apply visual effect: ${visualEffect}`;
-            }
-
-            // Character references text
+            // Characters Context
             const characterRefText = characters.map((c: any) => 
-                `Character "${c.name}": ${c.description}`
+                `[${c.name}]: ${c.description}`
             ).join('\n');
 
             systemPrompt = `
-                You are a master comic artist specialized in ${style}.
-                **TASK:** Draw a single high-quality comic panel.
+                You are a master comic artist (Gemini 3 Pro).
                 
-                **VISUAL SCENE:**
+                ${layoutInstruction}
+                
+                **SCENE SCRIPT (Read Carefully):**
                 ${panel.visual_description}
                 
                 ${dialogueInstruction}
                 
-                **ENVIRONMENTAL TEXT RULE:**
-                If there are any background signs, books, posters, or sound effects (SFX) in the scene, they MUST be written in **VIETNAMESE**. Do NOT use English or gibberish text.
-                
-                **CHARACTER REFERENCES:**
+                **CHARACTERS:**
                 ${characterRefText}
-                (Use reference images provided for visual consistency).
+                (Use reference images for visual consistency).
                 
-                **STYLE CONSTRAINTS:**
+                **STYLE:**
                 - Art Style: ${style}
-                - Color: ${colorFormat || 'Full Color'}
-                - ${qualityKeywords}
-                ${effectInstruction}
+                - Color: ${colorFormat}
+                - Effect: ${visualEffect}
+                - High resolution, 8k, crisp lines.
             `;
         }
 
         parts.push({ text: systemPrompt });
 
-        // Add Character References Images
         if (characters && Array.isArray(characters)) {
             for (const char of characters) {
                 if (char.image_url) {
                     const imgData = processDataUrl(char.image_url);
                     if (imgData) {
-                        parts.push({ text: `Reference Image for: ${char.name}` });
+                        parts.push({ text: `Ref for ${char.name}:` });
                         parts.push({ inlineData: { data: imgData.base64, mimeType: imgData.mimeType } });
                     }
                 }
             }
         }
 
-        // 4. Generate (Heavy Operation)
+        // USE GEMINI 3 PRO IMAGE PREVIEW FOR RENDERING
         const response = await ai.models.generateContent({
             model: 'gemini-3-pro-image-preview',
             contents: { parts },
@@ -166,7 +166,7 @@ const handler: Handler = async (event: HandlerEvent) => {
                 responseModalities: [Modality.IMAGE],
                 imageConfig: {
                     aspectRatio: aspectRatio || '3:4',
-                    imageSize: '2K' // Force High Quality
+                    imageSize: '2K' 
                 }
             }
         });
@@ -174,7 +174,6 @@ const handler: Handler = async (event: HandlerEvent) => {
         const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
         if (!imagePart?.inlineData) throw new Error("AI failed to render.");
 
-        // 5. Upload
         const s3Client = new S3Client({
             region: "auto",
             endpoint: process.env.R2_ENDPOINT!,
@@ -182,7 +181,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         });
 
         const buffer = Buffer.from(imagePart.inlineData.data, 'base64');
-        const fileName = `${userId}/comic/${Date.now()}_panel_${panel.panel_number}.png`;
+        const fileName = `${userId}/comic/${Date.now()}_page_${panel.panel_number}.png`;
         
         await (s3Client as any).send(new PutObjectCommand({
             Bucket: process.env.R2_BUCKET_NAME!,
@@ -196,11 +195,10 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         await new Promise(resolve => setTimeout(resolve, 1000));
 
-        // 6. Finalize
         await Promise.all([
             supabaseAdmin.from('generated_images').update({ 
                 image_url: publicUrl,
-                prompt: panel.visual_description || "Comic Panel" 
+                prompt: panel.visual_description || "Comic Page" 
             }).eq('id', jobId),
             supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id })
         ]);

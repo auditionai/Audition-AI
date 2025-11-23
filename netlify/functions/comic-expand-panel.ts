@@ -36,61 +36,70 @@ const handler: Handler = async (event: HandlerEvent) => {
         const lowerStyle = style.toLowerCase();
         const isWebtoon = lowerStyle.includes('webtoon') || lowerStyle.includes('manhwa');
         const layoutContext = isWebtoon 
-            ? "This is a Webtoon/Manhwa. Describe a SINGLE, large vertical image (Long Strip format). Focus on the main action/emotion of this section."
-            : "This is a Traditional Comic Page. Describe a FULL PAGE LAYOUT consisting of AT LEAST 5-7 distinct panels arranged in a dynamic grid (e.g., wide establishing shot at top, smaller action panels below).";
+            ? "This is a Webtoon/Manhwa (Vertical Scroll). Break the scene into 3-4 vertical flowing panels."
+            : "This is a Traditional Comic Page. Break the scene into 4-6 distinct panels in a grid.";
 
         // 1. Prepare Character Context (Consistency)
         const characterContext = characters.map((c: any) => 
             `### ${c.name}: ${c.description || "N/A"}`
         ).join('\n');
 
-        // 2. Prepare Story Memory (Context Awareness) - STRICTLY LIMIT TO LAST 3 ITEMS to reduce payload size
+        // 2. Prepare Story Memory
         let memoryContext = "No previous context.";
         if (previous_panels && Array.isArray(previous_panels) && previous_panels.length > 0) {
-            // Ensure we only process valid panels and take only the last 3
             const recentPanels = previous_panels
                 .filter((p: any) => p.visual_description && !p.visual_description.startsWith('[')) // Filter out errors
                 .slice(-3); 
             
             if (recentPanels.length > 0) {
                 memoryContext = recentPanels.map((p: any) => 
-                    `[Page ${p.panel_number}]: ${p.visual_description.substring(0, 200)}...`
+                    `[Prev Page ${p.panel_number}]: ${p.visual_description.substring(0, 100)}...`
                 ).join('\n');
             }
         }
 
         const prompt = `
-            You are an expert manga/comic script writer.
+            You are an expert comic script writer using Gemini 2.5 Pro logic.
             
-            **CRITICAL INSTRUCTION: PACING & LAYOUT**
-            1.  **PACING:** SLOW DOWN. Do not rush the plot. Focus on small details, facial expressions, and atmospheric shots. The user wants depth, not just action summaries.
-            2.  **LAYOUT:** The user requires a dense, detailed page. You MUST describe a layout with **AT LEAST 5-7 PANELS** for this single page (unless it is a splash page).
-            3.  **CONTENT:** Break the 'Plot Summary' down into these 5-7 panels. Include specific visual descriptions for each panel (e.g., "Panel 1: Wide shot of...", "Panel 2: Close up on...").
+            **CRITICAL TASK:**
+            Break down the 'Page Plot Summary' into a specific list of **PANELS** (Frames).
+            The 'visual_description' MUST be formatted strictly for the Image Generator to understand the layout.
+            
+            **FORMAT FOR 'visual_description':**
+            LAYOUT: [Describe overall grid, e.g. "5 Panels, Dynamic Grid"]
+            PANEL 1: [Shot type (Close-up/Wide), Characters present, Action, Emotion, Background]
+            PANEL 2: [Description...]
+            PANEL 3: [Description...]
+            ...
             
             **Genre:** ${genre} | **Style:** ${style}
-            **Layout Guidance:** ${layoutContext}
+            **Layout Mode:** ${layoutContext}
             
-            **Context (Last 3 Pages for Continuity):**
+            **Context:**
             ${memoryContext}
             
             **Characters:**
             ${characterContext}
             
-            **CURRENT PAGE PLOT SUMMARY:** "${plot_summary}"
+            **PAGE SUMMARY TO EXPAND:** "${plot_summary}"
+            
+            **Dialogues:**
+            For each panel, if there is speech, provide the exact Vietnamese text.
             
             **Output JSON:**
             {
-              "visual_description": "Detailed English prompt for AI Image Gen. Explicitly describe the panel layout (e.g. 'A comic page with 6 panels. Panel 1 shows... Panel 2 shows...'). Describe characters, setting, and action in high detail.",
+              "visual_description": "The full structured text with PANEL 1, PANEL 2... breakdown (as requested above)",
               "dialogue": [ 
-                  {"speaker": "Name", "text": "Vietnamese dialogue corresponding to Panel 1"},
-                  {"speaker": "Name", "text": "Vietnamese dialogue corresponding to Panel 2"},
+                  {"speaker": "PANEL 1 - [Character Name]", "text": "[Vietnamese dialogue]"},
+                  {"speaker": "PANEL 2 - [Character Name]", "text": "[Vietnamese dialogue]"},
                   ...
               ]
             }
         `;
 
+        // USE GEMINI 2.5 FLASH FOR SCRIPTING/TEXT GENERATION
         const response = await ai.models.generateContent({
-            model: 'gemini-3-pro-preview',
+            model: 'gemini-2.5-flash',
             contents: { parts: [{ text: prompt }] },
             config: {
                 responseMimeType: "application/json",

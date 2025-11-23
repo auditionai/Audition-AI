@@ -41,13 +41,12 @@ const handler: Handler = async (event: HandlerEvent) => {
         const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
 
         // 3. Construct Prompt - PHASE 1: OUTLINE ONLY
-        // We ask for a skeletal structure.
         const characterNames = characters.map((c: any) => c.name).join(', ');
         const targetLanguage = language || 'Tiếng Việt';
 
         let coverInstruction = "";
         if (coverPage === 'start' || coverPage === 'both') {
-            coverInstruction += `\n- Page 1 MUST be a 'Title Cover Page' (Trang bìa). Summary: 'Trang bìa với tên truyện: [Insert Title Here] và hình ảnh minh họa chính'.`;
+            coverInstruction += `\n- Page 1 MUST be a 'Title Cover Page' (Trang bìa). Summary: 'Trang bìa ấn tượng với tên truyện: [${premise.substring(0, 20)}...] và hình ảnh minh họa chính'.`;
         }
 
         const prompt = `
@@ -71,9 +70,9 @@ const handler: Handler = async (event: HandlerEvent) => {
             **Output Format:** JSON Array of objects.
         `;
 
-        // Upgraded to Gemini 3 Pro for better reasoning
+        // USE GEMINI 2.5 FLASH FOR TEXT GENERATION
         const response = await ai.models.generateContent({
-            model: 'gemini-3-pro-preview', 
+            model: 'gemini-2.5-flash', 
             contents: {
                 parts: [{ text: prompt }]
             },

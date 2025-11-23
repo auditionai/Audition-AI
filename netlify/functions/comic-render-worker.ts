@@ -18,7 +18,6 @@ const processDataUrl = (dataUrl: string | null) => {
 const failJob = async (jobId: string, userId: string, reason: string) => {
     console.error(`[COMIC WORKER] Failing job ${jobId}: ${reason}`);
     try {
-        // Refund and Delete Job
         await Promise.all([
             supabaseAdmin.from('generated_images').delete().eq('id', jobId),
             supabaseAdmin.rpc('increment_user_diamonds', { user_id_param: userId, diamond_amount: COST }),
@@ -53,7 +52,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         
         userId = jobData.user_id;
         const jobConfig = JSON.parse(jobData.prompt);
-        const { panel, characters, storyTitle, style, aspectRatio, colorFormat, visualEffect, isCover } = jobConfig.payload;
+        const { panel, characters, storyTitle, style, aspectRatio, colorFormat, isCover } = jobConfig.payload;
 
         const { data: apiKeyData } = await supabaseAdmin.from('api_keys').select('key_value, id').eq('status', 'active').limit(1).single();
         if (!apiKeyData) throw new Error('Hết tài nguyên AI.');
@@ -62,103 +61,100 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         const parts: any[] = [];
         
-        // --- LAYOUT LOGIC DETERMINATION ---
-        const lowerStyle = style.toLowerCase();
-        const isWebtoon = lowerStyle.includes('webtoon') || lowerStyle.includes('manhwa');
-        const lowerColor = colorFormat.toLowerCase();
-        const wantsColor = lowerColor.includes('color') || lowerColor.includes('màu');
-
-        let layoutInstruction = "";
-        if (isWebtoon) {
-            layoutInstruction = `
-            **MODE: WEBTOON / MANHWA**
-            - Draw a SINGLE, seamless vertical scroll composition.
-            - If the Visual Description mentions multiple 'PANELS', stack them vertically with smooth transitions or white gutters.
-            - Focus on cinematic flow.
-            `;
-        } else {
-            layoutInstruction = `
-            **MODE: COMIC PAGE (MULTIPLE PANELS)**
-            - Draw a COMPLETE COMIC PAGE containing multiple panels as described in the Visual Description.
-            - The image MUST contain a GRID of panels separated by white gutters/lines.
-            - Strictly follow the 'PANEL 1', 'PANEL 2'... structure in the prompt.
-            `;
+        // --- PARSE SCRIPT DATA ---
+        let scriptData;
+        let visualPromptContent = "";
+        
+        try {
+            // The 'visual_description' is now a JSON string of { layout_description, panels: [...] }
+            scriptData = JSON.parse(panel.visual_description);
+        } catch (e) {
+            // Fallback for legacy/error cases (treat as simple string)
+            scriptData = { layout_description: "Standard Grid", panels: [{ id: 1, visual: panel.visual_description, dialogue: [] }] };
         }
 
-        // --- DIALOGUE CONSTRUCTION ---
-        let dialogueInstruction = "";
-        if (panel.dialogue && Array.isArray(panel.dialogue) && panel.dialogue.length > 0) {
-            const dialogueList = panel.dialogue.map((d: any) => {
-                const speaker = d.speaker || "Character";
-                return `- Speaker (${speaker}): "${d.text}"`;
-            }).join('\n');
-            
-            dialogueInstruction = `
-            **TEXT RENDERING TASK:**
-            You MUST render speech bubbles containing the following Vietnamese text EXACTLY.
-            Place the bubbles correctly in the corresponding panels (Panel 1, Panel 2, etc).
-            
-            DIALOGUE LIST:
-            ${dialogueList}
-            `;
-        } else {
-            dialogueInstruction = "No dialogue. Focus on visual storytelling.";
-        }
-
-        // --- NORMAL PAGE MODE ---
-        let systemPrompt = "";
+        // --- CONSTRUCT SYSTEM PROMPT ---
         
         if (isCover) {
-            systemPrompt = `
-                You are a world-class Illustrator using Gemini 3 Pro Vision.
-                Task: Create a Comic Cover.
-                Title: "${storyTitle}" (Render title clearly).
-                Visuals: ${panel.visual_description}
-                Style: ${style}, ${colorFormat}.
+            visualPromptContent = `
+                **TASK: DRAW A COMIC COVER**
+                - Title: "${storyTitle}" (Render the text clearly and artistically).
+                - Visuals: ${scriptData.panels[0]?.visual || scriptData.layout_description || "Epic cover art"}.
+                - Style: ${style}, ${colorFormat}.
+                - Make it eye-catching and high resolution.
             `;
         } else {
-            // Characters Context
-            const characterRefText = characters.map((c: any) => 
-                `[${c.name}]: ${c.description}`
-            ).join('\n');
+            // Construct Panel Instructions
+            let panelsInstruction = "";
+            let dialogueList = "";
 
-            systemPrompt = `
-                You are a master comic artist (Gemini 3 Pro).
+            scriptData.panels.forEach((p: any) => {
+                panelsInstruction += `\n- **PANEL ${p.id}**: ${p.visual}`;
                 
-                ${layoutInstruction}
+                if (p.dialogue && p.dialogue.length > 0) {
+                    p.dialogue.forEach((d: any) => {
+                        dialogueList += `\n  - Panel ${p.id} Bubble: Speaker "${d.speaker}" says: "${d.text}"`;
+                    });
+                }
+            });
+
+            visualPromptContent = `
+                You are a master comic artist using Gemini 3 Pro Vision.
                 
-                **SCENE SCRIPT (Read Carefully):**
-                ${panel.visual_description}
+                **TASK: DRAW A COMPLETE COMIC PAGE**
                 
-                ${dialogueInstruction}
+                **LAYOUT INSTRUCTION:**
+                - Layout Style: ${scriptData.layout_description}
+                - The image MUST contain **${scriptData.panels.length} DISTINCT PANELS** separated by white gutters/borders.
+                - Draw the panels in a logical reading order (Left to Right, Top to Bottom).
                 
-                **CHARACTERS:**
-                ${characterRefText}
-                (Use reference images for visual consistency).
+                **PANEL DETAILS:**
+                ${panelsInstruction}
                 
-                **STYLE:**
-                - Art Style: ${style}
-                - Color: ${colorFormat}
-                - Effect: ${visualEffect}
-                - High resolution, 8k, crisp lines.
+                **DIALOGUE & TEXT (CRITICAL):**
+                - You MUST render speech bubbles with the exact text provided below.
+                - Ensure the text is legible and placed correctly within the corresponding panels.
+                - Language: Vietnamese.
+                
+                **DIALOGUE TO RENDER:**
+                ${dialogueList || "No dialogue."}
+                
+                **ART STYLE:**
+                - Style: ${style}
+                - Format: ${colorFormat}
+                - Quality: 8k resolution, highly detailed, professional linework.
             `;
         }
 
-        parts.push({ text: systemPrompt });
+        // Characters Context
+        const characterRefText = characters.map((c: any) => 
+            `[${c.name}]: ${c.description}`
+        ).join('\n');
 
+        const finalPrompt = `
+            ${visualPromptContent}
+            
+            **CHARACTER REFERENCES:**
+            ${characterRefText}
+            (Use provided reference images for visual consistency of characters).
+        `;
+
+        parts.push({ text: finalPrompt });
+
+        // Attach Character Images as References
         if (characters && Array.isArray(characters)) {
             for (const char of characters) {
                 if (char.image_url) {
                     const imgData = processDataUrl(char.image_url);
                     if (imgData) {
-                        parts.push({ text: `Ref for ${char.name}:` });
+                        parts.push({ text: `Reference Image for ${char.name}:` });
                         parts.push({ inlineData: { data: imgData.base64, mimeType: imgData.mimeType } });
                     }
                 }
             }
         }
 
-        // USE GEMINI 3 PRO IMAGE PREVIEW FOR RENDERING
+        // USE GEMINI 3 PRO IMAGE PREVIEW
         const response = await ai.models.generateContent({
             model: 'gemini-3-pro-image-preview',
             contents: { parts },
@@ -172,7 +168,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         });
 
         const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-        if (!imagePart?.inlineData) throw new Error("AI failed to render.");
+        if (!imagePart?.inlineData) throw new Error("AI failed to render image.");
 
         const s3Client = new S3Client({
             region: "auto",
@@ -193,12 +189,16 @@ const handler: Handler = async (event: HandlerEvent) => {
         const baseUrl = process.env.R2_PUBLIC_URL!.replace(/\/$/, '');
         const publicUrl = `${baseUrl}/${fileName}`;
 
+        // Slight delay to ensure propagation
         await new Promise(resolve => setTimeout(resolve, 1000));
 
         await Promise.all([
+            // Store the structured JSON in 'prompt' column for future reference/editing if needed, 
+            // although typically 'prompt' stores the input prompt. 
+            // We keep it consistent with the input payload.
             supabaseAdmin.from('generated_images').update({ 
                 image_url: publicUrl,
-                prompt: panel.visual_description || "Comic Page" 
+                prompt: panel.visual_description // Store the JSON string
             }).eq('id', jobId),
             supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id })
         ]);

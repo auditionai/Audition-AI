@@ -32,43 +32,19 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
 
-        // Determine Layout Type for Context
-        const lowerStyle = style.toLowerCase();
-        const isWebtoon = lowerStyle.includes('webtoon') || lowerStyle.includes('manhwa');
-        const layoutContext = isWebtoon 
-            ? "This is a Webtoon/Manhwa (Vertical Scroll). Break the scene into 3-4 vertical flowing panels."
-            : "This is a Traditional Comic Page. Break the scene into 4-6 distinct panels in a grid.";
-
-        // 1. Prepare Character Context (Consistency)
+        // 1. Prepare Character Context
         const characterContext = characters.map((c: any) => 
             `### ${c.name}: ${c.description || "N/A"}`
         ).join('\n');
 
-        // 2. Prepare Story Memory
-        let memoryContext = "No previous context.";
-        if (previous_panels && Array.isArray(previous_panels) && previous_panels.length > 0) {
-            const recentPanels = previous_panels
-                .filter((p: any) => p.visual_description && !p.visual_description.startsWith('[')) // Filter out errors
-                .slice(-3); 
-            
-            if (recentPanels.length > 0) {
-                memoryContext = recentPanels.map((p: any) => 
-                    `[Prev Page ${p.panel_number}]: ${p.visual_description.substring(0, 100)}...`
-                ).join('\n');
-            }
-        }
-        
         const targetLang = language || 'Tiếng Việt';
 
         const prompt = `
-            You are a world-class comic script writer.
-            
-            **LANGUAGE REQUIREMENT:**
-            - **CRITICAL:** You MUST write the content in **${targetLang}**.
+            You are a professional comic script writer.
             
             **TASK:**
-            Expand the provided plot summary into a detailed comic script for ONE PAGE (Trang).
-            Break it down into specific **PANELS** (Khung tranh).
+            Convert the provided Plot Summary into a detailed Comic Script for a SINGLE PAGE.
+            **CRITICAL REQUIREMENT:** You MUST break this page down into **4 to 6 DISTINCT PANELS** (Khung tranh). Do not create a single panel page.
             
             **INPUT:**
             - Plot Summary: "${plot_summary}"
@@ -76,32 +52,28 @@ const handler: Handler = async (event: HandlerEvent) => {
             - Style: ${style}
             - Characters: ${characterContext}
             
-            **OUTPUT FORMAT (JSON):**
+            **OUTPUT FORMAT (Strict JSON):**
+            You must return a JSON object with this exact structure:
             {
-              "visual_description": "String containing the full script layout.",
-              "dialogue": [
-                { "speaker": "Name", "text": "Dialogue content" }
+              "layout_description": "Describe the overall page layout (e.g., 'Dynamic layout with diagonal cuts', 'Traditional 2x3 grid').",
+              "panels": [
+                {
+                  "id": 1,
+                  "visual": "Detailed visual description of what is seen in this specific panel. Describe character action, camera angle, background.",
+                  "dialogue": [
+                    { "speaker": "Character Name", "text": "Dialogue content" }
+                  ]
+                },
+                ... (Repeat for 4-6 panels)
               ]
             }
-            
-            **GUIDELINES FOR 'visual_description':**
-            - Use this EXACT format for the text string (use 'KHUNG' instead of 'PANEL' if Vietnamese):
-              LAYOUT: [Describe the page layout, e.g., 5 panels, diagonal split...]
-              KHUNG 1: [Visual description: Action, Camera Angle, Background, Lighting, Character Expressions...]
-              KHUNG 2: [Visual description...]
-              ...
-            - The description MUST be detailed, cinematic, and describe WHAT IS HAPPENING visually.
-            - Do NOT include dialogue lines in 'visual_description'. Keep it purely visual.
-            
-            **GUIDELINES FOR 'dialogue':**
-            - Extract all dialogue lines.
-            - Map them to the characters.
-            - **IMPORTANT:** In the 'speaker' field, prefix with the Panel Number so we know where it goes.
-              Example: "KHUNG 1 - Conan", "KHUNG 2 - Ran".
-            - If a panel has no dialogue, skip it.
+
+            **LANGUAGE:** 
+            - The 'visual' and 'layout_description' should be in English (for better AI Image Generation accuracy).
+            - The 'dialogue' text MUST be in **${targetLang}**.
         `;
 
-        // USE GEMINI 2.5 FLASH FOR SCRIPTING/TEXT GENERATION
+        // USE GEMINI 2.5 FLASH FOR STRUCTURED JSON
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: { parts: [{ text: prompt }] },
@@ -110,14 +82,24 @@ const handler: Handler = async (event: HandlerEvent) => {
                 responseSchema: {
                     type: Type.OBJECT,
                     properties: {
-                        visual_description: { type: Type.STRING },
-                        dialogue: {
+                        layout_description: { type: Type.STRING },
+                        panels: {
                             type: Type.ARRAY,
                             items: {
                                 type: Type.OBJECT,
                                 properties: {
-                                    speaker: { type: Type.STRING },
-                                    text: { type: Type.STRING }
+                                    id: { type: Type.INTEGER },
+                                    visual: { type: Type.STRING },
+                                    dialogue: {
+                                        type: Type.ARRAY,
+                                        items: {
+                                            type: Type.OBJECT,
+                                            properties: {
+                                                speaker: { type: Type.STRING },
+                                                text: { type: Type.STRING }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -126,24 +108,26 @@ const handler: Handler = async (event: HandlerEvent) => {
             }
         });
 
-        let detailJson;
-        try {
-            const text = response.text || '{}';
-            detailJson = JSON.parse(text);
-            
-            if (!Array.isArray(detailJson.dialogue)) {
-                detailJson.dialogue = [];
-            }
-        } catch (e) {
-            detailJson = { 
-                visual_description: plot_summary, 
-                dialogue: [{ speaker: "Lời dẫn", text: "..." }] 
-            };
+        const text = response.text || '{}';
+        // No parsing needed if SDK handles it, but safe to parse just in case of raw string return
+        let detailJson = JSON.parse(text);
+
+        // Safety check for panel count
+        if (!detailJson.panels || detailJson.panels.length < 1) {
+             detailJson.panels = [
+                 { id: 1, visual: plot_summary, dialogue: [] }
+             ];
         }
+
+        // We wrap this in the structure expected by the frontend (storing JSON in visual_description string for now to avoid DB migration)
+        const frontendPayload = {
+            visual_description: JSON.stringify(detailJson), 
+            dialogue: [] // Legacy field, now inside visual_description JSON
+        };
 
         return {
             statusCode: 200,
-            body: JSON.stringify(detailJson),
+            body: JSON.stringify(frontendPayload),
         };
 
     } catch (error: any) {

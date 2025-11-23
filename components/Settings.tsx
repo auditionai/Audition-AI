@@ -20,6 +20,54 @@ import UserBadge from './common/UserBadge';
 import RedeemGiftCode from './user/RedeemGiftCode'; 
 import TransactionHistory from './user/TransactionHistory';
 
+// XP Guide Component
+const XPGuide: React.FC = () => {
+    const { t } = useTranslation();
+    
+    const guides = [
+        {
+            icon: 'ph-calendar-check',
+            color: 'text-green-400',
+            bg: 'bg-green-500/10',
+            key: 'checkIn'
+        },
+        {
+            icon: 'ph-magic-wand',
+            color: 'text-pink-400',
+            bg: 'bg-pink-500/10',
+            key: 'createImage'
+        },
+        {
+            icon: 'ph-clock',
+            color: 'text-blue-400',
+            bg: 'bg-blue-500/10',
+            key: 'active'
+        }
+    ];
+
+    return (
+        <div className="bg-[#12121A]/80 border border-white/10 rounded-2xl p-6 mb-8 shadow-lg">
+            <h3 className="text-xl font-bold mb-4 text-white flex items-center gap-2">
+                <i className="ph-fill ph-graduation-cap text-yellow-400"></i>
+                {t('creator.xpGuide.title')}
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {guides.map((item) => (
+                    <div key={item.key} className="bg-black/20 rounded-xl p-4 border border-white/5 flex flex-col items-center text-center h-full hover:bg-white/5 transition-colors">
+                        <div className={`w-12 h-12 rounded-full ${item.bg} ${item.color} flex items-center justify-center mb-3 text-2xl shadow-lg`}>
+                            <i className={`ph-fill ${item.icon}`}></i>
+                        </div>
+                        <h4 className="font-bold text-white text-sm mb-1">{t(`creator.xpGuide.${item.key}.title`)}</h4>
+                        <p className="text-xs text-gray-400 leading-relaxed">
+                            {t(`creator.xpGuide.${item.key}.description`)}
+                        </p>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
 // Referral Panel
 const ReferralPanel: React.FC = () => {
     const { user, showToast } = useAuth();
@@ -266,6 +314,7 @@ const Settings: React.FC = () => {
                     </div>
                 </div>
                 
+                <XPGuide />
                 <ReferralPanel />
                 <RedeemGiftCode />
                 

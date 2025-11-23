@@ -1,3 +1,4 @@
+
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { GoogleGenAI, Modality } from "@google/genai";
 import { supabaseAdmin } from './utils/supabaseClient';
@@ -13,16 +14,18 @@ const handler: Handler = async (event: HandlerEvent) => {
         const token = authHeader.split(' ')[1];
         if (!token) return { statusCode: 401, body: JSON.stringify({ error: 'Bearer token is missing.' }) };
 
-        // FIX: Use Supabase v2 `auth.getUser` as `auth.api` is from v1.
         const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
         if (authError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized: Invalid token.' }) };
 
         const { 
-            image: imageDataUrl, text, aiStyle, aiColor, signaturePosition, cost,
-            aiFont, aiSize, aiIsBold, aiIsItalic, aiCustomColor 
+            image: imageDataUrl, text, aiStyle, aiColor, signaturePosition, 
+            aiFont, aiSize, aiIsBold, aiIsItalic, aiCustomColor, model 
         } = JSON.parse(event.body || '{}');
 
-        if (!imageDataUrl || !text || !aiStyle || !aiColor || !signaturePosition || typeof cost !== 'number' || cost <= 0 || !aiFont || !aiSize || aiIsBold === undefined || aiIsItalic === undefined || !aiCustomColor) {
+        // Validate cost based on selected model (Pro = 10, Flash = 1)
+        const cost = (model === 'gemini-3-pro-image-preview') ? 10 : 1;
+
+        if (!imageDataUrl || !text || !aiStyle || !aiColor || !signaturePosition || !aiFont || !aiSize || aiIsBold === undefined || aiIsItalic === undefined || !aiCustomColor) {
             return { statusCode: 400, body: JSON.stringify({ error: 'Missing required parameters for AI signature.' }) };
         }
         
@@ -34,7 +37,8 @@ const handler: Handler = async (event: HandlerEvent) => {
         if (apiKeyError || !apiKeyData) return { statusCode: 503, body: JSON.stringify({ error: 'Hết tài nguyên AI. Vui lòng thử lại sau.' }) };
         
         const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
-        const model = 'gemini-2.5-flash-image';
+        // Use the model passed from frontend (validated cost above) or fallback
+        const selectedModel = model === 'gemini-3-pro-image-preview' ? 'gemini-3-pro-image-preview' : 'gemini-2.5-flash-image';
 
         // --- SERVER-SIDE PROMPT CONSTRUCTION (IN ENGLISH) ---
         let promptParts = [
@@ -66,7 +70,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         parts.push({ text: aiPrompt });
 
         const response = await ai.models.generateContent({
-            model,
+            model: selectedModel,
             contents: { parts },
             config: { responseModalities: [Modality.IMAGE] },
         });
@@ -76,7 +80,6 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         const finalImageBase64 = imagePartResponse.inlineData.data;
         
-        // No need to upload to S3 for this tool, just return the base64
         const newDiamondCount = userData.diamonds - cost;
         
         await Promise.all([
@@ -86,7 +89,7 @@ const handler: Handler = async (event: HandlerEvent) => {
                 user_id: user.id,
                 amount: -cost,
                 transaction_type: 'TOOL_USE',
-                description: 'Chèn chữ ký bằng AI'
+                description: `Chèn chữ ký AI (${selectedModel === 'gemini-3-pro-image-preview' ? 'Pro' : 'Flash'})`
             })
         ]);
 

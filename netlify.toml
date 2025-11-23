@@ -1,42 +1,37 @@
-# =============================================================================
-# Build Settings (Phần Cài đặt Xây dựng)
-# =============================================================================
 # Đây là phần quan trọng nhất. Nó ra lệnh cho Netlify cách xây dựng ứng dụng của bạn
 # và nơi để tìm các tệp đã được xây dựng xong. Nếu không có phần này, các quy tắc
 # chuyển hướng sẽ không hoạt động chính xác và gây ra lỗi treo.
 [build]
   # Lệnh này được lấy từ tệp package.json của bạn (npm run build).
   command = "npm run build"
-  
+
   # Thư mục mà Vite (công cụ xây dựng) đặt các tệp tĩnh sau khi chạy lệnh build.
   publish = "dist"
 
-
-# =============================================================================
+# ==============================================================================
 # Redirect Rule for Single Page Application (Quy tắc Chuyển hướng cho SPA)
-# =============================================================================
+# ==============================================================================
 # Đây là quy tắc chuyển hướng "thông minh" và là tiêu chuẩn của ngành để xử lý
 # định tuyến cho các ứng dụng React/Vite trên Netlify.
 [[redirects]]
   # Quy tắc "/*" sẽ bắt TẤT CẢ các đường dẫn không tương ứng với một tệp tin
   # có sẵn trong thư mục 'publish' (ví dụ: /tool, /settings, /buy-credits?status=PAID).
   from = "/*"
-  
+
   # Tất cả các đường dẫn không khớp sẽ được trả về tệp index.html chính.
   # Sau đó, bộ định tuyến của React sẽ tiếp quản và hiển thị đúng trang.
   to = "/index.html"
-  
+
   # Status 200 báo cho trình duyệt biết rằng trang đã được tìm thấy thành công.
   status = 200
 
-
-# =============================================================================
+# ==============================================================================
 # Headers for Performance and Security (Tiêu đề cho Hiệu năng và Bảo mật)
-# =============================================================================
+# ==============================================================================
 # Phần này thêm các tiêu đề HTTP quan trọng vào phản hồi của trang web,
 # giúp cải thiện tốc độ tải trang (qua caching) và tăng cường bảo mật.
 
-# Quy tắc cho việc lưu cache các tệp tĩnh (JS, CSS, ảnh, font...)
+# Quy tắc cho việc lưu cache các tệp tin (JS, CSS, ảnh, font...)
 [[headers]]
   for = "/assets/*"
   [headers.values]
@@ -53,19 +48,17 @@
     # Ngăn trình duyệt tự động đoán sai loại nội dung của tệp.
     X-Content-Type-Options = "nosniff"
 
-
-# =============================================================================
+# ==============================================================================
 # Functions Settings (Cài đặt Hàm Serverless)
-# =============================================================================
+# ==============================================================================
 [functions]
-  # Đảm bảo các tệp tiện ích trong thư mục 'utils' được đóng gói cùng với tất cả các hàm.
-  # Điều này rất quan trọng để các hàm có thể truy cập supabaseClient.
-  included_files = ["netlify/functions/utils/**"]
+  # Đảm bảo các tệp tiện ích trong thư mục 'utils' VÀ file ảnh logo được đóng gói
+  # Điều này cực kỳ quan trọng để code đọc được file watermark.png
+  included_files = ["netlify/functions/utils/**", "netlify/functions/watermark.png"]
 
-
-# =============================================================================
+# ==============================================================================
 # Scheduled Functions (Hàm Lên lịch)
-# =============================================================================
+# ==============================================================================
 # Lên lịch cho hàm 'cleanup-old-images' chạy hàng ngày lúc 2 giờ sáng UTC (9 giờ sáng Việt Nam).
 # Cú pháp cron: "phút giờ ngày-trong-tháng tháng ngày-trong-tuần"
 [functions."cleanup-old-images"]

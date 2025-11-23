@@ -1,3 +1,4 @@
+
 import type React from 'react';
 
 // NEW: Shared type for detailed dashboard statistics
@@ -49,6 +50,20 @@ export interface User {
     last_check_in_at?: string;
     consecutive_check_in_days?: number;
     last_announcement_seen_id?: number | null;
+    // NEW: Cosmetics
+    equipped_title_id?: string;
+    equipped_frame_id?: string;
+    equipped_name_effect_id?: string; // NEW: Name Effect
+    // NEW: Lucky Wheel
+    spin_tickets?: number;
+    last_daily_spin_at?: string;
+    last_share_app_at?: string; // NEW: Track daily share app task
+    // NEW: Social Profile
+    cover_url?: string | null;
+    bio?: string;
+    total_likes?: number;
+    profile_views?: number;
+    weekly_points?: number;
 }
 
 export interface AdminManagedUser extends User {
@@ -57,12 +72,13 @@ export interface AdminManagedUser extends User {
     consecutive_check_in_days?: number;
 }
 
-
+// UPDATED: Rank interface for DB
 export interface Rank {
+  id?: string;
   levelThreshold: number;
   title: string;
-  icon: React.ReactNode;
-  color: string; // e.g., 'text-yellow-400'
+  icon?: React.ReactNode | string; // URL or CSS class
+  color: string; // CSS class or Hex
 }
 
 
@@ -97,6 +113,10 @@ export interface GalleryImage {
     display_name: string;
     photo_url: string;
     level: number;
+    // NEW: Cosmetics in gallery view
+    equipped_frame_id?: string;
+    equipped_title_id?: string;
+    equipped_name_effect_id?: string; // NEW
   };
 }
 
@@ -120,6 +140,10 @@ export interface LeaderboardUser {
     xp: number;
     // creations_count sẽ được tính toán
     creations_count: number;
+    // NEW: Cosmetics
+    equipped_title_id?: string;
+    equipped_frame_id?: string;
+    equipped_name_effect_id?: string; // NEW
 }
 
 // Dành cho các gói nạp kim cương
@@ -189,7 +213,6 @@ export interface CheckInReward {
     created_at: string;
 }
 
-// FIX: Add missing GiftCode type definition
 // For Admin Gift Code Management
 export interface GiftCode {
     id: string;
@@ -204,4 +227,214 @@ export interface GiftCode {
 export interface PromptLibraryItem {
   image_url: string;
   prompt: string;
+}
+
+// NEW: Cosmetic Types
+export type CosmeticRarity = 'common' | 'rare' | 'epic' | 'legendary' | 'mythic';
+
+export interface CosmeticItem {
+    id: string;
+    type: 'frame' | 'title' | 'name_effect'; // Added name_effect
+    nameKey?: string; // Legacy Translation key
+    name?: string; // DB Name
+    rarity: CosmeticRarity;
+    cssClass?: string; // CSS class for animation/style (legacy/optional)
+    imageUrl?: string; // URL for uploaded image (Main Image/Background)
+    iconUrl?: string; // NEW: URL for small icon (e.g., badge icon)
+    unlockCondition?: {
+        level?: number;
+        vip?: boolean;
+    };
+    price?: number; // NEW: Price in diamonds
+    owned?: boolean; // NEW: Helper flag for UI
+    previewColor?: string;
+    is_active?: boolean;
+}
+
+// NEW: Chat Types
+export interface ChatMessage {
+    id: string;
+    user_id: string;
+    content: string;
+    type: 'text' | 'image' | 'sticker' | 'system';
+    metadata: {
+        sender_name?: string;
+        sender_avatar?: string;
+        sender_level?: number;
+        sender_frame_id?: string;
+        sender_title_id?: string;
+        sender_name_effect_id?: string; // NEW
+        image_url?: string;
+        sticker_id?: string;
+        deleted_by?: string;
+        deleted_at?: string;
+    };
+    created_at: string;
+    is_deleted?: boolean; // Added for admin moderation
+}
+
+export interface ChatConfig {
+    id?: number;
+    forbidden_words: string[];
+    rate_limit_ms: number;
+}
+
+export interface ChatBan {
+    user_id: string;
+    banned_until: string;
+    reason?: string;
+}
+
+// NEW: Lucky Wheel Reward
+export interface LuckyWheelReward {
+    id: string;
+    label: string;
+    type: 'diamond' | 'xp' | 'ticket' | 'lucky';
+    amount: number;
+    probability: number; // Percentage 0-100
+    color: string; // Hex code
+    is_active: boolean;
+    display_order: number;
+}
+
+// NEW: Social Feed Types
+export interface Post {
+    id: string;
+    user_id: string;
+    image_url: string;
+    caption: string;
+    created_at: string;
+    likes_count: number;
+    comments_count: number;
+    is_pinned: boolean;
+    user?: { // Joined info
+        display_name: string;
+        photo_url: string;
+        level: number;
+        equipped_frame_id?: string;
+        equipped_title_id?: string;
+        equipped_name_effect_id?: string; // NEW
+    }
+    // Helper for UI state (not in DB)
+    is_liked_by_user?: boolean; 
+}
+
+export interface PostComment {
+    id: string;
+    post_id: string;
+    user_id: string;
+    content: string;
+    created_at: string;
+    parent_id?: string | null; // For replies
+    user?: {
+        display_name: string;
+        photo_url: string;
+        level: number;
+        equipped_frame_id?: string;
+        equipped_title_id?: string;
+        equipped_name_effect_id?: string; // NEW
+    }
+    // Joined data for parent comment user
+    parent_comment?: {
+        user_id: string;
+        user: {
+            display_name: string;
+        }
+    }
+}
+
+// NEW: Notification Type
+export interface AppNotification {
+    id: string;
+    recipient_id: string;
+    actor_id: string;
+    type: 'like' | 'comment' | 'reply' | 'share' | 'system' | 'follow';
+    entity_id?: string; // post_id, etc.
+    content?: string;
+    is_read: boolean;
+    created_at: string;
+    actor?: {
+        display_name: string;
+        photo_url: string;
+    }
+}
+
+// NEW: Messaging System Types
+export interface Conversation {
+    id: string;
+    created_at: string;
+    updated_at: string;
+    participants: {
+        user_id: string;
+        user: {
+            id: string;
+            display_name: string;
+            photo_url: string;
+            is_online?: boolean; // Optional for future online status
+            xp?: number;
+            equipped_frame_id?: string;
+            equipped_title_id?: string;
+            equipped_name_effect_id?: string;
+        }
+    }[];
+    last_message?: {
+        content: string;
+        created_at: string;
+        type: string;
+        is_read: boolean;
+        sender_id: string;
+    };
+}
+
+export interface DirectMessage {
+    id: string;
+    conversation_id: string;
+    sender_id: string;
+    content: string;
+    type: 'text' | 'image';
+    is_read: boolean;
+    created_at: string;
+}
+
+// --- COMIC STUDIO TYPES ---
+export interface ComicProject {
+    id?: string;
+    title: string;
+    story_premise: string;
+    art_style: string;
+    layout_style: string;
+    dialogue_amount: string;
+    characters: ComicCharacter[];
+    pages: ComicPage[];
+}
+
+export interface ComicCharacter {
+    id: string; // Internal temporary ID for UI
+    name: string;
+    image_file?: File;
+    image_url?: string; // Base64 for preview
+    description: string; // Analysis result
+    is_analyzing?: boolean;
+}
+
+export interface ComicPage {
+    id: string;
+    page_number: number;
+    panels: ComicPanel[];
+    status: 'draft' | 'rendering' | 'completed';
+}
+
+export interface ComicPanel {
+    id: string;
+    panel_number: number;
+    visual_description: string; // Prompt for AI
+    plot_summary?: string; // New: Needed for retry mechanism
+    dialogue: ComicDialogue[];
+    image_url?: string;
+    is_rendering?: boolean;
+}
+
+export interface ComicDialogue {
+    speaker: string;
+    text: string;
 }

@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -16,6 +17,7 @@ import TopUpModal from '../components/creator/TopUpModal';
 import CheckInModal from '../components/CheckInModal';
 import AnnouncementModal from '../components/AnnouncementModal';
 import ThemeEffects from '../components/themes/ThemeEffects';
+import FloatingLuckyWheel from '../components/FloatingLuckyWheel';
 
 // Define the possible tabs for type safety
 export type CreatorTab = 'tool' | 'leaderboard' | 'my-creations' | 'settings';
@@ -77,6 +79,8 @@ const CreatorPage: React.FC<CreatorPageProps> = ({ activeTab }) => {
             <main className="flex-grow pt-24 md:pt-28">
                 {renderActiveTab()}
             </main>
+
+            <FloatingLuckyWheel />
 
             <CreatorFooter onInfoLinkClick={setInfoModalKey} />
 

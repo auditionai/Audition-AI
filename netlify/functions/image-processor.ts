@@ -1,14 +1,11 @@
+
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { GoogleGenAI, Modality } from "@google/genai";
 import { supabaseAdmin } from './utils/supabaseClient';
 import { Buffer } from 'buffer';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 
-const COST_PER_REMOVAL = 1;
-
 const handler: Handler = async (event: HandlerEvent) => {
-    // Fix: Moved S3Client initialization inside the handler to prevent potential scope/caching issues in serverless environments.
-    // Cấu hình S3 client để kết nối với Cloudflare R2
     const s3Client = new S3Client({
         region: "auto",
         endpoint: process.env.R2_ENDPOINT!,
@@ -24,24 +21,20 @@ const handler: Handler = async (event: HandlerEvent) => {
         }
 
         const authHeader = event.headers['authorization'];
-        if (!authHeader) {
-            return { statusCode: 401, body: JSON.stringify({ error: 'Authorization header is required.' }) };
-        }
+        if (!authHeader) return { statusCode: 401, body: JSON.stringify({ error: 'Authorization header is required.' }) };
         const token = authHeader.split(' ')[1];
-        if (!token) {
-            return { statusCode: 401, body: JSON.stringify({ error: 'Bearer token is missing.' }) };
-        }
+        if (!token) return { statusCode: 401, body: JSON.stringify({ error: 'Bearer token is missing.' }) };
 
-        // FIX: Use Supabase v2 `auth.getUser` as `auth.api` is from v1.
         const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
-        if (authError || !user) {
-            return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized: Invalid token.' }) };
-        }
+        if (authError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized: Invalid token.' }) };
 
-        const { image: imageDataUrl } = JSON.parse(event.body || '{}');
-        if (!imageDataUrl) {
-            return { statusCode: 400, body: JSON.stringify({ error: 'Image data is required.' }) };
-        }
+        const { image: imageDataUrl, model } = JSON.parse(event.body || '{}');
+        if (!imageDataUrl) return { statusCode: 400, body: JSON.stringify({ error: 'Image data is required.' }) };
+
+        // Validate Cost
+        const isPro = model === 'gemini-3-pro-image-preview';
+        // UPDATE: Pro cost = 10
+        const cost = isPro ? 10 : 1;
 
         const { data: userData, error: userError } = await supabaseAdmin
             .from('users')
@@ -49,12 +42,8 @@ const handler: Handler = async (event: HandlerEvent) => {
             .eq('id', user.id)
             .single();
         
-        if (userError || !userData) {
-            return { statusCode: 404, body: JSON.stringify({ error: 'User not found.' }) };
-        }
-        if (userData.diamonds < COST_PER_REMOVAL) {
-            return { statusCode: 402, body: JSON.stringify({ error: 'Không đủ kim cương.' }) };
-        }
+        if (userError || !userData) return { statusCode: 404, body: JSON.stringify({ error: 'User not found.' }) };
+        if (userData.diamonds < cost) return { statusCode: 402, body: JSON.stringify({ error: 'Không đủ kim cương.' }) };
 
         const { data: apiKeyData, error: apiKeyError } = await supabaseAdmin
             .from('api_keys')
@@ -64,12 +53,12 @@ const handler: Handler = async (event: HandlerEvent) => {
             .limit(1)
             .single();
 
-        if (apiKeyError || !apiKeyData) {
-            return { statusCode: 503, body: JSON.stringify({ error: 'Hết tài nguyên AI. Vui lòng thử lại sau.' }) };
-        }
+        if (apiKeyError || !apiKeyData) return { statusCode: 503, body: JSON.stringify({ error: 'Hết tài nguyên AI. Vui lòng thử lại sau.' }) };
 
         const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
-        const model = 'gemini-2.5-flash-image'; 
+        
+        // Selected model logic
+        const selectedModel = isPro ? 'gemini-3-pro-image-preview' : 'gemini-2.5-flash-image'; 
 
         const parts: any[] = [];
         const [header, base64] = imageDataUrl.split(',');
@@ -77,10 +66,18 @@ const handler: Handler = async (event: HandlerEvent) => {
         parts.push({ inlineData: { data: base64, mimeType } });
         parts.push({ text: "isolate the main subject with a solid black background" });
 
+        // STRICT CONFIG: Do not add extra properties
+        const config: any = { 
+            responseModalities: [Modality.IMAGE] 
+        };
+        
+        // Note: We don't set imageConfig for editing/bg removal usually, as we want to preserve input aspect ratio if possible.
+        // However, if Pro requires it, we might default to 1K, but usually it's safer to omit for editing tasks unless generating new content.
+
         const response = await ai.models.generateContent({
-            model,
+            model: selectedModel,
             contents: { parts: parts },
-            config: { responseModalities: [Modality.IMAGE] },
+            config: config,
         });
 
         const imagePartResponse = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
@@ -103,21 +100,20 @@ const handler: Handler = async (event: HandlerEvent) => {
             ContentType: finalImageMimeType,
         });
 
-        // FIX: Cast s3Client to 'any' to bypass a likely environment-specific TypeScript type resolution error.
         await (s3Client as any).send(putCommand);
 
         const publicUrl = `${process.env.R2_PUBLIC_URL}/${fileName}`;
         // --- END OF R2 UPLOAD LOGIC ---
 
-        const newDiamondCount = userData.diamonds - COST_PER_REMOVAL;
+        const newDiamondCount = userData.diamonds - cost;
         await Promise.all([
             supabaseAdmin.from('users').update({ diamonds: newDiamondCount }).eq('id', user.id),
             supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id }),
             supabaseAdmin.from('diamond_transactions_log').insert({
                 user_id: user.id,
-                amount: -COST_PER_REMOVAL,
+                amount: -cost,
                 transaction_type: 'BG_REMOVAL',
-                description: 'Tách nền ảnh'
+                description: `Tách nền ảnh (${isPro ? 'Pro' : 'Flash'})`
             })
         ]);
 

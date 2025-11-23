@@ -1,3 +1,4 @@
+
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
 
@@ -33,12 +34,22 @@ const handler: Handler = async (event: HandlerEvent) => {
             throw new Error(`Database query failed: ${imagesError.message}`);
         }
         
-        // 3. Create a creator object using GUARANTEED available data from the auth token.
-        // This avoids querying the 'users' table, which was the source of previous 500 errors.
+        // 3. Fetch latest user profile data to get consistent name/avatar/badges
+        // FIX: Use wildcard select to be robust against schema changes
+        const { data: userProfile } = await supabaseAdmin
+            .from('users')
+            .select('*')
+            .eq('id', user.id)
+            .single();
+
+        // Create creator object using DB data or auth fallback
         const creatorInfo = {
-            display_name: user.user_metadata?.full_name || 'Bạn',
-            photo_url: user.user_metadata?.avatar_url || 'https://i.pravatar.cc/150',
-            level: 1, // Using a default level is acceptable to ensure the gallery loads.
+            display_name: userProfile?.display_name || user.user_metadata?.full_name || 'Bạn',
+            photo_url: userProfile?.photo_url || user.user_metadata?.avatar_url || 'https://i.pravatar.cc/150',
+            level: 1, 
+            equipped_title_id: userProfile?.equipped_title_id,
+            equipped_frame_id: userProfile?.equipped_frame_id,
+            equipped_name_effect_id: userProfile?.equipped_name_effect_id
         };
 
         // 4. Combine images with the reliable creator info.

@@ -1,6 +1,3 @@
-import type { Handler } from "@netlify/functions";
-import { supabaseAdmin } from './utils/supabaseClient';
-
 const calculateLevelFromXp = (xp: number): number => {
     if (typeof xp !== 'number' || xp < 0) return 1;
     return Math.floor(xp / 100) + 1;
@@ -29,9 +26,6 @@ const handler: Handler = async () => {
         const userIds = [...new Set(images.map(img => img.user_id))];
 
         // 3. Fetch creator profiles for those IDs
-        const { data: creators, error: creatorsError } = await supabaseAdmin
-            .from('users')
-            .select('id, display_name, photo_url, xp')
             .in('id', userIds);
 
         if (creatorsError) {

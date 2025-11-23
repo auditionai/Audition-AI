@@ -1,15 +1,16 @@
+
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
 import { S3Client, DeleteObjectCommand } from "@aws-sdk/client-s3";
 
 const handler: Handler = async (event: HandlerEvent) => {
-    // 1. Initialize S3 client for R2
+    // 1. Initialize S3 client for R2 inside handler to ensure env vars are ready
     const s3Client = new S3Client({
         region: "auto",
-        endpoint: process.env.R2_ENDPOINT!,
+        endpoint: process.env.R2_ENDPOINT || '',
         credentials: {
-            accessKeyId: process.env.R2_ACCESS_KEY_ID!,
-            secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
+            accessKeyId: process.env.R2_ACCESS_KEY_ID || '',
+            secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || '',
         },
     });
 
@@ -23,7 +24,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized' }) };
     }
 
-    // FIX: Use Supabase v2 `auth.getUser` as `auth.api` is from v1.
+    // FIX: Use Supabase v2 `auth.getUser`
     const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
     if (authError || !user) {
         return { statusCode: 401, body: JSON.stringify({ error: 'Invalid token' }) };
@@ -32,7 +33,6 @@ const handler: Handler = async (event: HandlerEvent) => {
     // Fetch user role
     const { data: userProfile } = await supabaseAdmin.from('users').select('is_admin').eq('id', user.id).single();
     const isAdmin = userProfile?.is_admin || false;
-
 
     // 3. Body validation
     const { imageId } = JSON.parse(event.body || '{}');
@@ -49,35 +49,53 @@ const handler: Handler = async (event: HandlerEvent) => {
             .single();
 
         if (imageError || !imageData) {
-            return { statusCode: 404, body: JSON.stringify({ error: 'Image not found.' }) };
+            return { statusCode: 404, body: JSON.stringify({ error: 'Image not found in database.' }) };
         }
 
-        // --- MODIFICATION: Allow deletion if user is owner OR is an admin ---
+        // Allow deletion if user is owner OR is an admin
         if (imageData.user_id !== user.id && !isAdmin) {
             return { statusCode: 403, body: JSON.stringify({ error: 'You do not have permission to delete this image.' }) };
         }
 
-        // 5. Delete image from R2 storage, if it exists
+        // 5. Attempt to delete image from R2 storage
         const imageUrl = imageData.image_url;
-        if (imageUrl) {
-            const key = imageUrl.replace(`${process.env.R2_PUBLIC_URL}/`, '');
-            
-            const deleteCommand = new DeleteObjectCommand({
-                Bucket: process.env.R2_BUCKET_NAME!,
-                Key: key,
-            });
+        if (imageUrl && imageUrl !== 'PENDING') {
+            try {
+                let key = '';
+                try {
+                    const urlObj = new URL(imageUrl);
+                    key = urlObj.pathname.substring(1); 
+                } catch (e) {
+                    // Fallback for manual URL construction if needed
+                    const publicUrl = process.env.R2_PUBLIC_URL || '';
+                    key = imageUrl.replace(`${publicUrl}/`, '');
+                }
+                
+                key = decodeURIComponent(key);
 
-            await (s3Client as any).send(deleteCommand);
+                if (key) {
+                    const deleteCommand = new DeleteObjectCommand({
+                        Bucket: process.env.R2_BUCKET_NAME || '',
+                        Key: key,
+                    });
+                    // Cast to any to avoid potential type mismatches with R2's "auto" region
+                    await (s3Client as any).send(deleteCommand);
+                    console.log(`[delete-image] Successfully deleted ${key} from R2.`);
+                }
+            } catch (r2Error: any) {
+                console.warn(`[delete-image] Could not delete image from R2 (it might already be gone). Image ID: ${imageId}. Error: ${r2Error.message}`);
+            }
         }
 
-        // 6. Update image record in Supabase to set URL to null instead of deleting
-        const { error: updateDbError } = await supabaseAdmin
+        // 6. DELETE image record from Supabase (Hard Delete)
+        // IMPORTANT: We MUST delete the row entirely. Updating to NULL causes "violates not-null constraint".
+        const { error: deleteDbError } = await supabaseAdmin
             .from('generated_images')
-            .update({ image_url: null })
+            .delete()
             .eq('id', imageId);
 
-        if (updateDbError) {
-            throw new Error(`Failed to update database record: ${updateDbError.message}`);
+        if (deleteDbError) {
+            throw new Error(`Failed to delete database record: ${deleteDbError.message}`);
         }
 
         return {

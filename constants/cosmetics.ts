@@ -1,0 +1,97 @@
+
+import { CosmeticItem } from '../types';
+
+// --- LEVEL BASED ITEMS (Converted to Standard Items) ---
+export const AVATAR_FRAMES: CosmeticItem[] = [
+    { id: 'default', type: 'frame', nameKey: 'cosmetics.frames.default', rarity: 'common', cssClass: 'frame-none', price: 0 },
+    { id: 'wood-basic', type: 'frame', nameKey: 'cosmetics.frames.wood', rarity: 'common', cssClass: 'frame-wood', price: 10 },
+    { id: 'neon-blue', type: 'frame', nameKey: 'cosmetics.frames.neonBlue', rarity: 'rare', cssClass: 'frame-basic-blue', price: 20 },
+    { id: 'neon-pink', type: 'frame', nameKey: 'cosmetics.frames.neonPink', rarity: 'rare', cssClass: 'frame-basic-pink', price: 20 },
+    { id: 'musical-note', type: 'frame', nameKey: 'cosmetics.frames.music', rarity: 'rare', cssClass: 'frame-music', price: 30 },
+    { id: 'gradient-spin', type: 'frame', nameKey: 'cosmetics.frames.gradientSpin', rarity: 'epic', cssClass: 'frame-gradient-spin', price: 50 },
+    { id: 'sakura-bloom', type: 'frame', nameKey: 'cosmetics.frames.sakura', rarity: 'epic', cssClass: 'frame-sakura', price: 50 },
+    { id: 'cyber-tech', type: 'frame', nameKey: 'cosmetics.frames.cyber', rarity: 'epic', cssClass: 'frame-cyber', price: 60 },
+    { id: 'angel-wings', type: 'frame', nameKey: 'cosmetics.frames.angel', rarity: 'legendary', cssClass: 'frame-angel', price: 100 },
+    { id: 'demon-aura', type: 'frame', nameKey: 'cosmetics.frames.demon', rarity: 'legendary', cssClass: 'frame-demon', price: 100 },
+    { id: 'thunder-storm', type: 'frame', nameKey: 'cosmetics.frames.thunder', rarity: 'legendary', cssClass: 'frame-thunder', price: 120 },
+    { id: 'legendary-gold', type: 'frame', nameKey: 'cosmetics.frames.legendaryGold', rarity: 'legendary', cssClass: 'frame-legendary-gold', price: 150 },
+    { id: 'ice-crystal', type: 'frame', nameKey: 'cosmetics.frames.ice', rarity: 'legendary', cssClass: 'frame-ice', price: 150 },
+    { id: 'love-beat', type: 'frame', nameKey: 'cosmetics.frames.love', rarity: 'epic', cssClass: 'frame-love', price: 80 },
+    { id: 'galaxy-void', type: 'frame', nameKey: 'cosmetics.frames.galaxy', rarity: 'mythic', cssClass: 'frame-galaxy', price: 200 },
+    { id: 'matrix-code', type: 'frame', nameKey: 'cosmetics.frames.matrix', rarity: 'mythic', cssClass: 'frame-matrix', price: 250 },
+    { id: 'rainbow-glitch', type: 'frame', nameKey: 'cosmetics.frames.glitch', rarity: 'mythic', cssClass: 'frame-rainbow-glitch', price: 300 },
+    { id: 'mythic-fire', type: 'frame', nameKey: 'cosmetics.frames.mythicFire', rarity: 'mythic', cssClass: 'frame-mythic-fire', price: 350 },
+    { id: 'infinity-god', type: 'frame', nameKey: 'cosmetics.frames.god', rarity: 'mythic', cssClass: 'frame-infinity', price: 500 }
+];
+
+export const ACHIEVEMENT_TITLES: CosmeticItem[] = [
+    { id: 'newbie', type: 'title', nameKey: 'cosmetics.titles.newbie', rarity: 'common', cssClass: 'title-basic', price: 0 },
+    { id: 'dancer', type: 'title', nameKey: 'cosmetics.titles.dancer', rarity: 'common', cssClass: 'title-basic', price: 10 },
+    { id: 'style-icon', type: 'title', nameKey: 'cosmetics.titles.styleIcon', rarity: 'rare', cssClass: 'title-neon-blue', price: 20 },
+    { id: 'party-animal', type: 'title', nameKey: 'cosmetics.titles.party', rarity: 'rare', cssClass: 'title-neon-pink', price: 20 },
+    { id: 'rhythm-master', type: 'title', nameKey: 'cosmetics.titles.rhythm', rarity: 'rare', cssClass: 'title-music', price: 30 },
+    { id: 'vip', type: 'title', nameKey: 'cosmetics.titles.vip', rarity: 'epic', cssClass: 'title-vip-gold', price: 50 },
+    { id: 'charming', type: 'title', nameKey: 'cosmetics.titles.charming', rarity: 'epic', cssClass: 'title-sakura', price: 50 },
+    { id: 'cyber-punk', type: 'title', nameKey: 'cosmetics.titles.cyber', rarity: 'epic', cssClass: 'title-cyber', price: 60 },
+    { id: 'angel-voice', type: 'title', nameKey: 'cosmetics.titles.angel', rarity: 'legendary', cssClass: 'title-angel', price: 100 },
+    { id: 'demon-king', type: 'title', nameKey: 'cosmetics.titles.demon', rarity: 'legendary', cssClass: 'title-demon', price: 100 },
+    { id: 'thunder-lord', type: 'title', nameKey: 'cosmetics.titles.thunder', rarity: 'legendary', cssClass: 'title-thunder', price: 120 },
+    { id: 'glitch-master', type: 'title', nameKey: 'cosmetics.titles.glitchMaster', rarity: 'legendary', cssClass: 'title-cyber-glitch', price: 150 },
+    { id: 'ice-queen', type: 'title', nameKey: 'cosmetics.titles.ice', rarity: 'legendary', cssClass: 'title-ice', price: 150 },
+    { id: 'heart-breaker', type: 'title', nameKey: 'cosmetics.titles.love', rarity: 'epic', cssClass: 'title-love', price: 80 },
+    { id: 'galaxy-star', type: 'title', nameKey: 'cosmetics.titles.galaxy', rarity: 'mythic', cssClass: 'title-galaxy', price: 200 },
+    { id: 'the-one', type: 'title', nameKey: 'cosmetics.titles.matrix', rarity: 'mythic', cssClass: 'title-matrix', price: 250 },
+    { id: 'legend', type: 'title', nameKey: 'cosmetics.titles.legend', rarity: 'mythic', cssClass: 'title-rainbow', price: 300 },
+    { id: 'audition-god', type: 'title', nameKey: 'cosmetics.titles.auditionGod', rarity: 'mythic', cssClass: 'title-mythic-fire', price: 500 }
+];
+
+// --- SHOP EXCLUSIVE ITEMS (NEW PREMIUM) ---
+export const SHOP_EXCLUSIVE_COSMETICS: CosmeticItem[] = [
+    // FRAMES - Premium Redesigned
+    { id: 'shop-frame-01', type: 'frame', name: 'Neon Cyan', rarity: 'rare', cssClass: 'shop-frame-01', price: 50 },
+    { id: 'shop-frame-02', type: 'frame', name: 'Neon Magenta', rarity: 'rare', cssClass: 'shop-frame-02', price: 50 },
+    { id: 'shop-frame-03', type: 'frame', name: 'Hỏa Ngục', rarity: 'epic', cssClass: 'shop-frame-03', price: 150 },
+    { id: 'shop-frame-04', type: 'frame', name: 'Thần Thánh', rarity: 'legendary', cssClass: 'shop-frame-04', price: 300 },
+    { id: 'shop-frame-05', type: 'frame', name: 'Độc Dược', rarity: 'rare', cssClass: 'shop-frame-05', price: 80 },
+    { id: 'shop-frame-06', type: 'frame', name: 'Thủy Tinh', rarity: 'rare', cssClass: 'shop-frame-06', price: 80 },
+    { id: 'shop-frame-07', type: 'frame', name: 'Hoàng Kim 24K', rarity: 'legendary', cssClass: 'shop-frame-07', price: 500 },
+    { id: 'shop-frame-08', type: 'frame', name: 'Nhịp Tim', rarity: 'epic', cssClass: 'shop-frame-08', price: 200 },
+    { id: 'shop-frame-09', type: 'frame', name: 'Hư Không', rarity: 'epic', cssClass: 'shop-frame-09', price: 200 },
+    { id: 'shop-frame-10', type: 'frame', name: 'RGB Master', rarity: 'mythic', cssClass: 'shop-frame-10', price: 1000 },
+    { id: 'shop-frame-11', type: 'frame', name: 'Công Nghệ Cao', rarity: 'epic', cssClass: 'shop-frame-11', price: 250 },
+    { id: 'shop-frame-12', type: 'frame', name: 'Dung Nham', rarity: 'legendary', cssClass: 'shop-frame-12', price: 400 },
+    { id: 'shop-frame-13', type: 'frame', name: 'Băng Vĩnh Cửu', rarity: 'epic', cssClass: 'shop-frame-13', price: 250 },
+    { id: 'shop-frame-14', type: 'frame', name: 'Cổ Ngữ', rarity: 'epic', cssClass: 'shop-frame-14', price: 200 },
+    { id: 'shop-frame-15', type: 'frame', name: 'Rừng Rậm', rarity: 'rare', cssClass: 'shop-frame-15', price: 100 },
+    { id: 'shop-frame-16', type: 'frame', name: 'Siêu Sao', rarity: 'legendary', cssClass: 'shop-frame-16', price: 450 },
+    { id: 'shop-frame-17', type: 'frame', name: 'Linh Hồn', rarity: 'rare', cssClass: 'shop-frame-17', price: 120 },
+    { id: 'shop-frame-18', type: 'frame', name: 'Hắc Ám', rarity: 'mythic', cssClass: 'shop-frame-18', price: 1200 },
+    { id: 'shop-frame-19', type: 'frame', name: 'Đại Dương', rarity: 'epic', cssClass: 'shop-frame-19', price: 220 },
+    { id: 'shop-frame-20', type: 'frame', name: 'Vũ Trụ', rarity: 'mythic', cssClass: 'shop-frame-20', price: 1500 },
+
+    // TITLES - Premium Redesigned (Removed "Newbie" variants)
+    { id: 'shop-title-01', type: 'title', name: 'Cyan Neon', rarity: 'rare', cssClass: 'shop-title-01', price: 50 },
+    { id: 'shop-title-02', type: 'title', name: 'Magenta Neon', rarity: 'rare', cssClass: 'shop-title-02', price: 50 },
+    { id: 'shop-title-03', type: 'title', name: 'Hỏa Long', rarity: 'epic', cssClass: 'shop-title-03', price: 150 },
+    { id: 'shop-title-04', type: 'title', name: 'Thủy Quái', rarity: 'epic', cssClass: 'shop-title-04', price: 150 },
+    { id: 'shop-title-05', type: 'title', name: 'Hacker', rarity: 'rare', cssClass: 'shop-title-05', price: 100 },
+    { id: 'shop-title-06', type: 'title', name: 'Đại Gia', rarity: 'legendary', cssClass: 'shop-title-06', price: 500 },
+    { id: 'shop-title-08', type: 'title', name: 'Bóng Tối', rarity: 'rare', cssClass: 'shop-title-08', price: 80 },
+    { id: 'shop-title-09', type: 'title', name: 'Hư Không', rarity: 'epic', cssClass: 'shop-title-09', price: 200 },
+    { id: 'shop-title-10', type: 'title', name: 'Minimalist', rarity: 'common', cssClass: 'shop-title-10', price: 20 },
+    { id: 'shop-title-11', type: 'title', name: 'Cyberpunk 2077', rarity: 'epic', cssClass: 'shop-title-11', price: 250 },
+    { id: 'shop-title-12', type: 'title', name: 'Huyết Tộc', rarity: 'legendary', cssClass: 'shop-title-12', price: 400 },
+    { id: 'shop-title-13', type: 'title', name: 'Glassmorphism', rarity: 'rare', cssClass: 'shop-title-13', price: 100 },
+    { id: 'shop-title-14', type: 'title', name: 'Cosmic Voyager', rarity: 'epic', cssClass: 'shop-title-14', price: 220 },
+    { id: 'shop-title-16', type: 'title', name: 'Super Idol', rarity: 'legendary', cssClass: 'shop-title-16', price: 450 },
+    { id: 'shop-title-17', type: 'title', name: 'Phù Thủy', rarity: 'epic', cssClass: 'shop-title-17', price: 180 },
+    { id: 'shop-title-18', type: 'title', name: 'Bóng Ma', rarity: 'rare', cssClass: 'shop-title-18', price: 90 },
+    { id: 'shop-title-19', type: 'title', name: 'Vua Trò Chơi', rarity: 'mythic', cssClass: 'shop-title-19', price: 1000 },
+    { id: 'shop-title-20', type: 'title', name: 'RGB God', rarity: 'mythic', cssClass: 'shop-title-20', price: 2000 },
+];
+
+export const ALL_COSMETICS = [...AVATAR_FRAMES, ...ACHIEVEMENT_TITLES, ...SHOP_EXCLUSIVE_COSMETICS];
+
+export const getCosmeticById = (id: string | undefined, type: 'frame' | 'title'): CosmeticItem | undefined => {
+    return ALL_COSMETICS.find(item => item.id === id && item.type === type);
+};

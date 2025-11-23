@@ -2,11 +2,12 @@
 import React, { useState } from 'react';
 import { GalleryImage } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
-import { useChat } from '../../contexts/ChatContext'; // Import Chat Context
+import { useChat } from '../../contexts/ChatContext';
 import { getRankForLevel } from '../../utils/rankUtils';
 import { useTranslation } from '../../hooks/useTranslation';
 import UserAvatar from './UserAvatar';
 import UserBadge from './UserBadge';
+import UserName from './UserName'; // Import UserName
 
 interface ImageModalProps {
   isOpen: boolean;
@@ -18,7 +19,7 @@ interface ImageModalProps {
 
 const ImageModal: React.FC<ImageModalProps> = ({ isOpen, onClose, image, showInfoPanel = true, onShare }) => {
   const { showToast, user } = useAuth();
-  const { shareImageToChat } = useChat(); // Use Chat Context
+  const { shareImageToChat } = useChat();
   const { t } = useTranslation();
   const [isCopied, setIsCopied] = useState(false);
   const [isSharingToChat, setIsSharingToChat] = useState(false);
@@ -98,7 +99,11 @@ const ImageModal: React.FC<ImageModalProps> = ({ isOpen, onClose, image, showInf
                         />
                         <div>
                             <div className="flex items-center gap-2">
-                                <p className={`font-bold ${rank.color} neon-text-glow`}>{image.creator.display_name}</p>
+                                {/* Use UserName for effects */}
+                                <UserName 
+                                    user={image.creator} 
+                                    className={`font-bold ${rank.color}`} 
+                                />
                             </div>
                             <UserBadge titleId={image.creator.equipped_title_id} level={image.creator.level} />
                             <p className={`text-xs font-semibold flex items-center gap-1.5 mt-1 ${rank.color}`}>{rank.icon} {rank.title}</p>

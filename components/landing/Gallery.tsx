@@ -2,8 +2,9 @@
 import React from 'react';
 import { GalleryImage } from '../../types';
 import { getRankForLevel } from '../../utils/rankUtils';
-import UserBadge from '../common/UserBadge'; // Import UserBadge
-import UserAvatar from '../common/UserAvatar'; // Import UserAvatar
+import UserBadge from '../common/UserBadge';
+import UserAvatar from '../common/UserAvatar';
+import UserName from '../common/UserName'; // Import UserName
 
 interface GalleryProps {
   images: GalleryImage[];
@@ -64,7 +65,11 @@ const Gallery: React.FC<GalleryProps> = ({ images, onImageClick, limit, showSeeM
                             className="flex-shrink-0"
                           />
                           <div className="truncate flex flex-col gap-1">
-                            <p className={`font-bold text-sm drop-shadow-lg truncate ${rank.color} neon-text-glow`}>{image.creator.display_name}</p>
+                            {/* Use UserName for Name Effects */}
+                            <UserName 
+                                user={image.creator} 
+                                className={`font-bold text-sm drop-shadow-lg truncate ${rank.color}`}
+                            />
                             {/* Use UserBadge for icon and title display */}
                             <div className="flex items-center">
                                 <UserBadge titleId={image.creator.equipped_title_id} level={image.creator.level} className="scale-90 origin-left" />
@@ -114,7 +119,11 @@ const Gallery: React.FC<GalleryProps> = ({ images, onImageClick, limit, showSeeM
                         className="flex-shrink-0"
                       />
                       <div className="truncate flex flex-col gap-1">
-                        <p className={`font-bold text-sm drop-shadow-lg truncate ${rank.color} neon-text-glow`}>{image.creator.display_name}</p>
+                        {/* Use UserName for Name Effects */}
+                        <UserName 
+                            user={image.creator} 
+                            className={`font-bold text-sm drop-shadow-lg truncate ${rank.color}`} 
+                        />
                          <div className="flex items-center">
                             <UserBadge titleId={image.creator.equipped_title_id} level={image.creator.level} className="scale-90 origin-left" />
                          </div>

@@ -1,10 +1,14 @@
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import CreatorHeader from '../components/creator/CreatorHeader';
 import BottomNavBar from '../components/common/BottomNavBar';
 import UserAvatar from '../components/common/UserAvatar';
+import UserName from '../components/common/UserName'; // Import UserName
+import UserBadge from '../components/common/UserBadge'; // Import UserBadge
 import { Conversation, DirectMessage } from '../types';
+import { calculateLevelFromXp } from '../utils/rankUtils';
 
 const SYSTEM_BOT_ID = '00000000-0000-0000-0000-000000000000';
 
@@ -32,7 +36,6 @@ const MessagesPage: React.FC = () => {
     // 2. Load danh sách hội thoại
     const fetchConversations = useCallback(async () => {
         if (!session) return;
-        // Chỉ hiện loading lần đầu, các lần sau (polling) thì update ngầm
         if (conversations.length === 0) setIsLoadingConvs(true);
         
         try {
@@ -51,7 +54,7 @@ const MessagesPage: React.FC = () => {
 
     useEffect(() => {
         fetchConversations();
-        const interval = setInterval(fetchConversations, 10000); // Poll list every 10s
+        const interval = setInterval(fetchConversations, 10000);
         return () => clearInterval(interval);
     }, [fetchConversations]);
 
@@ -68,7 +71,6 @@ const MessagesPage: React.FC = () => {
                 body: JSON.stringify({ conversationId: convId })
             });
             
-            // Update UI locally to remove unread count immediately
             setConversations(prev => prev.map(c => 
                 c.id === convId ? { ...c, unread_count: 0 } : c
             ));
@@ -82,7 +84,6 @@ const MessagesPage: React.FC = () => {
     useEffect(() => {
         if (!activeConversationId || !session) return;
         
-        // Mark as read immediately when opening
         markAsRead(activeConversationId);
 
         const fetchMessages = async () => {
@@ -153,13 +154,15 @@ const MessagesPage: React.FC = () => {
     };
 
     const activeConv = conversations.find(c => c.id === activeConversationId);
+    // Fix: Cast fallback object to any to prevent TypeScript errors about missing properties
     const displayPartner = activeConv?.participants[0]?.user || { 
         display_name: 'Đang tải...', 
         photo_url: 'https://api.dicebear.com/7.x/bottts/svg?seed=Loading', 
         id: 'loading' 
-    };
+    } as any;
     
     const isSystemChat = displayPartner?.id === SYSTEM_BOT_ID || displayPartner?.display_name === 'HỆ THỐNG';
+    const partnerLevel = displayPartner.xp ? calculateLevelFromXp(displayPartner.xp) : 1;
 
     return (
         <div data-theme={theme} className="flex flex-col h-screen bg-skin-fill text-skin-base">
@@ -182,6 +185,7 @@ const MessagesPage: React.FC = () => {
                                 const partner = conv.participants[0]?.user;
                                 const isSystem = partner?.id === SYSTEM_BOT_ID || partner?.display_name === 'HỆ THỐNG';
                                 const hasUnread = (conv.unread_count || 0) > 0;
+                                const pLevel = partner?.xp ? calculateLevelFromXp(partner.xp) : 1;
 
                                 return (
                                     <div 
@@ -190,7 +194,13 @@ const MessagesPage: React.FC = () => {
                                         className={`flex items-center gap-3 p-3 cursor-pointer hover:bg-white/5 transition-colors relative ${activeConversationId === conv.id ? 'bg-skin-accent/10 border-l-4 border-skin-accent' : ''}`}
                                     >
                                         <div className="relative">
-                                            <UserAvatar url={partner?.photo_url || ''} alt={partner?.display_name || 'User'} size="md" />
+                                            <UserAvatar 
+                                                url={partner?.photo_url || ''} 
+                                                alt={partner?.display_name || 'User'} 
+                                                frameId={partner?.equipped_frame_id} 
+                                                level={pLevel}
+                                                size="md" 
+                                            />
                                             {hasUnread && (
                                                 <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold px-1.5 rounded-full border border-[#1E1B25]">
                                                     {conv.unread_count}
@@ -199,11 +209,12 @@ const MessagesPage: React.FC = () => {
                                         </div>
                                         <div className="flex-grow min-w-0">
                                             <div className="flex items-center justify-between">
-                                                <div className="flex items-center gap-1">
-                                                    <p className={`font-bold text-sm truncate ${isSystem ? 'text-yellow-400' : 'text-skin-base'} ${hasUnread ? 'text-white' : ''}`}>{partner?.display_name}</p>
+                                                <div className="flex items-center gap-1.5 overflow-hidden">
+                                                    <UserName user={partner} className={`font-bold text-sm truncate ${isSystem ? 'text-yellow-400' : 'text-skin-base'} ${hasUnread ? 'text-white' : ''}`} />
+                                                    {!isSystem && <UserBadge titleId={partner?.equipped_title_id} level={pLevel} className="scale-75 origin-left flex-shrink-0" />}
                                                     {isSystem && <i className="ph-fill ph-seal-check text-blue-400 text-xs"></i>}
                                                 </div>
-                                                <span className="text-[10px] text-skin-muted">{new Date(conv.updated_at).toLocaleDateString('vi-VN', {day: 'numeric', month: 'numeric'})}</span>
+                                                <span className="text-[10px] text-skin-muted flex-shrink-0">{new Date(conv.updated_at).toLocaleDateString('vi-VN', {day: 'numeric', month: 'numeric'})}</span>
                                             </div>
                                             <p className={`text-xs truncate ${hasUnread ? 'text-white font-bold' : 'text-skin-muted'}`}>
                                                 {isSystem ? 'Thông báo từ hệ thống' : (hasUnread ? 'Tin nhắn mới' : 'Nhấn để xem tin nhắn')}
@@ -223,10 +234,20 @@ const MessagesPage: React.FC = () => {
                             {/* Chat Header */}
                             <div className="p-3 border-b border-skin-border flex items-center gap-3 bg-skin-fill/50">
                                 <button onClick={() => setActiveConversationId(null)} className="md:hidden text-xl p-2"><i className="ph-fill ph-caret-left"></i></button>
-                                <UserAvatar url={displayPartner?.photo_url || ''} alt={displayPartner?.display_name || ''} size="sm" />
+                                <UserAvatar 
+                                    url={displayPartner?.photo_url || ''} 
+                                    alt={displayPartner?.display_name || ''} 
+                                    frameId={displayPartner?.equipped_frame_id}
+                                    level={partnerLevel}
+                                    size="sm" 
+                                />
                                 <div className="flex flex-col">
-                                    <div className="flex items-center gap-1">
-                                        <span className={`font-bold ${isSystemChat ? 'text-yellow-400' : ''}`}>{displayPartner?.display_name}</span>
+                                    <div className="flex items-center gap-2">
+                                        <UserName 
+                                            user={displayPartner} 
+                                            className={`font-bold ${isSystemChat ? 'text-yellow-400' : ''}`} 
+                                        />
+                                        {!isSystemChat && <UserBadge titleId={displayPartner?.equipped_title_id} level={partnerLevel} className="scale-75 origin-left" />}
                                         {isSystemChat && <span className="bg-blue-500 text-white text-[10px] px-1 rounded font-bold">OFFICIAL</span>}
                                     </div>
                                 </div>

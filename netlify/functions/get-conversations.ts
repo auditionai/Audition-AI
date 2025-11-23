@@ -1,3 +1,4 @@
+
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
 
@@ -44,7 +45,6 @@ const handler: Handler = async (event: HandlerEvent) => {
         if (convError) throw convError;
 
         // 4. [NEW] Lấy số lượng tin nhắn chưa đọc cho từng hội thoại
-        // Lấy tất cả tin nhắn chưa đọc trong các hội thoại này mà người gửi KHÔNG PHẢI là current user
         const { data: unreadMessages } = await supabaseAdmin
             .from('direct_messages')
             .select('conversation_id')
@@ -52,22 +52,22 @@ const handler: Handler = async (event: HandlerEvent) => {
             .eq('is_read', false)
             .neq('sender_id', user.id);
 
-        // Tính toán map: conversation_id -> count
         const unreadCountMap = new Map<string, number>();
         unreadMessages?.forEach((msg: any) => {
             const count = unreadCountMap.get(msg.conversation_id) || 0;
             unreadCountMap.set(msg.conversation_id, count + 1);
         });
 
-        // 5. Lấy thông tin User của các đối tác
+        // 5. Lấy thông tin User của các đối tác (bao gồm Cosmetics)
         const allParticipantIds = new Set<string>();
         conversations.forEach((c: any) => {
             c.participants.forEach((p: any) => allParticipantIds.add(p.user_id));
         });
 
+        // CHANGED: Added equipped_frame_id, equipped_title_id, equipped_name_effect_id
         const { data: users } = await supabaseAdmin
             .from('users')
-            .select('id, display_name, photo_url')
+            .select('id, display_name, photo_url, equipped_frame_id, equipped_title_id, equipped_name_effect_id, xp')
             .in('id', Array.from(allParticipantIds));
 
         const userMap = new Map(users?.map(u => [u.id, u]));
@@ -86,7 +86,9 @@ const handler: Handler = async (event: HandlerEvent) => {
                 partnerUser = {
                     id: SYSTEM_BOT_ID,
                     display_name: 'HỆ THỐNG',
-                    photo_url: 'https://api.dicebear.com/7.x/bottts/svg?seed=System'
+                    photo_url: 'https://api.dicebear.com/7.x/bottts/svg?seed=System',
+                    equipped_frame_id: 'default', // Or specific system frame
+                    equipped_name_effect_id: 'name-glitch' // Cool effect for system
                 };
             } else if (!partnerUser) {
                 partnerUser = {
@@ -101,7 +103,7 @@ const handler: Handler = async (event: HandlerEvent) => {
                 created_at: c.created_at,
                 updated_at: c.updated_at,
                 participants: [{ user: partnerUser }],
-                unread_count: unreadCountMap.get(c.id) || 0 // [NEW] Thêm field này
+                unread_count: unreadCountMap.get(c.id) || 0
             };
         });
 

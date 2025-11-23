@@ -371,6 +371,10 @@ export interface Conversation {
             display_name: string;
             photo_url: string;
             is_online?: boolean; // Optional for future online status
+            xp?: number;
+            equipped_frame_id?: string;
+            equipped_title_id?: string;
+            equipped_name_effect_id?: string;
         }
     }[];
     last_message?: {

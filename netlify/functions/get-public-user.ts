@@ -14,8 +14,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     }
 
     try {
-        // Fetch user public profile data
-        // CHANGED: Use select('*') to be safer against schema mismatches (missing bio, stats columns)
+        // 1. Fetch user public profile data
         const { data: user, error } = await supabaseAdmin
             .from('users')
             .select('*')
@@ -27,13 +26,19 @@ const handler: Handler = async (event: HandlerEvent) => {
             return { statusCode: 404, body: JSON.stringify({ error: 'User not found or database error.' }) };
         }
 
-        // Optional: Increment profile views asynchronously
-        // We wrap this in a try-catch block specifically to ensure it doesn't crash the main request
-        try {
-             await supabaseAdmin.rpc('increment_profile_views', { user_id_param: userId });
-        } catch (rpcError) {
-            console.warn("Failed to increment view count (RPC likely missing):", rpcError);
-        }
+        // 2. Manual Increment Logic (Robust approach without RPC)
+        // Get current views, default to 0 if null
+        const currentViews = user.profile_views || 0;
+        const newViews = currentViews + 1;
+
+        // Update the database
+        await supabaseAdmin
+            .from('users')
+            .update({ profile_views: newViews })
+            .eq('id', userId);
+
+        // Update the returned object so the UI updates immediately
+        user.profile_views = newViews;
 
         return {
             statusCode: 200,

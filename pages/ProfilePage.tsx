@@ -40,6 +40,23 @@ const ProfilePage: React.FC = () => {
     // 3D Tilt Effect Ref
     const cardRef = useRef<HTMLDivElement>(null);
 
+    // --- INCREMENT VIEW COUNT ON MOUNT ---
+    useEffect(() => {
+        if (user?.id) {
+            // Call the get-public-user endpoint just to trigger the view increment logic
+            // We don't need the data returned here as we have the 'user' context
+            fetch(`/.netlify/functions/get-public-user?userId=${user.id}`)
+                .then(res => res.json())
+                .then(data => {
+                    // Optionally update local state with new view count
+                    if (data.profile_views) {
+                        updateUserProfile({ profile_views: data.profile_views });
+                    }
+                })
+                .catch(err => console.error("Failed to increment view", err));
+        }
+    }, [user?.id]); // Run once when user ID is available
+
     // --- FETCH POSTS (Server-side) ---
     const fetchPosts = useCallback(async () => {
         if (!session) return;

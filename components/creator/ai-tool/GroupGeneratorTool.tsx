@@ -1,6 +1,6 @@
-// NEW: Create the content for the GroupGeneratorTool component.
+
 // FIX: Import 'useState' from 'react' to resolve 'Cannot find name' errors.
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
 import ConfirmationModal from '../../ConfirmationModal';
 import ImageUploader from '../../ai-tool/ImageUploader';
@@ -12,6 +12,7 @@ import ProcessedImageModal from '../../ai-tool/ProcessedImageModal';
 import SettingsBlock from '../../ai-tool/SettingsBlock';
 import { useTranslation } from '../../../hooks/useTranslation';
 import PromptLibraryModal from './PromptLibraryModal';
+import ToggleSwitch from '../../ai-tool/ToggleSwitch';
 
 
 // Mock data for presets - in a real app, this would come from a database
@@ -22,6 +23,20 @@ const MOCK_STYLES = [
     { id: 'photographic', name: 'Nhiếp ảnh' },
     { id: 'fantasy', name: 'Kỳ ảo' },
     { id: 'oil-painting', name: 'Tranh sơn dầu' },
+];
+
+const ASPECT_RATIOS = [
+    { label: '1:1', value: '1:1', icon: 'ph-square' },
+    { label: '3:4', value: '3:4', icon: 'ph-rectangle' }, // Portrait
+    { label: '4:3', value: '4:3', icon: 'ph-rectangle' }, // Landscape
+    { label: '9:16', value: '9:16', icon: 'ph-device-mobile' },
+    { label: '16:9', value: '16:9', icon: 'ph-monitor' },
+    { label: '2:3', value: '2:3', icon: 'ph-frame-corners' },
+    { label: '3:2', value: '3:2', icon: 'ph-frame-corners' },
+    { label: '4:5', value: '4:5', icon: 'ph-instagram-logo' },
+    { label: '5:4', value: '5:4', icon: 'ph-image' },
+    { label: '9:21', value: '9:21', icon: 'ph-arrows-out-line-vertical' },
+    { label: '21:9', value: '21:9', icon: 'ph-arrows-out-line-horizontal' },
 ];
 
 type ImageState = { url: string; file: File } | null;
@@ -70,7 +85,13 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
     const [prompt, setPrompt] = useState('');
     const [selectedStyle, setSelectedStyle] = useState(MOCK_STYLES[0].id);
     const [aspectRatio, setAspectRatio] = useState('3:4');
+    const [selectedModel, setSelectedModel] = useState<'flash' | 'pro'>('flash');
     
+    // New features state
+    const [imageResolution, setImageResolution] = useState<'1K' | '2K' | '4K'>('1K');
+    const [useGoogleSearch, setUseGoogleSearch] = useState(true);
+    const [removeWatermark, setRemoveWatermark] = useState(false); // New
+
     // New states for generation flow
     const [isGenerating, setIsGenerating] = useState(false);
     const [generatedImage, setGeneratedImage] = useState<string | null>(null);
@@ -82,10 +103,14 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
     const [imageToProcess, setImageToProcess] = useState<ProcessedImageData | null>(null);
     const [isPromptLibraryOpen, setIsPromptLibraryOpen] = useState(false);
 
+    // Refs for cleanup
+    const pollingInterval = useRef<ReturnType<typeof setInterval> | null>(null);
+
     // Effect to clean up any dangling subscriptions on unmount
     useEffect(() => {
         return () => {
             supabase?.removeAllChannels();
+            if (pollingInterval.current) clearInterval(pollingInterval.current);
         };
     }, [supabase]);
     
@@ -94,6 +119,16 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
         else if (numCharacters <= 4) setAspectRatio('1:1');
         else setAspectRatio('16:9');
     }, [numCharacters]);
+    
+    // Reset resolution when switching to flash
+    useEffect(() => {
+        if (selectedModel === 'flash') {
+            setImageResolution('1K');
+            setUseGoogleSearch(false);
+        } else {
+            setUseGoogleSearch(true);
+        }
+    }, [selectedModel]);
 
     const progressPercentage = useMemo(() => {
         if (!isGenerating) return 0;
@@ -176,10 +211,17 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
         setImageToProcess(imageData);
     };
 
-    const handleProcessFace = async (index: number) => {
+    const handleProcessFace = async (index: number, modelType: 'flash' | 'pro') => {
         const char = characters[index];
         if (!char.faceImage || !session) return;
         
+        // Cost check
+        const cost = modelType === 'pro' ? 10 : 1;
+        if (user && user.diamonds < cost) {
+             showToast(t('creator.aiTool.common.errorCredits', { cost, balance: user.diamonds }), 'error');
+             return;
+        }
+
         setProcessingFaceIndex(index);
         try {
             const reader = new FileReader();
@@ -189,7 +231,10 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                 const response = await fetch('/.netlify/functions/process-face', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-                    body: JSON.stringify({ image: base64Image }),
+                    body: JSON.stringify({ 
+                        image: base64Image, 
+                        model: modelType === 'pro' ? 'gemini-3-pro-image-preview' : 'gemini-2.5-flash-image' 
+                    }),
                 });
                 const result = await response.json();
                 if (!response.ok) throw new Error(result.error || t('creator.aiTool.singlePhoto.superFaceLockProcessing'));
@@ -205,7 +250,21 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
         }
     };
 
-    const totalCost = numCharacters + 1;
+    // Cost Calculation
+    // Base: Pro (1K) = 10, Pro (2K) = 15, Pro (4K) = 20. Flash = 1.
+    // + Characters count.
+    // + Watermark removal (+1)
+    const getBaseCost = () => {
+        if (selectedModel === 'pro') {
+            if (imageResolution === '4K') return 20;
+            if (imageResolution === '2K') return 15;
+            return 10; // 1K Base
+        }
+        return 1;
+    };
+    const baseCost = getBaseCost();
+    let totalCost = baseCost + numCharacters;
+    if (removeWatermark) totalCost += 1;
 
     const handleGenerateClick = () => {
         if (!referenceImage && !prompt.trim()) {
@@ -250,8 +309,13 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                 supabase.removeChannel(channel);
                 channel = null as any;
             }
+            if (pollingInterval.current) {
+                clearInterval(pollingInterval.current);
+                pollingInterval.current = null;
+            }
         };
 
+        // 1. Realtime Subscription
         channel
             .on('postgres_changes', {
                 event: 'UPDATE',
@@ -318,6 +382,10 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                                 prompt,
                                 style: selectedStyle,
                                 aspectRatio: aspectRatio,
+                                model: selectedModel,
+                                imageSize: imageResolution, 
+                                useSearch: useGoogleSearch,
+                                removeWatermark // New Param
                             }),
                         });
 
@@ -334,6 +402,22 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ jobId }),
                         });
+
+                        // 2. Polling Fallback (in case socket events are missed)
+                        pollingInterval.current = setInterval(async () => {
+                            const { data } = await supabase
+                                .from('generated_images')
+                                .select('image_url')
+                                .eq('id', jobId)
+                                .single();
+                            
+                            if (data && data.image_url && data.image_url !== 'PENDING') {
+                                setGeneratedImage(data.image_url);
+                                showToast(t('creator.aiTool.common.success'), 'success');
+                                setIsGenerating(false);
+                                cleanup();
+                            }
+                        }, 3000); // Check every 3 seconds
 
                     } catch (error: any) {
                         showToast(error.message, 'error');
@@ -519,14 +603,29 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                                         </button>
                                     </div>
                                 </div>
-                                <button 
-                                    onClick={() => handleProcessFace(index)}
-                                    disabled={processingFaceIndex === index || !char.faceImage || !!char.processedFace}
-                                    className={`w-full text-sm font-bold py-2 px-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-wait
-                                        ${char.processedFace ? 'bg-green-500/20 text-green-300' : 'bg-yellow-500/20 text-yellow-300 hover:bg-yellow-500/30'}`}
-                                >
-                                    {processingFaceIndex === index ? t('creator.aiTool.singlePhoto.superFaceLockProcessing') : char.processedFace ? t('creator.aiTool.singlePhoto.superFaceLockProcessed') : t('creator.aiTool.singlePhoto.superFaceLockProcess')}
-                                </button>
+                                {/* Face Lock Buttons */}
+                                {char.processedFace ? (
+                                     <div className="w-full text-sm font-bold py-2 px-3 bg-green-500/20 text-green-300 rounded-lg text-center">
+                                        <i className="ph-fill ph-check-circle mr-1"></i> {t('creator.aiTool.singlePhoto.superFaceLockProcessed')}
+                                    </div>
+                                ) : (
+                                    <div className="flex flex-col gap-2">
+                                        <button 
+                                            onClick={() => handleProcessFace(index, 'flash')}
+                                            disabled={processingFaceIndex === index || !char.faceImage}
+                                            className="w-full text-xs font-bold py-2 px-2 bg-blue-500/20 text-blue-300 border border-blue-500/50 rounded-lg hover:bg-blue-500/30 disabled:opacity-50 disabled:cursor-wait"
+                                        >
+                                            {processingFaceIndex === index ? t('creator.aiTool.singlePhoto.superFaceLockProcessing') : t('creator.aiTool.singlePhoto.superFaceLockActionFlash')}
+                                        </button>
+                                        <button 
+                                            onClick={() => handleProcessFace(index, 'pro')}
+                                            disabled={processingFaceIndex === index || !char.faceImage}
+                                            className="w-full text-xs font-bold py-2 px-2 bg-yellow-500/20 text-yellow-300 border border-yellow-500/50 rounded-lg hover:bg-yellow-500/30 disabled:opacity-50 disabled:cursor-wait shadow-lg shadow-yellow-500/10"
+                                        >
+                                            {processingFaceIndex === index ? t('creator.aiTool.singlePhoto.superFaceLockProcessing') : t('creator.aiTool.singlePhoto.superFaceLockActionPro')}
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         ))}
                     </div>
@@ -534,7 +633,11 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
 
                 {/* Right Column: Settings */}
                 <div className="w-full lg:w-1/3 themed-panel p-4 flex flex-col">
-                     <SettingsBlock title={t('creator.aiTool.groupStudio.settingsTitle')} instructionKey="group-studio" onInstructionClick={onInstructionClick}>
+                     <SettingsBlock 
+                        title={t('creator.aiTool.groupStudio.settingsTitle')} 
+                        instructionKey="group-studio" 
+                        onInstructionClick={onInstructionClick}
+                    >
                         <div className="space-y-4">
                              <div>
                                 <label className="text-sm font-semibold text-skin-base mb-2 block">{t('creator.aiTool.groupStudio.refImageTitle')}</label>
@@ -547,15 +650,68 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                                     <label className="text-sm font-semibold text-skin-base">{t('creator.aiTool.groupStudio.promptTitle')}</label>
                                     <button
                                         onClick={() => setIsPromptLibraryOpen(true)}
-                                        className="flex items-center gap-1.5 text-xs text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 rounded-lg px-3 py-1.5 font-semibold transition whitespace-nowrap"
+                                        className="flex items-center gap-1.5 text-xs text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 rounded-full px-3 py-1.5 font-semibold transition whitespace-nowrap"
                                         title={t('modals.promptLibrary.buttonTooltip')}
                                     >
                                         <i className="ph-fill ph-scroll"></i>
-                                        {t('modals.promptLibrary.button')}
+                                        <span>Sử dụng Prompt có sẵn</span>
                                     </button>
                                 </div>
                                 <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder={t('creator.aiTool.groupStudio.promptPlaceholder')} className="w-full p-2 bg-skin-input-bg rounded-md border border-skin-border focus:border-skin-border-accent transition text-xs text-skin-base resize-none" rows={3}/>
                             </div>
+
+                            <div>
+                                <label className="text-sm font-semibold text-skin-base mb-2 block">{t('creator.aiTool.singlePhoto.modelLabel')}</label>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <button 
+                                        onClick={() => setSelectedModel('flash')}
+                                        className={`p-2 rounded-lg border-2 text-left transition-all ${selectedModel === 'flash' ? 'border-blue-500 bg-blue-500/10 text-blue-300' : 'border-skin-border bg-skin-fill-secondary text-gray-400'}`}
+                                    >
+                                        <div className="text-xs font-bold">Flash</div>
+                                        <div className="text-[10px] mt-1 opacity-80">1💎 base</div>
+                                    </button>
+                                    <button 
+                                        onClick={() => setSelectedModel('pro')}
+                                        className={`p-2 rounded-lg border-2 text-left transition-all ${selectedModel === 'pro' ? 'border-yellow-500 bg-yellow-500/10 text-yellow-300' : 'border-skin-border bg-skin-fill-secondary text-gray-400'}`}
+                                    >
+                                        <div className="text-xs font-bold">Pro 4K</div>
+                                        <div className="text-[10px] mt-1 opacity-80">10+ 💎 base</div>
+                                    </button>
+                                </div>
+                            </div>
+
+                             {/* Resolution & Search for Pro */}
+                             {selectedModel === 'pro' && (
+                                <div className="p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg space-y-3">
+                                     <div>
+                                        <label className="text-xs font-bold text-yellow-400 mb-2 block flex justify-between">
+                                            <span>Resolution (Pro)</span>
+                                            <span className="text-[10px] bg-yellow-500/20 px-2 py-0.5 rounded">{imageResolution === '1K' ? 'Base 10💎' : imageResolution === '2K' ? 'Base 15💎' : 'Base 20💎'}</span>
+                                        </label>
+                                        <div className="grid grid-cols-3 gap-2">
+                                            {(['1K', '2K', '4K'] as const).map(res => (
+                                                <button 
+                                                    key={res}
+                                                    onClick={() => setImageResolution(res)}
+                                                    className={`py-1.5 px-2 text-xs font-bold rounded border transition-all ${imageResolution === res ? 'bg-yellow-500 text-black border-yellow-500' : 'bg-transparent text-yellow-200/70 border-yellow-500/30 hover:bg-yellow-500/20'}`}
+                                                >
+                                                    {res}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div className="pt-2 border-t border-yellow-500/20">
+                                        <ToggleSwitch 
+                                            label="Google Search Grounding" 
+                                            checked={useGoogleSearch} 
+                                            onChange={(e) => setUseGoogleSearch(e.target.checked)} 
+                                        />
+                                        <p className="text-[10px] text-yellow-200/60 mt-1">
+                                            Kết nối tìm kiếm thực tế (Auto-on).
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
 
                             <div>
                                 <label className="text-sm font-semibold text-skin-base mb-2 block">{t('creator.aiTool.groupStudio.styleTitle')}</label>
@@ -570,17 +726,29 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                             
                             <div>
                                 <label className="text-sm font-semibold text-skin-base mb-2 block">{t('creator.aiTool.groupStudio.aspectRatioTitle')}</label>
-                                <div className="grid grid-cols-5 gap-2">
-                                    {(['3:4', '1:1', '4:3', '9:16', '16:9'] as const).map(ar => {
-                                        const dims: { [key: string]: string } = { '3:4': 'w-3 h-4', '1:1': 'w-4 h-4', '4:3': 'w-4 h-3', '9:16': 'w-[1.125rem] h-5', '16:9': 'w-5 h-[1.125rem]' };
-                                        return (
-                                            <button key={ar} onClick={() => setAspectRatio(ar)} className={`p-2 rounded-md flex flex-col items-center justify-center gap-1 border-2 transition ${aspectRatio === ar ? 'selected-glow' : 'border-skin-border bg-skin-fill-secondary hover:border-pink-500/50 text-skin-base'}`}>
-                                                <div className={`${dims[ar]} bg-gray-500 rounded-sm`}/>
-                                                <span className="text-xs font-semibold">{ar}</span>
-                                            </button>
-                                        );
-                                    })}
+                                <div className="grid grid-cols-5 gap-2 max-h-40 overflow-y-auto custom-scrollbar pr-1">
+                                    {ASPECT_RATIOS.map(ar => (
+                                        <button 
+                                            key={ar.value} 
+                                            onClick={() => setAspectRatio(ar.value)} 
+                                            className={`p-2 rounded-md flex flex-col items-center justify-center gap-1 border-2 transition hover:scale-105 ${aspectRatio === ar.value ? 'selected-glow' : 'border-skin-border bg-skin-fill-secondary hover:border-pink-500/50 text-skin-base'}`}
+                                            title={ar.label}
+                                        >
+                                             <i className={`ph-fill ${ar.icon} text-xl`}></i>
+                                            <span className="text-[10px] font-semibold">{ar.label}</span>
+                                        </button>
+                                    ))}
                                 </div>
+                            </div>
+
+                            <div>
+                                <ToggleSwitch 
+                                    label={t('creator.aiTool.singlePhoto.removeWatermarkLabel')} 
+                                    checked={removeWatermark} 
+                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRemoveWatermark(e.target.checked)} 
+                                    title={t('creator.aiTool.singlePhoto.removeWatermarkDesc')}
+                                />
+                                <p className="text-xs text-skin-muted px-1 mt-1 leading-relaxed">{t('creator.aiTool.singlePhoto.removeWatermarkDesc')}</p>
                             </div>
                         </div>
                     </SettingsBlock>

@@ -1,8 +1,7 @@
+
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { TransactionLogEntry } from '../types';
 import XPProgressBar from './common/XPProgressBar';
-import RedeemGiftCode from './user/RedeemGiftCode';
 import Dashboard from './admin/Dashboard';
 import GiftCodeManager from './admin/GiftCodeManager';
 import TransactionManager from './admin/TransactionManager';
@@ -11,48 +10,64 @@ import CreditPackageManager from './admin/CreditPackageManager';
 import CheckInRewardManager from './admin/CheckInRewardManager';
 import AnnouncementManager from './admin/AnnouncementManager';
 import ApiKeyManager from './admin/ApiKeyManager';
+import GameConfigManager from './admin/GameConfigManager'; 
+import LuckyWheelManager from './admin/LuckyWheelManager'; 
+import SystemMessageManager from './admin/SystemMessageManager'; // NEW IMPORT
 import { resizeImage } from '../utils/imageUtils';
 import { useTranslation } from '../hooks/useTranslation';
+import UserAvatar from './common/UserAvatar';
+import UserBadge from './common/UserBadge';
+import RedeemGiftCode from './user/RedeemGiftCode'; 
+import TransactionHistory from './user/TransactionHistory';
 
-
-// User-facing Transaction History Component
-const TransactionHistory: React.FC = () => {
-    const { session, showToast } = useAuth();
+// Referral Panel
+const ReferralPanel: React.FC = () => {
+    const { user, showToast } = useAuth();
     const { t } = useTranslation();
-    const [logs, setLogs] = useState<TransactionLogEntry[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
+    const [copied, setCopied] = useState(false);
 
-    useEffect(() => {
-        const fetchHistory = async () => {
-            if (!session) return;
-            try {
-                const res = await fetch('/.netlify/functions/transaction-history', {
-                    headers: { Authorization: `Bearer ${session.access_token}` }
-                });
-                if (!res.ok) throw new Error(t('creator.settings.transactionHistory.error'));
-                setLogs(await res.json());
-            } catch (e: any) {
-                showToast(e.message, 'error');
-            } finally {
-                setIsLoading(false);
-            }
-        };
-        fetchHistory();
-    }, [session, showToast, t]);
+    if (!user) return null;
 
-    if (isLoading) return <p className="text-center text-gray-400">{t('creator.settings.transactionHistory.loading')}</p>;
+    // Generate referral code from user ID (first 8 chars, uppercase)
+    const referralCode = user.id.substring(0, 8).toUpperCase();
+
+    const handleCopy = () => {
+        navigator.clipboard.writeText(referralCode);
+        setCopied(true);
+        showToast(t('modals.image.copied'), 'success');
+        setTimeout(() => setCopied(false), 2000);
+    };
 
     return (
-        <div className="space-y-2 max-h-80 overflow-y-auto custom-scrollbar pr-2">
-            {logs.length > 0 ? logs.map(log => (
-                <div key={log.id} className="grid grid-cols-12 gap-2 items-center p-3 bg-white/5 rounded-lg text-sm">
-                    <div className="col-span-3 md:col-span-2 text-gray-400">{new Date(log.created_at).toLocaleDateString('vi-VN')}</div>
-                    <div className="col-span-6 md:col-span-7 text-white">{log.description}</div>
-                    <div className={`col-span-3 text-right font-bold ${log.amount >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                        {log.amount >= 0 ? '+' : ''}{log.amount.toLocaleString()} 💎
+        <div className="bg-gradient-to-r from-indigo-900/80 to-purple-900/80 border border-indigo-500/30 rounded-2xl shadow-lg p-6 mb-8 max-w-4xl mx-auto relative overflow-hidden">
+            {/* Decorative background */}
+            <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
+            
+            <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
+                <div className="flex-1">
+                    <h3 className="text-2xl font-bold mb-2 text-indigo-300 flex items-center gap-2">
+                        <i className="ph-fill ph-users-three"></i> {t('creator.settings.referral.title')}
+                    </h3>
+                    <p className="text-indigo-100/80 text-sm leading-relaxed">
+                        {t('creator.settings.referral.desc')} <span className="font-bold text-yellow-400">{t('creator.settings.referral.bonus')}</span>.
+                    </p>
+                </div>
+                
+                <div className="flex flex-col items-center gap-2 w-full md:w-auto">
+                    <span className="text-xs text-indigo-300 font-semibold uppercase">{t('creator.settings.referral.myCode')}</span>
+                    <div className="flex items-center gap-2 w-full">
+                        <div className="bg-black/30 border border-indigo-500/30 rounded-lg px-4 py-3 font-mono text-xl font-bold text-white tracking-wider text-center flex-grow md:w-48">
+                            {referralCode}
+                        </div>
+                        <button 
+                            onClick={handleCopy}
+                            className={`p-3 rounded-lg transition-all duration-300 ${copied ? 'bg-green-500 text-white' : 'bg-indigo-500 text-white hover:bg-indigo-600'}`}
+                        >
+                            <i className={`ph-fill ${copied ? 'ph-check' : 'ph-copy'} text-xl`}></i>
+                        </button>
                     </div>
                 </div>
-            )) : <p className="text-center text-gray-500 py-8">{t('creator.settings.transactionHistory.empty')}</p>}
+            </div>
         </div>
     );
 };
@@ -60,7 +75,7 @@ const TransactionHistory: React.FC = () => {
 // Admin Panel
 const AdminPanel: React.FC = () => {
     const { t } = useTranslation();
-    type AdminTab = 'dashboard' | 'transactions' | 'users' | 'gift_codes' | 'packages' | 'rewards' | 'announcements' | 'api_keys';
+    type AdminTab = 'dashboard' | 'transactions' | 'users' | 'gift_codes' | 'packages' | 'rewards' | 'announcements' | 'api_keys' | 'game_config' | 'lucky_wheel' | 'broadcast';
     const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
 
     const renderContent = () => {
@@ -73,6 +88,9 @@ const AdminPanel: React.FC = () => {
             case 'rewards': return <CheckInRewardManager />;
             case 'announcements': return <AnnouncementManager />;
             case 'api_keys': return <ApiKeyManager />;
+            case 'game_config': return <GameConfigManager />;
+            case 'lucky_wheel': return <LuckyWheelManager />;
+            case 'broadcast': return <SystemMessageManager />; // NEW
             default: return <p className="text-center text-gray-500 py-8">Chức năng này đang được phát triển.</p>;
         }
     };
@@ -82,6 +100,9 @@ const AdminPanel: React.FC = () => {
             <h2 className="text-3xl font-bold mb-6 text-center bg-gradient-to-r from-red-500 to-orange-500 text-transparent bg-clip-text">{t('creator.settings.admin.title')}</h2>
             <div className="flex flex-wrap justify-center gap-2 border-b border-white/10 mb-6 pb-4">
                 <button onClick={() => setActiveTab('dashboard')} className={activeTab === 'dashboard' ? 'admin-tab-active' : 'admin-tab'}>{t('creator.settings.admin.tabs.dashboard')}</button>
+                <button onClick={() => setActiveTab('broadcast')} className={activeTab === 'broadcast' ? 'admin-tab-active' : 'admin-tab'}><i className="ph-fill ph-megaphone mr-1"></i> {t('creator.settings.admin.tabs.broadcast')}</button>
+                <button onClick={() => setActiveTab('game_config')} className={activeTab === 'game_config' ? 'admin-tab-active' : 'admin-tab'}>{t('creator.settings.admin.gameConfig.title')}</button>
+                <button onClick={() => setActiveTab('lucky_wheel')} className={activeTab === 'lucky_wheel' ? 'admin-tab-active' : 'admin-tab'}>{t('creator.settings.admin.tabs.luckyWheel')}</button>
                 <button onClick={() => setActiveTab('transactions')} className={activeTab === 'transactions' ? 'admin-tab-active' : 'admin-tab'}>{t('creator.settings.admin.tabs.transactions')}</button>
                 <button onClick={() => setActiveTab('users')} className={activeTab === 'users' ? 'admin-tab-active' : 'admin-tab'}>{t('creator.settings.admin.tabs.users')}</button>
                 <button onClick={() => setActiveTab('gift_codes')} className={activeTab === 'gift_codes' ? 'admin-tab-active' : 'admin-tab'}>{t('creator.settings.admin.tabs.giftCodes')}</button>
@@ -97,12 +118,43 @@ const AdminPanel: React.FC = () => {
 
 // Main Settings Component
 const Settings: React.FC = () => {
-    const { user, session, showToast, updateUserProfile } = useAuth();
+    const { user, session, showToast, updateUserProfile, updateUserDiamonds } = useAuth();
     const { t } = useTranslation();
     const [displayName, setDisplayName] = useState(user?.display_name || '');
     const [isSaving, setIsSaving] = useState(false);
     const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
     
+    // Check for pending referral code on mount
+    useEffect(() => {
+        const checkReferral = async () => {
+            const pendingCode = localStorage.getItem('pendingReferralCode');
+            if (pendingCode && session) {
+                try {
+                    const res = await fetch('/.netlify/functions/process-referral', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            Authorization: `Bearer ${session.access_token}`,
+                        },
+                        body: JSON.stringify({ referralCode: pendingCode }),
+                    });
+                    const data = await res.json();
+                    if (res.ok) {
+                        showToast('Nhập mã giới thiệu thành công! +5 Kim Cương', 'success');
+                        updateUserDiamonds(user!.diamonds + 5);
+                    } else {
+                        console.log("Referral process info:", data.error);
+                    }
+                } catch (e) {
+                    console.error("Referral error:", e);
+                } finally {
+                    localStorage.removeItem('pendingReferralCode');
+                }
+            }
+        };
+        checkReferral();
+    }, [session, showToast, updateUserDiamonds, user]);
+
     if (!user) return null;
 
     const handleProfileUpdate = async (e: React.FormEvent) => {
@@ -132,7 +184,7 @@ const Settings: React.FC = () => {
 
         setIsUploadingAvatar(true);
         try {
-            const { dataUrl } = await resizeImage(file, 256); // Resize to 256x256 max
+            const { dataUrl } = await resizeImage(file, 256); 
 
             const response = await fetch('/.netlify/functions/upload-avatar', {
                 method: 'POST',
@@ -161,15 +213,22 @@ const Settings: React.FC = () => {
     return (
         <div className="container mx-auto px-4 py-8 animate-fade-in">
             <div className="max-w-4xl mx-auto">
-                <div className="bg-[#12121A]/80 border border-white/10 rounded-2xl shadow-lg p-6 flex flex-col md:flex-row items-center gap-6">
+                <div className="bg-[#12121A]/80 border border-white/10 rounded-2xl shadow-lg p-6 flex flex-col md:flex-row items-center gap-6 mb-8">
                     <div className="relative group flex-shrink-0">
-                        <img src={user.photo_url} alt={user.display_name} className="w-28 h-28 rounded-full object-cover" />
+                        <UserAvatar 
+                            url={user.photo_url} 
+                            alt={user.display_name} 
+                            frameId={user.equipped_frame_id}
+                            level={user.level}
+                            size="lg"
+                            className="w-28 h-28" 
+                        />
                         {isUploadingAvatar ? (
                             <div className="absolute inset-0 bg-black/70 rounded-full flex items-center justify-center">
                                 <div className="w-8 h-8 border-2 border-white/50 border-t-white rounded-full animate-spin"></div>
                             </div>
                         ) : (
-                            <label htmlFor="avatar-upload" className="absolute inset-0 bg-black/60 rounded-full flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                            <label htmlFor="avatar-upload" className="absolute inset-0 bg-black/60 rounded-full flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer z-10">
                                 <i className="ph-fill ph-camera text-3xl"></i>
                                 <span className="sr-only">{t('creator.settings.avatar.change')}</span>
                             </label>
@@ -185,12 +244,18 @@ const Settings: React.FC = () => {
                     </div>
                     <div className="flex-grow w-full">
                         <form onSubmit={handleProfileUpdate} className="flex flex-col sm:flex-row gap-4 items-center">
-                            <input
-                                type="text"
-                                value={displayName}
-                                onChange={(e) => setDisplayName(e.target.value)}
-                                className="auth-input flex-grow"
-                            />
+                            <div className="flex-grow w-full">
+                                <input
+                                    type="text"
+                                    value={displayName}
+                                    onChange={(e) => setDisplayName(e.target.value)}
+                                    className="auth-input"
+                                />
+                                <div className="mt-2 flex items-center gap-2">
+                                    <span className="text-xs text-gray-400">{t('creator.settings.personalization.currentTitle')}:</span>
+                                    <UserBadge titleId={user.equipped_title_id} level={user.level} />
+                                </div>
+                            </div>
                             <button type="submit" disabled={isSaving || displayName.trim() === user.display_name} className="themed-button-primary w-full sm:w-auto px-6 py-2 font-semibold">
                                 {isSaving ? t('creator.settings.saving') : t('creator.settings.save')}
                             </button>
@@ -200,45 +265,14 @@ const Settings: React.FC = () => {
                         </div>
                     </div>
                 </div>
+                
+                <ReferralPanel />
+                <RedeemGiftCode />
+                
+                {/* Transaction History for all users */}
+                <TransactionHistory />
 
-                <div className="bg-[#12121A]/80 border border-cyan-500/20 rounded-2xl shadow-lg p-6 mt-8">
-                    <h3 className="text-2xl font-bold mb-4 text-cyan-400 flex items-center gap-2">
-                        <i className="ph-fill ph-star"></i>{t('creator.settings.xpGuide.title')}
-                    </h3>
-                    <ul className="space-y-3 text-sm text-gray-300">
-                        <li className="flex items-start gap-3 p-3 bg-white/5 rounded-lg">
-                            <i className="ph-fill ph-calendar-check text-xl text-cyan-400 mt-1"></i>
-                            <div>
-                                <strong className="text-white">{t('creator.settings.xpGuide.checkIn.title')}</strong>
-                                <p className="text-gray-400">{t('creator.settings.xpGuide.checkIn.description')}</p>
-                            </div>
-                        </li>
-                        <li className="flex items-start gap-3 p-3 bg-white/5 rounded-lg">
-                            <i className="ph-fill ph-magic-wand text-xl text-cyan-400 mt-1"></i>
-                            <div>
-                                <strong className="text-white">{t('creator.settings.xpGuide.createImage.title')}</strong>
-                                <p className="text-gray-400">{t('creator.settings.xpGuide.createImage.description')}</p>
-                            </div>
-                        </li>
-                        <li className="flex items-start gap-3 p-3 bg-white/5 rounded-lg">
-                            <i className="ph-fill ph-timer text-xl text-cyan-400 mt-1"></i>
-                            <div>
-                                <strong className="text-white">{t('creator.settings.xpGuide.active.title')}</strong>
-                                <p className="text-gray-400">{t('creator.settings.xpGuide.active.description')}</p>
-                            </div>
-                        </li>
-                    </ul>
-                </div>
-
-                <div className="mt-8">
-                    <RedeemGiftCode />
-                </div>
-
-                <div className="bg-[#12121A]/80 border border-white/10 rounded-2xl shadow-lg p-6 mt-8">
-                     <h3 className="text-2xl font-bold mb-4 text-cyan-400">{t('creator.settings.transactionHistory.title')}</h3>
-                    <TransactionHistory />
-                </div>
-
+                {/* Admin Panel if applicable */}
                 {user.is_admin && <AdminPanel />}
             </div>
         </div>

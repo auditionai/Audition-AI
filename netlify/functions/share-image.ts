@@ -1,3 +1,4 @@
+
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
 
@@ -28,7 +29,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     try {
         const { data: userData, error: userError } = await supabaseAdmin
             .from('users')
-            .select('diamonds')
+            .select('diamonds, spin_tickets')
             .eq('id', user.id)
             .single();
 
@@ -52,15 +53,17 @@ const handler: Handler = async (event: HandlerEvent) => {
         }
 
         const newDiamondCount = userData.diamonds - COST_PER_SHARE;
+        // REWARD: Add 1 spin ticket
+        const newTicketCount = (userData.spin_tickets || 0) + 1;
 
         const [userUpdateResult, imageUpdateResult, logResult] = await Promise.all([
-            supabaseAdmin.from('users').update({ diamonds: newDiamondCount }).eq('id', user.id),
+            supabaseAdmin.from('users').update({ diamonds: newDiamondCount, spin_tickets: newTicketCount }).eq('id', user.id),
             supabaseAdmin.from('generated_images').update({ is_public: true }).eq('id', imageId),
             supabaseAdmin.from('diamond_transactions_log').insert({
                 user_id: user.id,
                 amount: -COST_PER_SHARE,
                 transaction_type: 'SHARE_IMAGE',
-                description: 'Chia sẻ tác phẩm ra thư viện'
+                description: 'Chia sẻ tác phẩm ra thư viện (+1 Vé quay)'
             })
         ]);
 
@@ -71,7 +74,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         return {
             statusCode: 200,
             body: JSON.stringify({ 
-                message: 'Chia sẻ ảnh thành công!',
+                message: 'Chia sẻ ảnh thành công! Nhận +1 Vé quay.',
                 newDiamondCount: newDiamondCount 
             }),
         };

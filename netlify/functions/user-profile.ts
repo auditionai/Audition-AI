@@ -1,5 +1,9 @@
+
 import { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
+import { sendSystemMessage } from './utils/chatUtils';
+
+const SYSTEM_BOT_ID = '00000000-0000-0000-0000-000000000000';
 
 const handler: Handler = async (event: HandlerEvent) => {
     // 1. Authenticate user (common for all methods)
@@ -13,29 +17,77 @@ const handler: Handler = async (event: HandlerEvent) => {
     }
 
     try {
-        // FIX: Use Supabase v2 `auth.getUser` as `auth.api` is from v1.
-        const { data: { user: authUser }, error: authError } = await supabaseAdmin.auth.getUser(token);
+        // FIX: Use Supabase v2 `auth.getUser` by casting to any
+        const { data: { user: authUser }, error: authError } = await (supabaseAdmin.auth as any).getUser(token);
         if (authError || !authUser) {
             return { statusCode: 401, body: JSON.stringify({ error: `Unauthorized: ${authError?.message || 'Invalid token.'}` }) };
         }
 
-        // --- GET Method: Fetch or Create User Profile via RPC ---
+        // --- GET Method: Fetch User Profile ---
         if (event.httpMethod === 'GET') {
-            const { data: profile, error: rpcError } = await supabaseAdmin
-                .rpc('handle_new_user', {
-                    p_id: authUser.id,
-                    p_email: authUser.email!,
-                    p_display_name: authUser.user_metadata?.full_name || 'Tân Binh',
-                    p_photo_url: authUser.user_metadata?.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${authUser.id}`,
-                })
-                .single(); // Ensure we get a single object, not an array
+            // OPTIMIZATION: Try to fetch the user directly first.
+            let { data: profile, error: fetchError } = await supabaseAdmin
+                .from('users')
+                .select('*')
+                .eq('id', authUser.id)
+                .single();
 
-            if (rpcError) {
-                throw new Error(`RPC 'handle_new_user' failed: ${rpcError.message}`);
-            }
-            
-            if (!profile) {
-                 throw new Error('RPC function returned no profile. This should not happen.');
+            // If user doesn't exist, THEN try to create/init via RPC
+            if (!profile || fetchError) {
+                console.log("User not found in public table, initializing via RPC...");
+                
+                const { error: rpcError } = await supabaseAdmin
+                    .rpc('handle_new_user', {
+                        p_id: authUser.id,
+                        p_email: authUser.email!,
+                        p_display_name: authUser.user_metadata?.full_name || 'Tân Binh',
+                        p_photo_url: authUser.user_metadata?.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${authUser.id}`,
+                    });
+
+                if (rpcError) {
+                    console.warn(`RPC 'handle_new_user' warning: ${rpcError.message}`);
+                } else {
+                    // --- NEW USER ONBOARDING LOGIC ---
+                    // Send all historical system broadcasts to this new user
+                    try {
+                        // 1. Determine valid sender (Admin or System Bot)
+                        let senderId = SYSTEM_BOT_ID;
+                        // Check if System Bot exists, otherwise find an Admin
+                        const { data: botUser } = await supabaseAdmin.from('users').select('id').eq('id', SYSTEM_BOT_ID).single();
+                        if (!botUser) {
+                            const { data: adminUser } = await supabaseAdmin.from('users').select('id').eq('is_admin', true).limit(1).single();
+                            if (adminUser) senderId = adminUser.id;
+                        }
+
+                        // 2. Fetch history
+                        const { data: broadcasts } = await supabaseAdmin
+                            .from('system_broadcasts')
+                            .select('content')
+                            .order('created_at', { ascending: true });
+
+                        // 3. Send messages
+                        if (broadcasts && broadcasts.length > 0) {
+                            console.log(`Sending ${broadcasts.length} historical broadcasts to new user ${authUser.id} from ${senderId}`);
+                            for (const msg of broadcasts) {
+                                await sendSystemMessage(authUser.id, msg.content, senderId);
+                            }
+                        }
+                    } catch (broadcastError) {
+                        console.error("Failed to send historical broadcasts:", broadcastError);
+                    }
+                }
+                
+                // Retry fetch after RPC
+                const { data: newProfile, error: retryError } = await supabaseAdmin
+                    .from('users')
+                    .select('*')
+                    .eq('id', authUser.id)
+                    .single();
+                
+                if (retryError || !newProfile) {
+                     throw new Error(`Failed to fetch/create user profile: ${retryError?.message || 'Unknown error'}`);
+                }
+                profile = newProfile;
             }
 
             return { statusCode: 200, body: JSON.stringify(profile) };

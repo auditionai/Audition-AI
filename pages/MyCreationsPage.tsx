@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { GalleryImage } from '../types';
@@ -23,8 +24,10 @@ const MyCreationsPage: React.FC = () => {
                 headers: { Authorization: `Bearer ${session.access_token}` },
             });
             if (!response.ok) throw new Error(t('creator.myCreations.loading'));
-            const data = await response.json();
-            setImages(data);
+            const data: GalleryImage[] = await response.json();
+            // Safeguard: Filter out any images that may have been deleted but still returned
+            // Also process 'PENDING' if we want to show placeholders, but user-gallery usually handles valid URLs
+            setImages(data.filter(img => img.image_url));
         } catch (error: any) {
             showToast(error.message, 'error');
         } finally {
@@ -88,6 +91,32 @@ const MyCreationsPage: React.FC = () => {
         }
     };
 
+    // Helper to clean up prompts (especially for Comic JSONs)
+    const formatPrompt = (prompt: string) => {
+        if (!prompt) return 'User creation';
+        if (prompt.trim().startsWith('{')) {
+            try {
+                // Try parsing JSON prompts from Comic Studio
+                const parsed = JSON.parse(prompt);
+                if (parsed.payload && parsed.payload.panel && parsed.payload.panel.visual_description) {
+                    return parsed.payload.panel.visual_description;
+                }
+                return 'Comic Panel Scene'; 
+            } catch (e) {
+                return 'Comic Creation';
+            }
+        }
+        return prompt;
+    };
+
+    const handleSelectImage = (image: GalleryImage) => {
+        const cleanedImage = {
+            ...image,
+            prompt: formatPrompt(image.prompt)
+        };
+        setSelectedImage(cleanedImage);
+    }
+
     if (isLoading) {
         return <div className="text-center p-12">{t('creator.myCreations.loading')}</div>;
     }
@@ -148,11 +177,11 @@ const MyCreationsPage: React.FC = () => {
                         <div 
                             key={image.id} 
                             className="group relative rounded-xl overflow-hidden cursor-pointer interactive-3d aspect-[3/4]"
-                            onClick={() => setSelectedImage(image)}
+                            onClick={() => handleSelectImage(image)}
                         >
                             <img 
                                 src={image.image_url} 
-                                alt={image.prompt || 'User creation'}
+                                alt={formatPrompt(image.prompt)}
                                 className="w-full h-full object-cover transition-transform duration-500 ease-in-out group-hover:scale-110"
                             />
                             <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent"></div>

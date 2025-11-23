@@ -8,9 +8,10 @@ interface LandingHeaderProps {
   user: User | null;
   onTopUpClick: () => void;
   onScrollTo: (id: 'hero' | 'features' | 'how-it-works' | 'pricing' | 'faq' | 'gallery') => void;
+  onAuthClick?: (mode: 'login' | 'register') => void;
 }
 
-const LandingHeader: React.FC<LandingHeaderProps> = ({ user, onTopUpClick, onScrollTo }) => {
+const LandingHeader: React.FC<LandingHeaderProps> = ({ user, onTopUpClick, onScrollTo, onAuthClick }) => {
   const { t } = useTranslation();
   const [isScrolled, setIsScrolled] = React.useState(false);
 
@@ -47,11 +48,23 @@ const LandingHeader: React.FC<LandingHeaderProps> = ({ user, onTopUpClick, onScr
                   <i className="ph-fill ph-diamonds-four text-skin-accent"></i>
                   <span className="font-bold">{user.diamonds}</span>
                 </div>
-                 {/* Fix: Use snake_case properties `photo_url` and `display_name` to match the User type. */}
                  <img src={user.photo_url || undefined} alt={user.display_name || 'User'} className="w-10 h-10 rounded-full" />
               </div>
             ) : (
-              null
+              <div className="flex items-center gap-2">
+                 <button 
+                    onClick={() => onAuthClick?.('login')}
+                    className="hidden sm:block px-4 py-2 text-sm font-bold text-skin-muted hover:text-white transition-colors"
+                 >
+                    {t('landing.header.login')}
+                 </button>
+                 <button 
+                    onClick={() => onAuthClick?.('register')}
+                    className="themed-button-primary px-5 py-2 !rounded-full text-sm font-bold shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all"
+                 >
+                    {t('landing.header.register')}
+                 </button>
+              </div>
             )}
           </div>
         </div>

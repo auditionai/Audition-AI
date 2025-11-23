@@ -1,4 +1,3 @@
-import React from 'react';
 import { Rank } from '../types';
 
 export const RANKS: Rank[] = [

@@ -5,10 +5,11 @@ interface ToggleSwitchProps {
     checked: boolean;
     onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
     disabled?: boolean;
+    title?: string;
 }
 
-const ToggleSwitch: React.FC<ToggleSwitchProps> = ({ label, checked, onChange, disabled = false }) => (
-    <label className={`flex items-center justify-between py-2 ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
+const ToggleSwitch: React.FC<ToggleSwitchProps> = ({ label, checked, onChange, disabled = false, title }) => (
+    <label title={title} className={`flex items-center justify-between py-2 ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
         <span className="text-sm text-skin-base">{label}</span>
         <div className="relative">
             <input type="checkbox" className="sr-only" checked={checked} onChange={onChange} disabled={disabled} />

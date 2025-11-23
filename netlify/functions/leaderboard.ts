@@ -1,34 +1,132 @@
-import type { Handler } from "@netlify/functions";
+
+import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
 
-// Hàm tính cấp bậc từ XP, đảm bảo logic đồng bộ với client
+// Hàm tính cấp bậc từ XP
 const calculateLevelFromXp = (xp: number): number => {
   if (typeof xp !== 'number' || xp < 0) return 1;
   return Math.floor(xp / 100) + 1;
 };
 
-const handler: Handler = async () => {
+const handler: Handler = async (event: HandlerEvent) => {
     try {
-        // TỐI ƯU HÓA: Gọi một hàm RPC duy nhất để database tự thực hiện
-        // tất cả các công việc nặng nhọc: đếm, nhóm, sắp xếp và kết nối bảng.
-        const { data: topUsers, error: rpcError } = await supabaseAdmin.rpc('get_leaderboard');
+        const { type } = event.queryStringParameters || {};
 
-        if (rpcError) {
-            // If the RPC fails, it is a critical error (e.g., function not created).
-            // Guide the developer on how to fix it in the error message.
-            throw new Error(`Database RPC error: ${rpcError.message}. Please ensure the 'get_leaderboard' function exists in your Supabase SQL Editor.`);
+        let users: any[] = [];
+
+        // FIX: Use select('*') for all queries to ensure robustness if new columns are missing
+
+        // --- 1. HOT (Top Profile Points / Weekly Points) ---
+        if (type === 'hot') {
+            const { data, error } = await supabaseAdmin
+                .from('users')
+                .select('*')
+                .order('weekly_points', { ascending: false })
+                .limit(50);
+            
+            if (error) throw error;
+            users = data.map(u => ({ ...u, metric_value: u.weekly_points }));
+        } 
+        
+        // --- 2. LEVEL (Top XP) ---
+        else if (type === 'level') {
+            const { data, error } = await supabaseAdmin
+                .from('users')
+                .select('*')
+                .order('xp', { ascending: false })
+                .limit(50);
+
+            if (error) throw error;
+            users = data.map(u => ({ ...u, metric_value: u.xp }));
         }
 
-        // Dữ liệu trả về từ RPC đã được xử lý sẵn.
-        // Chỉ cần định dạng lại một chút cho client.
-        const leaderboardData = (topUsers || []).map((user, index) => ({
-            id: user.user_id,
+        // --- 3. CREATION (Top Generated Images) ---
+        else if (type === 'creation') {
+             // Fallback: Since we don't have a 'creations_count' column on users, 
+             // we will fetch users and their image count using a subquery or RPC.
+             // Assuming get_leaderboard RPC (from previous code) does exactly this.
+             const { data, error } = await supabaseAdmin.rpc('get_leaderboard');
+             if (error) throw error;
+             // Note: RPC results map directly
+             users = data.map((u: any) => ({
+                 id: u.user_id,
+                 display_name: u.display_name,
+                 photo_url: u.photo_url,
+                 xp: u.xp,
+                 equipped_frame_id: u.equipped_frame_id,
+                 equipped_title_id: u.equipped_title_id,
+                 equipped_name_effect_id: u.equipped_name_effect_id,
+                 metric_value: Number(u.creations_count)
+             }));
+        }
+
+        // --- 4. TYCOON (Top Spenders) ---
+        // Based on diamond_transactions_log where amount < 0
+        else if (type === 'tycoon') {
+            const { data: logs, error } = await supabaseAdmin
+                .from('diamond_transactions_log')
+                .select('user_id, amount')
+                .lt('amount', 0)
+                .order('created_at', { ascending: false }) // Limit to recent activity to keep it fast
+                .limit(2000);
+
+            if (error) throw error;
+
+            const spendingMap: Record<string, number> = {};
+            logs.forEach((log: any) => {
+                const spent = Math.abs(log.amount);
+                spendingMap[log.user_id] = (spendingMap[log.user_id] || 0) + spent;
+            });
+
+            // Convert map to array and sort
+            const sortedSpenders = Object.entries(spendingMap)
+                .sort(([, a], [, b]) => b - a)
+                .slice(0, 50);
+
+            const userIds = sortedSpenders.map(([id]) => id);
+            
+            if (userIds.length > 0) {
+                const { data: userInfos } = await supabaseAdmin
+                    .from('users')
+                    .select('*')
+                    .in('id', userIds);
+                
+                const userInfoMap = new Map(userInfos?.map(u => [u.id, u]));
+
+                users = sortedSpenders.map(([id, spent]) => {
+                    const info = userInfoMap.get(id);
+                    if (!info) return null;
+                    return {
+                        ...(info as any),
+                        metric_value: spent
+                    };
+                }).filter(Boolean);
+            }
+        } 
+        
+        // Default to Level if type unknown
+        else {
+             const { data, error } = await supabaseAdmin
+                .from('users')
+                .select('*')
+                .order('xp', { ascending: false })
+                .limit(50);
+            if (error) throw error;
+            users = data.map(u => ({ ...u, metric_value: u.xp }));
+        }
+
+        // --- FORMATTING RESPONSE ---
+        const leaderboardData = users.map((user, index) => ({
+            id: user.id,
             rank: index + 1,
             display_name: user.display_name,
             photo_url: user.photo_url,
             level: calculateLevelFromXp(user.xp),
             xp: user.xp,
-            creations_count: Number(user.creations_count), // Đảm bảo kiểu dữ liệu là number
+            metric_value: user.metric_value, // Use this generic field for the specific leaderboard value
+            equipped_title_id: user.equipped_title_id,
+            equipped_frame_id: user.equipped_frame_id,
+            equipped_name_effect_id: user.equipped_name_effect_id
         }));
 
         return {

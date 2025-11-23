@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { AdminManagedUser } from '../../types';
@@ -16,7 +17,8 @@ const UserManager: React.FC = () => {
     const [isSaving, setIsSaving] = useState(false);
 
     const fetchUsers = useCallback(async () => {
-        setIsLoading(true);
+        // Don't set isLoading to true here to avoid flickering if re-fetching after save
+        if (users.length === 0) setIsLoading(true);
         try {
             const res = await fetch('/.netlify/functions/admin-users', {
                 headers: { Authorization: `Bearer ${session?.access_token}` },
@@ -28,11 +30,11 @@ const UserManager: React.FC = () => {
         } finally {
             setIsLoading(false);
         }
-    }, [session, showToast, t]);
+    }, [session, showToast, t, users.length]); // Dependencies adjusted
 
     useEffect(() => {
         fetchUsers();
-    }, [fetchUsers]);
+    }, []); // Run once on mount
 
     const handleEditClick = (user: AdminManagedUser) => {
         setEditingUser(user);
@@ -56,7 +58,18 @@ const UserManager: React.FC = () => {
             const updatedUser = await res.json();
             if (!res.ok) throw new Error(updatedUser.error || t('creator.settings.admin.users.saveError'));
 
-            setUsers(users.map(u => u.id === editingUser.id ? updatedUser : u));
+            // 1. Update local state immediately (Optimistic Update)
+            setUsers(prevUsers => prevUsers.map(u => u.id === editingUser.id ? { ...u, ...updatedUser } : u));
+            
+            // 2. Re-fetch from server to ensure absolute data integrity
+            // This fixes the issue where clicking edit again might show stale data if optimistic update missed something
+            const refreshRes = await fetch('/.netlify/functions/admin-users', {
+                headers: { Authorization: `Bearer ${session?.access_token}` },
+            });
+            if (refreshRes.ok) {
+                setUsers(await refreshRes.json());
+            }
+
             showToast(t('creator.settings.admin.users.saveSuccess'), 'success');
             setIsModalOpen(false);
         } catch (e: any) {
@@ -66,7 +79,7 @@ const UserManager: React.FC = () => {
         }
     };
 
-    if (isLoading) return <p className="text-center text-gray-400 p-8">{t('creator.settings.admin.users.loading')}</p>;
+    if (isLoading && users.length === 0) return <p className="text-center text-gray-400 p-8">{t('creator.settings.admin.users.loading')}</p>;
 
     return (
         <div className="bg-[#12121A]/80 border border-purple-500/20 rounded-2xl shadow-lg p-6">
@@ -91,7 +104,7 @@ const UserManager: React.FC = () => {
                         <div className="col-span-2 text-gray-400">{new Date(user.created_at).toLocaleDateString('vi-VN')}</div>
                         <div className="col-span-1">{user.is_admin ? '✅' : '❌'}</div>
                         <div className="col-span-2 text-right">
-                            <button onClick={() => handleEditClick(user)} className="px-3 py-1 bg-blue-500/20 text-blue-300 text-xs rounded-md">{t('common.edit')}</button>
+                            <button onClick={() => handleEditClick(user)} className="px-3 py-1 bg-blue-500/20 text-blue-300 text-xs rounded-md hover:bg-blue-500/30 transition-colors">{t('common.edit')}</button>
                         </div>
                     </div>
                 ))}

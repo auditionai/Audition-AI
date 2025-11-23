@@ -12,9 +12,7 @@ export const useBackgroundRemover = () => {
     const { session, showToast, updateUserProfile } = useAuth();
     const [isProcessing, setProcessing] = useState(false);
 
-    const COST_PER_REMOVAL = 1;
-
-    const removeBackground = async (imageFile: File): Promise<{ processedUrl: string; imageBase64: string; mimeType: string; } | null> => {
+    const removeBackground = async (imageFile: File, modelId: string = 'gemini-2.5-flash-image'): Promise<{ processedUrl: string; imageBase64: string; mimeType: string; } | null> => {
         setProcessing(true);
         
         try {
@@ -28,7 +26,10 @@ export const useBackgroundRemover = () => {
             const response = await fetch('/.netlify/functions/image-processor', {
                 method: 'POST',
                 headers: headers,
-                body: JSON.stringify({ image: imageDataUrl }),
+                body: JSON.stringify({ 
+                    image: imageDataUrl,
+                    model: modelId // Pass model choice to backend
+                }),
             });
 
             if (!response.ok) {
@@ -62,5 +63,5 @@ export const useBackgroundRemover = () => {
         }
     };
 
-    return { isProcessing, removeBackground, COST_PER_REMOVAL };
+    return { isProcessing, removeBackground };
 };

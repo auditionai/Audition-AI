@@ -2,7 +2,7 @@ import React from 'react';
 import Modal from '../common/Modal';
 import { useTranslation } from '../../hooks/useTranslation';
 
-type InstructionKey = 'character' | 'style' | 'prompt' | 'advanced' | 'face' | 'bg-remover' | 'signature' | 'group-studio' | null;
+type InstructionKey = 'character' | 'style' | 'prompt' | 'advanced' | 'face' | 'bg-remover' | 'signature' | 'group-studio' | 'comic-studio' | null;
 
 interface InstructionModalProps {
   isOpen: boolean;
@@ -125,12 +125,31 @@ const InstructionModal: React.FC<InstructionModalProps> = ({ isOpen, onClose, in
         <p>{t('modals.instruction.group-studio.note_text')}</p>
       </>
     ),
+    'comic-studio': (
+        <>
+         <p>Tạo truyện tranh nhiều khung hình (Panel) dựa trên cốt truyện của bạn.</p>
+         <p className="font-bold mt-4">Quy trình 3 bước:</p>
+         <ol className="list-decimal list-inside space-y-2 mt-2">
+           <li><strong>Thiết lập:</strong> Chọn thể loại, phong cách vẽ và "Casting" nhân vật (Upload ảnh, đặt tên).</li>
+           <li><strong>Kịch bản:</strong> Nhập ý tưởng, AI sẽ viết kịch bản chi tiết cho từng khung hình. Bạn có thể chỉnh sửa lời thoại.</li>
+           <li><strong>Sản xuất:</strong> Bấm "Vẽ" cho từng khung hình. Sau khi hoàn tất, tải xuống dưới dạng PDF hoặc ZIP.</li>
+         </ol>
+         <p className="font-bold mt-4">Chi phí:</p>
+         <ul className="list-disc list-inside space-y-1 mt-1">
+             <li>Tạo kịch bản: 2 Kim cương</li>
+             <li>Vẽ mỗi khung hình (Pro): 10 Kim cương</li>
+         </ul>
+       </>
+     ),
   };
   
+  // Type safety check
+  const contentKey = instructionKey as keyof typeof content;
+
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={t(`modals.instruction.${instructionKey}.title`)}>
+    <Modal isOpen={isOpen} onClose={onClose} title={t(`modals.instruction.${instructionKey}.title`) || 'Hướng dẫn'}>
       <div className="text-sm text-skin-muted space-y-3 custom-scrollbar pr-2 max-h-[60vh] overflow-y-auto">
-        {content[instructionKey]}
+        {content[contentKey] || <p>Nội dung đang cập nhật...</p>}
       </div>
       <button
           onClick={onClose}

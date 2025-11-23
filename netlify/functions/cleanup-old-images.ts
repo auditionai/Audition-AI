@@ -1,66 +1,94 @@
-import type { Handler, HandlerEvent } from "@netlify/functions";
+
+import type { Handler } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
+import { S3Client, DeleteObjectCommand } from "@aws-sdk/client-s3";
 
-const handler: Handler = async (event: HandlerEvent) => {
-    // 1. Admin Authentication
-    const authHeader = event.headers['authorization'];
-    if (!authHeader) return { statusCode: 401, body: JSON.stringify({ error: 'Authorization required.' }) };
-    const token = authHeader.split(' ')[1];
-    // FIX: Use Supabase v1 `api.getUser(token)` instead of v2 `auth.getUser(token)` and correct the destructuring.
-    const { user, error: authError } = await supabaseAdmin.auth.api.getUser(token);
-    if (authError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'Invalid token.' }) };
+// This handler is triggered by the Netlify scheduler based on the netlify.toml configuration.
+const handler: Handler = async () => {
+    console.log("--- [START] Scheduled Job: Cleanup Old Images ---");
 
-    const { data: userData } = await supabaseAdmin.from('users').select('is_admin').eq('id', user.id).single();
-    if (!userData?.is_admin) return { statusCode: 403, body: JSON.stringify({ error: 'Forbidden' }) };
-    
-    // 2. Method Handling
-    switch (event.httpMethod) {
-        case 'GET': {
-            const { data, error } = await supabaseAdmin
-                .from('check_in_rewards')
-                .select('*')
-                .order('consecutive_days', { ascending: true });
-            if (error) return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
-            return { statusCode: 200, body: JSON.stringify(data || []) };
+    // Initialize the S3 client
+    const s3Client = new S3Client({
+        region: "auto",
+        endpoint: process.env.R2_ENDPOINT || '',
+        credentials: {
+            accessKeyId: process.env.R2_ACCESS_KEY_ID || '',
+            secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || '',
+        },
+    });
+
+    try {
+        // 1. Calculate the cutoff date (3 days ago)
+        const cutoffDate = new Date();
+        cutoffDate.setDate(cutoffDate.getDate() - 3);
+        const cutoffISOString = cutoffDate.toISOString();
+
+        console.log(`[INFO] Deleting non-public images created before: ${cutoffISOString}`);
+
+        // 2. Fetch old non-public images
+        const { data: oldImages, error: fetchError } = await supabaseAdmin
+            .from('generated_images')
+            .select('id, image_url')
+            .lt('created_at', cutoffISOString)
+            .eq('is_public', false)
+            .limit(50);
+
+        if (fetchError) {
+            throw new Error(`Error fetching old images: ${fetchError.message}`);
         }
 
-        case 'POST': {
-            const { consecutive_days, diamond_reward, xp_reward } = JSON.parse(event.body || '{}');
-            if (consecutive_days === undefined || diamond_reward === undefined || xp_reward === undefined) {
-                 return { statusCode: 400, body: JSON.stringify({ error: 'Missing required fields.' }) };
+        if (!oldImages || oldImages.length === 0) {
+            return {
+                statusCode: 200,
+                body: JSON.stringify({ message: "No old images to delete." }),
+            };
+        }
+
+        console.log(`[INFO] Found ${oldImages.length} images to process.`);
+        const imageIdsToDelete: string[] = [];
+        const r2DeletePromises: Promise<any>[] = [];
+
+        // 3. Prepare R2 deletions
+        for (const image of oldImages) {
+            if (image.image_url && image.image_url !== 'PENDING' && image.image_url.startsWith(process.env.R2_PUBLIC_URL!)) {
+                const key = image.image_url.replace(`${process.env.R2_PUBLIC_URL}/`, '');
+                const deleteCommand = new DeleteObjectCommand({
+                    Bucket: process.env.R2_BUCKET_NAME || '',
+                    Key: key,
+                });
+                r2DeletePromises.push((s3Client as any).send(deleteCommand));
             }
-            const { data, error } = await supabaseAdmin
-                .from('check_in_rewards')
-                .insert({ consecutive_days, diamond_reward, xp_reward, is_active: true })
-                .select()
-                .single();
-            if (error) return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
-            return { statusCode: 201, body: JSON.stringify(data) };
+            imageIdsToDelete.push(image.id);
+        }
+        
+        // 4. Execute R2 deletions
+        await Promise.allSettled(r2DeletePromises);
+
+        // 5. HARD DELETE records from Database
+        // Replacing UPDATE NULL with DELETE to respect NOT NULL constraints
+        if (imageIdsToDelete.length > 0) {
+            const { error: dbDeleteError } = await supabaseAdmin
+                .from('generated_images')
+                .delete()
+                .in('id', imageIdsToDelete);
+
+            if (dbDeleteError) {
+                throw new Error(`Failed to delete records from database: ${dbDeleteError.message}`);
+            }
+            console.log(`[INFO] Successfully deleted ${imageIdsToDelete.length} records from database.`);
         }
 
-        case 'PUT': {
-            const { id, ...updates } = JSON.parse(event.body || '{}');
-             if (!id) return { statusCode: 400, body: JSON.stringify({ error: 'ID is required for update.' }) };
-            const { data, error } = await supabaseAdmin
-                .from('check_in_rewards')
-                .update(updates)
-                .eq('id', id)
-                .select()
-                .single();
-            if (error) return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
-            return { statusCode: 200, body: JSON.stringify(data) };
-        }
+        return {
+            statusCode: 200,
+            body: JSON.stringify({ message: `Cleanup successful. Deleted ${oldImages.length} images.` }),
+        };
 
-        case 'DELETE': {
-            const { id } = JSON.parse(event.body || '{}');
-            if (!id) return { statusCode: 400, body: JSON.stringify({ error: 'ID is required for deletion.' }) };
-            const { error } = await supabaseAdmin.from('check_in_rewards').delete().eq('id', id);
-            if (error) return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
-            return { statusCode: 204 }; // No content
-        }
-
-        default:
-            return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
+    } catch (error: any) {
+        console.error("--- [FATAL] Error in cleanup-old-images function ---", error);
+        return {
+            statusCode: 500,
+            body: JSON.stringify({ error: error.message }),
+        };
     }
 };
 

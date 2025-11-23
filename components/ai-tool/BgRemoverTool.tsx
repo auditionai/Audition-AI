@@ -1,7 +1,7 @@
+
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useBackgroundRemover } from '../../hooks/useBackgroundRemover';
-import { DiamondIcon } from '../common/DiamondIcon';
 import ConfirmationModal from '../ConfirmationModal';
 import { resizeImage, base64ToFile } from '../../utils/imageUtils';
 import ProcessedImageModal from './ProcessedImageModal';
@@ -26,12 +26,15 @@ interface ProcessedImageData {
 const BgRemoverTool: React.FC<BgRemoverToolProps> = ({ onMoveToGenerator, onMoveFaceToGenerator, onInstructionClick }) => {
     const { user, showToast } = useAuth();
     const { t } = useTranslation();
-    const { isProcessing, removeBackground, COST_PER_REMOVAL } = useBackgroundRemover();
+    const { isProcessing, removeBackground } = useBackgroundRemover();
 
     const [imagesForBgRemoval, setImagesForBgRemoval] = useState<Array<{id: string, url: string, file: File}>>([]);
     const [processedImages, setProcessedImages] = useState<ProcessedImageData[]>([]);
     const [isConfirmOpen, setConfirmOpen] = useState(false);
     const [selectedProcessedImage, setSelectedProcessedImage] = useState<ProcessedImageData | null>(null);
+    
+    // NEW: State to track which button was clicked
+    const [processingModel, setProcessingModel] = useState<'flash' | 'pro'>('flash');
     
     // Load processed images from sessionStorage on component mount
     useEffect(() => {
@@ -66,12 +69,15 @@ const BgRemoverTool: React.FC<BgRemoverToolProps> = ({ onMoveToGenerator, onMove
         e.target.value = '';
     };
 
-    const handleProcessClick = () => {
+    const handleProcessClick = (model: 'flash' | 'pro') => {
         if (imagesForBgRemoval.length === 0) {
             showToast('Vui lòng tải lên ảnh để xử lý.', 'error');
             return;
         }
-        const totalCost = imagesForBgRemoval.length * COST_PER_REMOVAL;
+        setProcessingModel(model);
+        // UPDATE: Pro costs 10 diamonds
+        const costPerImage = model === 'pro' ? 10 : 1;
+        const totalCost = imagesForBgRemoval.length * costPerImage;
         if (user && user.diamonds < totalCost) {
             showToast(`Bạn cần ${totalCost} kim cương, nhưng chỉ có ${user.diamonds}. Vui lòng nạp thêm.`, 'error');
             return;
@@ -84,8 +90,10 @@ const BgRemoverTool: React.FC<BgRemoverToolProps> = ({ onMoveToGenerator, onMove
         const imagesToProcessNow = [...imagesForBgRemoval];
         setImagesForBgRemoval([]);
     
+        const modelId = processingModel === 'pro' ? 'gemini-3-pro-image-preview' : 'gemini-2.5-flash-image';
+
         for (const image of imagesToProcessNow) {
-            const result = await removeBackground(image.file);
+            const result = await removeBackground(image.file, modelId);
             if (result) {
                 const { processedUrl, imageBase64, mimeType } = result;
                 setProcessedImages(prev => [...prev, {
@@ -119,7 +127,7 @@ const BgRemoverTool: React.FC<BgRemoverToolProps> = ({ onMoveToGenerator, onMove
     };
 
 
-    const totalCost = imagesForBgRemoval.length * COST_PER_REMOVAL;
+    const totalCost = imagesForBgRemoval.length * (processingModel === 'pro' ? 10 : 1);
 
     return (
         <div className="h-full flex flex-col">
@@ -163,6 +171,7 @@ const BgRemoverTool: React.FC<BgRemoverToolProps> = ({ onMoveToGenerator, onMove
                             <p className="text-xs">{t('creator.aiTool.bgRemover.uploadDesc')}</p>
                             <input type="file" multiple accept="image/*" onChange={handleBgRemovalImageUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
                         </label>
+                        
                         {imagesForBgRemoval.length > 0 && (
                             <div className="mt-4">
                             <h4 className="text-sm font-semibold mb-2 text-gray-300">{t('creator.aiTool.bgRemover.readyToProcess', { count: imagesForBgRemoval.length })}</h4>
@@ -176,12 +185,31 @@ const BgRemoverTool: React.FC<BgRemoverToolProps> = ({ onMoveToGenerator, onMove
                             </div>
                             </div>
                         )}
-                        <button onClick={handleProcessClick} disabled={isProcessing || imagesForBgRemoval.length === 0} className="w-full mt-4 py-3 font-bold text-lg text-white bg-gradient-to-r from-pink-500 to-fuchsia-600 rounded-full flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
-                            {isProcessing ? <div className="w-6 h-6 border-2 border-white/50 border-t-white rounded-full animate-spin"></div> : <>
-                                <DiamondIcon className="w-6 h-6" />
-                                <span>{t('creator.aiTool.bgRemover.processButton', { cost: totalCost })}</span>
-                            </>}
-                        </button>
+
+                        {/* Dual Process Buttons */}
+                        <div className="flex gap-3 mt-4">
+                            <button 
+                                onClick={() => handleProcessClick('flash')} 
+                                disabled={isProcessing || imagesForBgRemoval.length === 0} 
+                                className="flex-1 py-3 font-bold text-sm text-blue-300 bg-blue-500/20 border border-blue-500/50 hover:bg-blue-500/30 rounded-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                <i className="ph-fill ph-lightning"></i>
+                                <span>{t('creator.aiTool.bgRemover.flashButton')}</span>
+                            </button>
+                            <button 
+                                onClick={() => handleProcessClick('pro')} 
+                                disabled={isProcessing || imagesForBgRemoval.length === 0} 
+                                className="flex-1 py-3 font-bold text-sm text-yellow-300 bg-yellow-500/20 border border-yellow-500/50 hover:bg-yellow-500/30 rounded-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-yellow-500/10"
+                            >
+                                <i className="ph-fill ph-crown"></i>
+                                <span>Tách nền Pro (10 💎)</span>
+                            </button>
+                        </div>
+                        {isProcessing && (
+                            <div className="mt-2 text-center text-xs text-gray-400 animate-pulse">
+                                {t('creator.aiTool.common.processing')}
+                            </div>
+                        )}
                     </div>
                 </div>
         

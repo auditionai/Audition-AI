@@ -1,6 +1,10 @@
+
 import React from 'react';
 import { GalleryImage } from '../../types';
 import { getRankForLevel } from '../../utils/rankUtils';
+import UserBadge from '../common/UserBadge';
+import UserAvatar from '../common/UserAvatar';
+import UserName from '../common/UserName'; // Import UserName
 
 interface GalleryProps {
   images: GalleryImage[];
@@ -50,11 +54,26 @@ const Gallery: React.FC<GalleryProps> = ({ images, onImageClick, limit, showSeeM
                       <i className="ph-fill ph-eye text-5xl text-white"></i>
                     </div>
                     <div className="absolute bottom-0 left-0 p-4 w-full opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-4 group-hover:translate-y-0">
-                      <div className="flex items-center gap-2">
-                          <img src={image.creator.photo_url} alt={image.creator.display_name} className="w-8 h-8 rounded-full border-2 border-white/80 flex-shrink-0" />
-                          <div className="truncate">
-                            <p className={`font-bold text-sm drop-shadow-lg truncate ${rank.color} neon-text-glow`}>{image.creator.display_name}</p>
-                            <p className={`text-gray-300 text-xs drop-shadow flex items-center gap-1 ${rank.color}`}>{rank.icon} {rank.title}</p>
+                      <div className="flex items-center gap-3">
+                          {/* Use UserAvatar for consistent frame display */}
+                          <UserAvatar 
+                            url={image.creator.photo_url} 
+                            alt={image.creator.display_name} 
+                            frameId={image.creator.equipped_frame_id}
+                            level={image.creator.level}
+                            size="sm" 
+                            className="flex-shrink-0"
+                          />
+                          <div className="truncate flex flex-col gap-1">
+                            {/* Use UserName for Name Effects */}
+                            <UserName 
+                                user={image.creator} 
+                                className={`font-bold text-sm drop-shadow-lg truncate ${rank.color}`}
+                            />
+                            {/* Use UserBadge for icon and title display */}
+                            <div className="flex items-center">
+                                <UserBadge titleId={image.creator.equipped_title_id} level={image.creator.level} className="scale-90 origin-left" />
+                            </div>
                           </div>
                       </div>
                     </div>
@@ -90,11 +109,24 @@ const Gallery: React.FC<GalleryProps> = ({ images, onImageClick, limit, showSeeM
                   <i className="ph-fill ph-eye text-5xl text-white"></i>
                 </div>
                 <div className="absolute bottom-0 left-0 p-4 w-full opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-4 group-hover:translate-y-0">
-                  <div className="flex items-center gap-2">
-                      <img src={image.creator.photo_url} alt={image.creator.display_name} className="w-8 h-8 rounded-full border-2 border-white/80 flex-shrink-0" />
-                      <div className="truncate">
-                        <p className={`font-bold text-sm drop-shadow-lg truncate ${rank.color} neon-text-glow`}>{image.creator.display_name}</p>
-                        <p className={`text-gray-300 text-xs drop-shadow flex items-center gap-1 ${rank.color}`}>{rank.icon} {rank.title}</p>
+                  <div className="flex items-center gap-3">
+                      <UserAvatar 
+                        url={image.creator.photo_url} 
+                        alt={image.creator.display_name} 
+                        frameId={image.creator.equipped_frame_id}
+                        level={image.creator.level}
+                        size="sm" 
+                        className="flex-shrink-0"
+                      />
+                      <div className="truncate flex flex-col gap-1">
+                        {/* Use UserName for Name Effects */}
+                        <UserName 
+                            user={image.creator} 
+                            className={`font-bold text-sm drop-shadow-lg truncate ${rank.color}`} 
+                        />
+                         <div className="flex items-center">
+                            <UserBadge titleId={image.creator.equipped_title_id} level={image.creator.level} className="scale-90 origin-left" />
+                         </div>
                       </div>
                   </div>
                 </div>

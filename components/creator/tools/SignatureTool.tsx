@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
 import ConfirmationModal from '../../ConfirmationModal';
@@ -5,7 +6,8 @@ import { DiamondIcon } from '../../common/DiamondIcon';
 import { useTranslation } from '../../../hooks/useTranslation';
 
 const COST_MANUAL = 0;
-const COST_AI = 1;
+const COST_AI_FLASH = 1;
+const COST_AI_PRO = 10; // UPDATE: Changed to 10
 
 const FONTS = [
     { name: 'Poppins', class: 'font-["Poppins"]' },
@@ -34,6 +36,7 @@ interface SignatureToolProps {
 
 interface SignatureState {
     mode: ToolMode;
+    aiModelType: 'flash' | 'pro'; // Added model type
     text: string;
     // Manual
     font: string;
@@ -50,7 +53,7 @@ interface SignatureState {
 }
 
 const SignatureTool: React.FC<SignatureToolProps> = ({ initialImage, onClearInitialImage, onInstructionClick }) => {
-    const { user, session, showToast, updateUserProfile } = useAuth();
+    const { user, session, showToast, updateUserDiamonds } = useAuth();
     const { t } = useTranslation();
     const [isConfirmOpen, setConfirmOpen] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
@@ -65,6 +68,7 @@ const SignatureTool: React.FC<SignatureToolProps> = ({ initialImage, onClearInit
 
     const [state, setState] = useState<SignatureState>({
         mode: 'ai',
+        aiModelType: 'flash',
         text: 'Audition AI',
         font: 'Poppins',
         size: 48,
@@ -77,6 +81,9 @@ const SignatureTool: React.FC<SignatureToolProps> = ({ initialImage, onClearInit
         aiIsItalic: false,
         aiCustomColor: '#FF007F',
     });
+
+    // To track which button triggered the confirmation/action
+    const [pendingModel, setPendingModel] = useState<'flash' | 'pro'>('flash');
 
     useEffect(() => {
         try {
@@ -195,14 +202,19 @@ const SignatureTool: React.FC<SignatureToolProps> = ({ initialImage, onClearInit
         e.target.value = '';
     };
 
-    const cost = state.mode === 'ai' ? COST_AI : COST_MANUAL;
+    // Determine cost for confirmation modal
+    const cost = state.mode === 'ai' ? (pendingModel === 'pro' ? COST_AI_PRO : COST_AI_FLASH) : COST_MANUAL;
 
-    const handleApplyClick = () => {
+    const handleApplyClick = (model?: 'flash' | 'pro') => {
         if (!sourceImage) return showToast(t('creator.aiTool.signature.error.noImage'), 'error');
-        if (cost > 0) {
-            if (user && user.diamonds < cost) return showToast(t('creator.aiTool.signature.error.noCredits', { cost }), 'error');
+        
+        if (state.mode === 'ai' && model) {
+            setPendingModel(model);
+            const requiredCost = model === 'pro' ? COST_AI_PRO : COST_AI_FLASH;
+            if (user && user.diamonds < requiredCost) return showToast(t('creator.aiTool.signature.error.noCredits', { cost: requiredCost }), 'error');
             setConfirmOpen(true);
         } else {
+            // Manual Mode
             drawManualSignature();
             showToast('Áp dụng chữ ký thành công!', 'success');
         }
@@ -228,13 +240,14 @@ const SignatureTool: React.FC<SignatureToolProps> = ({ initialImage, onClearInit
                     aiSize: state.aiSize,
                     aiIsBold: state.aiIsBold,
                     aiIsItalic: state.aiIsItalic,
-                    aiCustomColor: state.aiCustomColor
+                    aiCustomColor: state.aiCustomColor,
+                    model: pendingModel === 'pro' ? 'gemini-3-pro-image-preview' : 'gemini-2.5-flash-image'
                 }),
             });
             const result = await res.json();
             if (!res.ok) throw new Error(result.error);
             
-            updateUserProfile({ diamonds: result.newDiamondCount });
+            updateUserDiamonds(result.newDiamondCount);
             setResultImage(`data:image/png;base64,${result.imageBase64}`);
             showToast('AI đã chèn chữ ký thành công!', 'success');
         } catch (err: any) {
@@ -382,12 +395,31 @@ const SignatureTool: React.FC<SignatureToolProps> = ({ initialImage, onClearInit
                          <p className="text-xs text-skin-muted p-2 bg-skin-fill rounded-md text-center">{t('creator.aiTool.signature.positionHelp')}</p>
                     </div>
                     <div className="mt-6 pt-6 border-t border-skin-border space-y-3">
-                         <button onClick={handleApplyClick} disabled={isProcessing || !sourceImage} className="w-full py-3 font-bold text-lg text-white bg-gradient-to-r from-pink-500 to-fuchsia-600 rounded-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
-                            {isProcessing ? <div className="w-6 h-6 border-2 border-white/50 border-t-white rounded-full animate-spin"></div> : <>
-                                {cost > 0 && <DiamondIcon className="w-6 h-6" />}
-                                <span>{state.mode === 'ai' ? t('creator.aiTool.signature.applyAiButton', { cost }) : t('creator.aiTool.signature.applyButton')}</span>
-                            </>}
-                        </button>
+                        {state.mode === 'manual' ? (
+                             <button onClick={() => handleApplyClick()} disabled={isProcessing || !sourceImage} className="w-full py-3 font-bold text-lg text-white bg-gradient-to-r from-pink-500 to-fuchsia-600 rounded-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                                <span>{t('creator.aiTool.signature.applyButton')}</span>
+                            </button>
+                        ) : (
+                            <div className="flex gap-3">
+                                 <button 
+                                    onClick={() => handleApplyClick('flash')} 
+                                    disabled={isProcessing || !sourceImage} 
+                                    className="flex-1 py-3 font-bold text-sm text-blue-300 bg-blue-500/20 border border-blue-500/50 hover:bg-blue-500/30 rounded-lg flex items-center justify-center gap-2 disabled:opacity-50"
+                                >
+                                    <DiamondIcon className="w-4 h-4" />
+                                    <span>{t('creator.aiTool.signature.applyAiFlash')}</span>
+                                </button>
+                                 <button 
+                                    onClick={() => handleApplyClick('pro')} 
+                                    disabled={isProcessing || !sourceImage} 
+                                    className="flex-1 py-3 font-bold text-sm text-yellow-300 bg-yellow-500/20 border border-yellow-500/50 hover:bg-yellow-500/30 rounded-lg flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg shadow-yellow-500/10"
+                                >
+                                    <DiamondIcon className="w-4 h-4" />
+                                    <span>AI Pro (10 💎)</span>
+                                </button>
+                            </div>
+                        )}
+                        
                         <button onClick={handleDownload} disabled={!resultImage} className="w-full py-3 font-bold bg-green-500/80 hover:bg-green-600 text-white rounded-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
                             <i className="ph-fill ph-download-simple"></i>
                             {t('creator.aiTool.signature.downloadButton')}

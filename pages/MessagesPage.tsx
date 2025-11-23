@@ -34,10 +34,11 @@ const MessagesPage: React.FC = () => {
         
         const fetchConversations = async () => {
             setIsLoadingConvs(true);
+            // FIX: Added 'created_at' to select query to match Conversation type
             const { data, error } = await supabase
                 .from('conversations')
                 .select(`
-                    id, updated_at,
+                    id, created_at, updated_at,
                     participants:conversation_participants(
                         user_id,
                         user:users(id, display_name, photo_url)
@@ -109,10 +110,11 @@ const MessagesPage: React.FC = () => {
         if (!exists && !isLoadingConvs) {
             console.log(`[Messages] Active conversation ${activeConversationId} missing from list. Fetching manually...`);
             const fetchSingle = async () => {
+                // FIX: Added 'created_at' to select query
                 const { data, error } = await supabase
                     .from('conversations')
                     .select(`
-                        id, updated_at,
+                        id, created_at, updated_at,
                         participants:conversation_participants(
                             user_id,
                             user:users(id, display_name, photo_url)
@@ -126,6 +128,7 @@ const MessagesPage: React.FC = () => {
                     
                     // Handle Fallback for missing profile (e.g. System User hidden by RLS)
                     if (!otherParticipant && data.participants.length > 0) {
+                         // FIX: Cast to any to avoid TS object literal errors
                          otherParticipant = {
                             user_id: 'unknown',
                             user: {
@@ -133,7 +136,7 @@ const MessagesPage: React.FC = () => {
                                 display_name: 'HỆ THỐNG', 
                                 photo_url: 'https://api.dicebear.com/7.x/bottts/svg?seed=System'
                             }
-                        };
+                        } as any;
                     }
 
                     if (otherParticipant) {
@@ -141,7 +144,8 @@ const MessagesPage: React.FC = () => {
                             ...data,
                             participants: [{ user: otherParticipant.user || { id: otherParticipant.user_id, display_name: 'Người dùng', photo_url: '' } }]
                         };
-                        setConversations(prev => [newConv as Conversation, ...prev]);
+                        // FIX: Double cast to ensure type compatibility
+                        setConversations(prev => [newConv as unknown as Conversation, ...prev]);
                     }
                 } else {
                     console.error("Could not fetch active conversation details", error);

@@ -120,26 +120,28 @@ const MessagesPage: React.FC = () => {
                     .single();
                 
                 if (data && !error) {
-                    let otherParticipant = data.participants.find((p: any) => p.user_id !== user.id);
+                    const foundParticipant = data.participants.find((p: any) => p.user_id !== user.id);
                     
                     // Handle Fallback for missing profile (e.g. System User hidden by RLS)
-                    if (!otherParticipant) {
-                         otherParticipant = {
-                            user_id: SYSTEM_BOT_ID,
-                            user: {
-                                id: SYSTEM_BOT_ID,
-                                display_name: 'HỆ THỐNG', 
-                                photo_url: 'https://api.dicebear.com/7.x/bottts/svg?seed=System'
-                            }
-                        } as any;
-                    }
+                    // Explicitly define fallback to satisfy TS strict null checks
+                    const otherParticipant = foundParticipant || {
+                        user_id: SYSTEM_BOT_ID,
+                        user: {
+                            id: SYSTEM_BOT_ID,
+                            display_name: 'HỆ THỐNG', 
+                            photo_url: 'https://api.dicebear.com/7.x/bottts/svg?seed=System'
+                        }
+                    };
 
                     // Construct valid conversation object
+                    // We assume otherParticipant is defined now due to the fallback
+                    const participantUser = otherParticipant.user || { id: otherParticipant.user_id, display_name: 'Người dùng', photo_url: '' };
+
                     const newConv = {
                         id: data.id,
                         created_at: data.created_at,
                         updated_at: data.updated_at,
-                        participants: [{ user: otherParticipant.user || { id: otherParticipant.user_id, display_name: 'Người dùng', photo_url: '' } }]
+                        participants: [{ user: participantUser }]
                     };
                     
                     // FIX: Double cast to ensure type compatibility

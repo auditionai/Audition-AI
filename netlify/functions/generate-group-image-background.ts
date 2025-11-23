@@ -26,12 +26,13 @@ const failJob = async (jobId: string, reason: string, userId: string, cost: numb
     }
 };
 
+// Standardize to match Google SDK structure { data, mimeType }
 const processDataUrl = (dataUrl: string | null) => {
     if (!dataUrl) return null;
     const [header, base64] = dataUrl.split(',');
     if (!base64) return null;
     const mimeType = header.match(/:(.*?);/)?.[1] || 'image/png';
-    return { base64, mimeType };
+    return { data: base64, mimeType };
 };
 
 const updateJobProgress = async (jobId: string, currentPromptData: any, progressMessage: string) => {
@@ -87,11 +88,14 @@ const handler: Handler = async (event: HandlerEvent) => {
         const isPro = selectedModel === 'pro';
         
         const generatedCharacters = [];
-        let finalBackgroundData;
+        
+        // Important: finalBackgroundData must have { data, mimeType } structure
+        let finalBackgroundData: { data: string; mimeType: string } | undefined;
 
         if (referenceImage) {
-            finalBackgroundData = processDataUrl(referenceImage);
-            if (!finalBackgroundData) throw new Error('Ảnh mẫu tham chiếu không hợp lệ.');
+            const processedRef = processDataUrl(referenceImage);
+            if (!processedRef) throw new Error('Ảnh mẫu tham chiếu không hợp lệ.');
+            finalBackgroundData = processedRef;
 
             for (let i = 0; i < numCharacters; i++) {
                 await updateJobProgress(jobId, jobPromptData, `Đang xử lý nhân vật ${i + 1}/${numCharacters}...`);
@@ -112,10 +116,10 @@ const handler: Handler = async (event: HandlerEvent) => {
 
                 const parts = [
                     { text: charPrompt },
-                    { inlineData: { data: finalBackgroundData.base64, mimeType: finalBackgroundData.mimeType } },
-                    { inlineData: { data: poseData.base64, mimeType: poseData.mimeType } },
+                    { inlineData: { data: finalBackgroundData.data, mimeType: finalBackgroundData.mimeType } },
+                    { inlineData: { data: poseData.data, mimeType: poseData.mimeType } },
                 ];
-                if (faceData) parts.push({ inlineData: { data: faceData.base64, mimeType: faceData.mimeType } });
+                if (faceData) parts.push({ inlineData: { data: faceData.data, mimeType: faceData.mimeType } });
 
                 // Use standard config for intermediate steps to save cost and time
                 const response = await ai.models.generateContent({ model: 'gemini-2.5-flash-image', contents: { parts }, config: { responseModalities: [Modality.IMAGE] } });
@@ -140,6 +144,8 @@ const handler: Handler = async (event: HandlerEvent) => {
             const bgResponse = await ai.models.generateContent({ model: modelName, contents: { parts: [{ text: bgPrompt }] }, config: bgConfig });
             const bgImagePart = bgResponse.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
             if (!bgImagePart?.inlineData) throw new Error("AI failed to create a background from your prompt.");
+            
+            // bgImagePart.inlineData already has { data, mimeType }
             finalBackgroundData = bgImagePart.inlineData;
             await new Promise(resolve => setTimeout(resolve, 2000));
 
@@ -154,7 +160,7 @@ const handler: Handler = async (event: HandlerEvent) => {
                 
                 const parts = [
                     { text: charPrompt },
-                    { inlineData: { data: poseData.base64, mimeType: poseData.mimeType } },
+                    { inlineData: { data: poseData.data, mimeType: poseData.mimeType } },
                 ];
                 
                 const response = await ai.models.generateContent({ model: 'gemini-2.5-flash-image', contents: { parts }, config: { responseModalities: [Modality.IMAGE] } });
@@ -166,6 +172,8 @@ const handler: Handler = async (event: HandlerEvent) => {
         }
         
         // --- FINAL COMPOSITE STEP ---
+        if (!finalBackgroundData) throw new Error("Failed to prepare background data.");
+
         await updateJobProgress(jobId, jobPromptData, 'Đang tổng hợp ảnh cuối cùng...');
 
         const compositePrompt = [
@@ -178,7 +186,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         
         const finalParts = [
             { text: compositePrompt },
-            { inlineData: { data: finalBackgroundData.base64, mimeType: finalBackgroundData.mimeType } },
+            { inlineData: finalBackgroundData }, // Now safe to use directly
             ...generatedCharacters.map(charData => ({ inlineData: charData }))
         ];
         

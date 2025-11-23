@@ -313,7 +313,7 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
         setGenerationStatus("Đang lên cấu trúc cốt truyện...");
 
         try {
-            // PHASE 1: GENERATE OUTLINE
+            // PHASE 1: GENERATE OUTLINE (PAGES)
             const res = await fetch('/.netlify/functions/comic-generate-script', {
                 method: 'POST',
                 headers: { 
@@ -329,6 +329,7 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
             const outline = data.outline;
             updateUserDiamonds(data.newDiamondCount);
             
+            // NOTE: outline now returns 'panel_number' which we map to 'PAGE number' in our minds
             const initialPanels = outline.map((p: any) => ({
                 id: crypto.randomUUID(),
                 panel_number: p.panel_number,
@@ -341,12 +342,12 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
             setPanels(initialPanels);
             setActiveStep(2);
 
-            // PHASE 2: EXPAND EACH PANEL WITH MEMORY
+            // PHASE 2: EXPAND EACH PAGE WITH MEMORY
             const completedPanelsData: any[] = [];
 
             for (let i = 0; i < outline.length; i++) {
                 const p = outline[i];
-                setGenerationStatus(`Đang viết chi tiết phân cảnh ${p.panel_number}/${outline.length}...`);
+                setGenerationStatus(`Đang viết chi tiết TRANG ${p.panel_number}/${outline.length}...`);
                 
                 try {
                     const expandRes = await fetch('/.netlify/functions/comic-expand-panel', {
@@ -388,7 +389,7 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                         throw new Error("API Error");
                     }
                 } catch (expandErr) {
-                    console.error(`Error expanding panel ${p.panel_number}`, expandErr);
+                    console.error(`Error expanding page ${p.panel_number}`, expandErr);
                     setPanels(prev => prev.map(panel => 
                         panel.panel_number === p.panel_number 
                         ? { 
@@ -421,8 +422,6 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
         setPanels(prev => prev.map(p => p.id === panelId ? { ...p, visual_description: `(Đang thử lại...) ${p.plot_summary || ''}` } : p));
 
         try {
-            // Prepare previous context (same logic as main generation)
-            // We need to find previous panels relative to this one
             const pIndex = panels.findIndex(p => p.id === panelId);
             const prevPanels = panels.slice(0, pIndex).map(p => ({
                 panel_number: p.panel_number,
@@ -517,7 +516,7 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                             is_rendering: false,
                             status: 'completed' 
                         } : p));
-                        showToast(`Đã vẽ xong khung tranh #${panel.panel_number}!`, "success");
+                        showToast(`Đã vẽ xong trang #${panel.panel_number}!`, "success");
                         supabase.removeChannel(channel);
                     }
                 })
@@ -572,7 +571,7 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                 if (panel.image_url) {
                     const response = await fetch(panel.image_url);
                     const blob = await response.blob();
-                    folder?.file(`panel-${panel.panel_number}.png`, blob);
+                    folder?.file(`page-${panel.panel_number}.png`, blob);
                     count++;
                 }
             }
@@ -859,7 +858,7 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                                         <div key={panel.id} className="comic-card p-0 flex flex-col md:flex-row relative overflow-hidden">
                                             <div className="md:w-1/2 p-4 border-b md:border-b-0 md:border-r border-white/10 bg-black/20 relative">
                                                 <div className="flex items-center justify-between mb-2">
-                                                    <span className="text-xs font-bold bg-blue-600 text-white px-2 py-0.5 rounded">PANEL {panel.panel_number}</span>
+                                                    <span className="text-xs font-bold bg-blue-600 text-white px-2 py-0.5 rounded">TRANG {panel.panel_number}</span>
                                                     <span className="text-[10px] text-gray-500">Mô tả hình ảnh</span>
                                                 </div>
                                                 <textarea className="w-full h-32 bg-transparent border-none focus:ring-0 text-sm text-gray-300 leading-relaxed resize-none p-0" value={panel.visual_description} onChange={(e) => handleUpdatePanel(panel.id, 'visual_description', e.target.value)} disabled={isGeneratingDetails} />
@@ -915,7 +914,7 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                                                 {(!hasUrl && !panel.is_rendering && !isPending) && (
                                                     <div className="absolute inset-0 bg-skin-fill-secondary/90 flex flex-col items-center justify-center z-20">
                                                         <p className="text-gray-400 text-sm mb-4 max-w-md text-center px-4 line-clamp-2">{panel.visual_description}</p>
-                                                        <button onClick={() => handleRenderPanel(panel)} className="themed-button-primary px-8 py-3 rounded-full font-bold text-white shadow-xl flex items-center gap-2 transform hover:scale-105 transition-all"><i className="ph-fill ph-paint-brush-broad text-xl"></i> Vẽ Panel Này ({RENDER_COST} 💎)</button>
+                                                        <button onClick={() => handleRenderPanel(panel)} className="themed-button-primary px-8 py-3 rounded-full font-bold text-white shadow-xl flex items-center gap-2 transform hover:scale-105 transition-all"><i className="ph-fill ph-paint-brush-broad text-xl"></i> Vẽ Trang Này ({RENDER_COST} 💎)</button>
                                                     </div>
                                                 )}
                                                 {(panel.is_rendering || isPending || isLoadingImage) && !isErrorImage && (
@@ -953,7 +952,7 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                                 {activeStep === 1 ? (
                                     <><span className="text-pink-400 text-xl">2</span><i className="ph-fill ph-diamonds-four text-pink-400 text-xs"></i><span className="text-xs font-medium text-gray-500 ml-1">cho Kịch bản</span></>
                                 ) : (
-                                    <><span className="text-purple-400 text-xl">{RENDER_COST}</span><i className="ph-fill ph-diamonds-four text-purple-400 text-xs"></i><span className="text-xs font-medium text-gray-500 ml-1">/ 1 Ảnh</span></>
+                                    <><span className="text-purple-400 text-xl">{RENDER_COST}</span><i className="ph-fill ph-diamonds-four text-purple-400 text-xs"></i><span className="text-xs font-medium text-gray-500 ml-1">/ 1 Trang</span></>
                                 )}
                             </div>
                         </div>

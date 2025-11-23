@@ -35,7 +35,6 @@ const failJob = async (jobId: string, userId: string, reason: string) => {
 };
 
 const handler: Handler = async (event: HandlerEvent) => {
-    // Fire-and-forget style, return 200 immediately to client
     if (event.httpMethod !== 'POST') return { statusCode: 200 };
 
     const { jobId } = JSON.parse(event.body || '{}');
@@ -44,7 +43,6 @@ const handler: Handler = async (event: HandlerEvent) => {
     let userId = "";
 
     try {
-        // 1. Fetch Job Details
         const { data: jobData, error: fetchError } = await supabaseAdmin
             .from('generated_images')
             .select('prompt, user_id')
@@ -57,18 +55,48 @@ const handler: Handler = async (event: HandlerEvent) => {
         const jobConfig = JSON.parse(jobData.prompt);
         const { panel, characters, storyTitle, style, aspectRatio, colorFormat, visualEffect, isCover } = jobConfig.payload;
 
-        // 2. Get API Key
         const { data: apiKeyData } = await supabaseAdmin.from('api_keys').select('key_value, id').eq('status', 'active').limit(1).single();
         if (!apiKeyData) throw new Error('Hết tài nguyên AI.');
 
         const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
 
-        // 3. Prepare Prompt
         const parts: any[] = [];
         
-        // --- VISUAL QUALITY MODIFIERS ---
-        // Add "Masterpiece" level quality keywords based on style
-        const qualityKeywords = "masterpiece, best quality, high resolution, incredibly detailed, 8k, cinematic lighting, sharp focus, professional manga composition";
+        // --- LAYOUT LOGIC DETERMINATION ---
+        const lowerStyle = style.toLowerCase();
+        const isWebtoon = lowerStyle.includes('webtoon') || lowerStyle.includes('manhwa') || lowerStyle.includes('scrolling');
+        const lowerColor = colorFormat.toLowerCase();
+        const wantsColor = lowerColor.includes('color') || lowerColor.includes('màu');
+
+        let layoutInstruction = "";
+        if (isWebtoon) {
+            // WEBTOON MODE: Single large vertical panel
+            layoutInstruction = `
+            **LAYOUT MODE: WEBTOON / MANHWA (Vertical Scroll)**
+            - Draw a SINGLE, large, high-quality vertical image.
+            - Do NOT create a grid. Do NOT create multiple small sub-panels.
+            - Focus on a single dramatic moment or a cinematic wide shot suitable for vertical scrolling.
+            - The composition should fill the entire canvas effectively.
+            `;
+        } else {
+            // MANGA / COMIC MODE: Traditional Page Layout with 3-5 panels
+            layoutInstruction = `
+            **LAYOUT MODE: TRADITIONAL COMIC PAGE**
+            - Draw a FULL COMIC PAGE consisting of 3 to 6 distinct panels (frames).
+            - Separate panels using clear white gutters (grid lines).
+            - Vary the panel sizes (e.g., one large establishing shot, smaller reaction shots).
+            - Arrange them logically from top-left to bottom-right.
+            `;
+        }
+
+        // --- COLOR LOGIC OVERRIDE ---
+        // If user wants color (colorFormat) but style says B&W (Manga), force color.
+        let colorInstruction = `- Color Palette: ${colorFormat || 'Full Color'}`;
+        if (wantsColor && lowerStyle.includes('black and white')) {
+            colorInstruction = `- Color Palette: **FULL COLOR** (Override B&W style). Use vibrant colors suitable for Manhwa/Webtoon.`;
+        }
+
+        const qualityKeywords = "masterpiece, best quality, high resolution, incredibly detailed, 8k, cinematic lighting, sharp focus, professional composition";
         
         // --- DIALOGUE CONSTRUCTION ---
         let dialogueInstruction = "";
@@ -85,11 +113,11 @@ const handler: Handler = async (event: HandlerEvent) => {
             ${dialogueList}
             
             *   **LANGUAGE RULE:** The text MUST be in **VIETNAMESE** as provided. Spelling must be perfect.
-            *   **PLACEMENT:** Place bubbles intelligently near the speaker's head, but DO NOT cover important facial features.
+            *   **PLACEMENT:** Place bubbles intelligently inside their respective panels or space.
             *   **STYLE:** Use professional comic fonts. White bubbles with black text.
             `;
         } else {
-            dialogueInstruction = "This panel has no dialogue. Focus on visual storytelling.";
+            dialogueInstruction = "This page has no dialogue. Focus on visual storytelling.";
         }
 
         // --- SPECIAL MODE: COVER PAGE ---
@@ -108,28 +136,28 @@ const handler: Handler = async (event: HandlerEvent) => {
                 5.  **LANGUAGE:** All text MUST be VIETNAMESE.
             `;
         } else {
-            // --- NORMAL PANEL MODE ---
+            // --- NORMAL PAGE MODE ---
             let effectInstruction = "";
             if (visualEffect && visualEffect !== 'none') {
                 effectInstruction = `- Apply visual effect: ${visualEffect}`;
             }
 
-            // Character references text
             const characterRefText = characters.map((c: any) => 
                 `Character "${c.name}": ${c.description}`
             ).join('\n');
 
             systemPrompt = `
                 You are a master comic artist specialized in ${style}.
-                **TASK:** Draw a single high-quality comic panel.
                 
-                **VISUAL SCENE:**
+                ${layoutInstruction}
+                
+                **VISUAL SCENE DESCRIPTION (FULL PAGE):**
                 ${panel.visual_description}
                 
                 ${dialogueInstruction}
                 
                 **ENVIRONMENTAL TEXT RULE:**
-                If there are any background signs, books, posters, or sound effects (SFX) in the scene, they MUST be written in **VIETNAMESE**. Do NOT use English or gibberish text.
+                If there are any background signs, books, posters, or sound effects (SFX) in the scene, they MUST be written in **VIETNAMESE**.
                 
                 **CHARACTER REFERENCES:**
                 ${characterRefText}
@@ -137,7 +165,7 @@ const handler: Handler = async (event: HandlerEvent) => {
                 
                 **STYLE CONSTRAINTS:**
                 - Art Style: ${style}
-                - Color: ${colorFormat || 'Full Color'}
+                ${colorInstruction}
                 - ${qualityKeywords}
                 ${effectInstruction}
             `;
@@ -145,7 +173,6 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         parts.push({ text: systemPrompt });
 
-        // Add Character References Images
         if (characters && Array.isArray(characters)) {
             for (const char of characters) {
                 if (char.image_url) {
@@ -158,7 +185,6 @@ const handler: Handler = async (event: HandlerEvent) => {
             }
         }
 
-        // 4. Generate (Heavy Operation)
         const response = await ai.models.generateContent({
             model: 'gemini-3-pro-image-preview',
             contents: { parts },
@@ -166,7 +192,7 @@ const handler: Handler = async (event: HandlerEvent) => {
                 responseModalities: [Modality.IMAGE],
                 imageConfig: {
                     aspectRatio: aspectRatio || '3:4',
-                    imageSize: '2K' // Force High Quality
+                    imageSize: '2K' 
                 }
             }
         });
@@ -174,7 +200,6 @@ const handler: Handler = async (event: HandlerEvent) => {
         const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
         if (!imagePart?.inlineData) throw new Error("AI failed to render.");
 
-        // 5. Upload
         const s3Client = new S3Client({
             region: "auto",
             endpoint: process.env.R2_ENDPOINT!,
@@ -182,7 +207,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         });
 
         const buffer = Buffer.from(imagePart.inlineData.data, 'base64');
-        const fileName = `${userId}/comic/${Date.now()}_panel_${panel.panel_number}.png`;
+        const fileName = `${userId}/comic/${Date.now()}_page_${panel.panel_number}.png`;
         
         await (s3Client as any).send(new PutObjectCommand({
             Bucket: process.env.R2_BUCKET_NAME!,
@@ -196,11 +221,10 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         await new Promise(resolve => setTimeout(resolve, 1000));
 
-        // 6. Finalize
         await Promise.all([
             supabaseAdmin.from('generated_images').update({ 
                 image_url: publicUrl,
-                prompt: panel.visual_description || "Comic Panel" 
+                prompt: panel.visual_description || "Comic Page" 
             }).eq('id', jobId),
             supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id })
         ]);

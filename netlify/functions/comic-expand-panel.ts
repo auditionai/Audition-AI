@@ -32,6 +32,13 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
 
+        // Determine Layout Type for Context
+        const lowerStyle = style.toLowerCase();
+        const isWebtoon = lowerStyle.includes('webtoon') || lowerStyle.includes('manhwa');
+        const layoutContext = isWebtoon 
+            ? "This is a Webtoon/Manhwa. Describe a SINGLE, large vertical image (Long Strip format). Focus on the main action/emotion of this section."
+            : "This is a Traditional Comic Page. Describe a FULL PAGE LAYOUT consisting of 3-6 distinct panels arranged in a dynamic grid (e.g., wide establishing shot at top, smaller action panels below).";
+
         // 1. Prepare Character Context (Consistency)
         const characterContext = characters.map((c: any) => 
             `### Character Name: ${c.name}
@@ -41,10 +48,10 @@ const handler: Handler = async (event: HandlerEvent) => {
         // 2. Prepare Story Memory (Context Awareness)
         let memoryContext = "No previous context (Start of story).";
         if (previous_panels && Array.isArray(previous_panels) && previous_panels.length > 0) {
-            // Use last 3 panels for immediate context to keep token usage optimal
+            // Use last 3 pages for immediate context
             const recentPanels = previous_panels.slice(-3); 
             memoryContext = recentPanels.map((p: any) => 
-                `[Panel ${p.panel_number}]: 
+                `[Page ${p.panel_number}]: 
                  - Visual Context: ${p.visual_description}
                  - Dialogue: ${p.dialogue ? p.dialogue.map((d: any) => `${d.speaker}: ${d.text}`).join(' | ') : 'None'}`
             ).join('\n');
@@ -53,7 +60,9 @@ const handler: Handler = async (event: HandlerEvent) => {
         const prompt = `
             You are an expert comic artist and writer specializing in ${genre} stories.
             
-            **Task:** Expand a brief plot summary into a detailed panel description and dialogue for the CURRENT PANEL.
+            **Task:** Expand a brief plot summary into a detailed visual description (Prompt for AI Image Gen) and dialogue.
+            
+            **LAYOUT CONTEXT:** ${layoutContext}
             
             **STORY MEMORY (PREVIOUS CONTEXT):**
             Use this to maintain continuity, logic flow, and character state:
@@ -62,20 +71,21 @@ const handler: Handler = async (event: HandlerEvent) => {
             **CHARACTER VISUAL GUIDE (STRICT CONSISTENCY):**
             ${characterContext}
             
-            **CURRENT PANEL PLOT SUMMARY:** "${plot_summary}"
+            **CURRENT PAGE SUMMARY:** "${plot_summary}"
             **ART STYLE:** ${style}
             
             **Requirements:**
-            1.  **visual_description (English):** Write a highly detailed prompt for an AI Image Generator. 
-                *   Describe the scene, background, lighting, and camera angle.
-                *   **CRITICAL:** When mentioning a character name (e.g., "${characters[0]?.name || 'Character'}"), you MUST explicitly repeat their visual traits from the guide above (e.g., "wearing white bucket hat", "pink hair"). The image generator does NOT know who the character is by name alone.
-                *   Ensure visual continuity with previous panels (e.g. if they were sitting, they should still be sitting unless the plot moved).
+            1.  **visual_description (English):** Write a highly detailed prompt for an AI Image Generator (Midjourney/Stable Diffusion style). 
+                *   **CRITICAL:** Describe the **Layout** (e.g., "A comic page split into 4 panels...").
+                *   Describe what happens in each panel within the page.
+                *   When mentioning a character, you MUST explicitly repeat their visual traits from the guide (e.g., "pink hair", "wearing hoodie").
+                *   Ensure visual continuity with previous pages.
             
-            2.  **dialogue (Vietnamese):** Write natural, engaging dialogue for this panel.
+            2.  **dialogue (Vietnamese):** Write natural, engaging dialogue for this PAGE.
                 *   If characters are speaking, use their names.
                 *   If characters are silent or thinking, use "(Suy nghĩ)".
-                *   If it is an action scene without speech, provide a **Narration Box** (Speaker: "Lời dẫn") or return an empty array if truly silent.
-                *   Ensure dialogue flows logically from the STORY MEMORY.
+                *   If it is a narration box, use Speaker: "Lời dẫn".
+                *   Ensure dialogue flows logically.
             
             Return a single JSON object.
         `;
@@ -109,12 +119,10 @@ const handler: Handler = async (event: HandlerEvent) => {
             const text = response.text || '{}';
             detailJson = JSON.parse(text);
             
-            // Safety check: Ensure dialogue is an array
             if (!Array.isArray(detailJson.dialogue)) {
                 detailJson.dialogue = [];
             }
         } catch (e) {
-            // Fallback
             detailJson = { 
                 visual_description: plot_summary, 
                 dialogue: [{ speaker: "Lời dẫn", text: "..." }] 

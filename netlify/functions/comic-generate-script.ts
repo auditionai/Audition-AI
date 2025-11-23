@@ -11,7 +11,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     const authHeader = event.headers['authorization'];
     if (!authHeader) return { statusCode: 401, body: JSON.stringify({ error: 'Authorization required.' }) };
     const token = authHeader.split(' ')[1];
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+    const { data: { user }, error: authError } = await (supabaseAdmin.auth as any).getUser(token);
     
     if (authError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'Invalid token.' }) };
 
@@ -47,10 +47,7 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         let coverInstruction = "";
         if (coverPage === 'start' || coverPage === 'both') {
-            coverInstruction += `\n- Panel 1 MUST be a 'Title Cover Page' (Trang bìa). Summary: 'Trang bìa với tên truyện: [Insert Title Here] và hình ảnh minh họa chính'.`;
-        }
-        if (coverPage === 'end' || coverPage === 'both') {
-            coverInstruction += `\n- The LAST Panel MUST be a 'The End Page' (Trang kết). Summary: 'Trang kết thúc với dòng chữ Hết/The End'.`;
+            coverInstruction += `\n- Page 1 MUST be a 'Title Cover Page' (Trang bìa). Summary: 'Trang bìa với tên truyện: [Insert Title Here] và hình ảnh minh họa chính'.`;
         }
 
         const prompt = `
@@ -59,7 +56,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             
             **Input Story:** "${premise}"
             **Genre:** ${genre}
-            **Target Length:** Approximately ${pageCount} pages (Total 4-6 panels).
+            **Target Length:** ${pageCount} PAGES (Each page contains 3-6 panels).
             **Characters:** ${characterNames}
             **Language for Summary:** ${targetLanguage}
             
@@ -67,9 +64,9 @@ const handler: Handler = async (event: HandlerEvent) => {
             ${coverInstruction}
             
             **Requirement:**
-            Break the story down into a sequence of panels. For each panel, provide a brief 'plot_summary' of what happens.
-            Do NOT write detailed visual descriptions or dialogue yet. Just the story beats.
-            The 'plot_summary' MUST be written in ${targetLanguage}.
+            Break the story down into a sequence of PAGES (Trang). 
+            For each PAGE, provide a brief 'plot_summary' of what happens on that entire page (e.g., "Page 1: Introduction of the hero...").
+            Do NOT write detailed visual descriptions or dialogue yet. Just the story beats per page.
             
             **Output Format:** JSON Array of objects.
         `;
@@ -86,8 +83,8 @@ const handler: Handler = async (event: HandlerEvent) => {
                     items: {
                         type: Type.OBJECT,
                         properties: {
-                            panel_number: { type: Type.INTEGER },
-                            plot_summary: { type: Type.STRING, description: "Brief summary of the action in this panel" },
+                            panel_number: { type: Type.INTEGER, description: "Page Number" },
+                            plot_summary: { type: Type.STRING, description: "Brief summary of the action in this PAGE" },
                         }
                     }
                 }

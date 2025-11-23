@@ -8,7 +8,10 @@ export const COMIC_PREMISES: Record<string, string[]> = {
         "Bạn phát hiện ra mình là nhân vật phụ trong một cuốn truyện tranh và quyết định nổi loạn để giành lấy vai chính.",
         "Một ứng dụng hẹn hò ghép đôi bạn với phiên bản của chính mình ở vũ trụ song song.",
         "Cả thế giới bỗng nhiên mất đi khả năng nói dối trong 24 giờ. Hỗn loạn bắt đầu.",
-        "Bạn thức dậy và phát hiện ra mọi đồ vật trong nhà đều có linh hồn và đang phàn nàn về cách bạn sử dụng chúng."
+        "Bạn thức dậy và phát hiện ra mọi đồ vật trong nhà đều có linh hồn và đang phàn nàn về cách bạn sử dụng chúng.",
+        "Trong một cuộc thi nhảy Audition, nhân vật chính phát hiện ra chiếc bàn phím của mình có khả năng điều khiển thực tại.",
+        "Một NPC trong thành phố vũ hội Audition bỗng nhiên có ý thức và muốn tìm cách thoát ra khỏi thế giới ảo.",
+        "Cặp đôi nhảy đôi ăn ý nhất server thực ra là hai kẻ thù không đội trời chung ngoài đời thực."
     ],
     'Hành động / Phiêu lưu': [
         "Năm 2077, Sài Gòn trở thành thành phố Cyberpunk. Một shipper giao hàng vô tình nắm giữ con chip chứa bí mật đen tối của tập đoàn thống trị.",
@@ -17,7 +20,10 @@ export const COMIC_PREMISES: Record<string, string[]> = {
         "Cuộc đua xe tử thần dưới lòng đất, nơi người thắng được tất cả, kẻ thua phải trả giá bằng linh hồn.",
         "Nhân vật chính sở hữu 'Hệ thống' cho phép sao chép kỹ năng của bất kỳ ai anh ta chạm vào trong 5 giây.",
         "Đội đặc nhiệm chuyên săn lùng những quái vật bước ra từ truyền thuyết đô thị (Slender Man, Ma da, Kumanthong).",
-        "Một cựu đặc công về hưu mở quán phở, nhưng quá khứ đẫm máu vẫn không buông tha anh khi kẻ thù cũ tìm đến."
+        "Một cựu đặc công về hưu mở quán phở, nhưng quá khứ đẫm máu vẫn không buông tha anh khi kẻ thù cũ tìm đến.",
+        "Cuộc chiến giành quyền kiểm soát khu tự do 101 giữa các Fam Audition bằng những vũ điệu chết người.",
+        "Săn lùng hacker bí ẩn đang thao túng kết quả của giải đấu Audition thế giới.",
+        "Hành trình của một vũ công đi tìm đôi cánh thiên thần huyền thoại bị thất lạc trong rừng sâu."
     ],
     'Trận chiến / Shonen': [
         "Trong thế giới nơi sức mạnh được quyết định bởi lượng 'Follower' trên mạng xã hội. Main chính là kẻ bị cả thế giới hủy follow.",
@@ -26,7 +32,10 @@ export const COMIC_PREMISES: Record<string, string[]> = {
         "Các vị thần phương Đông và phương Tây khai chiến. Một thanh niên bình thường vô tình trở thành trọng tài bất đắc dĩ.",
         "Thế giới bị xâm chiếm bởi loài quỷ ăn âm nhạc. Những chiến binh 'Nhạc Sư' dùng nhạc cụ làm vũ khí để chiến đấu.",
         "Cậu bé yếu đuối tìm thấy găng tay của Vua Quyền Anh huyền thoại và bắt đầu hành trình chinh phục đai vô địch.",
-        "Cuộc chiến giữa các gia tộc Ninja hiện đại ngay giữa lòng thành phố Tokyo sầm uất."
+        "Cuộc chiến giữa các gia tộc Ninja hiện đại ngay giữa lòng thành phố Tokyo sầm uất.",
+        "Đại chiến Boss đôi 8k: Nhóm bạn thân phải đánh bại Boss NPC siêu mạnh để bảo vệ khu vườn tình yêu.",
+        "Thế giới nơi Perfect càng nhiều thì sức mạnh càng lớn. Main chính là người duy nhất có thể Perfect x100 liên tục.",
+        "Cuộc đối đầu giữa hai Fam mạnh nhất server để tranh giành quyền sở hữu Thành phố Vũ hội."
     ],
     'Lãng mạn / Shoujo': [
         "Tổng tài bá đạo bị mất trí nhớ, trở thành nhân viên phục vụ bàn và yêu cô chủ quán đanh đá.",
@@ -36,7 +45,10 @@ export const COMIC_PREMISES: Record<string, string[]> = {
         "Cô gái có khả năng nhìn thấy 'sợi dây tơ hồng' của người khác, nhưng trớ trêu thay cô lại không có sợi dây nào.",
         "Chuyện tình yêu xa của một cặp đôi, nhưng 'xa' ở đây là cách nhau 100 năm lịch sử.",
         "Nam chính là hồ ly tinh tu luyện ngàn năm, xuống núi để tìm kiếp sau của người vợ quá cố, nhưng cô ấy giờ đã là... đàn ông (hoặc tomboy).",
-        "Cô thư ký hoàn hảo quyết định xin nghỉ việc, khiến chàng giám đốc lạnh lùng hoảng loạn tìm mọi cách níu kéo."
+        "Cô thư ký hoàn hảo quyết định xin nghỉ việc, khiến chàng giám đốc lạnh lùng hoảng loạn tìm mọi cách níu kéo.",
+        "Ghép đôi nhầm với Idol nổi tiếng trong game Audition và câu chuyện tình yêu từ ảo ra thật.",
+        "Chàng trai nghèo nạp thẻ lần đầu để mua nhẫn cầu hôn bạn nhảy trong game, nhưng cô ấy lại là tiểu thư nhà giàu.",
+        "Mối tình tay ba giữa hai chàng trai top server và cô gái mới tập chơi (Newbie) ngây thơ."
     ],
     'Hài hước / Vui nhộn': [
         "Nhật ký sinh tồn của một du học sinh tại Việt Nam: Sốc văn hóa với giao thông, đồ ăn và cách qua đường.",
@@ -46,7 +58,10 @@ export const COMIC_PREMISES: Record<string, string[]> = {
         "Một nhóm bạn thân lầy lội quyết tâm giúp thằng bạn 'ế thâm niên' đi tán gái và cái kết thảm họa.",
         "Chuyện gì xảy ra nếu động vật hoang dã cũng phải đi làm văn phòng, chấm công và chạy deadline?",
         "Đại hội võ lâm nhưng các cao thủ toàn dùng chiêu trò 'mõm' (võ mồm) thay vì đánh nhau.",
-        "Hai tên trộm ngốc nghếch đột nhập vào nhà của một nhà ảo thuật gia và bị quay như chong chóng."
+        "Hai tên trộm ngốc nghếch đột nhập vào nhà của một nhà ảo thuật gia và bị quay như chong chóng.",
+        "Khi các nhân vật Audition đình công đòi tăng lương và không chịu nhảy.",
+        "Chuyện về một anh chàng chuyên đi 'spam' nút Space quá mạnh khiến bàn phím nào cũng hỏng trong 1 ngày.",
+        "Hội những người già neo đơn rủ nhau vào Audition 'quẩy' nhạc 180 bpm để hồi xuân."
     ],
     'Kinh dị / Ly kỳ': [
         "Một nhóm Chat bí ẩn tự thêm bạn vào. Mỗi khi có thành viên rời nhóm, họ sẽ chết ngoài đời thực.",
@@ -56,7 +71,9 @@ export const COMIC_PREMISES: Record<string, string[]> = {
         "Livestream của một thám hiểm nhà ma vô tình quay được cảnh án mạng thực sự, và hung thủ đang nhìn vào camera.",
         "Một ngôi làng biệt lập nơi người dân không bao giờ già đi, nhưng khách du lịch đến đây đều mất tích.",
         "Chiếc gương trong phòng tắm phản chiếu hành động của bạn chậm hơn thực tế 2 giây.",
-        "Ứng dụng giao đồ ăn giao đến những món thịt kỳ lạ mà bạn không hề đặt, kèm theo lời nhắn: 'Phần của bạn đây'."
+        "Ứng dụng giao đồ ăn giao đến những món thịt kỳ lạ mà bạn không hề đặt, kèm theo lời nhắn: 'Phần của bạn đây'.",
+        "Bản nhạc bị nguyền rủa trong Audition: Bất cứ ai nhảy bài này lúc 12 giờ đêm đều biến mất.",
+        "Phòng nhảy số 404 không ai tạo ra nhưng luôn đầy người, và những người vào đó không bao giờ online trở lại."
     ],
     'Lát cắt cuộc sống': [
         "Nhật ký của một Shipper: Những câu chuyện ấm lòng và kỳ quặc gặp phải trên đường giao hàng.",
@@ -65,7 +82,9 @@ export const COMIC_PREMISES: Record<string, string[]> = {
         "Câu chuyện về một tiệm xăm hình, nơi mỗi hình xăm đều ẩn chứa một bí mật của khách hàng.",
         "Mối quan hệ giữa một người bà già cô đơn và chú robot giúp việc AI.",
         "Chuyện nghề nghiệp: Góc khuất hài hước và áp lực của nghề Lập trình viên (Dev).",
-        "Nhật ký nuôi mèo: Khi 'Hoàng thượng' mới là chủ thực sự của ngôi nhà."
+        "Nhật ký nuôi mèo: Khi 'Hoàng thượng' mới là chủ thực sự của ngôi nhà.",
+        "Câu chuyện về những người bạn quen nhau qua Audition được 10 năm và buổi offline đầy cảm xúc.",
+        "Một ngày bình thường của GM (Game Master) Audition: Giải quyết khiếu nại và những drama không hồi kết."
     ],
     'Khoa học viễn tưởng / Mecha': [
         "Trí tuệ nhân tạo (AI) nổi dậy, nhưng thay vì tiêu diệt loài người, chúng quyết định... nuôi con người làm thú cưng.",
@@ -74,7 +93,8 @@ export const COMIC_PREMISES: Record<string, string[]> = {
         "Cảnh sát thời gian truy đuổi một tội phạm đang cố gắng thay đổi lịch sử để ngăn chặn chiến tranh thế giới.",
         "Các chiến binh điều khiển Robot khổng lồ (Mecha) để chống lại cuộc xâm lăng của quái vật Kaiju từ chiều không gian khác.",
         "Công nghệ cấy ghép ký ức trở nên phổ biến. Một người đàn ông phát hiện ra ký ức về vợ mình là giả.",
-        "Thế giới nơi con người có thể upload ý thức lên đám mây (Cloud) để sống bất tử."
+        "Thế giới nơi con người có thể upload ý thức lên đám mây (Cloud) để sống bất tử.",
+        "Audition thực tế ảo (VR): Khi người chơi bị kẹt trong game và phải nhảy để duy trì sự sống."
     ],
     'Giả tưởng / Isekai': [
         "Chuyển sinh thành Slime (hoặc cục đá, cái cây) nhưng lại sở hữu kỹ năng bá đạo nhất thế giới.",
@@ -83,7 +103,8 @@ export const COMIC_PREMISES: Record<string, string[]> = {
         "Hội những kẻ phản diện trong các câu chuyện cổ tích hợp sức lại để lật đổ cái kết 'Hạnh phúc mãi mãi về sau'.",
         "Một con rồng hùng mạnh bị biến thành người và phải đi làm thêm ở cửa hàng tiện lợi để kiếm sống.",
         "Cuộc hành trình của một Bác sĩ thú y chuyên chữa bệnh cho các loài sinh vật huyền bí (Rồng, Kỳ lân, Phượng hoàng).",
-        "Thế giới bị đảo ngược: Quỷ vương là người tốt cai trị vương quốc hòa bình, còn Anh hùng là kẻ xâm lược tham lam."
+        "Thế giới bị đảo ngược: Quỷ vương là người tốt cai trị vương quốc hòa bình, còn Anh hùng là kẻ xâm lược tham lam.",
+        "Xuyên không vào thế giới Audition, nơi mọi mâu thuẫn đều được giải quyết bằng nhảy Beat Up."
     ],
     'Bí ẩn / Thám tử': [
         "Một thám tử có khả năng nhìn thấy 5 phút trước khi nạn nhân qua đời.",
@@ -92,7 +113,8 @@ export const COMIC_PREMISES: Record<string, string[]> = {
         "Một luật sư chuyên biện hộ cho... các hồn ma để họ được siêu thoát.",
         "Cô gái tỉnh dậy trong bệnh viện và nhận ra mình đã chết, cô phải tìm ra ai đã giết mình trong vòng 49 ngày.",
         "Bí ẩn về chuyến tàu điện ngầm số 0 chỉ xuất hiện vào những đêm mưa bão.",
-        "Thám tử thú cưng: Chuyên điều tra các vụ án trong thế giới động vật (Mèo mất tích, Chó bị vu oan)."
+        "Thám tử thú cưng: Chuyên điều tra các vụ án trong thế giới động vật (Mèo mất tích, Chó bị vu oan).",
+        "Vụ án mất tích bí ẩn của top 1 server Audition ngay trước đêm chung kết."
     ],
     'Bẩn thỉu và thô tục': [
         "Cuộc thi 'Vua Xì Hơi' toàn cầu: Nơi các thí sinh tranh tài bằng... khí gas tự nhiên.",

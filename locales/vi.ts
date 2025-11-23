@@ -1,5 +1,6 @@
 
 
+
 export const vi = {
   langName: 'Tiếng Việt',
   landing: {
@@ -521,6 +522,9 @@ export const vi = {
           titles: 'Danh hiệu',
           luckyWheel: 'Vòng Quay',
           broadcast: 'Phát Sóng',
+          name_effects: 'Hiệu ứng Tên',
+          chat: 'Chat',
+          db_tools: 'Công cụ DB'
         },
         dashboard: {
           title: 'Bảng Điều Khiển Dữ Liệu',
@@ -567,16 +571,21 @@ export const vi = {
             code: 'Mã (VD: HELLOAU)',
             reward: 'Kim cương thưởng',
             limit: 'Giới hạn sử dụng',
+            add: 'Thêm'
           },
           table: {
+            name: 'Mã',
+            key: 'Key',
             used: 'Đã dùng',
             active: 'Hoạt động',
             inactive: 'Vô hiệu',
+            actions: 'Hành động'
           },
           empty: 'Chưa có giftcode nào được tạo.',
           success: {
             create: 'Tạo giftcode thành công!',
             update: 'Cập nhật trạng thái thành công!',
+            delete: 'Xóa giftcode thành công!',
           },
           error: {
             load: 'Không thể tải giftcode.',
@@ -1066,10 +1075,32 @@ export const vi = {
             step5: 'Nhấn "Tạo ảnh nhóm".',
             note: 'Lưu ý:',
             note_text: 'Quá trình tạo ảnh nhóm phức tạp hơn nên sẽ tốn nhiều thời gian và kim cương hơn ảnh đơn. Hãy kiên nhẫn chờ đợi.'
+        },
+        'comic-studio': {
+             title: 'Hướng dẫn Truyện Tranh AI',
+             p1: 'Tạo những trang truyện tranh chuyên nghiệp với AI.',
+             steps_title: 'Quy trình:',
+             step1: 'Thiết lập: Tên truyện, thể loại và tải ảnh nhân vật để AI học mặt.',
+             step2: 'Kịch bản: Nhập ý tưởng, AI sẽ tự viết kịch bản chi tiết từng khung hình.',
+             step3: 'Sản xuất: Nhấn nút "Vẽ" cho từng khung hình. Bạn có thể tải về file PDF hoặc ZIP.',
+             note: 'Lưu ý:',
+             note_text: 'Tạo kịch bản tốn 2 Kim Cương. Mỗi lần vẽ khung hình tốn 10 Kim Cương.'
         }
-    }
+    },
   },
   changelog: {
+    13: {
+        title: 'Siêu Phẩm: Comic Studio (Truyện Tranh AI)',
+        description: 'Ra mắt công cụ sáng tạo Truyện Tranh chuyên nghiệp! Tự động viết kịch bản, phân tích nhân vật, vẽ tranh theo panel và xuất file PDF/ZIP sắc nét.',
+    },
+    12: {
+        title: 'Cửa Hàng Premium & Hiệu Ứng Tên',
+        description: 'Làm mới hoàn toàn Cửa Hàng. Ra mắt vật phẩm "Hiệu Ứng Tên" (Name Effects) giúp tên bạn nổi bật lấp lánh trong Chat và Bảng Xếp Hạng.',
+    },
+    11: {
+        title: 'Hệ Thống Chat & Vòng Quay Mới',
+        description: 'Nâng cấp Vòng Quay May Mắn (Floating), thêm nhiệm vụ kiếm vé miễn phí. Ra mắt Chat Global và Hệ thống tin nhắn riêng (Inbox).',
+    },
     10: {
       title: 'Ra mắt Studio Nhóm & Nâng cấp UI',
       description: 'Thêm tính năng Studio Nhóm cho phép tạo ảnh nhiều nhân vật. Sửa lỗi hiển thị và vị trí nút "Sử dụng PROMPT". Thêm kênh Thông báo Hệ thống.',

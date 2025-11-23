@@ -231,27 +231,19 @@ const GameConfigManager: React.FC = () => {
         }
     };
 
-    const sqlFixScript = `-- SCRIPT SỬA LỖI TIN NHẮN ẨN (FIX V5)
--- 1. Sửa RLS cho conversation_participants
--- Cho phép user xem thành viên CỦA HỘI THOẠI MÀ HỌ THAM GIA
-DROP POLICY IF EXISTS "Users can view participants of their conversations" ON public.conversation_participants;
-CREATE POLICY "Users can view participants of their conversations" ON public.conversation_participants
-FOR SELECT USING (
-  conversation_id IN (
-    SELECT conversation_id FROM public.conversation_participants WHERE user_id = auth.uid()
-  )
-);
+    const sqlFixScript = `-- GIẢI PHÁP TRIỆT ĐỂ CHO LỖI TIN NHẮN (NUCLEAR FIX)
 
--- 2. Sửa RLS cho conversations
-DROP POLICY IF EXISTS "Users can view their conversations" ON public.conversations;
-CREATE POLICY "Users can view their conversations" ON public.conversations
-FOR SELECT USING (
-  id IN (
-    SELECT conversation_id FROM public.conversation_participants WHERE user_id = auth.uid()
-  )
-);
+-- 1. Xóa hết các policy cũ gây rắc rối cho bảng users
+DROP POLICY IF EXISTS "Public profiles are viewable by everyone" ON public.users;
+DROP POLICY IF EXISTS "Users can see their own profile" ON public.users;
+DROP POLICY IF EXISTS "Authenticated users can view all profiles" ON public.users;
 
--- 3. Đảm bảo User SYSTEM tồn tại
+-- 2. TẠO POLICY SIÊU MỞ CHO USERS (Để ai cũng thấy được Admin/System)
+-- Điều này cực kỳ quan trọng để frontend không bị lỗi khi load tin nhắn từ người lạ/admin
+CREATE POLICY "Public profiles are viewable by everyone" ON public.users
+FOR SELECT USING (true);
+
+-- 3. Đảm bảo user SYSTEM tồn tại trong bảng public.users
 INSERT INTO public.users (id, email, display_name, photo_url, diamonds, xp)
 VALUES (
     '00000000-0000-0000-0000-000000000000',
@@ -260,65 +252,39 @@ VALUES (
     'https://api.dicebear.com/7.x/bottts/svg?seed=System',
     999999,
     999999
-) ON CONFLICT (id) DO UPDATE SET display_name = 'HỆ THỐNG', photo_url = 'https://api.dicebear.com/7.x/bottts/svg?seed=System';
+) ON CONFLICT (id) DO UPDATE SET 
+    display_name = 'HỆ THỐNG', 
+    photo_url = 'https://api.dicebear.com/7.x/bottts/svg?seed=System';
 
--- 4. Cập nhật Function get_or_create_conversation (An toàn)
-CREATE OR REPLACE FUNCTION public.get_or_create_conversation(other_user_id UUID)
-RETURNS UUID
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-DECLARE
-    conv_id UUID;
-    current_user_id UUID;
-BEGIN
-    current_user_id := auth.uid();
-    
-    -- Tìm conversation đã tồn tại
-    SELECT c.id INTO conv_id
-    FROM public.conversations c
-    JOIN public.conversation_participants cp1 ON c.id = cp1.conversation_id
-    JOIN public.conversation_participants cp2 ON c.id = cp2.conversation_id
-    WHERE cp1.user_id = current_user_id 
-      AND cp2.user_id = other_user_id
-    LIMIT 1;
+-- 4. Sửa quyền cho bảng conversations và participants
+DROP POLICY IF EXISTS "Users can view their conversations" ON public.conversations;
+CREATE POLICY "Users can view their conversations" ON public.conversations
+FOR SELECT USING (
+  EXISTS (
+    SELECT 1 FROM public.conversation_participants 
+    WHERE conversation_id = id AND user_id = auth.uid()
+  )
+);
 
-    -- Nếu chưa có, tạo mới
-    IF conv_id IS NULL THEN
-        INSERT INTO public.conversations DEFAULT VALUES RETURNING id INTO conv_id;
-        
-        -- Thêm cả 2 người vào
-        INSERT INTO public.conversation_participants (conversation_id, user_id)
-        VALUES (conv_id, current_user_id), (conv_id, other_user_id);
-    END IF;
+DROP POLICY IF EXISTS "Users can view participants of their conversations" ON public.conversation_participants;
+CREATE POLICY "Users can view participants of their conversations" ON public.conversation_participants
+FOR SELECT USING (
+  conversation_id IN (
+    SELECT conversation_id FROM public.conversation_participants WHERE user_id = auth.uid()
+  )
+);
 
-    RETURN conv_id;
-END;
-$$;
-
--- 5. Refresh Realtime Publication (Safe Block)
+-- 5. Đảm bảo Realtime được bật
 DO $$
 BEGIN
     ALTER PUBLICATION supabase_realtime ADD TABLE conversations;
-EXCEPTION WHEN duplicate_object THEN NULL;
-END;
-$$;
-
-DO $$
-BEGIN
     ALTER PUBLICATION supabase_realtime ADD TABLE conversation_participants;
-EXCEPTION WHEN duplicate_object THEN NULL;
-END;
-$$;
-
-DO $$
-BEGIN
     ALTER PUBLICATION supabase_realtime ADD TABLE direct_messages;
 EXCEPTION WHEN duplicate_object THEN NULL;
 END;
 $$;
 
-SELECT 'Đã cập nhật RLS và phân quyền thành công!' as ket_qua;
+SELECT 'Đã cấu hình lại toàn bộ quyền truy cập thành công!' as ket_qua;
 `;
 
     return (
@@ -339,9 +305,9 @@ SELECT 'Đã cập nhật RLS và phân quyền thành công!' as ket_qua;
             {activeSubTab === 'db_tools' && (
                 <div className="space-y-4">
                     <div className="bg-yellow-500/10 border border-yellow-500/30 p-4 rounded-lg">
-                        <h4 className="text-yellow-400 font-bold mb-2 flex items-center gap-2"><i className="ph-fill ph-warning-circle"></i> Cập Nhật Database (QUAN TRỌNG)</h4>
+                        <h4 className="text-yellow-400 font-bold mb-2 flex items-center gap-2"><i className="ph-fill ph-warning-circle"></i> SỬA LỖI TIN NHẮN (BẮT BUỘC)</h4>
                         <p className="text-sm text-gray-300 mb-4">
-                            Để sửa lỗi <strong>không thấy tin nhắn Admin</strong>, hãy chạy đoạn mã này. Nó sẽ sửa quyền RLS để bạn nhìn thấy người gửi là Admin/Hệ thống.
+                            Hãy chạy đoạn lệnh này trong <strong>Supabase SQL Editor</strong>. Nó sẽ mở khóa toàn bộ quyền xem Profile người dùng, đảm bảo bạn nhìn thấy tin nhắn từ Admin/Hệ thống.
                         </p>
                         <div className="relative">
                             <pre className="bg-black/50 p-3 rounded-lg text-xs text-green-400 overflow-x-auto font-mono border border-white/10 h-64 custom-scrollbar">
@@ -355,14 +321,7 @@ SELECT 'Đã cập nhật RLS và phân quyền thành công!' as ket_qua;
                             </button>
                         </div>
                         <div className="mt-4 text-xs text-gray-400">
-                            <strong>Hướng dẫn thực hiện:</strong>
-                            <ol className="list-decimal list-inside mt-1 space-y-1">
-                                <li>Đăng nhập <a href="https://supabase.com/dashboard" target="_blank" className="text-blue-400 underline">Supabase Dashboard</a>.</li>
-                                <li>Chọn Project của bạn.</li>
-                                <li>Bấm vào biểu tượng <strong>SQL Editor</strong> ở thanh bên trái.</li>
-                                <li>Bấm <strong>New Query</strong>.</li>
-                                <li>Dán đoạn code trên vào và bấm <strong>Run</strong>.</li>
-                            </ol>
+                            <strong>Hướng dẫn nhanh:</strong> Copy đoạn mã trên -> Vào Supabase -> SQL Editor -> Paste -> Run.
                         </div>
                     </div>
                 </div>

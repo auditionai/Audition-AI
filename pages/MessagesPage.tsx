@@ -32,8 +32,7 @@ const MessagesPage: React.FC = () => {
         if (!supabase || !user) return;
         const fetchConversations = async () => {
             setIsLoadingConvs(true);
-            // We request participants. But if RLS hides the *other* participant,
-            // the array will only contain ME.
+            
             const { data, error } = await supabase
                 .from('conversations')
                 .select(`
@@ -48,24 +47,31 @@ const MessagesPage: React.FC = () => {
             if (error) {
                 console.error("Error fetching conversations:", error);
             } else {
-                // Process conversations
+                // --- ROBUST DATA PROCESSING ---
                 const formatted = data.map((c: any) => {
-                    // Try to find a participant that is NOT me
+                    // 1. Try to find the OTHER participant (not me)
                     let otherParticipant = c.participants.find((p: any) => p.user_id !== user.id);
                     
-                    // If no other participant found, it means they are hidden (RLS) or deleted.
-                    // In this system, invisible usually means SYSTEM/ADMIN sending messages.
+                    // 2. FALLBACK: If specific partner not found (e.g. RLS hidden admin, or self-chat),
+                    // look for ANY participant that might represent the system or handle edge cases.
+                    
                     if (!otherParticipant) {
-                        otherParticipant = {
-                            user_id: SYSTEM_BOT_ID,
-                            user: {
-                                id: SYSTEM_BOT_ID,
-                                display_name: 'HỆ THỐNG',
-                                photo_url: 'https://api.dicebear.com/7.x/bottts/svg?seed=System'
-                            }
-                        };
-                    } else if (!otherParticipant.user) {
-                        // If participant row exists but user join failed (e.g. deleted user)
+                        // Only one participant in list (Me)? Then the other one is hidden/deleted.
+                        // Assume it is System/Support.
+                        if (c.participants.length >= 1) {
+                             otherParticipant = {
+                                user_id: SYSTEM_BOT_ID,
+                                user: {
+                                    id: SYSTEM_BOT_ID,
+                                    display_name: 'HỆ THỐNG',
+                                    photo_url: 'https://api.dicebear.com/7.x/bottts/svg?seed=System'
+                                }
+                            };
+                        }
+                    } 
+                    
+                    // 3. Handle case where user row is null (Foreign Key broke or RLS hid user details)
+                    if (otherParticipant && !otherParticipant.user) {
                         otherParticipant.user = {
                             id: otherParticipant.user_id,
                             display_name: 'Người dùng ẩn',
@@ -75,9 +81,11 @@ const MessagesPage: React.FC = () => {
 
                     return {
                         ...c,
-                        participants: [{ user: otherParticipant.user }] 
+                        // Ensure participants structure is valid for UI
+                        participants: otherParticipant ? [{ user: otherParticipant.user }] : []
                     };
-                });
+                }).filter((c: any) => c.participants.length > 0); // Only show valid convs
+
                 setConversations(formatted);
             }
             setIsLoadingConvs(false);
@@ -157,7 +165,6 @@ const MessagesPage: React.FC = () => {
     const activeConv = conversations.find(c => c.id === activeConversationId);
     const chatPartner = activeConv?.participants[0]?.user;
     
-    // Identify if it is a System chat (ID match OR Name match for fallback)
     const isSystemChat = chatPartner?.id === SYSTEM_BOT_ID || chatPartner?.display_name === 'HỆ THỐNG';
 
     return (

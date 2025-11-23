@@ -35,8 +35,7 @@ const failJob = async (jobId: string, userId: string, reason: string) => {
 };
 
 const handler: Handler = async (event: HandlerEvent) => {
-    // Fire-and-forget style, return 200 immediately to client usually, 
-    // but here we are called by the client to start processing.
+    // Fire-and-forget style, return 200 immediately to client
     if (event.httpMethod !== 'POST') return { statusCode: 200 };
 
     const { jobId } = JSON.parse(event.body || '{}');
@@ -56,7 +55,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         
         userId = jobData.user_id;
         const jobConfig = JSON.parse(jobData.prompt);
-        const { panel, characters, style, aspectRatio, colorFormat, visualEffect } = jobConfig.payload;
+        const { panel, characters, storyTitle, style, aspectRatio, colorFormat, visualEffect, isCover } = jobConfig.payload;
 
         // 2. Get API Key
         const { data: apiKeyData } = await supabaseAdmin.from('api_keys').select('key_value, id').eq('status', 'active').limit(1).single();
@@ -67,46 +66,92 @@ const handler: Handler = async (event: HandlerEvent) => {
         // 3. Prepare Prompt
         const parts: any[] = [];
         
-        let effectInstruction = "";
-        if (visualEffect && visualEffect !== 'none') {
-            effectInstruction = `- Apply this specific visual effect: ${visualEffect}`;
+        // --- VISUAL QUALITY MODIFIERS ---
+        // Add "Masterpiece" level quality keywords based on style
+        const qualityKeywords = "masterpiece, best quality, high resolution, incredibly detailed, 8k, cinematic lighting, sharp focus, professional manga composition";
+        
+        // --- DIALOGUE CONSTRUCTION ---
+        let dialogueInstruction = "";
+        if (panel.dialogue && Array.isArray(panel.dialogue) && panel.dialogue.length > 0) {
+            const dialogueList = panel.dialogue.map((d: any) => {
+                const speaker = d.speaker === "Lời dẫn" ? "NARRATION BOX" : `Character ${d.speaker}`;
+                return `- ${speaker}: "${d.text}"`;
+            }).join('\n');
+            
+            dialogueInstruction = `
+            **MANDATORY TEXT RENDERING:**
+            You MUST render speech bubbles or narration boxes directly into the image.
+            The text inside the bubbles MUST be EXACTLY:
+            ${dialogueList}
+            
+            *   **LANGUAGE RULE:** The text MUST be in **VIETNAMESE** as provided. Spelling must be perfect.
+            *   **PLACEMENT:** Place bubbles intelligently near the speaker's head, but DO NOT cover important facial features.
+            *   **STYLE:** Use professional comic fonts. White bubbles with black text.
+            `;
+        } else {
+            dialogueInstruction = "This panel has no dialogue. Focus on visual storytelling.";
         }
 
-        // Construct character reference text to reinforce images
-        const characterRefText = characters.map((c: any) => 
-            `Reference Image provided is for character "${c.name}". Visual description: ${c.description || "Follow image strictly"}`
-        ).join('\n');
+        // --- SPECIAL MODE: COVER PAGE ---
+        let systemPrompt = "";
+        
+        if (isCover) {
+            systemPrompt = `
+                You are a world-class Graphic Designer and Comic Artist.
+                **TASK:** Create a professional Movie-Poster style Comic Book Cover for a story titled: "${storyTitle}".
+                
+                **REQUIREMENTS:**
+                1.  **TITLE:** Render the title "${storyTitle}" clearly and artistically at the top or bottom. Large, bold, stylized typography.
+                2.  **VISUAL:** ${panel.visual_description}
+                3.  **STYLE:** ${style}. ${qualityKeywords}.
+                4.  **COMPOSITION:** Eye-catching, dynamic, poster-quality.
+                5.  **LANGUAGE:** All text MUST be VIETNAMESE.
+            `;
+        } else {
+            // --- NORMAL PANEL MODE ---
+            let effectInstruction = "";
+            if (visualEffect && visualEffect !== 'none') {
+                effectInstruction = `- Apply visual effect: ${visualEffect}`;
+            }
 
-        const systemPrompt = `
-            You are a master comic artist specialized in ${style} style.
-            Generate a single high-quality comic panel based on the description.
-            
-            **Visual Description:**
-            ${panel.visual_description}
-            
-            **Character References:**
-            ${characterRefText}
-            
-            **IMPORTANT:** Use the provided reference images to ground the character appearance. Do NOT mix up details between characters.
-            
-            **Style Constraints:**
-            - Art Style: ${style}
-            - Color Format: ${colorFormat || 'Full Color'}
-            - High contrast, expressive lines.
-            - Cinematic lighting.
-            ${effectInstruction}
-            - Do NOT include speech bubbles or text in the image.
-        `;
+            // Character references text
+            const characterRefText = characters.map((c: any) => 
+                `Character "${c.name}": ${c.description}`
+            ).join('\n');
+
+            systemPrompt = `
+                You are a master comic artist specialized in ${style}.
+                **TASK:** Draw a single high-quality comic panel.
+                
+                **VISUAL SCENE:**
+                ${panel.visual_description}
+                
+                ${dialogueInstruction}
+                
+                **ENVIRONMENTAL TEXT RULE:**
+                If there are any background signs, books, posters, or sound effects (SFX) in the scene, they MUST be written in **VIETNAMESE**. Do NOT use English or gibberish text.
+                
+                **CHARACTER REFERENCES:**
+                ${characterRefText}
+                (Use reference images provided for visual consistency).
+                
+                **STYLE CONSTRAINTS:**
+                - Art Style: ${style}
+                - Color: ${colorFormat || 'Full Color'}
+                - ${qualityKeywords}
+                ${effectInstruction}
+            `;
+        }
+
         parts.push({ text: systemPrompt });
 
-        // Add Character References
+        // Add Character References Images
         if (characters && Array.isArray(characters)) {
             for (const char of characters) {
                 if (char.image_url) {
                     const imgData = processDataUrl(char.image_url);
                     if (imgData) {
-                        // Explicitly label the image part
-                        parts.push({ text: `Reference Image for character: ${char.name}` });
+                        parts.push({ text: `Reference Image for: ${char.name}` });
                         parts.push({ inlineData: { data: imgData.base64, mimeType: imgData.mimeType } });
                     }
                 }
@@ -120,8 +165,8 @@ const handler: Handler = async (event: HandlerEvent) => {
             config: {
                 responseModalities: [Modality.IMAGE],
                 imageConfig: {
-                    aspectRatio: aspectRatio || '16:9',
-                    imageSize: '2K'
+                    aspectRatio: aspectRatio || '3:4',
+                    imageSize: '2K' // Force High Quality
                 }
             }
         });
@@ -129,7 +174,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
         if (!imagePart?.inlineData) throw new Error("AI failed to render.");
 
-        // 5. Upload (Heavy Operation)
+        // 5. Upload
         const s3Client = new S3Client({
             region: "auto",
             endpoint: process.env.R2_ENDPOINT!,
@@ -146,24 +191,16 @@ const handler: Handler = async (event: HandlerEvent) => {
             ContentType: 'image/png'
         }));
 
-        if (!process.env.R2_PUBLIC_URL) {
-            throw new Error("Server configuration error: Missing R2_PUBLIC_URL");
-        }
-
-        // Ensure no double slash issue
-        const baseUrl = process.env.R2_PUBLIC_URL.replace(/\/$/, '');
+        const baseUrl = process.env.R2_PUBLIC_URL!.replace(/\/$/, '');
         const publicUrl = `${baseUrl}/${fileName}`;
 
-        // Add a larger delay to ensure CDN propagation (2s)
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await new Promise(resolve => setTimeout(resolve, 1000));
 
-        // 6. Finalize Job (Update DB)
-        // CRITICAL FIX: We restore the prompt to just the visual description so it appears nicely in the gallery
-        // The original 'prompt' was a JSON blob configuration.
+        // 6. Finalize
         await Promise.all([
             supabaseAdmin.from('generated_images').update({ 
                 image_url: publicUrl,
-                prompt: panel.visual_description || "Comic Panel" // Clean up the prompt column with readable text
+                prompt: panel.visual_description || "Comic Panel" 
             }).eq('id', jobId),
             supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id })
         ]);

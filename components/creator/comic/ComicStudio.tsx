@@ -28,10 +28,10 @@ const GENRES = [
 
 const ART_STYLES = [
     { label: 'Mặc định (Audition)', value: 'Audition 3D Game Style' },
-    { label: 'Manga (Đen Trắng)', value: 'Manga Black and White' },
-    { label: 'Webtoon (Hàn Quốc)', value: 'Korean Webtoon Manhwa' },
-    { label: 'Comic (Âu Mỹ)', value: 'American Comic Book' },
-    { label: 'Anime (Nhật Bản)', value: 'Anime Style' },
+    { label: 'Manga (Đen Trắng)', value: 'Manga Black and White, Screen tones, High Contrast' },
+    { label: 'Webtoon (Hàn Quốc)', value: 'Korean Webtoon Manhwa, Full Color, Digital Art, High Quality' },
+    { label: 'Comic (Âu Mỹ)', value: 'American Comic Book, Bold Lines, Dynamic Colors' },
+    { label: 'Anime (Nhật Bản)', value: 'Anime Style, Kyoto Animation Quality' },
     { label: 'Oda Eiichiro (One Piece)', value: 'One Piece Art Style' },
     { label: 'Akira Toriyama (Dragon Ball)', value: 'Dragon Ball Art Style' },
     { label: 'Studio Ghibli', value: 'Studio Ghibli Art Style' },
@@ -44,7 +44,7 @@ const ART_STYLES = [
 ];
 
 const LANGUAGES = [
-    'Tiếng Việt', 'Tiếng Anh', 'Nhật Bản', 'Hàn Quốc', 'Trung Quốc', 'Tây Ban Nha', 'Tiếng Pháp'
+    'Tiếng Việt', 'Tiếng Anh', 'Nhật Bản', 'Hàn Quốc', 'Trung Quốc'
 ];
 
 const COLOR_FORMATS = [
@@ -61,15 +61,9 @@ const PAGE_NUMBERING = [
 ];
 
 const BUBBLE_FONTS = [
-    { label: 'Dễ thương / Tròn (Mali/Cát lún)', value: 'font-mali', family: '"Mali", cursive' },
-    { label: 'Anime Standard (Chữ hoa/Chữ không chân)', value: 'font-anime', family: 'sans-serif' },
-    { label: 'Viết tay (Patrick Hand/Pangolin)', value: 'font-hand', family: '"Patrick Hand", cursive' },
-    { label: 'Truyện tranh cổ điển (Phong cách Comic Sans)', value: 'font-comic', family: '"Comic Neue", cursive' },
-    { label: 'Webtoon hiện đại (Clean Roboto/Open Sans)', value: 'font-webtoon', family: '"Barlow", sans-serif' },
-    { label: 'Serif / Novel (Merriweather/Times)', value: 'font-serif', family: '"Merriweather", serif' },
-    { label: 'Pixel / Retro (VT323)', value: 'font-pixel', family: '"VT323", monospace' },
-    { label: 'Cọ / Thư pháp (Mực Châu Á)', value: 'font-brush', family: '"Sedgwick Ave Display", cursive' },
-    { label: 'Kinh dị (Scratchy/Distorted)', value: 'font-horror', family: '"Creepster", display' }
+    { label: 'AI Tự Động (Khuyên dùng)', value: 'auto', family: 'sans-serif' },
+    { label: 'Dễ thương / Tròn', value: 'font-mali', family: '"Mali", cursive' },
+    { label: 'Anime Standard', value: 'font-anime', family: 'sans-serif' }
 ];
 
 const ASPECT_RATIOS = [
@@ -81,31 +75,30 @@ const ASPECT_RATIOS = [
 ];
 
 const VISUAL_EFFECTS = [
+    { label: 'Tự động (Theo ngữ cảnh)', value: 'auto' },
     { label: 'Không có', value: 'none' },
     { label: 'Vụ nổ hoành tráng', value: 'Epic Explosion background' },
     { label: 'Đường Tốc Độ (Anime)', value: 'Anime Speed Lines' },
     { label: 'Máu me/Tối', value: 'Dark and Gore atmosphere' },
     { label: 'Hạt ma thuật', value: 'Magical Particles' },
     { label: 'Hiệu ứng trục trặc', value: 'Glitch Effect' },
-    { label: 'Làm mờ chuyển động động', value: 'Dynamic Motion Blur' },
+    { label: 'Làm mờ chuyển động', value: 'Dynamic Motion Blur' },
     { label: 'Kinh dị tâm lý', value: 'Psychological Horror vignette' }
 ];
 
 const DIALOGUE_AMOUNTS = [
-    { label: 'Ít (Visual Focus)', value: 'Ít (Visual Focus)' },
-    { label: 'Vừa phải', value: 'Vừa phải' },
-    { label: 'Nhiều (Story Focus)', value: 'Nhiều (Story Focus)' }
+    { label: 'Ít (Visual Focus)', value: 'Minimal' },
+    { label: 'Vừa phải', value: 'Moderate' },
+    { label: 'Nhiều (Story Focus)', value: 'Heavy' }
 ];
 
 const COVER_OPTIONS = [
-    { label: 'Không có', value: 'none' },
-    { label: 'Bắt đầu (Trang 1)', value: 'start' },
-    { label: 'Kết thúc (Trang cuối)', value: 'end' },
-    { label: 'Bắt đầu - Kết thúc', value: 'both' }
+    { label: 'Tự động tạo bìa', value: 'start' },
+    { label: 'Không có', value: 'none' }
 ];
 
 const RENDER_COST = 10; 
-const MAX_CHARACTERS = 12; // Updated limit per user request
+const MAX_CHARACTERS = 12;
 
 // --- SUB-COMPONENTS ---
 
@@ -216,63 +209,6 @@ const StepIndicator = ({ currentStep }: { currentStep: number }) => {
     );
 };
 
-interface DraggableBubbleProps {
-    text: string;
-    initialX: number;
-    initialY: number;
-    onUpdate: (x: number, y: number) => void;
-    fontFamily: string;
-}
-
-const DraggableBubble: React.FC<DraggableBubbleProps> = ({ 
-    text, 
-    initialX, 
-    initialY, 
-    onUpdate,
-    fontFamily
-}) => {
-    const [position, setPosition] = useState({ x: initialX, y: initialY });
-    const [isDragging, setIsDragging] = useState(false);
-    const dragStart = useRef({ x: 0, y: 0 });
-
-    const handleMouseDown = (e: React.MouseEvent) => {
-        e.stopPropagation();
-        setIsDragging(true);
-        dragStart.current = { x: e.clientX - position.x, y: e.clientY - position.y };
-    };
-
-    useEffect(() => {
-        const handleMouseMove = (e: MouseEvent) => {
-            if (!isDragging) return;
-            const newX = e.clientX - dragStart.current.x;
-            const newY = e.clientY - dragStart.current.y;
-            setPosition({ x: newX, y: newY });
-        };
-        const handleMouseUp = () => {
-            if (isDragging) {
-                setIsDragging(false);
-                onUpdate(position.x, position.y);
-            }
-        };
-        window.addEventListener('mousemove', handleMouseMove);
-        window.addEventListener('mouseup', handleMouseUp);
-        return () => {
-            window.removeEventListener('mousemove', handleMouseMove);
-            window.removeEventListener('mouseup', handleMouseUp);
-        };
-    }, [isDragging, onUpdate, position.x, position.y]);
-
-    return (
-        <div 
-            onMouseDown={handleMouseDown}
-            style={{ left: position.x, top: position.y, fontFamily: fontFamily }}
-            className="absolute cursor-move bg-white text-black px-4 py-3 rounded-[20px] border-2 border-black shadow-xl text-sm font-bold max-w-[200px] text-center z-30 select-none bubble-tail hover:scale-105 transition-transform leading-tight"
-        >
-            {text}
-        </div>
-    );
-};
-
 // --- MAIN COMPONENT ---
 
 interface ComicStudioProps {
@@ -289,6 +225,7 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
     // State for Step 1: Setup
     const [characters, setCharacters] = useState<ComicCharacter[]>([]);
     const [storySettings, setStorySettings] = useState({
+        title: '', // New Title Field
         genre: GENRES[0],
         artStyle: ART_STYLES[0].value,
         language: LANGUAGES[0],
@@ -368,6 +305,7 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
     const handleGenerateScript = async () => {
         if (characters.length === 0) return showToast("Cần ít nhất 1 nhân vật.", "error");
         if (!storySettings.premise.trim()) return showToast("Vui lòng nhập ý tưởng câu chuyện.", "error");
+        if (!storySettings.title.trim()) return showToast("Vui lòng nhập Tên Truyện.", "error");
         
         const missingDesc = characters.find(c => !c.description);
         if (missingDesc) return showToast(`Vui lòng upload ảnh cho ${missingDesc.name} để AI phân tích ngoại hình.`, "error");
@@ -476,58 +414,6 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
         }
     };
 
-    const handleRetryPanel = async (panelId: string) => {
-        const panelToRetry = panels.find(p => p.id === panelId);
-        if (!panelToRetry) return;
-
-        const plotSummary = (panelToRetry as any).plot_summary || panelToRetry.visual_description.replace(/^\[Lỗi\]\s*/, '');
-
-        setPanels(prev => prev.map(p => p.id === panelId ? { 
-            ...p, 
-            visual_description: `(Đang thử lại: ${plotSummary}...)` 
-        } : p));
-
-        try {
-            const expandRes = await fetch('/.netlify/functions/comic-expand-panel', {
-                method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${session?.access_token}`
-                },
-                body: JSON.stringify({ 
-                    plot_summary: plotSummary,
-                    characters: characters,
-                    style: storySettings.artStyle,
-                    genre: storySettings.genre,
-                    language: storySettings.language,
-                    previous_panels: panels.filter(p => p.panel_number < panelToRetry.panel_number && !p.visual_description.startsWith('(')).map(p => ({
-                        panel_number: p.panel_number,
-                        visual_description: p.visual_description,
-                        dialogue: p.dialogue
-                    }))
-                })
-            });
-
-            if (expandRes.ok) {
-                const details = await expandRes.json();
-                setPanels(prev => prev.map(p => p.id === panelId ? { 
-                    ...p, 
-                    visual_description: details.visual_description || plotSummary, 
-                    dialogue: Array.isArray(details.dialogue) ? details.dialogue : [] 
-                } : p));
-                showToast("Đã sửa lỗi thành công!", "success");
-            } else {
-                throw new Error("API Error");
-            }
-        } catch (e) {
-            showToast("Thử lại thất bại. Vui lòng thử lại lần nữa.", "error");
-            setPanels(prev => prev.map(p => p.id === panelId ? { 
-                ...p, 
-                visual_description: `[Lỗi] ${plotSummary}` 
-            } : p));
-        }
-    };
-
     const handleRenderPanel = async (panel: ComicPanel) => {
         if (!supabase) return;
         
@@ -544,10 +430,12 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                 body: JSON.stringify({ 
                     panel, 
                     characters, 
+                    storyTitle: storySettings.title, // Pass title
                     style: storySettings.artStyle,
                     colorFormat: storySettings.colorFormat,
                     visualEffect: storySettings.visualEffect,
-                    aspectRatio: storySettings.aspectRatio
+                    aspectRatio: storySettings.aspectRatio,
+                    isCover: panel.panel_number === 1 && storySettings.coverPage !== 'none'
                 })
             });
 
@@ -648,40 +536,6 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
         }
     };
 
-    const handleExportPDF = async () => {
-        setIsLoading(true);
-        showToast("Đang tạo PDF, vui lòng đợi...", "success");
-        try {
-            const pdf = new jsPDF('p', 'mm', 'a4');
-            let yOffset = 10;
-            
-            for (let i = 0; i < panels.length; i++) {
-                const panelEl = panelRefs.current[panels[i].id];
-                if (panelEl && panels[i].image_url) {
-                    const imgData = await capturePanel(panels[i].id, panelEl);
-                    if (imgData) {
-                        const imgProps = pdf.getImageProperties(imgData);
-                        const pdfWidth = 190;
-                        const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-                        if (yOffset + pdfHeight > 280) {
-                            pdf.addPage();
-                            yOffset = 10;
-                        }
-                        pdf.addImage(imgData, 'PNG', 10, yOffset, pdfWidth, pdfHeight);
-                        yOffset += pdfHeight + 10;
-                    }
-                }
-            }
-            pdf.save('audition-comic.pdf');
-            showToast("Xuất file PDF thành công!", "success");
-        } catch (e: any) {
-            console.error(e);
-            showToast("Lỗi khi xuất file.", "error");
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
     const handleDownloadZip = async () => {
         setIsLoading(true);
         showToast("Đang nén ảnh, vui lòng đợi...", "success");
@@ -692,14 +546,12 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
             let count = 0;
             for (let i = 0; i < panels.length; i++) {
                 const panel = panels[i];
-                const panelEl = panelRefs.current[panel.id];
-                if (panelEl && panel.image_url) {
-                    const imgData = await capturePanel(panel.id, panelEl);
-                    if (imgData) {
-                        const base64Data = imgData.split(',')[1];
-                        folder?.file(`panel-${panel.panel_number}.png`, base64Data, { base64: true });
-                        count++;
-                    }
+                // Simply download the image URL directly since text is baked in
+                if (panel.image_url) {
+                    const response = await fetch(panel.image_url);
+                    const blob = await response.blob();
+                    folder?.file(`panel-${panel.panel_number}.png`, blob);
+                    count++;
                 }
             }
 
@@ -732,6 +584,7 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
 
     const handleImageLoad = (panelId: string) => setImageLoadStates(prev => ({ ...prev, [panelId]: 'loaded' }));
     const handleImageError = (panelId: string) => setImageLoadStates(prev => ({ ...prev, [panelId]: 'error' }));
+    
     const handleReloadImage = (panelId: string) => {
         setPanels(prev => prev.map(p => {
             if (p.id !== panelId || !p.image_url) return p;
@@ -744,13 +597,9 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
         setImageLoadStates(prev => ({ ...prev, [panelId]: 'loading' }));
     };
 
-    const fontStyle = storySettings.bubbleFont.family;
-
     return (
         <div className="animate-fade-in h-[calc(100vh-140px)] min-h-[600px] flex flex-col max-w-7xl mx-auto">
             <style>{`
-                .bubble-tail::after { content: ''; position: absolute; bottom: -8px; left: 20px; border-width: 8px 8px 0; border-style: solid; border-color: black transparent; display: block; width: 0; }
-                .bubble-tail::before { content: ''; position: absolute; bottom: -5px; left: 22px; border-width: 6px 6px 0; border-style: solid; border-color: white transparent; display: block; width: 0; z-index: 1; }
                 .comic-card { background: var(--color-fill-secondary); border: 1px solid var(--color-border); border-radius: 1rem; overflow: hidden; transition: all 0.3s ease; }
                 .comic-card:hover { border-color: var(--color-border-accent); box-shadow: var(--shadow-accent); }
             `}</style>
@@ -806,6 +655,16 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                             <div className="lg:col-span-5 space-y-6">
                                 <SettingsBlock title="Cấu Hình Truyện" instructionKey="comic-studio" onInstructionClick={() => onInstructionClick && onInstructionClick()}>
                                     <div className="space-y-4">
+                                        <div>
+                                            <label className="text-xs font-bold text-skin-muted uppercase mb-1.5 block tracking-wide">TÊN TRUYỆN (ĐỂ TẠO BÌA)</label>
+                                            <input 
+                                                type="text" 
+                                                className="w-full bg-[#1E1B25] border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white focus:border-pink-500 focus:outline-none transition-colors font-bold"
+                                                placeholder="Nhập tên bộ truyện..."
+                                                value={storySettings.title}
+                                                onChange={e => setStorySettings({...storySettings, title: e.target.value})}
+                                            />
+                                        </div>
                                         <div className="grid grid-cols-2 gap-4">
                                             <ComicSelect label="THỂ LOẠI" value={storySettings.genre} onChange={(val) => setStorySettings({...storySettings, genre: val})} options={GENRES} />
                                             <ComicSelect label="NGÔN NGỮ" value={storySettings.language} onChange={(val) => setStorySettings({...storySettings, language: val})} options={LANGUAGES} />
@@ -813,11 +672,7 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                                         <ComicSelect label="PHONG CÁCH VẼ" value={storySettings.artStyle} onChange={(val) => setStorySettings({...storySettings, artStyle: val})} options={ART_STYLES} />
                                         <div className="grid grid-cols-2 gap-4">
                                             <ComicSelect label="ĐỊNH DẠNG MÀU" value={storySettings.colorFormat} onChange={(val) => setStorySettings({...storySettings, colorFormat: val})} options={COLOR_FORMATS} />
-                                            <ComicSelect label="KIỂU PHÔNG CHỮ BONG BÓNG" value={storySettings.bubbleFont.value} onChange={(val) => setStorySettings({...storySettings, bubbleFont: BUBBLE_FONTS.find(f => f.value === val) || BUBBLE_FONTS[0]})} options={BUBBLE_FONTS} previewFont={true} />
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-4">
                                             <ComicSelect label="TỶ LỆ KHUNG HÌNH" value={storySettings.aspectRatio} onChange={(val) => setStorySettings({...storySettings, aspectRatio: val})} options={ASPECT_RATIOS} />
-                                            <ComicSelect label="HIỆU ỨNG HÌNH ẢNH" value={storySettings.visualEffect} onChange={(val) => setStorySettings({...storySettings, visualEffect: val})} options={VISUAL_EFFECTS} />
                                         </div>
                                         <div className="grid grid-cols-2 gap-4">
                                             <ComicSelect label="LƯỢNG THOẠI" value={storySettings.dialogueAmount} onChange={(val) => setStorySettings({...storySettings, dialogueAmount: val})} options={DIALOGUE_AMOUNTS} />
@@ -884,7 +739,6 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                                                                     <span className="text-[10px] font-bold">Đang phân tích...</span>
                                                                 </div>
                                                             )}
-                                                            {/* New Retry Button */}
                                                             {!char.is_analyzing && !char.description && char.image_url && (
                                                                 <button 
                                                                     onClick={() => char.image_file && handleCharacterImageUpload(char.id, char.image_file)}
@@ -911,7 +765,7 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                                 <div className="w-10 h-10 bg-blue-500/20 rounded-full flex items-center justify-center text-blue-400"><i className="ph-fill ph-magic-wand text-xl"></i></div>
                                 <div>
                                     <h4 className="font-bold text-blue-100">{generationStatus ? generationStatus : 'Kịch bản AI đã sẵn sàng'}</h4>
-                                    <p className="text-xs text-blue-200/60">Hãy kiểm tra và chỉnh sửa lời thoại trước khi vẽ.</p>
+                                    <p className="text-xs text-blue-200/60">Hãy kiểm tra và chỉnh sửa lời thoại. AI sẽ tự động chèn lời thoại vào ảnh.</p>
                                 </div>
                             </div>
                             <div className="space-y-4">
@@ -920,21 +774,15 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                                     const isError = panel.visual_description.startsWith('[Lỗi');
                                     return (
                                         <div key={panel.id} className="comic-card p-0 flex flex-col md:flex-row relative overflow-hidden">
-                                            {isError && (
-                                                <div className="absolute inset-0 bg-red-900/40 flex flex-col items-center justify-center z-20 backdrop-blur-sm">
-                                                    <div className="text-center mb-3"><i className="ph-fill ph-warning-circle text-3xl text-red-400 mb-1"></i><p className="text-red-200 font-bold">Lỗi tạo nội dung</p><p className="text-red-300/70 text-xs">Vui lòng thử lại phân cảnh này</p></div>
-                                                    <button onClick={() => handleRetryPanel(panel.id)} className="px-6 py-2 bg-red-600 hover:bg-red-500 text-white font-bold rounded-full shadow-lg transition-transform transform hover:scale-105 active:scale-95 flex items-center gap-2"><i className="ph-bold ph-arrow-clockwise"></i> Thử lại</button>
-                                                </div>
-                                            )}
                                             <div className="md:w-1/2 p-4 border-b md:border-b-0 md:border-r border-white/10 bg-black/20">
                                                 <div className="flex items-center justify-between mb-2">
                                                     <span className="text-xs font-bold bg-blue-600 text-white px-2 py-0.5 rounded">PANEL {panel.panel_number}</span>
-                                                    <span className="text-[10px] text-gray-500">Visual Description</span>
+                                                    <span className="text-[10px] text-gray-500">Mô tả hình ảnh</span>
                                                 </div>
                                                 <textarea className="w-full h-32 bg-transparent border-none focus:ring-0 text-sm text-gray-300 leading-relaxed resize-none p-0" value={panel.visual_description} onChange={(e) => handleUpdatePanel(panel.id, 'visual_description', e.target.value)} disabled={isGeneratingDetails} />
                                             </div>
                                             <div className="md:w-1/2 p-4 bg-skin-fill-secondary">
-                                                <div className="mb-2 text-[10px] font-bold text-gray-500 uppercase">Hội thoại</div>
+                                                <div className="mb-2 text-[10px] font-bold text-gray-500 uppercase">Hội thoại (AI sẽ vẽ trực tiếp)</div>
                                                 <div className="space-y-3">
                                                     {Array.isArray(panel.dialogue) && panel.dialogue.map((dia, dIndex) => (
                                                         <div key={dIndex} className="flex gap-2 items-start group">
@@ -942,8 +790,7 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                                                             <div className="flex-grow"><textarea className="w-full bg-white/5 border border-white/5 rounded-lg p-2 text-sm text-white focus:border-green-500/50 focus:outline-none transition resize-none" value={dia.text} onChange={(e) => handleUpdateDialogue(panel.id, dIndex, 'text', e.target.value)} rows={2} /></div>
                                                         </div>
                                                     ))}
-                                                    {isGeneratingDetails && (!panel.dialogue || panel.dialogue.length === 0) && <div className="flex items-center justify-center py-4 text-xs text-gray-500 gap-2"><i className="ph-bold ph-spinner animate-spin text-pink-500"></i> Đang viết lời thoại...</div>}
-                                                    {!isGeneratingDetails && !isError && (!panel.dialogue || panel.dialogue.length === 0) && <p className="text-xs text-gray-600 italic pl-2">Không có lời thoại (Cảnh tĩnh/Hành động)</p>}
+                                                    {!isGeneratingDetails && !isError && (!panel.dialogue || panel.dialogue.length === 0) && <p className="text-xs text-gray-600 italic pl-2">Không có lời thoại</p>}
                                                 </div>
                                             </div>
                                         </div>
@@ -977,7 +824,7 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                                                 {(panel.is_rendering || isPending || isLoadingImage) && !isErrorImage && (
                                                     <div className="absolute inset-0 bg-skin-fill-secondary/90 flex flex-col items-center justify-center z-20">
                                                         <i className="ph-bold ph-spinner animate-spin text-3xl text-pink-500 mb-2"></i>
-                                                        <p className="text-sm text-gray-300">{isLoadingImage ? 'Đang tải ảnh...' : 'AI đang vẽ...'}</p>
+                                                        <p className="text-sm text-gray-300">{isLoadingImage ? 'Đang tải ảnh...' : 'AI đang vẽ & chèn thoại...'}</p>
                                                     </div>
                                                 )}
                                                 {isErrorImage && hasUrl && (
@@ -988,9 +835,8 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                                                     </div>
                                                 )}
                                                 {hasUrl && <img src={panel.image_url} alt="Panel" className={`w-full h-full object-cover ${isLoadingImage || isErrorImage ? 'opacity-0' : 'opacity-100'}`} onLoad={() => handleImageLoad(panel.id)} onError={() => handleImageError(panel.id)} />}
-                                                {hasUrl && !isLoadingImage && !isErrorImage && Array.isArray(panel.dialogue) && panel.dialogue.map((dia, idx) => (
-                                                    <DraggableBubble key={idx} text={`${dia.speaker && dia.speaker !== 'Lời dẫn' ? dia.speaker + ': ' : ''}${dia.text}`} initialX={50 + (idx * 50)} initialY={50 + (idx * 50)} onUpdate={() => {}} fontFamily={fontStyle} />
-                                                ))}
+                                                
+                                                {/* Page Number */}
                                                 <div className={`absolute bg-white border border-black text-black text-[10px] font-bold px-1.5 py-0.5 z-10 pointer-events-none select-none ${storySettings.pageNumbering === 'none' ? 'hidden' : storySettings.pageNumbering === 'bottom-left' ? 'bottom-2 left-2' : storySettings.pageNumbering === 'bottom-center' ? 'bottom-2 left-1/2 -translate-x-1/2' : 'bottom-2 right-2'}`}>{panel.panel_number}</div>
                                             </div>
                                         </div>
@@ -1023,10 +869,7 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                             <button onClick={() => setActiveStep(prev => (prev - 1) as any)} className="px-4 py-2.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 font-bold text-sm transition-colors flex items-center gap-2 border border-white/5"><i className="ph-bold ph-caret-left"></i> Quay lại</button>
                         )}
                         {activeStep === 3 && (
-                            <>
-                                <button onClick={handleDownloadZip} disabled={isLoading} className="px-5 py-2.5 rounded-lg bg-blue-600/90 hover:bg-blue-600 text-white font-bold text-sm transition-all shadow-lg shadow-blue-900/20 flex items-center gap-2">{isLoading ? <i className="ph-bold ph-spinner animate-spin"></i> : <i className="ph-bold ph-file-archive"></i>} Tải Ảnh (ZIP)</button>
-                                <button onClick={handleExportPDF} disabled={isLoading} className="px-5 py-2.5 rounded-lg bg-red-600/90 hover:bg-red-600 text-white font-bold text-sm transition-all shadow-lg shadow-red-900/20 flex items-center gap-2">{isLoading ? <i className="ph-bold ph-spinner animate-spin"></i> : <i className="ph-bold ph-file-pdf"></i>} Xuất PDF</button>
-                            </>
+                            <button onClick={handleDownloadZip} disabled={isLoading} className="px-5 py-2.5 rounded-lg bg-blue-600/90 hover:bg-blue-600 text-white font-bold text-sm transition-all shadow-lg shadow-blue-900/20 flex items-center gap-2">{isLoading ? <i className="ph-bold ph-spinner animate-spin"></i> : <i className="ph-bold ph-file-archive"></i>} Tải Ảnh (ZIP)</button>
                         )}
                         <button onClick={activeStep === 1 ? handleGenerateScript : () => setActiveStep(3)} disabled={isLoading || (activeStep === 3)} className={`px-6 py-2.5 rounded-lg font-bold text-sm transition-all transform hover:-translate-y-0.5 active:scale-95 flex items-center gap-2 shadow-lg ${activeStep === 3 ? 'bg-green-600 text-white cursor-default opacity-50' : 'bg-gradient-to-r from-pink-500 to-purple-600 text-white hover:shadow-pink-500/25'} disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none`}>
                             {isLoading ? <i className="ph-bold ph-spinner animate-spin text-lg"></i> : activeStep === 3 ? <>Hoàn Tất <i className="ph-bold ph-check"></i></> : <>{activeStep === 1 ? 'Tạo Kịch Bản' : 'Vào Xưởng Vẽ'} <i className="ph-bold ph-arrow-right"></i></>}

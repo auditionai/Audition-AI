@@ -32,52 +32,61 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
 
+        // Determine Layout Type for Context
+        const lowerStyle = style.toLowerCase();
+        const isWebtoon = lowerStyle.includes('webtoon') || lowerStyle.includes('manhwa');
+        const layoutContext = isWebtoon 
+            ? "This is a Webtoon/Manhwa. Describe a SINGLE, large vertical image (Long Strip format). Focus on the main action/emotion of this section."
+            : "This is a Traditional Comic Page. Describe a FULL PAGE LAYOUT consisting of AT LEAST 5-7 distinct panels arranged in a dynamic grid (e.g., wide establishing shot at top, smaller action panels below).";
+
         // 1. Prepare Character Context (Consistency)
         const characterContext = characters.map((c: any) => 
-            `### Character Name: ${c.name}
-             Visual Description (MUST FOLLOW): ${c.description || "No specific description provided."}`
-        ).join('\n\n');
+            `### ${c.name}: ${c.description || "N/A"}`
+        ).join('\n');
 
-        // 2. Prepare Story Memory (Context Awareness)
-        let memoryContext = "No previous context (Start of story).";
+        // 2. Prepare Story Memory (Context Awareness) - STRICTLY LIMIT TO LAST 3 ITEMS to reduce payload size
+        let memoryContext = "No previous context.";
         if (previous_panels && Array.isArray(previous_panels) && previous_panels.length > 0) {
-            // Use last 3 panels for immediate context to keep token usage optimal
-            const recentPanels = previous_panels.slice(-3); 
-            memoryContext = recentPanels.map((p: any) => 
-                `[Panel ${p.panel_number}]: 
-                 - Visual Context: ${p.visual_description}
-                 - Dialogue: ${p.dialogue ? p.dialogue.map((d: any) => `${d.speaker}: ${d.text}`).join(' | ') : 'None'}`
-            ).join('\n');
+            // Ensure we only process valid panels and take only the last 3
+            const recentPanels = previous_panels
+                .filter((p: any) => p.visual_description && !p.visual_description.startsWith('[')) // Filter out errors
+                .slice(-3); 
+            
+            if (recentPanels.length > 0) {
+                memoryContext = recentPanels.map((p: any) => 
+                    `[Page ${p.panel_number}]: ${p.visual_description.substring(0, 200)}...`
+                ).join('\n');
+            }
         }
 
         const prompt = `
-            You are an expert comic artist and writer specializing in ${genre} stories.
+            You are an expert manga/comic script writer.
             
-            **Task:** Expand a brief plot summary into a detailed panel description and dialogue for the CURRENT PANEL.
+            **CRITICAL INSTRUCTION: PACING & LAYOUT**
+            1.  **PACING:** SLOW DOWN. Do not rush the plot. Focus on small details, facial expressions, and atmospheric shots. The user wants depth, not just action summaries.
+            2.  **LAYOUT:** The user requires a dense, detailed page. You MUST describe a layout with **AT LEAST 5-7 PANELS** for this single page (unless it is a splash page).
+            3.  **CONTENT:** Break the 'Plot Summary' down into these 5-7 panels. Include specific visual descriptions for each panel (e.g., "Panel 1: Wide shot of...", "Panel 2: Close up on...").
             
-            **STORY MEMORY (PREVIOUS CONTEXT):**
-            Use this to maintain continuity, logic flow, and character state:
+            **Genre:** ${genre} | **Style:** ${style}
+            **Layout Guidance:** ${layoutContext}
+            
+            **Context (Last 3 Pages for Continuity):**
             ${memoryContext}
             
-            **CHARACTER VISUAL GUIDE (STRICT CONSISTENCY):**
+            **Characters:**
             ${characterContext}
             
-            **CURRENT PANEL PLOT SUMMARY:** "${plot_summary}"
-            **ART STYLE:** ${style}
+            **CURRENT PAGE PLOT SUMMARY:** "${plot_summary}"
             
-            **Requirements:**
-            1.  **visual_description (English):** Write a highly detailed prompt for an AI Image Generator. 
-                *   Describe the scene, background, lighting, and camera angle.
-                *   **CRITICAL:** When mentioning a character name (e.g., "${characters[0]?.name || 'Character'}"), you MUST explicitly repeat their visual traits from the guide above (e.g., "wearing white bucket hat", "pink hair"). The image generator does NOT know who the character is by name alone.
-                *   Ensure visual continuity with previous panels (e.g. if they were sitting, they should still be sitting unless the plot moved).
-            
-            2.  **dialogue (Vietnamese):** Write natural, engaging dialogue for this panel.
-                *   If characters are speaking, use their names.
-                *   If characters are silent or thinking, use "(Suy nghĩ)".
-                *   If it is an action scene without speech, provide a **Narration Box** (Speaker: "Lời dẫn") or return an empty array if truly silent.
-                *   Ensure dialogue flows logically from the STORY MEMORY.
-            
-            Return a single JSON object.
+            **Output JSON:**
+            {
+              "visual_description": "Detailed English prompt for AI Image Gen. Explicitly describe the panel layout (e.g. 'A comic page with 6 panels. Panel 1 shows... Panel 2 shows...'). Describe characters, setting, and action in high detail.",
+              "dialogue": [ 
+                  {"speaker": "Name", "text": "Vietnamese dialogue corresponding to Panel 1"},
+                  {"speaker": "Name", "text": "Vietnamese dialogue corresponding to Panel 2"},
+                  ...
+              ]
+            }
         `;
 
         const response = await ai.models.generateContent({
@@ -109,12 +118,10 @@ const handler: Handler = async (event: HandlerEvent) => {
             const text = response.text || '{}';
             detailJson = JSON.parse(text);
             
-            // Safety check: Ensure dialogue is an array
             if (!Array.isArray(detailJson.dialogue)) {
                 detailJson.dialogue = [];
             }
         } catch (e) {
-            // Fallback
             detailJson = { 
                 visual_description: plot_summary, 
                 dialogue: [{ speaker: "Lời dẫn", text: "..." }] 

@@ -224,7 +224,7 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
     // State for Step 1: Setup
     const [characters, setCharacters] = useState<ComicCharacter[]>([]);
     const [storySettings, setStorySettings] = useState({
-        title: '', // New Title Field
+        title: '', 
         genre: GENRES[0],
         artStyle: ART_STYLES[0].value,
         language: LANGUAGES[0],
@@ -301,6 +301,38 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
         }
     };
 
+    // --- NEW ROBUST SCRIPT GENERATION LOGIC ---
+
+    // Helper: Process a SINGLE panel/page
+    const processSinglePanelScript = async (panel: any, previousPanelsData: any[]) => {
+        try {
+            const expandRes = await fetch('/.netlify/functions/comic-expand-panel', {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session?.access_token}`
+                },
+                body: JSON.stringify({ 
+                    plot_summary: panel.plot_summary,
+                    characters: characters,
+                    style: storySettings.artStyle,
+                    genre: storySettings.genre,
+                    language: storySettings.language,
+                    previous_panels: previousPanelsData // Send context
+                })
+            });
+            
+            if (expandRes.ok) {
+                return await expandRes.json(); // Returns { visual_description, dialogue }
+            } else {
+                throw new Error(`Server Error: ${expandRes.status}`);
+            }
+        } catch (e: any) {
+            console.error(`Error expanding page ${panel.panel_number}`, e);
+            throw e;
+        }
+    };
+
     const handleGenerateScript = async () => {
         if (characters.length === 0) return showToast("Cần ít nhất 1 nhân vật.", "error");
         if (!storySettings.premise.trim()) return showToast("Vui lòng nhập ý tưởng câu chuyện.", "error");
@@ -310,10 +342,10 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
         if (missingDesc) return showToast(`Vui lòng upload ảnh cho ${missingDesc.name} để AI phân tích ngoại hình.`, "error");
 
         setIsLoading(true);
-        setGenerationStatus("Đang lên cấu trúc cốt truyện...");
+        setGenerationStatus("Đang lên cấu trúc cốt truyện (Đang dùng Gemini 3 Pro)...");
 
         try {
-            // PHASE 1: GENERATE OUTLINE
+            // PHASE 1: GENERATE OUTLINE (PAGES)
             const res = await fetch('/.netlify/functions/comic-generate-script', {
                 method: 'POST',
                 headers: { 
@@ -332,7 +364,7 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
             const initialPanels = outline.map((p: any) => ({
                 id: crypto.randomUUID(),
                 panel_number: p.panel_number,
-                visual_description: `(Đang tạo chi tiết từ ý tưởng: ${p.plot_summary}...)`,
+                visual_description: `(Đang chờ xử lý từ ý tưởng: ${p.plot_summary}...)`,
                 plot_summary: p.plot_summary,
                 dialogue: [],
                 is_rendering: false
@@ -341,69 +373,57 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
             setPanels(initialPanels);
             setActiveStep(2);
 
-            // PHASE 2: EXPAND EACH PANEL WITH MEMORY
+            // PHASE 2: EXPAND EACH PAGE WITH SEQUENTIAL QUEUE
             const completedPanelsData: any[] = [];
 
             for (let i = 0; i < outline.length; i++) {
                 const p = outline[i];
-                setGenerationStatus(`Đang viết chi tiết phân cảnh ${p.panel_number}/${outline.length}...`);
+                setGenerationStatus(`Đang viết chi tiết TRANG ${p.panel_number}/${outline.length}... (Vui lòng không tắt tab)`);
                 
-                try {
-                    const expandRes = await fetch('/.netlify/functions/comic-expand-panel', {
-                        method: 'POST',
-                        headers: { 
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${session?.access_token}`
-                        },
-                        body: JSON.stringify({ 
-                            plot_summary: p.plot_summary,
-                            characters: characters,
-                            style: storySettings.artStyle,
-                            genre: storySettings.genre,
-                            language: storySettings.language,
-                            previous_panels: completedPanelsData // PASS PREVIOUS CONTEXT
-                        })
-                    });
-                    
-                    if (expandRes.ok) {
-                        const details = await expandRes.json();
-                        
-                        const completedPanel = {
-                            panel_number: p.panel_number,
-                            visual_description: details.visual_description,
-                            dialogue: details.dialogue
-                        };
-                        completedPanelsData.push(completedPanel);
+                // --- CRITICAL FIX: DELAY ---
+                // We add a 3 second delay between requests to avoid hitting rate limits (403 Forbidden / 429 Too Many Requests)
+                // This makes the process slower but MUCH more reliable for 10+ pages.
+                if (i > 0) {
+                    await new Promise(resolve => setTimeout(resolve, 3000));
+                }
 
-                        setPanels(prev => prev.map(panel => 
-                            panel.panel_number === p.panel_number 
-                            ? { 
-                                ...panel, 
-                                visual_description: details.visual_description || p.plot_summary, 
-                                dialogue: Array.isArray(details.dialogue) ? details.dialogue : [] 
-                              }
-                            : panel
-                        ));
-                    } else {
-                        throw new Error("API Error");
-                    }
-                } catch (expandErr) {
-                    console.error(`Error expanding panel ${p.panel_number}`, expandErr);
+                try {
+                    // Only send the last 3 completed panels as context to keep payload small
+                    const recentContext = completedPanelsData.slice(-3);
+                    
+                    const details = await processSinglePanelScript(p, recentContext);
+                    
+                    const completedPanel = {
+                        panel_number: p.panel_number,
+                        visual_description: details.visual_description,
+                        dialogue: details.dialogue
+                    };
+                    completedPanelsData.push(completedPanel);
+
                     setPanels(prev => prev.map(panel => 
                         panel.panel_number === p.panel_number 
                         ? { 
                             ...panel, 
-                            visual_description: `[Lỗi] ${p.plot_summary}`, 
+                            visual_description: details.visual_description || p.plot_summary, 
+                            dialogue: Array.isArray(details.dialogue) ? details.dialogue : [] 
+                          }
+                        : panel
+                    ));
+                } catch (expandErr) {
+                    // If a page fails, mark it as error BUT CONTINUE THE LOOP
+                    setPanels(prev => prev.map(panel => 
+                        panel.panel_number === p.panel_number 
+                        ? { 
+                            ...panel, 
+                            visual_description: `[Lỗi kết nối] Không thể tạo kịch bản cho trang này. Nhấn nút 'Thử lại' bên dưới.`, 
                             dialogue: [] 
                           }
                         : panel
                     ));
                 }
-                
-                await new Promise(r => setTimeout(r, 500));
             }
 
-            showToast("Tạo kịch bản chi tiết hoàn tất!", "success");
+            showToast("Quy trình tạo kịch bản đã kết thúc.", "success");
 
         } catch (e: any) {
             showToast(e.message, "error");
@@ -417,38 +437,25 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
         const panel = panels.find(p => p.id === panelId);
         if (!panel || !panel.plot_summary) return;
 
-        // Set loading state
-        setPanels(prev => prev.map(p => p.id === panelId ? { ...p, visual_description: `(Đang thử lại...) ${p.plot_summary || ''}` } : p));
+        // Set loading state for this specific panel UI
+        setPanels(prev => prev.map(p => p.id === panelId ? { ...p, visual_description: `(Đang thử lại...) ${p.plot_summary}` } : p));
 
         try {
-            // Prepare previous context (same logic as main generation)
-            // We need to find previous panels relative to this one
+            // Gather context from previous SUCCESSFUL panels
             const pIndex = panels.findIndex(p => p.id === panelId);
-            const prevPanels = panels.slice(0, pIndex).map(p => ({
-                panel_number: p.panel_number,
-                visual_description: p.visual_description,
-                dialogue: p.dialogue
-            }));
-
-            const expandRes = await fetch('/.netlify/functions/comic-expand-panel', {
-                method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${session?.access_token}`
-                },
-                body: JSON.stringify({ 
-                    plot_summary: panel.plot_summary,
-                    characters: characters,
-                    style: storySettings.artStyle,
-                    genre: storySettings.genre,
-                    language: storySettings.language,
-                    previous_panels: prevPanels 
-                })
-            });
-
-            if (!expandRes.ok) throw new Error("API Error");
             
-            const details = await expandRes.json();
+            // Filter only panels that have valid descriptions (not error messages)
+            const validPrevPanels = panels
+                .slice(0, pIndex)
+                .filter(p => !p.visual_description.startsWith('[Lỗi') && !p.visual_description.startsWith('(Đang'))
+                .map(p => ({
+                    panel_number: p.panel_number,
+                    visual_description: p.visual_description,
+                    dialogue: p.dialogue
+                }))
+                .slice(-3); // Take last 3 valid
+
+            const details = await processSinglePanelScript({ plot_summary: panel.plot_summary }, validPrevPanels);
             
             setPanels(prev => prev.map(p => 
                 p.id === panelId 
@@ -464,12 +471,14 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
         } catch (e) {
             setPanels(prev => prev.map(p => 
                 p.id === panelId 
-                ? { ...p, visual_description: `[Lỗi] ${panel.plot_summary}` } 
+                ? { ...p, visual_description: `[Lỗi kết nối] Thử lại thất bại. Vui lòng thử lại lần nữa.` } 
                 : p
             ));
             showToast("Thử lại thất bại. Vui lòng kiểm tra kết nối.", "error");
         }
     };
+
+    // --- END NEW LOGIC ---
 
     const handleRenderPanel = async (panel: ComicPanel) => {
         if (!supabase) return;
@@ -487,7 +496,7 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                 body: JSON.stringify({ 
                     panel, 
                     characters, 
-                    storyTitle: storySettings.title, // Pass title
+                    storyTitle: storySettings.title, 
                     style: storySettings.artStyle,
                     colorFormat: storySettings.colorFormat,
                     visualEffect: storySettings.visualEffect,
@@ -517,7 +526,7 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                             is_rendering: false,
                             status: 'completed' 
                         } : p));
-                        showToast(`Đã vẽ xong khung tranh #${panel.panel_number}!`, "success");
+                        showToast(`Đã vẽ xong trang #${panel.panel_number}!`, "success");
                         supabase.removeChannel(channel);
                     }
                 })
@@ -572,7 +581,7 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                 if (panel.image_url) {
                     const response = await fetch(panel.image_url);
                     const blob = await response.blob();
-                    folder?.file(`panel-${panel.panel_number}.png`, blob);
+                    folder?.file(`page-${panel.panel_number}.png`, blob);
                     count++;
                 }
             }
@@ -761,7 +770,7 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                                             <div>
                                                 <label className="text-xs font-bold text-skin-muted uppercase mb-1.5 block tracking-wide">SỐ TRANG</label>
                                                 <div className="flex items-center bg-[#1E1B25] border border-white/10 rounded-lg px-3 py-2.5">
-                                                    <input type="number" className="bg-transparent text-white text-sm w-full focus:outline-none font-bold text-center" min={1} max={10} value={storySettings.pageCount} onChange={e => setStorySettings({...storySettings, pageCount: parseInt(e.target.value)})} />
+                                                    <input type="number" className="bg-transparent text-white text-sm w-full focus:outline-none font-bold text-center" min={1} max={20} value={storySettings.pageCount} onChange={e => setStorySettings({...storySettings, pageCount: parseInt(e.target.value)})} />
                                                 </div>
                                             </div>
                                         </div>
@@ -852,14 +861,14 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                             </div>
                             <div className="space-y-4">
                                 {panels.map((panel) => {
-                                    const isGeneratingDetails = panel.visual_description.startsWith('(Đang tạo chi tiết');
-                                    const isError = panel.visual_description.startsWith('[Lỗi]');
+                                    const isGeneratingDetails = panel.visual_description.startsWith('(Đang chờ xử lý');
+                                    const isError = panel.visual_description.startsWith('[Lỗi');
                                     
                                     return (
                                         <div key={panel.id} className="comic-card p-0 flex flex-col md:flex-row relative overflow-hidden">
                                             <div className="md:w-1/2 p-4 border-b md:border-b-0 md:border-r border-white/10 bg-black/20 relative">
                                                 <div className="flex items-center justify-between mb-2">
-                                                    <span className="text-xs font-bold bg-blue-600 text-white px-2 py-0.5 rounded">PANEL {panel.panel_number}</span>
+                                                    <span className="text-xs font-bold bg-blue-600 text-white px-2 py-0.5 rounded">TRANG {panel.panel_number}</span>
                                                     <span className="text-[10px] text-gray-500">Mô tả hình ảnh</span>
                                                 </div>
                                                 <textarea className="w-full h-32 bg-transparent border-none focus:ring-0 text-sm text-gray-300 leading-relaxed resize-none p-0" value={panel.visual_description} onChange={(e) => handleUpdatePanel(panel.id, 'visual_description', e.target.value)} disabled={isGeneratingDetails} />
@@ -868,7 +877,7 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                                                 {isError && (
                                                     <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center z-10 p-4 backdrop-blur-sm">
                                                         <i className="ph-fill ph-warning-circle text-red-500 text-3xl mb-2"></i>
-                                                        <p className="text-white text-sm font-bold mb-3 text-center">Lỗi tạo kịch bản</p>
+                                                        <p className="text-white text-sm font-bold mb-3 text-center">{panel.visual_description.substring(0, 60)}...</p>
                                                         <button 
                                                             onClick={() => handleRetryExpandPanel(panel.id)}
                                                             className="px-4 py-2 bg-white text-black text-xs font-bold rounded-full hover:bg-gray-200 flex items-center gap-2 transition-transform hover:scale-105 shadow-lg"
@@ -915,7 +924,7 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                                                 {(!hasUrl && !panel.is_rendering && !isPending) && (
                                                     <div className="absolute inset-0 bg-skin-fill-secondary/90 flex flex-col items-center justify-center z-20">
                                                         <p className="text-gray-400 text-sm mb-4 max-w-md text-center px-4 line-clamp-2">{panel.visual_description}</p>
-                                                        <button onClick={() => handleRenderPanel(panel)} className="themed-button-primary px-8 py-3 rounded-full font-bold text-white shadow-xl flex items-center gap-2 transform hover:scale-105 transition-all"><i className="ph-fill ph-paint-brush-broad text-xl"></i> Vẽ Panel Này ({RENDER_COST} 💎)</button>
+                                                        <button onClick={() => handleRenderPanel(panel)} className="themed-button-primary px-8 py-3 rounded-full font-bold text-white shadow-xl flex items-center gap-2 transform hover:scale-105 transition-all"><i className="ph-fill ph-paint-brush-broad text-xl"></i> Vẽ Trang Này ({RENDER_COST} 💎)</button>
                                                     </div>
                                                 )}
                                                 {(panel.is_rendering || isPending || isLoadingImage) && !isErrorImage && (
@@ -953,7 +962,7 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                                 {activeStep === 1 ? (
                                     <><span className="text-pink-400 text-xl">2</span><i className="ph-fill ph-diamonds-four text-pink-400 text-xs"></i><span className="text-xs font-medium text-gray-500 ml-1">cho Kịch bản</span></>
                                 ) : (
-                                    <><span className="text-purple-400 text-xl">{RENDER_COST}</span><i className="ph-fill ph-diamonds-four text-purple-400 text-xs"></i><span className="text-xs font-medium text-gray-500 ml-1">/ 1 Ảnh</span></>
+                                    <><span className="text-purple-400 text-xl">{RENDER_COST}</span><i className="ph-fill ph-diamonds-four text-purple-400 text-xs"></i><span className="text-xs font-medium text-gray-500 ml-1">/ 1 Trang</span></>
                                 )}
                             </div>
                         </div>

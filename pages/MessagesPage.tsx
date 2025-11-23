@@ -10,7 +10,7 @@ import { Conversation, DirectMessage } from '../types';
 const SYSTEM_BOT_ID = '00000000-0000-0000-0000-000000000000';
 
 const MessagesPage: React.FC = () => {
-    const { user, supabase, navigate } = useAuth();
+    const { user, supabase, navigate, showToast } = useAuth();
     const { theme } = useTheme();
     
     const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -26,7 +26,6 @@ const MessagesPage: React.FC = () => {
         const urlParams = new URLSearchParams(window.location.search);
         const convId = urlParams.get('conversationId');
         if (convId) {
-            console.log("Active Conversation ID from URL:", convId);
             setActiveConversationId(convId);
         }
     }, []);
@@ -50,33 +49,36 @@ const MessagesPage: React.FC = () => {
             console.error("Error fetching conversations:", error);
         } else {
             const formatted = data.map((c: any) => {
-                let otherParticipant = c.participants.find((p: any) => p.user_id !== user.id);
+                // Robust check for participants array
+                const participants = c.participants || [];
+                let otherParticipant = participants.find((p: any) => p.user_id !== user.id);
                 
-                // Xử lý fallback nếu không tìm thấy đối phương
-                if (!otherParticipant) {
-                    if (c.participants.length >= 1) {
-                         otherParticipant = {
-                            user_id: SYSTEM_BOT_ID, 
-                            user: {
-                                id: SYSTEM_BOT_ID,
-                                display_name: 'HỆ THỐNG',
-                                photo_url: 'https://api.dicebear.com/7.x/bottts/svg?seed=System'
-                            }
-                        };
-                    }
-                } 
+                // Xử lý fallback nếu không tìm thấy đối phương (Có thể do RLS hoặc system bot)
+                if (!otherParticipant && participants.length > 0) {
+                    // Nếu chỉ thấy mình (do RLS ẩn người kia), thử đoán đó là System Bot nếu context phù hợp, 
+                    // hoặc hiển thị "Người dùng ẩn danh"
+                    otherParticipant = {
+                        user_id: 'unknown',
+                        user: {
+                            id: 'unknown',
+                            display_name: 'Người dùng ẩn',
+                            photo_url: 'https://api.dicebear.com/7.x/bottts/svg?seed=Unknown'
+                        }
+                    };
+                }
                 
-                if (otherParticipant && !otherParticipant.user) {
-                    otherParticipant.user = {
-                        id: otherParticipant.user_id,
-                        display_name: 'Người dùng ẩn',
-                        photo_url: 'https://api.dicebear.com/7.x/bottts/svg?seed=Unknown'
+                // If explicit system bot ID is found but user data missing (join failed)
+                if (otherParticipant && otherParticipant.user_id === SYSTEM_BOT_ID && !otherParticipant.user) {
+                     otherParticipant.user = {
+                        id: SYSTEM_BOT_ID,
+                        display_name: 'HỆ THỐNG',
+                        photo_url: 'https://api.dicebear.com/7.x/bottts/svg?seed=System'
                     };
                 }
 
                 return {
                     ...c,
-                    participants: otherParticipant ? [{ user: otherParticipant.user }] : []
+                    participants: otherParticipant ? [{ user: otherParticipant.user || { display_name: 'Unknown' } }] : []
                 };
             }).filter((c: any) => c.participants.length > 0);
 
@@ -96,16 +98,13 @@ const MessagesPage: React.FC = () => {
         }
     }, [supabase, user]);
 
-    // 4. QUAN TRỌNG: Logic "Ép buộc hiển thị".
-    // Nếu có ID mà ID đó chưa nằm trong danh sách (do danh sách chưa update kịp), ta sẽ fetch riêng nó.
+    // 4. Logic "Ép buộc hiển thị" khi có ID từ URL nhưng chưa có trong list
     useEffect(() => {
         if (!activeConversationId || !supabase || !user) return;
         
-        // Kiểm tra xem hội thoại đã có trong list chưa
         const exists = conversations.some(c => c.id === activeConversationId);
         
         if (!exists) {
-            console.log(`[Messages] Active ID ${activeConversationId} chưa có trong list. Đang tải riêng...`);
             setIsLoadingActiveConv(true);
             
             const fetchSingle = async () => {
@@ -123,8 +122,10 @@ const MessagesPage: React.FC = () => {
                         .single();
                     
                     if (data && !error) {
-                        const foundParticipant = data.participants.find((p: any) => p.user_id !== user.id);
+                        const participants = data.participants || [];
+                        const foundParticipant = participants.find((p: any) => p.user_id !== user.id);
                         
+                        // Fallback for system bot or unknown user
                         const otherParticipant = foundParticipant || {
                             user_id: SYSTEM_BOT_ID,
                             user: { id: SYSTEM_BOT_ID, display_name: 'HỆ THỐNG', photo_url: 'https://api.dicebear.com/7.x/bottts/svg?seed=System' }
@@ -139,11 +140,12 @@ const MessagesPage: React.FC = () => {
                             participants: [{ user: participantUser }]
                         };
                         
-                        // Chèn vào đầu danh sách để hiển thị ngay
                         setConversations(prev => {
                             if (prev.some(c => c.id === newConv.id)) return prev;
                             return [newConv as unknown as Conversation, ...prev];
                         });
+                    } else {
+                        console.warn("Could not fetch active conversation details:", error);
                     }
                 } catch (e) {
                     console.error("Lỗi tải hội thoại riêng lẻ:", e);
@@ -156,7 +158,7 @@ const MessagesPage: React.FC = () => {
     }, [activeConversationId, conversations, supabase, user]);
 
 
-    // 5. Tải tin nhắn của hội thoại đang chọn
+    // 5. Tải tin nhắn
     useEffect(() => {
         if (!activeConversationId || !supabase) return;
         
@@ -199,31 +201,40 @@ const MessagesPage: React.FC = () => {
         if (!input.trim() || !activeConversationId || !user || !supabase) return;
 
         const content = input.trim();
-        setInput('');
+        setInput(''); // Optimistic clear
 
         try {
-            await supabase.from('direct_messages').insert({
+            const { error } = await supabase.from('direct_messages').insert({
                 conversation_id: activeConversationId,
                 sender_id: user.id,
                 content: content,
                 type: 'text'
             });
             
+            if (error) throw error;
+            
+            // Update timestamp
             await supabase.from('conversations')
                 .update({ updated_at: new Date().toISOString() })
                 .eq('id', activeConversationId);
 
-        } catch (error) {
+        } catch (error: any) {
             console.error("Send error:", error);
+            showToast(`Gửi thất bại: ${error.message}. Vui lòng kiểm tra lại mạng hoặc liên hệ Admin.`, 'error');
+            setInput(content); // Restore input on failure
         }
     };
 
-    // Logic hiển thị giao diện Chat
+    // Active Conversation Logic
     const activeConv = conversations.find(c => c.id === activeConversationId);
     const chatPartner = activeConv?.participants[0]?.user;
     
-    // Fallback hiển thị tạm trong khi đang load activeConv
-    const displayPartner = chatPartner || (isLoadingActiveConv ? { display_name: 'Đang tải...', photo_url: '', id: 'loading' } : null);
+    // Robust fallback for displayPartner
+    const displayPartner = chatPartner || (isLoadingActiveConv 
+        ? { display_name: 'Đang tải...', photo_url: '', id: 'loading' } 
+        : { display_name: 'Người dùng', photo_url: 'https://api.dicebear.com/7.x/bottts/svg?seed=Unknown', id: 'unknown' }
+    );
+    
     const isSystemChat = displayPartner?.id === SYSTEM_BOT_ID || displayPartner?.display_name === 'HỆ THỐNG';
 
     return (
@@ -232,7 +243,7 @@ const MessagesPage: React.FC = () => {
             
             <div className="flex flex-grow pt-20 overflow-hidden container mx-auto max-w-6xl px-0 md:px-4 pb-16 md:pb-4 gap-4">
                 
-                {/* Sidebar (Danh sách tin nhắn) */}
+                {/* Sidebar (List) */}
                 <div className={`w-full md:w-80 bg-skin-fill-secondary md:rounded-xl border-r md:border border-skin-border flex flex-col ${activeConversationId ? 'hidden md:flex' : 'flex'}`}>
                     <div className="p-4 border-b border-skin-border font-bold text-lg">Hộp Thư</div>
                     <div className="flex-grow overflow-y-auto custom-scrollbar">
@@ -265,12 +276,11 @@ const MessagesPage: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Chat Window (Khung chat chính) */}
+                {/* Chat Window */}
                 <div className={`flex-grow flex flex-col bg-skin-fill-secondary md:rounded-xl border border-skin-border overflow-hidden ${!activeConversationId ? 'hidden md:flex' : 'flex'}`}>
-                    {/* Trường hợp 1: Đang có hội thoại được chọn (hoặc đang load nó) */}
                     {activeConversationId ? (
                         <>
-                            {/* Header */}
+                            {/* Chat Header */}
                             <div className="p-3 border-b border-skin-border flex items-center gap-3 bg-skin-fill/50">
                                 <button onClick={() => setActiveConversationId(null)} className="md:hidden text-xl p-2"><i className="ph-fill ph-caret-left"></i></button>
                                 <UserAvatar url={displayPartner?.photo_url || ''} alt={displayPartner?.display_name || ''} size="sm" />
@@ -287,7 +297,7 @@ const MessagesPage: React.FC = () => {
                                 </div>
                             </div>
 
-                            {/* Messages List */}
+                            {/* Messages */}
                             <div className="flex-grow overflow-y-auto p-4 space-y-4 bg-black/20">
                                 {messages.map(msg => {
                                     const isOwn = msg.sender_id === user?.id;
@@ -305,7 +315,7 @@ const MessagesPage: React.FC = () => {
                                 <div ref={messagesEndRef} />
                             </div>
 
-                            {/* Input Area (Ẩn nếu là System Chat) */}
+                            {/* Input Area */}
                             {!isSystemChat ? (
                                 <form onSubmit={handleSendMessage} className="p-3 border-t border-skin-border flex gap-2 bg-skin-fill/50">
                                     <input 
@@ -315,7 +325,7 @@ const MessagesPage: React.FC = () => {
                                         placeholder="Nhập tin nhắn..."
                                         className="flex-grow bg-skin-fill border border-skin-border rounded-full px-4 py-2 text-sm focus:border-skin-accent focus:outline-none"
                                     />
-                                    <button type="submit" disabled={!input.trim()} className="bg-skin-accent text-white p-2 rounded-full w-10 h-10 flex items-center justify-center disabled:opacity-50">
+                                    <button type="submit" disabled={!input.trim()} className="bg-skin-accent text-white p-2 rounded-full w-10 h-10 flex items-center justify-center disabled:opacity-50 hover:bg-skin-accent/80 transition">
                                         <i className="ph-fill ph-paper-plane-right"></i>
                                     </button>
                                 </form>
@@ -326,7 +336,7 @@ const MessagesPage: React.FC = () => {
                             )}
                         </>
                     ) : (
-                        // Trường hợp 2: Chưa chọn hội thoại nào (Trạng thái chờ)
+                        // Empty State
                         <div className="flex-grow flex items-center justify-center text-skin-muted">
                             <div className="text-center">
                                 <i className="ph-fill ph-chats-teardrop text-6xl mb-4 opacity-50"></i>

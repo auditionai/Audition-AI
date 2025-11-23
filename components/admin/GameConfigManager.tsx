@@ -83,7 +83,26 @@ FOR SELECT USING (
   )
 );
 
--- 6. Đảm bảo Admin System User tồn tại (Để gửi thông báo hệ thống)
+-- 6. RLS cho Direct Messages (QUAN TRỌNG ĐỂ GỬI/NHẬN TIN)
+ALTER TABLE direct_messages ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can view messages in their conversations" ON direct_messages;
+CREATE POLICY "Users can view messages in their conversations" ON direct_messages
+FOR SELECT USING (
+  conversation_id IN (
+    SELECT conversation_id FROM conversation_participants WHERE user_id = auth.uid()
+  )
+);
+
+DROP POLICY IF EXISTS "Users can send messages to their conversations" ON direct_messages;
+CREATE POLICY "Users can send messages to their conversations" ON direct_messages
+FOR INSERT WITH CHECK (
+  conversation_id IN (
+    SELECT conversation_id FROM conversation_participants WHERE user_id = auth.uid()
+  )
+);
+
+-- 7. Đảm bảo Admin System User tồn tại (Để gửi thông báo hệ thống)
 INSERT INTO public.users (id, email, display_name, photo_url, diamonds, xp)
 VALUES (
     '00000000-0000-0000-0000-000000000000',
@@ -94,8 +113,7 @@ VALUES (
     999999
 ) ON CONFLICT (id) DO NOTHING;
 
--- 7. CỰC KỲ QUAN TRỌNG: Mở quyền đọc bảng Users
--- Nếu không có dòng này, bạn sẽ không thấy tên người chat cùng, dẫn đến hội thoại bị ẩn.
+-- 8. CỰC KỲ QUAN TRỌNG: Mở quyền đọc bảng Users
 ALTER TABLE "public"."users" ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Public profiles are viewable by everyone" ON "public"."users";
 CREATE POLICY "Public profiles are viewable by everyone" ON "public"."users" FOR SELECT USING (true);
@@ -345,7 +363,7 @@ const GameConfigManager: React.FC = () => {
                     <div className="bg-yellow-500/10 border border-yellow-500/30 p-4 rounded-lg">
                         <h4 className="text-yellow-400 font-bold mb-2 flex items-center gap-2"><i className="ph-fill ph-warning-circle"></i> SỬA LỖI TIN NHẮN (BẮT BUỘC)</h4>
                         <p className="text-sm text-gray-300 mb-4">
-                            Đoạn lệnh này sửa lỗi quyền xem profile (RLS) khiến bạn không thấy hộp thoại chat. <strong>Hãy chạy ngay!</strong>
+                            Đoạn lệnh này sửa lỗi quyền (RLS) cho tin nhắn và người dùng. <strong>Hãy chạy ngay nếu gặp lỗi chat!</strong>
                         </p>
                         <div className="relative">
                             <pre className="bg-black/50 p-3 rounded-lg text-xs text-green-400 overflow-x-auto font-mono border border-white/10 h-64 custom-scrollbar">

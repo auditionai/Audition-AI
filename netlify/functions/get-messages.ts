@@ -16,26 +16,26 @@ const handler: Handler = async (event: HandlerEvent) => {
     if (authError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'Invalid token' }) };
 
     try {
-        // 1. Kiểm tra xem user có quyền xem hội thoại này không (Bằng cách check bảng participants)
-        // Use limit(1).maybeSingle() to handle potential duplicates without throwing error
-        const { data: participation, error: partError } = await supabaseAdmin
+        // 1. Fetch all participants for this conversation (Bypass RLS filtering issues by fetching list)
+        const { data: participants, error: partError } = await supabaseAdmin
             .from('conversation_participants')
-            .select('id')
-            .eq('conversation_id', conversationId)
-            .eq('user_id', user.id)
-            .limit(1)
-            .maybeSingle();
+            .select('user_id')
+            .eq('conversation_id', conversationId);
 
         if (partError) {
             console.error("Participation check error:", partError);
+            return { statusCode: 500, body: JSON.stringify({ error: 'Database error checking participation.' }) };
         }
 
-        if (!participation) {
-            console.log(`User ${user.id} attempted to access conversation ${conversationId} but is not a participant.`);
-            return { statusCode: 403, body: JSON.stringify({ error: 'Forbidden' }) };
+        // 2. Verify in code
+        const isParticipant = participants?.some(p => p.user_id === user.id);
+
+        if (!isParticipant) {
+            console.warn(`User ${user.id} attempted to access conversation ${conversationId} but is not in participants list:`, participants);
+            return { statusCode: 403, body: JSON.stringify({ error: 'Forbidden: You are not a participant of this conversation.' }) };
         }
 
-        // 2. Lấy tin nhắn (Dùng Admin Client để bỏ qua RLS)
+        // 3. Fetch messages
         const { data: messages, error } = await supabaseAdmin
             .from('direct_messages')
             .select('*')

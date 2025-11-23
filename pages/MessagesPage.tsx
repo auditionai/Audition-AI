@@ -66,20 +66,27 @@ const MessagesPage: React.FC = () => {
                 const res = await fetch(`/.netlify/functions/get-messages?conversationId=${activeConversationId}`, {
                     headers: { Authorization: `Bearer ${session.access_token}` }
                 });
+                
                 if (res.ok) {
                     const data = await res.json();
                     setMessages(data);
                     scrollToBottom();
                 } else {
-                    const err = await res.json();
-                    console.error("Fetch messages error:", err);
+                    const errText = await res.text();
+                    console.error("Fetch messages error:", res.status, errText);
                     if (res.status === 403) {
                         showToast("Bạn không có quyền xem cuộc trò chuyện này.", "error");
-                        setActiveConversationId(null); // Exit if forbidden
+                        // Optionally redirect or clear active ID
+                        // setActiveConversationId(null); 
+                    } else {
+                        try {
+                            const errObj = JSON.parse(errText);
+                            console.error("Detailed error:", errObj);
+                        } catch(e) {}
                     }
                 }
             } catch (error) {
-                console.error(error);
+                console.error("Network error fetching messages:", error);
             }
         };
 

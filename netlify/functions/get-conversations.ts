@@ -1,4 +1,3 @@
-
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
 
@@ -17,7 +16,6 @@ const handler: Handler = async (event: HandlerEvent) => {
 
     try {
         // 2. Lấy danh sách các cuộc hội thoại mà user tham gia
-        // Dùng supabaseAdmin để BỎ QUA RLS
         const { data: myParticipations, error: partError } = await supabaseAdmin
             .from('conversation_participants')
             .select('conversation_id')
@@ -45,7 +43,23 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         if (convError) throw convError;
 
-        // 4. Lấy thông tin User của các đối tác (để hiển thị tên, avatar)
+        // 4. [NEW] Lấy số lượng tin nhắn chưa đọc cho từng hội thoại
+        // Lấy tất cả tin nhắn chưa đọc trong các hội thoại này mà người gửi KHÔNG PHẢI là current user
+        const { data: unreadMessages } = await supabaseAdmin
+            .from('direct_messages')
+            .select('conversation_id')
+            .in('conversation_id', conversationIds)
+            .eq('is_read', false)
+            .neq('sender_id', user.id);
+
+        // Tính toán map: conversation_id -> count
+        const unreadCountMap = new Map<string, number>();
+        unreadMessages?.forEach((msg: any) => {
+            const count = unreadCountMap.get(msg.conversation_id) || 0;
+            unreadCountMap.set(msg.conversation_id, count + 1);
+        });
+
+        // 5. Lấy thông tin User của các đối tác
         const allParticipantIds = new Set<string>();
         conversations.forEach((c: any) => {
             c.participants.forEach((p: any) => allParticipantIds.add(p.user_id));
@@ -58,17 +72,16 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         const userMap = new Map(users?.map(u => [u.id, u]));
 
-        // 5. Format dữ liệu trả về frontend
+        // 6. Format dữ liệu trả về frontend
         const formatted = conversations.map((c: any) => {
             // Tìm người không phải là mình
             let partnerId = c.participants.find((p: any) => p.user_id !== user.id)?.user_id;
             
             // Nếu không tìm thấy (chat với chính mình hoặc lỗi), fallback
-            if (!partnerId) partnerId = user.id; // Self chat edge case
+            if (!partnerId) partnerId = user.id; 
 
             let partnerUser = userMap.get(partnerId);
 
-            // Xử lý trường hợp Bot hệ thống nếu user chưa có trong bảng users
             if (!partnerUser && partnerId === SYSTEM_BOT_ID) {
                 partnerUser = {
                     id: SYSTEM_BOT_ID,
@@ -87,7 +100,8 @@ const handler: Handler = async (event: HandlerEvent) => {
                 id: c.id,
                 created_at: c.created_at,
                 updated_at: c.updated_at,
-                participants: [{ user: partnerUser }] // Format cho frontend
+                participants: [{ user: partnerUser }],
+                unread_count: unreadCountMap.get(c.id) || 0 // [NEW] Thêm field này
             };
         });
 

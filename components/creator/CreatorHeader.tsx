@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { CreatorTab } from '../../pages/CreatorPage';
@@ -10,7 +9,7 @@ import { useTranslation } from '../../hooks/useTranslation';
 import LanguageSwitcher from '../common/LanguageSwitcher';
 import UserAvatar from '../common/UserAvatar';
 import UserBadge from '../common/UserBadge';
-import UserName from '../common/UserName'; // Import UserName
+import UserName from '../common/UserName';
 
 interface CreatorHeaderProps {
   onTopUpClick: () => void;
@@ -20,16 +19,17 @@ interface CreatorHeaderProps {
 }
 
 const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, onNavigate, onCheckInClick }) => {
-  const { user, logout, hasCheckedInToday, supabase } = useAuth();
+  const { user, logout, hasCheckedInToday, supabase, session } = useAuth();
   const { t } = useTranslation();
   const [isDropdownOpen, setDropdownOpen] = useState(false);
   const [isNotificationOpen, setNotificationOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [unreadDMCount, setUnreadDMCount] = useState(0); // [NEW] DM Unread Count
 
   const dropdownRef = useRef<HTMLDivElement>(null);
   const notificationRef = useRef<HTMLDivElement>(null);
   
-  // 1. Fetch Unread Count Function
+  // 1. Fetch Notifications (Existing)
   const fetchUnreadCount = useCallback(async () => {
       if (!user || !supabase) return;
       const { count } = await supabase
@@ -41,38 +41,34 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
       setUnreadCount(count || 0);
   }, [user, supabase]);
 
-  // 2. Polling Strategy (Backup Layer) - Checks every 15 seconds
+  // 2. [NEW] Fetch DM Unread Count (Polling)
+  const fetchUnreadDMCount = useCallback(async () => {
+      if (!session) return;
+      try {
+          const res = await fetch('/.netlify/functions/get-unread-dm-count', {
+              headers: { Authorization: `Bearer ${session.access_token}` }
+          });
+          if (res.ok) {
+              const data = await res.json();
+              setUnreadDMCount(data.count || 0);
+          }
+      } catch (e) {
+          console.error("Failed to fetch DM count", e);
+      }
+  }, [session]);
+
+  // Polling Strategy
   useEffect(() => {
-      fetchUnreadCount(); // Initial fetch
+      fetchUnreadCount();
+      fetchUnreadDMCount();
       
       const intervalId = setInterval(() => {
           fetchUnreadCount();
-      }, 15000); // 15 seconds
+          fetchUnreadDMCount();
+      }, 10000); // 10 seconds
 
       return () => clearInterval(intervalId);
-  }, [fetchUnreadCount]);
-
-  // 3. Realtime Strategy (Instant Layer)
-  useEffect(() => {
-    if (!user || !supabase) return;
-
-    // USE A UNIQUE CHANNEL NAME PER USER
-    const channel = supabase.channel(`user-notifs-${user.id}`)
-      .on('postgres_changes', {
-        event: 'INSERT', // We mostly care about new notifications
-        schema: 'public',
-        table: 'notifications',
-        filter: `recipient_id=eq.${user.id}` // Explicitly filter by recipient_id
-      }, (payload) => {
-         console.log('New notification received!', payload);
-         fetchUnreadCount(); // Refresh count immediately
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [user?.id, supabase, fetchUnreadCount]);
+  }, [fetchUnreadCount, fetchUnreadDMCount]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -231,6 +227,9 @@ const CreatorHeader: React.FC<CreatorHeaderProps> = ({ onTopUpClick, activeTab, 
                   title={t('creator.header.nav.messages')}
                 >
                     <i className="ph-fill ph-chat-centered-text text-2xl md:text-lg"></i>
+                    {unreadDMCount > 0 && (
+                         <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.6)] border border-[#12121A]"></span>
+                    )}
                 </button>
 
                 {/* Notification Bell */}

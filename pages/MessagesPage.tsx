@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import CreatorHeader from '../components/creator/CreatorHeader';
@@ -13,7 +12,7 @@ const MessagesPage: React.FC = () => {
     const { user, navigate, showToast, session } = useAuth();
     const { theme } = useTheme();
     
-    const [conversations, setConversations] = useState<Conversation[]>([]);
+    const [conversations, setConversations] = useState<(Conversation & { unread_count?: number })[]>([]);
     const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
     const [messages, setMessages] = useState<DirectMessage[]>([]);
     const [input, setInput] = useState('');
@@ -26,15 +25,16 @@ const MessagesPage: React.FC = () => {
         const urlParams = new URLSearchParams(window.location.search);
         const convId = urlParams.get('conversationId');
         if (convId) {
-            console.log("MessagesPage mounted with conversationId:", convId);
             setActiveConversationId(convId);
         }
     }, []);
 
-    // 2. Load danh sách hội thoại bằng Server API (Bypass RLS)
-    const fetchConversations = async () => {
+    // 2. Load danh sách hội thoại
+    const fetchConversations = useCallback(async () => {
         if (!session) return;
-        setIsLoadingConvs(true);
+        // Chỉ hiện loading lần đầu, các lần sau (polling) thì update ngầm
+        if (conversations.length === 0) setIsLoadingConvs(true);
+        
         try {
             const res = await fetch('/.netlify/functions/get-conversations', {
                 headers: { Authorization: `Bearer ${session.access_token}` }
@@ -47,20 +47,44 @@ const MessagesPage: React.FC = () => {
         } finally {
             setIsLoadingConvs(false);
         }
-    };
+    }, [session]);
 
     useEffect(() => {
         fetchConversations();
-        // Realtime listener cho conversation mới (Optional, dùng polling nếu realtime lỗi)
-        const interval = setInterval(fetchConversations, 10000);
+        const interval = setInterval(fetchConversations, 10000); // Poll list every 10s
         return () => clearInterval(interval);
-    }, [session]);
+    }, [fetchConversations]);
 
-    // 3. Load tin nhắn khi chọn hội thoại (Bằng Server API)
+    // 3. Mark Read Function
+    const markAsRead = async (convId: string) => {
+        if (!session) return;
+        try {
+            await fetch('/.netlify/functions/mark-conversation-read', {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${session.access_token}` 
+                },
+                body: JSON.stringify({ conversationId: convId })
+            });
+            
+            // Update UI locally to remove unread count immediately
+            setConversations(prev => prev.map(c => 
+                c.id === convId ? { ...c, unread_count: 0 } : c
+            ));
+            
+        } catch (e) {
+            console.error("Mark read failed:", e);
+        }
+    };
+
+    // 4. Load tin nhắn & Mark Read khi chọn hội thoại
     useEffect(() => {
         if (!activeConversationId || !session) return;
-        console.log("Fetching messages for:", activeConversationId);
         
+        // Mark as read immediately when opening
+        markAsRead(activeConversationId);
+
         const fetchMessages = async () => {
             try {
                 const res = await fetch(`/.netlify/functions/get-messages?conversationId=${activeConversationId}`, {
@@ -71,19 +95,8 @@ const MessagesPage: React.FC = () => {
                     const data = await res.json();
                     setMessages(data);
                     scrollToBottom();
-                } else {
-                    const errText = await res.text();
-                    console.error("Fetch messages error:", res.status, errText);
-                    if (res.status === 403) {
-                        showToast("Bạn không có quyền xem cuộc trò chuyện này.", "error");
-                        // Optionally redirect or clear active ID
-                        // setActiveConversationId(null); 
-                    } else {
-                        try {
-                            const errObj = JSON.parse(errText);
-                            console.error("Detailed error:", errObj);
-                        } catch(e) {}
-                    }
+                } else if (res.status === 403) {
+                    showToast("Bạn không có quyền xem cuộc trò chuyện này.", "error");
                 }
             } catch (error) {
                 console.error("Network error fetching messages:", error);
@@ -92,7 +105,6 @@ const MessagesPage: React.FC = () => {
 
         fetchMessages();
         
-        // Polling tin nhắn mới mỗi 3s (An toàn hơn Realtime khi RLS đang có vấn đề)
         const msgInterval = setInterval(fetchMessages, 3000);
         return () => clearInterval(msgInterval);
 
@@ -104,17 +116,16 @@ const MessagesPage: React.FC = () => {
         }, 100);
     };
 
-    // 4. Gửi tin nhắn bằng Server API (Bypass RLS)
+    // 5. Gửi tin nhắn
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!input.trim() || !activeConversationId || !session) return;
 
         const content = input.trim();
-        setInput(''); // Optimistic clear
+        setInput('');
         setIsSending(true);
 
         try {
-            console.log("Sending message to:", activeConversationId);
             const res = await fetch('/.netlify/functions/send-message', {
                 method: 'POST',
                 headers: {
@@ -130,20 +141,17 @@ const MessagesPage: React.FC = () => {
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Gửi lỗi');
 
-            // Cập nhật UI ngay lập tức
             setMessages(prev => [...prev, data]);
             scrollToBottom();
 
         } catch (error: any) {
-            console.error("Send error:", error);
             showToast(`Gửi thất bại: ${error.message}`, 'error');
-            setInput(content); // Restore
+            setInput(content);
         } finally {
             setIsSending(false);
         }
     };
 
-    // Active Conversation Logic
     const activeConv = conversations.find(c => c.id === activeConversationId);
     const displayPartner = activeConv?.participants[0]?.user || { 
         display_name: 'Đang tải...', 
@@ -161,7 +169,9 @@ const MessagesPage: React.FC = () => {
                 
                 {/* Sidebar (List) */}
                 <div className={`w-full md:w-80 bg-skin-fill-secondary md:rounded-xl border-r md:border border-skin-border flex flex-col ${activeConversationId ? 'hidden md:flex' : 'flex'}`}>
-                    <div className="p-4 border-b border-skin-border font-bold text-lg">Hộp Thư</div>
+                    <div className="p-4 border-b border-skin-border font-bold text-lg flex justify-between items-center">
+                        Hộp Thư
+                    </div>
                     <div className="flex-grow overflow-y-auto custom-scrollbar">
                         {isLoadingConvs && conversations.length === 0 ? (
                             <div className="p-4 text-center text-skin-muted">Đang tải...</div>
@@ -171,19 +181,33 @@ const MessagesPage: React.FC = () => {
                             conversations.map(conv => {
                                 const partner = conv.participants[0]?.user;
                                 const isSystem = partner?.id === SYSTEM_BOT_ID || partner?.display_name === 'HỆ THỐNG';
+                                const hasUnread = (conv.unread_count || 0) > 0;
+
                                 return (
                                     <div 
                                         key={conv.id}
                                         onClick={() => setActiveConversationId(conv.id)}
-                                        className={`flex items-center gap-3 p-3 cursor-pointer hover:bg-white/5 transition-colors ${activeConversationId === conv.id ? 'bg-skin-accent/10 border-l-4 border-skin-accent' : ''}`}
+                                        className={`flex items-center gap-3 p-3 cursor-pointer hover:bg-white/5 transition-colors relative ${activeConversationId === conv.id ? 'bg-skin-accent/10 border-l-4 border-skin-accent' : ''}`}
                                     >
-                                        <UserAvatar url={partner?.photo_url || ''} alt={partner?.display_name || 'User'} size="md" />
+                                        <div className="relative">
+                                            <UserAvatar url={partner?.photo_url || ''} alt={partner?.display_name || 'User'} size="md" />
+                                            {hasUnread && (
+                                                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold px-1.5 rounded-full border border-[#1E1B25]">
+                                                    {conv.unread_count}
+                                                </span>
+                                            )}
+                                        </div>
                                         <div className="flex-grow min-w-0">
-                                            <div className="flex items-center gap-1">
-                                                <p className={`font-bold text-sm truncate ${isSystem ? 'text-yellow-400' : ''}`}>{partner?.display_name}</p>
-                                                {isSystem && <i className="ph-fill ph-seal-check text-blue-400 text-xs"></i>}
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-1">
+                                                    <p className={`font-bold text-sm truncate ${isSystem ? 'text-yellow-400' : 'text-skin-base'} ${hasUnread ? 'text-white' : ''}`}>{partner?.display_name}</p>
+                                                    {isSystem && <i className="ph-fill ph-seal-check text-blue-400 text-xs"></i>}
+                                                </div>
+                                                <span className="text-[10px] text-skin-muted">{new Date(conv.updated_at).toLocaleDateString('vi-VN', {day: 'numeric', month: 'numeric'})}</span>
                                             </div>
-                                            <p className="text-xs text-skin-muted truncate">{isSystem ? 'Thông báo từ hệ thống' : 'Nhấn để xem tin nhắn'}</p>
+                                            <p className={`text-xs truncate ${hasUnread ? 'text-white font-bold' : 'text-skin-muted'}`}>
+                                                {isSystem ? 'Thông báo từ hệ thống' : (hasUnread ? 'Tin nhắn mới' : 'Nhấn để xem tin nhắn')}
+                                            </p>
                                         </div>
                                     </div>
                                 );

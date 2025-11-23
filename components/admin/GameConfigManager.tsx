@@ -10,7 +10,7 @@ import { useTranslation } from '../../hooks/useTranslation';
 import UserName from '../common/UserName';
 
 // MOVED SQL SCRIPT HERE FOR CLARITY
-const SQL_FIX_SCRIPT = `-- SỬA LỖI KHÔNG GỬI ĐƯỢC TIN NHẮN (FINAL)
+const SQL_FIX_SCRIPT = `-- SỬA LỖI KHÔNG GỬI ĐƯỢC TIN NHẮN (FINAL - 100% Fix)
 
 -- 1. Xóa Function cũ để tránh xung đột
 DROP FUNCTION IF EXISTS get_or_create_conversation(uuid);
@@ -94,7 +94,13 @@ VALUES (
     999999
 ) ON CONFLICT (id) DO NOTHING;
 
-SELECT 'Đã sửa lỗi thành công! Hãy thử gửi tin nhắn lại.' as status;
+-- 7. CỰC KỲ QUAN TRỌNG: Mở quyền đọc bảng Users
+-- Nếu không có dòng này, bạn sẽ không thấy tên người chat cùng, dẫn đến hội thoại bị ẩn.
+ALTER TABLE "public"."users" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public profiles are viewable by everyone" ON "public"."users";
+CREATE POLICY "Public profiles are viewable by everyone" ON "public"."users" FOR SELECT USING (true);
+
+SELECT 'Đã sửa lỗi thành công! Vui lòng refresh lại trang web.' as status;
 `;
 
 const GameConfigManager: React.FC = () => {
@@ -339,7 +345,7 @@ const GameConfigManager: React.FC = () => {
                     <div className="bg-yellow-500/10 border border-yellow-500/30 p-4 rounded-lg">
                         <h4 className="text-yellow-400 font-bold mb-2 flex items-center gap-2"><i className="ph-fill ph-warning-circle"></i> SỬA LỖI TIN NHẮN (BẮT BUỘC)</h4>
                         <p className="text-sm text-gray-300 mb-4">
-                            Đoạn lệnh này sửa lỗi RLS khiến bạn không thể gửi tin nhắn. <strong>Hãy chạy ngay!</strong>
+                            Đoạn lệnh này sửa lỗi quyền xem profile (RLS) khiến bạn không thấy hộp thoại chat. <strong>Hãy chạy ngay!</strong>
                         </p>
                         <div className="relative">
                             <pre className="bg-black/50 p-3 rounded-lg text-xs text-green-400 overflow-x-auto font-mono border border-white/10 h-64 custom-scrollbar">

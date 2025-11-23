@@ -19,7 +19,7 @@ import RewardNotification from './components/common/RewardNotification';
 import GlobalChat from './components/chat/GlobalChat';
 
 const AppContent: React.FC = () => {
-    const { user, loading, route, toast, reward, clearReward } = useAuth();
+    const { user, loading, route, currentPath, toast, reward, clearReward } = useAuth();
 
     if (loading) {
         return (
@@ -48,7 +48,8 @@ const AppContent: React.FC = () => {
                 pageComponent = user ? <UserProfilePage key={window.location.pathname} /> : <HomePage />;
                 break;
             case 'messages':
-                pageComponent = user ? <MessagesPage /> : <HomePage />;
+                // Force remount on query param change (id change) using currentPath
+                pageComponent = user ? <MessagesPage key={currentPath} /> : <HomePage />;
                 break;
             case 'shop':
                 pageComponent = user ? <ShopPage /> : <HomePage />;

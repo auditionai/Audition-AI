@@ -31,6 +31,7 @@ interface AuthContextType {
     loading: boolean;
     toast: { message: string; type: 'success' | 'error' } | null;
     route: string;
+    currentPath: string; // NEW: Track full path including query params
     reward: { diamonds: number; xp: number } | null;
     hasCheckedInToday: boolean;
     announcement: Announcement | null;
@@ -61,6 +62,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     
     // Initial route handling
     const [route, setRoute] = useState(() => getRouteFromPath(window.location.pathname));
+    const [currentPath, setCurrentPath] = useState(() => window.location.pathname + window.location.search); // Initialize with full path
     
     const [reward, setReward] = useState<{ diamonds: number; xp: number } | null>(null);
     const [announcement, setAnnouncement] = useState<Announcement | null>(null);
@@ -86,9 +88,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const targetPath = path === 'home' ? '/' : `/${path}`;
         
         // 1. Immediate State Update (Responsiveness)
-        // Only update route state if it's valid, otherwise 'home' fallback logic in App.tsx handles it, 
-        // but we want to be explicit here for the switch case.
         setRoute(baseRoute);
+        setCurrentPath(targetPath); // Update full path to trigger effects depending on query params
         
         // 2. Update URL (Consistency)
         if (window.location.pathname + window.location.search !== targetPath) {
@@ -102,7 +103,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const clearReward = useCallback(() => setReward(null), []);
 
     useEffect(() => {
-        const handlePopState = () => setRoute(getRouteFromPath(window.location.pathname));
+        const handlePopState = () => {
+            setRoute(getRouteFromPath(window.location.pathname));
+            setCurrentPath(window.location.pathname + window.location.search);
+        };
         window.addEventListener('popstate', handlePopState);
         return () => window.removeEventListener('popstate', handlePopState);
     }, []);
@@ -206,10 +210,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                     await fetchAndSetUser(currentSession);
                     // Ensure route logic respects logged-in state
                     const currentRoute = getRouteFromPath(window.location.pathname);
+                    const currentFull = window.location.pathname + window.location.search;
                     if (currentRoute === 'home') {
                         navigate('tool');
                     } else {
                         setRoute(currentRoute);
+                        setCurrentPath(currentFull);
                     }
                 }
 
@@ -426,13 +432,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }, [supabase]);
 
     const value = useMemo(() => ({
-        session, user, loading, toast, route, hasCheckedInToday, reward,
+        session, user, loading, toast, route, currentPath, hasCheckedInToday, reward,
         announcement, showAnnouncementModal, supabase,
         login, logout, updateUserDiamonds, updateUserProfile, showToast, navigate, clearReward,
         markAnnouncementAsRead,
         loginWithEmail, registerWithEmail, resetPassword
     }), [
-        session, user, loading, toast, route, hasCheckedInToday, reward,
+        session, user, loading, toast, route, currentPath, hasCheckedInToday, reward,
         announcement, showAnnouncementModal, supabase,
         login, logout, updateUserDiamonds, updateUserProfile, showToast, navigate, clearReward,
         markAnnouncementAsRead,

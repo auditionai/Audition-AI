@@ -18,8 +18,10 @@ const MessagesPage: React.FC = () => {
     const [messages, setMessages] = useState<DirectMessage[]>([]);
     const [input, setInput] = useState('');
     const [isLoadingConvs, setIsLoadingConvs] = useState(true);
+    const [isLoadingActiveConv, setIsLoadingActiveConv] = useState(false); // New loading state for active conv
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
+    // Initialize ID from URL on mount
     useEffect(() => {
         const urlParams = new URLSearchParams(window.location.search);
         const convId = urlParams.get('conversationId');
@@ -104,55 +106,63 @@ const MessagesPage: React.FC = () => {
         
         const exists = conversations.some(c => c.id === activeConversationId);
         
-        if (!exists && !isLoadingConvs) {
+        // Only fetch if not exists AND we aren't already loading fetching all (to avoid duplicate)
+        // But importantly, if we have an ID, we MUST try to resolve it to a partner.
+        if (!exists) {
             console.log(`[Messages] Active conversation ${activeConversationId} missing from list. Fetching manually...`);
+            setIsLoadingActiveConv(true);
+            
             const fetchSingle = async () => {
-                const { data, error } = await supabase
-                    .from('conversations')
-                    .select(`
-                        id, created_at, updated_at,
-                        participants:conversation_participants(
-                            user_id,
-                            user:users(id, display_name, photo_url)
-                        )
-                    `)
-                    .eq('id', activeConversationId)
-                    .single();
-                
-                if (data && !error) {
-                    const foundParticipant = data.participants.find((p: any) => p.user_id !== user.id);
+                try {
+                    const { data, error } = await supabase
+                        .from('conversations')
+                        .select(`
+                            id, created_at, updated_at,
+                            participants:conversation_participants(
+                                user_id,
+                                user:users(id, display_name, photo_url)
+                            )
+                        `)
+                        .eq('id', activeConversationId)
+                        .single();
                     
-                    // Handle Fallback for missing profile (e.g. System User hidden by RLS)
-                    // Explicitly define fallback to satisfy TS strict null checks
-                    const otherParticipant = foundParticipant || {
-                        user_id: SYSTEM_BOT_ID,
-                        user: {
-                            id: SYSTEM_BOT_ID,
-                            display_name: 'HỆ THỐNG', 
-                            photo_url: 'https://api.dicebear.com/7.x/bottts/svg?seed=System'
-                        }
-                    };
+                    if (data && !error) {
+                        const foundParticipant = data.participants.find((p: any) => p.user_id !== user.id);
+                        
+                        // Fallback logic similar to main fetch
+                        const otherParticipant = foundParticipant || {
+                            user_id: SYSTEM_BOT_ID,
+                            user: {
+                                id: SYSTEM_BOT_ID,
+                                display_name: 'HỆ THỐNG', 
+                                photo_url: 'https://api.dicebear.com/7.x/bottts/svg?seed=System'
+                            }
+                        };
 
-                    // Construct valid conversation object
-                    // We assume otherParticipant is defined now due to the fallback
-                    const participantUser = otherParticipant.user || { id: otherParticipant.user_id, display_name: 'Người dùng', photo_url: '' };
+                        const participantUser = otherParticipant.user || { id: otherParticipant.user_id, display_name: 'Người dùng', photo_url: '' };
 
-                    const newConv = {
-                        id: data.id,
-                        created_at: data.created_at,
-                        updated_at: data.updated_at,
-                        participants: [{ user: participantUser }]
-                    };
-                    
-                    // FIX: Double cast to ensure type compatibility
-                    setConversations(prev => [newConv as unknown as Conversation, ...prev]);
-                } else {
-                    console.error("Could not fetch active conversation details", error);
+                        const newConv = {
+                            id: data.id,
+                            created_at: data.created_at,
+                            updated_at: data.updated_at,
+                            participants: [{ user: participantUser }]
+                        };
+                        
+                        setConversations(prev => {
+                            // Avoid duplicates
+                            if (prev.some(c => c.id === newConv.id)) return prev;
+                            return [newConv as unknown as Conversation, ...prev];
+                        });
+                    } else {
+                        console.error("Could not fetch active conversation details", error);
+                    }
+                } finally {
+                    setIsLoadingActiveConv(false);
                 }
             };
             fetchSingle();
         }
-    }, [activeConversationId, conversations, isLoadingConvs, supabase, user]);
+    }, [activeConversationId, conversations, supabase, user]);
 
 
     // Fetch Messages for Active ID
@@ -263,6 +273,7 @@ const MessagesPage: React.FC = () => {
 
                 {/* Chat Area */}
                 <div className={`flex-grow flex flex-col bg-skin-fill-secondary md:rounded-xl border border-skin-border overflow-hidden ${!activeConversationId ? 'hidden md:flex' : 'flex'}`}>
+                    {/* 1. Valid Active Conversation */}
                     {activeConversationId && chatPartner ? (
                         <>
                             {/* Header */}
@@ -316,7 +327,16 @@ const MessagesPage: React.FC = () => {
                                 </div>
                             )}
                         </>
+                    ) : activeConversationId && isLoadingActiveConv ? (
+                        // 2. Loading State
+                        <div className="flex-grow flex items-center justify-center text-skin-muted">
+                            <div className="text-center">
+                                <div className="w-8 h-8 border-4 border-skin-accent border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                                <p>Đang kết nối cuộc trò chuyện...</p>
+                            </div>
+                        </div>
                     ) : (
+                        // 3. Empty State
                         <div className="flex-grow flex items-center justify-center text-skin-muted">
                             <div className="text-center">
                                 <i className="ph-fill ph-chats-teardrop text-6xl mb-4 opacity-50"></i>

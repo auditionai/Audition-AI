@@ -9,6 +9,7 @@ const SystemMessageManager: React.FC = () => {
     const { t } = useTranslation();
     const [message, setMessage] = useState('');
     const [isSending, setIsSending] = useState(false);
+    const [isCleaning, setIsCleaning] = useState(false);
     const [target, setTarget] = useState<'inbox_all' | 'global'>('inbox_all');
 
     const handleSend = async (msgContent: string = message) => {
@@ -40,6 +41,31 @@ const SystemMessageManager: React.FC = () => {
             showToast(e.message, 'error');
         } finally {
             setIsSending(false);
+        }
+    };
+
+    const handleCleanupDuplicates = async () => {
+        if (!confirm("Bạn có chắc chắn muốn xóa tất cả tin nhắn hệ thống bị trùng lặp? Hệ thống sẽ giữ lại 1 tin nhắn mới nhất cho mỗi nội dung.")) return;
+        
+        setIsCleaning(true);
+        try {
+            const res = await fetch('/.netlify/functions/admin-cleanup-system-messages', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${session?.access_token}`,
+                },
+                body: JSON.stringify({ action: 'deduplicate' }),
+            });
+            
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error);
+
+            showToast(data.message, 'success');
+        } catch (e: any) {
+            showToast(e.message, 'error');
+        } finally {
+            setIsCleaning(false);
         }
     };
 
@@ -86,7 +112,10 @@ const SystemMessageManager: React.FC = () => {
                             : t('creator.settings.admin.broadcast.placeholderGlobal')}
                         className="auth-input min-h-[100px] text-base mb-3"
                     />
-                    <div className="flex justify-end">
+                    <div className="flex justify-between items-center">
+                        <div className="text-xs text-gray-500 italic">
+                            {target === 'inbox_all' && '* Hệ thống sẽ tự động lọc trùng lặp nếu bạn gửi nhiều lần.'}
+                        </div>
                         <button 
                             onClick={() => handleSend()}
                             disabled={isSending || !message.trim()}
@@ -96,6 +125,24 @@ const SystemMessageManager: React.FC = () => {
                             {t('creator.settings.admin.broadcast.sendButton')}
                         </button>
                     </div>
+                </div>
+
+                {/* Maintenance Tools */}
+                <div className="bg-orange-500/10 border border-orange-500/30 p-4 rounded-xl">
+                    <h4 className="text-orange-400 font-bold mb-2 flex items-center gap-2">
+                        <i className="ph-fill ph-wrench"></i> Công cụ bảo trì Hộp Thư
+                    </h4>
+                    <p className="text-sm text-gray-400 mb-3">
+                        Sử dụng khi bạn lỡ tay gửi quá nhiều tin nhắn giống nhau cho người dùng (như trong quá trình Test).
+                    </p>
+                    <button 
+                        onClick={handleCleanupDuplicates}
+                        disabled={isCleaning}
+                        className="px-4 py-2 bg-orange-500/20 hover:bg-orange-500/40 text-orange-300 border border-orange-500/50 rounded-lg text-sm font-bold flex items-center gap-2 transition-all"
+                    >
+                        {isCleaning ? <div className="w-4 h-4 border-2 border-orange-300 border-t-transparent rounded-full animate-spin"></div> : <i className="ph-fill ph-broom"></i>}
+                        Quét & Xóa Tin Nhắn Hệ Thống Trùng Lặp
+                    </button>
                 </div>
 
                 {/* Changelog History */}

@@ -3,7 +3,6 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { ComicCharacter, ComicPanel } from '../../../types';
 import { resizeImage } from '../../../utils/imageUtils';
-import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import JSZip from 'jszip';
 import SettingsBlock from '../ai-tool/SettingsBlock';
@@ -502,40 +501,6 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
         }));
     };
 
-    const capturePanel = async (panelId: string, panelEl: HTMLElement): Promise<string | null> => {
-        const imgEl = panelEl.querySelector('img');
-        if (!imgEl) return null;
-
-        const originalSrc = imgEl.src;
-        try {
-            const response = await fetch(originalSrc);
-            const blob = await response.blob();
-            
-            const base64Url = await new Promise<string>((resolve) => {
-                const reader = new FileReader();
-                reader.onloadend = () => resolve(reader.result as string);
-                reader.readAsDataURL(blob);
-            });
-
-            imgEl.src = base64Url;
-            await new Promise(resolve => setTimeout(resolve, 100));
-
-            const canvas = await html2canvas(panelEl, { 
-                useCORS: true, 
-                scale: 2,
-                logging: false,
-                backgroundColor: null
-            });
-
-            imgEl.src = originalSrc;
-            return canvas.toDataURL('image/png', 0.9);
-        } catch (e) {
-            console.error(`Failed to capture panel ${panelId}`, e);
-            imgEl.src = originalSrc;
-            return null;
-        }
-    };
-
     const handleDownloadZip = async () => {
         setIsLoading(true);
         showToast("Đang nén ảnh, vui lòng đợi...", "success");
@@ -546,7 +511,6 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
             let count = 0;
             for (let i = 0; i < panels.length; i++) {
                 const panel = panels[i];
-                // Simply download the image URL directly since text is baked in
                 if (panel.image_url) {
                     const response = await fetch(panel.image_url);
                     const blob = await response.blob();
@@ -576,6 +540,66 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
             setIsLoading(false);
         }
     }
+
+    const handleDownloadPDF = async () => {
+        setIsLoading(true);
+        showToast("Đang tạo PDF...", "success");
+        try {
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const pageWidth = pdf.internal.pageSize.getWidth();
+            const pageHeight = pdf.internal.pageSize.getHeight();
+            const margin = 10;
+            const maxImgWidth = pageWidth - (margin * 2);
+            const maxImgHeight = pageHeight - (margin * 2);
+
+            let hasContent = false;
+
+            for (let i = 0; i < panels.length; i++) {
+                const panel = panels[i];
+                if (panel.image_url && panel.image_url !== 'PENDING') {
+                    if (hasContent) pdf.addPage();
+                    
+                    // Load image
+                    const imgData = await fetch(panel.image_url)
+                        .then(res => res.blob())
+                        .then(blob => new Promise<string>((resolve) => {
+                            const reader = new FileReader();
+                            reader.onload = () => resolve(reader.result as string);
+                            reader.readAsDataURL(blob);
+                        }));
+
+                    const imgProps = pdf.getImageProperties(imgData);
+                    const imgRatio = imgProps.width / imgProps.height;
+                    
+                    let printWidth = maxImgWidth;
+                    let printHeight = maxImgWidth / imgRatio;
+
+                    if (printHeight > maxImgHeight) {
+                        printHeight = maxImgHeight;
+                        printWidth = maxImgHeight * imgRatio;
+                    }
+
+                    const x = (pageWidth - printWidth) / 2;
+                    const y = (pageHeight - printHeight) / 2;
+
+                    pdf.addImage(imgData, 'PNG', x, y, printWidth, printHeight);
+                    hasContent = true;
+                }
+            }
+
+            if (hasContent) {
+                pdf.save(`audition-comic-${Date.now()}.pdf`);
+                showToast("Tải PDF thành công!", "success");
+            } else {
+                showToast("Không có ảnh nào để tạo PDF.", "error");
+            }
+        } catch (e: any) {
+            console.error(e);
+            showToast("Lỗi tạo PDF.", "error");
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
     const handleSelectPremise = (premise: string) => {
         setStorySettings({ ...storySettings, premise });
@@ -869,7 +893,10 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                             <button onClick={() => setActiveStep(prev => (prev - 1) as any)} className="px-4 py-2.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 font-bold text-sm transition-colors flex items-center gap-2 border border-white/5"><i className="ph-bold ph-caret-left"></i> Quay lại</button>
                         )}
                         {activeStep === 3 && (
-                            <button onClick={handleDownloadZip} disabled={isLoading} className="px-5 py-2.5 rounded-lg bg-blue-600/90 hover:bg-blue-600 text-white font-bold text-sm transition-all shadow-lg shadow-blue-900/20 flex items-center gap-2">{isLoading ? <i className="ph-bold ph-spinner animate-spin"></i> : <i className="ph-bold ph-file-archive"></i>} Tải Ảnh (ZIP)</button>
+                            <>
+                                <button onClick={handleDownloadPDF} disabled={isLoading} className="px-5 py-2.5 rounded-lg bg-red-600/90 hover:bg-red-600 text-white font-bold text-sm transition-all shadow-lg flex items-center gap-2"><i className="ph-bold ph-file-pdf"></i> PDF</button>
+                                <button onClick={handleDownloadZip} disabled={isLoading} className="px-5 py-2.5 rounded-lg bg-blue-600/90 hover:bg-blue-600 text-white font-bold text-sm transition-all shadow-lg shadow-blue-900/20 flex items-center gap-2"><i className="ph-bold ph-file-archive"></i> ZIP</button>
+                            </>
                         )}
                         <button onClick={activeStep === 1 ? handleGenerateScript : () => setActiveStep(3)} disabled={isLoading || (activeStep === 3)} className={`px-6 py-2.5 rounded-lg font-bold text-sm transition-all transform hover:-translate-y-0.5 active:scale-95 flex items-center gap-2 shadow-lg ${activeStep === 3 ? 'bg-green-600 text-white cursor-default opacity-50' : 'bg-gradient-to-r from-pink-500 to-purple-600 text-white hover:shadow-pink-500/25'} disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none`}>
                             {isLoading ? <i className="ph-bold ph-spinner animate-spin text-lg"></i> : activeStep === 3 ? <>Hoàn Tất <i className="ph-bold ph-check"></i></> : <>{activeStep === 1 ? 'Tạo Kịch Bản' : 'Vào Xưởng Vẽ'} <i className="ph-bold ph-arrow-right"></i></>}

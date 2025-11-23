@@ -71,6 +71,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const initStarted = useRef(false);
     const visitLogged = useRef(false);
 
+    // Calculate hasCheckedInToday using the helper function to fix unused variable error
+    const hasCheckedInToday = useMemo(() => {
+        if (!user?.last_check_in_at) return false;
+        try {
+            const today = getVNDateString(new Date());
+            const lastCheckIn = getVNDateString(new Date(user.last_check_in_at));
+            return today === lastCheckIn;
+        } catch (e) {
+            return false;
+        }
+    }, [user]);
+
     const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
         setToast({ message, type });
         setTimeout(() => {

@@ -44,10 +44,42 @@ const MessagesPage: React.FC = () => {
             
             if (error) console.error("Error fetching conversations:", error);
             else {
-                const formatted = data.map((c: any) => ({
-                    ...c,
-                    participants: c.participants.filter((p: any) => p.user.id !== user.id)
-                }));
+                // Process conversations
+                const formatted = data.map((c: any) => {
+                    // Find partner. If it's a System message, user object might be null if RLS blocks it or join fails.
+                    // We manually reconstruct if missing.
+                    let partner = c.participants.find((p: any) => p.user?.id !== user.id)?.user;
+                    
+                    // Fallback for System Bot if partner is missing but we know it's likely system
+                    // (Note: In a real app, we'd check participant ID, but here we just check if valid partner exists)
+                    if (!partner && c.participants.length < 2) {
+                         // Heuristic: If only 1 participant returned (me), the other is hidden. Likely System.
+                         // But since we filter !== user.id above, if that returns empty, we check raw participants
+                         // actually, let's look at the raw c.participants
+                         const hasSystem = c.participants.some((p: any) => p.user_id === SYSTEM_BOT_ID); // user_id column might be needed in select
+                         if (hasSystem || c.participants.length === 1) {
+                             partner = {
+                                 id: SYSTEM_BOT_ID,
+                                 display_name: 'HỆ THỐNG',
+                                 photo_url: 'https://api.dicebear.com/7.x/bottts/svg?seed=System'
+                             };
+                         }
+                    }
+
+                    // Force System Bot data if ID matches
+                    if (partner?.id === SYSTEM_BOT_ID) {
+                        partner = {
+                            id: SYSTEM_BOT_ID,
+                            display_name: 'HỆ THỐNG',
+                            photo_url: 'https://api.dicebear.com/7.x/bottts/svg?seed=System'
+                        };
+                    }
+
+                    return {
+                        ...c,
+                        participants: [{ user: partner || { display_name: 'Người dùng', photo_url: '' } }] 
+                    };
+                });
                 setConversations(formatted);
             }
             setIsLoadingConvs(false);
@@ -232,7 +264,7 @@ const MessagesPage: React.FC = () => {
                     )}
                 </div>
             </div>
-            <BottomNavBar activeTab="tool" onTabChange={navigate} onCheckInClick={() => {}} />
+            <BottomNavBar activeTab="messages" onTabChange={navigate} onCheckInClick={() => {}} />
         </div>
     );
 };

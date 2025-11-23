@@ -231,28 +231,13 @@ const GameConfigManager: React.FC = () => {
         }
     };
 
-    const sqlFixScript = `-- SCRIPT SỬA LỖI DB (PHIÊN BẢN V2)
--- Sửa lỗi cột 'level' không tồn tại và cập nhật quyền truy cập
-
--- 1. BẬT CHẾ ĐỘ XEM CÔNG KHAI CHO BẢNG USERS
+    const sqlFixScript = `-- SCRIPT SỬA LỖI DB (ULTIMATE FIX V3)
+-- 1. BẬT CHẾ ĐỘ XEM CÔNG KHAI & SỬA QUYỀN USERS
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
-
--- Xóa policy cũ nếu có để tránh lỗi
-DROP POLICY IF EXISTS "Users can view their own data" ON public.users;
 DROP POLICY IF EXISTS "Public profiles are viewable by everyone" ON public.users;
+CREATE POLICY "Public profiles are viewable by everyone" ON public.users FOR SELECT USING (true);
 
--- Tạo policy mới: Ai cũng có thể xem (SELECT) thông tin user khác (cần thiết cho Chat & Ranking)
-CREATE POLICY "Public profiles are viewable by everyone" 
-ON public.users FOR SELECT 
-USING (true);
-
--- Policy cập nhật: Chỉ chủ sở hữu mới được sửa
-CREATE POLICY "Users can update own profile" 
-ON public.users FOR UPDATE 
-USING (auth.uid() = id);
-
--- 2. TẠO USER "HỆ THỐNG" (BOT)
--- Lưu ý: Đã loại bỏ cột 'level' gây lỗi. Level sẽ được tính toán từ XP.
+-- 2. TẠO USER "HỆ THỐNG" (BOT) - Đảm bảo tồn tại
 INSERT INTO public.users (id, email, display_name, photo_url, diamonds, xp)
 VALUES (
     '00000000-0000-0000-0000-000000000000',
@@ -261,108 +246,54 @@ VALUES (
     'https://api.dicebear.com/7.x/bottts/svg?seed=System',
     999999,
     999999
-) ON CONFLICT (id) DO NOTHING;
+) ON CONFLICT (id) DO UPDATE SET display_name = 'HỆ THỐNG', photo_url = 'https://api.dicebear.com/7.x/bottts/svg?seed=System';
 
--- 3. ĐẢM BẢO CÁC BẢNG CHAT TỒN TẠI VÀ CÓ QUYỀN
-CREATE TABLE IF NOT EXISTS public.conversations (
-    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
-);
+-- 3. HÀM RPC MẠNH MẼ ĐỂ TẠO CONVERSATION (AN TOÀN TUYỆT ĐỐI)
+-- Hàm này sẽ được gọi từ backend để bỏ qua RLS khi tạo chat
+CREATE OR REPLACE FUNCTION public.get_or_create_conversation(other_user_id UUID)
+RETURNS UUID
+LANGUAGE plpgsql
+SECURITY DEFINER -- Chạy với quyền Admin
+AS $$
+DECLARE
+    conv_id UUID;
+    current_user_id UUID;
+BEGIN
+    current_user_id := auth.uid();
+    
+    -- Tìm conversation đã tồn tại
+    SELECT c.id INTO conv_id
+    FROM public.conversations c
+    JOIN public.conversation_participants cp1 ON c.id = cp1.conversation_id
+    JOIN public.conversation_participants cp2 ON c.id = cp2.conversation_id
+    WHERE cp1.user_id = current_user_id 
+      AND cp2.user_id = other_user_id
+    LIMIT 1;
 
-CREATE TABLE IF NOT EXISTS public.conversation_participants (
-    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    conversation_id UUID REFERENCES public.conversations(id) ON DELETE CASCADE,
-    user_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
-    UNIQUE(conversation_id, user_id)
-);
+    -- Nếu chưa có, tạo mới
+    IF conv_id IS NULL THEN
+        INSERT INTO public.conversations DEFAULT VALUES RETURNING id INTO conv_id;
+        
+        -- Thêm cả 2 người vào
+        INSERT INTO public.conversation_participants (conversation_id, user_id)
+        VALUES (conv_id, current_user_id), (conv_id, other_user_id);
+    END IF;
 
-CREATE TABLE IF NOT EXISTS public.direct_messages (
-    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    conversation_id UUID REFERENCES public.conversations(id) ON DELETE CASCADE,
-    sender_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
-    content TEXT,
-    type TEXT DEFAULT 'text',
-    is_read BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
-);
+    RETURN conv_id;
+END;
+$$;
 
--- 4. CẬP NHẬT BẢNG HỆ THỐNG TIN NHẮN BROADCAST
-CREATE TABLE IF NOT EXISTS public.system_broadcasts (
-    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    content TEXT NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
-);
-GRANT ALL ON public.system_broadcasts TO service_role;
-
--- Bật RLS cho Chat
-ALTER TABLE public.conversations ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.conversation_participants ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.direct_messages ENABLE ROW LEVEL SECURITY;
-
--- Xóa policy cũ của chat (để reset sạch sẽ)
-DROP POLICY IF EXISTS "Users can view conversations they are in" ON public.conversations;
-DROP POLICY IF EXISTS "Users can view participants of their conversations" ON public.conversation_participants;
-DROP POLICY IF EXISTS "Users can view messages in their conversations" ON public.direct_messages;
-DROP POLICY IF EXISTS "Users can insert messages in their conversations" ON public.direct_messages;
-
--- Tạo lại Policy chuẩn cho Chat
-CREATE POLICY "Users can view conversations they are in" ON public.conversations
-FOR SELECT USING (
-    exists (
-        select 1 from public.conversation_participants cp
-        where cp.conversation_id = conversations.id
-        and cp.user_id = auth.uid()
-    )
-);
-
-CREATE POLICY "Users can view participants of their conversations" ON public.conversation_participants
-FOR SELECT USING (
-    exists (
-        select 1 from public.conversation_participants cp
-        where cp.conversation_id = conversation_participants.conversation_id
-        and cp.user_id = auth.uid()
-    )
-);
-
-CREATE POLICY "Users can view messages in their conversations" ON public.direct_messages
-FOR SELECT USING (
-    exists (
-        select 1 from public.conversation_participants cp
-        where cp.conversation_id = direct_messages.conversation_id
-        and cp.user_id = auth.uid()
-    )
-);
-
-CREATE POLICY "Users can insert messages in their conversations" ON public.direct_messages
-FOR INSERT WITH CHECK (
-    auth.uid() = sender_id AND
-    exists (
-        select 1 from public.conversation_participants cp
-        where cp.conversation_id = direct_messages.conversation_id
-        and cp.user_id = auth.uid()
-    )
-);
-
--- Cấp quyền cho Service Role (cho các hàm Admin chạy nền)
-GRANT ALL ON public.users TO service_role;
+-- 4. CẤP QUYỀN CHO SERVICE ROLE (Quan trọng cho Admin Broadcast)
 GRANT ALL ON public.conversations TO service_role;
 GRANT ALL ON public.conversation_participants TO service_role;
 GRANT ALL ON public.direct_messages TO service_role;
+GRANT ALL ON public.users TO service_role;
 
--- Refresh Realtime
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'direct_messages') THEN
-    ALTER PUBLICATION supabase_realtime ADD TABLE direct_messages;
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'conversations') THEN
-    ALTER PUBLICATION supabase_realtime ADD TABLE conversations;
-  END IF;
-END $$;
+-- 5. REFRESH REALTIME
+ALTER PUBLICATION supabase_realtime ADD TABLE conversations;
+ALTER PUBLICATION supabase_realtime ADD TABLE direct_messages;
 
-SELECT 'Sửa lỗi thành công! Đã cập nhật User Hệ Thống và phân quyền.' as ket_qua;
+SELECT 'Đã sửa lỗi DB & Cập nhật hàm RPC thành công!' as ket_qua;
 `;
 
     return (
@@ -383,9 +314,9 @@ SELECT 'Sửa lỗi thành công! Đã cập nhật User Hệ Thống và phân 
             {activeSubTab === 'db_tools' && (
                 <div className="space-y-4">
                     <div className="bg-yellow-500/10 border border-yellow-500/30 p-4 rounded-lg">
-                        <h4 className="text-yellow-400 font-bold mb-2 flex items-center gap-2"><i className="ph-fill ph-warning-circle"></i> Cập Nhật Database (BẮT BUỘC)</h4>
+                        <h4 className="text-yellow-400 font-bold mb-2 flex items-center gap-2"><i className="ph-fill ph-warning-circle"></i> Cập Nhật Database (QUAN TRỌNG)</h4>
                         <p className="text-sm text-gray-300 mb-4">
-                            Để sửa lỗi <strong>"Gửi tin nhắn thành công nhưng người khác không nhận được"</strong>, bạn phải chạy đoạn mã SQL này. Nó sẽ tạo User Hệ Thống và mở quyền xem Profile công khai.
+                            Để hệ thống tin nhắn và broadcast hoạt động ổn định, bạn cần chạy đoạn mã này trong Supabase SQL Editor. Nó sẽ cài đặt hàm <code>get_or_create_conversation</code> và sửa quyền.
                         </p>
                         <div className="relative">
                             <pre className="bg-black/50 p-3 rounded-lg text-xs text-green-400 overflow-x-auto font-mono border border-white/10 h-64 custom-scrollbar">

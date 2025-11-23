@@ -1,8 +1,13 @@
+
 import React, { useState } from 'react';
 import { GalleryImage } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
+import { useChat } from '../../contexts/ChatContext';
 import { getRankForLevel } from '../../utils/rankUtils';
 import { useTranslation } from '../../hooks/useTranslation';
+import UserAvatar from './UserAvatar';
+import UserBadge from './UserBadge';
+import UserName from './UserName'; // Import UserName
 
 interface ImageModalProps {
   isOpen: boolean;
@@ -13,9 +18,11 @@ interface ImageModalProps {
 }
 
 const ImageModal: React.FC<ImageModalProps> = ({ isOpen, onClose, image, showInfoPanel = true, onShare }) => {
-  const { showToast } = useAuth();
+  const { showToast, user } = useAuth();
+  const { shareImageToChat } = useChat();
   const { t } = useTranslation();
   const [isCopied, setIsCopied] = useState(false);
+  const [isSharingToChat, setIsSharingToChat] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
 
   if (!isOpen || !image) return null;
@@ -30,53 +37,40 @@ const ImageModal: React.FC<ImageModalProps> = ({ isOpen, onClose, image, showInf
     }, 2000);
   };
 
-  const handleDownload = async (e: React.MouseEvent) => {
+  const handleDownload = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!image?.image_url || isDownloading) return;
+    if (!image?.image_url) return;
 
     setIsDownloading(true);
 
-    const attemptDownload = async () => {
-        try {
-            const response = await fetch(image.image_url);
-            if (!response.ok) {
-                throw new Error('Direct fetch failed.');
-            }
-            return response.blob();
-        } catch (directError) {
-            console.warn('Direct download failed, trying proxy...', directError);
-            const proxyResponse = await fetch(`/.netlify/functions/download-image?url=${encodeURIComponent(image.image_url)}`);
-            if (!proxyResponse.ok) {
-                const errorBody = await proxyResponse.json().catch(() => ({ error: 'Lỗi không xác định từ proxy.' }));
-                throw new Error(errorBody.error);
-            }
-            return proxyResponse.blob();
-        }
-    };
+    const downloadUrl = `/.netlify/functions/download-image?url=${encodeURIComponent(image.image_url)}`;
 
-    try {
-        const blob = await attemptDownload();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.style.display = 'none';
-        a.href = url;
-        
-        const fileExtension = blob.type.split('/')[1] || 'png';
-        const uniqueId = image.id === 'generated-result' ? crypto.randomUUID().slice(0, 8) : image.id;
-        a.download = `audition-ai-${uniqueId}.${fileExtension}`;
-        
-        document.body.appendChild(a);
-        a.click();
-        
-        window.URL.revokeObjectURL(url);
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = downloadUrl;
+    a.download = `audition-ai-${image.id}.png`;
+    document.body.appendChild(a);
+    a.click();
+    
+    // Clean up and reset state after a short delay
+    setTimeout(() => {
         a.remove();
-    } catch (finalError: any) {
-        console.error('All download attempts failed:', finalError);
-        showToast(finalError.message || 'Tải ảnh thất bại sau nhiều lần thử.', 'error');
-    } finally {
         setIsDownloading(false);
-    }
+    }, 2000);
   };
+  
+  const handleShareToChat = async () => {
+      if (!image.image_url) return;
+      setIsSharingToChat(true);
+      try {
+          await shareImageToChat(image.image_url);
+          showToast("Đã chia sẻ ảnh lên Global Chat!", "success");
+      } catch (error) {
+          showToast("Lỗi khi chia sẻ.", "error");
+      } finally {
+          setIsSharingToChat(false);
+      }
+  }
   
   const rank = image.creator ? getRankForLevel(image.creator.level) : getRankForLevel(1);
 
@@ -89,6 +83,7 @@ const ImageModal: React.FC<ImageModalProps> = ({ isOpen, onClose, image, showInf
         className="relative bg-[#12121A] border border-pink-500/20 rounded-2xl shadow-lg w-full max-w-4xl h-auto max-h-[85vh] lg:h-[700px] lg:max-h-none flex flex-col lg:flex-row overflow-hidden animate-fade-in-up"
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Image Container */}
         <div className="relative flex-1 bg-black/50 flex items-center justify-center p-2 lg:p-4 overflow-hidden">
             <img 
                 src={image.image_url} 
@@ -97,52 +92,76 @@ const ImageModal: React.FC<ImageModalProps> = ({ isOpen, onClose, image, showInf
             />
         </div>
         
+        {/* Info & Actions Panel */}
         <div className="w-full lg:w-80 flex-shrink-0 bg-[#1e1b25]/50 flex flex-col text-white">
             <div className="flex-grow p-4 overflow-y-auto custom-scrollbar space-y-4">
+                {/* Conditionally show Creator info */}
                 {showInfoPanel && image.creator && (
                     <div className="flex items-center gap-3 pb-4 border-b border-white/10">
-                        <img src={image.creator.photo_url} alt={image.creator.display_name} className="w-12 h-12 rounded-full" />
+                        <UserAvatar 
+                            url={image.creator.photo_url} 
+                            alt={image.creator.display_name} 
+                            frameId={image.creator.equipped_frame_id}
+                            level={image.creator.level}
+                            size="md" 
+                        />
                         <div>
-                            <p className={`font-bold ${rank.color} neon-text-glow`}>{image.creator.display_name}</p>
-                            <p className={`text-xs font-semibold flex items-center gap-1.5 ${rank.color}`}>{rank.icon} {rank.title}</p>
+                            <div className="flex items-center gap-2">
+                                {/* Use UserName for effects */}
+                                <UserName 
+                                    user={image.creator} 
+                                    className={`font-bold ${rank.color}`} 
+                                />
+                            </div>
+                            <UserBadge titleId={image.creator.equipped_title_id} level={image.creator.level} />
+                            <p className={`text-xs font-semibold flex items-center gap-1.5 mt-1 ${rank.color}`}>{rank.icon} {rank.title}</p>
                         </div>
                     </div>
                 )}
                 
+                {/* Always show Prompt */}
                 <div>
                     <h4 className="font-semibold text-pink-400 mb-2 flex items-center gap-2">
-                        <i className="ph-fill ph-quotes" />
+                        <i className="ph-fill ph-quotes"></i>
                         {t('modals.image.prompt')}
                     </h4>
                     <p className="text-sm text-gray-300 italic bg-white/5 p-3 rounded-md max-h-40 overflow-y-auto custom-scrollbar">
-                        {`"${image.prompt}"`}
+                        "{image.prompt}"
                     </p>
                 </div>
             </div>
 
+            {/* Actions at the bottom of the panel */}
             <div className="p-4 border-t border-white/10 space-y-2">
+                {/* Share to Chat Button (New) */}
+                {user && (
+                    <button 
+                        onClick={handleShareToChat}
+                        disabled={isSharingToChat}
+                        className="w-full px-4 py-2 text-sm font-semibold rounded-lg flex items-center justify-center gap-2 transition-all duration-300 bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 disabled:opacity-50"
+                    >
+                        {isSharingToChat ? <i className="ph-fill ph-spinner animate-spin"></i> : <i className="ph-fill ph-chat-teardrop-text"></i>}
+                        <span>Khoe lên Global Chat</span>
+                    </button>
+                )}
+
                  <button
                     onClick={handleCopyPrompt}
                     className={`w-full px-4 py-2 text-sm font-semibold rounded-lg flex items-center justify-center gap-2 transition-all duration-300 ${isCopied ? 'bg-green-500/20 text-green-300' : 'bg-pink-500/20 text-pink-300 hover:bg-pink-500/30'}`}
                 >
-                    <i className={`ph-fill ${isCopied ? 'ph-check-circle' : 'ph-copy'}`} />
+                    <i className={`ph-fill ${isCopied ? 'ph-check-circle' : 'ph-copy'}`}></i>
                     {isCopied ? t('modals.image.copied') : t('modals.image.copy')}
                 </button>
                 <button 
                     onClick={handleDownload}
                     disabled={isDownloading}
-                    className="w-full px-4 py-2 text-sm font-semibold rounded-lg flex items-center justify-center gap-2 transition-all duration-300 bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 disabled:opacity-50 disabled:cursor-wait"
+                    className="w-full px-4 py-2 text-sm font-semibold rounded-lg flex items-center justify-center gap-2 transition-all duration-300 bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 disabled:opacity-50"
                 >
-                    {isDownloading ? (
-                        <div className="w-5 h-5 border-2 border-white/50 border-t-white rounded-full animate-spin" />
-                    ) : (
-                        <>
-                            <i className="ph-fill ph-download-simple" />
-                            <span>{t('modals.image.download')}</span>
-                        </>
-                    )}
+                    {isDownloading ? <i className="ph-fill ph-spinner animate-spin"></i> : <i className="ph-fill ph-download-simple"></i>}
+                    <span>{isDownloading ? t('common.downloading') || 'Đang tải...' : t('modals.image.download')}</span>
                 </button>
                  
+                 {/* Share button for "My Creations" */}
                  {onShare && !image.is_public && (
                      <button
                         onClick={(e) => {
@@ -151,7 +170,7 @@ const ImageModal: React.FC<ImageModalProps> = ({ isOpen, onClose, image, showInf
                         }}
                         className="w-full px-4 py-2 text-sm font-semibold rounded-lg flex items-center justify-center gap-2 transition-all duration-300 bg-green-500/20 text-green-300 hover:bg-green-500/30"
                     >
-                        <i className="ph-fill ph-share-network" />
+                        <i className="ph-fill ph-share-network"></i>
                         {t('modals.image.share')}
                     </button>
                  )}
@@ -164,7 +183,7 @@ const ImageModal: React.FC<ImageModalProps> = ({ isOpen, onClose, image, showInf
         </div>
       </div>
        <button onClick={onClose} className="absolute top-4 right-4 bg-black/50 text-white rounded-full p-2 hover:bg-pink-500/80 transition-all z-[60]">
-            <i className="ph-fill ph-x text-2xl" />
+            <i className="ph-fill ph-x text-2xl"></i>
         </button>
     </div>
   );

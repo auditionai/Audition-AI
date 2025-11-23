@@ -17,7 +17,10 @@ const UserName: React.FC<UserNameProps> = ({ name, effectId, className = '', use
     const { getCosmeticById } = useGameConfig();
     
     const displayName = user?.display_name || name || 'Unknown';
-    // FIX: Handle case where user exists but equipped_name_effect_id is missing in DB response
+    
+    // Logic: Use user's equipped ID if user obj exists (even if null/undefined to support unequip). 
+    // Fallback to effectId prop if user obj is not provided.
+    // Important: If user exists but equipped_name_effect_id is missing/null, it means "no effect".
     const activeEffectId = user ? (user.equipped_name_effect_id || undefined) : effectId;
     
     const effect = getCosmeticById(activeEffectId, 'name_effect');

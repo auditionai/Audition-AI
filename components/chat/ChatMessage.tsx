@@ -21,15 +21,19 @@ const ChatMessageItem: React.FC<ChatMessageProps> = ({ message, isOwn, onImageCl
     const [showMenu, setShowMenu] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
 
-    // Fallback for legacy messages or missing metadata
-    const senderName = metadata?.sender_name || 'Unknown';
-    const senderAvatar = metadata?.sender_avatar || 'https://i.pravatar.cc/150';
-    const senderLevel = metadata?.sender_level || 1;
-    const senderFrame = metadata?.sender_frame_id;
-    const senderTitle = metadata?.sender_title_id;
-    const senderNameEffect = metadata?.sender_name_effect_id; // NEW
-    const deletedBy = metadata?.deleted_by;
+    // Logic: If the message is own, use the LIVE user data from AuthContext to ensure 
+    // avatar frames, titles, and name effects are always synchronized with current settings.
+    // If it's another user, fall back to the metadata snapshot stored at message creation time.
+    const effectiveUser = isOwn && user ? user : null;
 
+    const senderName = effectiveUser?.display_name || metadata?.sender_name || 'Unknown';
+    const senderAvatar = effectiveUser?.photo_url || metadata?.sender_avatar || 'https://i.pravatar.cc/150';
+    const senderLevel = effectiveUser?.level || metadata?.sender_level || 1;
+    const senderFrame = effectiveUser?.equipped_frame_id || metadata?.sender_frame_id;
+    const senderTitle = effectiveUser?.equipped_title_id || metadata?.sender_title_id;
+    const senderNameEffect = effectiveUser?.equipped_name_effect_id || metadata?.sender_name_effect_id;
+    
+    const deletedBy = metadata?.deleted_by;
     const isAdmin = user?.is_admin;
 
     // Handle click outside to close menu

@@ -413,6 +413,64 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
         }
     };
 
+    const handleRetryExpandPanel = async (panelId: string) => {
+        const panel = panels.find(p => p.id === panelId);
+        if (!panel || !panel.plot_summary) return;
+
+        // Set loading state
+        setPanels(prev => prev.map(p => p.id === panelId ? { ...p, visual_description: `(Đang thử lại...) ${p.plot_summary || ''}` } : p));
+
+        try {
+            // Prepare previous context (same logic as main generation)
+            // We need to find previous panels relative to this one
+            const pIndex = panels.findIndex(p => p.id === panelId);
+            const prevPanels = panels.slice(0, pIndex).map(p => ({
+                panel_number: p.panel_number,
+                visual_description: p.visual_description,
+                dialogue: p.dialogue
+            }));
+
+            const expandRes = await fetch('/.netlify/functions/comic-expand-panel', {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session?.access_token}`
+                },
+                body: JSON.stringify({ 
+                    plot_summary: panel.plot_summary,
+                    characters: characters,
+                    style: storySettings.artStyle,
+                    genre: storySettings.genre,
+                    language: storySettings.language,
+                    previous_panels: prevPanels 
+                })
+            });
+
+            if (!expandRes.ok) throw new Error("API Error");
+            
+            const details = await expandRes.json();
+            
+            setPanels(prev => prev.map(p => 
+                p.id === panelId 
+                ? { 
+                    ...p, 
+                    visual_description: details.visual_description, 
+                    dialogue: Array.isArray(details.dialogue) ? details.dialogue : [] 
+                  }
+                : p
+            ));
+            showToast("Đã sửa lỗi kịch bản thành công!", "success");
+
+        } catch (e) {
+            setPanels(prev => prev.map(p => 
+                p.id === panelId 
+                ? { ...p, visual_description: `[Lỗi] ${panel.plot_summary}` } 
+                : p
+            ));
+            showToast("Thử lại thất bại. Vui lòng kiểm tra kết nối.", "error");
+        }
+    };
+
     const handleRenderPanel = async (panel: ComicPanel) => {
         if (!supabase) return;
         
@@ -795,15 +853,30 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                             <div className="space-y-4">
                                 {panels.map((panel) => {
                                     const isGeneratingDetails = panel.visual_description.startsWith('(Đang tạo chi tiết');
-                                    const isError = panel.visual_description.startsWith('[Lỗi');
+                                    const isError = panel.visual_description.startsWith('[Lỗi]');
+                                    
                                     return (
                                         <div key={panel.id} className="comic-card p-0 flex flex-col md:flex-row relative overflow-hidden">
-                                            <div className="md:w-1/2 p-4 border-b md:border-b-0 md:border-r border-white/10 bg-black/20">
+                                            <div className="md:w-1/2 p-4 border-b md:border-b-0 md:border-r border-white/10 bg-black/20 relative">
                                                 <div className="flex items-center justify-between mb-2">
                                                     <span className="text-xs font-bold bg-blue-600 text-white px-2 py-0.5 rounded">PANEL {panel.panel_number}</span>
                                                     <span className="text-[10px] text-gray-500">Mô tả hình ảnh</span>
                                                 </div>
                                                 <textarea className="w-full h-32 bg-transparent border-none focus:ring-0 text-sm text-gray-300 leading-relaxed resize-none p-0" value={panel.visual_description} onChange={(e) => handleUpdatePanel(panel.id, 'visual_description', e.target.value)} disabled={isGeneratingDetails} />
+                                                
+                                                {/* RETRY OVERLAY FOR SCRIPT ERROR */}
+                                                {isError && (
+                                                    <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center z-10 p-4 backdrop-blur-sm">
+                                                        <i className="ph-fill ph-warning-circle text-red-500 text-3xl mb-2"></i>
+                                                        <p className="text-white text-sm font-bold mb-3 text-center">Lỗi tạo kịch bản</p>
+                                                        <button 
+                                                            onClick={() => handleRetryExpandPanel(panel.id)}
+                                                            className="px-4 py-2 bg-white text-black text-xs font-bold rounded-full hover:bg-gray-200 flex items-center gap-2 transition-transform hover:scale-105 shadow-lg"
+                                                        >
+                                                            <i className="ph-bold ph-arrow-clockwise"></i> Thử lại
+                                                        </button>
+                                                    </div>
+                                                )}
                                             </div>
                                             <div className="md:w-1/2 p-4 bg-skin-fill-secondary">
                                                 <div className="mb-2 text-[10px] font-bold text-gray-500 uppercase">Hội thoại (AI sẽ vẽ trực tiếp)</div>

@@ -424,6 +424,7 @@ export interface ComicPanel {
     id: string;
     panel_number: number;
     visual_description: string; // Prompt for AI
+    plot_summary?: string; // New: Needed for retry mechanism
     dialogue: ComicDialogue[];
     image_url?: string;
     is_rendering?: boolean;

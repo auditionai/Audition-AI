@@ -20,9 +20,9 @@ const GameConfigContext = createContext<GameConfigContextType | undefined>(undef
 
 export const GameConfigProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const [ranks, setRanks] = useState<Rank[]>(DEFAULT_RANKS);
-    const [frames, setFrames] = useState<CosmeticItem[]>(DEFAULT_COSMETICS.filter(c => c.type === 'frame'));
-    const [titles, setTitles] = useState<CosmeticItem[]>(DEFAULT_COSMETICS.filter(c => c.type === 'title'));
-    const [nameEffects, setNameEffects] = useState<CosmeticItem[]>([]); // NEW
+    const [frames, setFrames] = useState<CosmeticItem[]>([]);
+    const [titles, setTitles] = useState<CosmeticItem[]>([]);
+    const [nameEffects, setNameEffects] = useState<CosmeticItem[]>([]); 
     const [isLoading, setIsLoading] = useState(true);
 
     const refreshConfig = async () => {
@@ -37,17 +37,17 @@ export const GameConfigProvider: React.FC<{ children: ReactNode }> = ({ children
                     setRanks(data.ranks.sort((a: Rank, b: Rank) => a.levelThreshold - b.levelThreshold));
                 }
 
-                // 2. Process Cosmetics (Merge with Defaults to keep nameKeys)
+                // 2. Process Cosmetics (DB First Approach)
                 if (data.cosmetics) {
-                    // Build Reverse Lookup Maps for Titles to fix key issues
-                    // We use 'any' cast because the types of translations are generic
+                    // Helper: Map of Default Constants for "nameKey" lookup only
+                    const defaultMap = new Map<string, CosmeticItem>();
+                    DEFAULT_COSMETICS.forEach(item => defaultMap.set(item.id, item));
+
+                    // Helper: Reverse Lookup Maps for Titles to fix key issues
                     const enTitles = (translations.en as any).cosmetics?.titles || {};
                     const viTitles = (translations.vi as any).cosmetics?.titles || {};
-                    
-                    // Map of "lowercase name" -> "translation key suffix"
                     const titleKeyMap = new Map<string, string>();
                     
-                    // Normalize lookup: "English Name" -> "key", "Vietnamese Name" -> "key"
                     Object.entries(enTitles).forEach(([key, val]) => {
                         if (typeof val === 'string') titleKeyMap.set(val.toLowerCase().trim(), key);
                     });
@@ -55,48 +55,25 @@ export const GameConfigProvider: React.FC<{ children: ReactNode }> = ({ children
                         if (typeof val === 'string') titleKeyMap.set(val.toLowerCase().trim(), key);
                     });
 
-                    // Create a map of DB items for faster lookup by ID
-                    const dbMapById = new Map<string, any>(data.cosmetics.map((c: any) => [c.id, c]));
-                    
-                    // Merge Default Items with DB overrides
-                    const mergedDefaultCosmetics = DEFAULT_COSMETICS.map(defaultItem => {
-                        // Match by ID first. This is the primary and most reliable method.
-                        let dbItem = dbMapById.get(defaultItem.id);
-
-                        if (dbItem) {
-                            // Remove from map to track what's left (custom items)
-                            dbMapById.delete(dbItem.id);
-                            
-                            return {
-                                ...defaultItem, // Keep defaults like nameKey, id, type
-                                ...dbItem,      // Override with DB values (iconUrl, unlockLevel, etc.)
-                                id: defaultItem.id, // KEEP the legacy ID so user profiles don't break
-                                nameKey: defaultItem.nameKey, // Ensure nameKey persists
-                                cssClass: dbItem.cssClass || defaultItem.cssClass, 
-                                imageUrl: dbItem.imageUrl || defaultItem.imageUrl,
-                                iconUrl: dbItem.iconUrl || defaultItem.iconUrl
-                            };
-                        }
-                        return defaultItem;
-                    });
-
-                    // Add remaining custom items from DB (those that didn't match any default item)
-                    const customItems = Array.from(dbMapById.values()).map((dbItem: any) => {
-                        let nameKey: string | null = null;
+                    // 3. Build Final List strictly from DB Data
+                    // We iterate ONLY over data.cosmetics. 
+                    // We do NOT merge in missing items from DEFAULT_COSMETICS.
+                    // This prevents duplicates and ensures DB is the single source of truth.
+                    const allCosmetics = data.cosmetics.map((dbItem: any) => {
+                        const defaultItem = defaultMap.get(dbItem.id);
                         
-                        if (dbItem.name && dbItem.type === 'title') {
+                        // Determine nameKey
+                        let nameKey = defaultItem?.nameKey || null;
+
+                        // If no nameKey from default, try to reverse lookup title name
+                        if (!nameKey && dbItem.name && dbItem.type === 'title') {
                              const lowerName = dbItem.name.toLowerCase().trim();
-                             
-                             // Strategy 1: Lookup by exact name match (EN or VI)
                              if (titleKeyMap.has(lowerName)) {
                                  const key = titleKeyMap.get(lowerName);
                                  if (key) nameKey = `cosmetics.titles.${key}`;
                              } 
-                             // Strategy 2: Handle "CODE.KEY" cases if saved in DB erroneously (e.g. CREATOR.COSMETICS.TITLES.AUDITIONGOD)
                              else {
-                                 // Attempt to clean up common prefixes if any
                                  const cleanName = lowerName.replace('creator.cosmetics.titles.', '');
-                                 // Check if this cleaned name exists as a key directly (case-insensitive check)
                                  const matchingKey = Object.keys(enTitles).find(k => k.toLowerCase() === cleanName);
                                  if (matchingKey) {
                                      nameKey = `cosmetics.titles.${matchingKey}`;
@@ -104,13 +81,16 @@ export const GameConfigProvider: React.FC<{ children: ReactNode }> = ({ children
                              }
                         }
 
+                        // Construct Item. DB properties take absolute precedence.
                         return {
-                            ...dbItem,
+                            ...dbItem, // Contains id, type, name, rarity, price, cssClass, imageUrl, iconUrl, unlockCondition
                             nameKey: nameKey,
+                            // Ensure these are populated if DB returns them, otherwise fallback to default item or null
+                            cssClass: dbItem.cssClass || defaultItem?.cssClass, 
+                            imageUrl: dbItem.imageUrl || defaultItem?.imageUrl,
+                            iconUrl: dbItem.iconUrl || defaultItem?.iconUrl,
                         };
                     });
-
-                    const allCosmetics = [...mergedDefaultCosmetics, ...customItems];
 
                     const finalFrames = allCosmetics.filter((c: CosmeticItem) => c.type === 'frame');
                     const finalTitles = allCosmetics.filter((c: CosmeticItem) => c.type === 'title');
@@ -123,6 +103,10 @@ export const GameConfigProvider: React.FC<{ children: ReactNode }> = ({ children
             }
         } catch (error) {
             console.error("Failed to load game config, using defaults", error);
+            // Fallback to defaults ONLY if API fails completely
+            setFrames(DEFAULT_COSMETICS.filter(c => c.type === 'frame'));
+            setTitles(DEFAULT_COSMETICS.filter(c => c.type === 'title'));
+            setNameEffects(DEFAULT_COSMETICS.filter(c => c.type === 'name_effect'));
         } finally {
             setIsLoading(false);
         }

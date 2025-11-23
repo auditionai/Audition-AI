@@ -10,7 +10,7 @@ import { Conversation, DirectMessage } from '../types';
 const SYSTEM_BOT_ID = '00000000-0000-0000-0000-000000000000';
 
 const MessagesPage: React.FC = () => {
-    const { user, navigate, showToast, session, supabase } = useAuth();
+    const { user, navigate, showToast, session } = useAuth();
     const { theme } = useTheme();
     
     const [conversations, setConversations] = useState<Conversation[]>([]);

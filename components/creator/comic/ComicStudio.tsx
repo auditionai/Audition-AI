@@ -884,6 +884,15 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                                                                     <span className="text-[10px] font-bold">Đang phân tích...</span>
                                                                 </div>
                                                             )}
+                                                            {/* New Retry Button */}
+                                                            {!char.is_analyzing && !char.description && char.image_url && (
+                                                                <button 
+                                                                    onClick={() => char.image_file && handleCharacterImageUpload(char.id, char.image_file)}
+                                                                    className="absolute bottom-2 right-2 text-[10px] bg-red-500/20 text-red-300 px-2 py-1 rounded border border-red-500/50 hover:bg-red-500/30 flex items-center gap-1 z-10 transition-all"
+                                                                >
+                                                                    <i className="ph-bold ph-arrow-clockwise"></i> Thử lại
+                                                                </button>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 </div>

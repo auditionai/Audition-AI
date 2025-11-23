@@ -11,7 +11,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     const authHeader = event.headers['authorization'];
     if (!authHeader) return { statusCode: 401, body: JSON.stringify({ error: 'Authorization required.' }) };
     const token = authHeader.split(' ')[1];
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+    const { data: { user }, error: authError } = await (supabaseAdmin.auth as any).getUser(token);
     
     if (authError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'Invalid token.' }) };
 
@@ -50,7 +50,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         `;
 
         const response = await ai.models.generateContent({
-            model: 'gemini-3-pro-preview', // Using the Pro model for best analysis
+            model: 'gemini-2.5-flash', // Switched to Flash for stability and speed (avoids 503 overload)
             contents: {
                 parts: [
                     { inlineData: { data: base64, mimeType } },

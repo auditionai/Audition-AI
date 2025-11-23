@@ -44,11 +44,10 @@ const AppContent: React.FC = () => {
                 pageComponent = user ? <ProfilePage /> : <HomePage />;
                 break;
             case 'user':
-                // FIX: Added key={window.location.pathname} to force remount when switching between users
                 pageComponent = user ? <UserProfilePage key={window.location.pathname} /> : <HomePage />;
                 break;
             case 'messages':
-                // Force remount on query param change (id change) using currentPath
+                // QUAN TRỌNG: Dùng full path làm key để buộc React mount lại MessagesPage khi ID thay đổi
                 pageComponent = user ? <MessagesPage key={currentPath} /> : <HomePage />;
                 break;
             case 'shop':

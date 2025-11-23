@@ -5,12 +5,12 @@ import { ComicCharacter, ComicPanel } from '../../../types';
 import { resizeImage } from '../../../utils/imageUtils';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
-import JSZip from 'jszip'; // Import JSZip
+import JSZip from 'jszip';
 import SettingsBlock from '../ai-tool/SettingsBlock';
 import Modal from '../../common/Modal';
 import { COMIC_PREMISES } from '../../../constants/comicPremises';
 
-// --- CONSTANTS (UPDATED) ---
+// --- CONSTANTS ---
 
 const GENRES = [
     'Mặc định (Sáng tạo)',
@@ -104,12 +104,11 @@ const COVER_OPTIONS = [
     { label: 'Bắt đầu - Kết thúc', value: 'both' }
 ];
 
-const RENDER_COST = 10; // 10 Diamonds per page render (Pro Model)
-const MAX_CHARACTERS = 12; // Increased limit per user request
+const RENDER_COST = 10; 
+const MAX_CHARACTERS = 12; // Updated limit per user request
 
 // --- SUB-COMPONENTS ---
 
-// New Custom Select Component for better UI
 interface ComicSelectProps {
     label: string;
     value: string;
@@ -133,12 +132,11 @@ const ComicSelect: React.FC<ComicSelectProps> = ({ label, value, onChange, optio
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    // Helper to normalize options
     const normalizedOptions = options.map(opt => 
         typeof opt === 'string' ? { label: opt, value: opt } : opt
     );
 
-    const selectedOption = normalizedOptions.find(o => o.value === value) || normalizedOptions[0];
+    const selectedOption = normalizedOptions.find(o => o.value === value) || normalizedOptions[0] || { label: 'Select', value: '' };
 
     return (
         <div className={`relative ${className}`} ref={ref}>
@@ -302,7 +300,7 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
         aspectRatio: ASPECT_RATIOS[0].value,
         visualEffect: VISUAL_EFFECTS[0].value,
         pageNumbering: PAGE_NUMBERING[0].value,
-        coverPage: COVER_OPTIONS[0].value // Added Cover Page State
+        coverPage: COVER_OPTIONS[0].value
     });
 
     // State for Step 2 & 3
@@ -407,7 +405,6 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
             setActiveStep(2);
 
             // PHASE 2: EXPAND EACH PANEL WITH MEMORY
-            // We need to accumulate context as we go
             const completedPanelsData: any[] = [];
 
             for (let i = 0; i < outline.length; i++) {
@@ -434,7 +431,6 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                     if (expandRes.ok) {
                         const details = await expandRes.json();
                         
-                        // Store for next iteration's context
                         const completedPanel = {
                             panel_number: p.panel_number,
                             visual_description: details.visual_description,
@@ -504,7 +500,6 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                     style: storySettings.artStyle,
                     genre: storySettings.genre,
                     language: storySettings.language,
-                    // For retry, we can attempt to gather context from previous panels in state
                     previous_panels: panels.filter(p => p.panel_number < panelToRetry.panel_number && !p.visual_description.startsWith('(')).map(p => ({
                         panel_number: p.panel_number,
                         visual_description: p.visual_description,
@@ -619,34 +614,24 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
         }));
     };
 
-    /**
-     * Robust method to capture HTML to Canvas by pre-fetching image as Base64
-     * This bypasses CORS issues that cause white pages in html2canvas.
-     */
     const capturePanel = async (panelId: string, panelEl: HTMLElement): Promise<string | null> => {
         const imgEl = panelEl.querySelector('img');
         if (!imgEl) return null;
 
         const originalSrc = imgEl.src;
         try {
-            // 1. Fetch image as blob
             const response = await fetch(originalSrc);
             const blob = await response.blob();
             
-            // 2. Create Base64 URL
             const base64Url = await new Promise<string>((resolve) => {
                 const reader = new FileReader();
                 reader.onloadend = () => resolve(reader.result as string);
                 reader.readAsDataURL(blob);
             });
 
-            // 3. Swap source
             imgEl.src = base64Url;
-            
-            // 4. Wait for image to 'load' (even though it's base64, to be safe)
             await new Promise(resolve => setTimeout(resolve, 100));
 
-            // 5. Capture with html2canvas
             const canvas = await html2canvas(panelEl, { 
                 useCORS: true, 
                 scale: 2,
@@ -654,13 +639,11 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                 backgroundColor: null
             });
 
-            // 6. Restore original source
             imgEl.src = originalSrc;
-
             return canvas.toDataURL('image/png', 0.9);
         } catch (e) {
             console.error(`Failed to capture panel ${panelId}`, e);
-            imgEl.src = originalSrc; // Ensure restore even on error
+            imgEl.src = originalSrc;
             return null;
         }
     };
@@ -675,28 +658,20 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
             for (let i = 0; i < panels.length; i++) {
                 const panelEl = panelRefs.current[panels[i].id];
                 if (panelEl && panels[i].image_url) {
-                    // Use the robust capture method
                     const imgData = await capturePanel(panels[i].id, panelEl);
-                    
                     if (imgData) {
-                        // Calculate dimensions to fit PDF width
-                        // A4 width is 210mm. Margins 10mm each side -> 190mm usable.
                         const imgProps = pdf.getImageProperties(imgData);
                         const pdfWidth = 190;
                         const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-                        
-                        // Check page break
                         if (yOffset + pdfHeight > 280) {
                             pdf.addPage();
                             yOffset = 10;
                         }
-                        
                         pdf.addImage(imgData, 'PNG', 10, yOffset, pdfWidth, pdfHeight);
                         yOffset += pdfHeight + 10;
                     }
                 }
             }
-            
             pdf.save('audition-comic.pdf');
             showToast("Xuất file PDF thành công!", "success");
         } catch (e: any) {
@@ -707,7 +682,6 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
         }
     };
 
-    // NEW: Download ZIP Functionality
     const handleDownloadZip = async () => {
         setIsLoading(true);
         showToast("Đang nén ảnh, vui lòng đợi...", "success");
@@ -715,18 +689,13 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
         try {
             const zip = new JSZip();
             const folder = zip.folder("audition-comic");
-            
             let count = 0;
             for (let i = 0; i < panels.length; i++) {
                 const panel = panels[i];
                 const panelEl = panelRefs.current[panel.id];
-                
                 if (panelEl && panel.image_url) {
-                    // Capture the panel WITH bubbles using the robust method
                     const imgData = await capturePanel(panel.id, panelEl);
-                    
                     if (imgData) {
-                        // Remove data:image/png;base64, prefix
                         const base64Data = imgData.split(',')[1];
                         folder?.file(`panel-${panel.panel_number}.png`, base64Data, { base64: true });
                         count++;
@@ -748,7 +717,6 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
             } else {
                 showToast("Không có ảnh nào để tải.", "error");
             }
-
         } catch (e: any) {
             console.error("ZIP generation failed:", e);
             showToast("Lỗi khi tạo file ZIP.", "error");
@@ -762,14 +730,8 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
         setIsPremiseModalOpen(false);
     };
 
-    const handleImageLoad = (panelId: string) => {
-        setImageLoadStates(prev => ({ ...prev, [panelId]: 'loaded' }));
-    };
-
-    const handleImageError = (panelId: string) => {
-        setImageLoadStates(prev => ({ ...prev, [panelId]: 'error' }));
-    };
-
+    const handleImageLoad = (panelId: string) => setImageLoadStates(prev => ({ ...prev, [panelId]: 'loaded' }));
+    const handleImageError = (panelId: string) => setImageLoadStates(prev => ({ ...prev, [panelId]: 'error' }));
     const handleReloadImage = (panelId: string) => {
         setPanels(prev => prev.map(p => {
             if (p.id !== panelId || !p.image_url) return p;
@@ -777,68 +739,39 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                 const url = new URL(p.image_url);
                 url.searchParams.set('t', Date.now().toString());
                 return { ...p, image_url: url.toString() };
-            } catch (e) {
-                return p;
-            }
+            } catch (e) { return p; }
         }));
         setImageLoadStates(prev => ({ ...prev, [panelId]: 'loading' }));
     };
 
-    // Style for font families
     const fontStyle = storySettings.bubbleFont.family;
 
     return (
         <div className="animate-fade-in h-[calc(100vh-140px)] min-h-[600px] flex flex-col max-w-7xl mx-auto">
             <style>{`
-                .bubble-tail::after {
-                    content: ''; position: absolute; bottom: -8px; left: 20px;
-                    border-width: 8px 8px 0; border-style: solid; border-color: black transparent;
-                    display: block; width: 0;
-                }
-                .bubble-tail::before {
-                    content: ''; position: absolute; bottom: -5px; left: 22px;
-                    border-width: 6px 6px 0; border-style: solid; border-color: white transparent;
-                    display: block; width: 0; z-index: 1;
-                }
-                .comic-card {
-                    background: var(--color-fill-secondary);
-                    border: 1px solid var(--color-border);
-                    border-radius: 1rem;
-                    overflow: hidden;
-                    transition: all 0.3s ease;
-                }
-                .comic-card:hover {
-                    border-color: var(--color-border-accent);
-                    box-shadow: var(--shadow-accent);
-                }
+                .bubble-tail::after { content: ''; position: absolute; bottom: -8px; left: 20px; border-width: 8px 8px 0; border-style: solid; border-color: black transparent; display: block; width: 0; }
+                .bubble-tail::before { content: ''; position: absolute; bottom: -5px; left: 22px; border-width: 6px 6px 0; border-style: solid; border-color: white transparent; display: block; width: 0; z-index: 1; }
+                .comic-card { background: var(--color-fill-secondary); border: 1px solid var(--color-border); border-radius: 1rem; overflow: hidden; transition: all 0.3s ease; }
+                .comic-card:hover { border-color: var(--color-border-accent); box-shadow: var(--shadow-accent); }
             `}</style>
 
             <Modal isOpen={isPremiseModalOpen} onClose={() => setIsPremiseModalOpen(false)} title={`Gợi ý: ${storySettings.genre}`}>
                 <div className="max-h-[60vh] overflow-y-auto custom-scrollbar pr-2 space-y-2">
                     {COMIC_PREMISES[storySettings.genre]?.map((p, idx) => (
-                        <button 
-                            key={idx}
-                            onClick={() => handleSelectPremise(p)}
-                            className="w-full text-left p-3 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 hover:border-pink-500/50 transition-all text-sm text-gray-300 hover:text-white"
-                        >
-                            <span className="font-bold text-pink-400 mr-2">#{idx + 1}</span>
-                            {p}
+                        <button key={idx} onClick={() => handleSelectPremise(p)} className="w-full text-left p-3 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 hover:border-pink-500/50 transition-all text-sm text-gray-300 hover:text-white">
+                            <span className="font-bold text-pink-400 mr-2">#{idx + 1}</span>{p}
                         </button>
                     ))}
-                    {!COMIC_PREMISES[storySettings.genre] && (
-                        <p className="text-center text-gray-500 italic">Chưa có gợi ý cho thể loại này.</p>
-                    )}
+                    {!COMIC_PREMISES[storySettings.genre] && <p className="text-center text-gray-500 italic">Chưa có gợi ý cho thể loại này.</p>}
                 </div>
             </Modal>
 
-            {/* Main Box */}
             <div className="flex-grow bg-[#12121A] border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col relative">
                 <div className="px-6 py-4 border-b border-white/10 bg-[#181820] flex justify-center">
                     <StepIndicator currentStep={activeStep} />
                 </div>
 
                 <div className="flex-grow overflow-y-auto p-6 custom-scrollbar bg-[#0f0f13]">
-                    
                     {/* FEATURE BADGES */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
                         <div className="bg-emerald-500/10 border border-emerald-500/30 p-3 rounded-xl flex items-center gap-3 shadow-lg shadow-emerald-500/5">
@@ -870,145 +803,59 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                     {/* STEP 1: SETUP */}
                     {activeStep === 1 && (
                         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                            {/* Left: Detailed Settings */}
                             <div className="lg:col-span-5 space-y-6">
-                                <SettingsBlock 
-                                    title="Cấu Hình Truyện" 
-                                    instructionKey="comic-studio" // Changed key to correct one
-                                    onInstructionClick={() => onInstructionClick && onInstructionClick()} 
-                                >
+                                <SettingsBlock title="Cấu Hình Truyện" instructionKey="comic-studio" onInstructionClick={() => onInstructionClick && onInstructionClick()}>
                                     <div className="space-y-4">
                                         <div className="grid grid-cols-2 gap-4">
-                                            <ComicSelect 
-                                                label="THỂ LOẠI" 
-                                                value={storySettings.genre} 
-                                                onChange={(val) => setStorySettings({...storySettings, genre: val})}
-                                                options={GENRES}
-                                            />
-                                            <ComicSelect 
-                                                label="NGÔN NGỮ" 
-                                                value={storySettings.language} 
-                                                onChange={(val) => setStorySettings({...storySettings, language: val})}
-                                                options={LANGUAGES}
-                                            />
+                                            <ComicSelect label="THỂ LOẠI" value={storySettings.genre} onChange={(val) => setStorySettings({...storySettings, genre: val})} options={GENRES} />
+                                            <ComicSelect label="NGÔN NGỮ" value={storySettings.language} onChange={(val) => setStorySettings({...storySettings, language: val})} options={LANGUAGES} />
                                         </div>
-
-                                        <ComicSelect 
-                                            label="PHONG CÁCH VẼ" 
-                                            value={storySettings.artStyle} 
-                                            onChange={(val) => setStorySettings({...storySettings, artStyle: val})}
-                                            options={ART_STYLES}
-                                        />
-
+                                        <ComicSelect label="PHONG CÁCH VẼ" value={storySettings.artStyle} onChange={(val) => setStorySettings({...storySettings, artStyle: val})} options={ART_STYLES} />
                                         <div className="grid grid-cols-2 gap-4">
-                                            <ComicSelect 
-                                                label="ĐỊNH DẠNG MÀU" 
-                                                value={storySettings.colorFormat} 
-                                                onChange={(val) => setStorySettings({...storySettings, colorFormat: val})}
-                                                options={COLOR_FORMATS}
-                                            />
-                                            <ComicSelect 
-                                                label="KIỂU PHÔNG CHỮ BONG BÓNG" 
-                                                value={storySettings.bubbleFont.value} 
-                                                onChange={(val) => setStorySettings({...storySettings, bubbleFont: BUBBLE_FONTS.find(f => f.value === val) || BUBBLE_FONTS[0]})}
-                                                options={BUBBLE_FONTS}
-                                                previewFont={true}
-                                            />
+                                            <ComicSelect label="ĐỊNH DẠNG MÀU" value={storySettings.colorFormat} onChange={(val) => setStorySettings({...storySettings, colorFormat: val})} options={COLOR_FORMATS} />
+                                            <ComicSelect label="KIỂU PHÔNG CHỮ BONG BÓNG" value={storySettings.bubbleFont.value} onChange={(val) => setStorySettings({...storySettings, bubbleFont: BUBBLE_FONTS.find(f => f.value === val) || BUBBLE_FONTS[0]})} options={BUBBLE_FONTS} previewFont={true} />
                                         </div>
-
                                         <div className="grid grid-cols-2 gap-4">
-                                            <ComicSelect 
-                                                label="TỶ LỆ KHUNG HÌNH" 
-                                                value={storySettings.aspectRatio} 
-                                                onChange={(val) => setStorySettings({...storySettings, aspectRatio: val})}
-                                                options={ASPECT_RATIOS}
-                                            />
-                                            <ComicSelect 
-                                                label="HIỆU ỨNG HÌNH ẢNH" 
-                                                value={storySettings.visualEffect} 
-                                                onChange={(val) => setStorySettings({...storySettings, visualEffect: val})}
-                                                options={VISUAL_EFFECTS}
-                                            />
+                                            <ComicSelect label="TỶ LỆ KHUNG HÌNH" value={storySettings.aspectRatio} onChange={(val) => setStorySettings({...storySettings, aspectRatio: val})} options={ASPECT_RATIOS} />
+                                            <ComicSelect label="HIỆU ỨNG HÌNH ẢNH" value={storySettings.visualEffect} onChange={(val) => setStorySettings({...storySettings, visualEffect: val})} options={VISUAL_EFFECTS} />
                                         </div>
-
                                         <div className="grid grid-cols-2 gap-4">
-                                            <ComicSelect 
-                                                label="LƯỢNG THOẠI" 
-                                                value={storySettings.dialogueAmount} 
-                                                onChange={(val) => setStorySettings({...storySettings, dialogueAmount: val})}
-                                                options={DIALOGUE_AMOUNTS}
-                                            />
+                                            <ComicSelect label="LƯỢNG THOẠI" value={storySettings.dialogueAmount} onChange={(val) => setStorySettings({...storySettings, dialogueAmount: val})} options={DIALOGUE_AMOUNTS} />
                                             <div>
                                                 <label className="text-xs font-bold text-skin-muted uppercase mb-1.5 block tracking-wide">SỐ TRANG</label>
                                                 <div className="flex items-center bg-[#1E1B25] border border-white/10 rounded-lg px-3 py-2.5">
-                                                    <input 
-                                                        type="number" 
-                                                        className="bg-transparent text-white text-sm w-full focus:outline-none font-bold text-center" 
-                                                        min={1} 
-                                                        max={10} 
-                                                        value={storySettings.pageCount} 
-                                                        onChange={e => setStorySettings({...storySettings, pageCount: parseInt(e.target.value)})} 
-                                                    />
+                                                    <input type="number" className="bg-transparent text-white text-sm w-full focus:outline-none font-bold text-center" min={1} max={10} value={storySettings.pageCount} onChange={e => setStorySettings({...storySettings, pageCount: parseInt(e.target.value)})} />
                                                 </div>
                                             </div>
                                         </div>
-
                                         <div className="grid grid-cols-2 gap-4">
-                                            <ComicSelect 
-                                                label="VỊ TRÍ SỐ TRANG" 
-                                                value={storySettings.pageNumbering} 
-                                                onChange={(val) => setStorySettings({...storySettings, pageNumbering: val})}
-                                                options={PAGE_NUMBERING}
-                                            />
-                                            <ComicSelect 
-                                                label="TẠO TRANG BÌA" 
-                                                value={storySettings.coverPage} 
-                                                onChange={(val) => setStorySettings({...storySettings, coverPage: val})}
-                                                options={COVER_OPTIONS}
-                                            />
+                                            <ComicSelect label="VỊ TRÍ SỐ TRANG" value={storySettings.pageNumbering} onChange={(val) => setStorySettings({...storySettings, pageNumbering: val})} options={PAGE_NUMBERING} />
+                                            <ComicSelect label="TẠO TRANG BÌA" value={storySettings.coverPage} onChange={(val) => setStorySettings({...storySettings, coverPage: val})} options={COVER_OPTIONS} />
                                         </div>
                                     </div>
                                 </SettingsBlock>
 
                                 <div className="bg-gradient-to-b from-indigo-900/30 to-purple-900/30 p-5 rounded-2xl border border-indigo-500/30 shadow-lg">
                                     <div className="flex justify-between items-center mb-3">
-                                        <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                                            <i className="ph-fill ph-lightbulb text-indigo-400"></i> Ý Tưởng Cốt Truyện
-                                        </h3>
-                                        <button onClick={() => setIsPremiseModalOpen(true)} className="text-xs bg-indigo-500/20 hover:bg-indigo-500/40 text-indigo-300 border border-indigo-500/50 px-2 py-1 rounded-full flex items-center gap-1 transition-colors">
-                                            <i className="ph-fill ph-sparkle"></i> Gợi ý mẫu
-                                        </button>
+                                        <h3 className="text-lg font-bold text-white flex items-center gap-2"><i className="ph-fill ph-lightbulb text-indigo-400"></i> Ý Tưởng Cốt Truyện</h3>
+                                        <button onClick={() => setIsPremiseModalOpen(true)} className="text-xs bg-indigo-500/20 hover:bg-indigo-500/40 text-indigo-300 border border-indigo-500/50 px-2 py-1 rounded-full flex items-center gap-1 transition-colors"><i className="ph-fill ph-sparkle"></i> Gợi ý mẫu</button>
                                     </div>
-                                    <textarea 
-                                        className="w-full bg-black/30 border border-white/10 rounded-xl p-4 text-sm text-white focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 transition resize-none placeholder-gray-500" 
-                                        rows={4}
-                                        placeholder="Nhập ý tưởng của bạn..." 
-                                        value={storySettings.premise} 
-                                        onChange={e => setStorySettings({...storySettings, premise: e.target.value})} 
-                                    />
+                                    <textarea className="w-full bg-black/30 border border-white/10 rounded-xl p-4 text-sm text-white focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 transition resize-none placeholder-gray-500" rows={4} placeholder="Nhập ý tưởng của bạn..." value={storySettings.premise} onChange={e => setStorySettings({...storySettings, premise: e.target.value})} />
                                 </div>
                             </div>
 
-                            {/* Right: Casting */}
                             <div className="lg:col-span-7">
                                 <div className="comic-card p-6 h-full flex flex-col">
                                     <div className="flex justify-between items-center mb-6">
                                         <h3 className="text-xl font-bold text-white flex items-center gap-3">
-                                            <span className="w-10 h-10 bg-pink-500/20 rounded-xl flex items-center justify-center text-pink-400">
-                                                <i className="ph-fill ph-users-three text-xl"></i>
-                                            </span>
-                                            Casting Nhân Vật
+                                            <span className="w-10 h-10 bg-pink-500/20 rounded-xl flex items-center justify-center text-pink-400"><i className="ph-fill ph-users-three text-xl"></i></span> Casting Nhân Vật
                                         </h3>
-                                        <button onClick={handleAddCharacter} className="themed-button-secondary px-4 py-2 text-sm font-bold flex items-center gap-2 hover:bg-white/10">
-                                            <i className="ph-bold ph-plus"></i> Thêm
-                                        </button>
+                                        <button onClick={handleAddCharacter} className="themed-button-secondary px-4 py-2 text-sm font-bold flex items-center gap-2 hover:bg-white/10"><i className="ph-bold ph-plus"></i> Thêm</button>
                                     </div>
 
                                     {characters.length === 0 ? (
                                         <div className="flex-grow flex flex-col items-center justify-center text-center py-20 border-2 border-dashed border-white/10 rounded-2xl bg-black/20">
-                                            <div className="w-20 h-20 bg-skin-fill-secondary rounded-full flex items-center justify-center mb-4 animate-bounce">
-                                                <i className="ph-fill ph-user-plus text-4xl text-skin-muted"></i>
-                                            </div>
+                                            <div className="w-20 h-20 bg-skin-fill-secondary rounded-full flex items-center justify-center mb-4 animate-bounce"><i className="ph-fill ph-user-plus text-4xl text-skin-muted"></i></div>
                                             <p className="text-skin-muted font-medium">Chưa có diễn viên nào.</p>
                                             <p className="text-xs text-gray-600 mt-1">Thêm nhân vật để bắt đầu câu chuyện.</p>
                                         </div>
@@ -1020,14 +867,10 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                                                         {char.image_url ? (
                                                             <img src={char.image_url} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" alt="Char" />
                                                         ) : (
-                                                            <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-600 gap-1">
-                                                                <i className="ph-fill ph-camera text-2xl"></i>
-                                                                <span className="text-[10px] font-bold">UPLOAD</span>
-                                                            </div>
+                                                            <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-600 gap-1"><i className="ph-fill ph-camera text-2xl"></i><span className="text-[10px] font-bold">UPLOAD</span></div>
                                                         )}
                                                         <input type="file" className="hidden" accept="image/*" onChange={(e) => e.target.files?.[0] && handleCharacterImageUpload(char.id, e.target.files[0])} />
                                                     </label>
-
                                                     <div className="flex-grow p-3 flex flex-col min-w-0">
                                                         <div className="flex justify-between items-start mb-2">
                                                             <input type="text" value={char.name} onChange={(e) => setCharacters(chars => chars.map(c => c.id === char.id ? { ...c, name: e.target.value } : c))} className="bg-transparent border-b border-white/10 focus:border-pink-500 text-white font-bold text-sm focus:outline-none w-32 pb-0.5 transition-colors placeholder-gray-600" placeholder="Tên..." />
@@ -1090,12 +933,8 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                                                             <div className="flex-grow"><textarea className="w-full bg-white/5 border border-white/5 rounded-lg p-2 text-sm text-white focus:border-green-500/50 focus:outline-none transition resize-none" value={dia.text} onChange={(e) => handleUpdateDialogue(panel.id, dIndex, 'text', e.target.value)} rows={2} /></div>
                                                         </div>
                                                     ))}
-                                                    {isGeneratingDetails && (!panel.dialogue || panel.dialogue.length === 0) && (
-                                                        <div className="flex items-center justify-center py-4 text-xs text-gray-500 gap-2"><i className="ph-bold ph-spinner animate-spin text-pink-500"></i> Đang viết lời thoại...</div>
-                                                    )}
-                                                    {!isGeneratingDetails && !isError && (!panel.dialogue || panel.dialogue.length === 0) && (
-                                                        <p className="text-xs text-gray-600 italic pl-2">Không có lời thoại (Cảnh tĩnh/Hành động)</p>
-                                                    )}
+                                                    {isGeneratingDetails && (!panel.dialogue || panel.dialogue.length === 0) && <div className="flex items-center justify-center py-4 text-xs text-gray-500 gap-2"><i className="ph-bold ph-spinner animate-spin text-pink-500"></i> Đang viết lời thoại...</div>}
+                                                    {!isGeneratingDetails && !isError && (!panel.dialogue || panel.dialogue.length === 0) && <p className="text-xs text-gray-600 italic pl-2">Không có lời thoại (Cảnh tĩnh/Hành động)</p>}
                                                 </div>
                                             </div>
                                         </div>
@@ -1115,17 +954,11 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                                     const loadState = imageLoadStates[panel.id] || 'loading';
                                     const isLoadingImage = loadState === 'loading' && hasUrl;
                                     const isErrorImage = loadState === 'error';
-
-                                    // Dynamic style based on Aspect Ratio
                                     const ratioStyle = { aspectRatio: storySettings.aspectRatio.replace(':', '/') };
 
                                     return (
                                         <div key={panel.id} className="bg-[#1a1a1a] p-2 shadow-2xl rounded-sm">
-                                            <div 
-                                                ref={(el) => { panelRefs.current[panel.id] = el; }}
-                                                className="relative w-full bg-white overflow-hidden border border-black flex items-center justify-center group mx-auto"
-                                                style={ratioStyle}
-                                            >
+                                            <div ref={(el) => { panelRefs.current[panel.id] = el; }} className="relative w-full bg-white overflow-hidden border border-black flex items-center justify-center group mx-auto" style={ratioStyle}>
                                                 {(!hasUrl && !panel.is_rendering && !isPending) && (
                                                     <div className="absolute inset-0 bg-skin-fill-secondary/90 flex flex-col items-center justify-center z-20">
                                                         <p className="text-gray-400 text-sm mb-4 max-w-md text-center px-4 line-clamp-2">{panel.visual_description}</p>
@@ -1145,21 +978,11 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                                                         <div className="flex flex-wrap justify-center gap-2"><button onClick={() => handleReloadImage(panel.id)} className="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-xs font-bold text-white flex items-center gap-2"><i className="ph-bold ph-arrow-clockwise"></i> Tải lại ảnh</button><button onClick={() => handleRenderPanel(panel)} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-bold text-gray-300 flex items-center gap-2"><i className="ph-bold ph-paint-brush-broad"></i> Vẽ lại</button></div>
                                                     </div>
                                                 )}
-                                                {hasUrl && (
-                                                    <img src={panel.image_url} alt="Panel" className={`w-full h-full object-cover ${isLoadingImage || isErrorImage ? 'opacity-0' : 'opacity-100'}`} onLoad={() => handleImageLoad(panel.id)} onError={() => handleImageError(panel.id)} />
-                                                )}
+                                                {hasUrl && <img src={panel.image_url} alt="Panel" className={`w-full h-full object-cover ${isLoadingImage || isErrorImage ? 'opacity-0' : 'opacity-100'}`} onLoad={() => handleImageLoad(panel.id)} onError={() => handleImageError(panel.id)} />}
                                                 {hasUrl && !isLoadingImage && !isErrorImage && Array.isArray(panel.dialogue) && panel.dialogue.map((dia, idx) => (
                                                     <DraggableBubble key={idx} text={`${dia.speaker && dia.speaker !== 'Lời dẫn' ? dia.speaker + ': ' : ''}${dia.text}`} initialX={50 + (idx * 50)} initialY={50 + (idx * 50)} onUpdate={() => {}} fontFamily={fontStyle} />
                                                 ))}
-                                                {/* Page Numbering */}
-                                                <div className={`absolute bg-white border border-black text-black text-[10px] font-bold px-1.5 py-0.5 z-10 pointer-events-none select-none ${
-                                                    storySettings.pageNumbering === 'none' ? 'hidden' : 
-                                                    storySettings.pageNumbering === 'bottom-left' ? 'bottom-2 left-2' :
-                                                    storySettings.pageNumbering === 'bottom-center' ? 'bottom-2 left-1/2 -translate-x-1/2' :
-                                                    'bottom-2 right-2'
-                                                }`}>
-                                                    {panel.panel_number}
-                                                </div>
+                                                <div className={`absolute bg-white border border-black text-black text-[10px] font-bold px-1.5 py-0.5 z-10 pointer-events-none select-none ${storySettings.pageNumbering === 'none' ? 'hidden' : storySettings.pageNumbering === 'bottom-left' ? 'bottom-2 left-2' : storySettings.pageNumbering === 'bottom-center' ? 'bottom-2 left-1/2 -translate-x-1/2' : 'bottom-2 right-2'}`}>{panel.panel_number}</div>
                                             </div>
                                         </div>
                                     );

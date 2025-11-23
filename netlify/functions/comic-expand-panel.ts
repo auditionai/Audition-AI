@@ -32,52 +32,50 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
 
-        // Inject the detailed AI analysis of characters here
+        // 1. Prepare Character Context (Consistency)
         const characterContext = characters.map((c: any) => 
-            `### Character: ${c.name}
-             Visual Traits (Strictly adhere to this): ${c.description || "No specific description provided."}`
+            `### Character Name: ${c.name}
+             Visual Description (MUST FOLLOW): ${c.description || "No specific description provided."}`
         ).join('\n\n');
 
-        // Build Previous Context String (Story Memory)
+        // 2. Prepare Story Memory (Context Awareness)
         let memoryContext = "No previous context (Start of story).";
         if (previous_panels && Array.isArray(previous_panels) && previous_panels.length > 0) {
-            // Take the last 3 panels to maintain context without overflowing tokens
+            // Use last 3 panels for immediate context to keep token usage optimal
             const recentPanels = previous_panels.slice(-3); 
             memoryContext = recentPanels.map((p: any) => 
                 `[Panel ${p.panel_number}]: 
-                 - Visual: ${p.visual_description}
-                 - Dialogue: ${p.dialogue.map((d: any) => `${d.speaker}: ${d.text}`).join(' | ')}`
+                 - Visual Context: ${p.visual_description}
+                 - Dialogue: ${p.dialogue ? p.dialogue.map((d: any) => `${d.speaker}: ${d.text}`).join(' | ') : 'None'}`
             ).join('\n');
         }
 
         const prompt = `
-            You are an expert comic artist and writer.
+            You are an expert comic artist and writer specializing in ${genre} stories.
             
             **Task:** Expand a brief plot summary into a detailed panel description and dialogue for the CURRENT PANEL.
-            **Genre:** ${genre}
-            **Art Style:** ${style}
             
             **STORY MEMORY (PREVIOUS CONTEXT):**
-            The story so far (use this to maintain continuity, logic, and character psychology):
+            Use this to maintain continuity, logic flow, and character state:
             ${memoryContext}
             
-            **Character Visual Guide (MUST FOLLOW):**
+            **CHARACTER VISUAL GUIDE (STRICT CONSISTENCY):**
             ${characterContext}
             
-            **CURRENT Panel Plot Summary:** "${plot_summary}"
+            **CURRENT PANEL PLOT SUMMARY:** "${plot_summary}"
+            **ART STYLE:** ${style}
             
             **Requirements:**
             1.  **visual_description (English):** Write a highly detailed prompt for an AI Image Generator. 
-                *   Describe the scene, background, lighting, camera angle.
-                *   **CRITICAL:** When mentioning a character name (e.g., "${characters[0]?.name}"), you MUST explicitly include their visual traits from the guide above (e.g., "wearing white bucket hat", "pink hair"). Do not assume the renderer knows who they are.
-                *   Ensure visual continuity with the previous panels if they are in the same scene.
+                *   Describe the scene, background, lighting, and camera angle.
+                *   **CRITICAL:** When mentioning a character name (e.g., "${characters[0]?.name || 'Character'}"), you MUST explicitly repeat their visual traits from the guide above (e.g., "wearing white bucket hat", "pink hair"). The image generator does NOT know who the character is by name alone.
+                *   Ensure visual continuity with previous panels (e.g. if they were sitting, they should still be sitting unless the plot moved).
             
             2.  **dialogue (Vietnamese):** Write natural, engaging dialogue for this panel.
-                *   **MANDATORY:** Do NOT return an empty array. Every panel must have some text.
                 *   If characters are speaking, use their names.
-                *   If characters are silent or thinking, use "(Suy nghĩ)" or "(Nghĩ thầm)".
-                *   If it is an action scene without speech, provide a **Narration Box** (Speaker: "Lời dẫn").
-                *   Ensure dialogue flows logically from the "STORY MEMORY" provided above.
+                *   If characters are silent or thinking, use "(Suy nghĩ)".
+                *   If it is an action scene without speech, provide a **Narration Box** (Speaker: "Lời dẫn") or return an empty array if truly silent.
+                *   Ensure dialogue flows logically from the STORY MEMORY.
             
             Return a single JSON object.
         `;
@@ -111,12 +109,12 @@ const handler: Handler = async (event: HandlerEvent) => {
             const text = response.text || '{}';
             detailJson = JSON.parse(text);
             
-            // Robustness check: Ensure dialogue is an array
+            // Safety check: Ensure dialogue is an array
             if (!Array.isArray(detailJson.dialogue)) {
-                detailJson.dialogue = [{ speaker: "Lời dẫn", text: "..." }];
+                detailJson.dialogue = [];
             }
         } catch (e) {
-            // Fallback if JSON is broken
+            // Fallback
             detailJson = { 
                 visual_description: plot_summary, 
                 dialogue: [{ speaker: "Lời dẫn", text: "..." }] 
@@ -130,8 +128,6 @@ const handler: Handler = async (event: HandlerEvent) => {
 
     } catch (error: any) {
         console.error("Panel expansion failed:", error);
-        // Return a failsafe object instead of 500 to prevent client crash loop if possible, 
-        // or frontend handles 500 safely now. 
         return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
     }
 };

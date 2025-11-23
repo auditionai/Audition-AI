@@ -1,3 +1,6 @@
+import type { Handler } from "@netlify/functions";
+import { supabaseAdmin } from './utils/supabaseClient';
+
 const calculateLevelFromXp = (xp: number): number => {
     if (typeof xp !== 'number' || xp < 0) return 1;
     return Math.floor(xp / 100) + 1;
@@ -26,7 +29,12 @@ const handler: Handler = async () => {
         const userIds = [...new Set(images.map(img => img.user_id))];
 
         // 3. Fetch creator profiles for those IDs
-            .in('id', userIds);
+        // Fix: Split query construction to avoid parser errors with chained .in()
+        let userQuery = supabaseAdmin.from('users').select('*');
+        if (userIds.length > 0) {
+            userQuery = userQuery.in('id', userIds);
+        }
+        const { data: creators, error: creatorsError } = await userQuery;
 
         if (creatorsError) {
             throw new Error(`DB Error fetching creators: ${creatorsError.message}`);
@@ -34,8 +42,8 @@ const handler: Handler = async () => {
 
         // 4. Create a map for easy lookup, handling potential duplicates
         const creatorMap = new Map<string, any>();
-        for (const creator of creators) {
-            if (!creatorMap.has(creator.id)) { // Only add the first one found for a given ID
+        for (const creator of (creators || [])) {
+            if (!creatorMap.has(creator.id)) { 
                 creatorMap.set(creator.id, creator);
             }
         }

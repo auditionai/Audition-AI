@@ -1,4 +1,3 @@
-
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
 
@@ -86,10 +85,10 @@ const handler: Handler = async (event: HandlerEvent) => {
             const userIds = sortedSpenders.map(([id]) => id);
             
             if (userIds.length > 0) {
-                const { data: userInfos } = await supabaseAdmin
-                    .from('users')
-                    .select('*')
-                    .in('id', userIds);
+                // Fix: Split query for safety
+                let userQuery = supabaseAdmin.from('users').select('*');
+                userQuery = userQuery.in('id', userIds);
+                const { data: userInfos } = await userQuery;
                 
                 const userInfoMap = new Map(userInfos?.map(u => [u.id, u]));
 

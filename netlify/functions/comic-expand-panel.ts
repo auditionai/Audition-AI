@@ -16,7 +16,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     if (authError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'Invalid token.' }) };
 
     try {
-        const { plot_summary, characters, style, genre, previous_panels } = JSON.parse(event.body || '{}');
+        const { plot_summary, characters, style, genre, previous_panels, language } = JSON.parse(event.body || '{}');
         
         if (!plot_summary) return { statusCode: 400, body: JSON.stringify({ error: 'Missing plot summary.' }) };
 
@@ -57,44 +57,48 @@ const handler: Handler = async (event: HandlerEvent) => {
                 ).join('\n');
             }
         }
+        
+        const targetLang = language || 'Tiếng Việt';
 
         const prompt = `
-            You are an expert comic script writer using Gemini 2.5 Pro logic.
+            You are a world-class comic script writer.
             
-            **CRITICAL TASK:**
-            Break down the 'Page Plot Summary' into a specific list of **PANELS** (Frames).
-            The 'visual_description' MUST be formatted strictly for the Image Generator to understand the layout.
+            **LANGUAGE REQUIREMENT:**
+            - **CRITICAL:** You MUST write the content in **${targetLang}**.
             
-            **FORMAT FOR 'visual_description':**
-            LAYOUT: [Describe overall grid, e.g. "5 Panels, Dynamic Grid"]
-            PANEL 1: [Shot type (Close-up/Wide), Characters present, Action, Emotion, Background]
-            PANEL 2: [Description...]
-            PANEL 3: [Description...]
-            ...
+            **TASK:**
+            Expand the provided plot summary into a detailed comic script for ONE PAGE (Trang).
+            Break it down into specific **PANELS** (Khung tranh).
             
-            **Genre:** ${genre} | **Style:** ${style}
-            **Layout Mode:** ${layoutContext}
+            **INPUT:**
+            - Plot Summary: "${plot_summary}"
+            - Genre: ${genre}
+            - Style: ${style}
+            - Characters: ${characterContext}
             
-            **Context:**
-            ${memoryContext}
-            
-            **Characters:**
-            ${characterContext}
-            
-            **PAGE SUMMARY TO EXPAND:** "${plot_summary}"
-            
-            **Dialogues:**
-            For each panel, if there is speech, provide the exact Vietnamese text.
-            
-            **Output JSON:**
+            **OUTPUT FORMAT (JSON):**
             {
-              "visual_description": "The full structured text with PANEL 1, PANEL 2... breakdown (as requested above)",
-              "dialogue": [ 
-                  {"speaker": "PANEL 1 - [Character Name]", "text": "[Vietnamese dialogue]"},
-                  {"speaker": "PANEL 2 - [Character Name]", "text": "[Vietnamese dialogue]"},
-                  ...
+              "visual_description": "String containing the full script layout.",
+              "dialogue": [
+                { "speaker": "Name", "text": "Dialogue content" }
               ]
             }
+            
+            **GUIDELINES FOR 'visual_description':**
+            - Use this EXACT format for the text string (use 'KHUNG' instead of 'PANEL' if Vietnamese):
+              LAYOUT: [Describe the page layout, e.g., 5 panels, diagonal split...]
+              KHUNG 1: [Visual description: Action, Camera Angle, Background, Lighting, Character Expressions...]
+              KHUNG 2: [Visual description...]
+              ...
+            - The description MUST be detailed, cinematic, and describe WHAT IS HAPPENING visually.
+            - Do NOT include dialogue lines in 'visual_description'. Keep it purely visual.
+            
+            **GUIDELINES FOR 'dialogue':**
+            - Extract all dialogue lines.
+            - Map them to the characters.
+            - **IMPORTANT:** In the 'speaker' field, prefix with the Panel Number so we know where it goes.
+              Example: "KHUNG 1 - Conan", "KHUNG 2 - Ran".
+            - If a panel has no dialogue, skip it.
         `;
 
         // USE GEMINI 2.5 FLASH FOR SCRIPTING/TEXT GENERATION

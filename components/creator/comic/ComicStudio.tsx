@@ -208,53 +208,111 @@ const StepIndicator = ({ currentStep }: { currentStep: number }) => {
     );
 };
 
-// -- Script Editor Visualizer --
-const VisualScriptPanel: React.FC<{ text: string }> = ({ text }) => {
-    // Advanced parser for the new "LAYOUT / PANEL" format
+// -- Script Editor Visualizer (IMPROVED) --
+interface VisualScriptPanelProps {
+    text: string;
+    dialogue: { speaker: string; text: string }[];
+}
+
+const VisualScriptPanel: React.FC<VisualScriptPanelProps> = ({ text, dialogue }) => {
     const lines = text.split('\n');
     const renderContent = [];
-    let currentItem = { title: 'Layout / Mô tả chung', content: '' };
+    let currentItem = { title: 'Thông tin chung', content: '', key: '' };
     
     for (const line of lines) {
         const cleanLine = line.trim();
-        // Check if line starts with "PANEL X:" or "LAYOUT:"
-        if (/^(PANEL\s+\d+|LAYOUT):/i.test(cleanLine)) {
-            // Push previous item if it has content
+        // Improved Regex to catch KHUNG, PANEL, LAYOUT, BỐ CỤC case-insensitive
+        const match = cleanLine.match(/^((?:KHUNG|PANEL|LAYOUT|BỐ CỤC|SCENE)\s*\d*):/i);
+        
+        if (match) {
             if (currentItem.content.trim()) {
                 renderContent.push(currentItem);
             }
-            
-            // Start new item
             const [title, ...rest] = cleanLine.split(':');
+            const fullTitle = title.toUpperCase().trim();
             currentItem = { 
-                title: title.toUpperCase().trim(), 
-                content: rest.join(':').trim() 
+                title: fullTitle, 
+                content: rest.join(':').trim(),
+                key: fullTitle // Used for dialogue mapping
             };
         } else {
-            // Append to current item
             if (cleanLine) {
                 currentItem.content += (currentItem.content ? '\n' : '') + cleanLine;
             }
         }
     }
-    // Push the last item
     if (currentItem.content.trim()) {
         renderContent.push(currentItem);
     }
 
+    // Dialogue Helper
+    const getDialogueForPanel = (panelKey: string) => {
+        if (!dialogue || !Array.isArray(dialogue)) return [];
+        // Simple heuristic: Check if speaker name contains the panel number (e.g. "KHUNG 1")
+        // Or just return all dialogue if it's the "Generic" layout block? No.
+        // If the speaker field says "KHUNG 1 - Conan", we match it.
+        
+        const panelNumMatch = panelKey.match(/\d+/);
+        const panelNum = panelNumMatch ? panelNumMatch[0] : null;
+        
+        if (panelNum) {
+            return dialogue.filter(d => 
+                d.speaker && (
+                    d.speaker.toUpperCase().includes(`KHUNG ${panelNum}`) || 
+                    d.speaker.toUpperCase().includes(`PANEL ${panelNum}`) ||
+                    d.speaker.toUpperCase().includes(`KHUNG${panelNum}`) || 
+                    d.speaker.toUpperCase().includes(`PANEL${panelNum}`)
+                )
+            );
+        }
+        return [];
+    };
+
     if (renderContent.length === 0) return <div className="text-gray-500 italic text-sm p-4">Chưa có nội dung chi tiết.</div>;
 
     return (
-        <div className="space-y-3 p-2">
-            {renderContent.map((item, idx) => (
-                <div key={idx} className={`rounded-lg p-3 border ${item.title.includes('LAYOUT') ? 'bg-blue-500/10 border-blue-500/30' : 'bg-[#1E1B25] border-white/10'}`}>
-                    <h5 className={`text-xs font-bold uppercase mb-1 pb-1 flex items-center gap-2 ${item.title.includes('LAYOUT') ? 'text-blue-400 border-blue-500/20' : 'text-pink-400 border-white/5 border-b'}`}>
-                        {item.title.includes('LAYOUT') ? <i className="ph-fill ph-layout"></i> : <i className="ph-fill ph-frame-corners"></i>} 
-                        {item.title}
-                    </h5>
-                    <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{item.content}</p>
-                </div>
-            ))}
+        <div className="space-y-4 p-1">
+            {renderContent.map((item, idx) => {
+                const isLayout = item.title.includes('LAYOUT') || item.title.includes('BỐ CỤC');
+                const panelDialogue = getDialogueForPanel(item.key);
+                
+                return (
+                    <div key={idx} className={`rounded-lg overflow-hidden border transition-all hover:border-opacity-50 ${isLayout ? 'bg-blue-900/10 border-blue-500/30' : 'bg-[#1E1B25] border-white/10 hover:border-pink-500/50'}`}>
+                        {/* Header */}
+                        <div className={`px-3 py-2 border-b flex items-center gap-2 ${isLayout ? 'bg-blue-500/10 border-blue-500/20' : 'bg-white/5 border-white/5'}`}>
+                            {isLayout ? <i className="ph-fill ph-layout text-blue-400"></i> : <i className="ph-fill ph-frame-corners text-pink-400"></i>} 
+                            <h5 className={`text-xs font-bold uppercase ${isLayout ? 'text-blue-300' : 'text-pink-300'}`}>{item.title}</h5>
+                        </div>
+                        
+                        <div className="p-3 space-y-3">
+                            {/* Visual Description */}
+                            <div className="flex gap-2">
+                                <div className="w-6 flex-shrink-0 pt-0.5 text-center">
+                                    <i className="ph-fill ph-eye text-gray-500 text-lg" title="Hình ảnh"></i>
+                                </div>
+                                <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap font-medium">{item.content}</p>
+                            </div>
+
+                            {/* Mapped Dialogue Display */}
+                            {panelDialogue.length > 0 && (
+                                <div className="flex gap-2 pt-2 border-t border-white/5 mt-2">
+                                    <div className="w-6 flex-shrink-0 pt-0.5 text-center">
+                                        <i className="ph-fill ph-chat-circle-text text-yellow-500 text-lg" title="Lời thoại"></i>
+                                    </div>
+                                    <div className="flex-grow space-y-2">
+                                        {panelDialogue.map((d, i) => (
+                                            <div key={i} className="text-xs bg-black/20 p-2 rounded border-l-2 border-yellow-500">
+                                                <span className="font-bold text-yellow-400 uppercase">{d.speaker.replace(/KHUNG \d+ - |PANEL \d+ - /i, '')}: </span>
+                                                <span className="text-white">"{d.text}"</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                );
+            })}
         </div>
     );
 }
@@ -393,7 +451,7 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
         if (missingDesc) return showToast(`Vui lòng upload ảnh cho ${missingDesc.name} để AI phân tích ngoại hình.`, "error");
 
         setIsLoading(true);
-        setGenerationStatus("Đang lên cấu trúc cốt truyện (Gemini 2.5 Pro - Flash)...");
+        setGenerationStatus("Đang lên cấu trúc cốt truyện (Gemini 2.5)...");
 
         try {
             // PHASE 1: GENERATE OUTLINE (PAGES)
@@ -724,6 +782,7 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                 return { ...p, image_url: url.toString() };
             } catch (e) { return p; }
         }));
+        // Fix: Use the argument 'panelId' instead of the undefined variable 'panel.id'
         setImageLoadStates(prev => ({ ...prev, [panelId]: 'loading' }));
     };
 
@@ -862,12 +921,12 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
 
                     {/* STEP 2: SCRIPT EDITOR - IMPROVED VISUALIZATION */}
                     {activeStep === 2 && (
-                        <div className="max-w-5xl mx-auto space-y-6">
+                        <div className="max-w-6xl mx-auto space-y-6">
                             <div className="bg-blue-500/10 border border-blue-500/30 p-4 rounded-xl flex items-center gap-4">
                                 <div className="w-10 h-10 bg-blue-500/20 rounded-full flex items-center justify-center text-blue-400"><i className="ph-fill ph-magic-wand text-xl"></i></div>
                                 <div>
                                     <h4 className="font-bold text-blue-100">{generationStatus ? generationStatus : 'Kịch bản chi tiết đã sẵn sàng'}</h4>
-                                    <p className="text-xs text-blue-200/60">AI đã chia trang thành các Panel cụ thể. Bạn có thể xem bố cục chi tiết bên dưới.</p>
+                                    <p className="text-xs text-blue-200/60">AI đã chia trang thành các Panel cụ thể. Hãy kiểm tra và chỉnh sửa trước khi vẽ.</p>
                                 </div>
                             </div>
                             <div className="space-y-6">
@@ -882,59 +941,74 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                                                 <span className="text-xs text-gray-500 font-mono">Script ID: {panel.id.slice(0,8)}</span>
                                             </div>
 
-                                            <div className="flex flex-col lg:flex-row">
-                                                {/* --- LEFT: RAW EDITOR --- */}
-                                                <div className="lg:w-1/2 p-4 bg-black/20 border-r border-white/10 relative">
-                                                    <div className="flex justify-between items-center mb-2">
-                                                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Mô tả kỹ thuật (Prompt AI)</span>
-                                                        <span className="text-[10px] text-gray-600">Chỉnh sửa nếu cần</span>
+                                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-0">
+                                                {/* --- LEFT: VISUALIZATION & PREVIEW (MAIN) --- */}
+                                                <div className="p-4 bg-[#181820] border-r border-white/5">
+                                                    <div className="flex justify-between items-center mb-3">
+                                                        <span className="text-xs font-bold text-pink-400 uppercase tracking-widest flex items-center gap-2"><i className="ph-fill ph-eye"></i> Kịch bản phân cảnh (Preview)</span>
                                                     </div>
-                                                    <textarea 
-                                                        className="w-full h-[300px] bg-[#0F0F13] border border-white/10 rounded-lg p-3 text-sm text-gray-300 leading-relaxed resize-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition font-mono custom-scrollbar" 
-                                                        value={panel.visual_description} 
-                                                        onChange={(e) => handleUpdatePanel(panel.id, 'visual_description', e.target.value)} 
-                                                        disabled={isGeneratingDetails} 
-                                                    />
-                                                    
-                                                    {isError && (
-                                                        <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center z-10 p-4 backdrop-blur-sm">
-                                                            <i className="ph-fill ph-warning-circle text-red-500 text-3xl mb-2"></i>
-                                                            <p className="text-white text-sm font-bold mb-3 text-center">{panel.visual_description.substring(0, 60)}...</p>
-                                                            <button 
-                                                                onClick={() => handleRetryExpandPanel(panel.id)}
-                                                                className="px-4 py-2 bg-white text-black text-xs font-bold rounded-full hover:bg-gray-200 flex items-center gap-2 transition-transform hover:scale-105 shadow-lg"
-                                                            >
-                                                                <i className="ph-bold ph-arrow-clockwise"></i> Thử lại
-                                                            </button>
-                                                        </div>
-                                                    )}
+                                                    <div className="max-h-[500px] overflow-y-auto custom-scrollbar">
+                                                        <VisualScriptPanel text={panel.visual_description} dialogue={panel.dialogue} />
+                                                    </div>
                                                 </div>
 
-                                                {/* --- RIGHT: VISUALIZATION & DIALOGUE --- */}
-                                                <div className="lg:w-1/2 p-0 flex flex-col">
-                                                    {/* Visualizer */}
-                                                    <div className="flex-1 bg-[#181820] p-4 border-b border-white/5 max-h-[300px] overflow-y-auto custom-scrollbar">
+                                                {/* --- RIGHT: EDITORS --- */}
+                                                <div className="flex flex-col h-full">
+                                                    {/* Text Editor (Collapsible/Tabs could be better, but sticking to clear layout) */}
+                                                    <div className="flex-1 p-4 bg-black/20 border-b border-white/5 relative">
                                                         <div className="flex justify-between items-center mb-2">
-                                                            <span className="text-[10px] font-bold text-pink-400 uppercase tracking-widest">Phân cảnh chi tiết (Preview)</span>
+                                                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Chỉnh sửa Prompt AI (Layout & Visuals)</span>
                                                         </div>
-                                                        <VisualScriptPanel text={panel.visual_description} />
+                                                        <textarea 
+                                                            className="w-full h-full min-h-[200px] bg-[#0F0F13] border border-white/10 rounded-lg p-3 text-sm text-gray-300 leading-relaxed resize-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition font-mono custom-scrollbar" 
+                                                            value={panel.visual_description} 
+                                                            onChange={(e) => handleUpdatePanel(panel.id, 'visual_description', e.target.value)} 
+                                                            disabled={isGeneratingDetails} 
+                                                        />
+                                                        
+                                                        {isError && (
+                                                            <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center z-10 p-4 backdrop-blur-sm rounded-lg">
+                                                                <i className="ph-fill ph-warning-circle text-red-500 text-3xl mb-2"></i>
+                                                                <p className="text-white text-sm font-bold mb-3 text-center">{panel.visual_description.substring(0, 60)}...</p>
+                                                                <button 
+                                                                    onClick={() => handleRetryExpandPanel(panel.id)}
+                                                                    className="px-4 py-2 bg-white text-black text-xs font-bold rounded-full hover:bg-gray-200 flex items-center gap-2 transition-transform hover:scale-105 shadow-lg"
+                                                                >
+                                                                    <i className="ph-bold ph-arrow-clockwise"></i> Thử lại
+                                                                </button>
+                                                            </div>
+                                                        )}
                                                     </div>
 
                                                     {/* Dialogue Editor */}
-                                                    <div className="bg-skin-fill-secondary p-4">
-                                                        <div className="mb-2 text-[10px] font-bold text-gray-500 uppercase tracking-widest">Hội thoại (AI chèn chữ)</div>
-                                                        <div className="space-y-3">
+                                                    <div className="bg-skin-fill-secondary p-4 max-h-[300px] overflow-y-auto custom-scrollbar">
+                                                        <div className="mb-2 text-[10px] font-bold text-gray-500 uppercase tracking-widest flex justify-between items-center">
+                                                            <span>Chỉnh sửa Lời thoại</span>
+                                                            <span className="text-[9px] bg-white/10 px-1.5 py-0.5 rounded">Dùng để AI tạo bóng thoại</span>
+                                                        </div>
+                                                        <div className="space-y-2">
                                                             {Array.isArray(panel.dialogue) && panel.dialogue.map((dia, dIndex) => (
-                                                                <div key={dIndex} className="flex gap-2 items-start group bg-black/20 p-2 rounded-lg border border-white/5">
-                                                                    <div className="w-24 pt-1">
-                                                                        <input className="w-full bg-transparent border-b border-white/10 text-xs font-bold text-yellow-400 focus:border-yellow-500 focus:outline-none text-right px-1 py-1" value={dia.speaker} onChange={(e) => handleUpdateDialogue(panel.id, dIndex, 'speaker', e.target.value)} placeholder="Tên" />
+                                                                <div key={dIndex} className="flex gap-2 items-start group bg-black/20 p-2 rounded-lg border border-white/5 hover:border-yellow-500/30 transition-colors">
+                                                                    <div className="w-28 pt-1">
+                                                                        <input 
+                                                                            className="w-full bg-transparent border-b border-white/10 text-xs font-bold text-yellow-400 focus:border-yellow-500 focus:outline-none px-1 py-1 placeholder-gray-600" 
+                                                                            value={dia.speaker} 
+                                                                            onChange={(e) => handleUpdateDialogue(panel.id, dIndex, 'speaker', e.target.value)} 
+                                                                            placeholder="VD: KHUNG 1 - Conan" 
+                                                                        />
                                                                     </div>
                                                                     <div className="flex-grow">
-                                                                        <textarea className="w-full bg-transparent text-sm text-white focus:outline-none resize-none" value={dia.text} onChange={(e) => handleUpdateDialogue(panel.id, dIndex, 'text', e.target.value)} rows={2} />
+                                                                        <textarea 
+                                                                            className="w-full bg-transparent text-sm text-white focus:outline-none resize-none placeholder-gray-600" 
+                                                                            value={dia.text} 
+                                                                            onChange={(e) => handleUpdateDialogue(panel.id, dIndex, 'text', e.target.value)} 
+                                                                            rows={1} 
+                                                                            placeholder="Nội dung thoại..."
+                                                                        />
                                                                     </div>
                                                                 </div>
                                                             ))}
-                                                            {!isGeneratingDetails && !isError && (!panel.dialogue || panel.dialogue.length === 0) && <p className="text-xs text-gray-600 italic pl-2">Không có lời thoại</p>}
+                                                            {!isGeneratingDetails && !isError && (!panel.dialogue || panel.dialogue.length === 0) && <p className="text-xs text-gray-600 italic pl-2">Không có lời thoại nào được phát hiện.</p>}
                                                         </div>
                                                     </div>
                                                 </div>

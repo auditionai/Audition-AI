@@ -15,26 +15,31 @@ interface ChatMessageProps {
 }
 
 const ChatMessageItem: React.FC<ChatMessageProps> = ({ message, isOwn, onImageClick, onDeleteMessage }) => {
-    const { user, navigate } = useAuth();
-    const { muteUser } = useChat();
+    const { user: currentUser, navigate } = useAuth();
+    const { muteUser, userProfiles } = useChat(); // Get live profiles
     const { content, type, metadata, is_deleted, created_at } = message;
     const [showMenu, setShowMenu] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
 
-    // Logic: If the message is own, use the LIVE user data from AuthContext to ensure 
-    // avatar frames, titles, and name effects are always synchronized with current settings.
-    // If it's another user, fall back to the metadata snapshot stored at message creation time.
-    const effectiveUser = isOwn && user ? user : null;
+    // --- SYNC FIX: UNIVERSAL LIVE DATA ---
+    // 1. If isOwn, use currentUser (live).
+    // 2. If !isOwn, check userProfiles[message.user_id] (live fetched in ChatContext).
+    // 3. Fallback to metadata (snapshot) only if live profile is missing.
+    
+    const liveProfile = isOwn ? currentUser : userProfiles[message.user_id];
 
-    const senderName = effectiveUser?.display_name || metadata?.sender_name || 'Unknown';
-    const senderAvatar = effectiveUser?.photo_url || metadata?.sender_avatar || 'https://i.pravatar.cc/150';
-    const senderLevel = effectiveUser?.level || metadata?.sender_level || 1;
-    const senderFrame = effectiveUser?.equipped_frame_id || metadata?.sender_frame_id;
-    const senderTitle = effectiveUser?.equipped_title_id || metadata?.sender_title_id;
-    const senderNameEffect = effectiveUser?.equipped_name_effect_id || metadata?.sender_name_effect_id;
+    const senderName = liveProfile?.display_name || metadata?.sender_name || 'Unknown';
+    const senderAvatar = liveProfile?.photo_url || metadata?.sender_avatar || 'https://i.pravatar.cc/150';
+    const senderLevel = liveProfile?.level || metadata?.sender_level || 1;
+    
+    // Cosmetics: Prioritize live profile. If live profile exists but field is null/undefined, it means UNEQUIPPED.
+    // Only fallback to metadata if liveProfile itself is missing (e.g. very old user not found in current fetch).
+    const senderFrame = liveProfile ? liveProfile.equipped_frame_id : metadata?.sender_frame_id;
+    const senderTitle = liveProfile ? liveProfile.equipped_title_id : metadata?.sender_title_id;
+    const senderNameEffect = liveProfile ? liveProfile.equipped_name_effect_id : metadata?.sender_name_effect_id;
     
     const deletedBy = metadata?.deleted_by;
-    const isAdmin = user?.is_admin;
+    const isAdmin = currentUser?.is_admin;
 
     // Handle click outside to close menu
     useEffect(() => {

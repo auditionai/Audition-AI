@@ -28,11 +28,12 @@ const MessagesPage: React.FC = () => {
         }
     }, []);
 
+    // Fetch All Conversations
     useEffect(() => {
         if (!supabase || !user) return;
+        
         const fetchConversations = async () => {
             setIsLoadingConvs(true);
-            
             const { data, error } = await supabase
                 .from('conversations')
                 .select(`
@@ -47,17 +48,10 @@ const MessagesPage: React.FC = () => {
             if (error) {
                 console.error("Error fetching conversations:", error);
             } else {
-                // --- ROBUST DATA PROCESSING ---
                 const formatted = data.map((c: any) => {
-                    // 1. Try to find the OTHER participant (not me)
                     let otherParticipant = c.participants.find((p: any) => p.user_id !== user.id);
                     
-                    // 2. FALLBACK: If specific partner not found (e.g. RLS hidden admin, or self-chat),
-                    // look for ANY participant that might represent the system or handle edge cases.
-                    
                     if (!otherParticipant) {
-                        // Only one participant in list (Me)? Then the other one is hidden/deleted.
-                        // Assume it is System/Support.
                         if (c.participants.length >= 1) {
                              otherParticipant = {
                                 user_id: SYSTEM_BOT_ID,
@@ -70,7 +64,6 @@ const MessagesPage: React.FC = () => {
                         }
                     } 
                     
-                    // 3. Handle case where user row is null (Foreign Key broke or RLS hid user details)
                     if (otherParticipant && !otherParticipant.user) {
                         otherParticipant.user = {
                             id: otherParticipant.user_id,
@@ -81,15 +74,15 @@ const MessagesPage: React.FC = () => {
 
                     return {
                         ...c,
-                        // Ensure participants structure is valid for UI
                         participants: otherParticipant ? [{ user: otherParticipant.user }] : []
                     };
-                }).filter((c: any) => c.participants.length > 0); // Only show valid convs
+                }).filter((c: any) => c.participants.length > 0);
 
                 setConversations(formatted);
             }
             setIsLoadingConvs(false);
         };
+        
         fetchConversations();
 
         const channel = supabase.channel('public:conversations')
@@ -101,6 +94,43 @@ const MessagesPage: React.FC = () => {
         return () => { supabase.removeChannel(channel); };
     }, [supabase, user]);
 
+    // Special Check for Newly Created Active Conversation
+    // If activeConversationId is set (via URL) but not in the list (freshly created), fetch it manually.
+    useEffect(() => {
+        if (!activeConversationId || !supabase || !user) return;
+        
+        const exists = conversations.some(c => c.id === activeConversationId);
+        if (!exists && !isLoadingConvs) {
+            const fetchSingle = async () => {
+                const { data, error } = await supabase
+                    .from('conversations')
+                    .select(`
+                        id, updated_at,
+                        participants:conversation_participants(
+                            user_id,
+                            user:users(id, display_name, photo_url)
+                        )
+                    `)
+                    .eq('id', activeConversationId)
+                    .single();
+                
+                if (data && !error) {
+                    let otherParticipant = data.participants.find((p: any) => p.user_id !== user.id);
+                    if (otherParticipant) {
+                        const newConv = {
+                            ...data,
+                            participants: [{ user: otherParticipant.user || { id: otherParticipant.user_id, display_name: 'New User', photo_url: '' } }]
+                        };
+                        setConversations(prev => [newConv as Conversation, ...prev]);
+                    }
+                }
+            };
+            fetchSingle();
+        }
+    }, [activeConversationId, conversations, isLoadingConvs, supabase, user]);
+
+
+    // Fetch Messages for Active ID
     useEffect(() => {
         if (!activeConversationId || !supabase) return;
         

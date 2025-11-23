@@ -89,19 +89,57 @@ const UserProfilePage: React.FC = () => {
     }, [userId, session]); 
 
     const handleMessageClick = async () => {
-        if (!supabase || !user || !viewUser) return;
+        if (!supabase || !user || !viewUser) {
+            showToast("Vui lòng đăng nhập để nhắn tin.", "error");
+            return;
+        }
         if (isCreatingChat) return;
         setIsCreatingChat(true);
 
         try {
-            const { data: conversationId, error } = await supabase
-                .rpc('get_or_create_conversation', { other_user_id: viewUser.id });
+            console.log(`[Chat Init] Attempting to create/get conversation with ${viewUser.id}`);
+            
+            // 1. Attempt with RPC (Preferred Method)
+            const { data: conversationId, error: rpcError } = await supabase
+                .rpc('get_or_create_conversation', { target_user_id: viewUser.id });
 
-            if (error) throw error;
-            navigate(`messages?conversationId=${conversationId}`);
+            if (conversationId) {
+                console.log(`[Chat Init] Success via RPC: ${conversationId}`);
+                navigate(`messages?conversationId=${conversationId}`);
+                return;
+            }
+
+            if (rpcError) {
+                console.warn("[Chat Init] RPC Failed, trying manual fallback...", rpcError);
+            }
+
+            // 2. Fallback: Manual Creation (If RPC missing or failed)
+            // Step A: Create Conversation
+            const { data: newConv, error: createError } = await supabase
+                .from('conversations')
+                .insert({})
+                .select()
+                .single();
+
+            if (createError) throw createError;
+            const newId = newConv.id;
+
+            // Step B: Insert Participants
+            const { error: partError } = await supabase
+                .from('conversation_participants')
+                .insert([
+                    { conversation_id: newId, user_id: user.id },
+                    { conversation_id: newId, user_id: viewUser.id }
+                ]);
+
+            if (partError) throw partError;
+
+            console.log(`[Chat Init] Success via Manual: ${newId}`);
+            navigate(`messages?conversationId=${newId}`);
+
         } catch (e: any) {
-            showToast("Không thể tạo cuộc trò chuyện.", "error");
-            console.error(e);
+            showToast(`Lỗi tạo cuộc trò chuyện: ${e.message}`, "error");
+            console.error("Chat Creation Error:", e);
         } finally {
             setIsCreatingChat(false);
         }

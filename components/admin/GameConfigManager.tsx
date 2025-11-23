@@ -148,6 +148,9 @@ const GameConfigManager: React.FC = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     
+    // Sorting State
+    const [sortType, setSortType] = useState<'price_asc' | 'price_desc' | 'level_asc' | 'level_desc' | 'rarity'>('price_asc');
+
     // State for editing
     const [editingRank, setEditingRank] = useState<Partial<Rank> | null>(null);
     const [editingCosmetic, setEditingCosmetic] = useState<Partial<CosmeticItem> | null>(null);
@@ -167,7 +170,7 @@ const GameConfigManager: React.FC = () => {
 
     // --- RESET SHOP ITEMS ---
     const handleResetShop = async () => {
-        if (!confirm("CẢNH BÁO: Thao tác này sẽ XÓA TOÀN BỘ vật phẩm hiện có trong Database và nạp lại danh sách chuẩn (bao gồm 20 hiệu ứng tên mới). Bạn có chắc chắn muốn làm mới không?")) return;
+        if (!confirm("CẢNH BÁO: Thao tác này sẽ XÓA TOÀN BỘ vật phẩm hiện có trong Database và nạp lại danh sách chuẩn (không có yêu cầu Level, ngoại trừ Legendary/Mythic). Bạn có chắc chắn muốn làm mới không?")) return;
         setIsSaving(true);
         try {
             const res = await fetch('/.netlify/functions/admin-game-config?action=reset', {
@@ -351,12 +354,28 @@ const GameConfigManager: React.FC = () => {
     };
 
     const getCosmeticList = () => {
+        let list: CosmeticItem[] = [];
         switch(activeSubTab) {
-            case 'frames': return frames;
-            case 'titles': return titles;
-            case 'name_effects': return nameEffects;
+            case 'frames': list = [...frames]; break;
+            case 'titles': list = [...titles]; break;
+            case 'name_effects': list = [...nameEffects]; break;
             default: return [];
         }
+
+        // SORTING LOGIC
+        return list.sort((a, b) => {
+            switch (sortType) {
+                case 'price_asc': return (a.price || 0) - (b.price || 0);
+                case 'price_desc': return (b.price || 0) - (a.price || 0);
+                case 'level_asc': return (a.unlockCondition?.level || 0) - (b.unlockCondition?.level || 0);
+                case 'level_desc': return (b.unlockCondition?.level || 0) - (a.unlockCondition?.level || 0);
+                case 'rarity': {
+                    const rarityOrder = { common: 1, rare: 2, epic: 3, legendary: 4, mythic: 5 };
+                    return (rarityOrder[b.rarity] || 0) - (rarityOrder[a.rarity] || 0);
+                }
+                default: return 0;
+            }
+        });
     };
 
     return (
@@ -442,7 +461,7 @@ const GameConfigManager: React.FC = () => {
             {/* FRAMES, TITLES & NAME EFFECTS LIST VIEW */}
             {(activeSubTab === 'frames' || activeSubTab === 'titles' || activeSubTab === 'name_effects') && (
                 <div>
-                    <div className="flex justify-between mb-4 gap-3">
+                    <div className="flex flex-col md:flex-row justify-between mb-4 gap-3">
                         <button 
                             onClick={() => handleEditCosmetic(null, activeSubTab === 'frames' ? 'frame' : activeSubTab === 'titles' ? 'title' : 'name_effect')} 
                             className="themed-button-primary px-4 py-2 text-sm flex-grow md:flex-grow-0"
@@ -450,11 +469,26 @@ const GameConfigManager: React.FC = () => {
                             + Thêm Mới
                         </button>
                         
-                        {/* RESET BUTTON */}
-                        <button onClick={handleResetShop} disabled={isSaving} className="bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg flex items-center gap-2 whitespace-nowrap">
-                            <i className="ph-fill ph-arrow-counter-clockwise"></i>
-                            {isSaving ? 'Đang xử lý...' : 'Làm Mới Shop (Reset)'}
-                        </button>
+                        <div className="flex gap-2">
+                            {/* Sorting Dropdown */}
+                            <select 
+                                value={sortType} 
+                                onChange={(e) => setSortType(e.target.value as any)}
+                                className="bg-black/30 text-white border border-white/10 rounded px-3 py-2 text-sm focus:outline-none"
+                            >
+                                <option value="price_asc">Giá: Thấp &rarr; Cao</option>
+                                <option value="price_desc">Giá: Cao &rarr; Thấp</option>
+                                <option value="level_asc">Level: Thấp &rarr; Cao</option>
+                                <option value="level_desc">Level: Cao &rarr; Thấp</option>
+                                <option value="rarity">Độ hiếm</option>
+                            </select>
+
+                            {/* RESET BUTTON */}
+                            <button onClick={handleResetShop} disabled={isSaving} className="bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg flex items-center gap-2 whitespace-nowrap">
+                                <i className="ph-fill ph-arrow-counter-clockwise"></i>
+                                {isSaving ? '...' : 'Làm Mới Shop'}
+                            </button>
+                        </div>
                     </div>
 
                     {/* Info Alert */}
@@ -482,9 +516,11 @@ const GameConfigManager: React.FC = () => {
                                 <div className="flex-grow min-w-0">
                                     <p className="font-bold text-sm text-white flex items-center gap-2 truncate">
                                         {c.nameKey ? t(c.nameKey) : c.name}
-                                        {c.price && c.price > 0 && <span className="bg-yellow-500/20 text-yellow-300 text-[10px] px-1.5 py-0.5 rounded font-mono">{c.price}💎</span>}
                                     </p>
                                     <div className="flex items-center gap-2 mt-1">
+                                        <span className="bg-yellow-500/20 text-yellow-300 text-xs px-2 py-0.5 rounded font-bold font-mono border border-yellow-500/30">
+                                            {c.price || 0} 💎
+                                        </span>
                                         <span className={`text-[10px] font-bold uppercase px-1.5 rounded border ${c.rarity === 'mythic' ? 'border-red-500 text-red-500' : c.rarity === 'legendary' ? 'border-yellow-500 text-yellow-500' : 'border-gray-500 text-gray-500'}`}>
                                             {c.rarity}
                                         </span>

@@ -48,6 +48,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         };
 
     } catch (error) {
+        // Removed ': any' type annotation to fix build error
         console.error('Download redirect error:', error);
         return { statusCode: 500, body: JSON.stringify({ error: 'Failed to generate download link.' }) };
     }

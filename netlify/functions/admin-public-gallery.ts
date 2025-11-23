@@ -1,4 +1,3 @@
-
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
 
@@ -15,8 +14,8 @@ const handler: Handler = async (event: HandlerEvent) => {
     const token = authHeader.split(' ')[1];
     if (!token) return { statusCode: 401, body: JSON.stringify({ error: 'Bearer token is missing.' }) };
 
-    // FIX: Use Supabase v2 `auth.getUser`
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+    // FIX: Use Supabase v2 `auth.getUser` by casting to any
+    const { data: { user }, error: authError } = await (supabaseAdmin.auth as any).getUser(token);
     if (authError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized: Invalid token.' }) };
 
     const { data: userData } = await supabaseAdmin.from('users').select('is_admin').eq('id', user.id).single();
@@ -29,6 +28,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             .from('generated_images')
             .select('id, user_id, prompt, image_url, created_at, is_public')
             .eq('is_public', true)
+            .not('image_url', 'is', null)
             .order('created_at', { ascending: false });
 
         if (imagesError) throw imagesError;
@@ -39,11 +39,9 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         // Step 2: Fetch Creators
         const userIds = [...new Set(images.map(img => img.user_id))];
-        // FIX: Use wildcard select
-        const { data: creators, error: creatorsError } = await supabaseAdmin
-            .from('users')
-            .select('*')
-            .in('id', userIds);
+        
+        // Flattened query to prevent build parser errors
+        const { data: creators, error: creatorsError } = await supabaseAdmin.from('users').select('*').in('id', userIds);
 
         if (creatorsError) throw creatorsError;
 

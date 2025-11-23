@@ -52,11 +52,12 @@ export const addSmartWatermark = async (imageBuffer: Buffer, _unusedUrl: string)
         if (logoBuffer) {
             const logo = await (Jimp as any).read(logoBuffer);
 
-            // 3. Resize logo bằng 35% chiều rộng ảnh chính
-            const targetLogoWidth = width * 0.35;
+            // 3. Resize logo bằng 15% chiều rộng ảnh chính (Đã chỉnh sửa theo yêu cầu)
+            const targetLogoWidth = width * 0.15;
             logo.resize(targetLogoWidth, (Jimp as any).AUTO);
 
-            const margin = width * 0.05;
+            // Giảm margin xuống 3% để logo nhỏ nằm gọn gàng hơn ở góc
+            const margin = width * 0.03; 
             const x = width - logo.getWidth() - margin;
             const y = height - logo.getHeight() - margin;
 

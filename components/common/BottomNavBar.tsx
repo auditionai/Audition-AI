@@ -9,7 +9,7 @@ interface BottomNavBarProps {
   onCheckInClick?: () => void;
 }
 
-const NavButton = ({ icon, label, isActive, onClick, hasNotification = false, notificationCount = 0 }: { icon: string, label: string, isActive: boolean, onClick: () => void, hasNotification?: boolean, notificationCount?: number }) => (
+const NavButton = ({ icon, label, isActive, onClick, hasNotification = false }: { icon: string, label: string, isActive: boolean, onClick: () => void, hasNotification?: boolean }) => (
     <button onClick={onClick} className={`relative flex flex-col items-center justify-center flex-1 h-full transition-colors duration-200 ${isActive ? 'text-skin-accent' : 'text-gray-400 hover:text-white'}`}>
         {hasNotification && (
             <span className="absolute top-2 right-4 flex h-2.5 w-2.5">

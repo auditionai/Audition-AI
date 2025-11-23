@@ -10,7 +10,7 @@ import { Conversation, DirectMessage } from '../types';
 const SYSTEM_BOT_ID = '00000000-0000-0000-0000-000000000000';
 
 const MessagesPage: React.FC = () => {
-    const { user, supabase, navigate, showToast } = useAuth();
+    const { user, navigate, showToast, session, supabase } = useAuth();
     const { theme } = useTheme();
     
     const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -18,10 +18,10 @@ const MessagesPage: React.FC = () => {
     const [messages, setMessages] = useState<DirectMessage[]>([]);
     const [input, setInput] = useState('');
     const [isLoadingConvs, setIsLoadingConvs] = useState(true);
-    const [isLoadingActiveConv, setIsLoadingActiveConv] = useState(false);
+    const [isSending, setIsSending] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
-    // 1. Lấy ID từ URL ngay khi mount
+    // 1. Lấy ID từ URL
     useEffect(() => {
         const urlParams = new URLSearchParams(window.location.search);
         const convId = urlParams.get('conversationId');
@@ -30,165 +30,57 @@ const MessagesPage: React.FC = () => {
         }
     }, []);
 
-    // 2. Hàm load danh sách hội thoại
+    // 2. Load danh sách hội thoại bằng Server API (Bypass RLS)
     const fetchConversations = async () => {
-        if (!supabase || !user) return;
+        if (!session) return;
         setIsLoadingConvs(true);
-        const { data, error } = await supabase
-            .from('conversations')
-            .select(`
-                id, created_at, updated_at,
-                participants:conversation_participants(
-                    user_id,
-                    user:users(id, display_name, photo_url)
-                )
-            `)
-            .order('updated_at', { ascending: false });
-        
-        if (error) {
-            console.error("Error fetching conversations:", error);
-        } else {
-            const formatted = data.map((c: any) => {
-                // Robust check for participants array
-                const participants = c.participants || [];
-                let otherParticipant = participants.find((p: any) => p.user_id !== user.id);
-                
-                // Xử lý fallback nếu không tìm thấy đối phương (Có thể do RLS hoặc system bot)
-                if (!otherParticipant && participants.length > 0) {
-                    // Nếu chỉ thấy mình (do RLS ẩn người kia), thử đoán đó là System Bot nếu context phù hợp, 
-                    // hoặc hiển thị "Người dùng ẩn danh"
-                    otherParticipant = {
-                        user_id: 'unknown',
-                        user: {
-                            id: 'unknown',
-                            display_name: 'Người dùng ẩn',
-                            photo_url: 'https://api.dicebear.com/7.x/bottts/svg?seed=Unknown'
-                        }
-                    };
-                }
-                
-                // If explicit system bot ID is found but user data missing (join failed)
-                if (otherParticipant && otherParticipant.user_id === SYSTEM_BOT_ID && !otherParticipant.user) {
-                     otherParticipant.user = {
-                        id: SYSTEM_BOT_ID,
-                        display_name: 'HỆ THỐNG',
-                        photo_url: 'https://api.dicebear.com/7.x/bottts/svg?seed=System'
-                    };
-                }
-
-                return {
-                    ...c,
-                    participants: otherParticipant ? [{ user: otherParticipant.user || { display_name: 'Unknown' } }] : []
-                };
-            }).filter((c: any) => c.participants.length > 0);
-
-            setConversations(formatted);
+        try {
+            const res = await fetch('/.netlify/functions/get-conversations', {
+                headers: { Authorization: `Bearer ${session.access_token}` }
+            });
+            if (!res.ok) throw new Error('Failed to load conversations');
+            const data = await res.json();
+            setConversations(data);
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setIsLoadingConvs(false);
         }
-        setIsLoadingConvs(false);
     };
 
-    // 3. Gọi hàm fetch
     useEffect(() => {
         fetchConversations();
-        if (supabase) {
-            const channel = supabase.channel('public:conversations')
-                .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, () => fetchConversations())
-                .subscribe();
-            return () => { supabase.removeChannel(channel); };
-        }
-    }, [supabase, user]);
+        // Realtime listener cho conversation mới (Optional, dùng polling nếu realtime lỗi)
+        const interval = setInterval(fetchConversations, 10000);
+        return () => clearInterval(interval);
+    }, [session]);
 
-    // 4. Logic "Ép buộc hiển thị" khi có ID từ URL nhưng chưa có trong list
+    // 3. Load tin nhắn khi chọn hội thoại (Bằng Server API)
     useEffect(() => {
-        if (!activeConversationId || !supabase || !user) return;
-        
-        const exists = conversations.some(c => c.id === activeConversationId);
-        
-        if (!exists) {
-            setIsLoadingActiveConv(true);
-            
-            const fetchSingle = async () => {
-                try {
-                    const { data, error } = await supabase
-                        .from('conversations')
-                        .select(`
-                            id, created_at, updated_at,
-                            participants:conversation_participants(
-                                user_id,
-                                user:users(id, display_name, photo_url)
-                            )
-                        `)
-                        .eq('id', activeConversationId)
-                        .single();
-                    
-                    if (data && !error) {
-                        const participants = data.participants || [];
-                        const foundParticipant = participants.find((p: any) => p.user_id !== user.id);
-                        
-                        // Fallback for system bot or unknown user
-                        const otherParticipant = foundParticipant || {
-                            user_id: SYSTEM_BOT_ID,
-                            user: { id: SYSTEM_BOT_ID, display_name: 'HỆ THỐNG', photo_url: 'https://api.dicebear.com/7.x/bottts/svg?seed=System' }
-                        };
-
-                        const participantUser = otherParticipant.user || { id: otherParticipant.user_id, display_name: 'Người dùng', photo_url: '' };
-
-                        const newConv: any = {
-                            id: data.id,
-                            created_at: data.created_at,
-                            updated_at: data.updated_at,
-                            participants: [{ user: participantUser }]
-                        };
-                        
-                        setConversations(prev => {
-                            if (prev.some(c => c.id === newConv.id)) return prev;
-                            return [newConv as unknown as Conversation, ...prev];
-                        });
-                    } else {
-                        console.warn("Could not fetch active conversation details:", error);
-                    }
-                } catch (e) {
-                    console.error("Lỗi tải hội thoại riêng lẻ:", e);
-                } finally {
-                    setIsLoadingActiveConv(false);
-                }
-            };
-            fetchSingle();
-        }
-    }, [activeConversationId, conversations, supabase, user]);
-
-
-    // 5. Tải tin nhắn
-    useEffect(() => {
-        if (!activeConversationId || !supabase) return;
+        if (!activeConversationId || !session) return;
         
         const fetchMessages = async () => {
-            const { data, error } = await supabase
-                .from('direct_messages')
-                .select('*')
-                .eq('conversation_id', activeConversationId)
-                .order('created_at', { ascending: true });
-            
-            if (error) console.error("Error fetching messages:", error);
-            else setMessages(data as DirectMessage[]);
-            scrollToBottom();
+            try {
+                const res = await fetch(`/.netlify/functions/get-messages?conversationId=${activeConversationId}`, {
+                    headers: { Authorization: `Bearer ${session.access_token}` }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    setMessages(data);
+                    scrollToBottom();
+                }
+            } catch (error) {
+                console.error(error);
+            }
         };
+
         fetchMessages();
+        
+        // Polling tin nhắn mới mỗi 3s (An toàn hơn Realtime khi RLS đang có vấn đề)
+        const msgInterval = setInterval(fetchMessages, 3000);
+        return () => clearInterval(msgInterval);
 
-        const channel = supabase.channel(`chat:${activeConversationId}`)
-            .on('postgres_changes', { 
-                event: 'INSERT', 
-                schema: 'public', 
-                table: 'direct_messages', 
-                filter: `conversation_id=eq.${activeConversationId}` 
-            }, (payload) => {
-                setMessages(prev => [...prev, payload.new as DirectMessage]);
-                scrollToBottom();
-            })
-            .subscribe();
-
-        return () => { supabase.removeChannel(channel); };
-    }, [activeConversationId, supabase]);
+    }, [activeConversationId, session]);
 
     const scrollToBottom = () => {
         setTimeout(() => {
@@ -196,46 +88,51 @@ const MessagesPage: React.FC = () => {
         }, 100);
     };
 
+    // 4. Gửi tin nhắn bằng Server API (Bypass RLS)
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!input.trim() || !activeConversationId || !user || !supabase) return;
+        if (!input.trim() || !activeConversationId || !session) return;
 
         const content = input.trim();
         setInput(''); // Optimistic clear
+        setIsSending(true);
 
         try {
-            // Explicitly construct the message object to match DB schema
-            const { error } = await supabase.from('direct_messages').insert({
-                conversation_id: activeConversationId,
-                sender_id: user.id,
-                content: content,
-                type: 'text',
-                is_read: false // Ensure default value
+            const res = await fetch('/.netlify/functions/send-message', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session.access_token}`
+                },
+                body: JSON.stringify({
+                    conversationId: activeConversationId,
+                    content: content
+                })
             });
-            
-            if (error) throw error;
-            
-            // Update timestamp
-            await supabase.from('conversations')
-                .update({ updated_at: new Date().toISOString() })
-                .eq('id', activeConversationId);
+
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Gửi lỗi');
+
+            // Cập nhật UI ngay lập tức
+            setMessages(prev => [...prev, data]);
+            scrollToBottom();
 
         } catch (error: any) {
             console.error("Send error:", error);
-            showToast(`Gửi thất bại: ${error.message || 'Lỗi không xác định'}.`, 'error');
-            setInput(content); // Restore input on failure
+            showToast(`Gửi thất bại: ${error.message}`, 'error');
+            setInput(content); // Restore
+        } finally {
+            setIsSending(false);
         }
     };
 
     // Active Conversation Logic
     const activeConv = conversations.find(c => c.id === activeConversationId);
-    const chatPartner = activeConv?.participants[0]?.user;
-    
-    // Robust fallback for displayPartner
-    const displayPartner = chatPartner || (isLoadingActiveConv 
-        ? { display_name: 'Đang tải...', photo_url: '', id: 'loading' } 
-        : { display_name: 'Người dùng', photo_url: 'https://api.dicebear.com/7.x/bottts/svg?seed=Unknown', id: 'unknown' }
-    );
+    const displayPartner = activeConv?.participants[0]?.user || { 
+        display_name: 'Đang tải...', 
+        photo_url: 'https://api.dicebear.com/7.x/bottts/svg?seed=Loading', 
+        id: 'loading' 
+    };
     
     const isSystemChat = displayPartner?.id === SYSTEM_BOT_ID || displayPartner?.display_name === 'HỆ THỐNG';
 
@@ -291,11 +188,6 @@ const MessagesPage: React.FC = () => {
                                         <span className={`font-bold ${isSystemChat ? 'text-yellow-400' : ''}`}>{displayPartner?.display_name}</span>
                                         {isSystemChat && <span className="bg-blue-500 text-white text-[10px] px-1 rounded font-bold">OFFICIAL</span>}
                                     </div>
-                                    {isLoadingActiveConv ? (
-                                        <span className="text-[10px] text-skin-accent animate-pulse">Đang kết nối...</span>
-                                    ) : (
-                                        <span className="text-[10px] text-skin-muted">{isSystemChat ? 'Kênh thông báo tự động' : 'Đang hoạt động'}</span>
-                                    )}
                                 </div>
                             </div>
 
@@ -326,9 +218,10 @@ const MessagesPage: React.FC = () => {
                                         onChange={(e) => setInput(e.target.value)}
                                         placeholder="Nhập tin nhắn..."
                                         className="flex-grow bg-skin-fill border border-skin-border rounded-full px-4 py-2 text-sm focus:border-skin-accent focus:outline-none"
+                                        disabled={isSending}
                                     />
-                                    <button type="submit" disabled={!input.trim()} className="bg-skin-accent text-white p-2 rounded-full w-10 h-10 flex items-center justify-center disabled:opacity-50 hover:bg-skin-accent/80 transition">
-                                        <i className="ph-fill ph-paper-plane-right"></i>
+                                    <button type="submit" disabled={!input.trim() || isSending} className="bg-skin-accent text-white p-2 rounded-full w-10 h-10 flex items-center justify-center disabled:opacity-50 hover:bg-skin-accent/80 transition">
+                                        {isSending ? <i className="ph ph-spinner animate-spin"></i> : <i className="ph-fill ph-paper-plane-right"></i>}
                                     </button>
                                 </form>
                             ) : (

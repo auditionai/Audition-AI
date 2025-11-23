@@ -29,7 +29,6 @@ const handler: Handler = async (event: HandlerEvent) => {
             .from('generated_images')
             .select('id, user_id, prompt, image_url, created_at, is_public')
             .eq('is_public', true)
-            .not('image_url', 'is', null)
             .order('created_at', { ascending: false });
 
         if (imagesError) throw imagesError;

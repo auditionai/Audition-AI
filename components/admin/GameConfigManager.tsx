@@ -9,76 +9,96 @@ import { resizeImage } from '../../utils/imageUtils';
 import { useTranslation } from '../../hooks/useTranslation';
 import UserName from '../common/UserName';
 
-// UPDATED SQL SCRIPT TO FIX INFINITE RECURSION
-const SQL_FIX_SCRIPT = `-- SỬA LỖI "INFINITE RECURSION" VÀ QUYỀN TIN NHẮN (V2)
+// UPDATED SQL SCRIPT TO FIX INFINITE RECURSION (FINAL FIX)
+const SQL_FIX_SCRIPT = `-- SỬA LỖI ĐỆ QUY RLS (INFINITE RECURSION) - PHIÊN BẢN TRIỆT ĐỂ
 
--- 1. Xóa các Policies cũ gây lỗi đệ quy
+-- 1. XÓA SẠCH CÁC POLICY CŨ (Để tránh xung đột)
+-- Conversations
 DROP POLICY IF EXISTS "Users can view their conversations" ON conversations;
+DROP POLICY IF EXISTS "allow_select_conv" ON conversations;
+DROP POLICY IF EXISTS "Enable read access for all users" ON conversations;
+DROP POLICY IF EXISTS "Enable insert for authenticated users" ON conversations;
+
+-- Participants
 DROP POLICY IF EXISTS "Users can view participants" ON conversation_participants;
+DROP POLICY IF EXISTS "Users can insert themselves" ON conversation_participants;
+DROP POLICY IF EXISTS "allow_select_part" ON conversation_participants;
+DROP POLICY IF EXISTS "allow_insert_part" ON conversation_participants;
+DROP POLICY IF EXISTS "Enable read access for all users" ON conversation_participants;
+DROP POLICY IF EXISTS "Enable insert for authenticated users" ON conversation_participants;
+
+-- Messages
 DROP POLICY IF EXISTS "Users can view messages in their conversations" ON direct_messages;
 DROP POLICY IF EXISTS "Users can send messages to their conversations" ON direct_messages;
+DROP POLICY IF EXISTS "Users can view messages" ON direct_messages;
+DROP POLICY IF EXISTS "Users can send messages" ON direct_messages;
+DROP POLICY IF EXISTS "allow_all_msg" ON direct_messages;
+DROP POLICY IF EXISTS "Enable read access for all users" ON direct_messages;
+DROP POLICY IF EXISTS "Enable insert for authenticated users" ON direct_messages;
 
--- 2. Tạo hàm kiểm tra quyền (SECURITY DEFINER) để phá vỡ vòng lặp đệ quy
--- Hàm này chạy với quyền admin (bỏ qua RLS) để kiểm tra xem user có trong hội thoại không
-CREATE OR REPLACE FUNCTION public.check_is_participant(conversation_id uuid)
+-- 2. TẠO HÀM HELPER "QUYỀN ADMIN" (SECURITY DEFINER)
+-- Hàm này chạy với quyền chủ sở hữu (postgres), bỏ qua RLS, giúp phá vỡ vòng lặp.
+CREATE OR REPLACE FUNCTION is_chat_participant(lookup_conv_id uuid)
 RETURNS boolean
 LANGUAGE sql
-SECURITY DEFINER
+SECURITY DEFINER 
 SET search_path = public
 AS $$
   SELECT EXISTS (
     SELECT 1
     FROM conversation_participants
-    WHERE conversation_id = $1
-    AND user_id = auth.uid()
+    WHERE conversation_id = lookup_conv_id
+    AND user_id = (select auth.uid())
   );
 $$;
 
--- 3. Tạo lại Policies sử dụng hàm trên (An toàn, không đệ quy)
+-- 3. THIẾT LẬP POLICY MỚI (Sử dụng hàm trên)
 
--- Bảng Conversations: Xem nếu mình là thành viên
-CREATE POLICY "Users can view their conversations" ON conversations
-FOR SELECT USING (
-  check_is_participant(id)
-);
-
--- Bảng Participants: Xem tất cả người tham gia trong các hội thoại của mình
-CREATE POLICY "Users can view participants" ON conversation_participants
-FOR SELECT USING (
-  check_is_participant(conversation_id)
-);
-
--- Cho phép tự thêm mình vào hội thoại (cần thiết khi tạo chat mới)
-CREATE POLICY "Users can insert themselves" ON conversation_participants
-FOR INSERT WITH CHECK (
-  user_id = auth.uid() OR 
-  EXISTS (SELECT 1 FROM users WHERE id = auth.uid()) -- Cho phép insert nếu đã đăng nhập
-);
-
--- Bảng Messages: Xem tin nhắn trong hội thoại của mình
-CREATE POLICY "Users can view messages" ON direct_messages
-FOR SELECT USING (
-  check_is_participant(conversation_id)
-);
-
--- Bảng Messages: Gửi tin nhắn vào hội thoại của mình
-CREATE POLICY "Users can send messages" ON direct_messages
-FOR INSERT WITH CHECK (
-  check_is_participant(conversation_id) AND
-  sender_id = auth.uid()
-);
-
--- 4. Cấp quyền thực thi hàm
-GRANT EXECUTE ON FUNCTION public.check_is_participant(uuid) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.check_is_participant(uuid) TO service_role;
-
--- 5. Đảm bảo RLS được bật
+-- Bảng: conversations
 ALTER TABLE conversations ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Conversations: View Own" ON conversations
+FOR SELECT USING (
+  is_chat_participant(id)
+);
+
+CREATE POLICY "Conversations: Create" ON conversations
+FOR INSERT WITH CHECK ( true ); 
+
+-- Bảng: conversation_participants
 ALTER TABLE conversation_participants ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Participants: View Group" ON conversation_participants
+FOR SELECT USING (
+  is_chat_participant(conversation_id) -- Ai trong nhóm thì thấy được các thành viên khác
+);
+
+CREATE POLICY "Participants: Insert" ON conversation_participants
+FOR INSERT WITH CHECK (
+  user_id = auth.uid() -- Tự thêm mình
+  OR is_chat_participant(conversation_id) -- Hoặc thêm người khác nếu mình đã ở trong nhóm
+);
+
+-- Bảng: direct_messages
 ALTER TABLE direct_messages ENABLE ROW LEVEL SECURITY;
 
--- 6. Fix lại Function tạo hội thoại (để chắc chắn nó hoạt động)
-CREATE OR REPLACE FUNCTION public.get_or_create_conversation(target_user_id UUID)
+CREATE POLICY "Messages: View Own" ON direct_messages
+FOR SELECT USING (
+  is_chat_participant(conversation_id)
+);
+
+CREATE POLICY "Messages: Send" ON direct_messages
+FOR INSERT WITH CHECK (
+  is_chat_participant(conversation_id)
+  AND sender_id = auth.uid()
+);
+
+-- 4. CẤP QUYỀN THỰC THI
+GRANT EXECUTE ON FUNCTION is_chat_participant(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION is_chat_participant(uuid) TO service_role;
+
+-- 5. CẬP NHẬT HÀM TẠO CHAT (RPC)
+CREATE OR REPLACE FUNCTION get_or_create_conversation(target_user_id UUID)
 RETURNS UUID
 SECURITY DEFINER
 SET search_path = public
@@ -89,8 +109,10 @@ DECLARE
   current_user_id UUID;
 BEGIN
   current_user_id := auth.uid();
+  
+  IF current_user_id IS NULL THEN RAISE EXCEPTION 'Not authenticated'; END IF;
 
-  -- Tìm hội thoại chung giữa 2 người
+  -- Tìm hội thoại chung
   SELECT c.id INTO conv_id
   FROM conversations c
   JOIN conversation_participants p1 ON c.id = p1.conversation_id
@@ -103,11 +125,8 @@ BEGIN
     RETURN conv_id;
   END IF;
 
-  -- Tạo mới nếu chưa có
-  INSERT INTO conversations (created_at, updated_at) 
-  VALUES (NOW(), NOW()) 
-  RETURNING id INTO conv_id;
-
+  -- Tạo mới
+  INSERT INTO conversations (created_at, updated_at) VALUES (NOW(), NOW()) RETURNING id INTO conv_id;
   INSERT INTO conversation_participants (conversation_id, user_id) VALUES (conv_id, current_user_id);
   INSERT INTO conversation_participants (conversation_id, user_id) VALUES (conv_id, target_user_id);
 
@@ -115,7 +134,7 @@ BEGIN
 END;
 $$;
 
-SELECT 'Đã sửa lỗi Infinite Recursion thành công!' as status;
+SELECT 'Sửa lỗi thành công! (Clean Install)' as status;
 `;
 
 const GameConfigManager: React.FC = () => {
@@ -358,9 +377,9 @@ const GameConfigManager: React.FC = () => {
             {activeSubTab === 'db_tools' && (
                 <div className="space-y-4">
                     <div className="bg-yellow-500/10 border border-yellow-500/30 p-4 rounded-lg">
-                        <h4 className="text-yellow-400 font-bold mb-2 flex items-center gap-2"><i className="ph-fill ph-warning-circle"></i> SỬA LỖI CHAT & KẾT NỐI (BẮT BUỘC)</h4>
+                        <h4 className="text-yellow-400 font-bold mb-2 flex items-center gap-2"><i className="ph-fill ph-warning-circle"></i> SỬA LỖI CHAT & KẾT NỐI (TRIỆT ĐỂ)</h4>
                         <p className="text-sm text-gray-300 mb-4">
-                            Đoạn mã này sửa lỗi "Infinite Recursion" (Đệ quy vô hạn) khiến bạn không thể gửi tin nhắn hoặc xem người dùng khác.
+                            Đoạn mã này sẽ <strong>xóa toàn bộ Policies cũ</strong> và cài đặt lại hệ thống quyền bảo mật "sạch sẽ" để khắc phục lỗi Infinite Recursion (42P17).
                         </p>
                         <div className="relative">
                             <pre className="bg-black/50 p-3 rounded-lg text-xs text-green-400 overflow-x-auto font-mono border border-white/10 h-64 custom-scrollbar">

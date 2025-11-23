@@ -204,11 +204,13 @@ const MessagesPage: React.FC = () => {
         setInput(''); // Optimistic clear
 
         try {
+            // Explicitly construct the message object to match DB schema
             const { error } = await supabase.from('direct_messages').insert({
                 conversation_id: activeConversationId,
                 sender_id: user.id,
                 content: content,
-                type: 'text'
+                type: 'text',
+                is_read: false // Ensure default value
             });
             
             if (error) throw error;
@@ -220,7 +222,7 @@ const MessagesPage: React.FC = () => {
 
         } catch (error: any) {
             console.error("Send error:", error);
-            showToast(`Gửi thất bại: ${error.message}. Vui lòng kiểm tra lại mạng hoặc liên hệ Admin.`, 'error');
+            showToast(`Gửi thất bại: ${error.message || 'Lỗi không xác định'}.`, 'error');
             setInput(content); // Restore input on failure
         }
     };

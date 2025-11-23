@@ -45,8 +45,9 @@ export const sendSystemMessage = async (userId: string, content: string, senderI
 
         if (userUpsertError) console.warn(`[ChatUtils] Warning upserting sender: ${userUpsertError.message}`);
 
-        // 2. FIND EXISTING CONVERSATION MANUALLY (Bypass RPC for transparency)
-        // We look for a conversation that has BOTH participants.
+        // 2. FIND OR CREATE CONVERSATION (Using SQL Function for Atomicity if possible, else manual)
+        
+        // Fallback Manual Check
         let conversationId = null;
 
         // Get all conversation IDs for the target user

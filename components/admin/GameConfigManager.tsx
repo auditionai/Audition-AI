@@ -239,11 +239,10 @@ DROP POLICY IF EXISTS "Users can see their own profile" ON public.users;
 DROP POLICY IF EXISTS "Authenticated users can view all profiles" ON public.users;
 
 -- 2. TẠO POLICY SIÊU MỞ CHO USERS (Để ai cũng thấy được Admin/System)
--- Điều này cực kỳ quan trọng để frontend không bị lỗi khi load tin nhắn từ người lạ/admin
 CREATE POLICY "Public profiles are viewable by everyone" ON public.users
 FOR SELECT USING (true);
 
--- 3. Đảm bảo user SYSTEM tồn tại trong bảng public.users
+-- 3. Đảm bảo user SYSTEM tồn tại trong bảng public.users (UPSERT)
 INSERT INTO public.users (id, email, display_name, photo_url, diamonds, xp)
 VALUES (
     '00000000-0000-0000-0000-000000000000',
@@ -256,7 +255,7 @@ VALUES (
     display_name = 'HỆ THỐNG', 
     photo_url = 'https://api.dicebear.com/7.x/bottts/svg?seed=System';
 
--- 4. Sửa quyền cho bảng conversations và participants
+-- 4. Mở rộng quyền cho bảng conversations
 DROP POLICY IF EXISTS "Users can view their conversations" ON public.conversations;
 CREATE POLICY "Users can view their conversations" ON public.conversations
 FOR SELECT USING (
@@ -266,6 +265,7 @@ FOR SELECT USING (
   )
 );
 
+-- 5. Mở rộng quyền cho bảng participants
 DROP POLICY IF EXISTS "Users can view participants of their conversations" ON public.conversation_participants;
 CREATE POLICY "Users can view participants of their conversations" ON public.conversation_participants
 FOR SELECT USING (
@@ -274,15 +274,52 @@ FOR SELECT USING (
   )
 );
 
--- 5. Đảm bảo Realtime được bật
+-- 6. Đảm bảo Realtime được bật (Xử lý lỗi 'already exists')
 DO $$
 BEGIN
     ALTER PUBLICATION supabase_realtime ADD TABLE conversations;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END;
+$$;
+
+DO $$
+BEGIN
     ALTER PUBLICATION supabase_realtime ADD TABLE conversation_participants;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END;
+$$;
+
+DO $$
+BEGIN
     ALTER PUBLICATION supabase_realtime ADD TABLE direct_messages;
 EXCEPTION WHEN duplicate_object THEN NULL;
 END;
 $$;
+
+-- 7. Tạo Function để đảm bảo hội thoại (Atomic)
+CREATE OR REPLACE FUNCTION get_or_create_conversation(other_user_id UUID)
+RETURNS UUID AS $$
+DECLARE
+  conv_id UUID;
+BEGIN
+  -- Tìm hội thoại chung
+  SELECT c.id INTO conv_id
+  FROM conversations c
+  JOIN conversation_participants p1 ON c.id = p1.conversation_id
+  JOIN conversation_participants p2 ON c.id = p2.conversation_id
+  WHERE p1.user_id = auth.uid() AND p2.user_id = other_user_id
+  LIMIT 1;
+
+  -- Nếu chưa có, tạo mới
+  IF conv_id IS NULL THEN
+    INSERT INTO conversations DEFAULT VALUES RETURNING id INTO conv_id;
+    INSERT INTO conversation_participants (conversation_id, user_id) VALUES (conv_id, auth.uid());
+    INSERT INTO conversation_participants (conversation_id, user_id) VALUES (conv_id, other_user_id);
+  END IF;
+
+  RETURN conv_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 SELECT 'Đã cấu hình lại toàn bộ quyền truy cập thành công!' as ket_qua;
 `;
@@ -321,7 +358,7 @@ SELECT 'Đã cấu hình lại toàn bộ quyền truy cập thành công!' as k
                             </button>
                         </div>
                         <div className="mt-4 text-xs text-gray-400">
-                            <strong>Hướng dẫn nhanh:</strong> Copy đoạn mã trên -> Vào Supabase -> SQL Editor -> Paste -> Run.
+                            <strong>Hướng dẫn nhanh:</strong> Copy đoạn mã trên &rarr; Vào Supabase &rarr; SQL Editor &rarr; Paste &rarr; Run.
                         </div>
                     </div>
                 </div>

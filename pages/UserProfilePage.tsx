@@ -99,7 +99,8 @@ const UserProfilePage: React.FC = () => {
         try {
             console.log(`[Chat Init] Attempting to create/get conversation with ${viewUser.id}`);
             
-            // 1. Attempt with RPC (Preferred Method)
+            // STRATEGY 1: RPC Call (Robust)
+            // This is preferred because it uses SECURITY DEFINER to bypass RLS on insert
             const { data: conversationId, error: rpcError } = await supabase
                 .rpc('get_or_create_conversation', { target_user_id: viewUser.id });
 
@@ -110,11 +111,15 @@ const UserProfilePage: React.FC = () => {
             }
 
             if (rpcError) {
-                console.warn("[Chat Init] RPC Failed, trying manual fallback...", rpcError);
+                console.warn("[Chat Init] RPC Failed, attempting manual fallback...", rpcError);
             }
 
-            // 2. Fallback: Manual Creation (If RPC missing or failed)
-            // Step A: Create Conversation
+            // STRATEGY 2: Manual Check & Create (Fallback)
+            // Step A: Check for existing conversation manually
+            // This requires complex querying of the participants table which might be slow or blocked by RLS
+            // Simplified attempt: just try to create new if RPC failed
+            
+            // Create Conversation
             const { data: newConv, error: createError } = await supabase
                 .from('conversations')
                 .insert({})
@@ -124,7 +129,7 @@ const UserProfilePage: React.FC = () => {
             if (createError) throw createError;
             const newId = newConv.id;
 
-            // Step B: Insert Participants
+            // Insert Participants
             const { error: partError } = await supabase
                 .from('conversation_participants')
                 .insert([
@@ -138,7 +143,7 @@ const UserProfilePage: React.FC = () => {
             navigate(`messages?conversationId=${newId}`);
 
         } catch (e: any) {
-            showToast(`Lỗi tạo cuộc trò chuyện: ${e.message}`, "error");
+            showToast(`Không thể tạo cuộc trò chuyện: ${e.message}`, "error");
             console.error("Chat Creation Error:", e);
         } finally {
             setIsCreatingChat(false);

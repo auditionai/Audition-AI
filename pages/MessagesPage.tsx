@@ -51,10 +51,14 @@ const MessagesPage: React.FC = () => {
                 const formatted = data.map((c: any) => {
                     let otherParticipant = c.participants.find((p: any) => p.user_id !== user.id);
                     
+                    // Handle System/Deleted Users fallback
                     if (!otherParticipant) {
                         if (c.participants.length >= 1) {
+                             // If it's a valid conversation but the other user is missing (e.g. RLS hidden or deleted),
+                             // check if it might be the System Bot or just an unknown user.
+                             // For chat with Admin/System, RLS sometimes hides the system user profile from normal users.
                              otherParticipant = {
-                                user_id: SYSTEM_BOT_ID,
+                                user_id: SYSTEM_BOT_ID, // Assume System if single participant context suggests it
                                 user: {
                                     id: SYSTEM_BOT_ID,
                                     display_name: 'HỆ THỐNG',
@@ -94,13 +98,16 @@ const MessagesPage: React.FC = () => {
         return () => { supabase.removeChannel(channel); };
     }, [supabase, user]);
 
-    // Special Check for Newly Created Active Conversation
-    // If activeConversationId is set (via URL) but not in the list (freshly created), fetch it manually.
+    // CRITICAL FIX: Fetch Active Conversation Individually if Missing
+    // This handles the case where a user clicks "Message" on a profile, redirects here with an ID,
+    // but the main conversation list query hasn't updated yet or RLS latency hides it.
     useEffect(() => {
         if (!activeConversationId || !supabase || !user) return;
         
         const exists = conversations.some(c => c.id === activeConversationId);
+        
         if (!exists && !isLoadingConvs) {
+            console.log(`[Messages] Active conversation ${activeConversationId} missing from list. Fetching manually...`);
             const fetchSingle = async () => {
                 const { data, error } = await supabase
                     .from('conversations')
@@ -116,13 +123,28 @@ const MessagesPage: React.FC = () => {
                 
                 if (data && !error) {
                     let otherParticipant = data.participants.find((p: any) => p.user_id !== user.id);
+                    
+                    // Handle Fallback for missing profile (e.g. System User hidden by RLS)
+                    if (!otherParticipant && data.participants.length > 0) {
+                         otherParticipant = {
+                            user_id: 'unknown',
+                            user: {
+                                id: 'unknown',
+                                display_name: 'HỆ THỐNG', 
+                                photo_url: 'https://api.dicebear.com/7.x/bottts/svg?seed=System'
+                            }
+                        };
+                    }
+
                     if (otherParticipant) {
                         const newConv = {
                             ...data,
-                            participants: [{ user: otherParticipant.user || { id: otherParticipant.user_id, display_name: 'New User', photo_url: '' } }]
+                            participants: [{ user: otherParticipant.user || { id: otherParticipant.user_id, display_name: 'Người dùng', photo_url: '' } }]
                         };
                         setConversations(prev => [newConv as Conversation, ...prev]);
                     }
+                } else {
+                    console.error("Could not fetch active conversation details", error);
                 }
             };
             fetchSingle();

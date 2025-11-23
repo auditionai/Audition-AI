@@ -9,6 +9,89 @@ import { resizeImage } from '../../utils/imageUtils';
 import { useTranslation } from '../../hooks/useTranslation';
 import UserName from '../common/UserName';
 
+// MOVED SQL SCRIPT HERE FOR CLARITY
+const SQL_FIX_SCRIPT = `-- SỬA LỖI KHÔNG GỬI ĐƯỢC TIN NHẮN & KHÔNG TẠO ĐƯỢC HỘI THOẠI
+
+-- 1. Xóa Function cũ nếu có
+DROP FUNCTION IF EXISTS get_or_create_conversation(uuid);
+
+-- 2. Tạo lại Function với quyền SECURITY DEFINER (Quyền tối cao, bỏ qua RLS)
+CREATE OR REPLACE FUNCTION get_or_create_conversation(target_user_id UUID)
+RETURNS UUID AS $$
+DECLARE
+  conv_id UUID;
+  current_user_id UUID;
+BEGIN
+  current_user_id := auth.uid();
+
+  -- Tìm hội thoại 2 người đã tồn tại
+  SELECT c.id INTO conv_id
+  FROM conversations c
+  JOIN conversation_participants p1 ON c.id = p1.conversation_id
+  JOIN conversation_participants p2 ON c.id = p2.conversation_id
+  WHERE p1.user_id = current_user_id
+    AND p2.user_id = target_user_id
+    AND (SELECT COUNT(*) FROM conversation_participants WHERE conversation_id = c.id) = 2
+  LIMIT 1;
+
+  IF conv_id IS NOT NULL THEN
+    RETURN conv_id;
+  END IF;
+
+  -- Tạo mới nếu chưa có
+  INSERT INTO conversations (created_at, updated_at) 
+  VALUES (NOW(), NOW()) 
+  RETURNING id INTO conv_id;
+
+  INSERT INTO conversation_participants (conversation_id, user_id) VALUES (conv_id, current_user_id);
+  INSERT INTO conversation_participants (conversation_id, user_id) VALUES (conv_id, target_user_id);
+
+  RETURN conv_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 3. Sửa lại RLS cho bảng conversations
+ALTER TABLE conversations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE conversation_participants ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Enable insert for authenticated users" ON conversations;
+CREATE POLICY "Enable insert for authenticated users" ON conversations FOR INSERT TO authenticated WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Users can view their conversations" ON conversations;
+CREATE POLICY "Users can view their conversations" ON conversations
+FOR SELECT USING (
+  EXISTS (
+    SELECT 1 FROM conversation_participants 
+    WHERE conversation_id = id AND user_id = auth.uid()
+  )
+);
+
+-- 4. Sửa lại RLS cho bảng participants
+DROP POLICY IF EXISTS "Enable insert for authenticated users" ON conversation_participants;
+CREATE POLICY "Enable insert for authenticated users" ON conversation_participants FOR INSERT TO authenticated WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Users can view participants" ON conversation_participants;
+CREATE POLICY "Users can view participants" ON conversation_participants
+FOR SELECT USING (
+  conversation_id IN (
+    SELECT conversation_id FROM conversation_participants WHERE user_id = auth.uid()
+  )
+);
+
+-- 5. Đảm bảo User System tồn tại
+INSERT INTO public.users (id, email, display_name, photo_url, diamonds, xp)
+VALUES (
+    '00000000-0000-0000-0000-000000000000',
+    'system@auditionai.io.vn',
+    'HỆ THỐNG',
+    'https://api.dicebear.com/7.x/bottts/svg?seed=System',
+    999999,
+    999999
+) ON CONFLICT (id) DO NOTHING;
+
+SELECT 'Đã sửa lỗi thành công! Bây giờ bạn có thể nhắn tin bình thường.' as ket_qua;
+`;
+
 const GameConfigManager: React.FC = () => {
     const { session, showToast } = useAuth();
     const { t } = useTranslation();
@@ -231,98 +314,6 @@ const GameConfigManager: React.FC = () => {
         }
     };
 
-    const sqlFixScript = `-- SỬA LỖI KHÔNG GỬI ĐƯỢC TIN NHẮN & KHÔNG TẠO ĐƯỢC HỘI THOẠI
-
--- 1. Xóa Function cũ nếu có
-DROP FUNCTION IF EXISTS get_or_create_conversation(uuid);
-
--- 2. Tạo lại Function với quyền SECURITY DEFINER (Quyền tối cao, bỏ qua RLS)
--- Điều này cực kỳ quan trọng để đảm bảo user có thể tạo hội thoại với bất kỳ ai
-CREATE OR REPLACE FUNCTION get_or_create_conversation(target_user_id UUID)
-RETURNS UUID AS $$
-DECLARE
-  conv_id UUID;
-  current_user_id UUID;
-BEGIN
-  current_user_id := auth.uid();
-
-  -- Tìm hội thoại đã tồn tại giữa 2 người
-  SELECT c.id INTO conv_id
-  FROM conversations c
-  JOIN conversation_participants p1 ON c.id = p1.conversation_id
-  JOIN conversation_participants p2 ON c.id = p2.conversation_id
-  WHERE p1.user_id = current_user_id
-    AND p2.user_id = target_user_id
-    -- Đảm bảo chỉ lấy hội thoại 2 người (không phải nhóm)
-    AND (SELECT COUNT(*) FROM conversation_participants WHERE conversation_id = c.id) = 2
-  LIMIT 1;
-
-  -- Nếu tìm thấy, trả về ID
-  IF conv_id IS NOT NULL THEN
-    RETURN conv_id;
-  END IF;
-
-  -- Nếu không tìm thấy, tạo mới
-  INSERT INTO conversations (created_at, updated_at) 
-  VALUES (NOW(), NOW()) 
-  RETURNING id INTO conv_id;
-
-  -- Thêm người tạo (Mình)
-  INSERT INTO conversation_participants (conversation_id, user_id) 
-  VALUES (conv_id, current_user_id);
-
-  -- Thêm người nhận (Đối phương)
-  INSERT INTO conversation_participants (conversation_id, user_id) 
-  VALUES (conv_id, target_user_id);
-
-  RETURN conv_id;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- 3. Sửa lại RLS cho bảng conversations và participants để tránh chặn quyền Insert
-ALTER TABLE conversations ENABLE ROW LEVEL SECURITY;
-ALTER TABLE conversation_participants ENABLE ROW LEVEL SECURITY;
-
--- Xóa policy cũ gây lỗi
-DROP POLICY IF EXISTS "Enable insert for authenticated users" ON conversations;
-DROP POLICY IF EXISTS "Enable insert for authenticated users" ON conversation_participants;
-
--- Tạo Policy cho phép Insert (Thêm mới)
-CREATE POLICY "Enable insert for authenticated users" ON conversations FOR INSERT TO authenticated WITH CHECK (true);
-CREATE POLICY "Enable insert for authenticated users" ON conversation_participants FOR INSERT TO authenticated WITH CHECK (true);
-
--- 4. Mở rộng quyền Select (Xem) để đảm bảo sau khi tạo xong thì nhìn thấy ngay
-DROP POLICY IF EXISTS "Users can view their conversations" ON conversations;
-CREATE POLICY "Users can view their conversations" ON conversations
-FOR SELECT USING (
-  EXISTS (
-    SELECT 1 FROM conversation_participants 
-    WHERE conversation_id = id AND user_id = auth.uid()
-  )
-);
-
-DROP POLICY IF EXISTS "Users can view participants" ON conversation_participants;
-CREATE POLICY "Users can view participants" ON conversation_participants
-FOR SELECT USING (
-  conversation_id IN (
-    SELECT conversation_id FROM conversation_participants WHERE user_id = auth.uid()
-  )
-);
-
--- 5. Đảm bảo User System tồn tại
-INSERT INTO public.users (id, email, display_name, photo_url, diamonds, xp)
-VALUES (
-    '00000000-0000-0000-0000-000000000000',
-    'system@auditionai.io.vn',
-    'HỆ THỐNG',
-    'https://api.dicebear.com/7.x/bottts/svg?seed=System',
-    999999,
-    999999
-) ON CONFLICT (id) DO NOTHING;
-
-SELECT 'Đã sửa lỗi thành công! Bây giờ bạn có thể nhắn tin bình thường.' as ket_qua;
-`;
-
     return (
         <div className="bg-[#12121A]/80 border border-blue-500/20 rounded-2xl shadow-lg p-6">
             <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
@@ -347,10 +338,10 @@ SELECT 'Đã sửa lỗi thành công! Bây giờ bạn có thể nhắn tin bì
                         </p>
                         <div className="relative">
                             <pre className="bg-black/50 p-3 rounded-lg text-xs text-green-400 overflow-x-auto font-mono border border-white/10 h-64 custom-scrollbar">
-                                {sqlFixScript}
+                                {SQL_FIX_SCRIPT}
                             </pre>
                             <button 
-                                onClick={() => { navigator.clipboard.writeText(sqlFixScript); showToast("Đã sao chép SQL!", "success"); }}
+                                onClick={() => { navigator.clipboard.writeText(SQL_FIX_SCRIPT); showToast("Đã sao chép SQL!", "success"); }}
                                 className="absolute top-2 right-2 bg-blue-500/20 hover:bg-blue-500/40 text-blue-300 px-3 py-1 rounded text-xs font-bold"
                             >
                                 Sao Chép
@@ -526,7 +517,12 @@ SELECT 'Đã sửa lỗi thành công! Bây giờ bạn có thể nhắn tin bì
                                 </div>
                                 <div className="flex-1">
                                     <label className="text-sm text-yellow-400 font-bold">Giá bán (Kim cương)</label>
-                                    <input type="number" value={editingCosmetic.price || 0} onChange={e => setEditingCosmetic({...editingCosmetic, price: Number(e.target.value)})} className="auth-input mt-1" border-yellow-500/50 focus:border-yellow-500" />
+                                    <input 
+                                        type="number" 
+                                        value={editingCosmetic.price || 0} 
+                                        onChange={e => setEditingCosmetic({...editingCosmetic, price: Number(e.target.value)})} 
+                                        className="auth-input mt-1 border-yellow-500/50 focus:border-yellow-500" 
+                                    />
                                 </div>
                             </div>
                             

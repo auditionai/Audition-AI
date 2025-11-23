@@ -1,7 +1,16 @@
 
-
 export const en = {
   langName: 'English',
+  common: {
+    edit: 'Edit',
+    delete: 'Delete',
+    save: 'Save',
+    saving: 'Saving...',
+    cancel: 'Cancel',
+    confirm: 'Confirm',
+    download: 'Download',
+    loading: 'Loading...',
+  },
   landing: {
     header: {
       features: 'Features',
@@ -819,6 +828,9 @@ export const en = {
     'neon-vibe': 'Crystal Palace',
   },
   modals: {
+    announcement: {
+        button: 'Got it',
+    },
     styles: {
         none: 'Default',
         cinematic: 'Cinematic',

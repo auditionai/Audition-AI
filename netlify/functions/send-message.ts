@@ -20,14 +20,21 @@ const handler: Handler = async (event: HandlerEvent) => {
         }
 
         // 1. Kiểm tra quyền (User có trong hội thoại không)
-        const { data: participation } = await supabaseAdmin
+        // Use limit(1).maybeSingle() to be safe against duplicates
+        const { data: participation, error: partError } = await supabaseAdmin
             .from('conversation_participants')
             .select('id')
             .eq('conversation_id', conversationId)
             .eq('user_id', user.id)
-            .single();
+            .limit(1)
+            .maybeSingle();
+
+        if (partError) {
+             console.error("Send message participation check error:", partError);
+        }
 
         if (!participation) {
+            console.log(`User ${user.id} failed to send message to ${conversationId} (Not a participant)`);
             return { statusCode: 403, body: JSON.stringify({ error: 'You are not in this conversation' }) };
         }
 

@@ -26,6 +26,7 @@ const MessagesPage: React.FC = () => {
         const urlParams = new URLSearchParams(window.location.search);
         const convId = urlParams.get('conversationId');
         if (convId) {
+            console.log("MessagesPage mounted with conversationId:", convId);
             setActiveConversationId(convId);
         }
     }, []);
@@ -42,7 +43,7 @@ const MessagesPage: React.FC = () => {
             const data = await res.json();
             setConversations(data);
         } catch (error) {
-            console.error(error);
+            console.error("Error loading conversations:", error);
         } finally {
             setIsLoadingConvs(false);
         }
@@ -58,6 +59,7 @@ const MessagesPage: React.FC = () => {
     // 3. Load tin nhắn khi chọn hội thoại (Bằng Server API)
     useEffect(() => {
         if (!activeConversationId || !session) return;
+        console.log("Fetching messages for:", activeConversationId);
         
         const fetchMessages = async () => {
             try {
@@ -68,6 +70,13 @@ const MessagesPage: React.FC = () => {
                     const data = await res.json();
                     setMessages(data);
                     scrollToBottom();
+                } else {
+                    const err = await res.json();
+                    console.error("Fetch messages error:", err);
+                    if (res.status === 403) {
+                        showToast("Bạn không có quyền xem cuộc trò chuyện này.", "error");
+                        setActiveConversationId(null); // Exit if forbidden
+                    }
                 }
             } catch (error) {
                 console.error(error);
@@ -98,6 +107,7 @@ const MessagesPage: React.FC = () => {
         setIsSending(true);
 
         try {
+            console.log("Sending message to:", activeConversationId);
             const res = await fetch('/.netlify/functions/send-message', {
                 method: 'POST',
                 headers: {

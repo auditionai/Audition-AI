@@ -17,14 +17,21 @@ const handler: Handler = async (event: HandlerEvent) => {
 
     try {
         // 1. Kiểm tra xem user có quyền xem hội thoại này không (Bằng cách check bảng participants)
-        const { data: participation } = await supabaseAdmin
+        // Use limit(1).maybeSingle() to handle potential duplicates without throwing error
+        const { data: participation, error: partError } = await supabaseAdmin
             .from('conversation_participants')
             .select('id')
             .eq('conversation_id', conversationId)
             .eq('user_id', user.id)
-            .single();
+            .limit(1)
+            .maybeSingle();
+
+        if (partError) {
+            console.error("Participation check error:", partError);
+        }
 
         if (!participation) {
+            console.log(`User ${user.id} attempted to access conversation ${conversationId} but is not a participant.`);
             return { statusCode: 403, body: JSON.stringify({ error: 'Forbidden' }) };
         }
 

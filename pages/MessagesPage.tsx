@@ -32,6 +32,8 @@ const MessagesPage: React.FC = () => {
         if (!supabase || !user) return;
         const fetchConversations = async () => {
             setIsLoadingConvs(true);
+            // We request participants. But if RLS hides the *other* participant,
+            // the array will only contain ME.
             const { data, error } = await supabase
                 .from('conversations')
                 .select(`
@@ -43,41 +45,37 @@ const MessagesPage: React.FC = () => {
                 `)
                 .order('updated_at', { ascending: false });
             
-            if (error) console.error("Error fetching conversations:", error);
-            else {
+            if (error) {
+                console.error("Error fetching conversations:", error);
+            } else {
                 // Process conversations
                 const formatted = data.map((c: any) => {
-                    // Find partner logic:
-                    // 1. Look for participant that is NOT me
-                    // 2. Check if their user object is loaded.
+                    // Try to find a participant that is NOT me
+                    let otherParticipant = c.participants.find((p: any) => p.user_id !== user.id);
                     
-                    // Note: 'participants' is an array of { user_id, user: {...} }
-                    
-                    const otherParticipant = c.participants.find((p: any) => p.user_id !== user.id);
-                    
-                    let partnerUser = otherParticipant?.user;
-
-                    // Handling Missing User Data (RLS hidden or Deleted)
-                    if (!partnerUser) {
-                        if (otherParticipant?.user_id === SYSTEM_BOT_ID) {
-                             partnerUser = {
-                                 id: SYSTEM_BOT_ID,
-                                 display_name: 'HỆ THỐNG',
-                                 photo_url: 'https://api.dicebear.com/7.x/bottts/svg?seed=System'
-                             };
-                        } else {
-                             // Generic fallback for unknown users
-                             partnerUser = {
-                                 id: otherParticipant?.user_id || 'unknown',
-                                 display_name: 'Người dùng ẩn',
-                                 photo_url: 'https://api.dicebear.com/7.x/bottts/svg?seed=Unknown'
-                             };
-                        }
+                    // If no other participant found, it means they are hidden (RLS) or deleted.
+                    // In this system, invisible usually means SYSTEM/ADMIN sending messages.
+                    if (!otherParticipant) {
+                        otherParticipant = {
+                            user_id: SYSTEM_BOT_ID,
+                            user: {
+                                id: SYSTEM_BOT_ID,
+                                display_name: 'HỆ THỐNG',
+                                photo_url: 'https://api.dicebear.com/7.x/bottts/svg?seed=System'
+                            }
+                        };
+                    } else if (!otherParticipant.user) {
+                        // If participant row exists but user join failed (e.g. deleted user)
+                        otherParticipant.user = {
+                            id: otherParticipant.user_id,
+                            display_name: 'Người dùng ẩn',
+                            photo_url: 'https://api.dicebear.com/7.x/bottts/svg?seed=Unknown'
+                        };
                     }
 
                     return {
                         ...c,
-                        participants: [{ user: partnerUser }] 
+                        participants: [{ user: otherParticipant.user }] 
                     };
                 });
                 setConversations(formatted);
@@ -158,7 +156,9 @@ const MessagesPage: React.FC = () => {
 
     const activeConv = conversations.find(c => c.id === activeConversationId);
     const chatPartner = activeConv?.participants[0]?.user;
-    const isSystemChat = chatPartner?.id === SYSTEM_BOT_ID;
+    
+    // Identify if it is a System chat (ID match OR Name match for fallback)
+    const isSystemChat = chatPartner?.id === SYSTEM_BOT_ID || chatPartner?.display_name === 'HỆ THỐNG';
 
     return (
         <div data-theme={theme} className="flex flex-col h-screen bg-skin-fill text-skin-base">
@@ -177,7 +177,7 @@ const MessagesPage: React.FC = () => {
                         ) : (
                             conversations.map(conv => {
                                 const partner = conv.participants[0]?.user;
-                                const isSystem = partner?.id === SYSTEM_BOT_ID;
+                                const isSystem = partner?.id === SYSTEM_BOT_ID || partner?.display_name === 'HỆ THỐNG';
                                 return (
                                     <div 
                                         key={conv.id}

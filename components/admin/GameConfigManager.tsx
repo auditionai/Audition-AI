@@ -231,13 +231,27 @@ const GameConfigManager: React.FC = () => {
         }
     };
 
-    const sqlFixScript = `-- SCRIPT SỬA LỖI DB (ULTIMATE FIX V4)
--- 1. BẬT CHẾ ĐỘ XEM CÔNG KHAI & SỬA QUYỀN USERS
-ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Public profiles are viewable by everyone" ON public.users;
-CREATE POLICY "Public profiles are viewable by everyone" ON public.users FOR SELECT USING (true);
+    const sqlFixScript = `-- SCRIPT SỬA LỖI TIN NHẮN ẨN (FIX V5)
+-- 1. Sửa RLS cho conversation_participants
+-- Cho phép user xem thành viên CỦA HỘI THOẠI MÀ HỌ THAM GIA
+DROP POLICY IF EXISTS "Users can view participants of their conversations" ON public.conversation_participants;
+CREATE POLICY "Users can view participants of their conversations" ON public.conversation_participants
+FOR SELECT USING (
+  conversation_id IN (
+    SELECT conversation_id FROM public.conversation_participants WHERE user_id = auth.uid()
+  )
+);
 
--- 2. TẠO USER "HỆ THỐNG" (BOT) - Đảm bảo tồn tại
+-- 2. Sửa RLS cho conversations
+DROP POLICY IF EXISTS "Users can view their conversations" ON public.conversations;
+CREATE POLICY "Users can view their conversations" ON public.conversations
+FOR SELECT USING (
+  id IN (
+    SELECT conversation_id FROM public.conversation_participants WHERE user_id = auth.uid()
+  )
+);
+
+-- 3. Đảm bảo User SYSTEM tồn tại
 INSERT INTO public.users (id, email, display_name, photo_url, diamonds, xp)
 VALUES (
     '00000000-0000-0000-0000-000000000000',
@@ -248,7 +262,7 @@ VALUES (
     999999
 ) ON CONFLICT (id) DO UPDATE SET display_name = 'HỆ THỐNG', photo_url = 'https://api.dicebear.com/7.x/bottts/svg?seed=System';
 
--- 3. HÀM RPC MẠNH MẼ ĐỂ TẠO CONVERSATION (AN TOÀN TUYỆT ĐỐI)
+-- 4. Cập nhật Function get_or_create_conversation (An toàn)
 CREATE OR REPLACE FUNCTION public.get_or_create_conversation(other_user_id UUID)
 RETURNS UUID
 LANGUAGE plpgsql
@@ -282,30 +296,29 @@ BEGIN
 END;
 $$;
 
--- 4. CẤP QUYỀN CHO SERVICE ROLE
-GRANT ALL ON public.conversations TO service_role;
-GRANT ALL ON public.conversation_participants TO service_role;
-GRANT ALL ON public.direct_messages TO service_role;
-GRANT ALL ON public.users TO service_role;
-
--- 5. REFRESH REALTIME (Safe Mode - Bỏ qua lỗi nếu đã tồn tại)
+-- 5. Refresh Realtime Publication (Safe Block)
 DO $$
 BEGIN
     ALTER PUBLICATION supabase_realtime ADD TABLE conversations;
-EXCEPTION WHEN duplicate_object THEN
-    RAISE NOTICE 'Table conversations already in publication';
+EXCEPTION WHEN duplicate_object THEN NULL;
+END;
+$$;
+
+DO $$
+BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE conversation_participants;
+EXCEPTION WHEN duplicate_object THEN NULL;
 END;
 $$;
 
 DO $$
 BEGIN
     ALTER PUBLICATION supabase_realtime ADD TABLE direct_messages;
-EXCEPTION WHEN duplicate_object THEN
-    RAISE NOTICE 'Table direct_messages already in publication';
+EXCEPTION WHEN duplicate_object THEN NULL;
 END;
 $$;
 
-SELECT 'Đã sửa lỗi DB & Cập nhật hàm RPC thành công!' as ket_qua;
+SELECT 'Đã cập nhật RLS và phân quyền thành công!' as ket_qua;
 `;
 
     return (
@@ -328,7 +341,7 @@ SELECT 'Đã sửa lỗi DB & Cập nhật hàm RPC thành công!' as ket_qua;
                     <div className="bg-yellow-500/10 border border-yellow-500/30 p-4 rounded-lg">
                         <h4 className="text-yellow-400 font-bold mb-2 flex items-center gap-2"><i className="ph-fill ph-warning-circle"></i> Cập Nhật Database (QUAN TRỌNG)</h4>
                         <p className="text-sm text-gray-300 mb-4">
-                            Để hệ thống tin nhắn và broadcast hoạt động ổn định, bạn cần chạy đoạn mã này trong Supabase SQL Editor. Nó sẽ cài đặt hàm <code>get_or_create_conversation</code> và sửa quyền.
+                            Để sửa lỗi <strong>không thấy tin nhắn Admin</strong>, hãy chạy đoạn mã này. Nó sẽ sửa quyền RLS để bạn nhìn thấy người gửi là Admin/Hệ thống.
                         </p>
                         <div className="relative">
                             <pre className="bg-black/50 p-3 rounded-lg text-xs text-green-400 overflow-x-auto font-mono border border-white/10 h-64 custom-scrollbar">
@@ -383,7 +396,7 @@ SELECT 'Đã sửa lỗi DB & Cập nhật hàm RPC thành công!' as ket_qua;
                             <div key={r.id || r.title} className="flex justify-between items-center p-2 bg-white/5 rounded">
                                 <div className="flex gap-3 items-center">
                                     <span className="text-yellow-400 font-bold">Lv.{r.levelThreshold}</span>
-                                    <span className={r.color}>{r.title}</span>
+                                    <span className="text-sm font-medium text-gray-300">{r.title}</span>
                                 </div>
                                 <div className="flex gap-2">
                                     <button onClick={() => handleEditRank(r)} className="text-blue-400 text-xs">{t('creator.settings.admin.gameConfig.buttons.edit')}</button>

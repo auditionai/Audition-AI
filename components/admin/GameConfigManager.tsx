@@ -10,52 +10,58 @@ import { useTranslation } from '../../hooks/useTranslation';
 import UserName from '../common/UserName';
 
 // MOVED SQL SCRIPT HERE FOR CLARITY
-const SQL_FIX_SCRIPT = `-- SỬA LỖI KHÔNG GỬI ĐƯỢC TIN NHẮN & KHÔNG TẠO ĐƯỢC HỘI THOẠI
+const SQL_FIX_SCRIPT = `-- SỬA LỖI KHÔNG GỬI ĐƯỢC TIN NHẮN (FINAL)
 
--- 1. Xóa Function cũ nếu có
+-- 1. Xóa Function cũ để tránh xung đột
 DROP FUNCTION IF EXISTS get_or_create_conversation(uuid);
 
--- 2. Tạo lại Function với quyền SECURITY DEFINER (Quyền tối cao, bỏ qua RLS)
-CREATE OR REPLACE FUNCTION get_or_create_conversation(target_user_id UUID)
-RETURNS UUID AS $$
+-- 2. Tạo lại Function với quyền SECURITY DEFINER (Quyền tối cao)
+-- QUAN TRỌNG: SET search_path để tránh lỗi không tìm thấy bảng
+CREATE OR REPLACE FUNCTION public.get_or_create_conversation(target_user_id UUID)
+RETURNS UUID
+SECURITY DEFINER
+SET search_path = public
+LANGUAGE plpgsql
+AS $$
 DECLARE
   conv_id UUID;
   current_user_id UUID;
 BEGIN
   current_user_id := auth.uid();
 
-  -- Tìm hội thoại 2 người đã tồn tại
+  -- Kiểm tra xem 2 người đã có hội thoại chưa
   SELECT c.id INTO conv_id
   FROM conversations c
   JOIN conversation_participants p1 ON c.id = p1.conversation_id
   JOIN conversation_participants p2 ON c.id = p2.conversation_id
   WHERE p1.user_id = current_user_id
     AND p2.user_id = target_user_id
-    AND (SELECT COUNT(*) FROM conversation_participants WHERE conversation_id = c.id) = 2
   LIMIT 1;
 
+  -- Nếu đã có, trả về ID ngay
   IF conv_id IS NOT NULL THEN
     RETURN conv_id;
   END IF;
 
-  -- Tạo mới nếu chưa có
+  -- Nếu chưa, tạo hội thoại mới
   INSERT INTO conversations (created_at, updated_at) 
   VALUES (NOW(), NOW()) 
   RETURNING id INTO conv_id;
 
+  -- Thêm cả 2 người vào
   INSERT INTO conversation_participants (conversation_id, user_id) VALUES (conv_id, current_user_id);
   INSERT INTO conversation_participants (conversation_id, user_id) VALUES (conv_id, target_user_id);
 
   RETURN conv_id;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$;
 
--- 3. Sửa lại RLS cho bảng conversations
+-- 3. Cấp quyền thực thi cho mọi người dùng đã đăng nhập
+GRANT EXECUTE ON FUNCTION public.get_or_create_conversation(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_or_create_conversation(UUID) TO service_role;
+
+-- 4. Reset RLS Policy cho bảng Conversations (Để Inbox hiển thị đúng)
 ALTER TABLE conversations ENABLE ROW LEVEL SECURITY;
-ALTER TABLE conversation_participants ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS "Enable insert for authenticated users" ON conversations;
-CREATE POLICY "Enable insert for authenticated users" ON conversations FOR INSERT TO authenticated WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Users can view their conversations" ON conversations;
 CREATE POLICY "Users can view their conversations" ON conversations
@@ -66,9 +72,8 @@ FOR SELECT USING (
   )
 );
 
--- 4. Sửa lại RLS cho bảng participants
-DROP POLICY IF EXISTS "Enable insert for authenticated users" ON conversation_participants;
-CREATE POLICY "Enable insert for authenticated users" ON conversation_participants FOR INSERT TO authenticated WITH CHECK (true);
+-- 5. Reset RLS Policy cho bảng Participants
+ALTER TABLE conversation_participants ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Users can view participants" ON conversation_participants;
 CREATE POLICY "Users can view participants" ON conversation_participants
@@ -78,7 +83,7 @@ FOR SELECT USING (
   )
 );
 
--- 5. Đảm bảo User System tồn tại
+-- 6. Đảm bảo Admin System User tồn tại (Để gửi thông báo hệ thống)
 INSERT INTO public.users (id, email, display_name, photo_url, diamonds, xp)
 VALUES (
     '00000000-0000-0000-0000-000000000000',
@@ -89,7 +94,7 @@ VALUES (
     999999
 ) ON CONFLICT (id) DO NOTHING;
 
-SELECT 'Đã sửa lỗi thành công! Bây giờ bạn có thể nhắn tin bình thường.' as ket_qua;
+SELECT 'Đã sửa lỗi thành công! Hãy thử gửi tin nhắn lại.' as status;
 `;
 
 const GameConfigManager: React.FC = () => {
@@ -334,7 +339,7 @@ const GameConfigManager: React.FC = () => {
                     <div className="bg-yellow-500/10 border border-yellow-500/30 p-4 rounded-lg">
                         <h4 className="text-yellow-400 font-bold mb-2 flex items-center gap-2"><i className="ph-fill ph-warning-circle"></i> SỬA LỖI TIN NHẮN (BẮT BUỘC)</h4>
                         <p className="text-sm text-gray-300 mb-4">
-                            Đoạn lệnh này sửa lỗi không tạo được hội thoại mới giữa 2 người dùng. Hãy copy và chạy trong Supabase SQL Editor.
+                            Đoạn lệnh này sửa lỗi RLS khiến bạn không thể gửi tin nhắn. <strong>Hãy chạy ngay!</strong>
                         </p>
                         <div className="relative">
                             <pre className="bg-black/50 p-3 rounded-lg text-xs text-green-400 overflow-x-auto font-mono border border-white/10 h-64 custom-scrollbar">
@@ -348,7 +353,7 @@ const GameConfigManager: React.FC = () => {
                             </button>
                         </div>
                         <div className="mt-4 text-xs text-gray-400">
-                            <strong>Hướng dẫn nhanh:</strong> Copy đoạn mã trên &rarr; Vào Supabase &rarr; SQL Editor &rarr; Paste &rarr; Run.
+                            <strong>Hướng dẫn:</strong> Copy đoạn mã trên &rarr; Vào Supabase &rarr; SQL Editor &rarr; Paste &rarr; Run.
                         </div>
                     </div>
                 </div>

@@ -57,9 +57,8 @@ const MessagesPage: React.FC = () => {
                         if (c.participants.length >= 1) {
                              // If it's a valid conversation but the other user is missing (e.g. RLS hidden or deleted),
                              // check if it might be the System Bot or just an unknown user.
-                             // For chat with Admin/System, RLS sometimes hides the system user profile from normal users.
                              otherParticipant = {
-                                user_id: SYSTEM_BOT_ID, // Assume System if single participant context suggests it
+                                user_id: SYSTEM_BOT_ID, 
                                 user: {
                                     id: SYSTEM_BOT_ID,
                                     display_name: 'HỆ THỐNG',
@@ -100,8 +99,6 @@ const MessagesPage: React.FC = () => {
     }, [supabase, user]);
 
     // CRITICAL FIX: Fetch Active Conversation Individually if Missing
-    // This handles the case where a user clicks "Message" on a profile, redirects here with an ID,
-    // but the main conversation list query hasn't updated yet or RLS latency hides it.
     useEffect(() => {
         if (!activeConversationId || !supabase || !user) return;
         
@@ -110,7 +107,6 @@ const MessagesPage: React.FC = () => {
         if (!exists && !isLoadingConvs) {
             console.log(`[Messages] Active conversation ${activeConversationId} missing from list. Fetching manually...`);
             const fetchSingle = async () => {
-                // FIX: Added 'created_at' to select query
                 const { data, error } = await supabase
                     .from('conversations')
                     .select(`
@@ -127,26 +123,27 @@ const MessagesPage: React.FC = () => {
                     let otherParticipant = data.participants.find((p: any) => p.user_id !== user.id);
                     
                     // Handle Fallback for missing profile (e.g. System User hidden by RLS)
-                    if (!otherParticipant && data.participants.length > 0) {
-                         // FIX: Cast to any to avoid TS object literal errors
+                    if (!otherParticipant) {
                          otherParticipant = {
-                            user_id: 'unknown',
+                            user_id: SYSTEM_BOT_ID,
                             user: {
-                                id: 'unknown',
+                                id: SYSTEM_BOT_ID,
                                 display_name: 'HỆ THỐNG', 
                                 photo_url: 'https://api.dicebear.com/7.x/bottts/svg?seed=System'
                             }
                         } as any;
                     }
 
-                    if (otherParticipant) {
-                        const newConv = {
-                            ...data,
-                            participants: [{ user: otherParticipant.user || { id: otherParticipant.user_id, display_name: 'Người dùng', photo_url: '' } }]
-                        };
-                        // FIX: Double cast to ensure type compatibility
-                        setConversations(prev => [newConv as unknown as Conversation, ...prev]);
-                    }
+                    // Construct valid conversation object
+                    const newConv = {
+                        id: data.id,
+                        created_at: data.created_at,
+                        updated_at: data.updated_at,
+                        participants: [{ user: otherParticipant.user || { id: otherParticipant.user_id, display_name: 'Người dùng', photo_url: '' } }]
+                    };
+                    
+                    // FIX: Double cast to ensure type compatibility
+                    setConversations(prev => [newConv as unknown as Conversation, ...prev]);
                 } else {
                     console.error("Could not fetch active conversation details", error);
                 }

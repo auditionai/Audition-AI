@@ -97,54 +97,29 @@ const UserProfilePage: React.FC = () => {
         setIsCreatingChat(true);
 
         try {
-            console.log(`[Chat Init] Attempting to create/get conversation with ${viewUser.id}`);
+            console.log(`[Chat Init] Using RPC to get_or_create_conversation with ${viewUser.id}`);
             
-            // STRATEGY 1: RPC Call (Robust)
-            // This is preferred because it uses SECURITY DEFINER to bypass RLS on insert
+            // STRICTLY use the RPC. Do NOT try to insert manually.
+            // Manual insert will fail RLS because you cannot insert a participant row for ANOTHER user.
             const { data: conversationId, error: rpcError } = await supabase
                 .rpc('get_or_create_conversation', { target_user_id: viewUser.id });
 
-            if (conversationId) {
-                console.log(`[Chat Init] Success via RPC: ${conversationId}`);
-                navigate(`messages?conversationId=${conversationId}`);
-                return;
-            }
-
             if (rpcError) {
-                console.warn("[Chat Init] RPC Failed, attempting manual fallback...", rpcError);
+                console.error("RPC Error:", rpcError);
+                throw new Error(rpcError.message);
             }
 
-            // STRATEGY 2: Manual Check & Create (Fallback)
-            // Step A: Check for existing conversation manually
-            // This requires complex querying of the participants table which might be slow or blocked by RLS
-            // Simplified attempt: just try to create new if RPC failed
-            
-            // Create Conversation
-            const { data: newConv, error: createError } = await supabase
-                .from('conversations')
-                .insert({})
-                .select()
-                .single();
-
-            if (createError) throw createError;
-            const newId = newConv.id;
-
-            // Insert Participants
-            const { error: partError } = await supabase
-                .from('conversation_participants')
-                .insert([
-                    { conversation_id: newId, user_id: user.id },
-                    { conversation_id: newId, user_id: viewUser.id }
-                ]);
-
-            if (partError) throw partError;
-
-            console.log(`[Chat Init] Success via Manual: ${newId}`);
-            navigate(`messages?conversationId=${newId}`);
+            if (conversationId) {
+                console.log(`[Chat Init] Success: ${conversationId}`);
+                navigate(`messages?conversationId=${conversationId}`);
+            } else {
+                throw new Error("Hệ thống không trả về ID hội thoại. Vui lòng thử lại.");
+            }
 
         } catch (e: any) {
-            showToast(`Không thể tạo cuộc trò chuyện: ${e.message}`, "error");
-            console.error("Chat Creation Error:", e);
+            console.error("Chat Creation Critical Error:", e);
+            // Only show generic error to user, but log specific one
+            showToast(`Lỗi khởi tạo tin nhắn. Vui lòng báo Admin: ${e.message}`, "error");
         } finally {
             setIsCreatingChat(false);
         }

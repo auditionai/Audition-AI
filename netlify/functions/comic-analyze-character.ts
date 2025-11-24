@@ -49,9 +49,9 @@ const handler: Handler = async (event: HandlerEvent) => {
             Keep the description under 100 words.
         `;
 
-        // Using gemini-3-pro-preview for highest quality analysis
+        // Use gemini-2.5-flash for stable, fast multimodal analysis
         const response = await ai.models.generateContent({
-            model: 'gemini-3-pro-preview', 
+            model: 'gemini-2.5-flash', 
             contents: {
                 parts: [
                     { inlineData: { data: base64, mimeType } },

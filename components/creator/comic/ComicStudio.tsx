@@ -809,7 +809,7 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                                             </button>
                                             
                                             <div className="flex gap-4">
-                                                {/* Image Upload */}
+                                                {/* Image Upload - Adjusted sizing */}
                                                 <div className="w-20 h-20 flex-shrink-0">
                                                     <ImageUploader
                                                         onUpload={(e) => handleCharacterImageUpload(e, char.id)}
@@ -818,6 +818,7 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                                                             setCharacters(prev => prev.map(c => c.id === char.id ? { ...c, image_url: undefined, image_file: undefined } : c));
                                                         }}
                                                         text=""
+                                                        className="w-full h-full min-h-0" // Force size to container
                                                     />
                                                 </div>
 

@@ -410,7 +410,7 @@ const ProfessionalScriptEditor: React.FC<{
 
 const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructionClick }) => {
     const { user, session, showToast, updateUserDiamonds, supabase } = useAuth();
-    const { t } = useTranslation(); // Satisfy unused variable check by using it if needed, or leave for future.
+    const { t } = useTranslation();
     
     // STEP CONTROL
     const [currentStep, setCurrentStep] = useState(1);
@@ -516,7 +516,14 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                 })
             });
 
-            const data = await response.json();
+            let data;
+            try {
+                const text = await response.text();
+                data = JSON.parse(text);
+            } catch (e) {
+                throw new Error("Lỗi kết nối server (Timeout hoặc sai định dạng). Vui lòng thử lại sau.");
+            }
+
             if (!response.ok) throw new Error(data.error || 'Failed to generate script');
 
             // Initialize panels from outline
@@ -564,7 +571,14 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                 })
             });
 
-            const data = await response.json();
+            let data;
+            try {
+                const text = await response.text();
+                data = JSON.parse(text);
+            } catch (e) {
+                throw new Error("Lỗi kết nối server (Timeout hoặc sai định dạng). Vui lòng thử lại.");
+            }
+
             if (!response.ok) throw new Error(data.error || 'Failed to expand page');
 
             const updatedPages = [...comicPages];

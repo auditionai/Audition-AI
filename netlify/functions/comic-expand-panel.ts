@@ -72,8 +72,9 @@ const handler: Handler = async (event: HandlerEvent) => {
             }
         `;
 
+        // Use gemini-2.5-flash for speed
         const response = await ai.models.generateContent({
-            model: 'gemini-3-pro-preview',
+            model: 'gemini-2.5-flash',
             contents: { parts: [{ text: prompt }] },
             config: {
                 responseMimeType: "application/json",

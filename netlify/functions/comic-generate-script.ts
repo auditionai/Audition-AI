@@ -46,7 +46,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             coverInstruction += `\n- Page 1 MUST be a 'Title Cover Page' (Trang bìa). Summary: 'Trang bìa ấn tượng với tên truyện: [${premise.substring(0, 20)}...] và hình ảnh minh họa chính'.`;
         }
 
-        // Prompt optimized for OUTLINING (prevent timeouts)
+        // Prompt optimized for OUTLINING
         const prompt = `
             You are a professional Comic Script Writer.
             **Task:** Create a structural outline for a comic script.
@@ -68,8 +68,9 @@ const handler: Handler = async (event: HandlerEvent) => {
             **Output Format:** JSON Array of objects.
         `;
 
+        // Use gemini-2.5-flash for speed to avoid Netlify 10s timeout
         const response = await ai.models.generateContent({
-            model: 'gemini-3-pro-preview', 
+            model: 'gemini-2.5-flash', 
             contents: { parts: [{ text: prompt }] },
             config: {
                 responseMimeType: "application/json",

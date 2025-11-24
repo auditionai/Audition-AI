@@ -307,7 +307,7 @@ const ProfessionalScriptEditor: React.FC<{
                     <button 
                         onClick={onExpand}
                         disabled={isExpanding}
-                        className="themed-button-primary px-6 py-3 rounded-lg font-bold flex items-center gap-2 mx-auto shadow-lg hover:shadow-pink-500/30 transition-all"
+                        className={`themed-button-primary px-6 py-3 rounded-lg font-bold flex items-center gap-2 mx-auto shadow-lg hover:shadow-pink-500/30 transition-all ${panel.visual_description ? 'bg-red-500 hover:bg-red-600 border-red-500' : ''}`}
                     >
                         {isExpanding ? (
                             <>
@@ -316,7 +316,8 @@ const ProfessionalScriptEditor: React.FC<{
                             </>
                         ) : (
                             <>
-                                <i className="ph-fill ph-magic-wand"></i> Phân tích chi tiết (AI)
+                                {panel.visual_description ? <i className="ph-fill ph-arrow-counter-clockwise"></i> : <i className="ph-fill ph-magic-wand"></i>}
+                                {panel.visual_description ? 'Thử lại (Lỗi định dạng)' : 'Phân tích chi tiết (AI)'}
                             </>
                         )}
                     </button>
@@ -601,12 +602,18 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
 
             if (!response.ok) throw new Error(data.error || 'Failed to expand page');
 
-            const updatedPages = [...comicPages];
-            updatedPages[pageIndex] = {
-                ...updatedPages[pageIndex],
-                visual_description: JSON.stringify(data.script_data) // Store full JSON here
-            };
-            setComicPages(updatedPages);
+            // --- CRITICAL FIX: FUNCTIONAL STATE UPDATE ---
+            // Using prev state ensures we don't overwrite changes from other async operations (like queue)
+            setComicPages(prev => {
+                const next = [...prev];
+                if (next[pageIndex]) {
+                    next[pageIndex] = {
+                        ...next[pageIndex],
+                        visual_description: JSON.stringify(data.script_data) // Store full JSON here
+                    };
+                }
+                return next;
+            });
             
             // Only show toast if user clicked manually (queue is empty)
             if (expansionQueue.length === 0) {
@@ -702,8 +709,7 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
             setComicPages(prev => {
                 const next = [...prev];
                 if (next[index]) {
-                    next[index].is_rendering = true;
-                    next[index].status = 'rendering';
+                    next[index] = { ...next[index], is_rendering: true, status: 'rendering' };
                 }
                 return next;
             });
@@ -740,8 +746,7 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                 setComicPages(prev => {
                     const next = [...prev];
                     if(next[pageIndex]) {
-                        next[pageIndex].is_rendering = false;
-                        next[pageIndex].status = 'draft'; // Reset to draft
+                         next[pageIndex] = { ...next[pageIndex], is_rendering: false, status: 'draft' };
                     }
                     return next;
                 });
@@ -754,9 +759,12 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                 setComicPages(prev => {
                     const next = [...prev];
                     if (next[pageIndex]) {
-                        next[pageIndex].image_url = data.image_url;
-                        next[pageIndex].is_rendering = false;
-                        next[pageIndex].status = 'completed';
+                        next[pageIndex] = { 
+                            ...next[pageIndex],
+                            image_url: data.image_url,
+                            is_rendering: false,
+                            status: 'completed'
+                        };
                     }
                     return next;
                 });
@@ -1056,11 +1064,16 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                                         pageIndex={activePageIndex}
                                         panel={comicPages[activePageIndex]} 
                                         onUpdate={(jsonStr) => {
-                                            const updated = [...comicPages];
-                                            if (updated[activePageIndex]) {
-                                                updated[activePageIndex].visual_description = jsonStr;
-                                                setComicPages(updated);
-                                            }
+                                            setComicPages(prev => {
+                                                const next = [...prev];
+                                                if (next[activePageIndex]) {
+                                                    next[activePageIndex] = {
+                                                        ...next[activePageIndex],
+                                                        visual_description: jsonStr
+                                                    };
+                                                }
+                                                return next;
+                                            });
                                         }}
                                         onExpand={() => handleExpandPage(activePageIndex)}
                                         isExpanding={expandingPageId === comicPages[activePageIndex].id}

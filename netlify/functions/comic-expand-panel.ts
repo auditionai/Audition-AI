@@ -41,21 +41,21 @@ const handler: Handler = async (event: HandlerEvent) => {
         const prompt = `
             You are a professional Comic Script Writer.
             
-            **TASK:** Break down this Page Summary into detailed Panels.
+            **TASK:** Break down this Page Summary into detailed Panels for an AI image generator and comic creation.
             
             **INPUT INFO:**
             - Page Summary: "${plot_summary}"
             - Genre: ${genre}
             - Style: ${style}
-            - Language: ${targetLanguage}
+            - Language: ${targetLanguage} (The output dialogue must be in this language).
             - Characters:
             ${characterContext}
             
             **STRICT RULES:**
             1. Create exactly 3 to 5 panels based on the summary.
-            2. "description" MUST be visual instructions for an artist (English preferred for precision, or Vietnamese).
-            3. "dialogues" MUST be in **${targetLanguage}**.
-            4. If language is Vietnamese, dialogues MUST be natural Vietnamese conversation.
+            2. **description**: Must be a detailed visual instruction for an artist/AI. Describe the action, camera angle, background, and character expressions vividly. (Use English for descriptions if possible for better AI generation later, but Vietnamese is acceptable).
+            3. **dialogues**: Must be natural conversation in **${targetLanguage}**.
+            4. **IMPORTANT**: Ensure every panel has a "description" and "dialogues" array (can be empty if silent).
             5. Output MUST be valid JSON matching the schema below.
             
             **JSON Schema:**

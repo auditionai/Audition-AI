@@ -813,15 +813,14 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                                             <div className="flex gap-4">
                                                 {/* Image Upload */}
                                                 <div className="w-20 h-20 flex-shrink-0">
-                                                    {char.image_url ? (
-                                                        <img src={char.image_url} className="w-full h-full object-cover rounded-lg border border-white/20" alt={char.name} />
-                                                    ) : (
-                                                        <label className="w-full h-full flex flex-col items-center justify-center bg-black/30 border border-dashed border-gray-600 rounded-lg cursor-pointer hover:border-pink-500 transition text-xs text-center p-1">
-                                                            <i className="ph-fill ph-camera text-xl mb-1"></i>
-                                                            <span>Ảnh mẫu</span>
-                                                            <input type="file" className="hidden" accept="image/*" onChange={(e) => handleCharacterImageUpload(e, char.id)} />
-                                                        </label>
-                                                    )}
+                                                    <ImageUploader
+                                                        onUpload={(e) => handleCharacterImageUpload(e, char.id)}
+                                                        image={char.image_url ? { url: char.image_url } : null}
+                                                        onRemove={() => {
+                                                            setCharacters(prev => prev.map(c => c.id === char.id ? { ...c, image_url: undefined, image_file: undefined } : c));
+                                                        }}
+                                                        text=""
+                                                    />
                                                 </div>
 
                                                 {/* Info */}

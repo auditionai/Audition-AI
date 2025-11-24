@@ -92,6 +92,29 @@ const handler: Handler = async (event: HandlerEvent) => {
             const text = response.text || '[]';
             const cleanText = text.replace(/```json|```/g, '').trim();
             scriptJson = JSON.parse(cleanText);
+
+            // ROBUSTNESS FIX: Ensure it's an array
+            if (!Array.isArray(scriptJson) && typeof scriptJson === 'object') {
+                // Sometimes AI wraps result in { "result": [...] } or { "pages": [...] }
+                const possibleKeys = ['outline', 'pages', 'panels', 'script', 'result'];
+                for (const key of possibleKeys) {
+                    if (Array.isArray(scriptJson[key])) {
+                        scriptJson = scriptJson[key];
+                        break;
+                    }
+                }
+            }
+            
+            // If still not an array (e.g. single object), wrap it
+            if (!Array.isArray(scriptJson) && scriptJson) {
+                scriptJson = [scriptJson];
+            }
+            
+            // Fallback if empty or null
+            if (!scriptJson || !Array.isArray(scriptJson)) {
+                scriptJson = [];
+            }
+
         } catch (parseError) {
             console.error("JSON Parse Error:", parseError);
             return { statusCode: 500, body: JSON.stringify({ error: 'AI returned invalid format. Please try again.' }) };

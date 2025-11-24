@@ -526,12 +526,18 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
 
             if (!response.ok) throw new Error(data.error || 'Failed to generate script');
 
+            // Safety Check: Verify data structure before using
+            if (!data || !data.outline || !Array.isArray(data.outline)) {
+                console.error("Invalid AI Response:", data);
+                throw new Error("AI trả về định dạng không hợp lệ. Vui lòng thử lại.");
+            }
+
             // Initialize panels from outline
             const newPages: ComicPanel[] = data.outline.map((outlineItem: any) => ({
                 id: crypto.randomUUID(),
-                panel_number: outlineItem.panel_number,
+                panel_number: outlineItem.panel_number || 1,
                 visual_description: "", // Empty initially
-                plot_summary: outlineItem.plot_summary, // Store summary for lazy expansion
+                plot_summary: outlineItem.plot_summary || "Đang tải...", // Store summary for lazy expansion
                 dialogue: [],
                 status: 'draft'
             }));

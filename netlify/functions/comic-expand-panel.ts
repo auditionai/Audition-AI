@@ -110,7 +110,25 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         let resultJson;
         try {
-            resultJson = JSON.parse(response.text || '{}');
+            const text = response.text || '{}';
+            const cleanText = text.replace(/```json|```/g, '').trim();
+            resultJson = JSON.parse(cleanText);
+            
+            // Basic validation
+            if (!resultJson.panels || !Array.isArray(resultJson.panels)) {
+                // Attempt to fix structure if AI wrapped it weirdly
+                if (resultJson.script && resultJson.script.panels) resultJson = resultJson.script;
+                else if (resultJson.result && resultJson.result.panels) resultJson = resultJson.result;
+            }
+            
+            // If still invalid, construct fallback
+            if (!resultJson.panels) {
+                 resultJson = { 
+                    layout_note: "Standard Layout",
+                    panels: [{ panel_id: 1, description: plot_summary, dialogues: [] }]
+                };
+            }
+
         } catch (e) {
             // Fallback
             resultJson = { 

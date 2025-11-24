@@ -6,7 +6,6 @@ import { resizeImage } from '../../../utils/imageUtils';
 import jsPDF from 'jspdf';
 import JSZip from 'jszip';
 import SettingsBlock from '../ai-tool/SettingsBlock';
-import Modal from '../../common/Modal'; 
 import { COMIC_PREMISES } from '../../../constants/comicPremises';
 import { useTranslation } from '../../../hooks/useTranslation';
 import ImageUploader from '../../ai-tool/ImageUploader';
@@ -481,7 +480,7 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
             if (!response.ok) throw new Error(data.error || 'Analysis failed');
 
             setCharacters(prev => prev.map(c => c.id === id ? { ...c, description: data.description, is_analyzing: false } : c));
-            showToast('Phân tích nhân vật thành công!', 'success');
+            showToast(t('creator.aiTool.singlePhoto.superFaceLockProcessed') || 'Phân tích thành công!', 'success');
 
         } catch (error: any) {
             showToast(error.message, 'error');

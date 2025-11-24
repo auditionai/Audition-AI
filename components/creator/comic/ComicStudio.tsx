@@ -224,7 +224,7 @@ interface ScriptPage {
 const ProfessionalScriptEditor: React.FC<{ 
     panel: ComicPanel; 
     onUpdate: (updatedJsonString: string) => void;
-    onExpand: () => void;
+    onExpand: () => Promise<void>; // Changed to Promise to allow await
     isExpanding: boolean;
     pageIndex: number;
 }> = ({ panel, onUpdate, onExpand, isExpanding, pageIndex }) => {
@@ -447,6 +447,9 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
     const [expandingPageId, setExpandingPageId] = useState<string | null>(null);
     const [renderingPageId, setRenderingPageId] = useState<string | null>(null);
 
+    // QUEUE STATE FOR SEQUENTIAL AUTO-EXPANSION
+    const [expansionQueue, setExpansionQueue] = useState<number[]>([]);
+
     // --- STEP 1: SETUP & CASTING ---
 
     const handleAddCharacter = () => {
@@ -552,7 +555,12 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
             setComicPages(newPages);
             updateUserDiamonds(data.newDiamondCount);
             setCurrentStep(2); // Move to Step 2
-            showToast('Đã tạo khung kịch bản! Hãy phân tích chi tiết từng trang.', 'success');
+            showToast('Đã tạo khung kịch bản! Hệ thống sẽ tự động phân tích chi tiết từng trang.', 'success');
+
+            // TRIGGER AUTO EXPANSION QUEUE FOR ALL PAGES
+            // Create an array of indices [0, 1, 2... pageCount-1]
+            const queue = Array.from({ length: newPages.length }, (_, i) => i);
+            setExpansionQueue(queue);
 
         } catch (error: any) {
             showToast(error.message, 'error');
@@ -599,14 +607,50 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                 visual_description: JSON.stringify(data.script_data) // Store full JSON here
             };
             setComicPages(updatedPages);
-            showToast(`Đã phân tích chi tiết trang ${pageIndex + 1}`, 'success');
+            
+            // Only show toast if user clicked manually (queue is empty)
+            if (expansionQueue.length === 0) {
+                showToast(`Đã phân tích chi tiết trang ${pageIndex + 1}`, 'success');
+            }
 
         } catch (error: any) {
-            showToast(error.message, 'error');
+            // If manual click, show error. If auto queue, log it but don't break the app flow
+            if (expansionQueue.length === 0) {
+                 showToast(error.message, 'error');
+            } else {
+                console.error("Auto-expand failed for page " + pageIndex, error);
+            }
         } finally {
             setExpandingPageId(null);
         }
     };
+    
+    // --- AUTO-PROCESS QUEUE EFFECT ---
+    useEffect(() => {
+        if (expansionQueue.length === 0 || expandingPageId) return;
+
+        const processNext = async () => {
+            const nextIndex = expansionQueue[0];
+            
+            // Safety check: index exists
+            if (!comicPages[nextIndex]) {
+                setExpansionQueue(prev => prev.slice(1));
+                return;
+            }
+            
+            // Optional: Auto-focus visual
+            setActivePageIndex(nextIndex);
+
+            // Trigger expansion
+            await handleExpandPage(nextIndex);
+            
+            // Remove from queue to process next
+            setExpansionQueue(prev => prev.slice(1));
+        };
+        
+        processNext();
+
+    }, [expansionQueue, expandingPageId]);
 
     // --- STEP 3: RENDERING ---
 
@@ -927,6 +971,15 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                     {/* Left: Page List */}
                     <div className="w-full lg:w-1/4 bg-[#12121A]/80 border border-white/10 rounded-2xl p-4 flex flex-col h-full">
                         <h3 className="text-lg font-bold text-white mb-4 px-2">Danh sách trang</h3>
+                        
+                        {/* Auto Expansion Indicator */}
+                        {expansionQueue.length > 0 && (
+                            <div className="mb-3 p-2 bg-blue-500/20 border border-blue-500/30 rounded-lg flex items-center gap-2 text-xs text-blue-300 animate-pulse">
+                                <div className="w-3 h-3 border-2 border-blue-300 border-t-transparent rounded-full animate-spin"></div>
+                                <span>Đang tự động phân tích ({pageCount - expansionQueue.length + 1}/{pageCount})...</span>
+                            </div>
+                        )}
+
                         <div className="flex-grow overflow-y-auto custom-scrollbar space-y-2 pr-1">
                             {comicPages.map((page, idx) => (
                                 <button
@@ -937,12 +990,20 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                                             ? 'bg-pink-500/20 border-pink-500 text-white shadow-lg shadow-pink-500/10' 
                                             : 'bg-white/5 border-transparent text-gray-400 hover:bg-white/10 hover:text-white'
                                         }
+                                        ${expansionQueue.includes(idx) ? 'opacity-70' : ''}
                                     `}
                                 >
                                     <div className="flex justify-between items-center mb-1">
                                         <span className="text-xs font-bold uppercase">Trang {idx + 1}</span>
                                         {page.status === 'completed' && <i className="ph-fill ph-check-circle text-green-400"></i>}
                                         {page.status === 'rendering' && <i className="ph-fill ph-spinner animate-spin text-yellow-400"></i>}
+                                        
+                                        {/* Show loading for expansion */}
+                                        {expandingPageId === page.id ? (
+                                            <i className="ph-fill ph-dots-three text-blue-400 animate-bounce"></i>
+                                        ) : !page.visual_description ? (
+                                            <i className="ph-fill ph-circle-dashed text-gray-600 text-[10px]"></i>
+                                        ) : null}
                                     </div>
                                     <p className="text-[10px] opacity-70 line-clamp-2">
                                         {page.plot_summary || 'Chưa có nội dung'}
@@ -969,7 +1030,7 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                                 {currentStep === 2 && (
                                     <button 
                                         onClick={() => handleRenderPage(activePageIndex)}
-                                        disabled={!!renderingPageId || comicPages[activePageIndex]?.status === 'rendering'}
+                                        disabled={!!renderingPageId || comicPages[activePageIndex]?.status === 'rendering' || !comicPages[activePageIndex]?.visual_description}
                                         className="px-6 py-2 bg-gradient-to-r from-pink-500 to-purple-600 text-white font-bold rounded-full shadow-lg hover:shadow-pink-500/30 transition transform active:scale-95 disabled:opacity-50 flex items-center gap-2"
                                     >
                                         {comicPages[activePageIndex]?.status === 'rendering' ? (

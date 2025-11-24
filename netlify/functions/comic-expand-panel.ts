@@ -39,32 +39,34 @@ const handler: Handler = async (event: HandlerEvent) => {
         const targetLanguage = language || 'Tiếng Việt';
 
         const prompt = `
-            Act as a Comic Script Writer.
-            **TASK:** Expand this Page Plot into 3-5 detailed panels.
+            You are a professional Comic Script Writer.
             
-            **Info:**
-            - Plot: "${plot_summary}"
+            **TASK:** Break down this Page Summary into detailed Panels.
+            
+            **INPUT INFO:**
+            - Page Summary: "${plot_summary}"
             - Genre: ${genre}
             - Style: ${style}
-            - Language: ${targetLanguage} (Strictly).
+            - Language: ${targetLanguage}
             - Characters:
             ${characterContext}
             
-            **Rules:**
-            1. Output strict JSON.
-            2. Create 3, 4, or 5 panels.
-            3. Descriptions must be concise visual instructions (max 40 words/panel).
-            4. Dialogues must be natural and in ${targetLanguage}.
+            **STRICT RULES:**
+            1. Create exactly 3 to 5 panels based on the summary.
+            2. "description" MUST be visual instructions for an artist (English preferred for precision, or Vietnamese).
+            3. "dialogues" MUST be in **${targetLanguage}**.
+            4. If language is Vietnamese, dialogues MUST be natural Vietnamese conversation.
+            5. Output MUST be valid JSON matching the schema below.
             
             **JSON Schema:**
             {
-              "layout_note": "String (e.g., 2x2 Grid)",
+              "layout_note": "String (e.g., 2x2 Grid, Dynamic Action)",
               "panels": [
                 {
                   "panel_id": Integer,
-                  "description": "String (Visuals)",
+                  "description": "String (Visual description of scene, action, angle)",
                   "dialogues": [
-                    { "speaker": "String", "text": "String" }
+                    { "speaker": "String (Character Name)", "text": "String (Dialogue Content)" }
                   ]
                 }
               ]
@@ -120,7 +122,7 @@ const handler: Handler = async (event: HandlerEvent) => {
                     else if (Array.isArray((parsed as any).result?.panels)) resultJson = (parsed as any).result;
                     else {
                         // Fallback
-                        resultJson.panels = [{ panel_id: 1, description: plot_summary, dialogues: [] }];
+                        resultJson.panels = [{ panel_id: 1, description: plot_summary, dialogues: [] }] as any;
                     }
                 }
             }

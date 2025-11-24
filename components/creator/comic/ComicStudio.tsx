@@ -231,35 +231,47 @@ const ProfessionalScriptEditor: React.FC<{
     const [pageData, setPageData] = useState<ScriptPage | null>(null);
     const [isParsingError, setIsParsingError] = useState(false);
 
-    // SYNC STATE WITH PROP
+    // SYNC STATE WITH PROP - ROBUST VERSION
     useEffect(() => {
         const desc = panel.visual_description || '';
         
-        if (!desc || !desc.trim().startsWith('{')) {
+        if (!desc || desc.trim() === "") {
             setPageData(null); 
-            setIsParsingError(true);
+            // Do not treat empty as error, it just means "Not Analyzed Yet"
+            setIsParsingError(false);
             return;
         }
 
         try {
             const parsed = JSON.parse(desc);
-            // Validate structure
-            if (!parsed.panels || !Array.isArray(parsed.panels)) {
-                console.warn("JSON valid but missing panels array:", parsed);
-                // Fallback structure if partial JSON
-                setPageData({
-                    layout_note: parsed.layout_note || "Standard",
-                    panels: []
-                });
-                setIsParsingError(false);
-                return;
+            // Robust Check: Ensure panels array exists
+            let cleanData: ScriptPage = { layout_note: "Standard", panels: [] };
+            
+            if (parsed.panels && Array.isArray(parsed.panels)) {
+                cleanData = parsed;
+            } else if (Array.isArray(parsed)) {
+                // If root is array (some older versions), wrap it
+                cleanData.panels = parsed;
+            } else {
+                // If JSON valid but unknown structure, treat strictly as 1 panel
+                throw new Error("Structure mismatch");
             }
-            setPageData(parsed);
+            
+            setPageData(cleanData);
             setIsParsingError(false);
         } catch (e) {
-            console.error("JSON Parse Error in Editor:", e);
-            setPageData(null);
-            setIsParsingError(true);
+            console.warn("JSON Parse Failed, falling back to raw text mode:", e);
+            // FALLBACK: Treat the entire string as the description for Panel 1
+            // This ensures the user ALWAYS sees the content to edit, even if AI messed up the format.
+            setPageData({
+                layout_note: "Recovered Layout",
+                panels: [{
+                    panel_id: 1,
+                    description: desc, // Use the raw string here
+                    dialogues: []
+                }]
+            });
+            setIsParsingError(false); // We handled the error by falling back
         }
     }, [panel.visual_description]);
 
@@ -272,7 +284,7 @@ const ProfessionalScriptEditor: React.FC<{
         if (!pageData) return;
         const newPanels = [...pageData.panels];
         if (newPanels[idx]) {
-            newPanels[idx] = { ...newPanels[idx], description: val }; // Create new object
+            newPanels[idx] = { ...newPanels[idx], description: val }; 
             updatePage({ ...pageData, panels: newPanels });
         }
     };
@@ -317,8 +329,8 @@ const ProfessionalScriptEditor: React.FC<{
         }
     }
 
-    // --- ERROR / EMPTY STATE ---
-    if (isParsingError || !pageData) {
+    // --- EMPTY STATE (Not Analyzed Yet) ---
+    if (!pageData) {
         return (
             <div className="flex flex-col items-center justify-center p-8 border border-dashed border-white/20 rounded-xl bg-white/5 min-h-[300px]">
                 <div className="text-center max-w-md">
@@ -343,7 +355,7 @@ const ProfessionalScriptEditor: React.FC<{
                         ) : (
                             <>
                                 {panel.visual_description ? <i className="ph-fill ph-arrow-counter-clockwise text-xl"></i> : <i className="ph-fill ph-magic-wand text-xl"></i>}
-                                {panel.visual_description ? 'Thử lại (Lỗi định dạng)' : 'Phân tích chi tiết (AI)'}
+                                {panel.visual_description ? 'Thử lại (Phân tích lại)' : 'Phân tích chi tiết (AI)'}
                             </>
                         )}
                     </button>
@@ -362,6 +374,10 @@ const ProfessionalScriptEditor: React.FC<{
                     <p className="text-xs font-bold text-blue-300 uppercase mb-1">Cốt truyện gốc (Tóm tắt)</p>
                     <p className="text-sm text-gray-300 leading-relaxed">{panel.plot_summary || 'Không có tóm tắt.'}</p>
                 </div>
+                {/* Add explicit Retry Button here as well for easier access */}
+                <button onClick={onExpand} disabled={isExpanding} className="ml-auto text-xs text-blue-300 hover:text-white underline whitespace-nowrap">
+                    {isExpanding ? 'Đang tải...' : 'Phân tích lại'}
+                </button>
             </div>
 
             {/* Panels List */}
@@ -370,7 +386,7 @@ const ProfessionalScriptEditor: React.FC<{
                     {/* Panel Header */}
                     <div className="bg-white/5 px-4 py-2 border-b border-white/10 flex justify-between items-center">
                         <span className="text-xs font-bold text-pink-400 uppercase tracking-wider flex items-center gap-2">
-                            <i className="ph-fill ph-frame-corners"></i> Khung tranh (Panel) {p.panel_id}
+                            <i className="ph-fill ph-frame-corners"></i> Khung tranh (Panel) {p.panel_id || (pIdx + 1)}
                         </span>
                     </div>
                     
@@ -591,7 +607,6 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
             showToast('Đã tạo khung kịch bản! Hệ thống sẽ tự động phân tích chi tiết từng trang.', 'success');
 
             // TRIGGER AUTO EXPANSION QUEUE FOR ALL PAGES
-            // Create an array of indices [0, 1, 2... newPages.length-1]
             const queue = Array.from({ length: newPages.length }, (_, i) => i);
             setExpansionQueue(queue);
 

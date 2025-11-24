@@ -208,6 +208,158 @@ const StepIndicator = ({ currentStep }: { currentStep: number }) => {
     );
 };
 
+// --- SCRIPT EDITOR COMPONENTS ---
+
+interface PanelData {
+    panel_id: number;
+    description: string;
+    dialogues: { speaker: string; text: string }[];
+}
+
+interface ScriptPage {
+    layout_note: string;
+    panels: PanelData[];
+}
+
+const ProfessionalScriptEditor: React.FC<{ 
+    panel: ComicPanel; 
+    onUpdate: (updatedJsonString: string) => void;
+}> = ({ panel, onUpdate }) => {
+    const [pageData, setPageData] = useState<ScriptPage | null>(null);
+    const [isParsingError, setIsParsingError] = useState(false);
+
+    useEffect(() => {
+        try {
+            if (!panel.visual_description || panel.visual_description.startsWith('(') || panel.visual_description.startsWith('[')) {
+                setPageData(null); // Still generating or error string
+                setIsParsingError(true);
+                return;
+            }
+            const parsed = JSON.parse(panel.visual_description);
+            setPageData(parsed);
+            setIsParsingError(false);
+        } catch (e) {
+            setPageData(null);
+            setIsParsingError(true);
+        }
+    }, [panel.visual_description]);
+
+    const updatePage = (newData: ScriptPage) => {
+        setPageData(newData);
+        onUpdate(JSON.stringify(newData));
+    };
+
+    const handlePanelDescChange = (idx: number, val: string) => {
+        if (!pageData) return;
+        const newPanels = [...pageData.panels];
+        newPanels[idx].description = val;
+        updatePage({ ...pageData, panels: newPanels });
+    };
+
+    const handleDialogueChange = (panelIdx: number, diaIdx: number, field: 'speaker' | 'text', val: string) => {
+        if (!pageData) return;
+        const newPanels = [...pageData.panels];
+        const newDialogues = [...newPanels[panelIdx].dialogues];
+        newDialogues[diaIdx] = { ...newDialogues[diaIdx], [field]: val };
+        newPanels[panelIdx].dialogues = newDialogues;
+        updatePage({ ...pageData, panels: newPanels });
+    };
+
+    const addDialogue = (panelIdx: number) => {
+        if (!pageData) return;
+        const newPanels = [...pageData.panels];
+        newPanels[panelIdx].dialogues.push({ speaker: 'Nhân vật', text: '...' });
+        updatePage({ ...pageData, panels: newPanels });
+    }
+
+    const removeDialogue = (panelIdx: number, diaIdx: number) => {
+        if (!pageData) return;
+        const newPanels = [...pageData.panels];
+        newPanels[panelIdx].dialogues.splice(diaIdx, 1);
+        updatePage({ ...pageData, panels: newPanels });
+    }
+
+    if (isParsingError || !pageData) {
+        return (
+            <div className="p-4 bg-white/5 rounded-lg border border-white/10 text-center">
+                <p className="text-gray-400 text-sm mb-2">Dữ liệu kịch bản dạng thô (Raw) hoặc đang tạo...</p>
+                <textarea 
+                    className="w-full h-64 bg-black/30 text-gray-300 p-2 rounded border border-white/10 text-xs font-mono"
+                    value={panel.visual_description}
+                    onChange={(e) => onUpdate(e.target.value)}
+                />
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-4">
+            {/* Layout Note */}
+            <div className="bg-[#1E1B25] p-3 rounded-lg border border-white/10 flex items-center gap-2">
+                <i className="ph-fill ph-layout text-purple-400"></i>
+                <input 
+                    className="bg-transparent w-full text-sm text-purple-200 focus:outline-none font-semibold"
+                    value={pageData.layout_note || ''}
+                    onChange={(e) => updatePage({ ...pageData, layout_note: e.target.value })}
+                    placeholder="Mô tả bố cục trang..."
+                />
+            </div>
+
+            {/* Panels List */}
+            {pageData.panels.map((p, idx) => (
+                <div key={idx} className="bg-[#1E1B25] border border-white/10 rounded-xl overflow-hidden shadow-sm hover:border-pink-500/30 transition-colors">
+                    <div className="bg-black/20 px-4 py-2 border-b border-white/5 flex justify-between items-center">
+                        <span className="text-xs font-bold text-pink-400 uppercase tracking-wider">Khung {p.panel_id}</span>
+                        <span className="text-[10px] text-gray-600 uppercase font-bold">Kịch bản chi tiết</span>
+                    </div>
+                    
+                    <div className="p-4 grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        {/* Left: Description */}
+                        <div>
+                            <label className="text-[10px] font-bold text-gray-500 uppercase mb-1 block">Mô tả hình ảnh (Visual)</label>
+                            <textarea 
+                                className="w-full h-24 bg-black/30 border border-white/10 rounded-lg p-3 text-sm text-white focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition resize-none"
+                                value={p.description}
+                                onChange={(e) => handlePanelDescChange(idx, e.target.value)}
+                                placeholder="Mô tả bối cảnh, hành động, góc máy..."
+                            />
+                        </div>
+
+                        {/* Right: Dialogues */}
+                        <div className="bg-white/5 rounded-lg p-3 border border-white/5">
+                            <div className="flex justify-between items-center mb-2">
+                                <label className="text-[10px] font-bold text-gray-500 uppercase block">Lời thoại (Dialogue)</label>
+                                <button onClick={() => addDialogue(idx)} className="text-[10px] bg-green-600/20 text-green-400 px-2 py-0.5 rounded hover:bg-green-600/40 transition">+ Thêm thoại</button>
+                            </div>
+                            
+                            <div className="space-y-2 max-h-24 overflow-y-auto custom-scrollbar">
+                                {p.dialogues.map((d, dIdx) => (
+                                    <div key={dIdx} className="flex gap-2 items-center">
+                                        <input 
+                                            className="w-1/3 bg-black/30 border border-white/10 rounded px-2 py-1 text-xs text-yellow-400 font-bold focus:border-yellow-500 outline-none text-right"
+                                            value={d.speaker}
+                                            onChange={(e) => handleDialogueChange(idx, dIdx, 'speaker', e.target.value)}
+                                            placeholder="Tên"
+                                        />
+                                        <input 
+                                            className="flex-grow bg-black/30 border border-white/10 rounded px-2 py-1 text-xs text-white focus:border-white outline-none"
+                                            value={d.text}
+                                            onChange={(e) => handleDialogueChange(idx, dIdx, 'text', e.target.value)}
+                                            placeholder="Nội dung..."
+                                        />
+                                        <button onClick={() => removeDialogue(idx, dIdx)} className="text-red-500 hover:text-red-400 text-xs px-1"><i className="ph-fill ph-x"></i></button>
+                                    </div>
+                                ))}
+                                {p.dialogues.length === 0 && <p className="text-xs text-gray-600 italic text-center py-2">Không có lời thoại</p>}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+};
+
 // --- MAIN COMPONENT ---
 
 interface ComicStudioProps {
@@ -224,7 +376,7 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
     // State for Step 1: Setup
     const [characters, setCharacters] = useState<ComicCharacter[]>([]);
     const [storySettings, setStorySettings] = useState({
-        title: '', // New Title Field
+        title: '', 
         genre: GENRES[0],
         artStyle: ART_STYLES[0].value,
         language: LANGUAGES[0],
@@ -244,7 +396,6 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
     const [imageLoadStates, setImageLoadStates] = useState<{[key: string]: 'loading' | 'loaded' | 'error'}>({});
     
     // Refs
-    const panelRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
     const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     useEffect(() => {
@@ -301,6 +452,42 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
         }
     };
 
+    // Helper: Process a SINGLE panel/page
+    const processSinglePanelScript = async (panel: any, previousPanelsData: any[]) => {
+        try {
+            const expandRes = await fetch('/.netlify/functions/comic-expand-panel', {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session?.access_token}`
+                },
+                body: JSON.stringify({ 
+                    plot_summary: panel.plot_summary,
+                    characters: characters,
+                    style: storySettings.artStyle,
+                    genre: storySettings.genre,
+                    language: storySettings.language,
+                    previous_panels: previousPanelsData 
+                })
+            });
+            
+            if (expandRes.ok) {
+                const data = await expandRes.json();
+                // Ensure we get stringified JSON back for storage consistency
+                const scriptData = data.script_data; 
+                return {
+                    // Store JSON object as string for visual_description field
+                    visual_description: JSON.stringify(scriptData) 
+                };
+            } else {
+                throw new Error(`Server Error: ${expandRes.status}`);
+            }
+        } catch (e: any) {
+            console.error(`Error expanding page ${panel.panel_number}`, e);
+            throw e;
+        }
+    };
+
     const handleGenerateScript = async () => {
         if (characters.length === 0) return showToast("Cần ít nhất 1 nhân vật.", "error");
         if (!storySettings.premise.trim()) return showToast("Vui lòng nhập ý tưởng câu chuyện.", "error");
@@ -310,10 +497,10 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
         if (missingDesc) return showToast(`Vui lòng upload ảnh cho ${missingDesc.name} để AI phân tích ngoại hình.`, "error");
 
         setIsLoading(true);
-        setGenerationStatus("Đang lên cấu trúc cốt truyện...");
+        setGenerationStatus("Đang lên cấu trúc cốt truyện (Gemini 2.5 Pro)...");
 
         try {
-            // PHASE 1: GENERATE OUTLINE
+            // PHASE 1: GENERATE OUTLINE (PAGES)
             const res = await fetch('/.netlify/functions/comic-generate-script', {
                 method: 'POST',
                 headers: { 
@@ -332,7 +519,7 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
             const initialPanels = outline.map((p: any) => ({
                 id: crypto.randomUUID(),
                 panel_number: p.panel_number,
-                visual_description: `(Đang tạo chi tiết từ ý tưởng: ${p.plot_summary}...)`,
+                visual_description: `(Đang chờ xử lý: ${p.plot_summary}...)`,
                 plot_summary: p.plot_summary,
                 dialogue: [],
                 is_rendering: false
@@ -341,133 +528,46 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
             setPanels(initialPanels);
             setActiveStep(2);
 
-            // PHASE 2: EXPAND EACH PANEL WITH MEMORY
+            // PHASE 2: EXPAND EACH PAGE WITH SEQUENTIAL QUEUE
             const completedPanelsData: any[] = [];
 
             for (let i = 0; i < outline.length; i++) {
                 const p = outline[i];
-                setGenerationStatus(`Đang viết chi tiết phân cảnh ${p.panel_number}/${outline.length}...`);
+                setGenerationStatus(`Đang viết chi tiết TRANG ${p.panel_number}/${outline.length}... (Gemini 2.5 Pro)`);
                 
-                try {
-                    const expandRes = await fetch('/.netlify/functions/comic-expand-panel', {
-                        method: 'POST',
-                        headers: { 
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${session?.access_token}`
-                        },
-                        body: JSON.stringify({ 
-                            plot_summary: p.plot_summary,
-                            characters: characters,
-                            style: storySettings.artStyle,
-                            genre: storySettings.genre,
-                            language: storySettings.language,
-                            previous_panels: completedPanelsData // PASS PREVIOUS CONTEXT
-                        })
-                    });
-                    
-                    if (expandRes.ok) {
-                        const details = await expandRes.json();
-                        
-                        const completedPanel = {
-                            panel_number: p.panel_number,
-                            visual_description: details.visual_description,
-                            dialogue: details.dialogue
-                        };
-                        completedPanelsData.push(completedPanel);
+                if (i > 0) await new Promise(resolve => setTimeout(resolve, 2000));
 
-                        setPanels(prev => prev.map(panel => 
-                            panel.panel_number === p.panel_number 
-                            ? { 
-                                ...panel, 
-                                visual_description: details.visual_description || p.plot_summary, 
-                                dialogue: Array.isArray(details.dialogue) ? details.dialogue : [] 
-                              }
-                            : panel
-                        ));
-                    } else {
-                        throw new Error("API Error");
-                    }
-                } catch (expandErr) {
-                    console.error(`Error expanding panel ${p.panel_number}`, expandErr);
+                try {
+                    const recentContext = completedPanelsData.slice(-3);
+                    const details = await processSinglePanelScript(p, recentContext);
+                    
+                    completedPanelsData.push(details); // Store for context
+
                     setPanels(prev => prev.map(panel => 
                         panel.panel_number === p.panel_number 
                         ? { 
                             ...panel, 
-                            visual_description: `[Lỗi] ${p.plot_summary}`, 
-                            dialogue: [] 
+                            visual_description: details.visual_description, // Stores JSON string
+                            dialogue: [] // Dialogues are now inside JSON
                           }
                         : panel
                     ));
+                } catch (expandErr) {
+                    setPanels(prev => prev.map(panel => 
+                        panel.panel_number === p.panel_number 
+                        ? { ...panel, visual_description: `[Lỗi kết nối] Không thể tạo kịch bản.` }
+                        : panel
+                    ));
                 }
-                
-                await new Promise(r => setTimeout(r, 500));
             }
 
-            showToast("Tạo kịch bản chi tiết hoàn tất!", "success");
+            showToast("Quy trình tạo kịch bản đã kết thúc.", "success");
 
         } catch (e: any) {
             showToast(e.message, "error");
         } finally {
             setIsLoading(false);
             setGenerationStatus("");
-        }
-    };
-
-    const handleRetryExpandPanel = async (panelId: string) => {
-        const panel = panels.find(p => p.id === panelId);
-        if (!panel || !panel.plot_summary) return;
-
-        // Set loading state
-        setPanels(prev => prev.map(p => p.id === panelId ? { ...p, visual_description: `(Đang thử lại...) ${p.plot_summary || ''}` } : p));
-
-        try {
-            // Prepare previous context (same logic as main generation)
-            // We need to find previous panels relative to this one
-            const pIndex = panels.findIndex(p => p.id === panelId);
-            const prevPanels = panels.slice(0, pIndex).map(p => ({
-                panel_number: p.panel_number,
-                visual_description: p.visual_description,
-                dialogue: p.dialogue
-            }));
-
-            const expandRes = await fetch('/.netlify/functions/comic-expand-panel', {
-                method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${session?.access_token}`
-                },
-                body: JSON.stringify({ 
-                    plot_summary: panel.plot_summary,
-                    characters: characters,
-                    style: storySettings.artStyle,
-                    genre: storySettings.genre,
-                    language: storySettings.language,
-                    previous_panels: prevPanels 
-                })
-            });
-
-            if (!expandRes.ok) throw new Error("API Error");
-            
-            const details = await expandRes.json();
-            
-            setPanels(prev => prev.map(p => 
-                p.id === panelId 
-                ? { 
-                    ...p, 
-                    visual_description: details.visual_description, 
-                    dialogue: Array.isArray(details.dialogue) ? details.dialogue : [] 
-                  }
-                : p
-            ));
-            showToast("Đã sửa lỗi kịch bản thành công!", "success");
-
-        } catch (e) {
-            setPanels(prev => prev.map(p => 
-                p.id === panelId 
-                ? { ...p, visual_description: `[Lỗi] ${panel.plot_summary}` } 
-                : p
-            ));
-            showToast("Thử lại thất bại. Vui lòng kiểm tra kết nối.", "error");
         }
     };
 
@@ -487,7 +587,7 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                 body: JSON.stringify({ 
                     panel, 
                     characters, 
-                    storyTitle: storySettings.title, // Pass title
+                    storyTitle: storySettings.title, 
                     style: storySettings.artStyle,
                     colorFormat: storySettings.colorFormat,
                     visualEffect: storySettings.visualEffect,
@@ -517,7 +617,7 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                             is_rendering: false,
                             status: 'completed' 
                         } : p));
-                        showToast(`Đã vẽ xong khung tranh #${panel.panel_number}!`, "success");
+                        showToast(`Đã vẽ xong trang #${panel.panel_number}!`, "success");
                         supabase.removeChannel(channel);
                     }
                 })
@@ -550,19 +650,9 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
         setPanels(prev => prev.map(p => p.id === id ? { ...p, [field]: value } : p));
     };
 
-    const handleUpdateDialogue = (panelId: string, dialogueIndex: number, field: 'speaker' | 'text', value: string) => {
-        setPanels(prev => prev.map(p => {
-            if (p.id !== panelId) return p;
-            const newDialogue = [...p.dialogue];
-            newDialogue[dialogueIndex] = { ...newDialogue[dialogueIndex], [field]: value };
-            return { ...p, dialogue: newDialogue };
-        }));
-    };
-
     const handleDownloadZip = async () => {
         setIsLoading(true);
-        showToast("Đang nén ảnh, vui lòng đợi...", "success");
-        
+        showToast("Đang nén ảnh...", "success");
         try {
             const zip = new JSZip();
             const folder = zip.folder("audition-comic");
@@ -572,11 +662,10 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                 if (panel.image_url) {
                     const response = await fetch(panel.image_url);
                     const blob = await response.blob();
-                    folder?.file(`panel-${panel.panel_number}.png`, blob);
+                    folder?.file(`page-${panel.panel_number}.png`, blob);
                     count++;
                 }
             }
-
             if (count > 0) {
                 const content = await zip.generateAsync({ type: "blob" });
                 const url = URL.createObjectURL(content);
@@ -587,13 +676,9 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                 a.click();
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
-                showToast("Tải xuống thành công!", "success");
-            } else {
-                showToast("Không có ảnh nào để tải.", "error");
             }
         } catch (e: any) {
-            console.error("ZIP generation failed:", e);
-            showToast("Lỗi khi tạo file ZIP.", "error");
+            showToast("Lỗi khi tải.", "error");
         } finally {
             setIsLoading(false);
         }
@@ -606,10 +691,6 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
             const pdf = new jsPDF('p', 'mm', 'a4');
             const pageWidth = pdf.internal.pageSize.getWidth();
             const pageHeight = pdf.internal.pageSize.getHeight();
-            const margin = 10;
-            const maxImgWidth = pageWidth - (margin * 2);
-            const maxImgHeight = pageHeight - (margin * 2);
-
             let hasContent = false;
 
             for (let i = 0; i < panels.length; i++) {
@@ -617,7 +698,6 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                 if (panel.image_url && panel.image_url !== 'PENDING') {
                     if (hasContent) pdf.addPage();
                     
-                    // Load image
                     const imgData = await fetch(panel.image_url)
                         .then(res => res.blob())
                         .then(blob => new Promise<string>((resolve) => {
@@ -626,33 +706,13 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                             reader.readAsDataURL(blob);
                         }));
 
-                    const imgProps = pdf.getImageProperties(imgData);
-                    const imgRatio = imgProps.width / imgProps.height;
-                    
-                    let printWidth = maxImgWidth;
-                    let printHeight = maxImgWidth / imgRatio;
-
-                    if (printHeight > maxImgHeight) {
-                        printHeight = maxImgHeight;
-                        printWidth = maxImgHeight * imgRatio;
-                    }
-
-                    const x = (pageWidth - printWidth) / 2;
-                    const y = (pageHeight - printHeight) / 2;
-
-                    pdf.addImage(imgData, 'PNG', x, y, printWidth, printHeight);
+                    pdf.addImage(imgData, 'PNG', 0, 0, pageWidth, pageHeight); // Fit to page for simplicity or maintain ratio
                     hasContent = true;
                 }
             }
 
-            if (hasContent) {
-                pdf.save(`audition-comic-${Date.now()}.pdf`);
-                showToast("Tải PDF thành công!", "success");
-            } else {
-                showToast("Không có ảnh nào để tạo PDF.", "error");
-            }
-        } catch (e: any) {
-            console.error(e);
+            if (hasContent) pdf.save(`comic-${Date.now()}.pdf`);
+        } catch (e) {
             showToast("Lỗi tạo PDF.", "error");
         } finally {
             setIsLoading(false);
@@ -664,28 +724,8 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
         setIsPremiseModalOpen(false);
     };
 
-    const handleImageLoad = (panelId: string) => setImageLoadStates(prev => ({ ...prev, [panelId]: 'loaded' }));
-    const handleImageError = (panelId: string) => setImageLoadStates(prev => ({ ...prev, [panelId]: 'error' }));
-    
-    const handleReloadImage = (panelId: string) => {
-        setPanels(prev => prev.map(p => {
-            if (p.id !== panelId || !p.image_url) return p;
-            try {
-                const url = new URL(p.image_url);
-                url.searchParams.set('t', Date.now().toString());
-                return { ...p, image_url: url.toString() };
-            } catch (e) { return p; }
-        }));
-        setImageLoadStates(prev => ({ ...prev, [panelId]: 'loading' }));
-    };
-
     return (
         <div className="animate-fade-in h-[calc(100vh-140px)] min-h-[600px] flex flex-col max-w-7xl mx-auto">
-            <style>{`
-                .comic-card { background: var(--color-fill-secondary); border: 1px solid var(--color-border); border-radius: 1rem; overflow: hidden; transition: all 0.3s ease; }
-                .comic-card:hover { border-color: var(--color-border-accent); box-shadow: var(--shadow-accent); }
-            `}</style>
-
             <Modal isOpen={isPremiseModalOpen} onClose={() => setIsPremiseModalOpen(false)} title={`Gợi ý: ${storySettings.genre}`}>
                 <div className="max-h-[60vh] overflow-y-auto custom-scrollbar pr-2 space-y-2">
                     {COMIC_PREMISES[storySettings.genre]?.map((p, idx) => (
@@ -693,7 +733,6 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                             <span className="font-bold text-pink-400 mr-2">#{idx + 1}</span>{p}
                         </button>
                     ))}
-                    {!COMIC_PREMISES[storySettings.genre] && <p className="text-center text-gray-500 italic">Chưa có gợi ý cho thể loại này.</p>}
                 </div>
             </Modal>
 
@@ -703,34 +742,6 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                 </div>
 
                 <div className="flex-grow overflow-y-auto p-6 custom-scrollbar bg-[#0f0f13]">
-                    {/* FEATURE BADGES */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-                        <div className="bg-emerald-500/10 border border-emerald-500/30 p-3 rounded-xl flex items-center gap-3 shadow-lg shadow-emerald-500/5">
-                            <div className="w-10 h-10 bg-emerald-500/20 rounded-full flex items-center justify-center text-emerald-400 shrink-0">
-                                <i className="ph-fill ph-lightning text-xl"></i>
-                            </div>
-                            <div>
-                                <div className="flex items-center gap-2">
-                                    <h4 className="font-bold text-emerald-100 text-sm">Story Memory & Plot Logic</h4>
-                                    <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded animate-pulse">HOT</span>
-                                </div>
-                                <p className="text-[11px] text-emerald-200/70 leading-tight">AI ghi nhớ diễn biến cốt truyện để phát triển tâm lý nhân vật sâu sắc hơn.</p>
-                            </div>
-                        </div>
-                        <div className="bg-orange-500/10 border border-orange-500/30 p-3 rounded-xl flex items-center gap-3 shadow-lg shadow-orange-500/5">
-                            <div className="w-10 h-10 bg-orange-500/20 rounded-full flex items-center justify-center text-orange-400 shrink-0">
-                                <i className="ph-fill ph-fire text-xl"></i>
-                            </div>
-                            <div>
-                                <div className="flex items-center gap-2">
-                                    <h4 className="font-bold text-orange-100 text-sm">Character Consistency</h4>
-                                    <span className="bg-orange-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded">ESSENTIAL</span>
-                                </div>
-                                <p className="text-[11px] text-orange-200/70 leading-tight">Hệ thống hỗ trợ tối đa <strong>{MAX_CHARACTERS} nhân vật</strong> tham chiếu. Độ đồng bộ 95-100%.</p>
-                            </div>
-                        </div>
-                    </div>
-
                     {/* STEP 1: SETUP */}
                     {activeStep === 1 && (
                         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -738,10 +749,10 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                                 <SettingsBlock title="Cấu Hình Truyện" instructionKey="comic-studio" onInstructionClick={() => onInstructionClick && onInstructionClick()}>
                                     <div className="space-y-4">
                                         <div>
-                                            <label className="text-xs font-bold text-skin-muted uppercase mb-1.5 block tracking-wide">TÊN TRUYỆN (ĐỂ TẠO BÌA)</label>
+                                            <label className="text-xs font-bold text-skin-muted uppercase mb-1.5 block tracking-wide">TÊN TRUYỆN</label>
                                             <input 
                                                 type="text" 
-                                                className="w-full bg-[#1E1B25] border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white focus:border-pink-500 focus:outline-none transition-colors font-bold"
+                                                className="w-full bg-[#1E1B25] border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white focus:border-pink-500 focus:outline-none font-bold"
                                                 placeholder="Nhập tên bộ truyện..."
                                                 value={storySettings.title}
                                                 onChange={e => setStorySettings({...storySettings, title: e.target.value})}
@@ -753,21 +764,14 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                                         </div>
                                         <ComicSelect label="PHONG CÁCH VẼ" value={storySettings.artStyle} onChange={(val) => setStorySettings({...storySettings, artStyle: val})} options={ART_STYLES} />
                                         <div className="grid grid-cols-2 gap-4">
-                                            <ComicSelect label="ĐỊNH DẠNG MÀU" value={storySettings.colorFormat} onChange={(val) => setStorySettings({...storySettings, colorFormat: val})} options={COLOR_FORMATS} />
-                                            <ComicSelect label="TỶ LỆ KHUNG HÌNH" value={storySettings.aspectRatio} onChange={(val) => setStorySettings({...storySettings, aspectRatio: val})} options={ASPECT_RATIOS} />
+                                            <ComicSelect label="MÀU SẮC" value={storySettings.colorFormat} onChange={(val) => setStorySettings({...storySettings, colorFormat: val})} options={COLOR_FORMATS} />
+                                            <ComicSelect label="TỶ LỆ" value={storySettings.aspectRatio} onChange={(val) => setStorySettings({...storySettings, aspectRatio: val})} options={ASPECT_RATIOS} />
                                         </div>
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <ComicSelect label="LƯỢNG THOẠI" value={storySettings.dialogueAmount} onChange={(val) => setStorySettings({...storySettings, dialogueAmount: val})} options={DIALOGUE_AMOUNTS} />
-                                            <div>
-                                                <label className="text-xs font-bold text-skin-muted uppercase mb-1.5 block tracking-wide">SỐ TRANG</label>
-                                                <div className="flex items-center bg-[#1E1B25] border border-white/10 rounded-lg px-3 py-2.5">
-                                                    <input type="number" className="bg-transparent text-white text-sm w-full focus:outline-none font-bold text-center" min={1} max={10} value={storySettings.pageCount} onChange={e => setStorySettings({...storySettings, pageCount: parseInt(e.target.value)})} />
-                                                </div>
+                                        <div>
+                                            <label className="text-xs font-bold text-skin-muted uppercase mb-1.5 block tracking-wide">SỐ TRANG (PAGE)</label>
+                                            <div className="flex items-center bg-[#1E1B25] border border-white/10 rounded-lg px-3 py-2.5">
+                                                <input type="number" className="bg-transparent text-white text-sm w-full focus:outline-none font-bold text-center" min={1} max={20} value={storySettings.pageCount} onChange={e => setStorySettings({...storySettings, pageCount: parseInt(e.target.value)})} />
                                             </div>
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <ComicSelect label="VỊ TRÍ SỐ TRANG" value={storySettings.pageNumbering} onChange={(val) => setStorySettings({...storySettings, pageNumbering: val})} options={PAGE_NUMBERING} />
-                                            <ComicSelect label="TẠO TRANG BÌA" value={storySettings.coverPage} onChange={(val) => setStorySettings({...storySettings, coverPage: val})} options={COVER_OPTIONS} />
                                         </div>
                                     </div>
                                 </SettingsBlock>
@@ -775,26 +779,24 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                                 <div className="bg-gradient-to-b from-indigo-900/30 to-purple-900/30 p-5 rounded-2xl border border-indigo-500/30 shadow-lg">
                                     <div className="flex justify-between items-center mb-3">
                                         <h3 className="text-lg font-bold text-white flex items-center gap-2"><i className="ph-fill ph-lightbulb text-indigo-400"></i> Ý Tưởng Cốt Truyện</h3>
-                                        <button onClick={() => setIsPremiseModalOpen(true)} className="text-xs bg-indigo-500/20 hover:bg-indigo-500/40 text-indigo-300 border border-indigo-500/50 px-2 py-1 rounded-full flex items-center gap-1 transition-colors"><i className="ph-fill ph-sparkle"></i> Gợi ý mẫu</button>
+                                        <button onClick={() => setIsPremiseModalOpen(true)} className="text-xs bg-indigo-500/20 hover:bg-indigo-500/40 text-indigo-300 border border-indigo-500/50 px-2 py-1 rounded-full flex items-center gap-1 transition-colors"><i className="ph-fill ph-sparkle"></i> Gợi ý</button>
                                     </div>
                                     <textarea className="w-full bg-black/30 border border-white/10 rounded-xl p-4 text-sm text-white focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 transition resize-none placeholder-gray-500" rows={4} placeholder="Nhập ý tưởng của bạn..." value={storySettings.premise} onChange={e => setStorySettings({...storySettings, premise: e.target.value})} />
                                 </div>
                             </div>
 
                             <div className="lg:col-span-7">
-                                <div className="comic-card p-6 h-full flex flex-col">
+                                <div className="bg-[#1E1B25] p-6 rounded-xl border border-white/10 h-full flex flex-col">
                                     <div className="flex justify-between items-center mb-6">
                                         <h3 className="text-xl font-bold text-white flex items-center gap-3">
-                                            <span className="w-10 h-10 bg-pink-500/20 rounded-xl flex items-center justify-center text-pink-400"><i className="ph-fill ph-users-three text-xl"></i></span> Casting Nhân Vật
+                                            <span className="w-10 h-10 bg-pink-500/20 rounded-xl flex items-center justify-center text-pink-400"><i className="ph-fill ph-users-three text-xl"></i></span> Nhân Vật
                                         </h3>
                                         <button onClick={handleAddCharacter} className="themed-button-secondary px-4 py-2 text-sm font-bold flex items-center gap-2 hover:bg-white/10"><i className="ph-bold ph-plus"></i> Thêm</button>
                                     </div>
 
                                     {characters.length === 0 ? (
                                         <div className="flex-grow flex flex-col items-center justify-center text-center py-20 border-2 border-dashed border-white/10 rounded-2xl bg-black/20">
-                                            <div className="w-20 h-20 bg-skin-fill-secondary rounded-full flex items-center justify-center mb-4 animate-bounce"><i className="ph-fill ph-user-plus text-4xl text-skin-muted"></i></div>
-                                            <p className="text-skin-muted font-medium">Chưa có diễn viên nào.</p>
-                                            <p className="text-xs text-gray-600 mt-1">Thêm nhân vật để bắt đầu câu chuyện.</p>
+                                            <p className="text-skin-muted font-medium">Thêm nhân vật để bắt đầu.</p>
                                         </div>
                                     ) : (
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -814,20 +816,12 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                                                             <button onClick={() => handleRemoveCharacter(char.id)} className="text-gray-500 hover:text-red-400 transition"><i className="ph-fill ph-x"></i></button>
                                                         </div>
                                                         <div className="relative flex-grow">
-                                                            <textarea className={`w-full h-full bg-white/5 border border-white/5 rounded-lg p-2 text-xs text-gray-400 focus:text-white focus:bg-black/40 transition resize-none ${char.is_analyzing ? 'opacity-30' : ''}`} placeholder="Mô tả ngoại hình (AI tự điền)..." value={char.description} onChange={(e) => setCharacters(chars => chars.map(c => c.id === char.id ? { ...c, description: e.target.value } : c))} />
+                                                            <textarea className={`w-full h-full bg-white/5 border border-white/5 rounded-lg p-2 text-xs text-gray-400 focus:text-white focus:bg-black/40 transition resize-none ${char.is_analyzing ? 'opacity-30' : ''}`} placeholder="Mô tả ngoại hình..." value={char.description} onChange={(e) => setCharacters(chars => chars.map(c => c.id === char.id ? { ...c, description: e.target.value } : c))} />
                                                             {char.is_analyzing && (
                                                                 <div className="absolute inset-0 flex items-center justify-center flex-col bg-black/60 backdrop-blur-sm text-white">
                                                                     <i className="ph-bold ph-scan animate-spin text-pink-500 text-xl mb-1"></i>
                                                                     <span className="text-[10px] font-bold">Đang phân tích...</span>
                                                                 </div>
-                                                            )}
-                                                            {!char.is_analyzing && !char.description && char.image_url && (
-                                                                <button 
-                                                                    onClick={() => char.image_file && handleCharacterImageUpload(char.id, char.image_file)}
-                                                                    className="absolute bottom-2 right-2 text-[10px] bg-red-500/20 text-red-300 px-2 py-1 rounded border border-red-500/50 hover:bg-red-500/30 flex items-center gap-1 z-10 transition-all"
-                                                                >
-                                                                    <i className="ph-bold ph-arrow-clockwise"></i> Thử lại
-                                                                </button>
                                                             )}
                                                         </div>
                                                     </div>
@@ -840,59 +834,31 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                         </div>
                     )}
 
-                    {/* STEP 2: SCRIPT EDITOR */}
+                    {/* STEP 2: SCRIPT EDITOR - PROFESSIONAL UI */}
                     {activeStep === 2 && (
                         <div className="max-w-5xl mx-auto space-y-6">
                             <div className="bg-blue-500/10 border border-blue-500/30 p-4 rounded-xl flex items-center gap-4">
                                 <div className="w-10 h-10 bg-blue-500/20 rounded-full flex items-center justify-center text-blue-400"><i className="ph-fill ph-magic-wand text-xl"></i></div>
                                 <div>
-                                    <h4 className="font-bold text-blue-100">{generationStatus ? generationStatus : 'Kịch bản AI đã sẵn sàng'}</h4>
-                                    <p className="text-xs text-blue-200/60">Hãy kiểm tra và chỉnh sửa lời thoại. AI sẽ tự động chèn lời thoại vào ảnh.</p>
+                                    <h4 className="font-bold text-blue-100">{generationStatus ? generationStatus : 'Kịch bản đã sẵn sàng'}</h4>
+                                    <p className="text-xs text-blue-200/60">Chỉnh sửa nội dung chi tiết cho từng khung hình (Panel) bên dưới trước khi vẽ.</p>
                                 </div>
                             </div>
-                            <div className="space-y-4">
-                                {panels.map((panel) => {
-                                    const isGeneratingDetails = panel.visual_description.startsWith('(Đang tạo chi tiết');
-                                    const isError = panel.visual_description.startsWith('[Lỗi]');
-                                    
-                                    return (
-                                        <div key={panel.id} className="comic-card p-0 flex flex-col md:flex-row relative overflow-hidden">
-                                            <div className="md:w-1/2 p-4 border-b md:border-b-0 md:border-r border-white/10 bg-black/20 relative">
-                                                <div className="flex items-center justify-between mb-2">
-                                                    <span className="text-xs font-bold bg-blue-600 text-white px-2 py-0.5 rounded">PANEL {panel.panel_number}</span>
-                                                    <span className="text-[10px] text-gray-500">Mô tả hình ảnh</span>
-                                                </div>
-                                                <textarea className="w-full h-32 bg-transparent border-none focus:ring-0 text-sm text-gray-300 leading-relaxed resize-none p-0" value={panel.visual_description} onChange={(e) => handleUpdatePanel(panel.id, 'visual_description', e.target.value)} disabled={isGeneratingDetails} />
-                                                
-                                                {/* RETRY OVERLAY FOR SCRIPT ERROR */}
-                                                {isError && (
-                                                    <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center z-10 p-4 backdrop-blur-sm">
-                                                        <i className="ph-fill ph-warning-circle text-red-500 text-3xl mb-2"></i>
-                                                        <p className="text-white text-sm font-bold mb-3 text-center">Lỗi tạo kịch bản</p>
-                                                        <button 
-                                                            onClick={() => handleRetryExpandPanel(panel.id)}
-                                                            className="px-4 py-2 bg-white text-black text-xs font-bold rounded-full hover:bg-gray-200 flex items-center gap-2 transition-transform hover:scale-105 shadow-lg"
-                                                        >
-                                                            <i className="ph-bold ph-arrow-clockwise"></i> Thử lại
-                                                        </button>
-                                                    </div>
-                                                )}
-                                            </div>
-                                            <div className="md:w-1/2 p-4 bg-skin-fill-secondary">
-                                                <div className="mb-2 text-[10px] font-bold text-gray-500 uppercase">Hội thoại (AI sẽ vẽ trực tiếp)</div>
-                                                <div className="space-y-3">
-                                                    {Array.isArray(panel.dialogue) && panel.dialogue.map((dia, dIndex) => (
-                                                        <div key={dIndex} className="flex gap-2 items-start group">
-                                                            <div className="w-24 pt-1"><input className="w-full bg-transparent border-b border-white/10 text-xs font-bold text-yellow-400 focus:border-yellow-500 focus:outline-none text-right px-1 py-1" value={dia.speaker} onChange={(e) => handleUpdateDialogue(panel.id, dIndex, 'speaker', e.target.value)} placeholder="Tên" /></div>
-                                                            <div className="flex-grow"><textarea className="w-full bg-white/5 border border-white/5 rounded-lg p-2 text-sm text-white focus:border-green-500/50 focus:outline-none transition resize-none" value={dia.text} onChange={(e) => handleUpdateDialogue(panel.id, dIndex, 'text', e.target.value)} rows={2} /></div>
-                                                        </div>
-                                                    ))}
-                                                    {!isGeneratingDetails && !isError && (!panel.dialogue || panel.dialogue.length === 0) && <p className="text-xs text-gray-600 italic pl-2">Không có lời thoại</p>}
-                                                </div>
-                                            </div>
+                            <div className="space-y-8">
+                                {panels.map((panel) => (
+                                    <div key={panel.id} className="bg-[#12121A] border border-white/10 rounded-xl overflow-hidden">
+                                        <div className="bg-[#1E1B25] px-4 py-3 border-b border-white/10 flex justify-between items-center">
+                                            <span className="font-bold text-white flex items-center gap-2"><i className="ph-fill ph-file-text text-pink-500"></i> TRANG {panel.panel_number}</span>
+                                            <span className="text-xs text-gray-500 italic">{panel.plot_summary.substring(0, 50)}...</span>
                                         </div>
-                                    );
-                                })}
+                                        <div className="p-4">
+                                            <ProfessionalScriptEditor 
+                                                panel={panel} 
+                                                onUpdate={(newVal) => handleUpdatePanel(panel.id, 'visual_description', newVal)} 
+                                            />
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
                         </div>
                     )}
@@ -911,11 +877,17 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
 
                                     return (
                                         <div key={panel.id} className="bg-[#1a1a1a] p-2 shadow-2xl rounded-sm">
-                                            <div ref={(el) => { panelRefs.current[panel.id] = el; }} className="relative w-full bg-white overflow-hidden border border-black flex items-center justify-center group mx-auto" style={ratioStyle}>
+                                            <div ref={() => {}} className="relative w-full bg-white overflow-hidden border border-black flex items-center justify-center group mx-auto" style={ratioStyle}>
                                                 {(!hasUrl && !panel.is_rendering && !isPending) && (
-                                                    <div className="absolute inset-0 bg-skin-fill-secondary/90 flex flex-col items-center justify-center z-20">
-                                                        <p className="text-gray-400 text-sm mb-4 max-w-md text-center px-4 line-clamp-2">{panel.visual_description}</p>
-                                                        <button onClick={() => handleRenderPanel(panel)} className="themed-button-primary px-8 py-3 rounded-full font-bold text-white shadow-xl flex items-center gap-2 transform hover:scale-105 transition-all"><i className="ph-fill ph-paint-brush-broad text-xl"></i> Vẽ Panel Này ({RENDER_COST} 💎)</button>
+                                                    <div className="absolute inset-0 bg-skin-fill-secondary/90 flex flex-col items-center justify-center z-20 p-6 text-center">
+                                                        <h4 className="text-xl font-bold text-white mb-2">TRANG {panel.panel_number}</h4>
+                                                        <p className="text-gray-400 text-sm mb-6 max-w-md line-clamp-3 opacity-80 italic">
+                                                            {panel.plot_summary}
+                                                        </p>
+                                                        <button onClick={() => handleRenderPanel(panel)} className="themed-button-primary px-8 py-3 rounded-full font-bold text-white shadow-xl flex items-center gap-2 transform hover:scale-105 transition-all">
+                                                            <i className="ph-fill ph-paint-brush-broad text-xl"></i> Vẽ Trang Này ({RENDER_COST} 💎)
+                                                        </button>
+                                                        <p className="text-[10px] text-gray-500 mt-3">Model: Gemini 3 Pro (Nano Banana)</p>
                                                     </div>
                                                 )}
                                                 {(panel.is_rendering || isPending || isLoadingImage) && !isErrorImage && (
@@ -928,13 +900,10 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                                                      <div className="absolute inset-0 bg-skin-fill-secondary/95 flex flex-col items-center justify-center z-20 p-4 text-center">
                                                         <i className="ph-fill ph-warning-circle text-4xl text-red-500 mb-2"></i>
                                                         <p className="text-sm font-bold text-white mb-1">Không thể tải ảnh</p>
-                                                        <div className="flex flex-wrap justify-center gap-2"><button onClick={() => handleReloadImage(panel.id)} className="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-xs font-bold text-white flex items-center gap-2"><i className="ph-bold ph-arrow-clockwise"></i> Tải lại ảnh</button><button onClick={() => handleRenderPanel(panel)} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-bold text-gray-300 flex items-center gap-2"><i className="ph-bold ph-paint-brush-broad"></i> Vẽ lại</button></div>
+                                                        <button onClick={() => handleRenderPanel(panel)} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-bold text-gray-300 flex items-center gap-2 mt-2"><i className="ph-bold ph-paint-brush-broad"></i> Vẽ lại</button>
                                                     </div>
                                                 )}
-                                                {hasUrl && <img src={panel.image_url} alt="Panel" className={`w-full h-full object-cover ${isLoadingImage || isErrorImage ? 'opacity-0' : 'opacity-100'}`} onLoad={() => handleImageLoad(panel.id)} onError={() => handleImageError(panel.id)} />}
-                                                
-                                                {/* Page Number */}
-                                                <div className={`absolute bg-white border border-black text-black text-[10px] font-bold px-1.5 py-0.5 z-10 pointer-events-none select-none ${storySettings.pageNumbering === 'none' ? 'hidden' : storySettings.pageNumbering === 'bottom-left' ? 'bottom-2 left-2' : storySettings.pageNumbering === 'bottom-center' ? 'bottom-2 left-1/2 -translate-x-1/2' : 'bottom-2 right-2'}`}>{panel.panel_number}</div>
+                                                {hasUrl && <img src={panel.image_url} alt="Panel" className={`w-full h-full object-cover ${isLoadingImage || isErrorImage ? 'opacity-0' : 'opacity-100'}`} onLoad={() => setImageLoadStates(prev => ({...prev, [panel.id]: 'loaded'}))} onError={() => setImageLoadStates(prev => ({...prev, [panel.id]: 'error'}))} />}
                                             </div>
                                         </div>
                                     );
@@ -953,7 +922,7 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                                 {activeStep === 1 ? (
                                     <><span className="text-pink-400 text-xl">2</span><i className="ph-fill ph-diamonds-four text-pink-400 text-xs"></i><span className="text-xs font-medium text-gray-500 ml-1">cho Kịch bản</span></>
                                 ) : (
-                                    <><span className="text-purple-400 text-xl">{RENDER_COST}</span><i className="ph-fill ph-diamonds-four text-purple-400 text-xs"></i><span className="text-xs font-medium text-gray-500 ml-1">/ 1 Ảnh</span></>
+                                    <><span className="text-purple-400 text-xl">{RENDER_COST}</span><i className="ph-fill ph-diamonds-four text-purple-400 text-xs"></i><span className="text-xs font-medium text-gray-500 ml-1">/ 1 Trang</span></>
                                 )}
                             </div>
                         </div>

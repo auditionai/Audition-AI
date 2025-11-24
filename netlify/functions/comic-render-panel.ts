@@ -12,7 +12,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     const authHeader = event.headers['authorization'];
     if (!authHeader) return { statusCode: 401, body: JSON.stringify({ error: 'Authorization required.' }) };
     const token = authHeader.split(' ')[1];
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+    const { data: { user }, error: authError } = await (supabaseAdmin.auth as any).getUser(token);
     
     if (authError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'Invalid token.' }) };
 

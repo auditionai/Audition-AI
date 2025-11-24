@@ -616,7 +616,9 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
         if (user && user.diamonds < RENDER_COST) return showToast(`Cần ${RENDER_COST} kim cương.`, 'error');
 
         setRenderingPageId(page.id);
+        
         try {
+            // 1. Call Panel Init (Synchronous)
             const response = await fetch('/.netlify/functions/comic-render-panel', {
                 method: 'POST',
                 headers: { 
@@ -632,7 +634,7 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                     colorFormat,
                     visualEffect,
                     isCover: index === 0 && coverOption === 'start',
-                    pageNumbering, // Send additional config to render worker
+                    pageNumbering, 
                     bubbleFont
                 })
             });
@@ -640,17 +642,32 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
             const data = await response.json();
             if (!response.ok) throw new Error(data.error);
 
-            // Mark as rendering
-            const updated = [...comicPages];
-            updated[index].is_rendering = true;
-            updated[index].status = 'rendering';
-            setComicPages(updated);
-            
+            const jobId = data.jobId;
+
+            // 2. Trigger Background Worker (Fire and Forget or Async wait)
+            fetch('/.netlify/functions/comic-render-background', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ jobId })
+            }).catch(err => console.error("Background trigger failed", err));
+
+            // 3. Update UI & Start Polling
             updateUserDiamonds(data.newDiamondCount);
-            showToast('Đang vẽ trang truyện... Bạn sẽ nhận được thông báo khi hoàn tất.', 'success');
+            
+            // Mark as rendering locally
+            setComicPages(prev => {
+                const next = [...prev];
+                if (next[index]) {
+                    next[index].is_rendering = true;
+                    next[index].status = 'rendering';
+                }
+                return next;
+            });
+            
+            showToast('Đã gửi yêu cầu vẽ. AI đang xử lý ngầm (có thể mất vài phút)...', 'success');
 
             // Start polling for this specific job
-            startPolling(data.jobId, index);
+            startPolling(jobId, index);
 
         } catch (error: any) {
             showToast(error.message, 'error');
@@ -660,20 +677,40 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
 
     const startPolling = (jobId: string, pageIndex: number) => {
         const interval = setInterval(async () => {
-            if (!supabase) return;
-            const res = await supabase
+            if (!supabase) {
+                clearInterval(interval);
+                return;
+            }
+            
+            // Check if image is generated or if row deleted (failed)
+            const { data, error } = await supabase
                 .from('generated_images')
                 .select('image_url')
                 .eq('id', jobId)
                 .single();
             
-            if (res.data && res.data.image_url && res.data.image_url !== 'PENDING') {
+            if (error) {
+                // If row is gone, it means it failed/refunded (based on worker logic)
                 clearInterval(interval);
-                // Functional update to access latest state if needed
+                setRenderingPageId(null);
+                setComicPages(prev => {
+                    const next = [...prev];
+                    if(next[pageIndex]) {
+                        next[pageIndex].is_rendering = false;
+                        next[pageIndex].status = 'draft'; // Reset to draft
+                    }
+                    return next;
+                });
+                showToast(`Vẽ trang ${pageIndex + 1} thất bại. Đã hoàn tiền.`, 'error');
+                return;
+            }
+
+            if (data && data.image_url && data.image_url !== 'PENDING') {
+                clearInterval(interval);
                 setComicPages(prev => {
                     const next = [...prev];
                     if (next[pageIndex]) {
-                        next[pageIndex].image_url = res.data.image_url;
+                        next[pageIndex].image_url = data.image_url;
                         next[pageIndex].is_rendering = false;
                         next[pageIndex].status = 'completed';
                     }
@@ -682,7 +719,7 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                 setRenderingPageId(null);
                 showToast(`Trang ${pageIndex + 1} đã hoàn tất!`, 'success');
             }
-        }, 5000);
+        }, 5000); // Poll every 5 seconds
     };
 
     // --- EXPORT ---
@@ -932,10 +969,10 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                                 {currentStep === 2 && (
                                     <button 
                                         onClick={() => handleRenderPage(activePageIndex)}
-                                        disabled={!!renderingPageId}
+                                        disabled={!!renderingPageId || comicPages[activePageIndex]?.status === 'rendering'}
                                         className="px-6 py-2 bg-gradient-to-r from-pink-500 to-purple-600 text-white font-bold rounded-full shadow-lg hover:shadow-pink-500/30 transition transform active:scale-95 disabled:opacity-50 flex items-center gap-2"
                                     >
-                                        {renderingPageId === comicPages[activePageIndex]?.id ? (
+                                        {comicPages[activePageIndex]?.status === 'rendering' ? (
                                             <><i className="ph-fill ph-spinner animate-spin"></i> Đang vẽ...</>
                                         ) : (
                                             <><i className="ph-fill ph-paint-brush-broad"></i> Vẽ Trang Này (10💎)</>
@@ -972,7 +1009,7 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
 
                             {/* Preview / Result Column */}
                             <div className="bg-black/40 rounded-xl border border-white/10 flex items-center justify-center min-h-[500px] relative overflow-hidden group">
-                                {comicPages[activePageIndex]?.image_url ? (
+                                {comicPages[activePageIndex]?.image_url && comicPages[activePageIndex]?.image_url !== 'PENDING' ? (
                                     <>
                                         <img 
                                             src={comicPages[activePageIndex].image_url} 
@@ -993,7 +1030,7 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                                     </>
                                 ) : (
                                     <div className="text-center text-gray-500 p-8">
-                                        {renderingPageId === comicPages[activePageIndex]?.id ? (
+                                        {comicPages[activePageIndex]?.status === 'rendering' ? (
                                             <div className="flex flex-col items-center gap-4">
                                                 <div className="w-12 h-12 border-4 border-pink-500 border-t-transparent rounded-full animate-spin"></div>
                                                 <p className="text-pink-400 font-bold animate-pulse">AI đang vẽ tác phẩm của bạn...</p>

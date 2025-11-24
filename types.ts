@@ -432,6 +432,7 @@ export interface ComicPanel {
     dialogue: ComicDialogue[];
     image_url?: string;
     is_rendering?: boolean;
+    status?: 'draft' | 'rendering' | 'completed';
 }
 
 export interface ComicDialogue {

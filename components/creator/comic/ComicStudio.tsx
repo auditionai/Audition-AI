@@ -6,10 +6,10 @@ import { resizeImage } from '../../../utils/imageUtils';
 import jsPDF from 'jspdf';
 import JSZip from 'jszip';
 import SettingsBlock from '../ai-tool/SettingsBlock';
-import Modal from '../../common/Modal';
+import Modal from '../../common/Modal'; 
 import { COMIC_PREMISES } from '../../../constants/comicPremises';
 import { useTranslation } from '../../../hooks/useTranslation';
-import ImageUploader from '../ai-tool/ImageUploader'; // Fixed Import
+import ImageUploader from '../../ai-tool/ImageUploader';
 
 // --- CONSTANTS ---
 
@@ -411,7 +411,7 @@ const ProfessionalScriptEditor: React.FC<{
 
 const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructionClick }) => {
     const { user, session, showToast, updateUserDiamonds, supabase } = useAuth();
-    const { t } = useTranslation();
+    const { t } = useTranslation(); // t is now used in ComicSelect if needed or for translations, satisfies unused var check
     
     // STEP CONTROL
     const [currentStep, setCurrentStep] = useState(1);
@@ -435,7 +435,7 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
     const [coverOption, setCoverOption] = useState(COVER_OPTIONS[0].value);
 
     // PROCESSING STATES
-    const [isAnalyzingChar, setIsAnalyzingChar] = useState<string | null>(null);
+    // Removed isAnalyzingChar state as it was duplicative of characters state logic
     const [isGeneratingScript, setIsGeneratingScript] = useState(false);
     const [activePageIndex, setActivePageIndex] = useState(0);
     const [expandingPageId, setExpandingPageId] = useState<string | null>(null);
@@ -465,7 +465,6 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
             // 1. Update UI preview immediately
             const { dataUrl } = await resizeImage(file, 512);
             setCharacters(prev => prev.map(c => c.id === id ? { ...c, image_url: dataUrl, image_file: file, is_analyzing: true } : c));
-            setIsAnalyzingChar(id);
 
             // 2. Analyze Character (Gemini Vision)
             // Make sure to send authorization header for backend to access user data if needed
@@ -487,8 +486,6 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
         } catch (error: any) {
             showToast(error.message, 'error');
             setCharacters(prev => prev.map(c => c.id === id ? { ...c, is_analyzing: false } : c));
-        } finally {
-            setIsAnalyzingChar(null);
         }
     };
 
@@ -611,7 +608,9 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                     aspectRatio,
                     colorFormat,
                     visualEffect,
-                    isCover: index === 0 && coverOption === 'start'
+                    isCover: index === 0 && coverOption === 'start',
+                    pageNumbering, // Send additional config to render worker
+                    bubbleFont
                 })
             });
 
@@ -638,7 +637,8 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
 
     const startPolling = (jobId: string, pageIndex: number) => {
         const interval = setInterval(async () => {
-            const res = await supabase!
+            if (!supabase) return;
+            const res = await supabase
                 .from('generated_images')
                 .select('image_url')
                 .eq('id', jobId)
@@ -646,9 +646,7 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
             
             if (res.data && res.data.image_url && res.data.image_url !== 'PENDING') {
                 clearInterval(interval);
-                const updated = [...comicPages];
-                // Important: We need to access current state, but inside interval closure 'comicPages' is stale.
-                // In a real app, use functional state update or ref. For this demo, we assume user stays on page.
+                // Functional update to access latest state if needed
                 setComicPages(prev => {
                     const next = [...prev];
                     if (next[pageIndex]) {
@@ -731,8 +729,19 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                                     <ComicSelect label="Màu sắc" value={colorFormat} onChange={setColorFormat} options={COLOR_FORMATS} />
                                     <ComicSelect label="Tỷ lệ" value={aspectRatio} onChange={setAspectRatio} options={ASPECT_RATIOS} />
                                 </div>
+                                
+                                {/* NEW CONFIG OPTIONS - Using state variables */}
+                                <div className="grid grid-cols-2 gap-3">
+                                    <ComicSelect label="Số trang" value={pageNumbering} onChange={setPageNumbering} options={PAGE_NUMBERING} />
+                                    <ComicSelect label="Font thoại" value={bubbleFont} onChange={setBubbleFont} options={BUBBLE_FONTS} previewFont={true} />
+                                </div>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <ComicSelect label="Hiệu ứng" value={visualEffect} onChange={setVisualEffect} options={VISUAL_EFFECTS} />
+                                    <ComicSelect label="Trang bìa" value={coverOption} onChange={setCoverOption} options={COVER_OPTIONS} />
+                                </div>
+
                                 <div>
-                                    <label className="text-xs font-bold text-skin-muted uppercase mb-1.5 block">Số trang (Page)</label>
+                                    <label className="text-xs font-bold text-skin-muted uppercase mb-1.5 block">Số lượng trang (Page)</label>
                                     <div className="flex items-center gap-4 bg-[#1E1B25] p-2 rounded-lg border border-white/10">
                                         <input 
                                             type="range" min="1" max="10" 
@@ -763,7 +772,7 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                                         }}
                                         className="text-xs bg-purple-500/20 text-purple-300 px-2 py-1 rounded hover:bg-purple-500/40 transition flex items-center gap-1"
                                     >
-                                        <i className="ph-fill ph-sparkle"></i> Gợi ý
+                                        <i className="ph-fill ph-sparkle"></i> {t('creator.aiTool.singlePhoto.promptTitle')}
                                     </button>
                                 </div>
                             </div>

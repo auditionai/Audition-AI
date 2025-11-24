@@ -68,7 +68,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             **Output Format:** JSON Array of objects.
         `;
 
-        // Use gemini-2.5-flash for speed to avoid Netlify 10s timeout
+        // Use gemini-2.5-flash for speed
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash', 
             contents: { parts: [{ text: prompt }] },
@@ -87,37 +87,42 @@ const handler: Handler = async (event: HandlerEvent) => {
             }
         });
 
-        let scriptJson;
+        let scriptJson: any[] = [];
         try {
             const text = response.text || '[]';
             const cleanText = text.replace(/```json|```/g, '').trim();
-            scriptJson = JSON.parse(cleanText);
+            const parsed = JSON.parse(cleanText);
 
-            // ROBUSTNESS FIX: Ensure it's an array
-            if (!Array.isArray(scriptJson) && typeof scriptJson === 'object') {
-                // Sometimes AI wraps result in { "result": [...] } or { "pages": [...] }
-                const possibleKeys = ['outline', 'pages', 'panels', 'script', 'result'];
-                for (const key of possibleKeys) {
-                    if (Array.isArray(scriptJson[key])) {
-                        scriptJson = scriptJson[key];
-                        break;
-                    }
+            // ROBUSTNESS: Handle different AI return formats
+            if (Array.isArray(parsed)) {
+                scriptJson = parsed;
+            } else if (typeof parsed === 'object' && parsed !== null) {
+                // Check for wrapped keys
+                if (Array.isArray(parsed.outline)) scriptJson = parsed.outline;
+                else if (Array.isArray(parsed.pages)) scriptJson = parsed.pages;
+                else if (Array.isArray(parsed.panels)) scriptJson = parsed.panels;
+                else if (Array.isArray(parsed.result)) scriptJson = parsed.result;
+                else {
+                    // Only one object? Wrap it
+                    scriptJson = [parsed];
                 }
             }
-            
-            // If still not an array (e.g. single object), wrap it
-            if (!Array.isArray(scriptJson) && scriptJson) {
-                scriptJson = [scriptJson];
-            }
-            
-            // Fallback if empty or null
-            if (!scriptJson || !Array.isArray(scriptJson)) {
-                scriptJson = [];
-            }
-
         } catch (parseError) {
             console.error("JSON Parse Error:", parseError);
-            return { statusCode: 500, body: JSON.stringify({ error: 'AI returned invalid format. Please try again.' }) };
+            // Don't throw, return empty array to prevent crash
+            scriptJson = []; 
+        }
+
+        // FINAL SAFETY CHECK: Must be an array
+        if (!Array.isArray(scriptJson)) {
+            scriptJson = [];
+        }
+
+        // If empty, create dummy data so user doesn't lose money for nothing
+        if (scriptJson.length === 0) {
+            for(let i=1; i<=pageCount; i++) {
+                scriptJson.push({ panel_number: i, plot_summary: `Trang ${i}: (AI chưa tạo được nội dung, bạn hãy nhập thủ công)` });
+            }
         }
 
         await supabaseAdmin.rpc('increment_user_diamonds', { user_id_param: user.id, diamond_amount: -COST });

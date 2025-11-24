@@ -38,7 +38,6 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         const targetLanguage = language || 'Tiếng Việt';
 
-        // Prompt optimized for single page expansion
         const prompt = `
             Act as a Comic Script Writer.
             **TASK:** Expand this Page Plot into 3-5 detailed panels.
@@ -72,13 +71,11 @@ const handler: Handler = async (event: HandlerEvent) => {
             }
         `;
 
-        // Use gemini-2.5-flash for speed
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: { parts: [{ text: prompt }] },
             config: {
                 responseMimeType: "application/json",
-                // Explicit schema helps the model generate faster and strictly
                 responseSchema: {
                     type: Type.OBJECT,
                     properties: {
@@ -108,33 +105,28 @@ const handler: Handler = async (event: HandlerEvent) => {
             }
         });
 
-        let resultJson;
+        let resultJson = { layout_note: "Standard Layout", panels: [] };
         try {
             const text = response.text || '{}';
             const cleanText = text.replace(/```json|```/g, '').trim();
-            resultJson = JSON.parse(cleanText);
+            const parsed = JSON.parse(cleanText);
             
-            // Basic validation
-            if (!resultJson.panels || !Array.isArray(resultJson.panels)) {
-                // Attempt to fix structure if AI wrapped it weirdly
-                if (resultJson.script && resultJson.script.panels) resultJson = resultJson.script;
-                else if (resultJson.result && resultJson.result.panels) resultJson = resultJson.result;
+            if (parsed && typeof parsed === 'object') {
+                resultJson = parsed;
+                // Ensure panels array exists
+                if (!resultJson.panels || !Array.isArray(resultJson.panels)) {
+                    // Check wrappers
+                    if (Array.isArray((parsed as any).script?.panels)) resultJson = (parsed as any).script;
+                    else if (Array.isArray((parsed as any).result?.panels)) resultJson = (parsed as any).result;
+                    else {
+                        // Fallback
+                        resultJson.panels = [{ panel_id: 1, description: plot_summary, dialogues: [] }];
+                    }
+                }
             }
-            
-            // If still invalid, construct fallback
-            if (!resultJson.panels) {
-                 resultJson = { 
-                    layout_note: "Standard Layout",
-                    panels: [{ panel_id: 1, description: plot_summary, dialogues: [] }]
-                };
-            }
-
         } catch (e) {
-            // Fallback
-            resultJson = { 
-                layout_note: "Standard Layout",
-                panels: [{ panel_id: 1, description: plot_summary, dialogues: [] }]
-            };
+            // Parsing failed, use fallback
+            resultJson.panels = [{ panel_id: 1, description: plot_summary, dialogues: [] }] as any;
         }
 
         return {

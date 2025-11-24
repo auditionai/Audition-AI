@@ -261,31 +261,39 @@ const ProfessionalScriptEditor: React.FC<{
     const handlePanelDescChange = (idx: number, val: string) => {
         if (!pageData) return;
         const newPanels = [...pageData.panels];
-        newPanels[idx].description = val;
-        updatePage({ ...pageData, panels: newPanels });
+        if (newPanels[idx]) {
+            newPanels[idx].description = val;
+            updatePage({ ...pageData, panels: newPanels });
+        }
     };
 
     const handleDialogueChange = (panelIdx: number, diaIdx: number, field: 'speaker' | 'text', val: string) => {
         if (!pageData) return;
         const newPanels = [...pageData.panels];
-        const newDialogues = [...newPanels[panelIdx].dialogues];
-        newDialogues[diaIdx] = { ...newDialogues[diaIdx], [field]: val };
-        newPanels[panelIdx].dialogues = newDialogues;
-        updatePage({ ...pageData, panels: newPanels });
+        if (newPanels[panelIdx] && newPanels[panelIdx].dialogues[diaIdx]) {
+            const newDialogues = [...newPanels[panelIdx].dialogues];
+            newDialogues[diaIdx] = { ...newDialogues[diaIdx], [field]: val };
+            newPanels[panelIdx].dialogues = newDialogues;
+            updatePage({ ...pageData, panels: newPanels });
+        }
     };
 
     const addDialogue = (panelIdx: number) => {
         if (!pageData) return;
         const newPanels = [...pageData.panels];
-        newPanels[panelIdx].dialogues.push({ speaker: 'Nhân vật', text: '...' });
-        updatePage({ ...pageData, panels: newPanels });
+        if (newPanels[panelIdx]) {
+            newPanels[panelIdx].dialogues.push({ speaker: 'Nhân vật', text: '...' });
+            updatePage({ ...pageData, panels: newPanels });
+        }
     }
 
     const removeDialogue = (panelIdx: number, diaIdx: number) => {
         if (!pageData) return;
         const newPanels = [...pageData.panels];
-        newPanels[panelIdx].dialogues.splice(diaIdx, 1);
-        updatePage({ ...pageData, panels: newPanels });
+        if (newPanels[panelIdx]) {
+            newPanels[panelIdx].dialogues.splice(diaIdx, 1);
+            updatePage({ ...pageData, panels: newPanels });
+        }
     }
 
     if (isParsingError || !pageData) {
@@ -361,7 +369,7 @@ const ProfessionalScriptEditor: React.FC<{
                             </div>
                             
                             <div className="space-y-2">
-                                {p.dialogues.map((d, dIdx) => (
+                                {p.dialogues && p.dialogues.map((d, dIdx) => (
                                     <div key={dIdx} className="flex gap-2 items-start group">
                                         <div className="w-1/3">
                                             <input 
@@ -394,7 +402,7 @@ const ProfessionalScriptEditor: React.FC<{
                                         </div>
                                     </div>
                                 ))}
-                                {p.dialogues.length === 0 && (
+                                {(!p.dialogues || p.dialogues.length === 0) && (
                                     <div className="text-xs text-gray-600 italic pl-2 py-1 border-l-2 border-gray-700">Không có lời thoại (Panel câm)</div>
                                 )}
                             </div>
@@ -518,15 +526,14 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
 
             let data;
             try {
-                const text = await response.text();
-                data = JSON.parse(text);
+                data = await response.json();
             } catch (e) {
-                throw new Error("Lỗi kết nối server (Timeout hoặc sai định dạng). Vui lòng thử lại sau.");
+                throw new Error("Lỗi kết nối server (Timeout hoặc sai định dạng JSON).");
             }
 
             if (!response.ok) throw new Error(data.error || 'Failed to generate script');
 
-            // Safety Check: Verify data structure before using
+            // SAFE GUARD: Ensure outline is an array
             if (!data || !data.outline || !Array.isArray(data.outline)) {
                 console.error("Invalid AI Response:", data);
                 throw new Error("AI trả về định dạng không hợp lệ. Vui lòng thử lại.");
@@ -579,10 +586,9 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
 
             let data;
             try {
-                const text = await response.text();
-                data = JSON.parse(text);
+                data = await response.json();
             } catch (e) {
-                throw new Error("Lỗi kết nối server (Timeout hoặc sai định dạng). Vui lòng thử lại.");
+                throw new Error("Lỗi kết nối server (Timeout hoặc sai định dạng).");
             }
 
             if (!response.ok) throw new Error(data.error || 'Failed to expand page');
@@ -947,17 +953,21 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                                     <i className="ph-fill ph-text-aa"></i> Kịch bản chi tiết
                                 </h4>
                                 
-                                <ProfessionalScriptEditor 
-                                    pageIndex={activePageIndex}
-                                    panel={comicPages[activePageIndex]} 
-                                    onUpdate={(jsonStr) => {
-                                        const updated = [...comicPages];
-                                        updated[activePageIndex].visual_description = jsonStr;
-                                        setComicPages(updated);
-                                    }}
-                                    onExpand={() => handleExpandPage(activePageIndex)}
-                                    isExpanding={expandingPageId === comicPages[activePageIndex]?.id}
-                                />
+                                {comicPages[activePageIndex] && (
+                                    <ProfessionalScriptEditor 
+                                        pageIndex={activePageIndex}
+                                        panel={comicPages[activePageIndex]} 
+                                        onUpdate={(jsonStr) => {
+                                            const updated = [...comicPages];
+                                            if (updated[activePageIndex]) {
+                                                updated[activePageIndex].visual_description = jsonStr;
+                                                setComicPages(updated);
+                                            }
+                                        }}
+                                        onExpand={() => handleExpandPage(activePageIndex)}
+                                        isExpanding={expandingPageId === comicPages[activePageIndex].id}
+                                    />
+                                )}
                             </div>
 
                             {/* Preview / Result Column */}

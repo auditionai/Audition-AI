@@ -68,16 +68,21 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         try {
             // The 'visual_description' field contains the FULL JSON structure of the page (layout, panels, dialogues)
+            // We need to parse this to extract the visual descriptions for the AI.
             scriptData = JSON.parse(panel.visual_description);
             
-            // Build a very explicit visual prompt
-            // IGNORE generic plot summary, focus on specific visual descriptions.
+            // Build a very explicit visual prompt from the parsed JSON
+            // IGNORE generic plot summary, focus on specific visual descriptions from the panels.
             visualDirectives = `**STRICT VISUAL INSTRUCTIONS (Follow Exactly):**\n`;
             visualDirectives += `- Layout Mode: ${scriptData.layout_note || "Standard Grid"}\n`;
             
-            if (scriptData.panels && Array.isArray(scriptData.panels)) {
-                scriptData.panels.forEach((p: any) => {
-                    visualDirectives += `\n[PANEL ${p.panel_id}]:\n`;
+            // Handle potential structure variation (panels array or single object)
+            const panelsList = Array.isArray(scriptData.panels) ? scriptData.panels : (scriptData.panels ? [scriptData.panels] : []);
+
+            if (panelsList.length > 0) {
+                panelsList.forEach((p: any) => {
+                    const pid = p.panel_id || 1;
+                    visualDirectives += `\n[PANEL ${pid}]:\n`;
                     visualDirectives += `  - Visual Action: ${p.description}\n`;
                     
                     // Extract Dialogue for this panel to ensure text placement
@@ -85,16 +90,19 @@ const handler: Handler = async (event: HandlerEvent) => {
                         p.dialogues.forEach((d: any) => {
                             // Ensure the text is sanitized
                             if (d.text && d.text.trim() !== "..." && d.text.trim() !== "") {
-                                dialogueListText += `Panel ${p.panel_id} bubble: "${d.text}" (Speaker: ${d.speaker})\n`;
+                                dialogueListText += `Panel ${pid} bubble: "${d.text}" (Speaker: ${d.speaker})\n`;
                             }
                         });
                     }
                 });
+            } else {
+                // Fallback if JSON valid but empty panels
+                visualDirectives = "Create a comic page based on the story context.";
             }
         } catch (e) {
-            // Fallback
+            // Fallback for legacy or raw text format (if user manually edited it to be non-JSON)
             visualDirectives = panel.visual_description;
-            dialogueListText = "No dialogue.";
+            dialogueListText = "No dialogue specified.";
         }
 
         const lowerStyle = style.toLowerCase();

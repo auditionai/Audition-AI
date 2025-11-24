@@ -229,7 +229,6 @@ const ProfessionalScriptEditor: React.FC<{
     pageIndex: number;
 }> = ({ panel, onUpdate, onExpand, isExpanding, pageIndex }) => {
     const [pageData, setPageData] = useState<ScriptPage | null>(null);
-    const [isParsingError, setIsParsingError] = useState(false);
 
     // SYNC STATE WITH PROP - ROBUST VERSION
     useEffect(() => {
@@ -237,8 +236,6 @@ const ProfessionalScriptEditor: React.FC<{
         
         if (!desc || desc.trim() === "") {
             setPageData(null); 
-            // Do not treat empty as error, it just means "Not Analyzed Yet"
-            setIsParsingError(false);
             return;
         }
 
@@ -252,13 +249,15 @@ const ProfessionalScriptEditor: React.FC<{
             } else if (Array.isArray(parsed)) {
                 // If root is array (some older versions), wrap it
                 cleanData.panels = parsed;
+            } else if (typeof parsed === 'object') {
+                // Try to salvage object if structure is slightly off
+                cleanData = { ...cleanData, ...parsed };
+                if (!cleanData.panels) cleanData.panels = [];
             } else {
-                // If JSON valid but unknown structure, treat strictly as 1 panel
                 throw new Error("Structure mismatch");
             }
             
             setPageData(cleanData);
-            setIsParsingError(false);
         } catch (e) {
             console.warn("JSON Parse Failed, falling back to raw text mode:", e);
             // FALLBACK: Treat the entire string as the description for Panel 1
@@ -271,7 +270,6 @@ const ProfessionalScriptEditor: React.FC<{
                     dialogues: []
                 }]
             });
-            setIsParsingError(false); // We handled the error by falling back
         }
     }, [panel.visual_description]);
 

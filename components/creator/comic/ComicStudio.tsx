@@ -282,11 +282,14 @@ const ProfessionalScriptEditor: React.FC<{
     if (isParsingError || !pageData) {
         return (
             <div className="p-4 bg-white/5 rounded-lg border border-white/10 text-center">
-                <p className="text-gray-400 text-sm mb-2">Dữ liệu kịch bản dạng thô (Raw) hoặc đang tạo...</p>
+                <div className="flex items-center justify-center gap-2 text-gray-400 text-sm mb-2 animate-pulse">
+                    <i className="ph-bold ph-spinner animate-spin"></i> Dữ liệu kịch bản đang được AI tạo...
+                </div>
                 <textarea 
                     className="w-full h-64 bg-black/30 text-gray-300 p-2 rounded border border-white/10 text-xs font-mono"
                     value={panel.visual_description}
                     onChange={(e) => onUpdate(e.target.value)}
+                    disabled
                 />
             </div>
         );
@@ -310,47 +313,58 @@ const ProfessionalScriptEditor: React.FC<{
                 <div key={idx} className="bg-[#1E1B25] border border-white/10 rounded-xl overflow-hidden shadow-sm hover:border-pink-500/30 transition-colors">
                     <div className="bg-black/20 px-4 py-2 border-b border-white/5 flex justify-between items-center">
                         <span className="text-xs font-bold text-pink-400 uppercase tracking-wider">Khung {p.panel_id}</span>
-                        <span className="text-[10px] text-gray-600 uppercase font-bold">Kịch bản chi tiết</span>
+                        <span className="text-[10px] text-gray-500 font-bold uppercase bg-white/5 px-2 py-0.5 rounded border border-white/5">Kịch bản chi tiết</span>
                     </div>
                     
-                    <div className="p-4 grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        {/* Left: Description */}
-                        <div>
-                            <label className="text-[10px] font-bold text-gray-500 uppercase mb-1 block">Mô tả hình ảnh (Visual)</label>
+                    <div className="p-4 grid grid-cols-1 lg:grid-cols-12 gap-6">
+                        {/* Left: Description (Large) */}
+                        <div className="lg:col-span-7">
+                            <label className="text-[10px] font-bold text-gray-500 uppercase mb-1 block flex items-center gap-1">
+                                <i className="ph-fill ph-film-strip"></i> Mô tả hình ảnh (Visual)
+                            </label>
                             <textarea 
-                                className="w-full h-24 bg-black/30 border border-white/10 rounded-lg p-3 text-sm text-white focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition resize-none"
+                                className="w-full h-32 bg-black/30 border border-white/10 rounded-lg p-3 text-sm text-white focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition resize-none leading-relaxed"
                                 value={p.description}
                                 onChange={(e) => handlePanelDescChange(idx, e.target.value)}
                                 placeholder="Mô tả bối cảnh, hành động, góc máy..."
                             />
                         </div>
 
-                        {/* Right: Dialogues */}
-                        <div className="bg-white/5 rounded-lg p-3 border border-white/5">
+                        {/* Right: Dialogues (List) */}
+                        <div className="lg:col-span-5 bg-white/5 rounded-lg p-3 border border-white/5 flex flex-col">
                             <div className="flex justify-between items-center mb-2">
-                                <label className="text-[10px] font-bold text-gray-500 uppercase block">Lời thoại (Dialogue)</label>
-                                <button onClick={() => addDialogue(idx)} className="text-[10px] bg-green-600/20 text-green-400 px-2 py-0.5 rounded hover:bg-green-600/40 transition">+ Thêm thoại</button>
+                                <label className="text-[10px] font-bold text-gray-500 uppercase block flex items-center gap-1">
+                                    <i className="ph-fill ph-chat-circle-text"></i> Lời thoại
+                                </label>
+                                <button onClick={() => addDialogue(idx)} className="text-[10px] bg-green-600/20 text-green-400 px-2 py-0.5 rounded hover:bg-green-600/40 transition border border-green-500/30 flex items-center gap-1">
+                                    <i className="ph-bold ph-plus"></i> Thêm
+                                </button>
                             </div>
                             
-                            <div className="space-y-2 max-h-24 overflow-y-auto custom-scrollbar">
+                            <div className="space-y-2 flex-grow overflow-y-auto custom-scrollbar pr-1">
                                 {p.dialogues.map((d, dIdx) => (
-                                    <div key={dIdx} className="flex gap-2 items-center">
+                                    <div key={dIdx} className="flex gap-2 items-center bg-black/20 p-1.5 rounded border border-white/5">
                                         <input 
-                                            className="w-1/3 bg-black/30 border border-white/10 rounded px-2 py-1 text-xs text-yellow-400 font-bold focus:border-yellow-500 outline-none text-right"
+                                            className="w-1/3 bg-transparent border-b border-white/10 px-1 py-1 text-xs text-yellow-400 font-bold focus:border-yellow-500 outline-none text-right placeholder-yellow-400/50"
                                             value={d.speaker}
                                             onChange={(e) => handleDialogueChange(idx, dIdx, 'speaker', e.target.value)}
-                                            placeholder="Tên"
+                                            placeholder="Tên NV"
                                         />
+                                        <div className="w-px h-4 bg-white/10"></div>
                                         <input 
-                                            className="flex-grow bg-black/30 border border-white/10 rounded px-2 py-1 text-xs text-white focus:border-white outline-none"
+                                            className="flex-grow bg-transparent px-1 py-1 text-xs text-white focus:outline-none placeholder-gray-600"
                                             value={d.text}
                                             onChange={(e) => handleDialogueChange(idx, dIdx, 'text', e.target.value)}
                                             placeholder="Nội dung..."
                                         />
-                                        <button onClick={() => removeDialogue(idx, dIdx)} className="text-red-500 hover:text-red-400 text-xs px-1"><i className="ph-fill ph-x"></i></button>
+                                        <button onClick={() => removeDialogue(idx, dIdx)} className="text-red-500 hover:text-red-400 text-xs px-1 opacity-50 hover:opacity-100 transition"><i className="ph-fill ph-x-circle"></i></button>
                                     </div>
                                 ))}
-                                {p.dialogues.length === 0 && <p className="text-xs text-gray-600 italic text-center py-2">Không có lời thoại</p>}
+                                {p.dialogues.length === 0 && (
+                                    <div className="flex flex-col items-center justify-center h-20 text-gray-600 italic text-xs border-2 border-dashed border-white/5 rounded">
+                                        <span>Chưa có lời thoại</span>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -519,7 +533,7 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
             const initialPanels = outline.map((p: any) => ({
                 id: crypto.randomUUID(),
                 panel_number: p.panel_number,
-                visual_description: `(Đang chờ xử lý: ${p.plot_summary}...)`,
+                visual_description: `(Đang chờ xử lý: ${p.plot_summary || '...'}...)`,
                 plot_summary: p.plot_summary,
                 dialogue: [],
                 is_rendering: false
@@ -882,7 +896,7 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                                                     <div className="absolute inset-0 bg-skin-fill-secondary/90 flex flex-col items-center justify-center z-20 p-6 text-center">
                                                         <h4 className="text-xl font-bold text-white mb-2">TRANG {panel.panel_number}</h4>
                                                         <p className="text-gray-400 text-sm mb-6 max-w-md line-clamp-3 opacity-80 italic">
-                                                            {panel.plot_summary}
+                                                            {panel.plot_summary || "Chưa có mô tả."}
                                                         </p>
                                                         <button onClick={() => handleRenderPanel(panel)} className="themed-button-primary px-8 py-3 rounded-full font-bold text-white shadow-xl flex items-center gap-2 transform hover:scale-105 transition-all">
                                                             <i className="ph-fill ph-paint-brush-broad text-xl"></i> Vẽ Trang Này ({RENDER_COST} 💎)

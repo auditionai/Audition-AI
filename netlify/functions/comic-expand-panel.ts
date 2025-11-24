@@ -51,8 +51,8 @@ const handler: Handler = async (event: HandlerEvent) => {
             
             **CRITICAL INSTRUCTIONS:**
             1.  **Model Behavior:** Act as **Gemini 3 Pro** logic. Think deeply about pacing, camera angles, and emotion.
-            2.  **Language:** ALL Output (Descriptions, Dialogues) MUST be in **VIETNAMESE** (Tiếng Việt).
-            3.  **Structure:** Break this Page into **3 to 5 Panels** (Khung).
+            2.  **Language:** ALL Output (Descriptions, Dialogues) MUST be in **VIETNAMESE** (Tiếng Việt) unless the story genre implies otherwise, but user setting usually mandates Vietnamese. Ensure clear, natural Vietnamese dialogue.
+            3.  **Structure:** Break this Page into **3 to 5 Panels** (Khung). Do not create too few or too many.
             4.  **Detail:** For each panel, describe the "Visual Action" (Bối cảnh, hành động nhân vật) and "Dialogues" (Lời thoại).
             5.  **Formatting:** Return strictly valid JSON.
             
@@ -72,7 +72,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             }
         `;
 
-        // Using gemini-3-pro-preview for highest reasoning capabilities
+        // Using gemini-3-pro-preview for highest reasoning capabilities as requested (Text Task)
         const response = await ai.models.generateContent({
             model: 'gemini-3-pro-preview',
             contents: { parts: [{ text: prompt }] },

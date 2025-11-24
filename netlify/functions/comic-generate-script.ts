@@ -57,7 +57,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             **Genre:** ${genre}
             **Target Length:** ${pageCount} PAGES.
             **Characters:** ${characterNames}
-            **Language for Summary:** ${targetLanguage}
+            **Language for Summary:** ${targetLanguage} (Note: Summary MUST be in Vietnamese).
             
             **Cover Page Settings:** ${coverPage}
             ${coverInstruction}

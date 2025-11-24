@@ -1,22 +1,16 @@
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { ComicCharacter, ComicPanel } from '../../../types';
 import { resizeImage } from '../../../utils/imageUtils';
-import jsPDF from 'jspdf';
-import JSZip from 'jszip';
 import SettingsBlock from '../ai-tool/SettingsBlock';
-import Modal from '../../common/Modal';
-import { COMIC_PREMISES } from '../../../constants/comicPremises';
 
-// --- CONSTANTS (Kept same as before) ---
+// --- CONSTANTS ---
 const GENRES = ['Mặc định (Sáng tạo)', 'Hành động / Phiêu lưu', 'Trận chiến / Shonen', 'Lãng mạn / Shoujo', 'Hài hước / Vui nhộn', 'Kinh dị / Ly kỳ', 'Lát cắt cuộc sống', 'Khoa học viễn tưởng / Mecha', 'Giả tưởng / Isekai', 'Bí ẩn / Thám tử', 'Bẩn thỉu và thô tục'];
 const ART_STYLES = [{ label: 'Mặc định (Audition)', value: 'Audition 3D Game Style' }, { label: 'Manga (Đen Trắng)', value: 'Manga Black and White, Screen tones, High Contrast' }, { label: 'Webtoon (Hàn Quốc)', value: 'Korean Webtoon Manhwa, Full Color, Digital Art, High Quality' }, { label: 'Comic (Âu Mỹ)', value: 'American Comic Book, Bold Lines, Dynamic Colors' }, { label: 'Anime (Nhật Bản)', value: 'Anime Style, Kyoto Animation Quality' }, { label: 'Pixel Art', value: 'Pixel Art' }, { label: 'Cyberpunk', value: 'Cyberpunk Neon' }];
 const LANGUAGES = ['Tiếng Việt', 'Tiếng Anh', 'Nhật Bản', 'Hàn Quốc', 'Trung Quốc'];
 const COLOR_FORMATS = [{ label: 'Đầy đủ màu sắc', value: 'Full Color' }, { label: 'Đen trắng / Manga', value: 'Black and White, Screen tones' }, { label: 'Bản phác thảo thô', value: 'Rough Sketch, Pencil' }];
-const PAGE_NUMBERING = [{ label: 'Không có', value: 'none' }, { label: 'Dưới cùng bên trái', value: 'bottom-left' }, { label: 'Trung tâm dưới cùng', value: 'bottom-center' }, { label: 'Góc dưới bên phải', value: 'bottom-right' }];
 const ASPECT_RATIOS = [{ label: '9:16 (Điện thoại)', value: '9:16' }, { label: '1:1 (Vuông)', value: '1:1' }, { label: '3:4 (Chân dung)', value: '3:4' }, { label: '4:3 (Phong cảnh)', value: '4:3' }, { label: '16:9 (Điện ảnh)', value: '16:9' }];
-const VISUAL_EFFECTS = [{ label: 'Tự động', value: 'auto' }, { label: 'Không có', value: 'none' }, { label: 'Vụ nổ', value: 'Explosion' }, { label: 'Tốc độ', value: 'Speed Lines' }];
 const DIALOGUE_AMOUNTS = [{ label: 'Ít', value: 'Minimal' }, { label: 'Vừa phải', value: 'Moderate' }, { label: 'Nhiều', value: 'Heavy' }];
 const COVER_OPTIONS = [{ label: 'Tự động tạo bìa', value: 'start' }, { label: 'Không có', value: 'none' }];
 const RENDER_COST = 10; 
@@ -63,12 +57,12 @@ const StepIndicator = ({ currentStep }: { currentStep: number }) => {
 
 // --- NEW COMPONENT: STRUCTURED PANEL EDITOR ---
 interface ScriptEditorProps {
-    pageId: string;
+    pageId: string; // Kept in interface but unused in destructuring to fix lint error
     scriptData: PageScriptData;
     onUpdate: (newData: PageScriptData) => void;
 }
 
-const ScriptEditor: React.FC<ScriptEditorProps> = ({ pageId, scriptData, onUpdate }) => {
+const ScriptEditor: React.FC<ScriptEditorProps> = ({ scriptData, onUpdate }) => {
     
     const handleLayoutChange = (val: string) => {
         onUpdate({ ...scriptData, layout_description: val });
@@ -188,7 +182,6 @@ const ComicStudio: React.FC<{ onInstructionClick?: () => void }> = ({ onInstruct
 
     // Step 2 & 3 Data
     const [panels, setPanels] = useState<ComicPanel[]>([]); // Panels here act as PAGES
-    const [imageLoadStates, setImageLoadStates] = useState<{[key: string]: string}>({});
 
     const handleAddCharacter = () => {
         if (characters.length >= MAX_CHARACTERS) return showToast("Đạt giới hạn nhân vật.", "error");

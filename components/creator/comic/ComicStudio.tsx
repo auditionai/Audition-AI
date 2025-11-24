@@ -410,7 +410,7 @@ const ProfessionalScriptEditor: React.FC<{
 
 const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructionClick }) => {
     const { user, session, showToast, updateUserDiamonds, supabase } = useAuth();
-    const { t } = useTranslation(); // t is now used in ComicSelect if needed or for translations, satisfies unused var check
+    const { t } = useTranslation(); // Satisfy unused variable check by using it if needed, or leave for future.
     
     // STEP CONTROL
     const [currentStep, setCurrentStep] = useState(1);
@@ -434,7 +434,6 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
     const [coverOption, setCoverOption] = useState(COVER_OPTIONS[0].value);
 
     // PROCESSING STATES
-    // Removed isAnalyzingChar state as it was duplicative of characters state logic
     const [isGeneratingScript, setIsGeneratingScript] = useState(false);
     const [activePageIndex, setActivePageIndex] = useState(0);
     const [expandingPageId, setExpandingPageId] = useState<string | null>(null);
@@ -466,7 +465,6 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
             setCharacters(prev => prev.map(c => c.id === id ? { ...c, image_url: dataUrl, image_file: file, is_analyzing: true } : c));
 
             // 2. Analyze Character (Gemini Vision)
-            // Make sure to send authorization header for backend to access user data if needed
             const response = await fetch('/.netlify/functions/comic-analyze-character', {
                 method: 'POST',
                 headers: { 
@@ -825,6 +823,9 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
 
                                                 {/* Info */}
                                                 <div className="flex-grow space-y-2">
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-xs text-gray-500 font-bold uppercase">Nhân vật {idx + 1}</span>
+                                                    </div>
                                                     <input 
                                                         type="text" 
                                                         className="w-full bg-transparent border-b border-white/10 focus:border-pink-500 text-sm font-bold text-white px-1 py-0.5 outline-none transition"

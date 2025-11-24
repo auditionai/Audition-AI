@@ -52,12 +52,12 @@ const handler: Handler = async (event: HandlerEvent) => {
         const prompt = `
             You are a professional comic book writer/editor.
             **Task:** Create a structural outline for a comic script based on the user's idea.
-            **LANGUAGE:** The output MUST be in ${targetLanguage}.
             
             **Input Story:** "${premise}"
             **Genre:** ${genre}
             **Target Length:** ${pageCount} PAGES.
             **Characters:** ${characterNames}
+            **Language for Summary:** ${targetLanguage}
             
             **Cover Page Settings:** ${coverPage}
             ${coverInstruction}
@@ -70,9 +70,9 @@ const handler: Handler = async (event: HandlerEvent) => {
             **Output Format:** JSON Array of objects.
         `;
 
-        // USE GEMINI 2.5 FLASH FOR TEXT GENERATION
+        // Using gemini-3-pro-preview for high-quality text logic
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash', 
+            model: 'gemini-3-pro-preview', 
             contents: {
                 parts: [{ text: prompt }]
             },

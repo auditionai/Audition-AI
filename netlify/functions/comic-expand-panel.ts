@@ -50,7 +50,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             ${characterContext}
             
             **CRITICAL INSTRUCTIONS:**
-            1.  **Model Behavior:** Act as **Gemini 2.5 Pro** logic. Think deeply about pacing, camera angles, and emotion.
+            1.  **Model Behavior:** Act as **Gemini 3 Pro** logic. Think deeply about pacing, camera angles, and emotion.
             2.  **Language:** ALL Output (Descriptions, Dialogues) MUST be in **VIETNAMESE** (Tiếng Việt).
             3.  **Structure:** Break this Page into **3 to 5 Panels** (Khung).
             4.  **Detail:** For each panel, describe the "Visual Action" (Bối cảnh, hành động nhân vật) and "Dialogues" (Lời thoại).
@@ -72,9 +72,9 @@ const handler: Handler = async (event: HandlerEvent) => {
             }
         `;
 
-        // Using gemini-1.5-pro for high reasoning capabilities (User requested "2.5 Pro" logic)
+        // Using gemini-3-pro-preview for highest reasoning capabilities
         const response = await ai.models.generateContent({
-            model: 'gemini-1.5-pro',
+            model: 'gemini-3-pro-preview',
             contents: { parts: [{ text: prompt }] },
             config: {
                 responseMimeType: "application/json",

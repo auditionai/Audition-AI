@@ -497,7 +497,7 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
         if (missingDesc) return showToast(`Vui lòng upload ảnh cho ${missingDesc.name} để AI phân tích ngoại hình.`, "error");
 
         setIsLoading(true);
-        setGenerationStatus("Đang lên cấu trúc cốt truyện (Gemini 2.5 Pro)...");
+        setGenerationStatus("Đang lên cấu trúc cốt truyện (Gemini 3 Pro)...");
 
         try {
             // PHASE 1: GENERATE OUTLINE (PAGES)
@@ -533,7 +533,7 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
 
             for (let i = 0; i < outline.length; i++) {
                 const p = outline[i];
-                setGenerationStatus(`Đang viết chi tiết TRANG ${p.panel_number}/${outline.length}... (Gemini 2.5 Pro)`);
+                setGenerationStatus(`Đang viết chi tiết TRANG ${p.panel_number}/${outline.length}... (Gemini 3 Pro)`);
                 
                 if (i > 0) await new Promise(resolve => setTimeout(resolve, 2000));
 
@@ -849,7 +849,7 @@ const ComicStudio: React.FC<ComicStudioProps> = ({ onInstructionClick }) => {
                                     <div key={panel.id} className="bg-[#12121A] border border-white/10 rounded-xl overflow-hidden">
                                         <div className="bg-[#1E1B25] px-4 py-3 border-b border-white/10 flex justify-between items-center">
                                             <span className="font-bold text-white flex items-center gap-2"><i className="ph-fill ph-file-text text-pink-500"></i> TRANG {panel.panel_number}</span>
-                                            <span className="text-xs text-gray-500 italic">{panel.plot_summary.substring(0, 50)}...</span>
+                                            <span className="text-xs text-gray-500 italic">{(panel.plot_summary || "").substring(0, 50)}...</span>
                                         </div>
                                         <div className="p-4">
                                             <ProfessionalScriptEditor 

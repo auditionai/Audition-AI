@@ -19,7 +19,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         const { image } = JSON.parse(event.body || '{}');
         if (!image) return { statusCode: 400, body: JSON.stringify({ error: 'Image data required.' }) };
 
-        // Retrieve API Key
+        // Retrieve API Key (Reuse existing key logic)
         const { data: apiKeyData } = await supabaseAdmin
             .from('api_keys')
             .select('key_value')
@@ -44,14 +44,14 @@ const handler: Handler = async (event: HandlerEvent) => {
             3. Clothing: Detailed outfit description (top, bottom, shoes, accessories, colors).
             4. Distinctive Features: Scars, tattoos, glasses, or unique traits.
             
-            Output the description as a single, cohesive paragraph suitable for an AI image generation prompt.
+            Output the description as a single, cohesive paragraph suitable for an AI image generation prompt (e.g., Stable Diffusion or Midjourney style).
             Do NOT describe the background or pose. Focus ONLY on the character's appearance.
             Keep the description under 100 words.
         `;
 
-        // USE GEMINI 2.5 FLASH FOR TEXT ANALYSIS
+        // Using gemini-3-pro-preview for highest quality analysis
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash', 
+            model: 'gemini-3-pro-preview', 
             contents: {
                 parts: [
                     { inlineData: { data: base64, mimeType } },

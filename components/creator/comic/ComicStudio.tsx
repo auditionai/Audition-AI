@@ -224,30 +224,40 @@ interface ScriptPage {
 const ProfessionalScriptEditor: React.FC<{ 
     panel: ComicPanel; 
     onUpdate: (updatedJsonString: string) => void;
-    onExpand: () => Promise<void>; // Changed to Promise to allow await
+    onExpand: () => Promise<void>; 
     isExpanding: boolean;
     pageIndex: number;
 }> = ({ panel, onUpdate, onExpand, isExpanding, pageIndex }) => {
     const [pageData, setPageData] = useState<ScriptPage | null>(null);
     const [isParsingError, setIsParsingError] = useState(false);
 
-    // Try to parse JSON from visual_description
+    // SYNC STATE WITH PROP
     useEffect(() => {
+        const desc = panel.visual_description || '';
+        
+        if (!desc || !desc.trim().startsWith('{')) {
+            setPageData(null); 
+            setIsParsingError(true);
+            return;
+        }
+
         try {
-            const desc = panel.visual_description || '';
-            // If it's empty or looks like raw text (not starting with {), treat as unparsed
-            if (!desc || !desc.trim().startsWith('{')) {
-                setPageData(null); 
-                setIsParsingError(true);
-                return;
-            }
             const parsed = JSON.parse(desc);
+            // Validate structure
             if (!parsed.panels || !Array.isArray(parsed.panels)) {
-                throw new Error("Invalid structure");
+                console.warn("JSON valid but missing panels array:", parsed);
+                // Fallback structure if partial JSON
+                setPageData({
+                    layout_note: parsed.layout_note || "Standard",
+                    panels: []
+                });
+                setIsParsingError(false);
+                return;
             }
             setPageData(parsed);
             setIsParsingError(false);
         } catch (e) {
+            console.error("JSON Parse Error in Editor:", e);
             setPageData(null);
             setIsParsingError(true);
         }
@@ -262,7 +272,7 @@ const ProfessionalScriptEditor: React.FC<{
         if (!pageData) return;
         const newPanels = [...pageData.panels];
         if (newPanels[idx]) {
-            newPanels[idx].description = val;
+            newPanels[idx] = { ...newPanels[idx], description: val }; // Create new object
             updatePage({ ...pageData, panels: newPanels });
         }
     };
@@ -270,10 +280,13 @@ const ProfessionalScriptEditor: React.FC<{
     const handleDialogueChange = (panelIdx: number, diaIdx: number, field: 'speaker' | 'text', val: string) => {
         if (!pageData) return;
         const newPanels = [...pageData.panels];
-        if (newPanels[panelIdx] && newPanels[panelIdx].dialogues[diaIdx]) {
-            const newDialogues = [...newPanels[panelIdx].dialogues];
+        const panelToUpdate = { ...newPanels[panelIdx] };
+        
+        if (panelToUpdate.dialogues && panelToUpdate.dialogues[diaIdx]) {
+            const newDialogues = [...panelToUpdate.dialogues];
             newDialogues[diaIdx] = { ...newDialogues[diaIdx], [field]: val };
-            newPanels[panelIdx].dialogues = newDialogues;
+            panelToUpdate.dialogues = newDialogues;
+            newPanels[panelIdx] = panelToUpdate;
             updatePage({ ...pageData, panels: newPanels });
         }
     };
@@ -281,42 +294,55 @@ const ProfessionalScriptEditor: React.FC<{
     const addDialogue = (panelIdx: number) => {
         if (!pageData) return;
         const newPanels = [...pageData.panels];
-        if (newPanels[panelIdx]) {
-            newPanels[panelIdx].dialogues.push({ speaker: 'Nhân vật', text: '...' });
-            updatePage({ ...pageData, panels: newPanels });
-        }
+        const panelToUpdate = { ...newPanels[panelIdx] };
+        
+        if (!panelToUpdate.dialogues) panelToUpdate.dialogues = [];
+        panelToUpdate.dialogues = [...panelToUpdate.dialogues, { speaker: 'Nhân vật', text: '...' }];
+        
+        newPanels[panelIdx] = panelToUpdate;
+        updatePage({ ...pageData, panels: newPanels });
     }
 
     const removeDialogue = (panelIdx: number, diaIdx: number) => {
         if (!pageData) return;
         const newPanels = [...pageData.panels];
-        if (newPanels[panelIdx]) {
-            newPanels[panelIdx].dialogues.splice(diaIdx, 1);
+        const panelToUpdate = { ...newPanels[panelIdx] };
+        
+        if (panelToUpdate.dialogues) {
+            const newDialogues = [...panelToUpdate.dialogues];
+            newDialogues.splice(diaIdx, 1);
+            panelToUpdate.dialogues = newDialogues;
+            newPanels[panelIdx] = panelToUpdate;
             updatePage({ ...pageData, panels: newPanels });
         }
     }
 
+    // --- ERROR / EMPTY STATE ---
     if (isParsingError || !pageData) {
         return (
-            <div className="flex flex-col items-center justify-center p-8 border border-dashed border-white/20 rounded-xl bg-white/5 min-h-[200px]">
+            <div className="flex flex-col items-center justify-center p-8 border border-dashed border-white/20 rounded-xl bg-white/5 min-h-[300px]">
                 <div className="text-center max-w-md">
-                    <i className="ph-fill ph-file-text text-4xl text-gray-500 mb-3"></i>
-                    <h4 className="font-bold text-white text-lg mb-2">Kịch bản chi tiết chưa có</h4>
-                    <p className="text-sm text-gray-400 mb-6 italic">"{panel.plot_summary || 'Trang này chưa có nội dung tóm tắt.'}"</p>
+                    <i className="ph-fill ph-file-text text-5xl text-gray-500 mb-4"></i>
+                    <h4 className="font-bold text-white text-xl mb-2">
+                        {pageIndex === 0 ? 'Nội dung Trang Bìa' : `Kịch bản chi tiết Trang ${pageIndex + 1}`}
+                    </h4>
+                    <p className="text-sm text-gray-400 mb-8 italic bg-black/30 p-4 rounded-lg border border-white/10">
+                        "{panel.plot_summary || 'Trang này chưa có nội dung tóm tắt.'}"
+                    </p>
                     
                     <button 
                         onClick={onExpand}
                         disabled={isExpanding}
-                        className={`themed-button-primary px-6 py-3 rounded-lg font-bold flex items-center gap-2 mx-auto shadow-lg hover:shadow-pink-500/30 transition-all ${panel.visual_description ? 'bg-red-500 hover:bg-red-600 border-red-500' : ''}`}
+                        className={`themed-button-primary px-8 py-4 rounded-xl font-bold flex items-center gap-3 mx-auto shadow-xl hover:shadow-pink-500/40 transition-all transform hover:-translate-y-1 ${panel.visual_description ? 'bg-red-500 hover:bg-red-600 border-red-500' : ''}`}
                     >
                         {isExpanding ? (
                             <>
-                                <div className="w-5 h-5 border-2 border-white/50 border-t-white rounded-full animate-spin"></div>
-                                AI đang viết...
+                                <div className="w-6 h-6 border-3 border-white/50 border-t-white rounded-full animate-spin"></div>
+                                AI đang viết kịch bản...
                             </>
                         ) : (
                             <>
-                                {panel.visual_description ? <i className="ph-fill ph-arrow-counter-clockwise"></i> : <i className="ph-fill ph-magic-wand"></i>}
+                                {panel.visual_description ? <i className="ph-fill ph-arrow-counter-clockwise text-xl"></i> : <i className="ph-fill ph-magic-wand text-xl"></i>}
                                 {panel.visual_description ? 'Thử lại (Lỗi định dạng)' : 'Phân tích chi tiết (AI)'}
                             </>
                         )}
@@ -326,24 +352,25 @@ const ProfessionalScriptEditor: React.FC<{
         );
     }
 
+    // --- EDITOR STATE ---
     return (
-        <div className="space-y-4 animate-fade-in">
+        <div className="space-y-4 animate-fade-in pb-20">
             {/* Plot Summary Display */}
             <div className="bg-blue-500/10 border border-blue-500/30 p-3 rounded-lg flex items-start gap-3">
                 <i className="ph-fill ph-info text-blue-400 mt-0.5 flex-shrink-0"></i>
                 <div>
-                    <p className="text-xs font-bold text-blue-300 uppercase mb-1">Cốt truyện trang {pageIndex + 1}</p>
+                    <p className="text-xs font-bold text-blue-300 uppercase mb-1">Cốt truyện gốc (Tóm tắt)</p>
                     <p className="text-sm text-gray-300 leading-relaxed">{panel.plot_summary || 'Không có tóm tắt.'}</p>
                 </div>
             </div>
 
             {/* Panels List */}
             {pageData.panels.map((p, pIdx) => (
-                <div key={pIdx} className="bg-[#1E1B25] border border-white/10 rounded-xl overflow-hidden shadow-sm">
+                <div key={pIdx} className="bg-[#1E1B25] border border-white/10 rounded-xl overflow-hidden shadow-sm transition-colors hover:border-white/20">
                     {/* Panel Header */}
                     <div className="bg-white/5 px-4 py-2 border-b border-white/10 flex justify-between items-center">
                         <span className="text-xs font-bold text-pink-400 uppercase tracking-wider flex items-center gap-2">
-                            <i className="ph-fill ph-frame-corners"></i> Khung tranh {p.panel_id}
+                            <i className="ph-fill ph-frame-corners"></i> Khung tranh (Panel) {p.panel_id}
                         </span>
                     </div>
                     
@@ -351,7 +378,10 @@ const ProfessionalScriptEditor: React.FC<{
                     <div className="p-4 space-y-4">
                         {/* Visual Description */}
                         <div>
-                            <label className="text-[10px] font-bold text-gray-500 uppercase mb-1.5 block">Mô tả hình ảnh / Hành động</label>
+                            <label className="text-[10px] font-bold text-gray-500 uppercase mb-1.5 block flex justify-between">
+                                <span>Mô tả hình ảnh / Hành động (Prompt cho AI)</span>
+                                <span className="text-cyan-500 cursor-help" title="AI sẽ vẽ dựa trên mô tả này">?</span>
+                            </label>
                             <textarea 
                                 className="w-full bg-black/30 border border-white/10 rounded-lg p-3 text-sm text-white focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition resize-none h-24 leading-relaxed"
                                 value={p.description}
@@ -389,13 +419,15 @@ const ProfessionalScriptEditor: React.FC<{
                                                 value={d.text}
                                                 onChange={(e) => {
                                                     handleDialogueChange(pIdx, dIdx, 'text', e.target.value);
+                                                    // Auto-grow height
                                                     e.target.style.height = 'auto';
                                                     e.target.style.height = e.target.scrollHeight + 'px';
                                                 }}
+                                                style={{ height: 'auto' }}
                                             />
                                             <button 
                                                 onClick={() => removeDialogue(pIdx, dIdx)}
-                                                className="absolute top-1/2 -right-8 -translate-y-1/2 text-gray-600 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition"
+                                                className="absolute top-1/2 -right-8 -translate-y-1/2 text-gray-600 hover:text-red-500 p-2 opacity-0 group-hover:opacity-100 transition"
                                                 title="Xóa thoại"
                                             >
                                                 <i className="ph-fill ph-trash"></i>
@@ -559,7 +591,7 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
             showToast('Đã tạo khung kịch bản! Hệ thống sẽ tự động phân tích chi tiết từng trang.', 'success');
 
             // TRIGGER AUTO EXPANSION QUEUE FOR ALL PAGES
-            // Create an array of indices [0, 1, 2... pageCount-1]
+            // Create an array of indices [0, 1, 2... newPages.length-1]
             const queue = Array.from({ length: newPages.length }, (_, i) => i);
             setExpansionQueue(queue);
 
@@ -853,7 +885,7 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                                 </div>
 
                                 <div>
-                                    <label className="text-xs font-bold text-skin-muted uppercase mb-1.5 block">Số lượng trang (Page)</label>
+                                    <label className="text-xs font-bold text-skin-muted uppercase mb-1.5 block">Số lượng trang NỘI DUNG</label>
                                     <div className="flex items-center gap-4 bg-[#1E1B25] p-2 rounded-lg border border-white/10">
                                         <input 
                                             type="range" min="1" max="10" 
@@ -862,6 +894,7 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                                         />
                                         <span className="font-bold text-white w-8 text-center">{pageCount}</span>
                                     </div>
+                                    <p className="text-[10px] text-gray-500 mt-1 italic">*Hệ thống sẽ tự cộng thêm 1 Trang Bìa.</p>
                                 </div>
                             </div>
                         </SettingsBlock>
@@ -978,13 +1011,13 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                 <div className="flex flex-col lg:flex-row gap-6 h-[calc(100vh-250px)]">
                     {/* Left: Page List */}
                     <div className="w-full lg:w-1/4 bg-[#12121A]/80 border border-white/10 rounded-2xl p-4 flex flex-col h-full">
-                        <h3 className="text-lg font-bold text-white mb-4 px-2">Danh sách trang</h3>
+                        <h3 className="text-lg font-bold text-white mb-4 px-2">Danh sách trang ({comicPages.length})</h3>
                         
                         {/* Auto Expansion Indicator */}
                         {expansionQueue.length > 0 && (
                             <div className="mb-3 p-2 bg-blue-500/20 border border-blue-500/30 rounded-lg flex items-center gap-2 text-xs text-blue-300 animate-pulse">
                                 <div className="w-3 h-3 border-2 border-blue-300 border-t-transparent rounded-full animate-spin"></div>
-                                <span>Đang tự động phân tích ({pageCount - expansionQueue.length + 1}/{pageCount})...</span>
+                                <span>Đang tự động phân tích ({comicPages.length - expansionQueue.length + 1}/{comicPages.length})...</span>
                             </div>
                         )}
 
@@ -1002,7 +1035,9 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                                     `}
                                 >
                                     <div className="flex justify-between items-center mb-1">
-                                        <span className="text-xs font-bold uppercase">Trang {idx + 1}</span>
+                                        <span className="text-xs font-bold uppercase">
+                                            {idx === 0 ? '⭐ Trang Bìa' : `Trang ${idx} (Nội dung)`}
+                                        </span>
                                         {page.status === 'completed' && <i className="ph-fill ph-check-circle text-green-400"></i>}
                                         {page.status === 'rendering' && <i className="ph-fill ph-spinner animate-spin text-yellow-400"></i>}
                                         
@@ -1033,7 +1068,9 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                     {/* Center: Script Editor & Preview */}
                     <div className="w-full lg:w-3/4 bg-[#12121A]/80 border border-white/10 rounded-2xl p-6 h-full overflow-y-auto custom-scrollbar relative">
                         <div className="flex justify-between items-center mb-6">
-                            <h2 className="text-2xl font-bold text-white">Trang {activePageIndex + 1}</h2>
+                            <h2 className="text-2xl font-bold text-white">
+                                {activePageIndex === 0 ? 'Trang Bìa' : `Trang Nội Dung ${activePageIndex}`}
+                            </h2>
                             <div className="flex gap-3">
                                 {currentStep === 2 && (
                                     <button 
@@ -1130,7 +1167,8 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                     <div className="bg-[#1E1B25] p-4 rounded-2xl border border-white/10 flex items-center gap-6 shadow-2xl">
                         <div className="text-right">
                             <p className="text-xs text-gray-400">Tổng chi phí dự kiến</p>
-                            <p className="text-xl font-black text-pink-400">2 💎 <span className="text-sm font-normal text-white">+ {pageCount * RENDER_COST} 💎 (Vẽ)</span></p>
+                            {/* Calculation update: Total pages = pageCount + 1 (Cover) */}
+                            <p className="text-xl font-black text-pink-400">2 💎 <span className="text-sm font-normal text-white">+ {(pageCount + 1) * RENDER_COST} 💎 (Vẽ {pageCount+1} trang)</span></p>
                         </div>
                         <button 
                             onClick={handleGenerateScript}

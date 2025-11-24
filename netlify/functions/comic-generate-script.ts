@@ -41,9 +41,22 @@ const handler: Handler = async (event: HandlerEvent) => {
         const characterNames = characters.map((c: any) => c.name).join(', ');
         const targetLanguage = language || 'Tiếng Việt';
 
+        // --- LOGIC TRANG BÌA ---
+        // Người dùng chọn X trang truyện.
+        // Hệ thống tạo X + 1 trang. Trang 1 là Bìa. Trang 2 -> X+1 là nội dung.
+        const totalPages = typeof pageCount === 'number' ? pageCount + 1 : 2;
+
         let coverInstruction = "";
         if (coverPage === 'start' || coverPage === 'both') {
-            coverInstruction += `\n- Page 1 MUST be a 'Title Cover Page' (Trang bìa). Summary: 'Trang bìa ấn tượng với tên truyện: [${premise.substring(0, 20)}...] và hình ảnh minh họa chính'.`;
+            coverInstruction = `
+            CRITICAL STRUCTURE REQUIREMENT:
+            - You MUST create exactly ${totalPages} items in the output array.
+            - Item 1 (panel_number: 1) MUST be the "Comic Cover" (Trang bìa). Plot Summary: "Trang bìa nghệ thuật với tên truyện: [${premise.substring(0, 20)}...], hình ảnh minh họa chính của nhân vật và không khí của bộ truyện."
+            - Items 2 to ${totalPages} are the actual story pages based on the premise.
+            `;
+        } else {
+            // Fallback if no cover selected (rare based on UI)
+             coverInstruction = `Create exactly ${pageCount} story pages.`;
         }
 
         // Prompt optimized for OUTLINING
@@ -53,14 +66,13 @@ const handler: Handler = async (event: HandlerEvent) => {
             
             **Input Story:** "${premise}"
             **Genre:** ${genre}
-            **Length:** ${pageCount} PAGES.
+            **Total Output Length:** ${totalPages} PAGES.
             **Characters:** ${characterNames}
             **Language:** ${targetLanguage} (Strictly).
             
             ${coverInstruction}
             
             **Requirement:**
-            - Break the story into ${pageCount} PAGES.
             - For each PAGE, provide a **concise 'plot_summary'** (2-3 sentences max).
             - Focus on the key event of the page.
             - **Do not** write detailed panels yet.
@@ -120,7 +132,8 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         // If empty, create dummy data so user doesn't lose money for nothing
         if (scriptJson.length === 0) {
-            for(let i=1; i<=pageCount; i++) {
+            scriptJson.push({ panel_number: 1, plot_summary: `Trang Bìa: Tên truyện và hình ảnh chủ đạo.` });
+            for(let i=2; i<=totalPages; i++) {
                 scriptJson.push({ panel_number: i, plot_summary: `Trang ${i}: (AI chưa tạo được nội dung, bạn hãy nhập thủ công)` });
             }
         }
@@ -130,7 +143,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             user_id: user.id,
             amount: -COST,
             transaction_type: 'COMIC_SCRIPT',
-            description: `Tạo kịch bản truyện tranh (${pageCount} trang)`
+            description: `Tạo kịch bản truyện tranh (${pageCount} trang + 1 bìa)`
         });
 
         return {

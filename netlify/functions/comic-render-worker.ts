@@ -1,144 +1,198 @@
 
 import type { Handler, HandlerEvent } from "@netlify/functions";
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, Modality } from "@google/genai";
 import { supabaseAdmin } from './utils/supabaseClient';
+import { Buffer } from 'buffer';
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+
+const COST = 10; 
+
+const processDataUrl = (dataUrl: string | null) => {
+    if (!dataUrl) return null;
+    const [header, base64] = dataUrl.split(',');
+    if (!base64) return null;
+    const mimeType = header.match(/:(.*?);/)?.[1] || 'image/png';
+    return { base64, mimeType };
+};
+
+const failJob = async (jobId: string, userId: string, reason: string) => {
+    console.error(`[COMIC WORKER] Failing job ${jobId}: ${reason}`);
+    try {
+        await Promise.all([
+            supabaseAdmin.from('generated_images').delete().eq('id', jobId),
+            supabaseAdmin.rpc('increment_user_diamonds', { user_id_param: userId, diamond_amount: COST }),
+            supabaseAdmin.from('diamond_transactions_log').insert({
+                user_id: userId,
+                amount: COST,
+                transaction_type: 'REFUND',
+                description: `Hoàn tiền vẽ truyện thất bại (Lỗi: ${reason.substring(0, 50)})`,
+            })
+        ]);
+    } catch (e) {
+        console.error("Critical failure during refund:", e);
+    }
+};
 
 const handler: Handler = async (event: HandlerEvent) => {
-    if (event.httpMethod !== 'POST') {
-        return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
-    }
+    if (event.httpMethod !== 'POST') return { statusCode: 200 };
 
-    const authHeader = event.headers['authorization'];
-    if (!authHeader) return { statusCode: 401, body: JSON.stringify({ error: 'Authorization required.' }) };
-    const token = authHeader.split(' ')[1];
-    const { data: { user }, error: authError } = await (supabaseAdmin.auth as any).getUser(token);
-    
-    if (authError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'Invalid token.' }) };
+    const { jobId } = JSON.parse(event.body || '{}');
+    if (!jobId) return { statusCode: 400, body: "Missing Job ID" };
+
+    let userId = "";
 
     try {
-        const { plot_summary, characters, style, genre, previous_panels } = JSON.parse(event.body || '{}');
-        
-        if (!plot_summary) return { statusCode: 400, body: JSON.stringify({ error: 'Missing plot summary.' }) };
-
-        const { data: apiKeyData } = await supabaseAdmin
-            .from('api_keys')
-            .select('key_value')
-            .eq('status', 'active')
-            .order('usage_count', { ascending: true })
-            .limit(1)
+        const { data: jobData, error: fetchError } = await supabaseAdmin
+            .from('generated_images')
+            .select('prompt, user_id')
+            .eq('id', jobId)
             .single();
 
-        if (!apiKeyData) return { statusCode: 503, body: JSON.stringify({ error: 'Service busy.' }) };
+        if (fetchError || !jobData) throw new Error("Job not found");
+        
+        userId = jobData.user_id;
+        const jobConfig = JSON.parse(jobData.prompt);
+        const { panel, characters, storyTitle, style, aspectRatio, colorFormat, visualEffect, isCover } = jobConfig.payload;
+
+        const { data: apiKeyData } = await supabaseAdmin.from('api_keys').select('key_value, id').eq('status', 'active').limit(1).single();
+        if (!apiKeyData) throw new Error('Hết tài nguyên AI.');
 
         const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
 
-        // 1. Prepare Character Context
-        const characterContext = characters.map((c: any) => 
-            `### ${c.name}: ${c.description || "N/A"}`
-        ).join('\n');
+        const parts: any[] = [];
+        
+        // --- PARSE STRUCTURED SCRIPT ---
+        let scriptData;
+        let visualDirectives = "";
+        let dialogueListText = "";
 
-        const prompt = `
-            You are a professional Comic Script Writer (Kịch bản gia truyện tranh chuyên nghiệp).
+        try {
+            // The 'visual_description' field contains the FULL JSON structure of the page (layout, panels, dialogues)
+            scriptData = JSON.parse(panel.visual_description);
             
-            **TASK:** Convert the 'Plot Summary' of a single Comic Page into a DETAILED SCRIPT broken down into PANELS (Khung tranh).
+            // Build a very explicit visual prompt
+            // IGNORE generic plot summary, focus on specific visual descriptions.
+            visualDirectives = `**STRICT VISUAL INSTRUCTIONS (Follow Exactly):**\n`;
+            visualDirectives += `- Layout Mode: ${scriptData.layout_note || "Standard Grid"}\n`;
             
-            **INPUT INFORMATION:**
-            - **Genre:** ${genre}
-            - **Art Style:** ${style}
-            - **Page Plot:** "${plot_summary}"
-            - **Characters:** 
-            ${characterContext}
-            
-            **CRITICAL INSTRUCTIONS:**
-            1.  **Model Behavior:** Act as **Gemini 2.5 Pro** logic. Think deeply about pacing, camera angles, and emotion.
-            2.  **Language:** ALL Output (Descriptions, Dialogues) MUST be in **VIETNAMESE** (Tiếng Việt).
-            3.  **Structure:** Break this Page into **3 to 5 Panels** (Khung).
-            4.  **Detail:** For each panel, describe the "Visual Action" (Bối cảnh, hành động nhân vật) and "Dialogues" (Lời thoại).
-            5.  **Formatting:** Return strictly valid JSON.
-            
-            **OUTPUT JSON SCHEMA:**
-            {
-              "layout_note": "Short note about page layout (e.g., 'Bố cục lưới 2x2', 'Trang có panel lớn ở giữa')",
-              "panels": [
-                {
-                  "panel_id": 1,
-                  "description": "Chi tiết hình ảnh: Ai đang làm gì? Góc máy (Toàn cảnh/Cận cảnh)? Biểu cảm? Bối cảnh?",
-                  "dialogues": [
-                    { "speaker": "Tên nhân vật", "text": "Lời thoại tiếng Việt..." }
-                  ]
-                },
-                ...
-              ]
+            if (scriptData.panels && Array.isArray(scriptData.panels)) {
+                scriptData.panels.forEach((p: any) => {
+                    visualDirectives += `\n[PANEL ${p.panel_id}]:\n`;
+                    visualDirectives += `  - Visual Action: ${p.description}\n`;
+                    
+                    // Extract Dialogue for this panel to ensure text placement
+                    if (p.dialogues && Array.isArray(p.dialogues)) {
+                        p.dialogues.forEach((d: any) => {
+                            // Ensure the text is sanitized
+                            if (d.text && d.text.trim() !== "..." && d.text.trim() !== "") {
+                                dialogueListText += `Panel ${p.panel_id} bubble: "${d.text}" (Speaker: ${d.speaker})\n`;
+                            }
+                        });
+                    }
+                });
             }
+        } catch (e) {
+            // Fallback
+            visualDirectives = panel.visual_description;
+            dialogueListText = "No dialogue.";
+        }
+
+        const lowerStyle = style.toLowerCase();
+        const isWebtoon = lowerStyle.includes('webtoon') || lowerStyle.includes('manhwa');
+        
+        let layoutInstruction = isWebtoon 
+            ? `**FORMAT: VERTICAL SCROLLING STRIP (WEBTOON)**.`
+            : `**FORMAT: COMIC PAGE**. A single page layout with distinct panels separated by white gutters.`;
+
+        const systemPrompt = `
+            You are a master comic artist (Gemini 3 Pro Vision).
+            
+            **GOAL:** Draw a high-quality comic page based EXACTLY on the visual directives below.
+            
+            ${layoutInstruction}
+            **ART STYLE:** ${style}. (Detailed lineart, 8k resolution).
+            - Color Palette: ${colorFormat}
+            ${visualEffect !== 'none' ? `- Visual Effect: ${visualEffect}` : ''}
+            
+            ${visualDirectives}
+            
+            **TEXT RENDERING (MANDATORY):**
+            Add speech bubbles containing the following text. Ensure text is legible and placed correctly in the corresponding panels.
+            ${dialogueListText}
+            
+            **CHARACTERS:**
+            Refer to the provided images. Maintain consistency in appearance (hair, clothes, face).
         `;
 
-        // Using gemini-1.5-pro for high reasoning capabilities (User requested "2.5 Pro" logic)
-        const response = await ai.models.generateContent({
-            model: 'gemini-1.5-pro',
-            contents: { parts: [{ text: prompt }] },
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: {
-                    type: Type.OBJECT,
-                    properties: {
-                        layout_note: { type: Type.STRING },
-                        panels: {
-                            type: Type.ARRAY,
-                            items: {
-                                type: Type.OBJECT,
-                                properties: {
-                                    panel_id: { type: Type.INTEGER },
-                                    description: { type: Type.STRING },
-                                    dialogues: {
-                                        type: Type.ARRAY,
-                                        items: {
-                                            type: Type.OBJECT,
-                                            properties: {
-                                                speaker: { type: Type.STRING },
-                                                text: { type: Type.STRING }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
+        parts.push({ text: systemPrompt });
+
+        if (characters && Array.isArray(characters)) {
+            for (const char of characters) {
+                if (char.image_url) {
+                    const imgData = processDataUrl(char.image_url);
+                    if (imgData) {
+                        parts.push({ text: `Reference Character: ${char.name}` });
+                        parts.push({ inlineData: { data: imgData.base64, mimeType: imgData.mimeType } });
                     }
+                }
+            }
+        }
+
+        // Use Gemini 3 Pro for rendering
+        const response = await ai.models.generateContent({
+            model: 'gemini-3-pro-image-preview',
+            contents: { parts },
+            config: {
+                responseModalities: [Modality.IMAGE],
+                imageConfig: {
+                    aspectRatio: aspectRatio || '3:4',
+                    imageSize: '2K' 
                 }
             }
         });
 
-        let resultJson;
-        try {
-            const text = response.text || '{}';
-            resultJson = JSON.parse(text);
-        } catch (e) {
-            // Fallback if JSON fails
-            resultJson = { 
-                layout_note: "Bố cục tiêu chuẩn",
-                panels: [
-                    { 
-                        panel_id: 1, 
-                        description: plot_summary, 
-                        dialogues: [] 
-                    }
-                ]
-            };
-        }
+        const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+        if (!imagePart?.inlineData) throw new Error("AI failed to render.");
 
-        // Wrap in the expected format for the frontend to store in 'visual_description'
-        // We stringify it because the DB column is text, and frontend will parse it.
-        return {
-            statusCode: 200,
-            body: JSON.stringify({ 
-                // We pass the object directly, the frontend will decide how to store/display it
-                script_data: resultJson 
-            }),
-        };
+        const s3Client = new S3Client({
+            region: "auto",
+            endpoint: process.env.R2_ENDPOINT!,
+            credentials: { accessKeyId: process.env.R2_ACCESS_KEY_ID!, secretAccessKey: process.env.R2_SECRET_ACCESS_KEY! },
+        });
+
+        const buffer = Buffer.from(imagePart.inlineData.data, 'base64');
+        const fileName = `${userId}/comic/${Date.now()}_page_${panel.panel_number}.png`;
+        
+        await (s3Client as any).send(new PutObjectCommand({
+            Bucket: process.env.R2_BUCKET_NAME!,
+            Key: fileName,
+            Body: buffer,
+            ContentType: 'image/png'
+        }));
+
+        const baseUrl = process.env.R2_PUBLIC_URL!.replace(/\/$/, '');
+        const publicUrl = `${baseUrl}/${fileName}`;
+
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        await Promise.all([
+            supabaseAdmin.from('generated_images').update({ 
+                image_url: publicUrl,
+                // Keep the JSON prompt structure in DB for future reference
+                prompt: panel.visual_description 
+            }).eq('id', jobId),
+            supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id })
+        ]);
+
+        console.log(`[WORKER] Job ${jobId} completed successfully.`);
 
     } catch (error: any) {
-        console.error("Panel expansion failed:", error);
-        return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
+        if (userId) {
+            await failJob(jobId, userId, error.message);
+        }
     }
+
+    return { statusCode: 200 };
 };
 
 export { handler };

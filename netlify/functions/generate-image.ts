@@ -13,6 +13,8 @@ const XP_PER_GENERATION = 10;
 
 /**
  * Pre-processes an image by placing it onto a new canvas of a target aspect ratio.
+ * FIXED: Now uses a standard target dimension (1024px) to enforce the ratio,
+ * instead of adapting to the input image size.
  */
 const processImageForGemini = async (imageDataUrl: string | null, targetAspectRatio: string): Promise<string | null> => {
     if (!imageDataUrl) return null;
@@ -23,27 +25,36 @@ const processImageForGemini = async (imageDataUrl: string | null, targetAspectRa
 
         const imageBuffer = Buffer.from(base64, 'base64');
         const image = await (Jimp as any).read(imageBuffer);
-        const originalWidth = image.getWidth();
-        const originalHeight = image.getHeight();
 
+        // 1. Parse Target Ratio
         const [aspectW, aspectH] = targetAspectRatio.split(':').map(Number);
         const targetRatio = aspectW / aspectH;
-        const originalRatio = originalWidth / originalHeight;
 
-        let newCanvasWidth: number, newCanvasHeight: number;
+        // 2. Define Standard Canvas Size (Max 1024px on long side to optimize for Gemini)
+        // This ensures the AI output respects the requested ratio regardless of input image size.
+        let canvasW, canvasH;
+        const MAX_DIM = 1024;
 
-        if (targetRatio > originalRatio) {
-            newCanvasHeight = originalHeight;
-            newCanvasWidth = Math.round(originalHeight * targetRatio);
+        if (targetRatio > 1) {
+            // Landscape
+            canvasW = MAX_DIM;
+            canvasH = Math.round(MAX_DIM / targetRatio);
         } else {
-            newCanvasWidth = originalWidth;
-            newCanvasHeight = Math.round(originalWidth / targetRatio);
+            // Portrait or Square
+            canvasH = MAX_DIM;
+            canvasW = Math.round(MAX_DIM * targetRatio);
         }
         
-        const newCanvas = new (Jimp as any)(newCanvasWidth, newCanvasHeight, '#000000');
+        // 3. Create Black Canvas
+        const newCanvas = new (Jimp as any)(canvasW, canvasH, '#000000');
         
-        const x = (newCanvasWidth - originalWidth) / 2;
-        const y = (newCanvasHeight - originalHeight) / 2;
+        // 4. Resize Input Image to FIT (Contain) inside the canvas
+        // We use contain so we don't crop the character
+        image.scaleToFit(canvasW, canvasH);
+
+        // 5. Center the image
+        const x = (canvasW - image.getWidth()) / 2;
+        const y = (canvasH - image.getHeight()) / 2;
         
         newCanvas.composite(image, x, y);
 
@@ -117,6 +128,9 @@ const handler: Handler = async (event: HandlerEvent) => {
         let finalImageMimeType: string;
         
         let fullPrompt = prompt;
+        
+        // Add explicit instruction to fill the canvas
+        fullPrompt += `\n\n(IMPORTANT LAYOUT INSTRUCTION: The provided image sets the canvas size and aspect ratio. The character is centered. You MUST fill the surrounding black empty space with the background described in the prompt. Do not crop the canvas. Maintain the aspect ratio of the input image exactly.)`;
 
         if (faceReferenceImage) {
             const faceLockInstruction = `(ABSOLUTE INSTRUCTION: The final image MUST use the exact face, including all features, details, and the complete facial expression, from the provided face reference image. Do NOT alter, modify, stylize, or change the expression of this face in any way. Ignore any conflicting instructions about facial expressions in the user's prompt. The face from the reference image must be perfectly preserved and transplanted onto the generated character.)\n\n`;

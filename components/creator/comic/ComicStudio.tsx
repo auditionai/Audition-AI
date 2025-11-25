@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { ComicCharacter, ComicPanel } from '../../../types';
@@ -723,6 +722,8 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                 },
                 body: JSON.stringify({
                     panel: page,
+                    // Include premise to ensure context consistency across pages
+                    premise: premise, 
                     characters: characters.map(c => ({ name: c.name, image_url: c.image_url })), // Send base64 for reference
                     storyTitle: comicTitle,
                     style: artStyle,

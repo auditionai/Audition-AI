@@ -52,7 +52,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         
         userId = jobData.user_id;
         const jobConfig = JSON.parse(jobData.prompt);
-        const { panel, characters, storyTitle, style, aspectRatio, colorFormat, visualEffect, isCover } = jobConfig.payload;
+        const { panel, characters, storyTitle, style, aspectRatio, colorFormat, visualEffect, isCover, premise } = jobConfig.payload;
 
         const { data: apiKeyData } = await supabaseAdmin.from('api_keys').select('key_value, id').eq('status', 'active').limit(1).single();
         if (!apiKeyData) throw new Error('Hết tài nguyên AI.');
@@ -73,8 +73,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             
             // Build a very explicit visual prompt from the parsed JSON
             // IGNORE generic plot summary, focus on specific visual descriptions from the panels.
-            visualDirectives = `**STRICT VISUAL INSTRUCTIONS (Follow Exactly):**\n`;
-            visualDirectives += `- Layout Mode: ${scriptData.layout_note || "Standard Grid"}\n`;
+            visualDirectives = `**PAGE LAYOUT INSTRUCTION:** ${scriptData.layout_note || "Standard Comic Grid"}\n\n`;
             
             // Handle potential structure variation (panels array or single object)
             const panelsList = Array.isArray(scriptData.panels) ? scriptData.panels : (scriptData.panels ? [scriptData.panels] : []);
@@ -82,8 +81,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             if (panelsList.length > 0) {
                 panelsList.forEach((p: any) => {
                     const pid = p.panel_id || 1;
-                    visualDirectives += `\n[PANEL ${pid}]:\n`;
-                    visualDirectives += `  - Visual Action: ${p.description}\n`;
+                    visualDirectives += `[PANEL ${pid} ACTION]: ${p.description}\n`;
                     
                     // Extract Dialogue for this panel to ensure text placement
                     if (p.dialogues && Array.isArray(p.dialogues)) {
@@ -110,26 +108,40 @@ const handler: Handler = async (event: HandlerEvent) => {
         
         let layoutInstruction = isWebtoon 
             ? `**FORMAT: VERTICAL SCROLLING STRIP (WEBTOON)**.`
-            : `**FORMAT: COMIC PAGE**. A single page layout with distinct panels separated by white gutters.`;
+            : `**FORMAT: COMIC PAGE**.`;
 
+        let characterContext = "No specific characters.";
+        if (characters && Array.isArray(characters)) {
+            characterContext = characters.map((c: any) => c.name).join(", ");
+        }
+
+        // --- THE MASTER PROMPT (DIRECTOR MODE) ---
         const systemPrompt = `
-            You are a master comic artist (Gemini 3 Pro Vision).
+            You are a legendary Comic Book Artist and Director (Gemini 3 Pro Vision).
             
-            **GOAL:** Draw a high-quality comic page based EXACTLY on the visual directives below.
+            **CORE DIRECTIVE: CONSISTENCY IS KING.**
+            You are drawing ONE page of a larger story. It is VITAL that characters and settings match the Global Story Context.
             
-            ${layoutInstruction}
-            **ART STYLE:** ${style}. (Detailed lineart, 8k resolution).
-            - Color Palette: ${colorFormat}
-            ${visualEffect !== 'none' ? `- Visual Effect: ${visualEffect}` : ''}
+            **1. GLOBAL STORY CONTEXT (THE TRUTH):**
+            "${premise}"
+            *Use this context to determine the setting (background), atmosphere, and character relationships. Unless the Page Script explicitly says otherwise, the setting must match this premise.*
             
+            **2. ARTISTIC DIRECTION:**
+            - Style: ${style} (High quality, 8k resolution, detailed lineart).
+            - Palette: ${colorFormat}
+            ${visualEffect !== 'none' ? `- Special Effect: ${visualEffect}` : ''}
+            - ${layoutInstruction}
+            
+            **3. CHARACTER CONSISTENCY:**
+            - Characters present: ${characterContext}.
+            - **CRITICAL:** You have been provided with reference images for these characters. You MUST adhere strictly to their hair color, hairstyle, facial features, and OUTFIT from the reference images. Do not hallucinate new clothes unless the script demands it.
+            
+            **4. CURRENT PAGE SCRIPT (YOUR TASK):**
             ${visualDirectives}
             
-            **TEXT RENDERING (MANDATORY):**
-            Add speech bubbles containing the following text. Ensure text is legible and placed correctly in the corresponding panels.
+            **5. TEXT RENDERING (MANDATORY):**
+            Add speech bubbles containing the following text. Ensure text is legible, clear, and correctly placed in the corresponding panels.
             ${dialogueListText}
-            
-            **CHARACTERS:**
-            Refer to the provided images. Maintain consistency in appearance (hair, clothes, face).
         `;
 
         parts.push({ text: systemPrompt });
@@ -139,7 +151,8 @@ const handler: Handler = async (event: HandlerEvent) => {
                 if (char.image_url) {
                     const imgData = processDataUrl(char.image_url);
                     if (imgData) {
-                        parts.push({ text: `Reference Character: ${char.name}` });
+                        // Explicitly label the reference image for the model
+                        parts.push({ text: `REFERENCE IMAGE FOR CHARACTER: ${char.name} (Use this exact look)` });
                         parts.push({ inlineData: { data: imgData.base64, mimeType: imgData.mimeType } });
                     }
                 }
@@ -147,6 +160,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         }
 
         // Use Gemini 3 Pro for rendering
+        console.log(`[WORKER] Calling Gemini 3 Pro for job ${jobId}...`);
         const response = await ai.models.generateContent({
             model: 'gemini-3-pro-image-preview',
             contents: { parts },

@@ -169,7 +169,8 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
         const file = e.target.files?.[0];
         if (!file) return;
 
-        resizeImage(file, 1024).then(({ file: resizedFile, dataUrl: resizedDataUrl }) => {
+        // OPTIMIZATION: Resize to 800px (smaller than 1024px) for group shots to prevent huge payload
+        resizeImage(file, 800).then(({ file: resizedFile, dataUrl: resizedDataUrl }) => {
             const newImage = { url: resizedDataUrl, file: resizedFile };
             if (type === 'reference') {
                 setReferenceImage(newImage);
@@ -359,7 +360,7 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                  table: 'generated_images',
                  filter: `id=eq.${jobId}`
             }, () => {
-                 showToast('Tạo ảnh nhóm thất bại do lỗi xử lý. Kim cương đã được hoàn lại.', 'error');
+                 showToast('Tạo ảnh thất bại. Hệ thống đã hoàn tiền cho bạn.', 'error');
                  setIsGenerating(false);
                  cleanup();
             })
@@ -397,6 +398,7 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                         const spawnerResult = await spawnerResponse.json();
                         updateUserDiamonds(spawnerResult.newDiamondCount);
 
+                        // Trigger Worker
                         fetch('/.netlify/functions/generate-group-image-background', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },

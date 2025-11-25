@@ -4,265 +4,298 @@ import { GoogleGenAI, Modality } from "@google/genai";
 import { supabaseAdmin } from './utils/supabaseClient';
 import { Buffer } from 'buffer';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { addSmartWatermark } from './watermark-service'; 
 import Jimp from 'jimp';
-import { addSmartWatermark } from './watermark-service'; // Import đã sửa
 
-const COST_UPSCALE = 1;
-const COST_REMOVE_WATERMARK = 1; 
-const XP_PER_GENERATION = 10;
+const XP_PER_CHARACTER = 5;
 
-/**
- * Pre-processes an image by placing it onto a new canvas of a target aspect ratio.
- * FIXED: Now uses a standard target dimension (1024px) to enforce the ratio,
- * instead of adapting to the input image size.
- */
-const processImageForGemini = async (imageDataUrl: string | null, targetAspectRatio: string): Promise<string | null> => {
-    if (!imageDataUrl) return null;
-
+const failJob = async (jobId: string, reason: string, userId: string, cost: number) => {
+    console.error(`[WORKER] Failing job ${jobId}: ${reason}`);
     try {
-        const [header, base64] = imageDataUrl.split(',');
-        if (!base64) return null;
+        await Promise.all([
+            supabaseAdmin.from('generated_images').delete().eq('id', jobId),
+            supabaseAdmin.rpc('increment_user_diamonds', { user_id_param: userId, diamond_amount: cost }),
+            supabaseAdmin.from('diamond_transactions_log').insert({
+                user_id: userId,
+                amount: cost,
+                transaction_type: 'REFUND',
+                description: `Hoàn tiền tạo ảnh nhóm thất bại (Lỗi: ${reason.substring(0, 50)})`,
+            })
+        ]);
+    } catch (e) {
+        console.error(`[WORKER] CRITICAL: Failed to clean up or refund for job ${jobId}`, e);
+    }
+};
 
+// Helper to resize image content into a standardized canvas matching the target aspect ratio
+const enforceAspectRatioCanvas = async (dataUrl: string, targetAspectRatio: string): Promise<{ data: string; mimeType: string } | null> => {
+     if (!dataUrl) return null;
+     try {
+        const [header, base64] = dataUrl.split(',');
         const imageBuffer = Buffer.from(base64, 'base64');
         const image = await (Jimp as any).read(imageBuffer);
 
-        // 1. Parse Target Ratio
         const [aspectW, aspectH] = targetAspectRatio.split(':').map(Number);
         const targetRatio = aspectW / aspectH;
-
-        // 2. Define Standard Canvas Size (Max 1024px on long side to optimize for Gemini)
-        // This ensures the AI output respects the requested ratio regardless of input image size.
-        let canvasW, canvasH;
+        
         const MAX_DIM = 1024;
-
+        let canvasW, canvasH;
+        
         if (targetRatio > 1) {
-            // Landscape
             canvasW = MAX_DIM;
             canvasH = Math.round(MAX_DIM / targetRatio);
         } else {
-            // Portrait or Square
             canvasH = MAX_DIM;
             canvasW = Math.round(MAX_DIM * targetRatio);
         }
-        
-        // 3. Create Black Canvas
-        const newCanvas = new (Jimp as any)(canvasW, canvasH, '#000000');
-        
-        // 4. Resize Input Image to FIT (Contain) inside the canvas
-        // We use contain so we don't crop the character
-        image.scaleToFit(canvasW, canvasH);
 
-        // 5. Center the image
+        const newCanvas = new (Jimp as any)(canvasW, canvasH, '#000000');
+        image.scaleToFit(canvasW, canvasH);
+        
         const x = (canvasW - image.getWidth()) / 2;
         const y = (canvasH - image.getHeight()) / 2;
         
         newCanvas.composite(image, x, y);
+        
+        const mime = header.match(/:(.*?);/)?.[1] || 'image/png';
+        const newBase64 = await newCanvas.getBase64Async(mime);
+        
+        return { data: newBase64.split(',')[1], mimeType: mime };
 
-        const mime = header.match(/:(.*?);/)?.[1] || (Jimp as any).MIME_PNG;
-        return newCanvas.getBase64Async(mime as any);
-
-    } catch (error) {
-        console.error("Error pre-processing image for Gemini:", error);
-        return imageDataUrl;
-    }
+     } catch (e) {
+         console.error("Error enforcing aspect ratio canvas:", e);
+         return null;
+     }
 };
 
+// Standardize to match Google SDK structure { data, mimeType }
+const processDataUrl = (dataUrl: string | null) => {
+    if (!dataUrl) return null;
+    const [header, base64] = dataUrl.split(',');
+    if (!base64) return null;
+    const mimeType = header.match(/:(.*?);/)?.[1] || 'image/png';
+    // FIX: Return property 'data' instead of 'base64' to match usage downstream
+    return { data: base64, mimeType };
+};
+
+const updateJobProgress = async (jobId: string, currentPromptData: any, progressMessage: string) => {
+    const newProgressData = { ...currentPromptData, progress: progressMessage };
+    await supabaseAdmin.from('generated_images').update({ prompt: JSON.stringify(newProgressData) }).eq('id', jobId);
+};
+
+
 const handler: Handler = async (event: HandlerEvent) => {
-    const s3Client = new S3Client({
-        region: "auto",
-        endpoint: process.env.R2_ENDPOINT!,
-        credentials: {
-            accessKeyId: process.env.R2_ACCESS_KEY_ID!,
-            secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
-        },
-    });
+    if (event.httpMethod !== 'POST') return { statusCode: 200 };
+
+    const { jobId } = JSON.parse(event.body || '{}');
+    if (!jobId) {
+        console.error("[WORKER] Job ID is missing.");
+        return { statusCode: 200 };
+    }
+
+    let jobPromptData, payload, userId, totalCost = 0;
 
     try {
-        if (event.httpMethod !== 'POST') {
-            return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
+        const { data: jobData, error: fetchError } = await supabaseAdmin
+            .from('generated_images')
+            .select('prompt, user_id')
+            .eq('id', jobId)
+            .single();
+
+        if (fetchError || !jobData || !jobData.prompt) {
+            throw new Error(fetchError?.message || 'Job not found or payload is missing.');
         }
+
+        jobPromptData = JSON.parse(jobData.prompt);
+        payload = jobPromptData.payload;
+        userId = jobData.user_id;
+
+        // IMMEDIATE UPDATE: Notify that worker has picked up the job
+        await updateJobProgress(jobId, jobPromptData, 'Máy chủ đang xử lý dữ liệu...');
+
+        const { characters, referenceImage, prompt, style, aspectRatio, model: selectedModel, imageSize = '1K', useSearch = false, removeWatermark = false } = payload;
+        const numCharacters = characters.length;
         
-        const authHeader = event.headers['authorization'];
-        if (!authHeader) return { statusCode: 401, body: JSON.stringify({ error: 'Authorization header is required.' }) };
-        const token = authHeader.split(' ')[1];
-        if (!token) return { statusCode: 401, body: JSON.stringify({ error: 'Bearer token is missing.' }) };
-
-        const { data: { user }, error: authError } = await (supabaseAdmin.auth as any).getUser(token);
-        if (authError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized: Invalid token.' }) };
-
-        const body = JSON.parse(event.body || '{}');
-        const { 
-            prompt, apiModel, characterImage, faceReferenceImage, styleImage, 
-            aspectRatio, negativePrompt, seed, useUpscaler,
-            imageSize = '1K', useGoogleSearch = false,
-            removeWatermark = false 
-        } = body;
-
-        if (!prompt || !apiModel) return { statusCode: 400, body: JSON.stringify({ error: 'Prompt and apiModel are required.' }) };
-        
-        // COST CALCULATION
         let baseCost = 1;
-        const isProModel = apiModel === 'gemini-3-pro-image-preview';
-
-        if (isProModel) {
-             // Pricing: 1K = 10, 2K = 15, 4K = 20
-             if (imageSize === '4K') baseCost = 20;
-             else if (imageSize === '2K') baseCost = 15;
-             else baseCost = 10; // 1K Base
+        if (selectedModel === 'pro') {
+            if (imageSize === '4K') baseCost = 20;
+            else if (imageSize === '2K') baseCost = 15;
+            else baseCost = 10;
         }
-        
-        let totalCost = baseCost;
-        if (useUpscaler) totalCost += COST_UPSCALE;
-        if (removeWatermark) totalCost += COST_REMOVE_WATERMARK; 
+        totalCost = baseCost + numCharacters;
+        if (removeWatermark) totalCost += 1;
 
-        const { data: userData, error: userError } = await supabaseAdmin.from('users').select('diamonds, xp').eq('id', user.id).single();
-        if (userError || !userData) return { statusCode: 404, body: JSON.stringify({ error: 'User not found.' }) };
-        if (userData.diamonds < totalCost) return { statusCode: 402, body: JSON.stringify({ error: `Không đủ kim cương. Cần ${totalCost}, bạn có ${userData.diamonds}.` }) };
-        
         const { data: apiKeyData, error: apiKeyError } = await supabaseAdmin.from('api_keys').select('id, key_value').eq('status', 'active').order('usage_count', { ascending: true }).limit(1).single();
-        if (apiKeyError || !apiKeyData) return { statusCode: 503, body: JSON.stringify({ error: 'Hết tài nguyên AI. Vui lòng thử lại sau.' }) };
+        if (apiKeyError || !apiKeyData) throw new Error('Hết tài nguyên AI. Vui lòng thử lại sau.');
         
         const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
-
-        let finalImageBase64: string;
-        let finalImageMimeType: string;
+        const modelName = selectedModel === 'pro' ? 'gemini-3-pro-image-preview' : 'gemini-2.5-flash-image';
+        const isPro = selectedModel === 'pro';
         
-        let fullPrompt = prompt;
+        const generatedCharacters = [];
         
-        // Add explicit instruction to fill the canvas
-        fullPrompt += `\n\n(IMPORTANT LAYOUT INSTRUCTION: The provided image sets the canvas size and aspect ratio. The character is centered. You MUST fill the surrounding black empty space with the background described in the prompt. Do not crop the canvas. Maintain the aspect ratio of the input image exactly.)`;
+        let finalBackgroundData: { data: string; mimeType: string } | undefined;
+        let layoutImageUrl: string | null = null; 
 
-        if (faceReferenceImage) {
-            const faceLockInstruction = `(ABSOLUTE INSTRUCTION: The final image MUST use the exact face, including all features, details, and the complete facial expression, from the provided face reference image. Do NOT alter, modify, stylize, or change the expression of this face in any way. Ignore any conflicting instructions about facial expressions in the user's prompt. The face from the reference image must be perfectly preserved and transplanted onto the generated character.)\n\n`;
-            fullPrompt = faceLockInstruction + fullPrompt;
+        if (referenceImage) {
+            layoutImageUrl = referenceImage;
+            
+            for (let i = 0; i < numCharacters; i++) {
+                await updateJobProgress(jobId, jobPromptData, `Đang xử lý nhân vật ${i + 1}/${numCharacters}...`);
+                
+                const char = characters[i];
+                const faceReferenceExists = !!char.faceImage;
+
+                const charPrompt = [
+                    `**ROLE DEFINITIONS:**`,
+                    `Create a full body character of a ${char.gender} based on the reference pose and outfit provided.`,
+                    faceReferenceExists ? `Use the face from the provided face image.` : '',
+                    `Render on a solid black background.`
+                ].join('\n');
+
+                const poseData = processDataUrl(char.poseImage);
+                const faceData = processDataUrl(char.faceImage);
+                const refData = processDataUrl(referenceImage); 
+
+                if (!poseData) throw new Error(`Lỗi dữ liệu ảnh dáng nhân vật ${i+1}.`);
+
+                const parts = [
+                    { text: charPrompt },
+                    { inlineData: { data: refData!.data, mimeType: refData!.mimeType } },
+                    { inlineData: { data: poseData.data, mimeType: poseData.mimeType } },
+                ];
+                if (faceData) parts.push({ inlineData: { data: faceData.data, mimeType: faceData.mimeType } });
+
+                const response = await ai.models.generateContent({ model: 'gemini-2.5-flash-image', contents: { parts }, config: { responseModalities: [Modality.IMAGE] } });
+                const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+                if (!imagePart?.inlineData) throw new Error(`AI không thể tạo nhân vật ${i + 1}.`);
+                
+                generatedCharacters.push(imagePart.inlineData);
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+
+        } else {
+            await updateJobProgress(jobId, jobPromptData, 'Đang tạo bối cảnh từ prompt...');
+            const bgPrompt = `Create a high-quality, cinematic background scene described as: "${prompt}". The scene should have a style of "${style}". Do NOT include any people or characters.`;
+            
+            const bgConfig: any = { responseModalities: [Modality.IMAGE] };
+            if (isPro) {
+                 bgConfig.imageConfig = { imageSize, aspectRatio };
+                 if (useSearch) bgConfig.tools = [{ googleSearch: {} }];
+            }
+
+            const bgResponse = await ai.models.generateContent({ model: modelName, contents: { parts: [{ text: bgPrompt }] }, config: bgConfig });
+            const bgImagePart = bgResponse.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+            if (!bgImagePart?.inlineData?.data) throw new Error("AI không thể tạo bối cảnh nền.");
+            
+            layoutImageUrl = `data:${bgImagePart.inlineData.mimeType};base64,${bgImagePart.inlineData.data}`;
+
+            await new Promise(resolve => setTimeout(resolve, 1500));
+
+            for (let i = 0; i < numCharacters; i++) {
+                await updateJobProgress(jobId, jobPromptData, `Đang xử lý nhân vật ${i + 1}/${numCharacters}...`);
+                const char = characters[i];
+                const charPrompt = `Create a full-body character of a **${char.gender}**. They MUST be wearing the exact outfit from the provided character image. Place the character on a solid black background.`;
+                
+                const poseData = processDataUrl(char.poseImage);
+                if (!poseData) throw new Error(`Lỗi dữ liệu ảnh dáng nhân vật ${i+1}.`);
+                
+                const parts = [
+                    { text: charPrompt },
+                    { inlineData: { data: poseData.data, mimeType: poseData.mimeType } },
+                ];
+                
+                const response = await ai.models.generateContent({ model: 'gemini-2.5-flash-image', contents: { parts }, config: { responseModalities: [Modality.IMAGE] } });
+                const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+                if (!imagePart?.inlineData) throw new Error(`AI không thể tạo nhân vật ${i + 1}.`);
+                
+                generatedCharacters.push(imagePart.inlineData);
+            }
         }
-
-        if (negativePrompt) {
-            fullPrompt += ` --no ${negativePrompt}`;
-        }
-
-        const parts: any[] = [];
         
-        const [
-            processedCharacterImage,
-            processedStyleImage,
-            processedFaceImage,
-        ] = await Promise.all([
-            processImageForGemini(characterImage, aspectRatio),
-            processImageForGemini(styleImage, aspectRatio),
-            processImageForGemini(faceReferenceImage, aspectRatio)
-        ]);
-        
-        parts.push({ text: fullPrompt });
+        if (!layoutImageUrl) throw new Error("Lỗi xử lý ảnh nền.");
 
-        const addImagePart = (imageDataUrl: string | null) => {
-            if (!imageDataUrl) return;
-            const [header, base64] = imageDataUrl.split(',');
-            const mimeType = header.match(/:(.*?);/)?.[1] || 'image/png';
-            parts.push({ inlineData: { data: base64, mimeType } });
+        await updateJobProgress(jobId, jobPromptData, 'Đang tổng hợp ảnh cuối cùng...');
+        
+        const processedLayout = await enforceAspectRatioCanvas(layoutImageUrl, aspectRatio);
+        
+        if (!processedLayout) throw new Error("Lỗi xử lý khung hình (Canvas).");
+        finalBackgroundData = processedLayout;
+
+        const compositePrompt = [
+            `**IMPORTANT: LAYOUT INSTRUCTION**`,
+            `The provided first image is the **CANVAS**. It sets the aspect ratio and the background/layout. You MUST fill this canvas. Do NOT crop it.`,
+            `---`,
+            `**Task:**`,
+            `1. **Background:** Use the provided Canvas base.`,
+            `2. **Characters:** Take the characters from the black background images and composite them onto this Canvas seamlessly.`,
+            `3. **Composition:** Arrange characters naturally within the scene.`
+        ].join('\n');
+        
+        const finalParts = [
+            { text: compositePrompt },
+            { inlineData: { data: finalBackgroundData.data, mimeType: finalBackgroundData.mimeType } },
+            ...generatedCharacters.map(charData => ({ inlineData: charData }))
+        ];
+        
+        const finalConfig: any = { 
+            responseModalities: [Modality.IMAGE] 
         };
 
-        addImagePart(processedCharacterImage);
-        addImagePart(processedStyleImage);
-        addImagePart(processedFaceImage);
-        
-        const config: any = { 
-            responseModalities: [Modality.IMAGE],
-            seed: seed ? Number(seed) : undefined,
-        };
-
-        if (isProModel) {
-            config.imageConfig = {
+        if (isPro) {
+            finalConfig.imageConfig = {
                 aspectRatio: aspectRatio,
-                imageSize: imageSize 
+                imageSize: imageSize
             };
-            if (useGoogleSearch) {
-                config.tools = [{ googleSearch: {} }]; 
+            if (useSearch) {
+                finalConfig.tools = [{ googleSearch: {} }];
             }
         }
 
-        const response = await ai.models.generateContent({
-            model: apiModel,
-            contents: { parts: parts },
-            config: config,
+        const finalResponse = await ai.models.generateContent({
+            model: modelName,
+            contents: { parts: finalParts },
+            config: finalConfig,
         });
 
-        const imagePartResponse = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-        if (!imagePartResponse?.inlineData) {
-            console.error("Gemini Response Error:", JSON.stringify(response, null, 2));
-            throw new Error("AI không thể tạo hình ảnh từ mô tả này. Hãy thử thay đổi prompt hoặc ảnh tham chiếu.");
-        }
+        const finalImagePart = finalResponse.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+        if (!finalImagePart?.inlineData) throw new Error("AI failed to composite the final image.");
 
-        finalImageBase64 = imagePartResponse.inlineData.data;
-        finalImageMimeType = imagePartResponse.inlineData.mimeType.includes('png') ? 'image/png' : 'image/jpeg';
-        
-        // --- WATERMARK LOGIC ---
+        const finalImageBase64 = finalImagePart.inlineData.data;
+        const finalImageMimeType = finalImagePart.inlineData.mimeType;
+
         let imageBuffer = Buffer.from(finalImageBase64, 'base64');
-
         if (!removeWatermark) {
-            // Construct URL for the watermark.png using Production URL as default
             const siteUrl = process.env.URL || 'https://auditionai.io.vn';
             const watermarkUrl = `${siteUrl}/watermark.png`;
-            
             imageBuffer = await addSmartWatermark(imageBuffer, watermarkUrl);
         }
 
-        const fileExtension = finalImageMimeType.split('/')[1] || 'png';
-        const fileName = `${user.id}/${Date.now()}.${fileExtension}`;
-
-        const putCommand = new PutObjectCommand({
-            Bucket: process.env.R2_BUCKET_NAME!,
-            Key: fileName,
-            Body: imageBuffer,
-            ContentType: finalImageMimeType,
-        });
-        await (s3Client as any).send(putCommand);
+        const s3Client = new S3Client({ region: "auto", endpoint: process.env.R2_ENDPOINT!, credentials: { accessKeyId: process.env.R2_ACCESS_KEY_ID!, secretAccessKey: process.env.R2_SECRET_ACCESS_KEY! }});
+        const fileName = `${userId}/group/${Date.now()}.${finalImageMimeType.split('/')[1] || 'png'}`;
+        
+        await (s3Client as any).send(new PutObjectCommand({ Bucket: process.env.R2_BUCKET_NAME!, Key: fileName, Body: imageBuffer, ContentType: finalImageMimeType }));
         const publicUrl = `${process.env.R2_PUBLIC_URL}/${fileName}`;
+        
+        const xpToAward = numCharacters * XP_PER_CHARACTER;
 
-        const newDiamondCount = userData.diamonds - totalCost;
-        const newXp = userData.xp + XP_PER_GENERATION;
-        
-        let logDescription = `Tạo ảnh`;
-        if (isProModel) logDescription += ` (Pro ${imageSize})`; else logDescription += ` (Flash)`;
-        if (useUpscaler) logDescription += " + Upscale";
-        if (removeWatermark) logDescription += " + NoWatermark";
-        logDescription += `: ${prompt.substring(0, 20)}...`;
-        
         await Promise.all([
-            supabaseAdmin.from('users').update({ diamonds: newDiamondCount, xp: newXp }).eq('id', user.id),
-            supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id }),
-            supabaseAdmin.from('generated_images').insert({
-                user_id: user.id,
-                prompt: prompt,
-                image_url: publicUrl,
-                model_used: apiModel,
-                used_face_enhancer: !!faceReferenceImage
-            }),
-            supabaseAdmin.from('diamond_transactions_log').insert({
-                user_id: user.id,
-                amount: -totalCost,
-                transaction_type: 'IMAGE_GENERATION',
-                description: logDescription
-            })
+             supabaseAdmin.from('generated_images').update({ image_url: publicUrl, prompt: payload.prompt }).eq('id', jobId),
+             supabaseAdmin.rpc('increment_user_xp', { user_id_param: userId, xp_amount: xpToAward }),
+             supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id })
         ]);
-
-        return {
-            statusCode: 200,
-            body: JSON.stringify({ imageUrl: publicUrl, newDiamondCount, newXp }),
-        };
+        
+        console.log(`[WORKER ${jobId}] Job finalized successfully.`);
 
     } catch (error: any) {
-        console.error("Generate image function error:", error);
-        let clientFriendlyError = 'Lỗi không xác định từ máy chủ.';
-        if (error?.message) {
-            if (error.message.includes('INVALID_ARGUMENT')) {
-                 clientFriendlyError = 'Lỗi cấu hình AI: Vui lòng thử lại hoặc đổi model.';
-            } else {
-                clientFriendlyError = error.message;
-            }
+        if (userId && totalCost > 0) {
+            await failJob(jobId, error.message, userId, totalCost);
+        } else {
+             console.error(`[WORKER ${jobId}] Failed without user/cost info`, error);
         }
-        return { statusCode: 500, body: JSON.stringify({ error: clientFriendlyError }) };
     }
+
+    return { statusCode: 200 };
 };
 
 export { handler };

@@ -12,10 +12,8 @@ const COST_REMOVE_WATERMARK = 1;
 const XP_PER_GENERATION = 10;
 
 /**
- * CHIẾN THUẬT CANVAS XÁM (THE GREY CANVAS STRATEGY)
- * Creates a fixed-size canvas of neutral grey (#808080) based on the target aspect ratio.
- * The input image is centered (contain) within this canvas.
- * This forces the AI to generate content within the specific boundaries.
+ * CHIẾN THUẬT CANVAS XÁM (THE GREY CANVAS STRATEGY) - UPDATED V2
+ * Force resize/crop to target aspect ratio strictly.
  */
 const processImageForGemini = async (imageDataUrl: string | null, targetAspectRatio: string): Promise<string | null> => {
     if (!imageDataUrl) return null;
@@ -32,7 +30,6 @@ const processImageForGemini = async (imageDataUrl: string | null, targetAspectRa
         const targetRatio = aspectW / aspectH;
 
         // 2. Define Standard Canvas Size (Using 1024px base for Gemini optimization)
-        // Force rigid dimensions.
         const MAX_DIM = 1024;
         let canvasW, canvasH;
 
@@ -47,17 +44,14 @@ const processImageForGemini = async (imageDataUrl: string | null, targetAspectRa
         }
         
         // 3. Create Neutral Grey Canvas (#808080)
-        // Using grey helps AI calculate lighting better than pure black
         const newCanvas = new (Jimp as any)(canvasW, canvasH, '#808080');
         
-        // 4. Resize Input Image to FIT (Contain)
-        image.scaleToFit(canvasW, canvasH);
+        // 4. SMART FIT: Cover instead of Contain if possible to avoid too much grey space
+        // This helps AI understand the composition better.
+        image.cover(canvasW, canvasH);
 
-        // 5. Center the image
-        const x = (canvasW - image.getWidth()) / 2;
-        const y = (canvasH - image.getHeight()) / 2;
-        
-        newCanvas.composite(image, x, y);
+        // 5. Composite
+        newCanvas.composite(image, 0, 0);
 
         const mime = header.match(/:(.*?);/)?.[1] || (Jimp as any).MIME_PNG;
         return newCanvas.getBase64Async(mime as any);
@@ -127,27 +121,27 @@ const handler: Handler = async (event: HandlerEvent) => {
         let finalImageBase64: string;
         let finalImageMimeType: string;
         
-        // --- PROMPT ENGINEERING: STRICT LAYOUT & STYLE ---
+        // --- PROMPT ENGINEERING: EMOTION & INTERACTION ---
         let fullPrompt = prompt;
         
-        // 1. Canvas & Layout Rule
-        fullPrompt += `\n\n**LAYOUT INSTRUCTION (MANDATORY):**\nThe input image provides a FIXED CANVAS size with a Grey background. You MUST generate the scene to fill this Grey space completely. \n- DO NOT crop the canvas.\n- DO NOT change the aspect ratio.\n- The character is centered; build the background AROUND them.`;
+        // 1. Canvas & Layout Rule (STRICT)
+        fullPrompt += `\n\n**LAYOUT MANDATE:**\n- I have provided a canvas with aspect ratio ${aspectRatio}. You MUST fill this canvas completely.\n- IGNORE the aspect ratio of the reference character image. The canvas size is Law.\n- Center the subject but extend the background to the edges of the canvas.`;
 
-        // 2. Style Rule: Hyper-realistic 3D Render (Audition Style)
-        fullPrompt += `\n\n**STYLE INSTRUCTION (MANDATORY):**\nRender Style: **Hyper-realistic 3D Render**. \n- Look like a high-end CGI cinematic character from a game (e.g., Unreal Engine 5).\n- Skin texture: Perfect, smooth, semi-realistic (NOT photo-realistic human skin).\n- Lighting: Volumetric, dramatic, studio quality.\n- **ABSOLUTELY NO** Photorealistic/Photography style. Keep it 3D Art.`;
+        // 2. Style Rule: Hyper-realistic 3D Render
+        fullPrompt += `\n\n**STYLE:**\n- **Hyper-realistic 3D Render** (Unreal Engine 5, Octane Render).\n- Detailed skin texture (pores, subsurface scattering), volumetric lighting, raytracing reflections.\n- NOT "Cartoon", NOT "2D", but Stylized Realism (like Final Fantasy cinematics).`;
 
-        // 3. Pose & Outfit Rule
+        // 3. Pose & Outfit Rule (DYNAMIC)
         if (characterImage) {
-             fullPrompt += `\n\n**CHARACTER INSTRUCTION:**\n- **OUTFIT:** Preserve the exact clothing design, colors, and accessories from the input image. Enhance textures to 3D quality.\n- **POSE:** If a pose prompt is given, change the pose naturally. If not, refine the current pose to be dynamic.`;
+             fullPrompt += `\n\n**CHARACTER & POSE:**\n- **OUTFIT:** Keep the exact clothing design from reference.\n- **POSE:** DO NOT COPY THE REFERENCE POSE. Create a **NATURAL, DYNAMIC POSE** that fits the scene: "${prompt}". \n- If it's a group or couple, they MUST interact (look at each other, touch, lean). NO STIFFNESS.`;
         }
 
         // 4. Face Lock
         if (faceReferenceImage) {
-            fullPrompt += `\n\n**FACE ID INSTRUCTION:**\nThe final image MUST use the exact face structure and features from the provided 'Face Reference' image. Blend it seamlessly onto the 3D character body.`;
+            fullPrompt += `\n\n**FACE ID:**\n- Use the exact facial structure from 'Face Reference'. Blend it seamlessly.`;
         }
 
-        // 5. Negative Prompt (Hardcoded Safety + User Input)
-        const hardNegative = "photorealistic, photography, real life photo, grainy, low quality, 2D, sketch, cartoon, flat color, distorted body";
+        // 5. Negative Prompt
+        const hardNegative = "photorealistic, real photo, grainy, low quality, 2D, sketch, cartoon, flat color, stiff pose, t-pose, mannequin, looking at camera blankly";
         fullPrompt += ` --no ${hardNegative}, ${negativePrompt || ''}`;
 
         const parts: any[] = [];

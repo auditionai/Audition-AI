@@ -27,8 +27,8 @@ const failJob = async (jobId: string, reason: string, userId: string, cost: numb
     }
 };
 
-// Helper: Create a GREY canvas of the EXACT target resolution.
-// This forces the aspect ratio rigidly.
+// Helper: Enforce Aspect Ratio by COVERING (Filling) the canvas
+// This prevents grey bars and forces the AI to see a full image in the correct ratio.
 const enforceAspectRatioCanvas = async (dataUrl: string, targetAspectRatio: string): Promise<{ data: string; mimeType: string } | null> => {
      if (!dataUrl) return null;
      try {
@@ -50,16 +50,13 @@ const enforceAspectRatioCanvas = async (dataUrl: string, targetAspectRatio: stri
             canvasW = Math.round(MAX_DIM * targetRatio);
         }
 
-        // GREY CANVAS (#808080) - Neutral ground for blending lighting
+        // GREY CANVAS (#808080)
         const newCanvas = new (Jimp as any)(canvasW, canvasH, '#808080');
         
-        // Scale image to FIT inside
-        image.scaleToFit(canvasW, canvasH);
+        // USE COVER to fill the canvas completely (Crop excess)
+        image.cover(canvasW, canvasH);
         
-        const x = (canvasW - image.getWidth()) / 2;
-        const y = (canvasH - image.getHeight()) / 2;
-        
-        newCanvas.composite(image, x, y);
+        newCanvas.composite(image, 0, 0);
         
         const mime = header.match(/:(.*?);/)?.[1] || 'image/png';
         const newBase64 = await newCanvas.getBase64Async(mime);
@@ -135,21 +132,22 @@ const handler: Handler = async (event: HandlerEvent) => {
         let layoutImageUrl: string | null = null; 
 
         // --- STEP 1: PREPARE CHARACTER & LAYOUT ASSETS ---
-        // We allow a relaxed "Flash" generation first to get the poses right, then we assemble.
+        // Strategy: Use prompt context to generate dynamic poses instead of static T-poses.
         
         if (referenceImage) {
             layoutImageUrl = referenceImage;
             
+            // If using reference image, we respect its layout but re-generate characters to match prompt vibe
             for (let i = 0; i < numCharacters; i++) {
                 await updateJobProgress(jobId, jobPromptData, `Đang xử lý nhân vật ${i + 1}/${numCharacters}...`);
                 
                 const char = characters[i];
                 
-                // Prompt for Individual Character Generation
+                // DYNAMIC POSE PROMPT
                 const charPrompt = [
                     `Create a full-body 3D character of a **${char.gender}**.`,
                     `**OUTFIT:** Strictly maintain the outfit from the input image.`,
-                    `**POSE:** Relaxed, natural standing pose. Do not freeze.`,
+                    `**POSE & ACTION:** Character is part of this scene: "${prompt}". Generate a pose that fits this context (e.g. laughing, walking, dancing). DO NOT STAND STIFFLY.`,
                     `**STYLE:** 3D Render. Neutral lighting. Solid Grey Background.`,
                 ].join('\n');
 
@@ -161,7 +159,7 @@ const handler: Handler = async (event: HandlerEvent) => {
 
                 const parts = [
                     { text: charPrompt },
-                    { inlineData: { data: refData!.data, mimeType: refData!.mimeType } },
+                    { inlineData: { data: refData!.data, mimeType: refData!.mimeType } }, // Ref helps with scale/position
                     { inlineData: { data: poseData.data, mimeType: poseData.mimeType } },
                 ];
                 if (faceData) parts.push({ inlineData: { data: faceData.data, mimeType: faceData.mimeType } });
@@ -175,13 +173,17 @@ const handler: Handler = async (event: HandlerEvent) => {
             }
 
         } else {
-            // Generate Background from Prompt First
+            // Generate Background from Prompt First (Strict Ratio)
             await updateJobProgress(jobId, jobPromptData, 'Đang tạo bối cảnh từ prompt...');
-            const bgPrompt = `Create a high-quality, cinematic background scene: "${prompt}". Style: "${style}". NO people. Grey Canvas Layout.`;
+            const bgPrompt = `Create a high-quality, cinematic background scene: "${prompt}". Style: "${style}". NO people. Ratio: ${aspectRatio}.`;
             
-            const bgConfig: any = { responseModalities: [Modality.IMAGE] };
+            const bgConfig: any = { 
+                responseModalities: [Modality.IMAGE],
+                imageConfig: { aspectRatio: aspectRatio } // Enforce ratio on background creation
+            };
+            
             if (isPro) {
-                 bgConfig.imageConfig = { imageSize, aspectRatio };
+                 bgConfig.imageConfig.imageSize = imageSize;
                  if (useSearch) bgConfig.tools = [{ googleSearch: {} }];
             }
 
@@ -193,10 +195,11 @@ const handler: Handler = async (event: HandlerEvent) => {
 
             await new Promise(resolve => setTimeout(resolve, 1500));
 
+            // Generate characters with context
             for (let i = 0; i < numCharacters; i++) {
                 await updateJobProgress(jobId, jobPromptData, `Đang xử lý nhân vật ${i + 1}/${numCharacters}...`);
                 const char = characters[i];
-                const charPrompt = `Create a full-body character of a **${char.gender}**. Maintain exact OUTFIT details. Neutral lighting. Solid Grey Background.`;
+                const charPrompt = `Create a full-body character of a **${char.gender}**. POSE: Dynamic, natural, interacting with others in scene "${prompt}". Maintain OUTFIT. Neutral lighting. Grey BG.`;
                 
                 const poseData = processDataUrl(char.poseImage);
                 if (!poseData) throw new Error(`Lỗi dữ liệu ảnh dáng nhân vật ${i+1}.`);
@@ -216,32 +219,30 @@ const handler: Handler = async (event: HandlerEvent) => {
         
         if (!layoutImageUrl) throw new Error("Lỗi xử lý ảnh nền.");
 
-        // --- STEP 2: COMPOSE ON GREY CANVAS ---
-        await updateJobProgress(jobId, jobPromptData, 'Đang tổng hợp và hòa trộn ánh sáng (Hyper-realistic)...');
+        // --- STEP 2: COMPOSE ON PROCESSED CANVAS ---
+        await updateJobProgress(jobId, jobPromptData, 'Đang tổng hợp và hòa trộn cảm xúc...');
         
-        // This creates the RIGID canvas structure
+        // This creates the RIGID canvas structure (CROP/COVER if needed)
         const processedLayout = await enforceAspectRatioCanvas(layoutImageUrl, aspectRatio);
         
         if (!processedLayout) throw new Error("Lỗi xử lý khung hình (Canvas).");
 
         // --- STEP 3: FINAL BLEND (THE MAGIC STEP) ---
-        // Updated prompt to enforce "Hyper-realistic 3D Render" and disable "Photorealism"
+        // Updated prompt to force Interactions and Emotional Soul
         const compositePrompt = [
-            `**TASK: COMPOSE AND BLEND (HYPER-REALISTIC 3D RENDER)**`,
-            `You are a master 3D artist (Unreal Engine 5 expert).`,
-            `I have provided a Background Canvas (Grey Layout) and Character cutouts.`,
-            `Your job is to **ASSEMBLE** them into a cohesive 3D scene.`,
+            `**TASK: GROUP PHOTO COMPOSITION (HYPER-REALISTIC 3D RENDER)**`,
+            `**ASPECT RATIO IS LAW:** The input [CANVAS_BACKGROUND] sets the absolute size. DO NOT CHANGE IT.`,
             `---`,
-            `**CRITICAL STYLE RULES:**`,
-            `1. **STYLE:** Hyper-realistic 3D Render (Audition Game Style). High fidelity textures, volumetric lighting.`,
-            `2. **NEGATIVE:** NO Photorealistic human skin. NO real-life photography style. NO 2D/Sketch.`,
+            `**CRITICAL: EMOTION & INTERACTION (THE SOUL)**`,
+            `1. **CONNECTION:** Characters MUST look like they know each other. They should be interacting (leaning in, touching shoulders, looking at each other, laughing together).`,
+            `2. **NO STIFFNESS:** Absolutely NO static "mannequin" poses. Adjust limbs and heads to look natural and relaxed.`,
+            `3. **ATMOSPHERE:** Infuse the scene with the emotion of "${prompt}" (e.g., joy, romance, cool vibes).`,
             `---`,
-            `**EXECUTION RULES:**`,
-            `1. **ANCHOR:** Place the characters onto the provided background canvas. Ensure feet are planted with correct shadows.`,
-            `2. **RELIGHT:** Adjust the character's lighting to match the scene environment perfectly (Global Illumination).`,
-            `3. **OUTFIT:** KEEP THE EXACT OUTFIT DESIGN. Do not invent new clothes.`,
-            `4. **FACE:** Keep the character's facial identity.`,
-            `5. **FILL:** Fill any remaining grey space with the scene environment extension.`
+            `**TECHNICAL EXECUTION:**`,
+            `1. **ANCHOR:** Place characters firmly on the ground of the background.`,
+            `2. **RELIGHT:** Use global illumination to blend characters into the scene.`,
+            `3. **OUTFIT:** Preserve outfit details from inputs.`,
+            `4. **STYLE:** Hyper-realistic 3D Render (Audition Game High-End).`
         ].join('\n');
         
         const finalParts = [

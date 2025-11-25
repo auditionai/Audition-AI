@@ -684,6 +684,10 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
             // Collect Global Context (Summaries of all pages)
             const globalContext = comicPages.map((p, i) => `Page ${i+1}: ${p.plot_summary}`).join('\n');
 
+            // VISUAL CONTINUITY: Get previous page image if available
+            const prevPage = comicPages[index - 1];
+            const previousPageUrl = (prevPage && prevPage.status === 'completed' && prevPage.image_url) ? prevPage.image_url : null;
+
             const response = await fetch('/.netlify/functions/comic-render-panel', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
@@ -700,7 +704,8 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                     isCover: index === 0 && coverOption === 'start',
                     pageNumbering, 
                     bubbleFont,
-                    imageQuality
+                    imageQuality,
+                    previousPageUrl // Send previous page URL for visual consistency
                 })
             });
             const data = await response.json();
@@ -824,11 +829,16 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
         <div className="flex flex-col gap-6 max-w-6xl mx-auto animate-fade-in">
             <PremiseSelectionModal isOpen={isPremiseModalOpen} onClose={() => setIsPremiseModalOpen(false)} onSelect={handleApplyPremise} genre={genre} />
             
-            {/* Lightbox */}
+            {/* Lightbox (Fixed CSS) */}
             {viewingImage && (
-                <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4" onClick={() => setViewingImage(null)}>
-                    <img src={viewingImage} alt="Fullsize" className="max-w-full max-h-full object-contain rounded shadow-2xl" />
-                    <button className="absolute top-4 right-4 text-white text-4xl hover:text-gray-300">&times;</button>
+                <div className="fixed inset-0 z-[9999] bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm" onClick={() => setViewingImage(null)}>
+                    <img 
+                        src={viewingImage} 
+                        alt="Fullsize" 
+                        className="max-w-[90vw] max-h-[90vh] object-contain rounded shadow-2xl border border-white/10" 
+                        onClick={(e) => e.stopPropagation()} // Prevent close on image click
+                    />
+                    <button className="absolute top-4 right-4 text-white text-4xl hover:text-gray-300 hover:scale-110 transition-transform">&times;</button>
                 </div>
             )}
 

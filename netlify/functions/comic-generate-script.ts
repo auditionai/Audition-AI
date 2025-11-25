@@ -51,25 +51,29 @@ const handler: Handler = async (event: HandlerEvent) => {
         if (dialogueDensity === 'low') densityInstruction = "Dialogue Density: LOW. Focus on visual storytelling, minimal text.";
         if (dialogueDensity === 'high') densityInstruction = "Dialogue Density: HIGH. Detailed conversations and narration.";
 
-        // NEW PROMPT STRATEGY: 3-Layer Scripting Structure
+        // NEW PROMPT STRATEGY: Chain of Consequence
         const prompt = `
-            You are a professional Comic Script Director and Writer.
+            You are a professional Comic Script Director.
             
-            **TASK:** Create a structured breakdown for a comic book based on the user's premise.
+            **TASK:** Create a strictly causal, logical breakdown for a comic book based on the premise.
             **INPUT PREMISE:** "${premise}"
             **GENRE:** ${genre}
             **CHARACTERS:** ${characterNames}
-            **TARGET LANGUAGE:** ${targetLanguage} (Strictly).
+            **LANGUAGE:** ${targetLanguage}.
             
             **STRUCTURE REQUIREMENTS:**
-            You must output an array of ${totalPages} objects.
+            Output an array of ${totalPages} objects.
             
-            **STEP 1: THINK LIKE A DIRECTOR (Mental Sandbox)**
-            Before listing the pages, plan the FULL STORY ARC for ${contentPages} content pages:
-            - **Beginning (Page 2-3):** Establish the setting, characters, and the inciting incident.
-            - **Middle (Page 4...):** Rising action, conflict, or development.
-            - **Climax/End (Last Page):** The peak of the action or a strong cliffhanger/resolution.
-            - **Continuity Rule:** Ensure Page N+1 logically follows Page N. If a character falls in Page 2, they must be on the ground in Page 3.
+            **CRITICAL LOGIC: CHAIN OF CONSEQUENCE**
+            You must ensure a tight narrative flow. Page N must be the direct result of Page N-1.
+            - **Beginning (Page 2-3):** Setup and Inciting Incident.
+            - **Middle (Page 4...):** Rising Action. EACH page must physically and logically continue the previous action.
+            - **End (Last Page):** Climax/Resolution.
+            
+            **EXAMPLE OF CAUSAL CHAIN:**
+            - Page 2: Hero punches Villain. Villain stumbles back.
+            - Page 3: Villain recovers from the stumble and counter-attacks. Hero dodges.
+            *(Do NOT jump scenes randomly. Maintain time and space continuity.)*
             
             **STEP 2: GENERATE THE OUTPUT LIST**
             
@@ -79,7 +83,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             
             **Items 2 to ${totalPages} (Story Pages):**
             - panel_number: [Page Number]
-            - plot_summary: [A concise 2-sentence summary of what happens on this page. Focus on the key action beat. MUST BE IN ${targetLanguage}.]
+            - plot_summary: [A concise 2-sentence summary. MUST explicitly state how it connects to the previous page action. MUST BE IN ${targetLanguage}.]
             
             ${densityInstruction}
             

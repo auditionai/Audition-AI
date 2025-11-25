@@ -53,7 +53,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         
         userId = jobData.user_id;
         const jobConfig = JSON.parse(jobData.prompt);
-        const { panel, characters, style, aspectRatio, colorFormat, visualEffect, premise, globalContext, imageQuality = '1K' } = jobConfig.payload;
+        const { panel, characters, style, aspectRatio, colorFormat, visualEffect, premise, globalContext, imageQuality = '1K', previousPageUrl } = jobConfig.payload;
         
         if (imageQuality === '2K') totalCost += 10;
         if (imageQuality === '4K') totalCost += 15;
@@ -96,10 +96,10 @@ const handler: Handler = async (event: HandlerEvent) => {
         const systemPrompt = `
             You are a legendary Comic Book Artist (Gemini 3 Pro Vision).
             
-            **CORE DIRECTIVE: CHARACTER & VISUAL CONSISTENCY IS LAW.**
-            1. **REFERENCE LOCK:** I will provide reference images for the characters. You MUST use these EXACT visual identities (Hair, Face, Body Type, **OUTFIT**).
-            2. **OUTFIT RULE:** Characters MUST wear the same clothes as in the reference images. Do not change them randomly between panels.
-            3. **STAGING RULE:** Follow the "Left/Right" positioning instructions in the Visual Script exactly. This is required for dialogue placement.
+            **CORE DIRECTIVE: VISUAL CONSISTENCY IS LAW.**
+            1. **PREVIOUS PAGE CONTEXT:** Use the provided previous page image as the ABSOLUTE TRUTH for style, lighting, and environment. Continue the scene directly from there.
+            2. **REFERENCE LOCK:** Use the character reference images for outfit/face consistency.
+            3. **STAGING RULE:** Follow the positioning instructions in the Visual Script exactly.
             
             **CONTEXT:**
             "${premise}"
@@ -111,19 +111,32 @@ const handler: Handler = async (event: HandlerEvent) => {
             ${visualDirectives}
             
             **DIALOGUE (TEXT PLACEMENT):**
-            Render speech bubbles with legible Vietnamese text. Place bubbles near the speaking characters based on the Staging rules.
+            Render speech bubbles with legible Vietnamese text.
             ${dialogueListText}
         `;
 
         parts.push({ text: systemPrompt });
 
+        // 1. Inject Previous Page (Visual Continuity)
+        if (previousPageUrl) {
+            try {
+                const response = await fetch(previousPageUrl);
+                const buffer = await response.arrayBuffer();
+                const base64 = Buffer.from(buffer).toString('base64');
+                parts.push({ text: "**[IMPORTANT] CONTEXT IMAGE (PREVIOUS PAGE):** This is the immediately preceding page. Continue the action visually from here." });
+                parts.push({ inlineData: { data: base64, mimeType: 'image/png' } });
+            } catch (e) {
+                console.error("[WORKER] Failed to fetch previous page image. Continuing without it.", e);
+            }
+        }
+
+        // 2. Inject Character References
         if (characters && Array.isArray(characters)) {
             for (const char of characters) {
                 if (char.image_url) {
                     const imgData = processDataUrl(char.image_url);
                     if (imgData) {
-                        // Strong reinforcement
-                        parts.push({ text: `[STRICT REFERENCE] CHARACTER: ${char.name}. VISUAL DNA: Maintain this exact face and outfit.` });
+                        parts.push({ text: `[REFERENCE] CHARACTER: ${char.name}. VISUAL DNA: Maintain this exact face and outfit.` });
                         parts.push({ inlineData: { data: imgData.base64, mimeType: imgData.mimeType } });
                     }
                 }

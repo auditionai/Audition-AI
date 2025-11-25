@@ -43,7 +43,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         // We store the render configuration in the 'prompt' column as a JSON string
         // This acts as a temporary storage for the worker to read
         const jobConfig = {
-            payload: payload, // Passes entire payload including globalContext, quality, etc.
+            payload: payload, // Passes entire payload including globalContext, quality, AND previousPageUrl
             status: 'initializing'
         };
 

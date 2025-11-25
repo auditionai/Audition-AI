@@ -2,6 +2,7 @@
 import { useState, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { AIModel } from '../types';
+import { preprocessImageToAspectRatio } from '../utils/imageUtils';
 
 const fileToBase64 = (file: File): Promise<string> => new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -46,10 +47,18 @@ export const useImageGenerator = () => {
                 setProgress(prev => (prev < 8 ? prev + 1 : prev));
             }, 1800);
 
+            // PRE-PROCESS IMAGES: Apply Letterboxing/Padding on Client Side
+            const processInput = async (file: File | null) => {
+                if (!file) return null;
+                const rawBase64 = await fileToBase64(file);
+                // Apply White Padding logic based on Aspect Ratio
+                return await preprocessImageToAspectRatio(rawBase64, aspectRatio);
+            };
+
             const [poseImageBase64, styleImageBase64, faceImageBase64] = await Promise.all([
-                poseImageFile ? fileToBase64(poseImageFile) : Promise.resolve(null),
-                styleImageFile ? fileToBase64(styleImageFile) : Promise.resolve(null),
-                faceImage instanceof File ? fileToBase64(faceImage) : Promise.resolve(faceImage)
+                processInput(poseImageFile), // Letterbox Pose
+                processInput(styleImageFile), // Letterbox Style (optional but good for consistency)
+                faceImage instanceof File ? fileToBase64(faceImage) : Promise.resolve(faceImage) // Do NOT letterbox Face ID
             ]);
 
             const response = await fetch('/.netlify/functions/generate-image', {
@@ -99,8 +108,6 @@ export const useImageGenerator = () => {
             }
 
             // Smart Recovery Logic
-            // If the request failed (e.g. timeout), check if an image was actually created in the DB recently.
-            // This handles cases where the server finished but the client connection dropped.
             if (supabase && session?.user?.id) {
                 console.log("Attempting recovery check for generated image...");
                 try {
@@ -108,7 +115,7 @@ export const useImageGenerator = () => {
                         .from('generated_images')
                         .select('image_url, created_at')
                         .eq('user_id', session.user.id)
-                        .not('image_url', 'eq', 'PENDING') // Only completed ones
+                        .not('image_url', 'eq', 'PENDING')
                         .not('image_url', 'is', null)
                         .order('created_at', { ascending: false })
                         .limit(1);
@@ -117,18 +124,16 @@ export const useImageGenerator = () => {
                         const latestImage = recentImages[0];
                         const timeDiff = Date.now() - new Date(latestImage.created_at).getTime();
                         
-                        // If the latest image was created in the last 2 minutes, assume it's the one we wanted
                         if (timeDiff < 120000) { 
                             console.log("Recovered image from DB:", latestImage.image_url);
                             setGeneratedImage(latestImage.image_url);
-                            // Refresh user profile to sync diamonds/xp just in case
                             const userRes = await supabase.from('users').select('diamonds, xp').eq('id', session.user.id).single();
                             if (userRes.data) {
                                 updateUserProfile({ diamonds: userRes.data.diamonds, xp: userRes.data.xp });
                             }
                             showToast('Tạo ảnh thành công (Đã khôi phục)!', 'success');
                             setProgress(10);
-                            return; // Exit without showing error
+                            return;
                         }
                     }
                 } catch (recoveryErr) {

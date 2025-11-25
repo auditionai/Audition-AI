@@ -59,3 +59,46 @@ export const base64ToFile = (base64: string, filename: string, mimeType: string)
     const blob = new Blob([byteArray], { type: mimeType });
     return new File([blob], filename, { type: mimeType });
 };
+
+// NEW: Letterboxing / Outpainting Preprocessor
+export const preprocessImageToAspectRatio = async (
+    dataUrl: string,
+    targetAspectRatio: string // e.g., "16:9", "1:1", "3:4"
+): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        const [w, h] = targetAspectRatio.split(':').map(Number);
+        if (!w || !h) return resolve(dataUrl); // Fallback if invalid ratio
+
+        const img = new Image();
+        img.onload = () => {
+            // Standardize base width to ensure high quality input for AI
+            const baseWidth = 1024;
+            const canvas = document.createElement('canvas');
+            canvas.width = baseWidth;
+            canvas.height = Math.round(baseWidth * (h / w));
+
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return reject(new Error('Canvas context error'));
+
+            // STEP 1: Fill with WHITE background (Required for Outpainting)
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // STEP 2: Calculate "Contain" dimensions
+            const scale = Math.min(canvas.width / img.width, canvas.height / img.height);
+            const drawWidth = img.width * scale;
+            const drawHeight = img.height * scale;
+            
+            // Center the image
+            const offsetX = (canvas.width - drawWidth) / 2;
+            const offsetY = (canvas.height - drawHeight) / 2;
+
+            ctx.drawImage(img, offsetX, offsetY, drawWidth, drawHeight);
+
+            // Return result as Data URL (PNG to preserve quality)
+            resolve(canvas.toDataURL('image/png'));
+        };
+        img.onerror = (e) => reject(new Error('Failed to load image for preprocessing'));
+        img.src = dataUrl;
+    });
+};

@@ -13,13 +13,9 @@ const XP_PER_CHARACTER = 5;
 const failJob = async (jobId: string, reason: string, userId: string, cost: number) => {
     console.error(`[WORKER] Failing job ${jobId}. Reason: ${reason}. Refunding: ${cost}`);
     try {
-        // 1. Fetch fresh user data
         const { data: userNow } = await supabaseAdmin.from('users').select('diamonds').eq('id', userId).single();
-        
         if (userNow) {
             const refundBalance = userNow.diamonds + cost;
-            
-            // 2. Perform Refund Update
             await Promise.all([
                 supabaseAdmin.from('generated_images').delete().eq('id', jobId),
                 supabaseAdmin.from('users').update({ diamonds: refundBalance }).eq('id', userId),
@@ -27,7 +23,7 @@ const failJob = async (jobId: string, reason: string, userId: string, cost: numb
                     user_id: userId,
                     amount: cost,
                     transaction_type: 'REFUND',
-                    description: `Hoàn tiền tạo ảnh nhóm thất bại (Lỗi: ${reason.substring(0, 50)})`,
+                    description: `Hoàn tiền lỗi tạo ảnh: ${reason.substring(0, 50)}`,
                 })
             ]);
             console.log(`[WORKER] Refund successful for ${userId}`);
@@ -37,18 +33,13 @@ const failJob = async (jobId: string, reason: string, userId: string, cost: numb
     }
 };
 
-// Helper to fetch image from URL and return base64 (Just In Time)
 const fetchImageToBase64 = async (url: string | null): Promise<{ data: string; mimeType: string } | null> => {
     if (!url) return null;
-    
-    // Check if it's already base64 (Legacy support or small images)
     if (url.startsWith('data:')) {
         const [header, base64] = url.split(',');
         const mimeType = header.match(/:(.*?);/)?.[1] || 'image/png';
         return { data: base64, mimeType };
     }
-
-    // It's a URL
     try {
         const response = await fetch(url);
         if (!response.ok) throw new Error(`Failed to fetch image: ${response.statusText}`);
@@ -63,45 +54,59 @@ const fetchImageToBase64 = async (url: string | null): Promise<{ data: string; m
     }
 }
 
-// Helper: Enforce Aspect Ratio by COVERING (Filling) the canvas with Grey
-const enforceAspectRatioCanvas = async (data: { data: string; mimeType: string } | null, targetAspectRatio: string): Promise<{ data: string; mimeType: string } | null> => {
-     if (!data) return null;
-     try {
-        const imageBuffer = Buffer.from(data.data, 'base64');
-        const image = await (Jimp as any).read(imageBuffer);
+// --- STRICT CANVAS CREATION (WHITE PADDING MODE) ---
+const createMasterCanvas = async (
+    sourceUrl: string | null, 
+    aspectRatio: string
+): Promise<{ data: string; mimeType: string }> => {
+    const [aspectW, aspectH] = aspectRatio.split(':').map(Number);
+    const ratio = aspectW / aspectH;
+    
+    const MAX_DIM = 1280; 
+    let width, height;
+    
+    if (ratio > 1) { // Landscape
+        width = MAX_DIM;
+        height = Math.round(MAX_DIM / ratio);
+    } else { // Portrait or Square
+        height = MAX_DIM;
+        width = Math.round(MAX_DIM * ratio);
+    }
 
-        const [aspectW, aspectH] = targetAspectRatio.split(':').map(Number);
-        const targetRatio = aspectW / aspectH;
-        
-        const MAX_DIM = 1024;
-        let canvasW, canvasH;
-        
-        if (targetRatio > 1) {
-            canvasW = MAX_DIM;
-            canvasH = Math.round(MAX_DIM / targetRatio);
-        } else {
-            canvasH = MAX_DIM;
-            canvasW = Math.round(MAX_DIM * targetRatio);
+    console.log(`[WORKER] Creating Master Canvas: ${width}x${height} (${aspectRatio})`);
+
+    try {
+        // 1. Create WHITE Canvas (#FFFFFF) for Outpainting context
+        const canvas = new (Jimp as any)(width, height, '#FFFFFF'); 
+
+        // 2. Process Reference Image
+        if (sourceUrl) {
+            const imgData = await fetchImageToBase64(sourceUrl);
+            if (imgData) {
+                const srcBuffer = Buffer.from(imgData.data, 'base64');
+                const srcImage = await (Jimp as any).read(srcBuffer);
+                
+                // STRATEGY: CONTAIN (FIT)
+                // Fit image inside canvas, leaving white bars if necessary.
+                srcImage.contain(width, height);
+                
+                // Composite centered
+                canvas.composite(srcImage, 0, 0);
+            }
         }
 
-        // GREY CANVAS (#808080)
-        const newCanvas = new (Jimp as any)(canvasW, canvasH, '#808080');
-        
-        // USE COVER to fill the canvas completely
-        image.cover(canvasW, canvasH);
-        
-        newCanvas.composite(image, 0, 0);
-        
-        const mime = data.mimeType || 'image/png';
-        const newBase64 = await newCanvas.getBase64Async(mime);
-        
-        return { data: newBase64.split(',')[1], mimeType: mime };
+        const mime = (Jimp as any).MIME_PNG;
+        const buffer = await canvas.getBufferAsync(mime);
+        return { 
+            data: buffer.toString('base64'), 
+            mimeType: 'image/png' 
+        };
 
-     } catch (e) {
-         console.warn("[WORKER] Aspect Ratio Enforcement Failed (Falling back to raw image):", e);
-         return data; 
-     }
-};
+    } catch (e) {
+        console.error("Canvas creation failed:", e);
+        throw new Error("Lỗi khởi tạo khung tranh (Canvas Error).");
+    }
+}
 
 const updateJobProgress = async (jobId: string, currentPromptData: any, progressMessage: string) => {
     try {
@@ -161,154 +166,98 @@ const handler: Handler = async (event: HandlerEvent) => {
         const isPro = selectedModel === 'pro';
         
         const generatedCharacters = [];
-        let layoutData: { data: string; mimeType: string } | null = null;
+        let masterLayoutData: { data: string; mimeType: string } | null = null;
 
-        // --- STEP 1: PREPARE CHARACTER & LAYOUT ASSETS ---
+        // --- BƯỚC 1: TẠO MASTER CANVAS (WHITE PADDING) ---
+        await updateJobProgress(jobId, jobPromptData, 'Đang thiết lập khung tranh chuẩn...');
         
-        if (referenceImage) {
-            // If reference image exists, fetch it and set as layout base
-            layoutData = await fetchImageToBase64(referenceImage);
-            
-            // PARALLEL GENERATION FOR CHARACTERS
-            await updateJobProgress(jobId, jobPromptData, `Đang xử lý đồng thời ${numCharacters} nhân vật...`);
-            
-            const charPromises = characters.map(async (char: any, i: number) => {
-                try {
-                    const isMale = char.gender === 'male';
-                    const vibe = isMale ? 'Cool, confident, masculine, strong' : 'Muse-like, graceful, girly ("bánh bèo"), sexy';
-                    
-                    const charPrompt = [
-                        `Create a full-body 3D character of a **${char.gender}**.`,
-                        `**OUTFIT:** Strictly maintain the outfit from the input image.`,
-                        `**POSE & VIBE:** Pose must be **${vibe}**. Action fits scene: "${prompt}".`,
-                        `**EXPRESSION:** Subtle, natural smile. No exaggerated emotions.`,
-                        `**STYLE:** 3D Render. Neutral lighting. Solid Grey Background.`,
-                    ].join('\n');
+        masterLayoutData = await createMasterCanvas(referenceImage, aspectRatio);
+        
+        if (!masterLayoutData) throw new Error("Lỗi khởi tạo khung ảnh nền.");
 
-                    // Fetch images in parallel
-                    const [poseData, faceData, refData] = await Promise.all([
-                        fetchImageToBase64(char.poseImage),
-                        fetchImageToBase64(char.faceImage),
-                        fetchImageToBase64(referenceImage)
-                    ]);
-
-                    if (!poseData || !refData) throw new Error(`Lỗi tải ảnh nhân vật ${i+1}.`);
-
-                    const parts: any[] = [
-                        { text: charPrompt },
-                        { inlineData: { data: refData.data, mimeType: refData.mimeType } },
-                        { inlineData: { data: poseData.data, mimeType: poseData.mimeType } },
-                    ];
-                    if (faceData) parts.push({ inlineData: { data: faceData.data, mimeType: faceData.mimeType } });
-
-                    const response = await ai.models.generateContent({ 
-                        model: 'gemini-2.5-flash-image', 
-                        contents: { parts }, 
-                        config: { responseModalities: [Modality.IMAGE] } 
-                    });
-                    
-                    const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-                    if (!imagePart?.inlineData) throw new Error(`AI không thể tạo nhân vật ${i + 1}.`);
-                    
-                    return imagePart.inlineData;
-                } catch (charErr) {
-                    console.error(`Error generating character ${i}:`, charErr);
-                    throw charErr;
-                }
-            });
-
-            const results = await Promise.all(charPromises);
-            generatedCharacters.push(...results);
-
-        } else {
-            // Generate Background First
-            await updateJobProgress(jobId, jobPromptData, 'Đang tạo bối cảnh từ prompt...');
-            
-            // [STRICT] FORCE EMPTY BACKGROUND
-            const bgPrompt = `Create a high-quality, cinematic background scene: "${prompt}". Style: "${style}". EXTREMELY IMPORTANT: EMPTY SCENE, NO PEOPLE, NO CHARACTERS, NO CROWDS. Just the environment. Ratio: ${aspectRatio}.`;
-            
-            const bgConfig: any = { 
-                responseModalities: [Modality.IMAGE],
-                imageConfig: { aspectRatio: aspectRatio } 
-            };
-            
-            if (isPro) {
-                 bgConfig.imageConfig.imageSize = imageSize;
-                 if (useSearch) bgConfig.tools = [{ googleSearch: {} }];
-            }
-
-            const bgResponse = await ai.models.generateContent({ model: modelName, contents: { parts: [{ text: bgPrompt }] }, config: bgConfig });
-            const bgImagePart = bgResponse.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-            if (!bgImagePart?.inlineData?.data) throw new Error("AI không thể tạo bối cảnh nền.");
-            
-            layoutData = { data: bgImagePart.inlineData.data, mimeType: bgImagePart.inlineData.mimeType };
-
-            // Generate characters in PARALLEL
-            await updateJobProgress(jobId, jobPromptData, `Đang xử lý đồng thời ${numCharacters} nhân vật...`);
-            
-            const charPromises = characters.map(async (char: any, i: number) => {
+        // --- BƯỚC 2: XỬ LÝ NHÂN VẬT (SONG SONG) ---
+        await updateJobProgress(jobId, jobPromptData, `Đang xử lý đồng thời ${numCharacters} nhân vật...`);
+        
+        const charPromises = characters.map(async (char: any, i: number) => {
+            try {
                 const isMale = char.gender === 'male';
-                const vibe = isMale ? 'Cool, confident, masculine, strong, stylish' : 'Muse-like, graceful, girly ("bánh bèo"), sexy, charming';
+                const vibe = isMale ? 'Cool, confident, masculine' : 'Muse-like, graceful, sexy';
                 
-                const charPrompt = `Create a full-body character of a **${char.gender}**. VIBE: ${vibe}. POSE: Dynamic, natural, interacting in scene "${prompt}". Maintain OUTFIT. Neutral lighting. Grey BG.`;
-                
-                const poseData = await fetchImageToBase64(char.poseImage);
+                const charPrompt = [
+                    `Create a full-body 3D character of a **${char.gender}**.`,
+                    `**OUTFIT:** Strictly maintain the outfit from the input image.`,
+                    `**POSE:** Create a pose fitting the description: "${prompt}".`,
+                    `**VIBE:** ${vibe}.`,
+                    `**BACKGROUND:** Solid Grey Background.`,
+                ].join('\n');
+
+                const [poseData, faceData] = await Promise.all([
+                    fetchImageToBase64(char.poseImage),
+                    fetchImageToBase64(char.faceImage)
+                ]);
+
                 if (!poseData) throw new Error(`Lỗi tải ảnh nhân vật ${i+1}.`);
-                
-                const parts = [
-                    { text: charPrompt },
+
+                const parts: any[] = [
                     { inlineData: { data: poseData.data, mimeType: poseData.mimeType } },
+                    { text: charPrompt },
                 ];
                 
-                const response = await ai.models.generateContent({ model: 'gemini-2.5-flash-image', contents: { parts }, config: { responseModalities: [Modality.IMAGE] } });
+                if (faceData) {
+                    parts.push({ text: "Face Reference (High Priority):" });
+                    parts.push({ inlineData: { data: faceData.data, mimeType: faceData.mimeType } });
+                }
+
+                const response = await ai.models.generateContent({ 
+                    model: 'gemini-2.5-flash-image', 
+                    contents: { parts }, 
+                    config: { responseModalities: [Modality.IMAGE] } 
+                });
+                
                 const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
                 if (!imagePart?.inlineData) throw new Error(`AI không thể tạo nhân vật ${i + 1}.`);
                 
                 return imagePart.inlineData;
-            });
+            } catch (charErr) {
+                console.error(`Error generating character ${i}:`, charErr);
+                throw charErr;
+            }
+        });
 
-            const results = await Promise.all(charPromises);
-            generatedCharacters.push(...results);
-        }
-        
-        if (!layoutData) throw new Error("Lỗi xử lý ảnh nền.");
+        const results = await Promise.all(charPromises);
+        generatedCharacters.push(...results);
 
-        // --- STEP 2: COMPOSE ON PROCESSED CANVAS ---
+        // --- BƯỚC 3: TỔNG HỢP TRÊN MASTER CANVAS ---
         await updateJobProgress(jobId, jobPromptData, 'Đang tổng hợp và hòa trộn cảm xúc...');
         
-        const finalLayout = await enforceAspectRatioCanvas(layoutData, aspectRatio);
-        if (!finalLayout) throw new Error("Lỗi xử lý layout canvas.");
-
-        // --- STEP 3: FINAL BLEND ---
-        // [STRICT] Force Quantity Constraint
         const compositePrompt = [
-            `**TASK: GROUP PHOTO COMPOSITION (HYPER-REALISTIC 3D RENDER)**`,
-            `**STRICT QUANTITY CONTROL:** The final image MUST contain EXACTLY ${numCharacters} main characters.`,
-            `**ABSOLUTE PROHIBITION:** Do NOT generate any extra people, bystanders, crowds, or background characters. The background must remain strictly environmental as provided.`,
-            `**ASPECT RATIO IS LAW:** The input [CANVAS_WITH_CHARACTER_AND_GREY_BG] sets the absolute size. DO NOT CHANGE IT.`,
+            `**TASK: GROUP PHOTO COMPOSITION**`,
+            `**ASPECT RATIO ENFORCEMENT:**`,
+            `I have provided a MASTER CANVAS image first. You MUST use this canvas as the base.`,
+            `| TECHNICAL REQUIREMENT: The input MASTER CANVAS has been PRE-FORMATTED with WHITE PADDING to rigidly enforce a target aspect ratio of ${aspectRatio}. Do NOT crop this image. You MUST perform OUTPAINTING. Verify the white padded areas and fill them completely with a seamless background that matches the scene's context. The final output MUST be exactly ${aspectRatio} and contain NO remaining white borders.`,
             `---`,
-            `**CRITICAL: VIBE & SOUL**`,
-            `1. **MALE CHARACTERS:** Must look Cool, Confident, Masculine, Strong.`,
-            `2. **FEMALE CHARACTERS:** Must look Muse-like, Graceful, Girly ("Bánh bèo"), Charming, Sexy.`,
-            `3. **EXPRESSIONS:** Subtle, natural smiles. DO NOT DISTORT FACES.`,
-            `4. **INTERACTION:** Characters MUST interact (leaning, touching, looking at each other).`,
+            `**SCENE DESCRIPTION:** ${prompt}`,
+            `**STYLE:** Hyper-realistic 3D Render (Audition Game Style), Volumetric Lighting, ${style || 'Cinematic'}.`,
             `---`,
-            `**TECHNICAL EXECUTION:**`,
-            `1. **ANCHOR:** Place characters firmly on the ground.`,
-            `2. **RELIGHT:** Use global illumination.`,
-            `3. **OUTFIT:** Preserve outfit details from input.`,
-            `4. **STYLE:** Hyper-realistic 3D Render (Audition Game High-End).`,
-            `--no extra people, crowd, audience, bystanders, distorted faces, bad anatomy, blurry, low quality`
+            `**CHARACTERS:**`,
+            `I have provided ${numCharacters} individual character images below.`,
+            `You MUST composite ALL ${numCharacters} characters into the scene.`,
+            `**QUANTITY LOCK:** The final image must contain EXACTLY ${numCharacters} people. NO MORE, NO LESS.`,
+            `**NO EXTRAS:** Do NOT generate any extra people, crowd, or background characters.`,
+            `---`,
+            `**NEGATIVE PROMPT:** extra people, crowd, audience, bystanders, distorted faces, bad anatomy, blurry, watermark, text, low resolution, white borders, white bars.`
         ].join('\n');
         
-        const finalParts = [
+        const finalParts: any[] = [
+            { inlineData: { data: masterLayoutData.data, mimeType: masterLayoutData.mimeType } },
+            { text: `[MASTER CANVAS - BASE LAYOUT - DO NOT RESIZE]` },
             { text: compositePrompt },
-            { text: "[CANVAS_WITH_CHARACTER_AND_GREY_BG]" },
-            { inlineData: { data: finalLayout.data, mimeType: finalLayout.mimeType } },
-            ...generatedCharacters.map((charData) => ({ 
-                inlineData: charData 
-            }))
         ];
+
+        generatedCharacters.forEach((charData, idx) => {
+            finalParts.push({ text: `[Input Character ${idx + 1}]` });
+            finalParts.push({ inlineData: charData });
+        });
         
         const finalConfig: any = { 
             responseModalities: [Modality.IMAGE] 

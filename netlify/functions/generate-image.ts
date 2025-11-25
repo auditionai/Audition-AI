@@ -14,14 +14,11 @@ const XP_PER_GENERATION = 10;
 // Helper function to refund user reliably
 const refundUser = async (userId: string, amount: number, reason: string) => {
     try {
-        // 1. Fetch current balance fresh from DB
         const { data: userNow } = await supabaseAdmin.from('users').select('diamonds').eq('id', userId).single();
         if (!userNow) return;
 
-        // 2. Add back the amount
         const refundBalance = userNow.diamonds + amount;
         
-        // 3. Update and Log
         await Promise.all([
             supabaseAdmin.from('users').update({ diamonds: refundBalance }).eq('id', userId),
             supabaseAdmin.from('diamond_transactions_log').insert({
@@ -38,9 +35,9 @@ const refundUser = async (userId: string, amount: number, reason: string) => {
 };
 
 /**
- * CHIẾN THUẬT "CANVAS XÁM CỨNG" (HARD GREY CANVAS STRATEGY)
- * Tạo một khung ảnh màu xám đúng tỷ lệ yêu cầu, sau đó đặt nhân vật vào.
- * Bắt buộc AI phải vẽ trên khung này -> Tỷ lệ không bao giờ sai.
+ * CHIẾN THUẬT "WHITE LETTERBOXING" (OUTPAINTING CANVAS)
+ * Tạo khung ảnh màu TRẮNG (#FFFFFF) và dán ảnh vào giữa (Contain).
+ * Đồng bộ với chỉ dẫn kỹ thuật gửi cho AI.
  */
 const processImageForGemini = async (imageDataUrl: string | null, targetAspectRatio: string): Promise<string | null> => {
     if (!imageDataUrl) return null;
@@ -52,11 +49,10 @@ const processImageForGemini = async (imageDataUrl: string | null, targetAspectRa
         const imageBuffer = Buffer.from(base64, 'base64');
         const image = await (Jimp as any).read(imageBuffer);
 
-        // 1. Tính toán kích thước Canvas dựa trên tỷ lệ được chọn
+        // 1. Tính toán kích thước Canvas
         const [aspectW, aspectH] = targetAspectRatio.split(':').map(Number);
         const targetRatio = aspectW / aspectH;
 
-        // Chuẩn hóa kích thước (Base 1024px để tối ưu cho Gemini)
         const MAX_DIM = 1024;
         let canvasW, canvasH;
 
@@ -70,12 +66,11 @@ const processImageForGemini = async (imageDataUrl: string | null, targetAspectRa
             canvasW = Math.round(MAX_DIM * targetRatio);
         }
         
-        // 2. TẠO CANVAS XÁM (#808080)
-        // Màu xám giúp AI dễ dàng "outpaint" (vẽ thêm nền) và hòa trộn ánh sáng hơn màu đen/trắng
-        const newCanvas = new (Jimp as any)(canvasW, canvasH, '#808080');
+        // 2. TẠO CANVAS TRẮNG (#FFFFFF)
+        // Màu trắng giúp AI nhận diện là vùng padding (Letterboxing) để vẽ thêm (Outpainting)
+        const newCanvas = new (Jimp as any)(canvasW, canvasH, '#FFFFFF');
         
-        // 3. Đặt nhân vật vào Canvas
-        // Sử dụng 'contain' để giữ nguyên toàn bộ chi tiết nhân vật, không bị cắt mất đầu/chân
+        // 3. Đặt nhân vật vào Canvas (Contain Mode)
         image.contain(canvasW, canvasH);
 
         // 4. Composite (Ghép)
@@ -85,8 +80,8 @@ const processImageForGemini = async (imageDataUrl: string | null, targetAspectRa
         return newCanvas.getBase64Async(mime as any);
 
     } catch (error) {
-        console.error("Error creating Grey Canvas:", error);
-        return imageDataUrl; // Fallback nếu lỗi (dù hiếm)
+        console.error("Error creating White Canvas:", error);
+        return imageDataUrl; // Fallback
     }
 };
 
@@ -144,12 +139,11 @@ const handler: Handler = async (event: HandlerEvent) => {
         
         calculatedCost = totalCost;
 
-        // --- 2. CHECK BALANCE & DEDUCT IMMEDIATELY (DEBIT FIRST STRATEGY) ---
+        // --- 2. CHECK BALANCE & DEDUCT ---
         const { data: userData, error: userError } = await supabaseAdmin.from('users').select('diamonds, xp').eq('id', user.id).single();
         if (userError || !userData) return { statusCode: 404, body: JSON.stringify({ error: 'User not found.' }) };
         if (userData.diamonds < totalCost) return { statusCode: 402, body: JSON.stringify({ error: `Không đủ kim cương. Cần ${totalCost}, bạn có ${userData.diamonds}.` }) };
         
-        // DEDUCT NOW
         const newDiamondCount = userData.diamonds - totalCost;
         const { error: deductError } = await supabaseAdmin.from('users').update({ diamonds: newDiamondCount }).eq('id', user.id);
         if (deductError) throw new Error("Lỗi giao dịch: Không thể trừ kim cương.");
@@ -167,40 +161,38 @@ const handler: Handler = async (event: HandlerEvent) => {
             description: logDescription
         });
         
-        // --- 3. PROCESSING (INSIDE TRY/CATCH FOR REFUND SAFETY) ---
+        // --- 3. PROCESSING ---
         const { data: apiKeyData, error: apiKeyError } = await supabaseAdmin.from('api_keys').select('id, key_value').eq('status', 'active').order('usage_count', { ascending: true }).limit(1).single();
         if (apiKeyError || !apiKeyData) throw new Error('Hết tài nguyên AI. Vui lòng thử lại sau.');
         
         const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
 
-        let finalImageBase64: string;
-        let finalImageMimeType: string;
-        
-        // --- PROMPT ENGINEERING (ENHANCED VIBE) ---
+        // --- PROMPT ENGINEERING (UPDATED WITH TECHNICAL INSTRUCTION) ---
         let fullPrompt = prompt;
-        fullPrompt += `\n\n**LAYOUT MANDATE:**\n- I have provided a GREY CANVAS with aspect ratio ${aspectRatio}. You MUST fill this canvas completely.\n- The grey area is for you to draw the background/environment.\n- DO NOT change the canvas dimensions.`;
+        
+        // SYSTEM INSTRUCTION INJECTION (OUTPAINTING ENFORCEMENT)
+        fullPrompt += ` | TECHNICAL REQUIREMENT: The input reference image has been PRE-FORMATTED with WHITE PADDING to rigidly enforce a target aspect ratio of ${aspectRatio}. Do NOT crop this image. You MUST perform OUTPAINTING. Your task is to keep the central character intact but verify the white padded areas and fill them completely with a seamless background that matches the scene's context. The final output MUST be exactly ${aspectRatio} and contain NO remaining white borders.`;
+
         fullPrompt += `\n\n**STYLE:**\n- **Hyper-realistic 3D Render** (High-end Game Cinematic style, Unreal Engine 5).\n- Detailed skin texture, volumetric lighting, raytracing reflections.\n- **NOT** "Photorealistic" (Do not make it look like a real camera photo).\n- **NOT** "Cartoon" or "2D".`;
 
         if (characterImage) {
              fullPrompt += `\n\n**CHARACTER & POSE INSTRUCTIONS:**\n`;
              fullPrompt += `- **OUTFIT:** Keep the exact clothing design from the reference image.\n`;
-             fullPrompt += `- **POSE:** DO NOT COPY THE REFERENCE POSE. Create a **NEW, NATURAL, DYNAMIC POSE** fitting the scene "${prompt}".\n`;
-             fullPrompt += `- **IF MALE:** Pose must be **Cool, Confident, Masculine, Strong**. Vibe: Charismatic, stylish, "bad boy" or gentleman depending on clothes.\n`;
-             fullPrompt += `- **IF FEMALE:** Pose must be **Muse-like, Graceful, Girly ("Bánh bèo"), Charming, Sexy**. Vibe: Elegant, confident, high-fashion.\n`;
-             fullPrompt += `- **EXPRESSION:** Subtle, natural facial expression. Slight smile if happy. **DO NOT** exaggerate emotions. Preserve facial identity strictly.\n`;
-             fullPrompt += `- **INTERACTION:** Interact naturally with the environment (leaning, sitting, holding items). NO stiffness.`;
+             fullPrompt += `- **POSE:** Create a NEW, NATURAL pose based on the prompt, but ensure the character fits within the provided composition.\n`;
+             fullPrompt += `- **INTERACTION:** Interact naturally with the environment generated in the white padded areas.`;
         }
 
         if (faceReferenceImage) {
             fullPrompt += `\n\n**FACE ID:**\n- Use the exact facial structure from 'Face Reference'. Blend it seamlessly.`;
         }
 
-        const hardNegative = "photorealistic, real photo, grainy, low quality, 2D, sketch, cartoon, flat color, stiff pose, t-pose, mannequin, looking at camera blankly, distorted face, ugly, blurry, deformed hands";
+        const hardNegative = "photorealistic, real photo, grainy, low quality, 2D, sketch, cartoon, flat color, stiff pose, t-pose, mannequin, looking at camera blankly, distorted face, ugly, blurry, deformed hands, white borders, white bars, letterboxing";
         fullPrompt += ` --no ${hardNegative}, ${negativePrompt || ''}`;
 
         const parts: any[] = [];
         
         // --- IMAGE PROCESSING ---
+        // We re-process on server to guarantee strict White Padding even if client didn't do it or did it wrong.
         const [
             processedCharacterImage,
             processedStyleImage,
@@ -208,9 +200,15 @@ const handler: Handler = async (event: HandlerEvent) => {
         ] = await Promise.all([
             processImageForGemini(characterImage, aspectRatio),
             processImageForGemini(styleImage, aspectRatio),
-            processImageForGemini(faceReferenceImage, aspectRatio)
+            // Face Image should NOT be letterboxed generally, but we process it to ensure it's valid
+            // Actually for Face ID, letterboxing is bad. We pass raw.
+            characterImage ? Promise.resolve(null) : Promise.resolve(null) 
         ]);
         
+        // Handle face image separately (raw or cropped)
+        // Only Letterbox the Composition references (Character/Style)
+        const actualFaceImage = faceReferenceImage; // Use raw input for face
+
         parts.push({ text: fullPrompt });
 
         const addImagePart = (imageDataUrl: string | null, label: string) => {
@@ -221,9 +219,9 @@ const handler: Handler = async (event: HandlerEvent) => {
             parts.push({ inlineData: { data: base64, mimeType } });
         };
 
-        addImagePart(processedCharacterImage, "CANVAS_WITH_CHARACTER_AND_GREY_BG");
+        addImagePart(processedCharacterImage, "INPUT_IMAGE_WITH_WHITE_PADDING");
         addImagePart(processedStyleImage, "STYLE_REFERENCE");
-        addImagePart(processedFaceImage, "FACE_REFERENCE");
+        addImagePart(actualFaceImage, "FACE_REFERENCE");
         
         const config: any = { 
             responseModalities: [Modality.IMAGE],
@@ -252,8 +250,8 @@ const handler: Handler = async (event: HandlerEvent) => {
             throw new Error("AI không thể tạo hình ảnh từ mô tả này.");
         }
 
-        finalImageBase64 = imagePartResponse.inlineData.data;
-        finalImageMimeType = imagePartResponse.inlineData.mimeType.includes('png') ? 'image/png' : 'image/jpeg';
+        const finalImageBase64 = imagePartResponse.inlineData.data;
+        const finalImageMimeType = imagePartResponse.inlineData.mimeType.includes('png') ? 'image/png' : 'image/jpeg';
         
         // --- WATERMARK & UPLOAD ---
         let imageBuffer = Buffer.from(finalImageBase64, 'base64');
@@ -276,11 +274,11 @@ const handler: Handler = async (event: HandlerEvent) => {
         await (s3Client as any).send(putCommand);
         const publicUrl = `${process.env.R2_PUBLIC_URL}/${fileName}`;
 
-        // --- SUCCESS: AWARD XP ---
+        // --- SUCCESS ---
         const newXp = userData.xp + XP_PER_GENERATION;
         
         await Promise.all([
-            supabaseAdmin.from('users').update({ xp: newXp }).eq('id', user.id), // Update XP only
+            supabaseAdmin.from('users').update({ xp: newXp }).eq('id', user.id),
             supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id }),
             supabaseAdmin.from('generated_images').insert({
                 user_id: user.id,
@@ -298,12 +296,9 @@ const handler: Handler = async (event: HandlerEvent) => {
 
     } catch (error: any) {
         console.error("Generate image function error:", error);
-        
-        // --- REFUND LOGIC (CRITICAL FIX) ---
         if (userLogId && calculatedCost > 0) {
             await refundUser(userLogId, calculatedCost, error.message || "Unknown Error");
         }
-
         let clientFriendlyError = 'Lỗi không xác định từ máy chủ.';
         if (error?.message) {
             if (error.message.includes('INVALID_ARGUMENT')) {

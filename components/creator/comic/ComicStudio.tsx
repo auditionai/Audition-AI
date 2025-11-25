@@ -263,8 +263,8 @@ const ProfessionalScriptEditor: React.FC<{
     onUpdate: (updatedJsonString: string) => void;
     onExpand: () => Promise<void>; 
     isExpanding: boolean;
-    pageIndex: number;
-}> = ({ panel, onUpdate, onExpand, isExpanding, pageIndex }) => {
+    // Removed pageIndex to fix TS6133
+}> = ({ panel, onUpdate, onExpand, isExpanding }) => {
     const [pageData, setPageData] = useState<ScriptPage | null>(null);
 
     useEffect(() => {
@@ -844,7 +844,6 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                                             <i className="ph-fill ph-text-aa"></i> Kịch bản & Lời thoại
                                         </h4>
                                         <ProfessionalScriptEditor 
-                                            pageIndex={idx}
                                             panel={page} 
                                             onUpdate={(jsonStr) => {
                                                 setComicPages(prev => {

@@ -4,7 +4,7 @@ import { GoogleGenAI, Modality } from "@google/genai";
 import { supabaseAdmin } from './utils/supabaseClient';
 import { Buffer } from 'buffer';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
-import Jimp from 'jimp';
+// Removed Jimp import as it is no longer used for input processing
 import { addSmartWatermark } from './watermark-service';
 
 const COST_UPSCALE = 1;
@@ -31,57 +31,6 @@ const refundUser = async (userId: string, amount: number, reason: string) => {
         console.log(`[REFUND] Refunded ${amount} diamonds to ${userId}. Reason: ${reason}`);
     } catch (e) {
         console.error("[REFUND CRITICAL] Failed to refund user:", e);
-    }
-};
-
-/**
- * CHIẾN THUẬT "WHITE LETTERBOXING" (OUTPAINTING CANVAS)
- * Tạo khung ảnh màu TRẮNG (#FFFFFF) và dán ảnh vào giữa (Contain).
- * Đồng bộ với chỉ dẫn kỹ thuật gửi cho AI.
- */
-const processImageForGemini = async (imageDataUrl: string | null, targetAspectRatio: string): Promise<string | null> => {
-    if (!imageDataUrl) return null;
-
-    try {
-        const [header, base64] = imageDataUrl.split(',');
-        if (!base64) return null;
-
-        const imageBuffer = Buffer.from(base64, 'base64');
-        const image = await (Jimp as any).read(imageBuffer);
-
-        // 1. Tính toán kích thước Canvas
-        const [aspectW, aspectH] = targetAspectRatio.split(':').map(Number);
-        const targetRatio = aspectW / aspectH;
-
-        const MAX_DIM = 1024;
-        let canvasW, canvasH;
-
-        if (targetRatio > 1) {
-            // Ngang (Landscape)
-            canvasW = MAX_DIM;
-            canvasH = Math.round(MAX_DIM / targetRatio);
-        } else {
-            // Dọc (Portrait) hoặc Vuông
-            canvasH = MAX_DIM;
-            canvasW = Math.round(MAX_DIM * targetRatio);
-        }
-        
-        // 2. TẠO CANVAS TRẮNG (#FFFFFF)
-        // Màu trắng giúp AI nhận diện là vùng padding (Letterboxing) để vẽ thêm (Outpainting)
-        const newCanvas = new (Jimp as any)(canvasW, canvasH, '#FFFFFF');
-        
-        // 3. Đặt nhân vật vào Canvas (Contain Mode)
-        image.contain(canvasW, canvasH);
-
-        // 4. Composite (Ghép)
-        newCanvas.composite(image, 0, 0);
-
-        const mime = header.match(/:(.*?);/)?.[1] || (Jimp as any).MIME_PNG;
-        return newCanvas.getBase64Async(mime as any);
-
-    } catch (error) {
-        console.error("Error creating White Canvas:", error);
-        return imageDataUrl; // Fallback
     }
 };
 
@@ -191,23 +140,13 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         const parts: any[] = [];
         
-        // --- IMAGE PROCESSING ---
-        // We re-process on server to guarantee strict White Padding even if client didn't do it or did it wrong.
-        const [
-            processedCharacterImage,
-            processedStyleImage,
-            processedFaceImage,
-        ] = await Promise.all([
-            processImageForGemini(characterImage, aspectRatio),
-            processImageForGemini(styleImage, aspectRatio),
-            // Face Image should NOT be letterboxed generally, but we process it to ensure it's valid
-            // Actually for Face ID, letterboxing is bad. We pass raw.
-            characterImage ? Promise.resolve(null) : Promise.resolve(null) 
-        ]);
-        
-        // Handle face image separately (raw or cropped)
-        // Only Letterbox the Composition references (Character/Style)
-        const actualFaceImage = faceReferenceImage; // Use raw input for face
+        // --- IMAGE PROCESSING OPTIMIZATION ---
+        // Client-side has already processed the images (letterboxing/resizing).
+        // We use them directly to save server resources and time.
+        const processedCharacterImage = characterImage;
+        const processedStyleImage = styleImage;
+        // Face Image is always used raw for Face ID
+        const actualFaceImage = faceReferenceImage;
 
         parts.push({ text: fullPrompt });
 

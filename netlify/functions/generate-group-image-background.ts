@@ -5,7 +5,6 @@ import { supabaseAdmin } from './utils/supabaseClient';
 import { Buffer } from 'buffer';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { addSmartWatermark } from './watermark-service'; 
-import Jimp from 'jimp';
 
 const XP_PER_CHARACTER = 5;
 
@@ -51,60 +50,6 @@ const fetchImageToBase64 = async (url: string | null): Promise<{ data: string; m
     } catch (e) {
         console.warn("Failed to fetch image from URL:", url, e);
         return null;
-    }
-}
-
-// --- STRICT CANVAS CREATION (WHITE PADDING MODE) ---
-const createMasterCanvas = async (
-    sourceUrl: string | null, 
-    aspectRatio: string
-): Promise<{ data: string; mimeType: string }> => {
-    const [aspectW, aspectH] = aspectRatio.split(':').map(Number);
-    const ratio = aspectW / aspectH;
-    
-    const MAX_DIM = 1280; 
-    let width, height;
-    
-    if (ratio > 1) { // Landscape
-        width = MAX_DIM;
-        height = Math.round(MAX_DIM / ratio);
-    } else { // Portrait or Square
-        height = MAX_DIM;
-        width = Math.round(MAX_DIM * ratio);
-    }
-
-    console.log(`[WORKER] Creating Master Canvas: ${width}x${height} (${aspectRatio})`);
-
-    try {
-        // 1. Create WHITE Canvas (#FFFFFF) for Outpainting context
-        const canvas = new (Jimp as any)(width, height, '#FFFFFF'); 
-
-        // 2. Process Reference Image
-        if (sourceUrl) {
-            const imgData = await fetchImageToBase64(sourceUrl);
-            if (imgData) {
-                const srcBuffer = Buffer.from(imgData.data, 'base64');
-                const srcImage = await (Jimp as any).read(srcBuffer);
-                
-                // STRATEGY: CONTAIN (FIT)
-                // Fit image inside canvas, leaving white bars if necessary.
-                srcImage.contain(width, height);
-                
-                // Composite centered
-                canvas.composite(srcImage, 0, 0);
-            }
-        }
-
-        const mime = (Jimp as any).MIME_PNG;
-        const buffer = await canvas.getBufferAsync(mime);
-        return { 
-            data: buffer.toString('base64'), 
-            mimeType: 'image/png' 
-        };
-
-    } catch (e) {
-        console.error("Canvas creation failed:", e);
-        throw new Error("Lỗi khởi tạo khung tranh (Canvas Error).");
     }
 }
 
@@ -168,12 +113,18 @@ const handler: Handler = async (event: HandlerEvent) => {
         const generatedCharacters = [];
         let masterLayoutData: { data: string; mimeType: string } | null = null;
 
-        // --- BƯỚC 1: TẠO MASTER CANVAS (WHITE PADDING) ---
+        // --- BƯỚC 1: LẤY MASTER CANVAS (ĐÃ PRE-PROCESS Ở CLIENT) ---
         await updateJobProgress(jobId, jobPromptData, 'Đang thiết lập khung tranh chuẩn...');
         
-        masterLayoutData = await createMasterCanvas(referenceImage, aspectRatio);
+        // The referenceImage URL is now GUARANTEED to be the master canvas (either user ref or blank)
+        if (referenceImage) {
+            masterLayoutData = await fetchImageToBase64(referenceImage);
+        } else {
+            // Should typically not happen as client always sends it, but robust fallback check
+            throw new Error("Dữ liệu khung tranh bị thiếu.");
+        }
         
-        if (!masterLayoutData) throw new Error("Lỗi khởi tạo khung ảnh nền.");
+        if (!masterLayoutData) throw new Error("Lỗi tải khung ảnh nền.");
 
         // --- BƯỚC 2: XỬ LÝ NHÂN VẬT (SONG SONG) ---
         await updateJobProgress(jobId, jobPromptData, `Đang xử lý đồng thời ${numCharacters} nhân vật...`);

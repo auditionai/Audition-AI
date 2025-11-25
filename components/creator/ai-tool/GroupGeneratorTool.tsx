@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
 import ConfirmationModal from '../../ConfirmationModal';
 import ImageUploader from '../../ai-tool/ImageUploader';
-import { resizeImage, base64ToFile } from '../../../utils/imageUtils';
+import { resizeImage, base64ToFile, preprocessImageToAspectRatio, createBlankCanvas } from '../../../utils/imageUtils';
 import ProcessedImagePickerModal from './ProcessedImagePickerModal';
 import GenerationProgress from '../../ai-tool/GenerationProgress';
 import ImageModal from '../../common/ImageModal';
@@ -275,7 +275,7 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
     
     // --- UPLOAD HELPER ---
     const uploadImageToR2 = async (file: File): Promise<string> => {
-        const { dataUrl } = await resizeImage(file, 800);
+        const { dataUrl } = await resizeImage(file, 1024); // 1024 for high quality
         const res = await fetch('/.netlify/functions/upload-temp-image', {
             method: 'POST',
             headers: { 
@@ -369,14 +369,23 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
             .subscribe(async (status, err) => {
                 if (status === 'SUBSCRIBED') {
                     try {
-                        // --- UPLOAD IMAGES FIRST ---
-                        setProgressText('Đang tải lên dữ liệu...');
+                        // --- PREPARE AND UPLOAD IMAGES ---
+                        setProgressText('Đang chuẩn bị dữ liệu...');
                         
-                        // 1. Upload Reference Image (if exists)
-                        let uploadedRefUrl = null;
+                        // 1. Prepare Master Canvas (Client-side Preprocessing)
+                        // This replaces the server-side Jimp processing to avoid timeouts
+                        let masterCanvasBase64 = '';
                         if (referenceImage) {
-                            uploadedRefUrl = await uploadImageToR2(referenceImage.file);
+                            // Letterbox the user's reference image to match the target aspect ratio
+                            masterCanvasBase64 = await preprocessImageToAspectRatio(referenceImage.url, aspectRatio);
+                        } else {
+                            // Create a blank white canvas with the target aspect ratio
+                            masterCanvasBase64 = createBlankCanvas(aspectRatio);
                         }
+
+                        // Upload the preprocessed master canvas
+                        const masterCanvasFile = base64ToFile(masterCanvasBase64.split(',')[1], 'master_canvas.png', 'image/png');
+                        const uploadedRefUrl = await uploadImageToR2(masterCanvasFile);
 
                         // 2. Upload Character Images (Parallel)
                         const charactersPayload = await Promise.all(characters.map(async (char, idx) => {
@@ -410,7 +419,7 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                             body: JSON.stringify({
                                 jobId, 
                                 characters: charactersPayload,
-                                referenceImage: uploadedRefUrl,
+                                referenceImage: uploadedRefUrl, // Now points to the pre-processed canvas
                                 prompt,
                                 style: selectedStyle,
                                 aspectRatio: aspectRatio,

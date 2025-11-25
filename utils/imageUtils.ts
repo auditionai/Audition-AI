@@ -104,3 +104,22 @@ export const preprocessImageToAspectRatio = async (
         img.src = dataUrl;
     });
 };
+
+// NEW: Create a blank white canvas with specific aspect ratio
+export const createBlankCanvas = (aspectRatio: string): string => {
+    const [w, h] = aspectRatio.split(':').map(Number);
+    const baseWidth = 1024;
+    const width = baseWidth;
+    const height = Math.round(baseWidth * (h / w));
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return '';
+
+    // Fill with White for optimal AI outpainting
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, width, height);
+    return canvas.toDataURL('image/png');
+};

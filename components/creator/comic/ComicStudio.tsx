@@ -9,6 +9,7 @@ import SettingsBlock from '../ai-tool/SettingsBlock';
 import { COMIC_PREMISES } from '../../../constants/comicPremises';
 import { useTranslation } from '../../../hooks/useTranslation';
 import ImageUploader from '../../ai-tool/ImageUploader';
+import Modal from '../../common/Modal';
 
 // --- CONSTANTS ---
 
@@ -205,6 +206,43 @@ const StepIndicator = ({ currentStep }: { currentStep: number }) => {
                 );
             })}
         </div>
+    );
+};
+
+// --- PREMISE SELECTION MODAL ---
+const PremiseSelectionModal: React.FC<{
+    isOpen: boolean;
+    onClose: () => void;
+    onSelect: (premise: string) => void;
+    genre: string;
+}> = ({ isOpen, onClose, onSelect, genre }) => {
+    const premises = COMIC_PREMISES[genre] || COMIC_PREMISES['Mặc định (Sáng tạo)'];
+
+    if (!isOpen) return null;
+
+    return (
+        <Modal isOpen={isOpen} onClose={onClose} title="Chọn Ý Tưởng Kịch Bản">
+            <div className="p-2">
+                <div className="bg-skin-fill-secondary p-3 rounded-lg mb-4 text-xs text-skin-muted border border-skin-border">
+                    <i className="ph-fill ph-info mr-1"></i>
+                    Danh sách gợi ý dựa trên thể loại: <span className="font-bold text-skin-accent">{genre}</span>
+                </div>
+                <div className="space-y-2 max-h-[50vh] overflow-y-auto custom-scrollbar pr-1">
+                    {premises.map((item, idx) => (
+                        <div 
+                            key={idx}
+                            onClick={() => { onSelect(item); onClose(); }}
+                            className="p-3 bg-black/20 border border-white/5 rounded-lg hover:border-pink-500/50 hover:bg-pink-500/5 cursor-pointer transition-all group"
+                        >
+                            <div className="flex gap-3">
+                                <span className="text-pink-500 font-bold text-xs mt-0.5 flex-shrink-0">{idx + 1}.</span>
+                                <p className="text-sm text-gray-300 group-hover:text-white leading-relaxed">{item}</p>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </Modal>
     );
 };
 
@@ -493,6 +531,7 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
     const [activePageIndex, setActivePageIndex] = useState(0);
     const [expandingPageId, setExpandingPageId] = useState<string | null>(null);
     const [renderingPageId, setRenderingPageId] = useState<string | null>(null);
+    const [isPremiseModalOpen, setIsPremiseModalOpen] = useState(false);
 
     // QUEUE STATE FOR SEQUENTIAL AUTO-EXPANSION
     const [expansionQueue, setExpansionQueue] = useState<number[]>([]);
@@ -857,6 +896,14 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
 
     return (
         <div className="flex flex-col gap-6 max-w-6xl mx-auto animate-fade-in">
+            {/* Modal */}
+            <PremiseSelectionModal 
+                isOpen={isPremiseModalOpen}
+                onClose={() => setIsPremiseModalOpen(false)}
+                onSelect={handleApplyPremise}
+                genre={genre}
+            />
+
             {/* Header Step Indicator */}
             <div className="flex justify-center">
                 <StepIndicator currentStep={currentStep} />
@@ -952,7 +999,7 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                                 </div>
                             </SettingsBlock>
                             
-                            <SettingsBlock title="Ý Tưởng Cốt Truyện" instructionKey="prompt">
+                            <SettingsBlock title="Ý Tưởng Cốt Truyện">
                                 <div className="relative">
                                     <textarea 
                                         className="auth-input min-h-[150px] text-sm leading-relaxed resize-none"
@@ -962,12 +1009,7 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                                     />
                                     <div className="absolute bottom-2 right-2">
                                         <button 
-                                            onClick={() => {
-                                                const randomPremise = COMIC_PREMISES[genre] 
-                                                    ? COMIC_PREMISES[genre][Math.floor(Math.random() * COMIC_PREMISES[genre].length)]
-                                                    : COMIC_PREMISES['Mặc định (Sáng tạo)'][0];
-                                                handleApplyPremise(randomPremise);
-                                            }}
+                                            onClick={() => setIsPremiseModalOpen(true)}
                                             className="text-xs bg-purple-500/20 text-purple-300 px-2 py-1 rounded hover:bg-purple-500/40 transition flex items-center gap-1"
                                         >
                                             <i className="ph-fill ph-lightbulb"></i> Gợi ý kịch bản

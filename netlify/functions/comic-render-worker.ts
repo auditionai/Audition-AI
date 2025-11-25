@@ -103,8 +103,8 @@ const handler: Handler = async (event: HandlerEvent) => {
         const isWebtoon = lowerStyle.includes('webtoon') || lowerStyle.includes('manhwa');
         
         let layoutInstruction = isWebtoon 
-            ? `**FORMAT: VERTICAL SCROLLING STRIP (WEBTOON)**.`
-            : `**FORMAT: COMIC PAGE**.`;
+            ? `**MODE: WEBTOON (Vertical)**. Draw one high-quality vertical strip composition containing the described panels.`
+            : `**MODE: COMIC PAGE**. Draw a full page with distinct panels separated by white gutters.`;
 
         let colorInstruction = `- Palette: ${colorFormat}`;
         
@@ -129,9 +129,10 @@ const handler: Handler = async (event: HandlerEvent) => {
             ${visualEffect !== 'none' ? `- Effect: ${visualEffect}` : ''}
             - ${layoutInstruction}
             
-            **3. CHARACTER CONSISTENCY (STRICT):**
-            - **OUTFIT RULE:** The characters MUST wear the EXACT SAME OUTFIT as shown in their Reference Images. Do not add jackets, change colors, or remove accessories unless explicitly told to "change clothes".
+            **3. CHARACTER CONSISTENCY (STRICT ENFORCEMENT):**
+            - **OUTFIT RULE:** The characters MUST wear the **EXACT SAME OUTFIT** as shown in their Reference Images. Do not hallucinate new jackets, colors, or accessories. Copy the reference outfit details precisely.
             - **FACE RULE:** Maintain facial structure identity across all panels and angles.
+            - **BODY RULE:** Maintain character body type and height relative to others.
             
             **4. CURRENT PAGE SCRIPT:**
             ${visualDirectives}
@@ -155,7 +156,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             }
         }
 
-        // Use Gemini 3 Pro for rendering
+        // Use Gemini 3 Pro for rendering (High Quality)
         console.log(`[WORKER] Calling Gemini 3 Pro for job ${jobId} (Quality: ${imageQuality})...`);
         const response = await ai.models.generateContent({
             model: 'gemini-3-pro-image-preview',

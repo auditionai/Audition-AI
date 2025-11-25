@@ -16,7 +16,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     if (authError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'Invalid token.' }) };
 
     try {
-        const { plot_summary, characters, style, genre, language } = JSON.parse(event.body || '{}');
+        const { plot_summary, characters, style, genre, language, story_context } = JSON.parse(event.body || '{}');
         
         if (!plot_summary) return { statusCode: 400, body: JSON.stringify({ error: 'Missing plot summary.' }) };
 
@@ -57,6 +57,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             **MODE: STORY PAGE**
             - Create exactly 3 to 5 panels based on the summary.
             - Break down the action logically.
+            - **CRITICAL: Ensure the panel flow matches the 'STORY CONTEXT' provided below.**
             `;
         }
 
@@ -72,6 +73,9 @@ const handler: Handler = async (event: HandlerEvent) => {
             - Language: ${targetLanguage}.
             - Characters:
             ${characterContext}
+            
+            **STORY CONTEXT (PREVIOUS PAGES):**
+            ${story_context || "Start of story."}
             
             ${panelInstruction}
             

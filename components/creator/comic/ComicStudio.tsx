@@ -383,11 +383,12 @@ const ProfessionalScriptEditor: React.FC<{
         );
     }
 
+    // UPDATED: CSS to match Dark Theme
     return (
-        <div className="space-y-6 animate-fade-in p-4 bg-white text-gray-900 rounded-lg shadow-xl border border-gray-300 font-serif">
-            <div className="border-b-2 border-gray-800 pb-4 mb-4">
+        <div className="space-y-6 animate-fade-in p-4 bg-[#1E1B25] text-gray-200 rounded-lg shadow-xl border border-white/10 font-serif">
+            <div className="border-b-2 border-white/10 pb-4 mb-4">
                 <h4 className="text-center font-bold uppercase tracking-widest text-gray-500 text-xs">Kịch Bản Phân Cảnh</h4>
-                <div className="mt-2 text-sm text-gray-700">
+                <div className="mt-2 text-sm text-gray-300">
                     <strong>Tóm tắt cốt truyện:</strong> {panel.plot_summary}
                 </div>
                 <div className="mt-1 text-xs text-gray-500">
@@ -396,15 +397,15 @@ const ProfessionalScriptEditor: React.FC<{
             </div>
 
             {pageData.panels.map((p, pIdx) => (
-                <div key={pIdx} className="mb-6 pl-4 border-l-4 border-gray-300">
+                <div key={pIdx} className="mb-6 pl-4 border-l-4 border-white/20">
                     <div className="flex items-baseline gap-2 mb-2">
-                        <span className="font-black text-lg text-gray-900 uppercase">Panel {p.panel_id}</span>
+                        <span className="font-black text-lg text-white uppercase">Panel {p.panel_id}</span>
                     </div>
                     
                     <div className="mb-4">
                         <label className="text-[10px] font-bold text-gray-500 uppercase block mb-1">Mô tả hình ảnh (Visual Description)</label>
                         <textarea 
-                            className="w-full bg-gray-100 border border-gray-300 rounded p-3 text-sm text-gray-900 focus:border-gray-500 focus:ring-0 resize-none h-24 leading-relaxed font-sans"
+                            className="w-full bg-black/30 border border-white/10 rounded p-3 text-sm text-gray-300 focus:border-pink-500 focus:ring-0 resize-none h-24 leading-relaxed font-sans"
                             value={p.description}
                             onChange={(e) => handlePanelDescChange(pIdx, e.target.value)}
                         />
@@ -417,7 +418,7 @@ const ProfessionalScriptEditor: React.FC<{
                                 <div className="w-1/4 pt-1">
                                     <input 
                                         type="text" 
-                                        className="w-full bg-transparent border-none p-0 text-xs font-bold text-gray-800 uppercase text-right focus:ring-0"
+                                        className="w-full bg-transparent border-none p-0 text-xs font-bold text-gray-400 uppercase text-right focus:ring-0"
                                         value={d.speaker}
                                         placeholder="NHÂN VẬT"
                                         onChange={(e) => handleDialogueChange(pIdx, dIdx, 'speaker', e.target.value)}
@@ -425,18 +426,18 @@ const ProfessionalScriptEditor: React.FC<{
                                 </div>
                                 <div className="flex-grow">
                                     <textarea 
-                                        className="w-full bg-gray-50 border border-gray-200 rounded p-2 text-sm text-gray-800 focus:border-gray-400 focus:ring-0 resize-none h-auto min-h-[40px]"
+                                        className="w-full bg-black/30 border border-white/10 rounded p-2 text-sm text-white focus:border-pink-500 focus:ring-0 resize-none h-auto min-h-[40px]"
                                         value={d.text}
                                         placeholder="Nội dung thoại..."
                                         rows={2}
                                         onChange={(e) => handleDialogueChange(pIdx, dIdx, 'text', e.target.value)}
                                     />
                                 </div>
-                                <button onClick={() => removeDialogue(pIdx, dIdx)} className="text-gray-400 hover:text-red-500 p-1 pt-2 opacity-0 group-hover:opacity-100 transition-opacity"><i className="ph-fill ph-x"></i></button>
+                                <button onClick={() => removeDialogue(pIdx, dIdx)} className="text-gray-500 hover:text-red-500 p-1 pt-2 opacity-0 group-hover:opacity-100 transition-opacity"><i className="ph-fill ph-x"></i></button>
                             </div>
                         ))}
                         <div className="flex justify-center mt-2">
-                            <button onClick={() => addDialogue(pIdx)} className="text-[10px] text-gray-400 hover:text-gray-600 font-bold border border-dashed border-gray-300 rounded px-3 py-1 hover:bg-gray-50 transition">
+                            <button onClick={() => addDialogue(pIdx)} className="text-[10px] text-gray-500 hover:text-gray-300 font-bold border border-dashed border-white/10 rounded px-3 py-1 hover:bg-white/5 transition">
                                 + Thêm thoại
                             </button>
                         </div>
@@ -563,11 +564,23 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
         const page = comicPages[pageIndex];
         if (!page) return;
         setExpandingPageId(page.id);
+        
+        // IMPROVED: Generate Context Summary from previous pages
+        const previousPages = comicPages.slice(0, pageIndex);
+        const contextSummary = previousPages.map(p => `Page ${p.panel_number}: ${p.plot_summary}`).join('\n');
+
         try {
             const response = await fetch('/.netlify/functions/comic-expand-panel', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
-                body: JSON.stringify({ plot_summary: page.plot_summary || '', characters: characters.map(c => ({ name: c.name, description: c.description })), genre, style: artStyle, language })
+                body: JSON.stringify({ 
+                    plot_summary: page.plot_summary || '', 
+                    characters: characters.map(c => ({ name: c.name, description: c.description })), 
+                    genre, 
+                    style: artStyle, 
+                    language,
+                    story_context: contextSummary // Pass context
+                })
             });
             const data = await response.json();
             if (!response.ok) throw new Error(data.error || 'Failed to expand page');
@@ -677,14 +690,6 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                 });
                 setRenderingPageId(null);
                 showToast(`Trang ${pageIndex + 1} đã hoàn tất!`, 'success');
-                
-                // FIX: Robust Batch Render Logic
-                // We verify if batch rendering is active via state ref check (in effect) or simple state logic
-                // However, state updates in interval closure might be stale.
-                // We rely on a functional update check in a useEffect or just check a ref.
-                // Simpler approach: Use a flag in localstorage or just chain here carefully.
-                // Since state inside interval is stale, we use the callback pattern or re-check.
-                // BETTER: Use a useEffect to watch comicPages changes and trigger next if batch is on.
             }
         }, 5000);
     };
@@ -752,8 +757,8 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
             a.click();
             document.body.removeChild(a);
             
-            // Small delay between downloads
-            await new Promise(r => setTimeout(r, 500));
+            // Increased delay between downloads to prevent browser blocking (1.5s)
+            await new Promise(r => setTimeout(r, 1500));
         }
     };
 
@@ -792,7 +797,7 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                             </div>
                             <div>
                                 <h4 className="font-bold text-orange-100 flex items-center gap-2 text-sm">Character Consistency <span className="bg-orange-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded uppercase shadow-sm">ESSENTIAL</span></h4>
-                                <p className="text-xs text-orange-200/60 mt-1 leading-relaxed font-medium">Hệ thống hỗ trợ tối đa 12 nhân vật tham chiếu. Độ đồng bộ 95-100%.</p>
+                                <p className="text-xs text-orange-200/60 mt-1 leading-relaxed font-medium">Hệ thống hỗ trợ tối đa 10 nhân vật tham chiếu. Độ đồng bộ 95-100%.</p>
                             </div>
                         </div>
                     </div>
@@ -1039,7 +1044,6 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                                                 <>
                                                     <i className="ph-fill ph-image-square text-4xl mb-2 opacity-30"></i>
                                                     <p className="text-xs font-medium">Chưa có hình ảnh</p>
-                                                    {/* Fix: Handle possibly undefined plot_summary safely */}
                                                     <p className="text-[10px] mt-1 text-gray-700 italic max-w-xs mx-auto">{(page.plot_summary || '').substring(0, 50)}...</p>
                                                 </>
                                             )}

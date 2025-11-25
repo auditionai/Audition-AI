@@ -64,10 +64,10 @@ const handler: Handler = async (event: HandlerEvent) => {
         if (dialogueDensity === 'low') densityInstruction = "Dialogue Density: LOW. Focus on visual storytelling, minimal text.";
         if (dialogueDensity === 'high') densityInstruction = "Dialogue Density: HIGH. Detailed conversations and narration.";
 
-        // Prompt optimized for OUTLINING
+        // Prompt optimized for OUTLINING with Narrative Cohesion
         const prompt = `
             You are a professional Comic Script Writer.
-            **Task:** Create a structural outline for a comic script.
+            **Task:** Create a cohesive, logical structural outline for a comic script.
             
             **Input Story:** "${premise}"
             **Genre:** ${genre}
@@ -77,6 +77,11 @@ const handler: Handler = async (event: HandlerEvent) => {
             ${densityInstruction}
             
             ${coverInstruction}
+            
+            **STORYTELLING REQUIREMENTS:**
+            1. **Continuity:** The story MUST flow logically from Page 1 to the end. Do not create disconnected scenes. Page N+1 must be a direct consequence of Page N.
+            2. **Pacing:** Ensure the climax happens towards the end.
+            3. **Character Arc:** Characters should stay consistent in their roles.
             
             **Requirement:**
             - For each PAGE, provide a **concise 'plot_summary'** (2-3 sentences max).

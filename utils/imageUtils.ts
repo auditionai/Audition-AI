@@ -1,3 +1,4 @@
+
 // Helper function to resize an image file before uploading
 export const resizeImage = (file: File, maxSize: number): Promise<{ file: File; dataUrl: string }> => {
     return new Promise((resolve, reject) => {
@@ -98,7 +99,8 @@ export const preprocessImageToAspectRatio = async (
             // Return result as Data URL (PNG to preserve quality)
             resolve(canvas.toDataURL('image/png'));
         };
-        img.onerror = (e) => reject(new Error('Failed to load image for preprocessing'));
+        // FIX: Removed unused variable 'e' to satisfy TS6133
+        img.onerror = () => reject(new Error('Failed to load image for preprocessing'));
         img.src = dataUrl;
     });
 };

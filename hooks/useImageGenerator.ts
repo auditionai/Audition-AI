@@ -48,6 +48,7 @@ export const useImageGenerator = () => {
             }, 1800);
 
             // PRE-PROCESS IMAGES: Apply Letterboxing/Padding on Client Side
+            // This rigidly enforces the aspect ratio by padding with WHITE before sending to AI
             const processInput = async (file: File | null) => {
                 if (!file) return null;
                 const rawBase64 = await fileToBase64(file);

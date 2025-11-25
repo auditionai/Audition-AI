@@ -286,7 +286,7 @@ export const vi = {
       quickGuide: 'Xem hướng dẫn nhanh',
       upgradeBanner: {
         title: 'Nâng Cấp: Nano Banana Pro (Gemini 3) đã ra mắt!',
-        desc: 'Ứng dụng hiện mặc định sử dụng Gemini 3 Pro cho ảnh 4K siêu nét. Chi phí: 10-20 Kim cương/ảnh (tùy độ phân giải). Bạn có thể đổi lại bản tiêu chuẩn (1 Kim cương) bằng nút bên cạnh hoặc trong Cài đặt Nâng cao.',
+        desc: 'Mô hình mặc định hiện tại là Nano Banana (Tiêu chuẩn). Để sử dụng mô hình AI mới Nano Banana Pro (Gemini 3) cho ảnh 4K siêu nét (10-20 Kim cương), vui lòng ấn nút "Đổi ngay".',
         button: 'Đổi ngay',
       },
       tabs: {

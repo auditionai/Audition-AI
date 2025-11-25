@@ -286,7 +286,7 @@ export const en = {
       quickGuide: 'View Quick Guide',
       upgradeBanner: {
         title: 'Upgrade: Nano Banana Pro (Gemini 3) is Live!',
-        desc: 'The app now defaults to Gemini 3 Pro for 4K ultra-sharp images. Cost: 10-20 Diamonds/image (depends on resolution). You can switch back to the standard version (1 Diamond) using the button or in Advanced Settings.',
+        desc: 'The default model is currently Nano Banana (Standard). To use the new Nano Banana Pro (Gemini 3) for 4K ultra-sharp images (10-20 Diamonds), please click "Change Now".',
         button: 'Change Now',
       },
       tabs: {

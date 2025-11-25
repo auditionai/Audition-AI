@@ -60,7 +60,12 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
 
     const [prompt, setPrompt] = useState('');
     const [negativePrompt, setNegativePrompt] = useState('');
-    const [selectedModel, setSelectedModel] = useState<AIModel>(DETAILED_AI_MODELS[0]); // Default to Pro
+    
+    // Default to Flash (Nano Banana) - id: 'audition-ai-v4'
+    const [selectedModel, setSelectedModel] = useState<AIModel>(
+        DETAILED_AI_MODELS.find(m => m.id === 'audition-ai-v4') || DETAILED_AI_MODELS[1]
+    ); 
+    
     const [selectedStyle, setSelectedStyle] = useState('none');
     const [aspectRatio, setAspectRatio] = useState('3:4');
     const [seed, setSeed] = useState<number | ''>('');

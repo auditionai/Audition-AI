@@ -41,7 +41,7 @@ const failJob = async (jobId: string, reason: string, userId: string, cost: numb
 const fetchImageToBase64 = async (url: string | null): Promise<{ data: string; mimeType: string } | null> => {
     if (!url) return null;
     
-    // Check if it's already base64
+    // Check if it's already base64 (Legacy support or small images)
     if (url.startsWith('data:')) {
         const [header, base64] = url.split(',');
         const mimeType = header.match(/:(.*?);/)?.[1] || 'image/png';
@@ -68,8 +68,6 @@ const enforceAspectRatioCanvas = async (data: { data: string; mimeType: string }
      if (!data) return null;
      try {
         const imageBuffer = Buffer.from(data.data, 'base64');
-        
-        // Optimize: Use Jimp in a way that consumes less memory if possible, or just wrap in try/catch
         const image = await (Jimp as any).read(imageBuffer);
 
         const [aspectW, aspectH] = targetAspectRatio.split(':').map(Number);
@@ -94,7 +92,6 @@ const enforceAspectRatioCanvas = async (data: { data: string; mimeType: string }
         
         newCanvas.composite(image, 0, 0);
         
-        // Keep mime type or default to PNG
         const mime = data.mimeType || 'image/png';
         const newBase64 = await newCanvas.getBase64Async(mime);
         
@@ -102,7 +99,7 @@ const enforceAspectRatioCanvas = async (data: { data: string; mimeType: string }
 
      } catch (e) {
          console.warn("[WORKER] Aspect Ratio Enforcement Failed (Falling back to raw image):", e);
-         return data; // Fallback to original if processing fails
+         return data; 
      }
 };
 
@@ -123,7 +120,6 @@ const handler: Handler = async (event: HandlerEvent) => {
     if (!jobId) return { statusCode: 200 };
 
     let jobPromptData, payload, userId;
-    // Initialize cost to 0, will calculate ASAP
     let totalCost = 0;
 
     try {
@@ -141,7 +137,6 @@ const handler: Handler = async (event: HandlerEvent) => {
         payload = jobPromptData.payload;
         userId = jobData.user_id;
         
-        // --- CRITICAL: CALCULATE COST IMMEDIATELY ---
         const { characters, model: selectedModel, imageSize = '1K', removeWatermark = false } = payload;
         
         let baseCost = 1;
@@ -152,7 +147,6 @@ const handler: Handler = async (event: HandlerEvent) => {
         }
         totalCost = baseCost + (characters?.length || 0);
         if (removeWatermark) totalCost += 1;
-        // --------------------------------------------
 
         await updateJobProgress(jobId, jobPromptData, 'Máy chủ đang xử lý dữ liệu...');
 
@@ -167,7 +161,6 @@ const handler: Handler = async (event: HandlerEvent) => {
         const isPro = selectedModel === 'pro';
         
         const generatedCharacters = [];
-        
         let layoutData: { data: string; mimeType: string } | null = null;
 
         // --- STEP 1: PREPARE CHARACTER & LAYOUT ASSETS ---
@@ -176,8 +169,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             // If reference image exists, fetch it and set as layout base
             layoutData = await fetchImageToBase64(referenceImage);
             
-            // PARALLEL GENERATION FOR CHARACTERS (CRITICAL OPTIMIZATION)
-            // We launch all character generations at once using Promise.all
+            // PARALLEL GENERATION FOR CHARACTERS
             await updateJobProgress(jobId, jobPromptData, `Đang xử lý đồng thời ${numCharacters} nhân vật...`);
             
             const charPromises = characters.map(async (char: any, i: number) => {
@@ -193,6 +185,7 @@ const handler: Handler = async (event: HandlerEvent) => {
                         `**STYLE:** 3D Render. Neutral lighting. Solid Grey Background.`,
                     ].join('\n');
 
+                    // Fetch images in parallel
                     const [poseData, faceData, refData] = await Promise.all([
                         fetchImageToBase64(char.poseImage),
                         fetchImageToBase64(char.faceImage),
@@ -228,7 +221,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             generatedCharacters.push(...results);
 
         } else {
-            // Generate Background First (Parallel with Chars logic is tricky here as layout is needed, keeping sequential for layout -> chars)
+            // Generate Background First
             await updateJobProgress(jobId, jobPromptData, 'Đang tạo bối cảnh từ prompt...');
             const bgPrompt = `Create a high-quality, cinematic background scene: "${prompt}". Style: "${style}". NO people. Ratio: ${aspectRatio}.`;
             
@@ -281,11 +274,10 @@ const handler: Handler = async (event: HandlerEvent) => {
         // --- STEP 2: COMPOSE ON PROCESSED CANVAS ---
         await updateJobProgress(jobId, jobPromptData, 'Đang tổng hợp và hòa trộn cảm xúc...');
         
-        // Apply Grey Canvas enforcement to layout image
         const finalLayout = await enforceAspectRatioCanvas(layoutData, aspectRatio);
         if (!finalLayout) throw new Error("Lỗi xử lý layout canvas.");
 
-        // --- STEP 3: FINAL BLEND (THE MAGIC STEP) ---
+        // --- STEP 3: FINAL BLEND ---
         const compositePrompt = [
             `**TASK: GROUP PHOTO COMPOSITION (HYPER-REALISTIC 3D RENDER)**`,
             `**ASPECT RATIO IS LAW:** The input [CANVAS_WITH_CHARACTER_AND_GREY_BG] sets the absolute size. DO NOT CHANGE IT.`,
@@ -293,13 +285,13 @@ const handler: Handler = async (event: HandlerEvent) => {
             `**CRITICAL: VIBE & SOUL**`,
             `1. **MALE CHARACTERS:** Must look Cool, Confident, Masculine, Strong.`,
             `2. **FEMALE CHARACTERS:** Must look Muse-like, Graceful, Girly ("Bánh bèo"), Charming, Sexy.`,
-            `3. **EXPRESSIONS:** Subtle, natural smiles. DO NOT DISTORT FACES. No creepy smiles.`,
-            `4. **INTERACTION:** Characters MUST interact (leaning, touching, looking at each other). NO static "mannequin" poses.`,
+            `3. **EXPRESSIONS:** Subtle, natural smiles. DO NOT DISTORT FACES.`,
+            `4. **INTERACTION:** Characters MUST interact (leaning, touching, looking at each other).`,
             `---`,
             `**TECHNICAL EXECUTION:**`,
-            `1. **ANCHOR:** Place characters firmly on the ground of the background.`,
-            `2. **RELIGHT:** Use global illumination to blend characters into the scene.`,
-            `3. **OUTFIT:** Preserve outfit details from inputs.`,
+            `1. **ANCHOR:** Place characters firmly on the ground.`,
+            `2. **RELIGHT:** Use global illumination.`,
+            `3. **OUTFIT:** Preserve outfit details.`,
             `4. **STYLE:** Hyper-realistic 3D Render (Audition Game High-End).`
         ].join('\n');
         
@@ -362,7 +354,6 @@ const handler: Handler = async (event: HandlerEvent) => {
         console.log(`[WORKER ${jobId}] Job finalized successfully.`);
 
     } catch (error: any) {
-        // Refund Logic Trigger
         if (userId && totalCost > 0) {
             await failJob(jobId, error.message, userId, totalCost);
         } else {

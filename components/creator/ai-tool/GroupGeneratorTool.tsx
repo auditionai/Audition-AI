@@ -1,5 +1,4 @@
 
-// FIX: Import 'useState' from 'react' to resolve 'Cannot find name' errors.
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
 import ConfirmationModal from '../../ConfirmationModal';
@@ -15,7 +14,7 @@ import PromptLibraryModal from './PromptLibraryModal';
 import ToggleSwitch from '../../ai-tool/ToggleSwitch';
 
 
-// Mock data for presets - in a real app, this would come from a database
+// Mock data for styles
 const MOCK_STYLES = [
     { id: 'cinematic', name: 'Điện ảnh' },
     { id: 'anime', name: 'Hoạt hình Anime' },
@@ -53,23 +52,14 @@ interface ProcessedImageData {
     imageBase64: string;
     mimeType: string;
     fileName: string;
-    // Add missing properties to match the type used in ProcessedImageModal
     processedUrl: string;
     originalUrl?: string;
 }
 
 interface GroupGeneratorToolProps {
     onSwitchToUtility: () => void;
-    // FIX: Add missing 'onInstructionClick' prop to align with its usage in AITool.tsx.
     onInstructionClick: () => void;
 }
-
-const fileToBase64 = (file: File): Promise<string> => new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-});
 
 // Main Component
 const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtility, onInstructionClick }) => {
@@ -90,7 +80,7 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
     // New features state
     const [imageResolution, setImageResolution] = useState<'1K' | '2K' | '4K'>('1K');
     const [useGoogleSearch, setUseGoogleSearch] = useState(true);
-    const [removeWatermark, setRemoveWatermark] = useState(false); // New
+    const [removeWatermark, setRemoveWatermark] = useState(false);
 
     // New states for generation flow
     const [isGenerating, setIsGenerating] = useState(false);
@@ -106,7 +96,6 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
     // Refs for cleanup
     const pollingInterval = useRef<ReturnType<typeof setInterval> | null>(null);
 
-    // Effect to clean up any dangling subscriptions on unmount
     useEffect(() => {
         return () => {
             supabase?.removeAllChannels();
@@ -169,7 +158,6 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
         const file = e.target.files?.[0];
         if (!file) return;
 
-        // OPTIMIZATION: Resize to 800px (smaller than 1024px) for group shots to prevent huge payload
         resizeImage(file, 800).then(({ file: resizedFile, dataUrl: resizedDataUrl }) => {
             const newImage = { url: resizedDataUrl, file: resizedFile };
             if (type === 'reference') {
@@ -216,7 +204,6 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
         const char = characters[index];
         if (!char.faceImage || !session) return;
         
-        // Cost check
         const cost = modelType === 'pro' ? 10 : 1;
         if (user && user.diamonds < cost) {
              showToast(t('creator.aiTool.common.errorCredits', { cost, balance: user.diamonds }), 'error');
@@ -251,15 +238,11 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
         }
     };
 
-    // Cost Calculation
-    // Base: Pro (1K) = 10, Pro (2K) = 15, Pro (4K) = 20. Flash = 1.
-    // + Characters count.
-    // + Watermark removal (+1)
     const getBaseCost = () => {
         if (selectedModel === 'pro') {
             if (imageResolution === '4K') return 20;
             if (imageResolution === '2K') return 15;
-            return 10; // 1K Base
+            return 10;
         }
         return 1;
     };
@@ -290,9 +273,9 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
         setConfirmOpen(true);
     };
     
-    // --- NEW: UPLOAD HELPER ---
+    // --- UPLOAD HELPER ---
     const uploadImageToR2 = async (file: File): Promise<string> => {
-        const { dataUrl } = await resizeImage(file, 800); // Resize before upload to save bandwidth
+        const { dataUrl } = await resizeImage(file, 800);
         const res = await fetch('/.netlify/functions/upload-temp-image', {
             method: 'POST',
             headers: { 
@@ -386,7 +369,7 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
             .subscribe(async (status, err) => {
                 if (status === 'SUBSCRIBED') {
                     try {
-                        // --- NEW STEP: UPLOAD IMAGES FIRST ---
+                        // --- UPLOAD IMAGES FIRST ---
                         setProgressText('Đang tải lên dữ liệu...');
                         
                         // 1. Upload Reference Image (if exists)
@@ -399,7 +382,6 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                         const charactersPayload = await Promise.all(characters.map(async (char, idx) => {
                             let poseUrl = null;
                             let faceUrl = null;
-                            let processedFaceData = null;
 
                             // Pose is mandatory
                             if (char.poseImage) {
@@ -408,9 +390,6 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
 
                             // Face: Either use processed base64 (from face lock) OR upload raw file
                             if (char.processedFace) {
-                                // If it's already a base64 string from processing, we send it as is 
-                                // OR upload it to R2 to keep payload small (Recommended)
-                                // Let's convert base64 to File then upload
                                 const file = base64ToFile(char.processedFace, `char_${idx}_face.png`, 'image/png');
                                 faceUrl = await uploadImageToR2(file);
                             } else if (char.faceImage) {
@@ -418,8 +397,8 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                             }
 
                             return {
-                                poseImage: poseUrl, // Now a URL string
-                                faceImage: faceUrl, // Now a URL string
+                                poseImage: poseUrl,
+                                faceImage: faceUrl, 
                                 gender: char.gender,
                             };
                         }));
@@ -431,7 +410,7 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                             body: JSON.stringify({
                                 jobId, 
                                 characters: charactersPayload,
-                                referenceImage: uploadedRefUrl, // Now a URL string
+                                referenceImage: uploadedRefUrl,
                                 prompt,
                                 style: selectedStyle,
                                 aspectRatio: aspectRatio,
@@ -457,7 +436,7 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                             body: JSON.stringify({ jobId }),
                         });
 
-                        // 2. Polling Fallback (in case socket events are missed)
+                        // 2. Polling Fallback
                         pollingInterval.current = setInterval(async () => {
                             const { data } = await supabase
                                 .from('generated_images')
@@ -471,7 +450,7 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                                 setIsGenerating(false);
                                 cleanup();
                             }
-                        }, 3000); // Check every 3 seconds
+                        }, 3000);
 
                     } catch (error: any) {
                         showToast(error.message, 'error');

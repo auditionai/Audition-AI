@@ -37,13 +37,37 @@ const failJob = async (jobId: string, reason: string, userId: string, cost: numb
     }
 };
 
+// Helper to fetch image from URL and return base64 (Just In Time)
+const fetchImageToBase64 = async (url: string | null): Promise<{ data: string; mimeType: string } | null> => {
+    if (!url) return null;
+    
+    // Check if it's already base64
+    if (url.startsWith('data:')) {
+        const [header, base64] = url.split(',');
+        const mimeType = header.match(/:(.*?);/)?.[1] || 'image/png';
+        return { data: base64, mimeType };
+    }
+
+    // It's a URL
+    try {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`Failed to fetch image: ${response.statusText}`);
+        const arrayBuffer = await response.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+        const base64 = buffer.toString('base64');
+        const mimeType = response.headers.get('content-type') || 'image/png';
+        return { data: base64, mimeType };
+    } catch (e) {
+        console.warn("Failed to fetch image from URL:", url, e);
+        return null;
+    }
+}
+
 // Helper: Enforce Aspect Ratio by COVERING (Filling) the canvas with Grey
-// FAIL-SAFE: If this crashes, it returns NULL, allowing the main process to continue with raw image.
-const enforceAspectRatioCanvas = async (dataUrl: string, targetAspectRatio: string): Promise<{ data: string; mimeType: string } | null> => {
-     if (!dataUrl) return null;
+const enforceAspectRatioCanvas = async (data: { data: string; mimeType: string } | null, targetAspectRatio: string): Promise<{ data: string; mimeType: string } | null> => {
+     if (!data) return null;
      try {
-        const [header, base64] = dataUrl.split(',');
-        const imageBuffer = Buffer.from(base64, 'base64');
+        const imageBuffer = Buffer.from(data.data, 'base64');
         
         // Optimize: Use Jimp in a way that consumes less memory if possible, or just wrap in try/catch
         const image = await (Jimp as any).read(imageBuffer);
@@ -70,23 +94,16 @@ const enforceAspectRatioCanvas = async (dataUrl: string, targetAspectRatio: stri
         
         newCanvas.composite(image, 0, 0);
         
-        const mime = header.match(/:(.*?);/)?.[1] || 'image/png';
+        // Keep mime type or default to PNG
+        const mime = data.mimeType || 'image/png';
         const newBase64 = await newCanvas.getBase64Async(mime);
         
         return { data: newBase64.split(',')[1], mimeType: mime };
 
      } catch (e) {
          console.warn("[WORKER] Aspect Ratio Enforcement Failed (Falling back to raw image):", e);
-         return null; // Fail gracefully
+         return data; // Fallback to original if processing fails
      }
-};
-
-const processDataUrl = (dataUrl: string | null) => {
-    if (!dataUrl) return null;
-    const [header, base64] = dataUrl.split(',');
-    if (!base64) return null;
-    const mimeType = header.match(/:(.*?);/)?.[1] || 'image/png';
-    return { data: base64, mimeType };
 };
 
 const updateJobProgress = async (jobId: string, currentPromptData: any, progressMessage: string) => {
@@ -151,52 +168,67 @@ const handler: Handler = async (event: HandlerEvent) => {
         
         const generatedCharacters = [];
         
-        let layoutImageUrl: string | null = null; 
+        let layoutData: { data: string; mimeType: string } | null = null;
 
         // --- STEP 1: PREPARE CHARACTER & LAYOUT ASSETS ---
         
         if (referenceImage) {
-            layoutImageUrl = referenceImage;
+            // If reference image exists, fetch it and set as layout base
+            layoutData = await fetchImageToBase64(referenceImage);
             
-            // Generate Characters
-            for (let i = 0; i < numCharacters; i++) {
-                await updateJobProgress(jobId, jobPromptData, `Đang xử lý nhân vật ${i + 1}/${numCharacters}...`);
-                
-                const char = characters[i];
-                const isMale = char.gender === 'male';
-                const vibe = isMale ? 'Cool, confident, masculine, strong' : 'Muse-like, graceful, girly ("bánh bèo"), sexy';
-                
-                const charPrompt = [
-                    `Create a full-body 3D character of a **${char.gender}**.`,
-                    `**OUTFIT:** Strictly maintain the outfit from the input image.`,
-                    `**POSE & VIBE:** Pose must be **${vibe}**. Action fits scene: "${prompt}".`,
-                    `**EXPRESSION:** Subtle, natural smile. No exaggerated emotions.`,
-                    `**STYLE:** 3D Render. Neutral lighting. Solid Grey Background.`,
-                ].join('\n');
+            // PARALLEL GENERATION FOR CHARACTERS (CRITICAL OPTIMIZATION)
+            // We launch all character generations at once using Promise.all
+            await updateJobProgress(jobId, jobPromptData, `Đang xử lý đồng thời ${numCharacters} nhân vật...`);
+            
+            const charPromises = characters.map(async (char: any, i: number) => {
+                try {
+                    const isMale = char.gender === 'male';
+                    const vibe = isMale ? 'Cool, confident, masculine, strong' : 'Muse-like, graceful, girly ("bánh bèo"), sexy';
+                    
+                    const charPrompt = [
+                        `Create a full-body 3D character of a **${char.gender}**.`,
+                        `**OUTFIT:** Strictly maintain the outfit from the input image.`,
+                        `**POSE & VIBE:** Pose must be **${vibe}**. Action fits scene: "${prompt}".`,
+                        `**EXPRESSION:** Subtle, natural smile. No exaggerated emotions.`,
+                        `**STYLE:** 3D Render. Neutral lighting. Solid Grey Background.`,
+                    ].join('\n');
 
-                const poseData = processDataUrl(char.poseImage);
-                const faceData = processDataUrl(char.faceImage);
-                const refData = processDataUrl(referenceImage); 
+                    const [poseData, faceData, refData] = await Promise.all([
+                        fetchImageToBase64(char.poseImage),
+                        fetchImageToBase64(char.faceImage),
+                        fetchImageToBase64(referenceImage)
+                    ]);
 
-                if (!poseData) throw new Error(`Lỗi dữ liệu ảnh dáng nhân vật ${i+1}.`);
+                    if (!poseData || !refData) throw new Error(`Lỗi tải ảnh nhân vật ${i+1}.`);
 
-                const parts = [
-                    { text: charPrompt },
-                    { inlineData: { data: refData!.data, mimeType: refData!.mimeType } },
-                    { inlineData: { data: poseData.data, mimeType: poseData.mimeType } },
-                ];
-                if (faceData) parts.push({ inlineData: { data: faceData.data, mimeType: faceData.mimeType } });
+                    const parts: any[] = [
+                        { text: charPrompt },
+                        { inlineData: { data: refData.data, mimeType: refData.mimeType } },
+                        { inlineData: { data: poseData.data, mimeType: poseData.mimeType } },
+                    ];
+                    if (faceData) parts.push({ inlineData: { data: faceData.data, mimeType: faceData.mimeType } });
 
-                const response = await ai.models.generateContent({ model: 'gemini-2.5-flash-image', contents: { parts }, config: { responseModalities: [Modality.IMAGE] } });
-                const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-                if (!imagePart?.inlineData) throw new Error(`AI không thể tạo nhân vật ${i + 1}.`);
-                
-                generatedCharacters.push(imagePart.inlineData);
-                await new Promise(resolve => setTimeout(resolve, 1000));
-            }
+                    const response = await ai.models.generateContent({ 
+                        model: 'gemini-2.5-flash-image', 
+                        contents: { parts }, 
+                        config: { responseModalities: [Modality.IMAGE] } 
+                    });
+                    
+                    const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+                    if (!imagePart?.inlineData) throw new Error(`AI không thể tạo nhân vật ${i + 1}.`);
+                    
+                    return imagePart.inlineData;
+                } catch (charErr) {
+                    console.error(`Error generating character ${i}:`, charErr);
+                    throw charErr;
+                }
+            });
+
+            const results = await Promise.all(charPromises);
+            generatedCharacters.push(...results);
 
         } else {
-            // Generate Background
+            // Generate Background First (Parallel with Chars logic is tricky here as layout is needed, keeping sequential for layout -> chars)
             await updateJobProgress(jobId, jobPromptData, 'Đang tạo bối cảnh từ prompt...');
             const bgPrompt = `Create a high-quality, cinematic background scene: "${prompt}". Style: "${style}". NO people. Ratio: ${aspectRatio}.`;
             
@@ -214,21 +246,19 @@ const handler: Handler = async (event: HandlerEvent) => {
             const bgImagePart = bgResponse.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
             if (!bgImagePart?.inlineData?.data) throw new Error("AI không thể tạo bối cảnh nền.");
             
-            layoutImageUrl = `data:${bgImagePart.inlineData.mimeType};base64,${bgImagePart.inlineData.data}`;
+            layoutData = { data: bgImagePart.inlineData.data, mimeType: bgImagePart.inlineData.mimeType };
 
-            await new Promise(resolve => setTimeout(resolve, 1500));
-
-            // Generate characters
-            for (let i = 0; i < numCharacters; i++) {
-                await updateJobProgress(jobId, jobPromptData, `Đang xử lý nhân vật ${i + 1}/${numCharacters}...`);
-                const char = characters[i];
+            // Generate characters in PARALLEL
+            await updateJobProgress(jobId, jobPromptData, `Đang xử lý đồng thời ${numCharacters} nhân vật...`);
+            
+            const charPromises = characters.map(async (char: any, i: number) => {
                 const isMale = char.gender === 'male';
                 const vibe = isMale ? 'Cool, confident, masculine, strong, stylish' : 'Muse-like, graceful, girly ("bánh bèo"), sexy, charming';
                 
                 const charPrompt = `Create a full-body character of a **${char.gender}**. VIBE: ${vibe}. POSE: Dynamic, natural, interacting in scene "${prompt}". Maintain OUTFIT. Neutral lighting. Grey BG.`;
                 
-                const poseData = processDataUrl(char.poseImage);
-                if (!poseData) throw new Error(`Lỗi dữ liệu ảnh dáng nhân vật ${i+1}.`);
+                const poseData = await fetchImageToBase64(char.poseImage);
+                if (!poseData) throw new Error(`Lỗi tải ảnh nhân vật ${i+1}.`);
                 
                 const parts = [
                     { text: charPrompt },
@@ -239,27 +269,21 @@ const handler: Handler = async (event: HandlerEvent) => {
                 const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
                 if (!imagePart?.inlineData) throw new Error(`AI không thể tạo nhân vật ${i + 1}.`);
                 
-                generatedCharacters.push(imagePart.inlineData);
-            }
+                return imagePart.inlineData;
+            });
+
+            const results = await Promise.all(charPromises);
+            generatedCharacters.push(...results);
         }
         
-        if (!layoutImageUrl) throw new Error("Lỗi xử lý ảnh nền.");
+        if (!layoutData) throw new Error("Lỗi xử lý ảnh nền.");
 
         // --- STEP 2: COMPOSE ON PROCESSED CANVAS ---
         await updateJobProgress(jobId, jobPromptData, 'Đang tổng hợp và hòa trộn cảm xúc...');
         
-        // TRY ENFORCE RATIO (SAFE MODE)
-        // If this fails, we fall back to the AI-generated layout image directly
-        let layoutData = processDataUrl(layoutImageUrl);
-        const enforcedLayout = await enforceAspectRatioCanvas(layoutImageUrl, aspectRatio);
-        
-        if (enforcedLayout) {
-            layoutData = enforcedLayout; // Use the enforced one if success
-        } else {
-            console.log("[WORKER] Using original layout image (Canvas processing failed or skipped).");
-        }
-        
-        if (!layoutData) throw new Error("Lỗi xử lý layout.");
+        // Apply Grey Canvas enforcement to layout image
+        const finalLayout = await enforceAspectRatioCanvas(layoutData, aspectRatio);
+        if (!finalLayout) throw new Error("Lỗi xử lý layout canvas.");
 
         // --- STEP 3: FINAL BLEND (THE MAGIC STEP) ---
         const compositePrompt = [
@@ -282,8 +306,8 @@ const handler: Handler = async (event: HandlerEvent) => {
         const finalParts = [
             { text: compositePrompt },
             { text: "[CANVAS_WITH_CHARACTER_AND_GREY_BG]" },
-            { inlineData: { data: layoutData.data, mimeType: layoutData.mimeType } },
-            ...generatedCharacters.map((charData, idx) => ({ 
+            { inlineData: { data: finalLayout.data, mimeType: finalLayout.mimeType } },
+            ...generatedCharacters.map((charData) => ({ 
                 inlineData: charData 
             }))
         ];

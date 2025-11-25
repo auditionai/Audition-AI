@@ -290,6 +290,25 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
         setConfirmOpen(true);
     };
     
+    // --- NEW: UPLOAD HELPER ---
+    const uploadImageToR2 = async (file: File): Promise<string> => {
+        const { dataUrl } = await resizeImage(file, 800); // Resize before upload to save bandwidth
+        const res = await fetch('/.netlify/functions/upload-temp-image', {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json', 
+                Authorization: `Bearer ${session?.access_token}` 
+            },
+            body: JSON.stringify({ image: dataUrl }),
+        });
+        if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.error || "Upload failed");
+        }
+        const data = await res.json();
+        return data.url;
+    };
+
     const handleConfirmGeneration = async () => {
         setConfirmOpen(false);
         setIsGenerating(true);
@@ -367,26 +386,59 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
             .subscribe(async (status, err) => {
                 if (status === 'SUBSCRIBED') {
                     try {
-                        const charactersPayload = await Promise.all(characters.map(async char => ({
-                            poseImage: char.poseImage ? await fileToBase64(char.poseImage.file) : null,
-                            faceImage: char.processedFace ? `data:image/png;base64,${char.processedFace}` : (char.faceImage ? await fileToBase64(char.faceImage.file) : null),
-                            gender: char.gender,
-                        })));
+                        // --- NEW STEP: UPLOAD IMAGES FIRST ---
+                        setProgressText('Đang tải lên dữ liệu...');
+                        
+                        // 1. Upload Reference Image (if exists)
+                        let uploadedRefUrl = null;
+                        if (referenceImage) {
+                            uploadedRefUrl = await uploadImageToR2(referenceImage.file);
+                        }
+
+                        // 2. Upload Character Images (Parallel)
+                        const charactersPayload = await Promise.all(characters.map(async (char, idx) => {
+                            let poseUrl = null;
+                            let faceUrl = null;
+                            let processedFaceData = null;
+
+                            // Pose is mandatory
+                            if (char.poseImage) {
+                                poseUrl = await uploadImageToR2(char.poseImage.file);
+                            }
+
+                            // Face: Either use processed base64 (from face lock) OR upload raw file
+                            if (char.processedFace) {
+                                // If it's already a base64 string from processing, we send it as is 
+                                // OR upload it to R2 to keep payload small (Recommended)
+                                // Let's convert base64 to File then upload
+                                const file = base64ToFile(char.processedFace, `char_${idx}_face.png`, 'image/png');
+                                faceUrl = await uploadImageToR2(file);
+                            } else if (char.faceImage) {
+                                faceUrl = await uploadImageToR2(char.faceImage.file);
+                            }
+
+                            return {
+                                poseImage: poseUrl, // Now a URL string
+                                faceImage: faceUrl, // Now a URL string
+                                gender: char.gender,
+                            };
+                        }));
             
+                        // 3. Send Lightweight Payload (URLs only)
                         const spawnerResponse = await fetch('/.netlify/functions/generate-group-image', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
                             body: JSON.stringify({
                                 jobId, 
                                 characters: charactersPayload,
-                                referenceImage: referenceImage ? await fileToBase64(referenceImage.file) : null,
+                                referenceImage: uploadedRefUrl, // Now a URL string
                                 prompt,
                                 style: selectedStyle,
                                 aspectRatio: aspectRatio,
                                 model: selectedModel,
                                 imageSize: imageResolution, 
                                 useSearch: useGoogleSearch,
-                                removeWatermark // New Param
+                                removeWatermark 
                             }),
                         });
 

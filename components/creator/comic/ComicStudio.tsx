@@ -864,166 +864,206 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
 
             {/* --- STEP 1: SETUP --- */}
             {currentStep === 1 && (
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    {/* Left: Config */}
-                    <div className="lg:col-span-1 space-y-4">
-                        <SettingsBlock title="Cấu Hình Truyện" instructionKey="comic-studio" onInstructionClick={onInstructionClick}>
-                            <div className="space-y-4">
-                                <div>
-                                    <label className="text-xs font-bold text-skin-muted uppercase mb-1.5 block">Tên Truyện</label>
-                                    <input 
-                                        type="text" 
-                                        className="auth-input" 
-                                        placeholder="VD: Trùm Trường Sợ Gián"
-                                        value={comicTitle}
-                                        onChange={(e) => setComicTitle(e.target.value)}
-                                    />
-                                </div>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <ComicSelect label="Thể loại" value={genre} onChange={setGenre} options={GENRES} />
-                                    <ComicSelect label="Ngôn ngữ" value={language} onChange={setLanguage} options={LANGUAGES} />
-                                </div>
-                                <ComicSelect label="Phong cách vẽ" value={artStyle} onChange={setArtStyle} options={ART_STYLES} />
-                                <div className="grid grid-cols-2 gap-3">
-                                    <ComicSelect label="Màu sắc" value={colorFormat} onChange={setColorFormat} options={COLOR_FORMATS} />
-                                    <ComicSelect label="Tỷ lệ" value={aspectRatio} onChange={setAspectRatio} options={ASPECT_RATIOS} />
-                                </div>
-                                
-                                {/* NEW CONFIG OPTIONS - Using state variables */}
-                                <div className="grid grid-cols-2 gap-3">
-                                    <ComicSelect label="Số trang" value={pageNumbering} onChange={setPageNumbering} options={PAGE_NUMBERING} />
-                                    <ComicSelect label="Font thoại" value={bubbleFont} onChange={setBubbleFont} options={BUBBLE_FONTS} previewFont={true} />
-                                </div>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <ComicSelect label="Hiệu ứng" value={visualEffect} onChange={setVisualEffect} options={VISUAL_EFFECTS} />
-                                    <ComicSelect label="Trang bìa" value={coverOption} onChange={setCoverOption} options={COVER_OPTIONS} />
-                                </div>
-
-                                <div>
-                                    <label className="text-xs font-bold text-skin-muted uppercase mb-1.5 block">Số lượng trang NỘI DUNG</label>
-                                    <div className="flex items-center gap-4 bg-[#1E1B25] p-2 rounded-lg border border-white/10">
-                                        <input 
-                                            type="range" min="1" max="10" 
-                                            value={pageCount} onChange={(e) => setPageCount(Number(e.target.value))} 
-                                            className="flex-grow accent-pink-500 h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer"
-                                        />
-                                        <span className="font-bold text-white w-8 text-center">{pageCount}</span>
-                                    </div>
-                                    <p className="text-[10px] text-gray-500 mt-1 italic">*Hệ thống sẽ tự cộng thêm 1 Trang Bìa.</p>
-                                </div>
+                <>
+                    {/* Feature Highlights */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-2">
+                        {/* Story Memory */}
+                        <div className="bg-[#12121A]/80 border border-emerald-500/20 p-4 rounded-xl flex items-center gap-4 shadow-lg shadow-emerald-500/5 relative overflow-hidden group interactive-3d">
+                            <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                            <div className="w-12 h-12 rounded-full bg-emerald-500/20 flex items-center justify-center flex-shrink-0 border border-emerald-500/30 shadow-inner">
+                                <i className="ph-fill ph-lightning text-2xl text-emerald-400 animate-pulse"></i>
                             </div>
-                        </SettingsBlock>
-                        
-                        <SettingsBlock title="Ý Tưởng Cốt Truyện" instructionKey="prompt">
-                            <div className="relative">
-                                <textarea 
-                                    className="auth-input min-h-[150px] text-sm leading-relaxed resize-none"
-                                    placeholder="Nhập tóm tắt câu chuyện của bạn..."
-                                    value={premise}
-                                    onChange={(e) => setPremise(e.target.value)}
-                                />
-                                <div className="absolute bottom-2 right-2">
-                                    <button 
-                                        onClick={() => {
-                                            const randomPremise = COMIC_PREMISES[genre] 
-                                                ? COMIC_PREMISES[genre][Math.floor(Math.random() * COMIC_PREMISES[genre].length)]
-                                                : COMIC_PREMISES['Mặc định (Sáng tạo)'][0];
-                                            handleApplyPremise(randomPremise);
-                                        }}
-                                        className="text-xs bg-purple-500/20 text-purple-300 px-2 py-1 rounded hover:bg-purple-500/40 transition flex items-center gap-1"
-                                    >
-                                        <i className="ph-fill ph-lightbulb"></i> Gợi ý kịch bản
-                                    </button>
-                                </div>
+                            <div>
+                                <h4 className="font-bold text-emerald-100 flex items-center gap-2 text-sm">
+                                    Story Memory & Plot Logic
+                                    <span className="bg-red-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded uppercase shadow-sm">HOT</span>
+                                </h4>
+                                <p className="text-xs text-emerald-200/60 mt-1 leading-relaxed font-medium">
+                                    AI ghi nhớ diễn biến cốt truyện để phát triển tâm lý nhân vật sâu sắc hơn.
+                                </p>
                             </div>
-                        </SettingsBlock>
-                    </div>
+                        </div>
 
-                    {/* Right: Characters */}
-                    <div className="lg:col-span-2">
-                        <div className="bg-[#12121A]/80 border border-white/10 rounded-2xl p-6 h-full">
-                            <div className="flex justify-between items-center mb-4">
-                                <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                                    <i className="ph-fill ph-users-three text-pink-500"></i> Nhân Vật ({characters.length}/{MAX_CHARACTERS})
-                                </h3>
-                                <div className="flex items-center gap-2">
-                                    <button onClick={onInstructionClick} className="flex items-center gap-1 text-xs text-skin-accent hover:opacity-80 transition-all px-2 py-1 rounded-md bg-skin-accent/10 border border-skin-border-accent hover:bg-skin-accent/20 shadow-accent hover:shadow-accent-lg">
-                                        <i className="ph-fill ph-book-open"></i> Hướng dẫn
-                                    </button>
-                                    <button 
-                                        onClick={handleAddCharacter}
-                                        disabled={characters.length >= MAX_CHARACTERS}
-                                        className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm font-bold transition flex items-center gap-2 disabled:opacity-50"
-                                    >
-                                        <i className="ph-bold ph-plus"></i> Thêm
-                                    </button>
-                                </div>
+                        {/* Character Consistency */}
+                        <div className="bg-[#12121A]/80 border border-orange-500/20 p-4 rounded-xl flex items-center gap-4 shadow-lg shadow-orange-500/5 relative overflow-hidden group interactive-3d">
+                            <div className="absolute inset-0 bg-gradient-to-r from-orange-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                            <div className="w-12 h-12 rounded-full bg-orange-500/20 flex items-center justify-center flex-shrink-0 border border-orange-500/30 shadow-inner">
+                                <i className="ph-fill ph-fire text-2xl text-orange-400 animate-pulse"></i>
                             </div>
-
-                            {characters.length === 0 ? (
-                                <div className="flex flex-col items-center justify-center h-64 border-2 border-dashed border-white/10 rounded-xl text-skin-muted">
-                                    <i className="ph-fill ph-user-plus text-4xl mb-2 opacity-50"></i>
-                                    <p>Thêm nhân vật để AI nhận diện khuôn mặt & trang phục</p>
-                                </div>
-                            ) : (
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[600px] overflow-y-auto custom-scrollbar pr-2">
-                                    {characters.map((char, idx) => (
-                                        <div key={char.id} className="bg-[#1E1B25] p-4 rounded-xl border border-white/5 relative group">
-                                            <button 
-                                                onClick={() => handleRemoveCharacter(char.id)}
-                                                className="absolute top-2 right-2 text-gray-500 hover:text-red-500 opacity-0 group-hover:opacity-100 transition p-1"
-                                            >
-                                                <i className="ph-fill ph-x"></i>
-                                            </button>
-                                            
-                                            <div className="flex gap-4">
-                                                {/* Image Upload - Adjusted sizing */}
-                                                <div className="w-20 h-20 flex-shrink-0">
-                                                    <ImageUploader
-                                                        onUpload={(e) => handleCharacterImageUpload(e, char.id)}
-                                                        image={char.image_url ? { url: char.image_url } : null}
-                                                        onRemove={() => {
-                                                            setCharacters(prev => prev.map(c => c.id === char.id ? { ...c, image_url: undefined, image_file: undefined } : c));
-                                                        }}
-                                                        text=""
-                                                        className="w-full h-full min-h-0" // Force size to container
-                                                    />
-                                                </div>
-
-                                                {/* Info */}
-                                                <div className="flex-grow space-y-2">
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="text-xs text-gray-500 font-bold uppercase">Nhân vật {idx + 1}</span>
-                                                    </div>
-                                                    <input 
-                                                        type="text" 
-                                                        className="w-full bg-transparent border-b border-white/10 focus:border-pink-500 text-sm font-bold text-white px-1 py-0.5 outline-none transition"
-                                                        value={char.name}
-                                                        onChange={(e) => setCharacters(prev => prev.map(c => c.id === char.id ? { ...c, name: e.target.value } : c))}
-                                                        placeholder="Tên nhân vật"
-                                                    />
-                                                    
-                                                    {char.is_analyzing ? (
-                                                        <div className="text-xs text-pink-400 flex items-center gap-1 animate-pulse">
-                                                            <i className="ph-fill ph-spinner animate-spin"></i> Đang phân tích...
-                                                        </div>
-                                                    ) : (
-                                                        <textarea 
-                                                            className="w-full bg-black/20 border border-white/10 rounded p-2 text-xs text-gray-300 h-16 resize-none focus:border-white/30 outline-none"
-                                                            placeholder="Mô tả ngoại hình..."
-                                                            value={char.description}
-                                                            onChange={(e) => setCharacters(prev => prev.map(c => c.id === char.id ? { ...c, description: e.target.value } : c))}
-                                                        />
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
+                            <div>
+                                <h4 className="font-bold text-orange-100 flex items-center gap-2 text-sm">
+                                    Character Consistency
+                                    <span className="bg-orange-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded uppercase shadow-sm">ESSENTIAL</span>
+                                </h4>
+                                <p className="text-xs text-orange-200/60 mt-1 leading-relaxed font-medium">
+                                    Hệ thống hỗ trợ tối đa 12 nhân vật tham chiếu. Độ đồng bộ 95-100%.
+                                </p>
+                            </div>
                         </div>
                     </div>
-                </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        {/* Left: Config */}
+                        <div className="lg:col-span-1 space-y-4">
+                            <SettingsBlock title="Cấu Hình Truyện" instructionKey="comic-studio" onInstructionClick={onInstructionClick}>
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="text-xs font-bold text-skin-muted uppercase mb-1.5 block">Tên Truyện</label>
+                                        <input 
+                                            type="text" 
+                                            className="auth-input" 
+                                            placeholder="VD: Trùm Trường Sợ Gián"
+                                            value={comicTitle}
+                                            onChange={(e) => setComicTitle(e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <ComicSelect label="Thể loại" value={genre} onChange={setGenre} options={GENRES} />
+                                        <ComicSelect label="Ngôn ngữ" value={language} onChange={setLanguage} options={LANGUAGES} />
+                                    </div>
+                                    <ComicSelect label="Phong cách vẽ" value={artStyle} onChange={setArtStyle} options={ART_STYLES} />
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <ComicSelect label="Màu sắc" value={colorFormat} onChange={setColorFormat} options={COLOR_FORMATS} />
+                                        <ComicSelect label="Tỷ lệ" value={aspectRatio} onChange={setAspectRatio} options={ASPECT_RATIOS} />
+                                    </div>
+                                    
+                                    {/* NEW CONFIG OPTIONS - Using state variables */}
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <ComicSelect label="Số trang" value={pageNumbering} onChange={setPageNumbering} options={PAGE_NUMBERING} />
+                                        <ComicSelect label="Font thoại" value={bubbleFont} onChange={setBubbleFont} options={BUBBLE_FONTS} previewFont={true} />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <ComicSelect label="Hiệu ứng" value={visualEffect} onChange={setVisualEffect} options={VISUAL_EFFECTS} />
+                                        <ComicSelect label="Trang bìa" value={coverOption} onChange={setCoverOption} options={COVER_OPTIONS} />
+                                    </div>
+
+                                    <div>
+                                        <label className="text-xs font-bold text-skin-muted uppercase mb-1.5 block">Số lượng trang NỘI DUNG</label>
+                                        <div className="flex items-center gap-4 bg-[#1E1B25] p-2 rounded-lg border border-white/10">
+                                            <input 
+                                                type="range" min="1" max="10" 
+                                                value={pageCount} onChange={(e) => setPageCount(Number(e.target.value))} 
+                                                className="flex-grow accent-pink-500 h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer"
+                                            />
+                                            <span className="font-bold text-white w-8 text-center">{pageCount}</span>
+                                        </div>
+                                        <p className="text-[10px] text-gray-500 mt-1 italic">*Hệ thống sẽ tự cộng thêm 1 Trang Bìa.</p>
+                                    </div>
+                                </div>
+                            </SettingsBlock>
+                            
+                            <SettingsBlock title="Ý Tưởng Cốt Truyện" instructionKey="prompt">
+                                <div className="relative">
+                                    <textarea 
+                                        className="auth-input min-h-[150px] text-sm leading-relaxed resize-none"
+                                        placeholder="Nhập tóm tắt câu chuyện của bạn..."
+                                        value={premise}
+                                        onChange={(e) => setPremise(e.target.value)}
+                                    />
+                                    <div className="absolute bottom-2 right-2">
+                                        <button 
+                                            onClick={() => {
+                                                const randomPremise = COMIC_PREMISES[genre] 
+                                                    ? COMIC_PREMISES[genre][Math.floor(Math.random() * COMIC_PREMISES[genre].length)]
+                                                    : COMIC_PREMISES['Mặc định (Sáng tạo)'][0];
+                                                handleApplyPremise(randomPremise);
+                                            }}
+                                            className="text-xs bg-purple-500/20 text-purple-300 px-2 py-1 rounded hover:bg-purple-500/40 transition flex items-center gap-1"
+                                        >
+                                            <i className="ph-fill ph-lightbulb"></i> Gợi ý kịch bản
+                                        </button>
+                                    </div>
+                                </div>
+                            </SettingsBlock>
+                        </div>
+
+                        {/* Right: Characters */}
+                        <div className="lg:col-span-2">
+                            <div className="bg-[#12121A]/80 border border-white/10 rounded-2xl p-6 h-full">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                                        <i className="ph-fill ph-users-three text-pink-500"></i> Nhân Vật ({characters.length}/{MAX_CHARACTERS})
+                                    </h3>
+                                    <div className="flex items-center gap-2">
+                                        {/* MOVED HELP BUTTON HERE AS REQUESTED PREVIOUSLY */}
+                                        <button onClick={onInstructionClick} className="flex items-center gap-1 text-xs text-skin-accent hover:opacity-80 transition-all px-2 py-1 rounded-md bg-skin-accent/10 border border-skin-border-accent hover:bg-skin-accent/20 shadow-accent hover:shadow-accent-lg">
+                                            <i className="ph-fill ph-book-open"></i> Hướng dẫn
+                                        </button>
+                                        <button 
+                                            onClick={handleAddCharacter}
+                                            disabled={characters.length >= MAX_CHARACTERS}
+                                            className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm font-bold transition flex items-center gap-2 disabled:opacity-50"
+                                        >
+                                            <i className="ph-bold ph-plus"></i> Thêm
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {characters.length === 0 ? (
+                                    <div className="flex flex-col items-center justify-center h-64 border-2 border-dashed border-white/10 rounded-xl text-skin-muted">
+                                        <i className="ph-fill ph-user-plus text-4xl mb-2 opacity-50"></i>
+                                        <p>Thêm nhân vật để AI nhận diện khuôn mặt & trang phục</p>
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[600px] overflow-y-auto custom-scrollbar pr-2">
+                                        {characters.map((char, idx) => (
+                                            <div key={char.id} className="bg-[#1E1B25] p-4 rounded-xl border border-white/5 relative group">
+                                                <button 
+                                                    onClick={() => handleRemoveCharacter(char.id)}
+                                                    className="absolute top-2 right-2 text-gray-500 hover:text-red-500 opacity-0 group-hover:opacity-100 transition p-1"
+                                                >
+                                                    <i className="ph-fill ph-x"></i>
+                                                </button>
+                                                
+                                                <div className="flex gap-4">
+                                                    {/* Image Upload - Adjusted sizing */}
+                                                    <div className="w-20 h-20 flex-shrink-0">
+                                                        <ImageUploader
+                                                            onUpload={(e) => handleCharacterImageUpload(e, char.id)}
+                                                            image={char.image_url ? { url: char.image_url } : null}
+                                                            onRemove={() => {
+                                                                setCharacters(prev => prev.map(c => c.id === char.id ? { ...c, image_url: undefined, image_file: undefined } : c));
+                                                            }}
+                                                            text=""
+                                                            className="w-full h-full min-h-0" // Force size to container
+                                                        />
+                                                    </div>
+
+                                                    {/* Info */}
+                                                    <div className="flex-grow space-y-2">
+                                                        <div className="flex justify-between items-center">
+                                                            <span className="text-xs text-gray-500 font-bold uppercase">Nhân vật {idx + 1}</span>
+                                                        </div>
+                                                        <input 
+                                                            type="text" 
+                                                            className="w-full bg-transparent border-b border-white/10 focus:border-pink-500 text-sm font-bold text-white px-1 py-0.5 outline-none transition"
+                                                            value={char.name}
+                                                            onChange={(e) => setCharacters(prev => prev.map(c => c.id === char.id ? { ...c, name: e.target.value } : c))}
+                                                            placeholder="Tên nhân vật"
+                                                        />
+                                                        
+                                                        {char.is_analyzing ? (
+                                                            <div className="text-xs text-pink-400 flex items-center gap-1 animate-pulse">
+                                                                <i className="ph-fill ph-spinner animate-spin"></i> Đang phân tích...
+                                                            </div>
+                                                        ) : (
+                                                            <textarea 
+                                                                className="w-full bg-black/20 border border-white/10 rounded p-2 text-xs text-gray-300 h-16 resize-none focus:border-white/30 outline-none"
+                                                                placeholder="Mô tả ngoại hình..."
+                                                                value={char.description}
+                                                                onChange={(e) => setCharacters(prev => prev.map(c => c.id === char.id ? { ...c, description: e.target.value } : c))}
+                                                            />
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </>
             )}
 
             {/* --- STEP 2 & 3: SCRIPT & RENDER --- */}

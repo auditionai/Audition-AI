@@ -925,7 +925,8 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                                                 <>
                                                     <i className="ph-fill ph-image-square text-4xl mb-2 opacity-30"></i>
                                                     <p className="text-xs">Chưa có hình ảnh</p>
-                                                    <p className="text-[10px] mt-1 text-gray-700">{page.plot_summary.substring(0, 30)}...</p>
+                                                    {/* Fix: Handle possibly undefined plot_summary safely */}
+                                                    <p className="text-[10px] mt-1 text-gray-700">{(page.plot_summary || '').substring(0, 30)}...</p>
                                                 </>
                                             )}
                                         </div>

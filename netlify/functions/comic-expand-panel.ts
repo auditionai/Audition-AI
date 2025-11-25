@@ -69,14 +69,14 @@ const handler: Handler = async (event: HandlerEvent) => {
             - Page Summary: "${plot_summary}"
             - Genre: ${genre}
             - Style: ${style}
-            - Language: ${targetLanguage} (The output dialogue must be in this language).
+            - Language: ${targetLanguage}.
             - Characters:
             ${characterContext}
             
             ${panelInstruction}
             
             **STRICT RULES:**
-            1. **description**: Must be a detailed visual instruction for an artist/AI. Describe the action, camera angle, background, and character expressions vividly. (Use English for descriptions if possible for better AI generation later, but Vietnamese is acceptable).
+            1. **description**: Must be a detailed visual instruction for an artist/AI. Describe the action, camera angle, background, and character expressions vividly. **MUST BE IN VIETNAMESE (TIẾNG VIỆT)**.
             2. **dialogues**: Must be natural conversation in **${targetLanguage}**. If it is a Cover Page, dialogue is usually empty or just the Title.
             3. **IMPORTANT**: Ensure every panel has a "description" and "dialogues" array.
             4. Output MUST be valid JSON matching the schema below.
@@ -87,7 +87,7 @@ const handler: Handler = async (event: HandlerEvent) => {
               "panels": [
                 {
                   "panel_id": Integer,
-                  "description": "String (Visual description of scene, action, angle)",
+                  "description": "String (Visual description in Vietnamese)",
                   "dialogues": [
                     { "speaker": "String (Character Name)", "text": "String (Dialogue Content)" }
                   ]
@@ -134,7 +134,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             // Fallback: If JSON fails completely, create a valid structure manually so the frontend doesn't crash
             resultJson.panels = [{ 
                 panel_id: 1, 
-                description: `Scene: ${plot_summary}. (Auto-generated from summary due to AI formatting error).`, 
+                description: `Cảnh: ${plot_summary}. (Tự động tạo do lỗi định dạng AI).`, 
                 dialogues: [] 
             }] as any;
         }

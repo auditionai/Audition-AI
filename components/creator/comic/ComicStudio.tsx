@@ -174,8 +174,7 @@ const ComicSelect: React.FC<ComicSelectProps> = ({ label, value, onChange, optio
 const StepIndicator = ({ currentStep }: { currentStep: number }) => {
     const steps = [
         { num: 1, label: 'Thiết lập', icon: 'ph-sliders' },
-        { num: 2, label: 'Kịch bản', icon: 'ph-scroll' },
-        { num: 3, label: 'Sản xuất', icon: 'ph-paint-brush-broad' },
+        { num: 2, label: 'Sản xuất (Kịch bản & Vẽ)', icon: 'ph-paint-brush-broad' },
     ];
 
     return (
@@ -199,7 +198,7 @@ const StepIndicator = ({ currentStep }: { currentStep: number }) => {
                             <i className={`ph-fill ${step.icon} text-lg ${isActive ? 'animate-pulse' : ''}`}></i>
                             <span className={`text-xs sm:text-sm ${isActive ? 'block' : 'hidden sm:block'}`}>{step.label}</span>
                         </div>
-                        {step.num < 3 && (
+                        {step.num < 2 && (
                             <div className={`w-6 h-0.5 mx-1 transition-colors duration-300 ${isPast ? 'bg-purple-500/30' : 'bg-white/5'}`}></div>
                         )}
                     </div>
@@ -268,7 +267,6 @@ const ProfessionalScriptEditor: React.FC<{
 }> = ({ panel, onUpdate, onExpand, isExpanding, pageIndex }) => {
     const [pageData, setPageData] = useState<ScriptPage | null>(null);
 
-    // SYNC STATE WITH PROP - ROBUST VERSION
     useEffect(() => {
         const desc = panel.visual_description || '';
         
@@ -279,32 +277,24 @@ const ProfessionalScriptEditor: React.FC<{
 
         try {
             const parsed = JSON.parse(desc);
-            // Robust Check: Ensure panels array exists
             let cleanData: ScriptPage = { layout_note: "Standard", panels: [] };
             
             if (parsed.panels && Array.isArray(parsed.panels)) {
                 cleanData = parsed;
             } else if (Array.isArray(parsed)) {
-                // If root is array (some older versions), wrap it
                 cleanData.panels = parsed;
             } else if (typeof parsed === 'object') {
-                // Try to salvage object if structure is slightly off
                 cleanData = { ...cleanData, ...parsed };
                 if (!cleanData.panels) cleanData.panels = [];
-            } else {
-                throw new Error("Structure mismatch");
             }
             
             setPageData(cleanData);
         } catch (e) {
-            console.warn("JSON Parse Failed, falling back to raw text mode:", e);
-            // FALLBACK: Treat the entire string as the description for Panel 1
-            // This ensures the user ALWAYS sees the content to edit, even if AI messed up the format.
             setPageData({
                 layout_note: "Recovered Layout",
                 panels: [{
                     panel_id: 1,
-                    description: desc, // Use the raw string here
+                    description: desc, 
                     dialogues: []
                 }]
             });
@@ -365,133 +355,60 @@ const ProfessionalScriptEditor: React.FC<{
         }
     }
 
-    // --- EMPTY STATE (Not Analyzed Yet) ---
     if (!pageData) {
         return (
-            <div className="flex flex-col items-center justify-center p-8 border border-dashed border-white/20 rounded-xl bg-white/5 min-h-[300px]">
-                <div className="text-center max-w-md">
-                    <i className="ph-fill ph-file-text text-5xl text-gray-500 mb-4"></i>
-                    <h4 className="font-bold text-white text-xl mb-2">
-                        {pageIndex === 0 ? 'Nội dung Trang Bìa' : `Kịch bản chi tiết Trang ${pageIndex + 1}`}
-                    </h4>
-                    <p className="text-sm text-gray-400 mb-8 italic bg-black/30 p-4 rounded-lg border border-white/10">
-                        "{panel.plot_summary || 'Trang này chưa có nội dung tóm tắt.'}"
-                    </p>
-                    
-                    <button 
-                        onClick={onExpand}
-                        disabled={isExpanding}
-                        className={`themed-button-primary px-8 py-4 rounded-xl font-bold flex items-center gap-3 mx-auto shadow-xl hover:shadow-pink-500/40 transition-all transform hover:-translate-y-1 ${panel.visual_description ? 'bg-red-500 hover:bg-red-600 border-red-500' : ''}`}
-                    >
-                        {isExpanding ? (
-                            <>
-                                <div className="w-6 h-6 border-3 border-white/50 border-t-white rounded-full animate-spin"></div>
-                                AI đang viết kịch bản...
-                            </>
-                        ) : (
-                            <>
-                                {panel.visual_description ? <i className="ph-fill ph-arrow-counter-clockwise text-xl"></i> : <i className="ph-fill ph-magic-wand text-xl"></i>}
-                                {panel.visual_description ? 'Thử lại (Phân tích lại)' : 'Phân tích chi tiết (AI)'}
-                            </>
-                        )}
-                    </button>
-                </div>
+            <div className="flex flex-col items-center justify-center p-4 bg-black/30 rounded-lg border border-white/10 min-h-[200px]">
+                <p className="text-sm text-gray-400 mb-4 italic text-center">
+                    "{panel.plot_summary || 'Trang này chưa có nội dung tóm tắt.'}"
+                </p>
+                <button 
+                    onClick={onExpand}
+                    disabled={isExpanding}
+                    className={`themed-button-primary px-4 py-2 rounded-lg font-bold flex items-center gap-2 text-sm ${panel.visual_description ? 'bg-red-500' : ''}`}
+                >
+                    {isExpanding ? <i className="ph-fill ph-spinner animate-spin"></i> : <i className="ph-fill ph-magic-wand"></i>}
+                    {isExpanding ? 'Đang phân tích...' : 'Phân tích chi tiết'}
+                </button>
             </div>
         );
     }
 
-    // --- EDITOR STATE ---
     return (
-        <div className="space-y-4 animate-fade-in pb-20">
-            {/* Plot Summary Display */}
-            <div className="bg-blue-500/10 border border-blue-500/30 p-3 rounded-lg flex items-start gap-3">
-                <i className="ph-fill ph-info text-blue-400 mt-0.5 flex-shrink-0"></i>
-                <div>
-                    <p className="text-xs font-bold text-blue-300 uppercase mb-1">Cốt truyện gốc (Tóm tắt)</p>
-                    <p className="text-sm text-gray-300 leading-relaxed">{panel.plot_summary || 'Không có tóm tắt.'}</p>
-                </div>
-                {/* Add explicit Retry Button here as well for easier access */}
-                <button onClick={onExpand} disabled={isExpanding} className="ml-auto text-xs text-blue-300 hover:text-white underline whitespace-nowrap">
-                    {isExpanding ? 'Đang tải...' : 'Phân tích lại'}
-                </button>
+        <div className="space-y-4">
+            <div className="bg-blue-500/10 border border-blue-500/30 p-2 rounded-lg text-xs text-gray-300 mb-2">
+                <strong className="text-blue-300">Tóm tắt:</strong> {panel.plot_summary}
             </div>
-
-            {/* Panels List */}
             {pageData.panels.map((p, pIdx) => (
-                <div key={pIdx} className="bg-[#1E1B25] border border-white/10 rounded-xl overflow-hidden shadow-sm transition-colors hover:border-white/20">
-                    {/* Panel Header */}
-                    <div className="bg-white/5 px-4 py-2 border-b border-white/10 flex justify-between items-center">
-                        <span className="text-xs font-bold text-pink-400 uppercase tracking-wider flex items-center gap-2">
-                            <i className="ph-fill ph-frame-corners"></i> Khung tranh (Panel) {p.panel_id || (pIdx + 1)}
-                        </span>
+                <div key={pIdx} className="bg-[#1E1B25] border border-white/10 rounded-lg p-3">
+                    <div className="flex justify-between items-center mb-2">
+                        <span className="text-[10px] font-bold text-pink-400 uppercase">Panel {p.panel_id}</span>
                     </div>
-                    
-                    {/* Panel Content */}
-                    <div className="p-4 space-y-4">
-                        {/* Visual Description */}
-                        <div>
-                            <label className="text-[10px] font-bold text-gray-500 uppercase mb-1.5 block flex justify-between">
-                                <span>Mô tả hình ảnh / Hành động (Prompt cho AI)</span>
-                                <span className="text-cyan-500 cursor-help" title="AI sẽ vẽ dựa trên mô tả này">?</span>
-                            </label>
-                            <textarea 
-                                className="w-full bg-black/30 border border-white/10 rounded-lg p-3 text-sm text-white focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition resize-none h-24 leading-relaxed"
-                                value={p.description}
-                                onChange={(e) => handlePanelDescChange(pIdx, e.target.value)}
-                                placeholder="Mô tả bối cảnh, nhân vật, góc máy..."
-                            />
-                        </div>
-
-                        {/* Dialogues */}
-                        <div>
-                            <div className="flex justify-between items-end mb-2">
-                                <label className="text-[10px] font-bold text-gray-500 uppercase block">Lời thoại</label>
-                                <button onClick={() => addDialogue(pIdx)} className="text-[10px] text-cyan-400 hover:text-cyan-300 font-bold flex items-center gap-1 px-2 py-1 rounded hover:bg-cyan-500/10 transition">
-                                    <i className="ph-bold ph-plus"></i> Thêm thoại
-                                </button>
+                    <div className="mb-3">
+                        <textarea 
+                            className="w-full bg-black/30 border border-white/10 rounded-md p-2 text-xs text-white focus:border-pink-500 transition resize-none h-16"
+                            value={p.description}
+                            onChange={(e) => handlePanelDescChange(pIdx, e.target.value)}
+                            placeholder="Mô tả hành động, bối cảnh..."
+                        />
+                    </div>
+                    <div className="space-y-2">
+                        {p.dialogues && p.dialogues.map((d, dIdx) => (
+                            <div key={dIdx} className="flex gap-2 items-center group">
+                                <input 
+                                    type="text" 
+                                    className="w-1/4 bg-black/30 border border-white/10 rounded p-1.5 text-[10px] text-yellow-300 font-bold"
+                                    value={d.speaker}
+                                    onChange={(e) => handleDialogueChange(pIdx, dIdx, 'speaker', e.target.value)}
+                                />
+                                <input 
+                                    className="flex-grow bg-black/30 border border-white/10 rounded p-1.5 text-[10px] text-white"
+                                    value={d.text}
+                                    onChange={(e) => handleDialogueChange(pIdx, dIdx, 'text', e.target.value)}
+                                />
+                                <button onClick={() => removeDialogue(pIdx, dIdx)} className="text-gray-600 hover:text-red-500"><i className="ph-fill ph-trash"></i></button>
                             </div>
-                            
-                            <div className="space-y-2">
-                                {p.dialogues && p.dialogues.map((d, dIdx) => (
-                                    <div key={dIdx} className="flex gap-2 items-start group">
-                                        <div className="w-1/3">
-                                            <input 
-                                                type="text" 
-                                                className="w-full bg-black/30 border border-white/10 rounded p-2 text-xs text-yellow-300 font-bold placeholder-gray-600 focus:border-yellow-500 transition"
-                                                placeholder="Nhân vật"
-                                                value={d.speaker}
-                                                onChange={(e) => handleDialogueChange(pIdx, dIdx, 'speaker', e.target.value)}
-                                            />
-                                        </div>
-                                        <div className="flex-grow relative">
-                                            <textarea 
-                                                className="w-full bg-black/30 border border-white/10 rounded p-2 text-xs text-white placeholder-gray-600 focus:border-white/50 transition resize-none overflow-hidden min-h-[34px]"
-                                                rows={1}
-                                                placeholder="Nội dung thoại..."
-                                                value={d.text}
-                                                onChange={(e) => {
-                                                    handleDialogueChange(pIdx, dIdx, 'text', e.target.value);
-                                                    // Auto-grow height
-                                                    e.target.style.height = 'auto';
-                                                    e.target.style.height = e.target.scrollHeight + 'px';
-                                                }}
-                                                style={{ height: 'auto' }}
-                                            />
-                                            <button 
-                                                onClick={() => removeDialogue(pIdx, dIdx)}
-                                                className="absolute top-1/2 -right-8 -translate-y-1/2 text-gray-600 hover:text-red-500 p-2 opacity-0 group-hover:opacity-100 transition"
-                                                title="Xóa thoại"
-                                            >
-                                                <i className="ph-fill ph-trash"></i>
-                                            </button>
-                                        </div>
-                                    </div>
-                                ))}
-                                {(!p.dialogues || p.dialogues.length === 0) && (
-                                    <div className="text-xs text-gray-600 italic pl-2 py-1 border-l-2 border-gray-700">Không có lời thoại (Panel câm)</div>
-                                )}
-                            </div>
-                        </div>
+                        ))}
+                        <button onClick={() => addDialogue(pIdx)} className="text-[10px] text-cyan-400 hover:text-cyan-300 font-bold">+ Thêm thoại</button>
                     </div>
                 </div>
             ))}
@@ -505,7 +422,6 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
     const { user, session, showToast, updateUserDiamonds, supabase } = useAuth();
     const { t } = useTranslation();
     
-    // STEP CONTROL
     const [currentStep, setCurrentStep] = useState(1);
 
     // DATA STATES
@@ -526,25 +442,15 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
     const [visualEffect, setVisualEffect] = useState(VISUAL_EFFECTS[0].value);
     const [coverOption, setCoverOption] = useState(COVER_OPTIONS[0].value);
 
-    // PROCESSING STATES
     const [isGeneratingScript, setIsGeneratingScript] = useState(false);
-    const [activePageIndex, setActivePageIndex] = useState(0);
     const [expandingPageId, setExpandingPageId] = useState<string | null>(null);
     const [renderingPageId, setRenderingPageId] = useState<string | null>(null);
     const [isPremiseModalOpen, setIsPremiseModalOpen] = useState(false);
-
-    // QUEUE STATE FOR SEQUENTIAL AUTO-EXPANSION
     const [expansionQueue, setExpansionQueue] = useState<number[]>([]);
-
-    // --- STEP 1: SETUP & CASTING ---
+    const [isBatchRendering, setIsBatchRendering] = useState(false);
 
     const handleAddCharacter = () => {
-        const newChar: ComicCharacter = {
-            id: crypto.randomUUID(),
-            name: `Nhân vật ${characters.length + 1}`,
-            description: '',
-            is_analyzing: false
-        };
+        const newChar: ComicCharacter = { id: crypto.randomUUID(), name: `Nhân vật ${characters.length + 1}`, description: '', is_analyzing: false };
         setCharacters([...characters, newChar]);
     };
 
@@ -555,39 +461,25 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
     const handleCharacterImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, id: string) => {
         const file = e.target.files?.[0];
         if (!file) return;
-
         try {
-            // 1. Update UI preview immediately
             const { dataUrl } = await resizeImage(file, 512);
             setCharacters(prev => prev.map(c => c.id === id ? { ...c, image_url: dataUrl, image_file: file, is_analyzing: true } : c));
-
-            // 2. Analyze Character (Gemini Vision)
             const response = await fetch('/.netlify/functions/comic-analyze-character', {
                 method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${session?.access_token}`
-                },
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
                 body: JSON.stringify({ image: dataUrl })
             });
-            
             const data = await response.json();
             if (!response.ok) throw new Error(data.error || 'Analysis failed');
-
             setCharacters(prev => prev.map(c => c.id === id ? { ...c, description: data.description, is_analyzing: false } : c));
             showToast(t('creator.aiTool.singlePhoto.superFaceLockProcessed') || 'Phân tích thành công!', 'success');
-
         } catch (error: any) {
             showToast(error.message, 'error');
             setCharacters(prev => prev.map(c => c.id === id ? { ...c, is_analyzing: false } : c));
         }
     };
 
-    const handleApplyPremise = (p: string) => {
-        setPremise(p);
-    };
-
-    // --- STEP 2: SCRIPT GENERATION (OUTLINE) ---
+    const handleApplyPremise = (p: string) => setPremise(p);
 
     const handleGenerateScript = async () => {
         if (!premise.trim()) return showToast('Vui lòng nhập ý tưởng cốt truyện.', 'error');
@@ -598,54 +490,26 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
         try {
             const response = await fetch('/.netlify/functions/comic-generate-script', {
                 method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${session?.access_token}`
-                },
-                body: JSON.stringify({
-                    premise,
-                    genre,
-                    artStyle,
-                    pageCount,
-                    characters: characters.map(c => ({ name: c.name, description: c.description })),
-                    language,
-                    coverPage: coverOption
-                })
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+                body: JSON.stringify({ premise, genre, artStyle, pageCount, characters: characters.map(c => ({ name: c.name, description: c.description })), language, coverPage: coverOption })
             });
-
-            let data;
-            try {
-                data = await response.json();
-            } catch (e) {
-                throw new Error("Lỗi kết nối server (Timeout hoặc sai định dạng JSON).");
-            }
-
+            const data = await response.json();
             if (!response.ok) throw new Error(data.error || 'Failed to generate script');
 
-            // SAFE GUARD: Ensure outline is an array
-            if (!data || !data.outline || !Array.isArray(data.outline)) {
-                console.error("Invalid AI Response:", data);
-                throw new Error("AI trả về định dạng không hợp lệ. Vui lòng thử lại.");
-            }
-
-            // Initialize panels from outline
             const newPages: ComicPanel[] = data.outline.map((outlineItem: any) => ({
                 id: crypto.randomUUID(),
                 panel_number: outlineItem.panel_number || 1,
-                visual_description: "", // Empty initially
-                plot_summary: outlineItem.plot_summary || "Đang tải...", // Store summary for lazy expansion
+                visual_description: "",
+                plot_summary: outlineItem.plot_summary || "Đang tải...",
                 dialogue: [],
                 status: 'draft'
             }));
 
             setComicPages(newPages);
             updateUserDiamonds(data.newDiamondCount);
-            setCurrentStep(2); // Move to Step 2
+            setCurrentStep(2);
             showToast('Đã tạo khung kịch bản! Hệ thống sẽ tự động phân tích chi tiết từng trang.', 'success');
-
-            // TRIGGER AUTO EXPANSION QUEUE FOR ALL PAGES
-            const queue = Array.from({ length: newPages.length }, (_, i) => i);
-            setExpansionQueue(queue);
+            setExpansionQueue(Array.from({ length: newPages.length }, (_, i) => i));
 
         } catch (error: any) {
             showToast(error.message, 'error');
@@ -654,96 +518,39 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
         }
     };
 
-    // --- STEP 2.5: LAZY EXPANSION (DETAIL) ---
-
     const handleExpandPage = async (pageIndex: number) => {
         const page = comicPages[pageIndex];
         if (!page) return;
-
         setExpandingPageId(page.id);
         try {
             const response = await fetch('/.netlify/functions/comic-expand-panel', {
                 method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${session?.access_token}`
-                },
-                body: JSON.stringify({
-                    plot_summary: page.plot_summary || '',
-                    characters: characters.map(c => ({ name: c.name, description: c.description })),
-                    genre,
-                    style: artStyle,
-                    language
-                })
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+                body: JSON.stringify({ plot_summary: page.plot_summary || '', characters: characters.map(c => ({ name: c.name, description: c.description })), genre, style: artStyle, language })
             });
-
-            let data;
-            try {
-                data = await response.json();
-            } catch (e) {
-                throw new Error("Lỗi kết nối server (Timeout hoặc sai định dạng).");
-            }
-
+            const data = await response.json();
             if (!response.ok) throw new Error(data.error || 'Failed to expand page');
-
-            // --- CRITICAL FIX: FUNCTIONAL STATE UPDATE ---
-            // Using prev state ensures we don't overwrite changes from other async operations (like queue)
             setComicPages(prev => {
                 const next = [...prev];
-                if (next[pageIndex]) {
-                    next[pageIndex] = {
-                        ...next[pageIndex],
-                        visual_description: JSON.stringify(data.script_data) // Store full JSON here
-                    };
-                }
+                if (next[pageIndex]) next[pageIndex] = { ...next[pageIndex], visual_description: JSON.stringify(data.script_data) };
                 return next;
             });
-            
-            // Only show toast if user clicked manually (queue is empty)
-            if (expansionQueue.length === 0) {
-                showToast(`Đã phân tích chi tiết trang ${pageIndex + 1}`, 'success');
-            }
-
         } catch (error: any) {
-            // If manual click, show error. If auto queue, log it but don't break the app flow
-            if (expansionQueue.length === 0) {
-                 showToast(error.message, 'error');
-            } else {
-                console.error("Auto-expand failed for page " + pageIndex, error);
-            }
+            if (expansionQueue.length === 0) showToast(error.message, 'error');
         } finally {
             setExpandingPageId(null);
         }
     };
     
-    // --- AUTO-PROCESS QUEUE EFFECT ---
     useEffect(() => {
         if (expansionQueue.length === 0 || expandingPageId) return;
-
         const processNext = async () => {
             const nextIndex = expansionQueue[0];
-            
-            // Safety check: index exists
-            if (!comicPages[nextIndex]) {
-                setExpansionQueue(prev => prev.slice(1));
-                return;
-            }
-            
-            // Optional: Auto-focus visual
-            setActivePageIndex(nextIndex);
-
-            // Trigger expansion
-            await handleExpandPage(nextIndex);
-            
-            // Remove from queue to process next
+            if (comicPages[nextIndex]) await handleExpandPage(nextIndex);
             setExpansionQueue(prev => prev.slice(1));
         };
-        
         processNext();
-
     }, [expansionQueue, expandingPageId]);
-
-    // --- STEP 3: RENDERING ---
 
     const handleRenderPage = async (index: number) => {
         const page = comicPages[index];
@@ -751,20 +558,14 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
         if (user && user.diamonds < RENDER_COST) return showToast(`Cần ${RENDER_COST} kim cương.`, 'error');
 
         setRenderingPageId(page.id);
-        
         try {
-            // 1. Call Panel Init (Synchronous)
             const response = await fetch('/.netlify/functions/comic-render-panel', {
                 method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${session?.access_token}`
-                },
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
                 body: JSON.stringify({
                     panel: page,
-                    // Include premise to ensure context consistency across pages
-                    premise: premise, 
-                    characters: characters.map(c => ({ name: c.name, image_url: c.image_url })), // Send base64 for reference
+                    premise: premise,
+                    characters: characters.map(c => ({ name: c.name, image_url: c.image_url })),
                     storyTitle: comicTitle,
                     style: artStyle,
                     aspectRatio,
@@ -775,36 +576,19 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                     bubbleFont
                 })
             });
-
             const data = await response.json();
             if (!response.ok) throw new Error(data.error);
 
-            const jobId = data.jobId;
-
-            // 2. Trigger Background Worker (Fire and Forget or Async wait)
-            fetch('/.netlify/functions/comic-render-background', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ jobId })
-            }).catch(err => console.error("Background trigger failed", err));
-
-            // 3. Update UI & Start Polling
+            fetch('/.netlify/functions/comic-render-background', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jobId: data.jobId }) });
             updateUserDiamonds(data.newDiamondCount);
             
-            // Mark as rendering locally
             setComicPages(prev => {
                 const next = [...prev];
-                if (next[index]) {
-                    next[index] = { ...next[index], is_rendering: true, status: 'rendering' };
-                }
+                if (next[index]) next[index] = { ...next[index], is_rendering: true, status: 'rendering' };
                 return next;
             });
-            
-            showToast('Đã gửi yêu cầu vẽ. AI đang xử lý ngầm (có thể mất vài phút)...', 'success');
-
-            // Start polling for this specific job
-            startPolling(jobId, index);
-
+            showToast('Đã gửi yêu cầu vẽ...', 'success');
+            startPolling(data.jobId, index);
         } catch (error: any) {
             showToast(error.message, 'error');
             setRenderingPageId(null);
@@ -813,27 +597,15 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
 
     const startPolling = (jobId: string, pageIndex: number) => {
         const interval = setInterval(async () => {
-            if (!supabase) {
-                clearInterval(interval);
-                return;
-            }
-            
-            // Check if image is generated or if row deleted (failed)
-            const { data, error } = await supabase
-                .from('generated_images')
-                .select('image_url')
-                .eq('id', jobId)
-                .single();
+            if (!supabase) { clearInterval(interval); return; }
+            const { data, error } = await supabase.from('generated_images').select('image_url').eq('id', jobId).single();
             
             if (error) {
-                // If row is gone, it means it failed/refunded (based on worker logic)
                 clearInterval(interval);
                 setRenderingPageId(null);
                 setComicPages(prev => {
                     const next = [...prev];
-                    if(next[pageIndex]) {
-                         next[pageIndex] = { ...next[pageIndex], is_rendering: false, status: 'draft' };
-                    }
+                    if(next[pageIndex]) next[pageIndex] = { ...next[pageIndex], is_rendering: false, status: 'draft' };
                     return next;
                 });
                 showToast(`Vẽ trang ${pageIndex + 1} thất bại. Đã hoàn tiền.`, 'error');
@@ -844,125 +616,100 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                 clearInterval(interval);
                 setComicPages(prev => {
                     const next = [...prev];
-                    if (next[pageIndex]) {
-                        next[pageIndex] = { 
-                            ...next[pageIndex],
-                            image_url: data.image_url,
-                            is_rendering: false,
-                            status: 'completed'
-                        };
-                    }
+                    if (next[pageIndex]) next[pageIndex] = { ...next[pageIndex], image_url: data.image_url, is_rendering: false, status: 'completed' };
                     return next;
                 });
                 setRenderingPageId(null);
                 showToast(`Trang ${pageIndex + 1} đã hoàn tất!`, 'success');
+                
+                // Handle Batch Logic
+                if (isBatchRendering) {
+                    // Find next page that needs rendering
+                    const nextPageIdx = comicPages.findIndex((p, idx) => idx > pageIndex && p.status !== 'completed' && p.status !== 'rendering');
+                    if (nextPageIdx !== -1) {
+                        // Small delay to be safe
+                        setTimeout(() => handleRenderPage(nextPageIdx), 1000);
+                    } else {
+                        setIsBatchRendering(false);
+                        showToast('Đã hoàn thành toàn bộ truyện!', 'success');
+                    }
+                }
             }
-        }, 5000); // Poll every 5 seconds
+        }, 5000);
     };
 
-    // --- EXPORT ---
+    const handleRenderAll = () => {
+        if (isBatchRendering) return;
+        // Find first non-completed page
+        const firstPageToRender = comicPages.findIndex(p => p.status !== 'completed' && p.status !== 'rendering');
+        if (firstPageToRender === -1) return showToast("Tất cả các trang đã được vẽ!", "success");
+        
+        if (user && user.diamonds < RENDER_COST) return showToast(`Cần ${RENDER_COST} kim cương để bắt đầu.`, 'error');
+        
+        setIsBatchRendering(true);
+        handleRenderPage(firstPageToRender);
+    };
+
     const handleExport = async () => {
         const completedPages = comicPages.filter(p => p.image_url);
         if (completedPages.length === 0) return showToast('Chưa có trang nào hoàn tất.', 'error');
-
         const zip = new JSZip();
         const pdf = new jsPDF();
-        
         for (let i = 0; i < completedPages.length; i++) {
             const page = completedPages[i];
             const imgData = await fetch(page.image_url!).then(res => res.blob());
-            
-            // Add to ZIP
             zip.file(`page_${i + 1}.png`, imgData);
-
-            // Add to PDF
             if (i > 0) pdf.addPage();
             const imgProps = pdf.getImageProperties(page.image_url!);
             const pdfWidth = pdf.internal.pageSize.getWidth();
             const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
             pdf.addImage(page.image_url!, 'PNG', 0, 0, pdfWidth, pdfHeight);
         }
-
-        // Download ZIP
         const zipBlob = await zip.generateAsync({ type: 'blob' });
         const zipLink = document.createElement('a');
         zipLink.href = URL.createObjectURL(zipBlob);
         zipLink.download = `${comicTitle || 'comic'}_images.zip`;
         zipLink.click();
-
-        // Download PDF
         pdf.save(`${comicTitle || 'comic'}.pdf`);
     };
 
     return (
         <div className="flex flex-col gap-6 max-w-6xl mx-auto animate-fade-in">
-            {/* Modal */}
-            <PremiseSelectionModal 
-                isOpen={isPremiseModalOpen}
-                onClose={() => setIsPremiseModalOpen(false)}
-                onSelect={handleApplyPremise}
-                genre={genre}
-            />
-
-            {/* Header Step Indicator */}
+            <PremiseSelectionModal isOpen={isPremiseModalOpen} onClose={() => setIsPremiseModalOpen(false)} onSelect={handleApplyPremise} genre={genre} />
             <div className="flex justify-center">
                 <StepIndicator currentStep={currentStep} />
             </div>
 
-            {/* --- STEP 1: SETUP --- */}
             {currentStep === 1 && (
                 <>
-                    {/* Feature Highlights */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-2">
-                        {/* Story Memory */}
                         <div className="bg-[#12121A]/80 border border-emerald-500/20 p-4 rounded-xl flex items-center gap-4 shadow-lg shadow-emerald-500/5 relative overflow-hidden group interactive-3d">
-                            <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
                             <div className="w-12 h-12 rounded-full bg-emerald-500/20 flex items-center justify-center flex-shrink-0 border border-emerald-500/30 shadow-inner">
                                 <i className="ph-fill ph-lightning text-2xl text-emerald-400 animate-pulse"></i>
                             </div>
                             <div>
-                                <h4 className="font-bold text-emerald-100 flex items-center gap-2 text-sm">
-                                    Story Memory & Plot Logic
-                                    <span className="bg-red-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded uppercase shadow-sm">HOT</span>
-                                </h4>
-                                <p className="text-xs text-emerald-200/60 mt-1 leading-relaxed font-medium">
-                                    AI ghi nhớ diễn biến cốt truyện để phát triển tâm lý nhân vật sâu sắc hơn.
-                                </p>
+                                <h4 className="font-bold text-emerald-100 flex items-center gap-2 text-sm">Story Memory & Plot Logic <span className="bg-red-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded uppercase shadow-sm">HOT</span></h4>
+                                <p className="text-xs text-emerald-200/60 mt-1 leading-relaxed font-medium">AI ghi nhớ diễn biến cốt truyện để phát triển tâm lý nhân vật sâu sắc hơn.</p>
                             </div>
                         </div>
-
-                        {/* Character Consistency */}
                         <div className="bg-[#12121A]/80 border border-orange-500/20 p-4 rounded-xl flex items-center gap-4 shadow-lg shadow-orange-500/5 relative overflow-hidden group interactive-3d">
-                            <div className="absolute inset-0 bg-gradient-to-r from-orange-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
                             <div className="w-12 h-12 rounded-full bg-orange-500/20 flex items-center justify-center flex-shrink-0 border border-orange-500/30 shadow-inner">
                                 <i className="ph-fill ph-fire text-2xl text-orange-400 animate-pulse"></i>
                             </div>
                             <div>
-                                <h4 className="font-bold text-orange-100 flex items-center gap-2 text-sm">
-                                    Character Consistency
-                                    <span className="bg-orange-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded uppercase shadow-sm">ESSENTIAL</span>
-                                </h4>
-                                <p className="text-xs text-orange-200/60 mt-1 leading-relaxed font-medium">
-                                    Hệ thống hỗ trợ tối đa 12 nhân vật tham chiếu. Độ đồng bộ 95-100%.
-                                </p>
+                                <h4 className="font-bold text-orange-100 flex items-center gap-2 text-sm">Character Consistency <span className="bg-orange-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded uppercase shadow-sm">ESSENTIAL</span></h4>
+                                <p className="text-xs text-orange-200/60 mt-1 leading-relaxed font-medium">Hệ thống hỗ trợ tối đa 12 nhân vật tham chiếu. Độ đồng bộ 95-100%.</p>
                             </div>
                         </div>
                     </div>
 
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        {/* Left: Config */}
                         <div className="lg:col-span-1 space-y-4">
                             <SettingsBlock title="Cấu Hình Truyện" instructionKey="comic-studio" onInstructionClick={onInstructionClick}>
                                 <div className="space-y-4">
                                     <div>
                                         <label className="text-xs font-bold text-skin-muted uppercase mb-1.5 block">Tên Truyện</label>
-                                        <input 
-                                            type="text" 
-                                            className="auth-input" 
-                                            placeholder="VD: Trùm Trường Sợ Gián"
-                                            value={comicTitle}
-                                            onChange={(e) => setComicTitle(e.target.value)}
-                                        />
+                                        <input type="text" className="auth-input" placeholder="VD: Trùm Trường Sợ Gián" value={comicTitle} onChange={(e) => setComicTitle(e.target.value)} />
                                     </div>
                                     <div className="grid grid-cols-2 gap-3">
                                         <ComicSelect label="Thể loại" value={genre} onChange={setGenre} options={GENRES} />
@@ -973,8 +720,6 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                                         <ComicSelect label="Màu sắc" value={colorFormat} onChange={setColorFormat} options={COLOR_FORMATS} />
                                         <ComicSelect label="Tỷ lệ" value={aspectRatio} onChange={setAspectRatio} options={ASPECT_RATIOS} />
                                     </div>
-                                    
-                                    {/* NEW CONFIG OPTIONS - Using state variables */}
                                     <div className="grid grid-cols-2 gap-3">
                                         <ComicSelect label="Số trang" value={pageNumbering} onChange={setPageNumbering} options={PAGE_NUMBERING} />
                                         <ComicSelect label="Font thoại" value={bubbleFont} onChange={setBubbleFont} options={BUBBLE_FONTS} previewFont={true} />
@@ -983,64 +728,36 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                                         <ComicSelect label="Hiệu ứng" value={visualEffect} onChange={setVisualEffect} options={VISUAL_EFFECTS} />
                                         <ComicSelect label="Trang bìa" value={coverOption} onChange={setCoverOption} options={COVER_OPTIONS} />
                                     </div>
-
                                     <div>
                                         <label className="text-xs font-bold text-skin-muted uppercase mb-1.5 block">Số lượng trang NỘI DUNG</label>
                                         <div className="flex items-center gap-4 bg-[#1E1B25] p-2 rounded-lg border border-white/10">
-                                            <input 
-                                                type="range" min="1" max="10" 
-                                                value={pageCount} onChange={(e) => setPageCount(Number(e.target.value))} 
-                                                className="flex-grow accent-pink-500 h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer"
-                                            />
+                                            <input type="range" min="1" max="10" value={pageCount} onChange={(e) => setPageCount(Number(e.target.value))} className="flex-grow accent-pink-500 h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer" />
                                             <span className="font-bold text-white w-8 text-center">{pageCount}</span>
                                         </div>
                                         <p className="text-[10px] text-gray-500 mt-1 italic">*Hệ thống sẽ tự cộng thêm 1 Trang Bìa.</p>
                                     </div>
                                 </div>
                             </SettingsBlock>
-                            
                             <SettingsBlock title="Ý Tưởng Cốt Truyện">
                                 <div className="relative">
-                                    <textarea 
-                                        className="auth-input min-h-[150px] text-sm leading-relaxed resize-none"
-                                        placeholder="Nhập tóm tắt câu chuyện của bạn..."
-                                        value={premise}
-                                        onChange={(e) => setPremise(e.target.value)}
-                                    />
+                                    <textarea className="auth-input min-h-[150px] text-sm leading-relaxed resize-none" placeholder="Nhập tóm tắt câu chuyện của bạn..." value={premise} onChange={(e) => setPremise(e.target.value)} />
                                     <div className="absolute bottom-2 right-2">
-                                        <button 
-                                            onClick={() => setIsPremiseModalOpen(true)}
-                                            className="text-xs bg-purple-500/20 text-purple-300 px-2 py-1 rounded hover:bg-purple-500/40 transition flex items-center gap-1"
-                                        >
+                                        <button onClick={() => setIsPremiseModalOpen(true)} className="text-xs bg-purple-500/20 text-purple-300 px-2 py-1 rounded hover:bg-purple-500/40 transition flex items-center gap-1">
                                             <i className="ph-fill ph-lightbulb"></i> Gợi ý kịch bản
                                         </button>
                                     </div>
                                 </div>
                             </SettingsBlock>
                         </div>
-
-                        {/* Right: Characters */}
                         <div className="lg:col-span-2">
                             <div className="bg-[#12121A]/80 border border-white/10 rounded-2xl p-6 h-full">
                                 <div className="flex justify-between items-center mb-4">
-                                    <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                                        <i className="ph-fill ph-users-three text-pink-500"></i> Nhân Vật ({characters.length}/{MAX_CHARACTERS})
-                                    </h3>
+                                    <h3 className="text-xl font-bold text-white flex items-center gap-2"><i className="ph-fill ph-users-three text-pink-500"></i> Nhân Vật ({characters.length}/{MAX_CHARACTERS})</h3>
                                     <div className="flex items-center gap-2">
-                                        {/* MOVED HELP BUTTON HERE AS REQUESTED PREVIOUSLY */}
-                                        <button onClick={onInstructionClick} className="flex items-center gap-1 text-xs text-skin-accent hover:opacity-80 transition-all px-2 py-1 rounded-md bg-skin-accent/10 border border-skin-border-accent hover:bg-skin-accent/20 shadow-accent hover:shadow-accent-lg">
-                                            <i className="ph-fill ph-book-open"></i> Hướng dẫn
-                                        </button>
-                                        <button 
-                                            onClick={handleAddCharacter}
-                                            disabled={characters.length >= MAX_CHARACTERS}
-                                            className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm font-bold transition flex items-center gap-2 disabled:opacity-50"
-                                        >
-                                            <i className="ph-bold ph-plus"></i> Thêm
-                                        </button>
+                                        <button onClick={onInstructionClick} className="flex items-center gap-1 text-xs text-skin-accent hover:opacity-80 transition-all px-2 py-1 rounded-md bg-skin-accent/10 border border-skin-border-accent hover:bg-skin-accent/20 shadow-accent hover:shadow-accent-lg"><i className="ph-fill ph-book-open"></i> Hướng dẫn</button>
+                                        <button onClick={handleAddCharacter} disabled={characters.length >= MAX_CHARACTERS} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm font-bold transition flex items-center gap-2 disabled:opacity-50"><i className="ph-bold ph-plus"></i> Thêm</button>
                                     </div>
                                 </div>
-
                                 {characters.length === 0 ? (
                                     <div className="flex flex-col items-center justify-center h-64 border-2 border-dashed border-white/10 rounded-xl text-skin-muted">
                                         <i className="ph-fill ph-user-plus text-4xl mb-2 opacity-50"></i>
@@ -1050,52 +767,13 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[600px] overflow-y-auto custom-scrollbar pr-2">
                                         {characters.map((char, idx) => (
                                             <div key={char.id} className="bg-[#1E1B25] p-4 rounded-xl border border-white/5 relative group">
-                                                <button 
-                                                    onClick={() => handleRemoveCharacter(char.id)}
-                                                    className="absolute top-2 right-2 text-gray-500 hover:text-red-500 opacity-0 group-hover:opacity-100 transition p-1"
-                                                >
-                                                    <i className="ph-fill ph-x"></i>
-                                                </button>
-                                                
+                                                <button onClick={() => handleRemoveCharacter(char.id)} className="absolute top-2 right-2 text-gray-500 hover:text-red-500 opacity-0 group-hover:opacity-100 transition p-1"><i className="ph-fill ph-x"></i></button>
                                                 <div className="flex gap-4">
-                                                    {/* Image Upload - Adjusted sizing */}
-                                                    <div className="w-20 h-20 flex-shrink-0">
-                                                        <ImageUploader
-                                                            onUpload={(e) => handleCharacterImageUpload(e, char.id)}
-                                                            image={char.image_url ? { url: char.image_url } : null}
-                                                            onRemove={() => {
-                                                                setCharacters(prev => prev.map(c => c.id === char.id ? { ...c, image_url: undefined, image_file: undefined } : c));
-                                                            }}
-                                                            text=""
-                                                            className="w-full h-full min-h-0" // Force size to container
-                                                        />
-                                                    </div>
-
-                                                    {/* Info */}
+                                                    <div className="w-20 h-20 flex-shrink-0"><ImageUploader onUpload={(e) => handleCharacterImageUpload(e, char.id)} image={char.image_url ? { url: char.image_url } : null} onRemove={() => { setCharacters(prev => prev.map(c => c.id === char.id ? { ...c, image_url: undefined, image_file: undefined } : c)); }} text="" className="w-full h-full min-h-0" /></div>
                                                     <div className="flex-grow space-y-2">
-                                                        <div className="flex justify-between items-center">
-                                                            <span className="text-xs text-gray-500 font-bold uppercase">Nhân vật {idx + 1}</span>
-                                                        </div>
-                                                        <input 
-                                                            type="text" 
-                                                            className="w-full bg-transparent border-b border-white/10 focus:border-pink-500 text-sm font-bold text-white px-1 py-0.5 outline-none transition"
-                                                            value={char.name}
-                                                            onChange={(e) => setCharacters(prev => prev.map(c => c.id === char.id ? { ...c, name: e.target.value } : c))}
-                                                            placeholder="Tên nhân vật"
-                                                        />
-                                                        
-                                                        {char.is_analyzing ? (
-                                                            <div className="text-xs text-pink-400 flex items-center gap-1 animate-pulse">
-                                                                <i className="ph-fill ph-spinner animate-spin"></i> Đang phân tích...
-                                                            </div>
-                                                        ) : (
-                                                            <textarea 
-                                                                className="w-full bg-black/20 border border-white/10 rounded p-2 text-xs text-gray-300 h-16 resize-none focus:border-white/30 outline-none"
-                                                                placeholder="Mô tả ngoại hình..."
-                                                                value={char.description}
-                                                                onChange={(e) => setCharacters(prev => prev.map(c => c.id === char.id ? { ...c, description: e.target.value } : c))}
-                                                            />
-                                                        )}
+                                                        <div className="flex justify-between items-center"><span className="text-xs text-gray-500 font-bold uppercase">Nhân vật {idx + 1}</span></div>
+                                                        <input type="text" className="w-full bg-transparent border-b border-white/10 focus:border-pink-500 text-sm font-bold text-white px-1 py-0.5 outline-none transition" value={char.name} onChange={(e) => setCharacters(prev => prev.map(c => c.id === char.id ? { ...c, name: e.target.value } : c))} placeholder="Tên nhân vật" />
+                                                        {char.is_analyzing ? (<div className="text-xs text-pink-400 flex items-center gap-1 animate-pulse"><i className="ph-fill ph-spinner animate-spin"></i> Đang phân tích...</div>) : (<textarea className="w-full bg-black/20 border border-white/10 rounded p-2 text-xs text-gray-300 h-16 resize-none focus:border-white/30 outline-none" placeholder="Mô tả ngoại hình..." value={char.description} onChange={(e) => setCharacters(prev => prev.map(c => c.id === char.id ? { ...c, description: e.target.value } : c))} />)}
                                                     </div>
                                                 </div>
                                             </div>
@@ -1108,180 +786,124 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                 </>
             )}
 
-            {/* --- STEP 2 & 3: SCRIPT & RENDER --- */}
             {currentStep >= 2 && (
-                <div className="flex flex-col lg:flex-row gap-6 h-[calc(100vh-250px)]">
-                    {/* Left: Page List */}
-                    <div className="w-full lg:w-1/4 bg-[#12121A]/80 border border-white/10 rounded-2xl p-4 flex flex-col h-full">
-                        <h3 className="text-lg font-bold text-white mb-4 px-2">Danh sách trang ({comicPages.length})</h3>
-                        
-                        {/* Auto Expansion Indicator */}
-                        {expansionQueue.length > 0 && (
-                            <div className="mb-3 p-2 bg-blue-500/20 border border-blue-500/30 rounded-lg flex items-center gap-2 text-xs text-blue-300 animate-pulse">
-                                <div className="w-3 h-3 border-2 border-blue-300 border-t-transparent rounded-full animate-spin"></div>
-                                <span>Đang tự động phân tích ({comicPages.length - expansionQueue.length + 1}/{comicPages.length})...</span>
-                            </div>
-                        )}
-
-                        <div className="flex-grow overflow-y-auto custom-scrollbar space-y-2 pr-1">
-                            {comicPages.map((page, idx) => (
-                                <button
-                                    key={page.id}
-                                    onClick={() => setActivePageIndex(idx)}
-                                    className={`w-full text-left p-3 rounded-xl border transition-all relative group
-                                        ${activePageIndex === idx 
-                                            ? 'bg-pink-500/20 border-pink-500 text-white shadow-lg shadow-pink-500/10' 
-                                            : 'bg-white/5 border-transparent text-gray-400 hover:bg-white/10 hover:text-white'
-                                        }
-                                        ${expansionQueue.includes(idx) ? 'opacity-70' : ''}
-                                    `}
-                                >
-                                    <div className="flex justify-between items-center mb-1">
-                                        <span className="text-xs font-bold uppercase">
-                                            {idx === 0 ? '⭐ Trang Bìa' : `Trang ${idx} (Nội dung)`}
-                                        </span>
-                                        {page.status === 'completed' && <i className="ph-fill ph-check-circle text-green-400"></i>}
-                                        {page.status === 'rendering' && <i className="ph-fill ph-spinner animate-spin text-yellow-400"></i>}
-                                        
-                                        {/* Show loading for expansion */}
-                                        {expandingPageId === page.id ? (
-                                            <i className="ph-fill ph-dots-three text-blue-400 animate-bounce"></i>
-                                        ) : !page.visual_description ? (
-                                            <i className="ph-fill ph-circle-dashed text-gray-600 text-[10px]"></i>
-                                        ) : null}
-                                    </div>
-                                    <p className="text-[10px] opacity-70 line-clamp-2">
-                                        {page.plot_summary || 'Chưa có nội dung'}
-                                    </p>
-                                </button>
-                            ))}
+                <div className="w-full max-w-5xl mx-auto">
+                    {/* Main Action Bar */}
+                    <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6 bg-[#1E1B25] p-4 rounded-xl border border-white/10 shadow-xl">
+                        <div className="text-white">
+                            <h2 className="text-xl font-bold">{comicTitle || 'Truyện Tranh Của Tôi'}</h2>
+                            <p className="text-xs text-gray-400 mt-1">{comicPages.filter(p => p.status === 'completed').length} / {comicPages.length} trang hoàn tất</p>
                         </div>
-                        <div className="mt-4 pt-4 border-t border-white/10">
-                            <div className="flex justify-between text-xs text-gray-400 mb-2">
-                                <span>Ước tính chi phí:</span>
-                                <span className="text-white font-bold">{RENDER_COST} 💎 / trang</span>
-                            </div>
-                            <button onClick={handleExport} className="w-full py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm font-bold transition flex items-center justify-center gap-2">
-                                <i className="ph-fill ph-download-simple"></i> Xuất file (PDF/Zip)
+                        <div className="flex gap-3">
+                            <button 
+                                onClick={handleRenderAll}
+                                disabled={isBatchRendering}
+                                className={`px-6 py-3 bg-gradient-to-r from-pink-500 to-purple-600 text-white font-bold rounded-lg shadow-lg transition flex items-center gap-2 ${isBatchRendering ? 'opacity-50 cursor-not-allowed' : 'hover:shadow-pink-500/30 hover:-translate-y-1'}`}
+                            >
+                                {isBatchRendering ? (
+                                    <><i className="ph-fill ph-spinner animate-spin"></i> Đang vẽ tự động...</>
+                                ) : (
+                                    <><i className="ph-fill ph-paint-bucket"></i> Vẽ tất cả (Auto)</>
+                                )}
+                            </button>
+                            <button onClick={handleExport} className="px-4 py-3 bg-white/10 hover:bg-white/20 text-white font-bold rounded-lg transition flex items-center gap-2">
+                                <i className="ph-fill ph-download-simple"></i> Xuất bản (PDF)
                             </button>
                         </div>
                     </div>
 
-                    {/* Center: Script Editor & Preview */}
-                    <div className="w-full lg:w-3/4 bg-[#12121A]/80 border border-white/10 rounded-2xl p-6 h-full overflow-y-auto custom-scrollbar relative">
-                        <div className="flex justify-between items-center mb-6">
-                            <h2 className="text-2xl font-bold text-white">
-                                {activePageIndex === 0 ? 'Trang Bìa' : `Trang Nội Dung ${activePageIndex}`}
-                            </h2>
-                            <div className="flex gap-3">
-                                {currentStep === 2 && (
-                                    <button 
-                                        onClick={() => handleRenderPage(activePageIndex)}
-                                        disabled={!!renderingPageId || comicPages[activePageIndex]?.status === 'rendering' || !comicPages[activePageIndex]?.visual_description}
-                                        className="px-6 py-2 bg-gradient-to-r from-pink-500 to-purple-600 text-white font-bold rounded-full shadow-lg hover:shadow-pink-500/30 transition transform active:scale-95 disabled:opacity-50 flex items-center gap-2"
-                                    >
-                                        {comicPages[activePageIndex]?.status === 'rendering' ? (
-                                            <><i className="ph-fill ph-spinner animate-spin"></i> Đang vẽ...</>
-                                        ) : (
-                                            <><i className="ph-fill ph-paint-brush-broad"></i> Vẽ Trang Này (10💎)</>
-                                        )}
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* Editor Area */}
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                            {/* Script Column */}
-                            <div>
-                                <h4 className="text-sm font-bold text-gray-400 uppercase mb-3 flex items-center gap-2">
-                                    <i className="ph-fill ph-text-aa"></i> Kịch bản chi tiết
-                                </h4>
+                    {/* Unified Page List */}
+                    <div className="space-y-8">
+                        {comicPages.map((page, idx) => (
+                            <div key={page.id} className="bg-[#12121A]/90 border border-white/10 rounded-2xl p-6 relative overflow-hidden group">
+                                <div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-pink-500 to-purple-600"></div>
                                 
-                                {comicPages[activePageIndex] && (
-                                    <ProfessionalScriptEditor 
-                                        pageIndex={activePageIndex}
-                                        panel={comicPages[activePageIndex]} 
-                                        onUpdate={(jsonStr) => {
-                                            setComicPages(prev => {
-                                                const next = [...prev];
-                                                if (next[activePageIndex]) {
-                                                    next[activePageIndex] = {
-                                                        ...next[activePageIndex],
-                                                        visual_description: jsonStr
-                                                    };
-                                                }
-                                                return next;
-                                            });
-                                        }}
-                                        onExpand={() => handleExpandPage(activePageIndex)}
-                                        isExpanding={expandingPageId === comicPages[activePageIndex].id}
-                                    />
-                                )}
-                            </div>
-
-                            {/* Preview / Result Column */}
-                            <div className="bg-black/40 rounded-xl border border-white/10 flex items-center justify-center min-h-[500px] relative overflow-hidden group">
-                                {comicPages[activePageIndex]?.image_url && comicPages[activePageIndex]?.image_url !== 'PENDING' ? (
-                                    <>
-                                        <img 
-                                            src={comicPages[activePageIndex].image_url} 
-                                            alt="Result" 
-                                            className="w-full h-full object-contain"
-                                        />
-                                        <div className="absolute bottom-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <a 
-                                                href={comicPages[activePageIndex].image_url} 
-                                                download={`page_${activePageIndex + 1}.png`}
-                                                className="p-2 bg-black/60 text-white rounded-full hover:bg-pink-500 transition"
-                                                target="_blank"
-                                                rel="noreferrer"
-                                            >
-                                                <i className="ph-fill ph-download-simple text-xl"></i>
-                                            </a>
-                                        </div>
-                                    </>
-                                ) : (
-                                    <div className="text-center text-gray-500 p-8">
-                                        {comicPages[activePageIndex]?.status === 'rendering' ? (
-                                            <div className="flex flex-col items-center gap-4">
-                                                <div className="w-12 h-12 border-4 border-pink-500 border-t-transparent rounded-full animate-spin"></div>
-                                                <p className="text-pink-400 font-bold animate-pulse">AI đang vẽ tác phẩm của bạn...</p>
-                                                <p className="text-xs">Quá trình này có thể mất 1-2 phút.</p>
-                                            </div>
-                                        ) : (
-                                            <>
-                                                <i className="ph-fill ph-image text-6xl mb-4 opacity-30"></i>
-                                                <p>Kết quả hình ảnh sẽ hiển thị tại đây</p>
-                                            </>
-                                        )}
+                                <div className="flex justify-between items-center mb-6 pl-4">
+                                    <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                                        <span className="bg-white/10 px-2 py-1 rounded text-sm">#{idx === 0 ? 'COVER' : idx}</span>
+                                        {idx === 0 ? 'Trang Bìa' : `Trang Nội Dung`}
+                                    </h3>
+                                    <div className="flex items-center gap-3">
+                                        {page.status === 'rendering' && <span className="text-xs text-yellow-400 animate-pulse flex items-center gap-1"><i className="ph-fill ph-spinner animate-spin"></i> Đang vẽ...</span>}
+                                        {page.status === 'completed' && <span className="text-xs text-green-400 flex items-center gap-1"><i className="ph-fill ph-check-circle"></i> Hoàn tất</span>}
+                                        
+                                        <button 
+                                            onClick={() => handleRenderPage(idx)} 
+                                            disabled={!!renderingPageId || page.status === 'rendering' || !page.visual_description}
+                                            className="text-xs bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg font-bold transition disabled:opacity-50 disabled:bg-gray-700"
+                                        >
+                                            {page.status === 'completed' ? 'Vẽ lại (10💎)' : 'Vẽ Trang Này (10💎)'}
+                                        </button>
                                     </div>
-                                )}
+                                </div>
+
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pl-4">
+                                    {/* Script Editor */}
+                                    <div className="flex flex-col h-full">
+                                        <h4 className="text-xs font-bold text-gray-500 uppercase mb-3 flex items-center gap-2">
+                                            <i className="ph-fill ph-text-aa"></i> Kịch bản & Lời thoại
+                                        </h4>
+                                        <ProfessionalScriptEditor 
+                                            pageIndex={idx}
+                                            panel={page} 
+                                            onUpdate={(jsonStr) => {
+                                                setComicPages(prev => {
+                                                    const next = [...prev];
+                                                    if (next[idx]) next[idx] = { ...next[idx], visual_description: jsonStr };
+                                                    return next;
+                                                });
+                                            }}
+                                            onExpand={() => handleExpandPage(idx)}
+                                            isExpanding={expandingPageId === page.id}
+                                        />
+                                    </div>
+
+                                    {/* Image Preview */}
+                                    <div>
+                                        <h4 className="text-xs font-bold text-gray-500 uppercase mb-3 flex items-center gap-2">
+                                            <i className="ph-fill ph-image"></i> Minh họa
+                                        </h4>
+                                        <div className="bg-black/40 rounded-xl border border-white/10 aspect-[3/4] flex items-center justify-center relative overflow-hidden group-hover:border-white/30 transition-colors">
+                                            {page.image_url && page.image_url !== 'PENDING' ? (
+                                                <>
+                                                    <img src={page.image_url} alt={`Page ${idx}`} className="w-full h-full object-contain" />
+                                                    <a href={page.image_url} download={`page_${idx}.png`} target="_blank" rel="noreferrer" className="absolute bottom-4 right-4 p-2 bg-black/60 text-white rounded-full hover:bg-pink-500 transition opacity-0 group-hover:opacity-100">
+                                                        <i className="ph-fill ph-download-simple text-xl"></i>
+                                                    </a>
+                                                </>
+                                            ) : (
+                                                <div className="text-center text-gray-600 p-8">
+                                                    {page.status === 'rendering' ? (
+                                                        <div className="flex flex-col items-center gap-2">
+                                                            <div className="w-8 h-8 border-2 border-pink-500 border-t-transparent rounded-full animate-spin"></div>
+                                                            <p className="text-xs">AI đang xử lý...</p>
+                                                        </div>
+                                                    ) : (
+                                                        <>
+                                                            <i className="ph-fill ph-image-square text-4xl mb-2 opacity-30"></i>
+                                                            <p className="text-xs">Chưa có hình ảnh</p>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                        </div>
+                        ))}
                     </div>
                 </div>
             )}
 
-            {/* FOOTER ACTION (Step 1 Only) */}
             {currentStep === 1 && (
                 <div className="flex justify-center mt-8 pb-12">
                     <div className="bg-[#1E1B25] p-4 rounded-2xl border border-white/10 flex items-center gap-6 shadow-2xl">
                         <div className="text-right">
                             <p className="text-xs text-gray-400">Tổng chi phí dự kiến</p>
-                            {/* Calculation update: Total pages = pageCount + 1 (Cover) */}
                             <p className="text-xl font-black text-pink-400">2 💎 <span className="text-sm font-normal text-white">+ {(pageCount + 1) * RENDER_COST} 💎 (Vẽ {pageCount+1} trang)</span></p>
                         </div>
-                        <button 
-                            onClick={handleGenerateScript}
-                            disabled={isGeneratingScript}
-                            className="themed-button-primary px-10 py-4 text-lg font-bold rounded-xl shadow-lg hover:shadow-pink-500/40 transition transform hover:-translate-y-1 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-3"
-                        >
-                            {isGeneratingScript ? (
-                                <><div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> Đang tạo kịch bản...</>
-                            ) : (
-                                <>Tạo Kịch Bản <i className="ph-fill ph-arrow-right"></i></>
-                            )}
+                        <button onClick={handleGenerateScript} disabled={isGeneratingScript} className="themed-button-primary px-10 py-4 text-lg font-bold rounded-xl shadow-lg hover:shadow-pink-500/40 transition transform hover:-translate-y-1 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-3">
+                            {isGeneratingScript ? (<><div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> Đang tạo kịch bản...</>) : (<>Tạo Kịch Bản <i className="ph-fill ph-arrow-right"></i></>)}
                         </button>
                     </div>
                 </div>

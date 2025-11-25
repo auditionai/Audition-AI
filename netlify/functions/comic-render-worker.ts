@@ -34,6 +34,7 @@ const failJob = async (jobId: string, userId: string, reason: string) => {
 };
 
 const handler: Handler = async (event: HandlerEvent) => {
+    // Background functions respond with 202 immediately, but we still return 200 for good measure in logic
     if (event.httpMethod !== 'POST') return { statusCode: 200 };
 
     const { jobId } = JSON.parse(event.body || '{}');
@@ -67,15 +68,9 @@ const handler: Handler = async (event: HandlerEvent) => {
         let dialogueListText = "";
 
         try {
-            // The 'visual_description' field contains the FULL JSON structure of the page (layout, panels, dialogues)
-            // We need to parse this to extract the visual descriptions for the AI.
             scriptData = JSON.parse(panel.visual_description);
-            
-            // Build a very explicit visual prompt from the parsed JSON
-            // IGNORE generic plot summary, focus on specific visual descriptions from the panels.
             visualDirectives = `**PAGE LAYOUT INSTRUCTION:** ${scriptData.layout_note || "Standard Comic Grid"}\n\n`;
             
-            // Handle potential structure variation (panels array or single object)
             const panelsList = Array.isArray(scriptData.panels) ? scriptData.panels : (scriptData.panels ? [scriptData.panels] : []);
 
             if (panelsList.length > 0) {
@@ -83,10 +78,8 @@ const handler: Handler = async (event: HandlerEvent) => {
                     const pid = p.panel_id || 1;
                     visualDirectives += `[PANEL ${pid} ACTION]: ${p.description}\n`;
                     
-                    // Extract Dialogue for this panel to ensure text placement
                     if (p.dialogues && Array.isArray(p.dialogues)) {
                         p.dialogues.forEach((d: any) => {
-                            // Ensure the text is sanitized
                             if (d.text && d.text.trim() !== "..." && d.text.trim() !== "") {
                                 dialogueListText += `Panel ${pid} bubble: "${d.text}" (Speaker: ${d.speaker})\n`;
                             }
@@ -94,11 +87,9 @@ const handler: Handler = async (event: HandlerEvent) => {
                     }
                 });
             } else {
-                // Fallback if JSON valid but empty panels
                 visualDirectives = "Create a comic page based on the story context.";
             }
         } catch (e) {
-            // Fallback for legacy or raw text format (if user manually edited it to be non-JSON)
             visualDirectives = panel.visual_description;
             dialogueListText = "No dialogue specified.";
         }
@@ -110,37 +101,34 @@ const handler: Handler = async (event: HandlerEvent) => {
             ? `**FORMAT: VERTICAL SCROLLING STRIP (WEBTOON)**.`
             : `**FORMAT: COMIC PAGE**.`;
 
-        let characterContext = "No specific characters.";
-        if (characters && Array.isArray(characters)) {
-            characterContext = characters.map((c: any) => c.name).join(", ");
-        }
-
-        // --- THE MASTER PROMPT (DIRECTOR MODE) ---
+        let colorInstruction = `- Palette: ${colorFormat}`;
+        
+        // --- CRITICAL: CONSISTENCY ENFORCEMENT ---
         const systemPrompt = `
             You are a legendary Comic Book Artist and Director (Gemini 3 Pro Vision).
             
-            **CORE DIRECTIVE: CONSISTENCY IS KING.**
-            You are drawing ONE page of a larger story. It is VITAL that characters and settings match the Global Story Context.
+            **CORE DIRECTIVE: MAXIMUM VISUAL CONSISTENCY.**
+            This is one page of a continuous story. The characters and background MUST remain consistent with the provided Reference Images and Global Context.
             
-            **1. GLOBAL STORY CONTEXT (THE TRUTH):**
+            **1. GLOBAL CONTEXT (THE SETTING):**
             "${premise}"
-            *Use this context to determine the setting (background), atmosphere, and character relationships. Unless the Page Script explicitly says otherwise, the setting must match this premise.*
+            *You MUST use this context to determine the static background environment. Do NOT change the setting randomly between panels unless the script says "Change Scene".*
             
             **2. ARTISTIC DIRECTION:**
-            - Style: ${style} (High quality, 8k resolution, detailed lineart).
+            - Style: ${style} (High quality, 8k, consistent lineart).
             - Palette: ${colorFormat}
-            ${visualEffect !== 'none' ? `- Special Effect: ${visualEffect}` : ''}
+            ${visualEffect !== 'none' ? `- Effect: ${visualEffect}` : ''}
             - ${layoutInstruction}
             
-            **3. CHARACTER CONSISTENCY:**
-            - Characters present: ${characterContext}.
-            - **CRITICAL:** You have been provided with reference images for these characters. You MUST adhere strictly to their hair color, hairstyle, facial features, and OUTFIT from the reference images. Do not hallucinate new clothes unless the script demands it.
+            **3. CHARACTER CONSISTENCY (STRICT):**
+            - **OUTFIT RULE:** The characters MUST wear the EXACT SAME OUTFIT as shown in their Reference Images. Do not add jackets, change colors, or remove accessories unless explicitly told to "change clothes".
+            - **FACE RULE:** Maintain facial structure identity across all panels and angles.
             
-            **4. CURRENT PAGE SCRIPT (YOUR TASK):**
+            **4. CURRENT PAGE SCRIPT:**
             ${visualDirectives}
             
-            **5. TEXT RENDERING (MANDATORY):**
-            Add speech bubbles containing the following text. Ensure text is legible, clear, and correctly placed in the corresponding panels.
+            **5. TEXT RENDERING:**
+            Add speech bubbles. Text MUST be legible Vietnamese.
             ${dialogueListText}
         `;
 
@@ -151,8 +139,7 @@ const handler: Handler = async (event: HandlerEvent) => {
                 if (char.image_url) {
                     const imgData = processDataUrl(char.image_url);
                     if (imgData) {
-                        // Explicitly label the reference image for the model
-                        parts.push({ text: `REFERENCE IMAGE FOR CHARACTER: ${char.name} (Use this exact look)` });
+                        parts.push({ text: `[REFERENCE] CHARACTER: ${char.name} (LOCK THIS OUTFIT & FACE)` });
                         parts.push({ inlineData: { data: imgData.base64, mimeType: imgData.mimeType } });
                     }
                 }
@@ -200,7 +187,6 @@ const handler: Handler = async (event: HandlerEvent) => {
         await Promise.all([
             supabaseAdmin.from('generated_images').update({ 
                 image_url: publicUrl,
-                // Keep the JSON prompt structure in DB for future reference
                 prompt: panel.visual_description 
             }).eq('id', jobId),
             supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id })

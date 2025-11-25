@@ -367,83 +367,146 @@ const ProfessionalScriptEditor: React.FC<{
 
     if (!pageData) {
         return (
-            <div className="flex flex-col items-center justify-center p-8 bg-white/5 rounded-lg border border-white/10 min-h-[200px]">
-                <p className="text-sm text-gray-400 mb-6 italic text-center max-w-md">
-                    "{panel.plot_summary || 'Trang này chưa có nội dung tóm tắt.'}"
-                </p>
+            <div className="flex flex-col items-center justify-center p-12 bg-black/20 rounded-xl border-2 border-dashed border-white/10 min-h-[250px] group hover:border-white/20 transition-colors">
+                <div className="mb-6 p-4 bg-white/5 rounded-lg max-w-2xl text-center">
+                    <p className="text-lg font-bold text-white mb-2">Tóm tắt trang:</p>
+                    <p className="text-base text-gray-300 italic leading-relaxed">
+                        "{panel.plot_summary || 'Trang này chưa có nội dung tóm tắt.'}"
+                    </p>
+                </div>
                 <button 
                     onClick={onExpand}
                     disabled={isExpanding}
-                    className={`themed-button-primary px-6 py-2 rounded-full font-bold flex items-center gap-2 text-sm shadow-lg ${panel.visual_description ? 'bg-red-500' : ''}`}
+                    className={`
+                        px-8 py-3 rounded-full font-bold text-base shadow-lg transition-all duration-300
+                        ${isExpanding 
+                            ? 'bg-white/10 text-gray-300 cursor-wait' 
+                            : 'bg-gradient-to-r from-pink-500 to-purple-600 text-white hover:shadow-pink-500/30 hover:-translate-y-1'
+                        }
+                    `}
                 >
-                    {isExpanding ? <i className="ph-fill ph-spinner animate-spin"></i> : <i className="ph-fill ph-magic-wand"></i>}
-                    {isExpanding ? 'Đang phân tích...' : 'Phân tích chi tiết (Miễn phí)'}
+                    {isExpanding ? (
+                        <span className="flex items-center gap-2"><i className="ph-fill ph-spinner animate-spin"></i> AI đang viết kịch bản...</span>
+                    ) : (
+                        <span className="flex items-center gap-2"><i className="ph-fill ph-magic-wand"></i> Phân tích chi tiết (Miễn phí)</span>
+                    )}
                 </button>
             </div>
         );
     }
 
-    // UPDATED: CSS to match Dark Theme
+    // UPDATED: Professional Screenplay-like Design in Dark Mode
     return (
-        <div className="space-y-6 animate-fade-in p-4 bg-[#1E1B25] text-gray-200 rounded-lg shadow-xl border border-white/10 font-serif">
-            <div className="border-b-2 border-white/10 pb-4 mb-4">
-                <h4 className="text-center font-bold uppercase tracking-widest text-gray-500 text-xs">Kịch Bản Phân Cảnh</h4>
-                <div className="mt-2 text-sm text-gray-300">
-                    <strong>Tóm tắt cốt truyện:</strong> {panel.plot_summary}
+        <div className="animate-fade-in bg-[#1E1B25] text-gray-200 rounded-xl shadow-2xl border border-white/10 overflow-hidden font-sans">
+            
+            {/* Header: Page Info */}
+            <div className="bg-[#181820] p-6 border-b border-white/10">
+                <div className="flex justify-between items-start mb-4">
+                    <div className="space-y-1">
+                        <h4 className="text-xs font-black tracking-[0.2em] text-pink-500 uppercase">KỊCH BẢN PHÂN CẢNH</h4>
+                        <h2 className="text-xl font-bold text-white">Trang {panel.panel_number}</h2>
+                    </div>
+                    <div className="text-right">
+                        <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Layout</span>
+                        <div className="text-sm font-mono text-cyan-400">{pageData.layout_note}</div>
+                    </div>
                 </div>
-                <div className="mt-1 text-xs text-gray-500">
-                    <strong>Layout:</strong> {pageData.layout_note}
+                <div className="bg-white/5 p-3 rounded-lg border-l-4 border-pink-500">
+                    <p className="text-xs font-bold text-gray-400 uppercase mb-1">Tóm tắt cốt truyện</p>
+                    <p className="text-sm text-gray-200 italic leading-relaxed">{panel.plot_summary}</p>
                 </div>
             </div>
 
-            {pageData.panels.map((p, pIdx) => (
-                <div key={pIdx} className="mb-6 pl-4 border-l-4 border-white/20">
-                    <div className="flex items-baseline gap-2 mb-2">
-                        <span className="font-black text-lg text-white uppercase">Panel {p.panel_id}</span>
-                    </div>
-                    
-                    <div className="mb-4">
-                        <label className="text-[10px] font-bold text-gray-500 uppercase block mb-1">Mô tả hình ảnh (Visual Description)</label>
-                        <textarea 
-                            className="w-full bg-black/30 border border-white/10 rounded p-3 text-sm text-gray-300 focus:border-pink-500 focus:ring-0 resize-none h-24 leading-relaxed font-sans"
-                            value={p.description}
-                            onChange={(e) => handlePanelDescChange(pIdx, e.target.value)}
-                        />
-                    </div>
+            {/* Editor Body */}
+            <div className="p-6 space-y-8">
+                {pageData.panels.map((p, pIdx) => (
+                    <div key={pIdx} className="relative pl-6 md:pl-0">
+                        {/* Vertical Line for Mobile */}
+                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-white/10 md:hidden rounded-full"></div>
 
-                    <div className="space-y-2">
-                        <label className="text-[10px] font-bold text-gray-500 uppercase block mb-1">Thoại (Dialogue)</label>
-                        {p.dialogues && p.dialogues.map((d, dIdx) => (
-                            <div key={dIdx} className="flex gap-3 items-start group">
-                                <div className="w-1/4 pt-1">
-                                    <input 
-                                        type="text" 
-                                        className="w-full bg-transparent border-none p-0 text-xs font-bold text-gray-400 uppercase text-right focus:ring-0"
-                                        value={d.speaker}
-                                        placeholder="NHÂN VẬT"
-                                        onChange={(e) => handleDialogueChange(pIdx, dIdx, 'speaker', e.target.value)}
-                                    />
-                                </div>
-                                <div className="flex-grow">
-                                    <textarea 
-                                        className="w-full bg-black/30 border border-white/10 rounded p-2 text-sm text-white focus:border-pink-500 focus:ring-0 resize-none h-auto min-h-[40px]"
-                                        value={d.text}
-                                        placeholder="Nội dung thoại..."
-                                        rows={2}
-                                        onChange={(e) => handleDialogueChange(pIdx, dIdx, 'text', e.target.value)}
-                                    />
-                                </div>
-                                <button onClick={() => removeDialogue(pIdx, dIdx)} className="text-gray-500 hover:text-red-500 p-1 pt-2 opacity-0 group-hover:opacity-100 transition-opacity"><i className="ph-fill ph-x"></i></button>
+                        {/* Panel Header */}
+                        <div className="flex items-center gap-4 mb-3">
+                            <div className="bg-white/10 text-white font-black text-sm px-3 py-1 rounded uppercase tracking-wider shadow-sm border border-white/5">
+                                Panel {p.panel_id}
                             </div>
-                        ))}
-                        <div className="flex justify-center mt-2">
-                            <button onClick={() => addDialogue(pIdx)} className="text-[10px] text-gray-500 hover:text-gray-300 font-bold border border-dashed border-white/10 rounded px-3 py-1 hover:bg-white/5 transition">
-                                + Thêm thoại
-                            </button>
+                            <div className="h-px flex-grow bg-white/10"></div>
+                        </div>
+                        
+                        {/* Content Grid */}
+                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                            {/* Left: Visual Description */}
+                            <div className="lg:col-span-7 space-y-2">
+                                <label className="flex items-center gap-2 text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                                    <i className="ph-fill ph-image"></i> Mô tả hình ảnh (Visual)
+                                </label>
+                                <div className="relative group">
+                                    <textarea 
+                                        className="w-full bg-[#12121A] border border-white/10 rounded-lg p-4 text-sm text-gray-200 focus:border-pink-500 focus:ring-1 focus:ring-pink-500/50 transition-all shadow-inner min-h-[120px] leading-relaxed resize-y font-sans"
+                                        value={p.description}
+                                        onChange={(e) => handlePanelDescChange(pIdx, e.target.value)}
+                                        placeholder="Mô tả chi tiết khung cảnh..."
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Right: Dialogue */}
+                            <div className="lg:col-span-5 space-y-2">
+                                <label className="flex items-center gap-2 text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                                    <i className="ph-fill ph-chats-circle"></i> Thoại (Dialogue)
+                                </label>
+                                <div className="bg-[#12121A] rounded-lg border border-white/10 p-2 space-y-2 shadow-inner min-h-[120px]">
+                                    {p.dialogues && p.dialogues.length > 0 ? (
+                                        p.dialogues.map((d, dIdx) => (
+                                            <div key={dIdx} className="flex gap-2 group/row items-start animate-fade-in-up">
+                                                <div className="w-[80px] flex-shrink-0">
+                                                    <input 
+                                                        type="text" 
+                                                        className="w-full bg-white/5 border-none rounded px-2 py-1.5 text-[11px] font-bold text-cyan-300 uppercase text-center focus:ring-1 focus:ring-cyan-500 transition-all placeholder-gray-600"
+                                                        value={d.speaker}
+                                                        placeholder="TÊN"
+                                                        onChange={(e) => handleDialogueChange(pIdx, dIdx, 'speaker', e.target.value)}
+                                                    />
+                                                </div>
+                                                <div className="flex-grow relative">
+                                                    <textarea 
+                                                        className="w-full bg-transparent border-b border-white/10 focus:border-white p-1.5 text-sm text-white focus:ring-0 resize-none overflow-hidden min-h-[34px] leading-snug transition-colors placeholder-gray-600"
+                                                        value={d.text}
+                                                        placeholder="Lời thoại..."
+                                                        rows={1}
+                                                        onInput={(e) => {
+                                                            e.currentTarget.style.height = 'auto';
+                                                            e.currentTarget.style.height = e.currentTarget.scrollHeight + 'px';
+                                                        }}
+                                                        onChange={(e) => handleDialogueChange(pIdx, dIdx, 'text', e.target.value)}
+                                                    />
+                                                </div>
+                                                <button 
+                                                    onClick={() => removeDialogue(pIdx, dIdx)} 
+                                                    className="text-gray-600 hover:text-red-500 p-1 opacity-0 group-hover/row:opacity-100 transition-all"
+                                                    title="Xóa dòng thoại"
+                                                >
+                                                    <i className="ph-fill ph-x-circle text-sm"></i>
+                                                </button>
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <div className="h-full flex flex-col items-center justify-center text-gray-600 text-xs italic py-4">
+                                            Không có thoại
+                                        </div>
+                                    )}
+                                    
+                                    <button 
+                                        onClick={() => addDialogue(pIdx)} 
+                                        className="w-full py-1.5 mt-2 border border-dashed border-white/10 rounded text-[10px] font-bold text-gray-500 hover:text-white hover:bg-white/5 hover:border-white/30 transition-all flex items-center justify-center gap-1"
+                                    >
+                                        <i className="ph-bold ph-plus"></i> Thêm thoại
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                </div>
-            ))}
+                ))}
+            </div>
         </div>
     );
 };

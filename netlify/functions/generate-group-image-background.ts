@@ -10,7 +10,6 @@ import Jimp from 'jimp';
 const XP_PER_CHARACTER = 5;
 
 // FIX: Refund logic using Direct Database Update instead of RPC
-// This ensures reliability even if the RPC function is missing or broken.
 const failJob = async (jobId: string, reason: string, userId: string, cost: number) => {
     console.error(`[WORKER] Failing job ${jobId}. Reason: ${reason}. Refunding: ${cost}`);
     try {
@@ -39,11 +38,14 @@ const failJob = async (jobId: string, reason: string, userId: string, cost: numb
 };
 
 // Helper: Enforce Aspect Ratio by COVERING (Filling) the canvas with Grey
+// FAIL-SAFE: If this crashes, it returns NULL, allowing the main process to continue with raw image.
 const enforceAspectRatioCanvas = async (dataUrl: string, targetAspectRatio: string): Promise<{ data: string; mimeType: string } | null> => {
      if (!dataUrl) return null;
      try {
         const [header, base64] = dataUrl.split(',');
         const imageBuffer = Buffer.from(base64, 'base64');
+        
+        // Optimize: Use Jimp in a way that consumes less memory if possible, or just wrap in try/catch
         const image = await (Jimp as any).read(imageBuffer);
 
         const [aspectW, aspectH] = targetAspectRatio.split(':').map(Number);
@@ -60,10 +62,10 @@ const enforceAspectRatioCanvas = async (dataUrl: string, targetAspectRatio: stri
             canvasW = Math.round(MAX_DIM * targetRatio);
         }
 
-        // GREY CANVAS (#808080) - Quan trọng: Phải là màu xám
+        // GREY CANVAS (#808080)
         const newCanvas = new (Jimp as any)(canvasW, canvasH, '#808080');
         
-        // USE COVER to fill the canvas completely (Crop excess) if it's a background
+        // USE COVER to fill the canvas completely
         image.cover(canvasW, canvasH);
         
         newCanvas.composite(image, 0, 0);
@@ -74,8 +76,8 @@ const enforceAspectRatioCanvas = async (dataUrl: string, targetAspectRatio: stri
         return { data: newBase64.split(',')[1], mimeType: mime };
 
      } catch (e) {
-         console.error("Error enforcing aspect ratio canvas:", e);
-         return null;
+         console.warn("[WORKER] Aspect Ratio Enforcement Failed (Falling back to raw image):", e);
+         return null; // Fail gracefully
      }
 };
 
@@ -88,8 +90,12 @@ const processDataUrl = (dataUrl: string | null) => {
 };
 
 const updateJobProgress = async (jobId: string, currentPromptData: any, progressMessage: string) => {
-    const newProgressData = { ...currentPromptData, progress: progressMessage };
-    await supabaseAdmin.from('generated_images').update({ prompt: JSON.stringify(newProgressData) }).eq('id', jobId);
+    try {
+        const newProgressData = { ...currentPromptData, progress: progressMessage };
+        await supabaseAdmin.from('generated_images').update({ prompt: JSON.stringify(newProgressData) }).eq('id', jobId);
+    } catch (e) {
+        console.warn("Failed to update progress:", e);
+    }
 };
 
 
@@ -152,14 +158,12 @@ const handler: Handler = async (event: HandlerEvent) => {
         if (referenceImage) {
             layoutImageUrl = referenceImage;
             
-            // If using reference image, we respect its layout but re-generate characters to match prompt vibe
+            // Generate Characters
             for (let i = 0; i < numCharacters; i++) {
                 await updateJobProgress(jobId, jobPromptData, `Đang xử lý nhân vật ${i + 1}/${numCharacters}...`);
                 
                 const char = characters[i];
                 const isMale = char.gender === 'male';
-                
-                // DYNAMIC POSE PROMPT WITH VIBE
                 const vibe = isMale ? 'Cool, confident, masculine, strong' : 'Muse-like, graceful, girly ("bánh bèo"), sexy';
                 
                 const charPrompt = [
@@ -178,7 +182,7 @@ const handler: Handler = async (event: HandlerEvent) => {
 
                 const parts = [
                     { text: charPrompt },
-                    { inlineData: { data: refData!.data, mimeType: refData!.mimeType } }, // Ref helps with scale/position
+                    { inlineData: { data: refData!.data, mimeType: refData!.mimeType } },
                     { inlineData: { data: poseData.data, mimeType: poseData.mimeType } },
                 ];
                 if (faceData) parts.push({ inlineData: { data: faceData.data, mimeType: faceData.mimeType } });
@@ -192,13 +196,13 @@ const handler: Handler = async (event: HandlerEvent) => {
             }
 
         } else {
-            // Generate Background from Prompt First (Strict Ratio)
+            // Generate Background
             await updateJobProgress(jobId, jobPromptData, 'Đang tạo bối cảnh từ prompt...');
             const bgPrompt = `Create a high-quality, cinematic background scene: "${prompt}". Style: "${style}". NO people. Ratio: ${aspectRatio}.`;
             
             const bgConfig: any = { 
                 responseModalities: [Modality.IMAGE],
-                imageConfig: { aspectRatio: aspectRatio } // Enforce ratio on background creation
+                imageConfig: { aspectRatio: aspectRatio } 
             };
             
             if (isPro) {
@@ -214,7 +218,7 @@ const handler: Handler = async (event: HandlerEvent) => {
 
             await new Promise(resolve => setTimeout(resolve, 1500));
 
-            // Generate characters with context
+            // Generate characters
             for (let i = 0; i < numCharacters; i++) {
                 await updateJobProgress(jobId, jobPromptData, `Đang xử lý nhân vật ${i + 1}/${numCharacters}...`);
                 const char = characters[i];
@@ -244,10 +248,18 @@ const handler: Handler = async (event: HandlerEvent) => {
         // --- STEP 2: COMPOSE ON PROCESSED CANVAS ---
         await updateJobProgress(jobId, jobPromptData, 'Đang tổng hợp và hòa trộn cảm xúc...');
         
-        // This creates the RIGID GREY CANVAS structure (CROP/COVER if needed)
-        const processedLayout = await enforceAspectRatioCanvas(layoutImageUrl, aspectRatio);
+        // TRY ENFORCE RATIO (SAFE MODE)
+        // If this fails, we fall back to the AI-generated layout image directly
+        let layoutData = processDataUrl(layoutImageUrl);
+        const enforcedLayout = await enforceAspectRatioCanvas(layoutImageUrl, aspectRatio);
         
-        if (!processedLayout) throw new Error("Lỗi xử lý khung hình (Canvas).");
+        if (enforcedLayout) {
+            layoutData = enforcedLayout; // Use the enforced one if success
+        } else {
+            console.log("[WORKER] Using original layout image (Canvas processing failed or skipped).");
+        }
+        
+        if (!layoutData) throw new Error("Lỗi xử lý layout.");
 
         // --- STEP 3: FINAL BLEND (THE MAGIC STEP) ---
         const compositePrompt = [
@@ -270,7 +282,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         const finalParts = [
             { text: compositePrompt },
             { text: "[CANVAS_WITH_CHARACTER_AND_GREY_BG]" },
-            { inlineData: { data: processedLayout.data, mimeType: processedLayout.mimeType } },
+            { inlineData: { data: layoutData.data, mimeType: layoutData.mimeType } },
             ...generatedCharacters.map((charData, idx) => ({ 
                 inlineData: charData 
             }))

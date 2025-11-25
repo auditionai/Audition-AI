@@ -2,7 +2,7 @@
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
 
-const COST = 10; // 10 Diamonds per panel
+const BASE_COST = 10; // Base cost (1K)
 
 const handler: Handler = async (event: HandlerEvent) => {
     if (event.httpMethod !== 'POST') {
@@ -19,26 +19,31 @@ const handler: Handler = async (event: HandlerEvent) => {
     try {
         // 1. Parse Payload
         const payload = JSON.parse(event.body || '{}');
-        const { panel } = payload;
+        const { panel, imageQuality = '1K' } = payload;
         
         if (!panel || !panel.visual_description) {
             return { statusCode: 400, body: JSON.stringify({ error: 'Missing panel data.' }) };
         }
 
+        // Calculate Cost
+        let totalCost = BASE_COST;
+        if (imageQuality === '2K') totalCost += 10;
+        if (imageQuality === '4K') totalCost += 15;
+
         // 2. Check Balance
         const { data: userData } = await supabaseAdmin.from('users').select('diamonds').eq('id', user.id).single();
-        if (!userData || userData.diamonds < COST) {
-            return { statusCode: 402, body: JSON.stringify({ error: `Không đủ kim cương. Cần ${COST} Kim Cương.` }) };
+        if (!userData || userData.diamonds < totalCost) {
+            return { statusCode: 402, body: JSON.stringify({ error: `Không đủ kim cương. Cần ${totalCost} Kim Cương cho chất lượng ${imageQuality}.` }) };
         }
 
         // 3. Create Job Record (PENDING state)
         const jobId = crypto.randomUUID();
-        const newDiamondCount = userData.diamonds - COST;
+        const newDiamondCount = userData.diamonds - totalCost;
 
         // We store the render configuration in the 'prompt' column as a JSON string
         // This acts as a temporary storage for the worker to read
         const jobConfig = {
-            payload: payload,
+            payload: payload, // Passes entire payload including globalContext, quality, etc.
             status: 'initializing'
         };
 
@@ -46,7 +51,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         const { error: insertError } = await supabaseAdmin.from('generated_images').insert({
             id: jobId,
             user_id: user.id,
-            model_used: 'Comic Studio (Pro)',
+            model_used: `Comic Studio (Pro ${imageQuality})`,
             prompt: JSON.stringify(jobConfig), // Store config here
             is_public: false,
             image_url: 'PENDING', // Mark as pending
@@ -58,9 +63,9 @@ const handler: Handler = async (event: HandlerEvent) => {
             supabaseAdmin.from('users').update({ diamonds: newDiamondCount }).eq('id', user.id),
             supabaseAdmin.from('diamond_transactions_log').insert({
                 user_id: user.id,
-                amount: -COST,
+                amount: -totalCost,
                 transaction_type: 'COMIC_RENDER',
-                description: `Vẽ khung tranh #${panel.panel_number} (Đang xử lý)`
+                description: `Vẽ khung tranh #${panel.panel_number} (${imageQuality})`
             })
         ]);
 

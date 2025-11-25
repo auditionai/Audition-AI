@@ -16,7 +16,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     if (authError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'Invalid token.' }) };
 
     try {
-        const { premise, genre, artStyle, pageCount, characters, language, coverPage } = JSON.parse(event.body || '{}');
+        const { premise, genre, artStyle, pageCount, characters, language, coverPage, dialogueDensity } = JSON.parse(event.body || '{}');
         
         if (!premise) return { statusCode: 400, body: JSON.stringify({ error: 'Missing premise.' }) };
 
@@ -58,6 +58,11 @@ const handler: Handler = async (event: HandlerEvent) => {
             // Fallback if no cover selected (rare based on UI)
              coverInstruction = `Create exactly ${pageCount} story pages.`;
         }
+        
+        // Logic Dialogue Density
+        let densityInstruction = "Dialogue Density: Normal balanced conversation.";
+        if (dialogueDensity === 'low') densityInstruction = "Dialogue Density: LOW. Focus on visual storytelling, minimal text.";
+        if (dialogueDensity === 'high') densityInstruction = "Dialogue Density: HIGH. Detailed conversations and narration.";
 
         // Prompt optimized for OUTLINING
         const prompt = `
@@ -69,6 +74,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             **Total Output Length:** ${totalPages} PAGES.
             **Characters:** ${characterNames}
             **Language:** ${targetLanguage} (Strictly).
+            ${densityInstruction}
             
             ${coverInstruction}
             

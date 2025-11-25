@@ -5,7 +5,7 @@ import { supabaseAdmin } from './utils/supabaseClient';
 import { Buffer } from 'buffer';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 
-const COST = 10; 
+const BASE_COST = 10; 
 
 const processDataUrl = (dataUrl: string | null) => {
     if (!dataUrl) return null;
@@ -15,15 +15,15 @@ const processDataUrl = (dataUrl: string | null) => {
     return { base64, mimeType };
 };
 
-const failJob = async (jobId: string, userId: string, reason: string) => {
+const failJob = async (jobId: string, userId: string, reason: string, totalCost: number) => {
     console.error(`[COMIC WORKER] Failing job ${jobId}: ${reason}`);
     try {
         await Promise.all([
             supabaseAdmin.from('generated_images').delete().eq('id', jobId),
-            supabaseAdmin.rpc('increment_user_diamonds', { user_id_param: userId, diamond_amount: COST }),
+            supabaseAdmin.rpc('increment_user_diamonds', { user_id_param: userId, diamond_amount: totalCost }),
             supabaseAdmin.from('diamond_transactions_log').insert({
                 user_id: userId,
-                amount: COST,
+                amount: totalCost,
                 transaction_type: 'REFUND',
                 description: `Hoàn tiền vẽ truyện thất bại (Lỗi: ${reason.substring(0, 50)})`,
             })
@@ -41,6 +41,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     if (!jobId) return { statusCode: 400, body: "Missing Job ID" };
 
     let userId = "";
+    let totalCost = BASE_COST;
 
     try {
         const { data: jobData, error: fetchError } = await supabaseAdmin
@@ -53,7 +54,11 @@ const handler: Handler = async (event: HandlerEvent) => {
         
         userId = jobData.user_id;
         const jobConfig = JSON.parse(jobData.prompt);
-        const { panel, characters, storyTitle, style, aspectRatio, colorFormat, visualEffect, isCover, premise } = jobConfig.payload;
+        const { panel, characters, storyTitle, style, aspectRatio, colorFormat, visualEffect, isCover, premise, globalContext, imageQuality = '1K' } = jobConfig.payload;
+        
+        // Recalculate cost for refund handling
+        if (imageQuality === '2K') totalCost += 10;
+        if (imageQuality === '4K') totalCost += 15;
 
         const { data: apiKeyData } = await supabaseAdmin.from('api_keys').select('key_value, id').eq('status', 'active').limit(1).single();
         if (!apiKeyData) throw new Error('Hết tài nguyên AI.');
@@ -103,6 +108,9 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         let colorInstruction = `- Palette: ${colorFormat}`;
         
+        // Global Context Injection
+        const contextString = globalContext ? `\n**FULL STORY CONTEXT (REFERENCE ONLY):**\n${globalContext.substring(0, 2000)}\n` : '';
+
         // --- CRITICAL: CONSISTENCY ENFORCEMENT ---
         const systemPrompt = `
             You are a legendary Comic Book Artist and Director (Gemini 3 Pro Vision).
@@ -112,10 +120,11 @@ const handler: Handler = async (event: HandlerEvent) => {
             
             **1. GLOBAL CONTEXT (THE SETTING):**
             "${premise}"
+            ${contextString}
             *You MUST use this context to determine the static background environment. Do NOT change the setting randomly between panels unless the script says "Change Scene".*
             
             **2. ARTISTIC DIRECTION:**
-            - Style: ${style} (High quality, 8k, consistent lineart).
+            - Style: ${style} (High quality, ${imageQuality} resolution, consistent lineart).
             - Palette: ${colorFormat}
             ${visualEffect !== 'none' ? `- Effect: ${visualEffect}` : ''}
             - ${layoutInstruction}
@@ -147,7 +156,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         }
 
         // Use Gemini 3 Pro for rendering
-        console.log(`[WORKER] Calling Gemini 3 Pro for job ${jobId}...`);
+        console.log(`[WORKER] Calling Gemini 3 Pro for job ${jobId} (Quality: ${imageQuality})...`);
         const response = await ai.models.generateContent({
             model: 'gemini-3-pro-image-preview',
             contents: { parts },
@@ -155,7 +164,7 @@ const handler: Handler = async (event: HandlerEvent) => {
                 responseModalities: [Modality.IMAGE],
                 imageConfig: {
                     aspectRatio: aspectRatio || '3:4',
-                    imageSize: '2K' 
+                    imageSize: imageQuality // Dynamic Quality
                 }
             }
         });
@@ -187,6 +196,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         await Promise.all([
             supabaseAdmin.from('generated_images').update({ 
                 image_url: publicUrl,
+                // Keep the JSON prompt structure in DB for future reference
                 prompt: panel.visual_description 
             }).eq('id', jobId),
             supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id })
@@ -196,7 +206,7 @@ const handler: Handler = async (event: HandlerEvent) => {
 
     } catch (error: any) {
         if (userId) {
-            await failJob(jobId, userId, error.message);
+            await failJob(jobId, userId, error.message, totalCost);
         }
     }
 

@@ -5,16 +5,17 @@ import { supabaseAdmin } from './utils/supabaseClient';
 import { Buffer } from 'buffer';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import Jimp from 'jimp';
-import { addSmartWatermark } from './watermark-service'; // Import đã sửa
+import { addSmartWatermark } from './watermark-service';
 
 const COST_UPSCALE = 1;
 const COST_REMOVE_WATERMARK = 1; 
 const XP_PER_GENERATION = 10;
 
 /**
- * Pre-processes an image by placing it onto a new canvas of a target aspect ratio.
- * FIXED: Now uses a standard target dimension (1024px) to enforce the ratio,
- * instead of adapting to the input image size.
+ * CHIẾN THUẬT CANVAS XÁM (THE GREY CANVAS STRATEGY)
+ * Creates a fixed-size canvas of neutral grey (#808080) based on the target aspect ratio.
+ * The input image is centered (contain) within this canvas.
+ * This forces the AI to generate content within the specific boundaries.
  */
 const processImageForGemini = async (imageDataUrl: string | null, targetAspectRatio: string): Promise<string | null> => {
     if (!imageDataUrl) return null;
@@ -30,10 +31,10 @@ const processImageForGemini = async (imageDataUrl: string | null, targetAspectRa
         const [aspectW, aspectH] = targetAspectRatio.split(':').map(Number);
         const targetRatio = aspectW / aspectH;
 
-        // 2. Define Standard Canvas Size (Max 1024px on long side to optimize for Gemini)
-        // This ensures the AI output respects the requested ratio regardless of input image size.
-        let canvasW, canvasH;
+        // 2. Define Standard Canvas Size (Using 1024px base for Gemini optimization)
+        // Force rigid dimensions.
         const MAX_DIM = 1024;
+        let canvasW, canvasH;
 
         if (targetRatio > 1) {
             // Landscape
@@ -45,11 +46,11 @@ const processImageForGemini = async (imageDataUrl: string | null, targetAspectRa
             canvasW = Math.round(MAX_DIM * targetRatio);
         }
         
-        // 3. Create Black Canvas
-        const newCanvas = new (Jimp as any)(canvasW, canvasH, '#000000');
+        // 3. Create Neutral Grey Canvas (#808080)
+        // Using grey helps AI calculate lighting better than pure black
+        const newCanvas = new (Jimp as any)(canvasW, canvasH, '#808080');
         
-        // 4. Resize Input Image to FIT (Contain) inside the canvas
-        // We use contain so we don't crop the character
+        // 4. Resize Input Image to FIT (Contain)
         image.scaleToFit(canvasW, canvasH);
 
         // 5. Center the image
@@ -105,10 +106,9 @@ const handler: Handler = async (event: HandlerEvent) => {
         const isProModel = apiModel === 'gemini-3-pro-image-preview';
 
         if (isProModel) {
-             // Pricing: 1K = 10, 2K = 15, 4K = 20
              if (imageSize === '4K') baseCost = 20;
              else if (imageSize === '2K') baseCost = 15;
-             else baseCost = 10; // 1K Base
+             else baseCost = 10;
         }
         
         let totalCost = baseCost;
@@ -127,19 +127,28 @@ const handler: Handler = async (event: HandlerEvent) => {
         let finalImageBase64: string;
         let finalImageMimeType: string;
         
+        // --- PROMPT ENGINEERING: STRICT LAYOUT & STYLE ---
         let fullPrompt = prompt;
         
-        // Add explicit instruction to fill the canvas
-        fullPrompt += `\n\n(IMPORTANT LAYOUT INSTRUCTION: The provided image sets the canvas size and aspect ratio. The character is centered. You MUST fill the surrounding black empty space with the background described in the prompt. Do not crop the canvas. Maintain the aspect ratio of the input image exactly.)`;
+        // 1. Canvas & Layout Rule
+        fullPrompt += `\n\n**LAYOUT INSTRUCTION (MANDATORY):**\nThe input image provides a FIXED CANVAS size with a Grey background. You MUST generate the scene to fill this Grey space completely. \n- DO NOT crop the canvas.\n- DO NOT change the aspect ratio.\n- The character is centered; build the background AROUND them.`;
 
+        // 2. Style Rule: Hyper-realistic 3D Render (Audition Style)
+        fullPrompt += `\n\n**STYLE INSTRUCTION (MANDATORY):**\nRender Style: **Hyper-realistic 3D Render**. \n- Look like a high-end CGI cinematic character from a game (e.g., Unreal Engine 5).\n- Skin texture: Perfect, smooth, semi-realistic (NOT photo-realistic human skin).\n- Lighting: Volumetric, dramatic, studio quality.\n- **ABSOLUTELY NO** Photorealistic/Photography style. Keep it 3D Art.`;
+
+        // 3. Pose & Outfit Rule
+        if (characterImage) {
+             fullPrompt += `\n\n**CHARACTER INSTRUCTION:**\n- **OUTFIT:** Preserve the exact clothing design, colors, and accessories from the input image. Enhance textures to 3D quality.\n- **POSE:** If a pose prompt is given, change the pose naturally. If not, refine the current pose to be dynamic.`;
+        }
+
+        // 4. Face Lock
         if (faceReferenceImage) {
-            const faceLockInstruction = `(ABSOLUTE INSTRUCTION: The final image MUST use the exact face, including all features, details, and the complete facial expression, from the provided face reference image. Do NOT alter, modify, stylize, or change the expression of this face in any way. Ignore any conflicting instructions about facial expressions in the user's prompt. The face from the reference image must be perfectly preserved and transplanted onto the generated character.)\n\n`;
-            fullPrompt = faceLockInstruction + fullPrompt;
+            fullPrompt += `\n\n**FACE ID INSTRUCTION:**\nThe final image MUST use the exact face structure and features from the provided 'Face Reference' image. Blend it seamlessly onto the 3D character body.`;
         }
 
-        if (negativePrompt) {
-            fullPrompt += ` --no ${negativePrompt}`;
-        }
+        // 5. Negative Prompt (Hardcoded Safety + User Input)
+        const hardNegative = "photorealistic, photography, real life photo, grainy, low quality, 2D, sketch, cartoon, flat color, distorted body";
+        fullPrompt += ` --no ${hardNegative}, ${negativePrompt || ''}`;
 
         const parts: any[] = [];
         
@@ -155,16 +164,17 @@ const handler: Handler = async (event: HandlerEvent) => {
         
         parts.push({ text: fullPrompt });
 
-        const addImagePart = (imageDataUrl: string | null) => {
+        const addImagePart = (imageDataUrl: string | null, label: string) => {
             if (!imageDataUrl) return;
             const [header, base64] = imageDataUrl.split(',');
             const mimeType = header.match(/:(.*?);/)?.[1] || 'image/png';
+            parts.push({ text: `[${label}]` });
             parts.push({ inlineData: { data: base64, mimeType } });
         };
 
-        addImagePart(processedCharacterImage);
-        addImagePart(processedStyleImage);
-        addImagePart(processedFaceImage);
+        addImagePart(processedCharacterImage, "CANVAS_LAYOUT_AND_CHARACTER");
+        addImagePart(processedStyleImage, "STYLE_REFERENCE");
+        addImagePart(processedFaceImage, "FACE_REFERENCE");
         
         const config: any = { 
             responseModalities: [Modality.IMAGE],
@@ -200,15 +210,13 @@ const handler: Handler = async (event: HandlerEvent) => {
         let imageBuffer = Buffer.from(finalImageBase64, 'base64');
 
         if (!removeWatermark) {
-            // Construct URL for the watermark.png using Production URL as default
             const siteUrl = process.env.URL || 'https://auditionai.io.vn';
             const watermarkUrl = `${siteUrl}/watermark.png`;
-            
             imageBuffer = await addSmartWatermark(imageBuffer, watermarkUrl);
         }
 
         const fileExtension = finalImageMimeType.split('/')[1] || 'png';
-        const fileName = `${user.id}/${Date.now()}.${fileExtension}`;
+        const fileName = `${user.id}/${Date.now()}_${isProModel ? 'pro' : 'flash'}.${fileExtension}`;
 
         const putCommand = new PutObjectCommand({
             Bucket: process.env.R2_BUCKET_NAME!,
@@ -226,7 +234,6 @@ const handler: Handler = async (event: HandlerEvent) => {
         if (isProModel) logDescription += ` (Pro ${imageSize})`; else logDescription += ` (Flash)`;
         if (useUpscaler) logDescription += " + Upscale";
         if (removeWatermark) logDescription += " + NoWatermark";
-        logDescription += `: ${prompt.substring(0, 20)}...`;
         
         await Promise.all([
             supabaseAdmin.from('users').update({ diamonds: newDiamondCount, xp: newXp }).eq('id', user.id),

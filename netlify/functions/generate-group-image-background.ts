@@ -27,7 +27,8 @@ const failJob = async (jobId: string, reason: string, userId: string, cost: numb
     }
 };
 
-// Helper to resize image content into a standardized canvas matching the target aspect ratio
+// Helper: Create a GREY canvas of the EXACT target resolution.
+// This forces the aspect ratio rigidly.
 const enforceAspectRatioCanvas = async (dataUrl: string, targetAspectRatio: string): Promise<{ data: string; mimeType: string } | null> => {
      if (!dataUrl) return null;
      try {
@@ -49,7 +50,10 @@ const enforceAspectRatioCanvas = async (dataUrl: string, targetAspectRatio: stri
             canvasW = Math.round(MAX_DIM * targetRatio);
         }
 
-        const newCanvas = new (Jimp as any)(canvasW, canvasH, '#000000');
+        // GREY CANVAS (#808080) - Neutral ground for blending lighting
+        const newCanvas = new (Jimp as any)(canvasW, canvasH, '#808080');
+        
+        // Scale image to FIT inside
         image.scaleToFit(canvasW, canvasH);
         
         const x = (canvasW - image.getWidth()) / 2;
@@ -68,13 +72,11 @@ const enforceAspectRatioCanvas = async (dataUrl: string, targetAspectRatio: stri
      }
 };
 
-// Standardize to match Google SDK structure { data, mimeType }
 const processDataUrl = (dataUrl: string | null) => {
     if (!dataUrl) return null;
     const [header, base64] = dataUrl.split(',');
     if (!base64) return null;
     const mimeType = header.match(/:(.*?);/)?.[1] || 'image/png';
-    // FIX: Return property 'data' instead of 'base64' to match usage downstream
     return { data: base64, mimeType };
 };
 
@@ -88,10 +90,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     if (event.httpMethod !== 'POST') return { statusCode: 200 };
 
     const { jobId } = JSON.parse(event.body || '{}');
-    if (!jobId) {
-        console.error("[WORKER] Job ID is missing.");
-        return { statusCode: 200 };
-    }
+    if (!jobId) return { statusCode: 200 };
 
     let jobPromptData, payload, userId, totalCost = 0;
 
@@ -110,7 +109,6 @@ const handler: Handler = async (event: HandlerEvent) => {
         payload = jobPromptData.payload;
         userId = jobData.user_id;
 
-        // IMMEDIATE UPDATE: Notify that worker has picked up the job
         await updateJobProgress(jobId, jobPromptData, 'Máy chủ đang xử lý dữ liệu...');
 
         const { characters, referenceImage, prompt, style, aspectRatio, model: selectedModel, imageSize = '1K', useSearch = false, removeWatermark = false } = payload;
@@ -134,9 +132,11 @@ const handler: Handler = async (event: HandlerEvent) => {
         
         const generatedCharacters = [];
         
-        let finalBackgroundData: { data: string; mimeType: string } | undefined;
         let layoutImageUrl: string | null = null; 
 
+        // --- STEP 1: PREPARE CHARACTER & LAYOUT ASSETS ---
+        // We allow a relaxed "Flash" generation first to get the poses right, then we assemble.
+        
         if (referenceImage) {
             layoutImageUrl = referenceImage;
             
@@ -144,13 +144,13 @@ const handler: Handler = async (event: HandlerEvent) => {
                 await updateJobProgress(jobId, jobPromptData, `Đang xử lý nhân vật ${i + 1}/${numCharacters}...`);
                 
                 const char = characters[i];
-                const faceReferenceExists = !!char.faceImage;
-
+                
+                // Prompt for Individual Character Generation
                 const charPrompt = [
-                    `**ROLE DEFINITIONS:**`,
-                    `Create a full body character of a ${char.gender} based on the reference pose and outfit provided.`,
-                    faceReferenceExists ? `Use the face from the provided face image.` : '',
-                    `Render on a solid black background.`
+                    `Create a full-body 3D character of a **${char.gender}**.`,
+                    `**OUTFIT:** Strictly maintain the outfit from the input image.`,
+                    `**POSE:** Relaxed, natural standing pose. Do not freeze.`,
+                    `**STYLE:** 3D Render. Neutral lighting. Solid Grey Background.`,
                 ].join('\n');
 
                 const poseData = processDataUrl(char.poseImage);
@@ -175,8 +175,9 @@ const handler: Handler = async (event: HandlerEvent) => {
             }
 
         } else {
+            // Generate Background from Prompt First
             await updateJobProgress(jobId, jobPromptData, 'Đang tạo bối cảnh từ prompt...');
-            const bgPrompt = `Create a high-quality, cinematic background scene described as: "${prompt}". The scene should have a style of "${style}". Do NOT include any people or characters.`;
+            const bgPrompt = `Create a high-quality, cinematic background scene: "${prompt}". Style: "${style}". NO people. Grey Canvas Layout.`;
             
             const bgConfig: any = { responseModalities: [Modality.IMAGE] };
             if (isPro) {
@@ -195,7 +196,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             for (let i = 0; i < numCharacters; i++) {
                 await updateJobProgress(jobId, jobPromptData, `Đang xử lý nhân vật ${i + 1}/${numCharacters}...`);
                 const char = characters[i];
-                const charPrompt = `Create a full-body character of a **${char.gender}**. They MUST be wearing the exact outfit from the provided character image. Place the character on a solid black background.`;
+                const charPrompt = `Create a full-body character of a **${char.gender}**. Maintain exact OUTFIT details. Neutral lighting. Solid Grey Background.`;
                 
                 const poseData = processDataUrl(char.poseImage);
                 if (!poseData) throw new Error(`Lỗi dữ liệu ảnh dáng nhân vật ${i+1}.`);
@@ -215,27 +216,41 @@ const handler: Handler = async (event: HandlerEvent) => {
         
         if (!layoutImageUrl) throw new Error("Lỗi xử lý ảnh nền.");
 
-        await updateJobProgress(jobId, jobPromptData, 'Đang tổng hợp ảnh cuối cùng...');
+        // --- STEP 2: COMPOSE ON GREY CANVAS ---
+        await updateJobProgress(jobId, jobPromptData, 'Đang tổng hợp và hòa trộn ánh sáng (Hyper-realistic)...');
         
+        // This creates the RIGID canvas structure
         const processedLayout = await enforceAspectRatioCanvas(layoutImageUrl, aspectRatio);
         
         if (!processedLayout) throw new Error("Lỗi xử lý khung hình (Canvas).");
-        finalBackgroundData = processedLayout;
 
+        // --- STEP 3: FINAL BLEND (THE MAGIC STEP) ---
+        // Updated prompt to enforce "Hyper-realistic 3D Render" and disable "Photorealism"
         const compositePrompt = [
-            `**IMPORTANT: LAYOUT INSTRUCTION**`,
-            `The provided first image is the **CANVAS**. It sets the aspect ratio and the background/layout. You MUST fill this canvas. Do NOT crop it.`,
+            `**TASK: COMPOSE AND BLEND (HYPER-REALISTIC 3D RENDER)**`,
+            `You are a master 3D artist (Unreal Engine 5 expert).`,
+            `I have provided a Background Canvas (Grey Layout) and Character cutouts.`,
+            `Your job is to **ASSEMBLE** them into a cohesive 3D scene.`,
             `---`,
-            `**Task:**`,
-            `1. **Background:** Use the provided Canvas base.`,
-            `2. **Characters:** Take the characters from the black background images and composite them onto this Canvas seamlessly.`,
-            `3. **Composition:** Arrange characters naturally within the scene.`
+            `**CRITICAL STYLE RULES:**`,
+            `1. **STYLE:** Hyper-realistic 3D Render (Audition Game Style). High fidelity textures, volumetric lighting.`,
+            `2. **NEGATIVE:** NO Photorealistic human skin. NO real-life photography style. NO 2D/Sketch.`,
+            `---`,
+            `**EXECUTION RULES:**`,
+            `1. **ANCHOR:** Place the characters onto the provided background canvas. Ensure feet are planted with correct shadows.`,
+            `2. **RELIGHT:** Adjust the character's lighting to match the scene environment perfectly (Global Illumination).`,
+            `3. **OUTFIT:** KEEP THE EXACT OUTFIT DESIGN. Do not invent new clothes.`,
+            `4. **FACE:** Keep the character's facial identity.`,
+            `5. **FILL:** Fill any remaining grey space with the scene environment extension.`
         ].join('\n');
         
         const finalParts = [
             { text: compositePrompt },
-            { inlineData: { data: finalBackgroundData.data, mimeType: finalBackgroundData.mimeType } },
-            ...generatedCharacters.map(charData => ({ inlineData: charData }))
+            { text: "[CANVAS_BACKGROUND]" },
+            { inlineData: { data: processedLayout.data, mimeType: processedLayout.mimeType } },
+            ...generatedCharacters.map((charData, idx) => ({ 
+                inlineData: charData 
+            }))
         ];
         
         const finalConfig: any = { 

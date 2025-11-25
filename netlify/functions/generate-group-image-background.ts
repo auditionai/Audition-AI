@@ -27,8 +27,7 @@ const failJob = async (jobId: string, reason: string, userId: string, cost: numb
     }
 };
 
-// Helper: Enforce Aspect Ratio by COVERING (Filling) the canvas
-// This prevents grey bars and forces the AI to see a full image in the correct ratio.
+// Helper: Enforce Aspect Ratio by COVERING (Filling) the canvas with Grey
 const enforceAspectRatioCanvas = async (dataUrl: string, targetAspectRatio: string): Promise<{ data: string; mimeType: string } | null> => {
      if (!dataUrl) return null;
      try {
@@ -50,10 +49,10 @@ const enforceAspectRatioCanvas = async (dataUrl: string, targetAspectRatio: stri
             canvasW = Math.round(MAX_DIM * targetRatio);
         }
 
-        // GREY CANVAS (#808080)
+        // GREY CANVAS (#808080) - Quan trọng: Phải là màu xám
         const newCanvas = new (Jimp as any)(canvasW, canvasH, '#808080');
         
-        // USE COVER to fill the canvas completely (Crop excess)
+        // USE COVER to fill the canvas completely (Crop excess) if it's a background
         image.cover(canvasW, canvasH);
         
         newCanvas.composite(image, 0, 0);
@@ -132,7 +131,6 @@ const handler: Handler = async (event: HandlerEvent) => {
         let layoutImageUrl: string | null = null; 
 
         // --- STEP 1: PREPARE CHARACTER & LAYOUT ASSETS ---
-        // Strategy: Use prompt context to generate dynamic poses instead of static T-poses.
         
         if (referenceImage) {
             layoutImageUrl = referenceImage;
@@ -142,12 +140,16 @@ const handler: Handler = async (event: HandlerEvent) => {
                 await updateJobProgress(jobId, jobPromptData, `Đang xử lý nhân vật ${i + 1}/${numCharacters}...`);
                 
                 const char = characters[i];
+                const isMale = char.gender === 'male';
                 
-                // DYNAMIC POSE PROMPT
+                // DYNAMIC POSE PROMPT WITH VIBE
+                const vibe = isMale ? 'Cool, confident, masculine, strong' : 'Muse-like, graceful, girly ("bánh bèo"), sexy';
+                
                 const charPrompt = [
                     `Create a full-body 3D character of a **${char.gender}**.`,
                     `**OUTFIT:** Strictly maintain the outfit from the input image.`,
-                    `**POSE & ACTION:** Character is part of this scene: "${prompt}". Generate a pose that fits this context (e.g. laughing, walking, dancing). DO NOT STAND STIFFLY.`,
+                    `**POSE & VIBE:** Pose must be **${vibe}**. Action fits scene: "${prompt}".`,
+                    `**EXPRESSION:** Subtle, natural smile. No exaggerated emotions.`,
                     `**STYLE:** 3D Render. Neutral lighting. Solid Grey Background.`,
                 ].join('\n');
 
@@ -199,7 +201,10 @@ const handler: Handler = async (event: HandlerEvent) => {
             for (let i = 0; i < numCharacters; i++) {
                 await updateJobProgress(jobId, jobPromptData, `Đang xử lý nhân vật ${i + 1}/${numCharacters}...`);
                 const char = characters[i];
-                const charPrompt = `Create a full-body character of a **${char.gender}**. POSE: Dynamic, natural, interacting with others in scene "${prompt}". Maintain OUTFIT. Neutral lighting. Grey BG.`;
+                const isMale = char.gender === 'male';
+                const vibe = isMale ? 'Cool, confident, masculine' : 'Graceful, girly, sexy';
+                
+                const charPrompt = `Create a full-body character of a **${char.gender}**. VIBE: ${vibe}. POSE: Dynamic, natural, interacting in scene "${prompt}". Maintain OUTFIT. Neutral lighting. Grey BG.`;
                 
                 const poseData = processDataUrl(char.poseImage);
                 if (!poseData) throw new Error(`Lỗi dữ liệu ảnh dáng nhân vật ${i+1}.`);
@@ -222,21 +227,21 @@ const handler: Handler = async (event: HandlerEvent) => {
         // --- STEP 2: COMPOSE ON PROCESSED CANVAS ---
         await updateJobProgress(jobId, jobPromptData, 'Đang tổng hợp và hòa trộn cảm xúc...');
         
-        // This creates the RIGID canvas structure (CROP/COVER if needed)
+        // This creates the RIGID GREY CANVAS structure (CROP/COVER if needed)
         const processedLayout = await enforceAspectRatioCanvas(layoutImageUrl, aspectRatio);
         
         if (!processedLayout) throw new Error("Lỗi xử lý khung hình (Canvas).");
 
         // --- STEP 3: FINAL BLEND (THE MAGIC STEP) ---
-        // Updated prompt to force Interactions and Emotional Soul
         const compositePrompt = [
             `**TASK: GROUP PHOTO COMPOSITION (HYPER-REALISTIC 3D RENDER)**`,
-            `**ASPECT RATIO IS LAW:** The input [CANVAS_BACKGROUND] sets the absolute size. DO NOT CHANGE IT.`,
+            `**ASPECT RATIO IS LAW:** The input [CANVAS_WITH_CHARACTER_AND_GREY_BG] sets the absolute size. DO NOT CHANGE IT.`,
             `---`,
-            `**CRITICAL: EMOTION & INTERACTION (THE SOUL)**`,
-            `1. **CONNECTION:** Characters MUST look like they know each other. They should be interacting (leaning in, touching shoulders, looking at each other, laughing together).`,
-            `2. **NO STIFFNESS:** Absolutely NO static "mannequin" poses. Adjust limbs and heads to look natural and relaxed.`,
-            `3. **ATMOSPHERE:** Infuse the scene with the emotion of "${prompt}" (e.g., joy, romance, cool vibes).`,
+            `**CRITICAL: VIBE & SOUL**`,
+            `1. **MALE CHARACTERS:** Must look Cool, Confident, Masculine, Strong.`,
+            `2. **FEMALE CHARACTERS:** Must look Muse-like, Graceful, Girly ("Bánh bèo"), Charming, Sexy.`,
+            `3. **EXPRESSIONS:** Subtle, natural smiles. DO NOT DISTORT FACES. No creepy smiles.`,
+            `4. **INTERACTION:** Characters MUST interact (leaning, touching, looking at each other). NO static "mannequin" poses.`,
             `---`,
             `**TECHNICAL EXECUTION:**`,
             `1. **ANCHOR:** Place characters firmly on the ground of the background.`,
@@ -247,7 +252,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         
         const finalParts = [
             { text: compositePrompt },
-            { text: "[CANVAS_BACKGROUND]" },
+            { text: "[CANVAS_WITH_CHARACTER_AND_GREY_BG]" },
             { inlineData: { data: processedLayout.data, mimeType: processedLayout.mimeType } },
             ...generatedCharacters.map((charData, idx) => ({ 
                 inlineData: charData 

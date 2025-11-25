@@ -12,8 +12,9 @@ const COST_REMOVE_WATERMARK = 1;
 const XP_PER_GENERATION = 10;
 
 /**
- * CHIẾN THUẬT CANVAS XÁM (THE GREY CANVAS STRATEGY) - UPDATED V2
- * Force resize/crop to target aspect ratio strictly.
+ * CHIẾN THUẬT "CANVAS XÁM CỨNG" (HARD GREY CANVAS STRATEGY)
+ * Tạo một khung ảnh màu xám đúng tỷ lệ yêu cầu, sau đó đặt nhân vật vào.
+ * Bắt buộc AI phải vẽ trên khung này -> Tỷ lệ không bao giờ sai.
  */
 const processImageForGemini = async (imageDataUrl: string | null, targetAspectRatio: string): Promise<string | null> => {
     if (!imageDataUrl) return null;
@@ -25,40 +26,41 @@ const processImageForGemini = async (imageDataUrl: string | null, targetAspectRa
         const imageBuffer = Buffer.from(base64, 'base64');
         const image = await (Jimp as any).read(imageBuffer);
 
-        // 1. Parse Target Ratio
+        // 1. Tính toán kích thước Canvas dựa trên tỷ lệ được chọn
         const [aspectW, aspectH] = targetAspectRatio.split(':').map(Number);
         const targetRatio = aspectW / aspectH;
 
-        // 2. Define Standard Canvas Size (Using 1024px base for Gemini optimization)
+        // Chuẩn hóa kích thước (Base 1024px để tối ưu cho Gemini)
         const MAX_DIM = 1024;
         let canvasW, canvasH;
 
         if (targetRatio > 1) {
-            // Landscape
+            // Ngang (Landscape)
             canvasW = MAX_DIM;
             canvasH = Math.round(MAX_DIM / targetRatio);
         } else {
-            // Portrait or Square
+            // Dọc (Portrait) hoặc Vuông
             canvasH = MAX_DIM;
             canvasW = Math.round(MAX_DIM * targetRatio);
         }
         
-        // 3. Create Neutral Grey Canvas (#808080)
+        // 2. TẠO CANVAS XÁM (#808080)
+        // Màu xám giúp AI dễ dàng "outpaint" (vẽ thêm nền) và hòa trộn ánh sáng hơn màu đen/trắng
         const newCanvas = new (Jimp as any)(canvasW, canvasH, '#808080');
         
-        // 4. SMART FIT: Cover instead of Contain if possible to avoid too much grey space
-        // This helps AI understand the composition better.
-        image.cover(canvasW, canvasH);
+        // 3. Đặt nhân vật vào Canvas
+        // Sử dụng 'contain' để giữ nguyên toàn bộ chi tiết nhân vật, không bị cắt mất đầu/chân
+        image.contain(canvasW, canvasH);
 
-        // 5. Composite
+        // 4. Composite (Ghép)
         newCanvas.composite(image, 0, 0);
 
         const mime = header.match(/:(.*?);/)?.[1] || (Jimp as any).MIME_PNG;
         return newCanvas.getBase64Async(mime as any);
 
     } catch (error) {
-        console.error("Error pre-processing image for Gemini:", error);
-        return imageDataUrl;
+        console.error("Error creating Grey Canvas:", error);
+        return imageDataUrl; // Fallback nếu lỗi (dù hiếm)
     }
 };
 
@@ -121,18 +123,28 @@ const handler: Handler = async (event: HandlerEvent) => {
         let finalImageBase64: string;
         let finalImageMimeType: string;
         
-        // --- PROMPT ENGINEERING: EMOTION & INTERACTION ---
+        // --- PROMPT ENGINEERING: CANVAS, VIBE & SOUL ---
         let fullPrompt = prompt;
         
-        // 1. Canvas & Layout Rule (STRICT)
-        fullPrompt += `\n\n**LAYOUT MANDATE:**\n- I have provided a canvas with aspect ratio ${aspectRatio}. You MUST fill this canvas completely.\n- IGNORE the aspect ratio of the reference character image. The canvas size is Law.\n- Center the subject but extend the background to the edges of the canvas.`;
+        // 1. Canvas Mandate (Mệnh lệnh khung hình)
+        fullPrompt += `\n\n**LAYOUT MANDATE:**\n- I have provided a GREY CANVAS with aspect ratio ${aspectRatio}. You MUST fill this canvas completely.\n- The grey area is for you to draw the background/environment.\n- DO NOT change the canvas dimensions.`;
 
-        // 2. Style Rule: Hyper-realistic 3D Render
-        fullPrompt += `\n\n**STYLE:**\n- **Hyper-realistic 3D Render** (Unreal Engine 5, Octane Render).\n- Detailed skin texture (pores, subsurface scattering), volumetric lighting, raytracing reflections.\n- NOT "Cartoon", NOT "2D", but Stylized Realism (like Final Fantasy cinematics).`;
+        // 2. Style Rule: Hyper-realistic 3D Render (Not Photorealistic)
+        fullPrompt += `\n\n**STYLE:**\n- **Hyper-realistic 3D Render** (High-end Game Cinematic style, Unreal Engine 5).\n- Detailed skin texture, volumetric lighting, raytracing reflections.\n- **NOT** "Photorealistic" (Do not make it look like a real camera photo).\n- **NOT** "Cartoon" or "2D".`;
 
-        // 3. Pose & Outfit Rule (DYNAMIC)
+        // 3. Character Vibe & Pose (Hồn nhân vật)
         if (characterImage) {
-             fullPrompt += `\n\n**CHARACTER & POSE:**\n- **OUTFIT:** Keep the exact clothing design from reference.\n- **POSE:** DO NOT COPY THE REFERENCE POSE. Create a **NATURAL, DYNAMIC POSE** that fits the scene: "${prompt}". \n- If it's a group or couple, they MUST interact (look at each other, touch, lean). NO STIFFNESS.`;
+             fullPrompt += `\n\n**CHARACTER & POSE INSTRUCTIONS:**\n`;
+             fullPrompt += `- **OUTFIT:** Keep the exact clothing design from the reference image.\n`;
+             fullPrompt += `- **POSE:** DO NOT COPY THE REFERENCE POSE. Create a **NEW, NATURAL, DYNAMIC POSE** fitting the scene "${prompt}".\n`;
+             
+             // Logic phân biệt giới tính dựa trên prompt hoặc mặc định
+             // (Tạm thời áp dụng logic chung, AI tự nhận diện giới tính từ ảnh)
+             fullPrompt += `- **IF MALE:** Pose must be **Cool, Confident, Masculine, Strong**. Vibe: Charismatic, stylish, "bad boy" or gentleman depending on clothes.\n`;
+             fullPrompt += `- **IF FEMALE:** Pose must be **Muse-like, Graceful, Girly ("Bánh bèo"), Charming, Sexy**. Vibe: Elegant, confident, high-fashion.\n`;
+             
+             fullPrompt += `- **EXPRESSION:** Subtle, natural facial expression. Slight smile if happy. **DO NOT** exaggerate emotions. Preserve facial identity strictly.\n`;
+             fullPrompt += `- **INTERACTION:** Interact naturally with the environment (leaning, sitting, holding items). NO stiffness.`;
         }
 
         // 4. Face Lock
@@ -140,12 +152,13 @@ const handler: Handler = async (event: HandlerEvent) => {
             fullPrompt += `\n\n**FACE ID:**\n- Use the exact facial structure from 'Face Reference'. Blend it seamlessly.`;
         }
 
-        // 5. Negative Prompt
-        const hardNegative = "photorealistic, real photo, grainy, low quality, 2D, sketch, cartoon, flat color, stiff pose, t-pose, mannequin, looking at camera blankly";
+        // 5. Negative Prompt (Chặn AI hóa, Chặn Người thật)
+        const hardNegative = "photorealistic, real photo, grainy, low quality, 2D, sketch, cartoon, flat color, stiff pose, t-pose, mannequin, looking at camera blankly, distorted face, ugly, blurry";
         fullPrompt += ` --no ${hardNegative}, ${negativePrompt || ''}`;
 
         const parts: any[] = [];
         
+        // --- QUAN TRỌNG: Xử lý ảnh qua Jimp để tạo Canvas Xám ---
         const [
             processedCharacterImage,
             processedStyleImage,
@@ -166,7 +179,8 @@ const handler: Handler = async (event: HandlerEvent) => {
             parts.push({ inlineData: { data: base64, mimeType } });
         };
 
-        addImagePart(processedCharacterImage, "CANVAS_LAYOUT_AND_CHARACTER");
+        // Gửi Canvas đã xử lý (Đã có nhân vật nằm giữa nền xám)
+        addImagePart(processedCharacterImage, "CANVAS_WITH_CHARACTER_AND_GREY_BG");
         addImagePart(processedStyleImage, "STYLE_REFERENCE");
         addImagePart(processedFaceImage, "FACE_REFERENCE");
         

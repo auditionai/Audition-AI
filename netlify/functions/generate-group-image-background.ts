@@ -9,19 +9,30 @@ import Jimp from 'jimp';
 
 const XP_PER_CHARACTER = 5;
 
+// FIX: Refund logic using Direct Database Update instead of RPC
+// This ensures reliability even if the RPC function is missing or broken.
 const failJob = async (jobId: string, reason: string, userId: string, cost: number) => {
-    console.error(`[WORKER] Failing job ${jobId}: ${reason}`);
+    console.error(`[WORKER] Failing job ${jobId}. Reason: ${reason}. Refunding: ${cost}`);
     try {
-        await Promise.all([
-            supabaseAdmin.from('generated_images').delete().eq('id', jobId),
-            supabaseAdmin.rpc('increment_user_diamonds', { user_id_param: userId, diamond_amount: cost }),
-            supabaseAdmin.from('diamond_transactions_log').insert({
-                user_id: userId,
-                amount: cost,
-                transaction_type: 'REFUND',
-                description: `Hoàn tiền tạo ảnh nhóm thất bại (Lỗi: ${reason.substring(0, 50)})`,
-            })
-        ]);
+        // 1. Fetch fresh user data
+        const { data: userNow } = await supabaseAdmin.from('users').select('diamonds').eq('id', userId).single();
+        
+        if (userNow) {
+            const refundBalance = userNow.diamonds + cost;
+            
+            // 2. Perform Refund Update
+            await Promise.all([
+                supabaseAdmin.from('generated_images').delete().eq('id', jobId),
+                supabaseAdmin.from('users').update({ diamonds: refundBalance }).eq('id', userId),
+                supabaseAdmin.from('diamond_transactions_log').insert({
+                    user_id: userId,
+                    amount: cost,
+                    transaction_type: 'REFUND',
+                    description: `Hoàn tiền tạo ảnh nhóm thất bại (Lỗi: ${reason.substring(0, 50)})`,
+                })
+            ]);
+            console.log(`[WORKER] Refund successful for ${userId}`);
+        }
     } catch (e) {
         console.error(`[WORKER] CRITICAL: Failed to clean up or refund for job ${jobId}`, e);
     }
@@ -88,7 +99,9 @@ const handler: Handler = async (event: HandlerEvent) => {
     const { jobId } = JSON.parse(event.body || '{}');
     if (!jobId) return { statusCode: 200 };
 
-    let jobPromptData, payload, userId, totalCost = 0;
+    let jobPromptData, payload, userId;
+    // Initialize cost to 0, will calculate ASAP
+    let totalCost = 0;
 
     try {
         const { data: jobData, error: fetchError } = await supabaseAdmin
@@ -104,11 +117,9 @@ const handler: Handler = async (event: HandlerEvent) => {
         jobPromptData = JSON.parse(jobData.prompt);
         payload = jobPromptData.payload;
         userId = jobData.user_id;
-
-        await updateJobProgress(jobId, jobPromptData, 'Máy chủ đang xử lý dữ liệu...');
-
-        const { characters, referenceImage, prompt, style, aspectRatio, model: selectedModel, imageSize = '1K', useSearch = false, removeWatermark = false } = payload;
-        const numCharacters = characters.length;
+        
+        // --- CRITICAL: CALCULATE COST IMMEDIATELY ---
+        const { characters, model: selectedModel, imageSize = '1K', removeWatermark = false } = payload;
         
         let baseCost = 1;
         if (selectedModel === 'pro') {
@@ -116,8 +127,14 @@ const handler: Handler = async (event: HandlerEvent) => {
             else if (imageSize === '2K') baseCost = 15;
             else baseCost = 10;
         }
-        totalCost = baseCost + numCharacters;
+        totalCost = baseCost + (characters?.length || 0);
         if (removeWatermark) totalCost += 1;
+        // --------------------------------------------
+
+        await updateJobProgress(jobId, jobPromptData, 'Máy chủ đang xử lý dữ liệu...');
+
+        const { referenceImage, prompt, style, aspectRatio, useSearch = false } = payload;
+        const numCharacters = characters.length;
 
         const { data: apiKeyData, error: apiKeyError } = await supabaseAdmin.from('api_keys').select('id, key_value').eq('status', 'active').order('usage_count', { ascending: true }).limit(1).single();
         if (apiKeyError || !apiKeyData) throw new Error('Hết tài nguyên AI. Vui lòng thử lại sau.');
@@ -202,7 +219,7 @@ const handler: Handler = async (event: HandlerEvent) => {
                 await updateJobProgress(jobId, jobPromptData, `Đang xử lý nhân vật ${i + 1}/${numCharacters}...`);
                 const char = characters[i];
                 const isMale = char.gender === 'male';
-                const vibe = isMale ? 'Cool, confident, masculine' : 'Graceful, girly, sexy';
+                const vibe = isMale ? 'Cool, confident, masculine, strong, stylish' : 'Muse-like, graceful, girly ("bánh bèo"), sexy, charming';
                 
                 const charPrompt = `Create a full-body character of a **${char.gender}**. VIBE: ${vibe}. POSE: Dynamic, natural, interacting in scene "${prompt}". Maintain OUTFIT. Neutral lighting. Grey BG.`;
                 
@@ -309,10 +326,11 @@ const handler: Handler = async (event: HandlerEvent) => {
         console.log(`[WORKER ${jobId}] Job finalized successfully.`);
 
     } catch (error: any) {
+        // Refund Logic Trigger
         if (userId && totalCost > 0) {
             await failJob(jobId, error.message, userId, totalCost);
         } else {
-             console.error(`[WORKER ${jobId}] Failed without user/cost info`, error);
+             console.error(`[WORKER ${jobId}] Failed without user/cost info. No refund possible. Error:`, error);
         }
     }
 

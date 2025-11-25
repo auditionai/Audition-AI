@@ -33,7 +33,7 @@ const LANGUAGES = [
     'Chinese'
 ];
 
-const MAX_CHARACTERS = 5;
+const MAX_CHARACTERS = 12; // Updated to 12 as per feature description
 
 const ART_STYLES = [
     { label: 'Mặc định (Audition)', value: 'Audition 3D Game Style' },
@@ -99,6 +99,49 @@ const COVER_OPTIONS = [
 const RENDER_COST = 10; 
 
 // --- SUB-COMPONENTS ---
+
+// NEW: Feature Badges Component
+const ComicFeatures = () => {
+    return (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div className="bg-gradient-to-br from-[#064e3b]/80 to-[#065f46]/50 border border-green-500/30 p-4 rounded-2xl flex items-center gap-4 relative overflow-hidden group hover:border-green-500/50 transition-all">
+                <div className="absolute -right-6 -top-6 text-green-500/10 text-9xl pointer-events-none group-hover:scale-110 transition-transform">
+                    <i className="ph-fill ph-lightning"></i>
+                </div>
+                <div className="w-12 h-12 rounded-full bg-green-500/20 flex items-center justify-center text-green-400 flex-shrink-0 border border-green-500/30 shadow-[0_0_15px_rgba(74,222,128,0.2)]">
+                    <i className="ph-fill ph-lightning text-2xl"></i>
+                </div>
+                <div className="relative z-10">
+                    <div className="flex items-center gap-2 mb-1">
+                        <h4 className="font-bold text-white text-sm md:text-base">Story Memory & Plot Logic</h4>
+                        <span className="bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow-sm animate-pulse">HOT</span>
+                    </div>
+                    <p className="text-xs text-green-100/70 leading-relaxed">
+                        AI ghi nhớ diễn biến cốt truyện để phát triển tâm lý nhân vật sâu sắc hơn.
+                    </p>
+                </div>
+            </div>
+
+            <div className="bg-gradient-to-br from-[#431407]/80 to-[#7c2d12]/50 border border-orange-500/30 p-4 rounded-2xl flex items-center gap-4 relative overflow-hidden group hover:border-orange-500/50 transition-all">
+                <div className="absolute -right-6 -top-6 text-orange-500/10 text-9xl pointer-events-none group-hover:scale-110 transition-transform">
+                    <i className="ph-fill ph-fire"></i>
+                </div>
+                <div className="w-12 h-12 rounded-full bg-orange-500/20 flex items-center justify-center text-orange-400 flex-shrink-0 border border-orange-500/30 shadow-[0_0_15px_rgba(251,146,60,0.2)]">
+                    <i className="ph-fill ph-users-three text-2xl"></i>
+                </div>
+                <div className="relative z-10">
+                    <div className="flex items-center gap-2 mb-1">
+                        <h4 className="font-bold text-white text-sm md:text-base">Character Consistency</h4>
+                        <span className="bg-orange-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow-sm">ESSENTIAL</span>
+                    </div>
+                    <p className="text-xs text-orange-100/70 leading-relaxed">
+                        Hệ thống hỗ trợ tối đa 12 nhân vật tham chiếu. Độ đồng bộ 95-100%.
+                    </p>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 interface ComicSelectProps {
     label: string;
@@ -860,6 +903,9 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
             <div className="flex justify-center">
                 <StepIndicator currentStep={currentStep} />
             </div>
+
+            {/* Features Banner */}
+            <ComicFeatures />
 
             {/* --- STEP 1: SETUP --- */}
             {currentStep === 1 && (

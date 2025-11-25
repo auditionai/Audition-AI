@@ -136,12 +136,12 @@ const ComicSelect: React.FC<ComicSelectProps> = ({ label, value, onChange, optio
             <label className="text-xs font-bold text-skin-muted uppercase mb-1.5 block tracking-wide">{label}</label>
             <button 
                 onClick={() => setIsOpen(!isOpen)}
-                className={`w-full flex items-center justify-between bg-[#1E1B25] border ${isOpen ? 'border-pink-500 ring-1 ring-pink-500/50' : 'border-white/10 hover:border-white/30'} rounded-lg px-3 py-2.5 text-sm text-white transition-all duration-200`}
+                className={`w-full flex items-center justify-center bg-[#1E1B25] border ${isOpen ? 'border-pink-500 ring-1 ring-pink-500/50' : 'border-white/10 hover:border-white/30'} rounded-lg px-3 py-2.5 text-sm text-white transition-all duration-200`}
             >
                 <span className="truncate" style={previewFont && (selectedOption as any).family ? { fontFamily: (selectedOption as any).family } : {}}>
                     {selectedOption.label}
                 </span>
-                <i className={`ph-fill ph-caret-down text-gray-400 transition-transform duration-200 ${isOpen ? 'rotate-180 text-pink-500' : ''}`}></i>
+                <i className={`ph-fill ph-caret-down text-gray-400 ml-2 transition-transform duration-200 ${isOpen ? 'rotate-180 text-pink-500' : ''}`}></i>
             </button>
 
             {isOpen && (
@@ -174,32 +174,33 @@ const ComicSelect: React.FC<ComicSelectProps> = ({ label, value, onChange, optio
 const StepIndicator = ({ currentStep }: { currentStep: number }) => {
     const steps = [
         { num: 1, label: 'Thiết lập', icon: 'ph-sliders' },
-        { num: 2, label: 'Sản xuất (Kịch bản & Vẽ)', icon: 'ph-paint-brush-broad' },
+        { num: 2, label: 'Kịch bản', icon: 'ph-text-aa' },
+        { num: 3, label: 'Sản xuất', icon: 'ph-paint-brush-broad' },
     ];
 
     return (
         <div className="bg-[#12121A]/50 border border-white/5 p-1 rounded-full flex items-center shadow-inner mb-6">
-            {steps.map((step) => {
+            {steps.map((step, idx) => {
                 const isActive = step.num === currentStep;
                 const isPast = step.num < currentStep;
                 return (
                     <div key={step.num} className="flex items-center">
                         <div 
                             className={`
-                                flex items-center gap-2 px-5 py-2 rounded-full transition-all duration-300 select-none
+                                flex items-center gap-2 px-6 py-2 rounded-full transition-all duration-300 select-none
                                 ${isActive 
-                                    ? 'bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-md font-bold' 
+                                    ? 'bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-md font-bold scale-105' 
                                     : isPast 
-                                        ? 'text-purple-300 hover:text-white' 
+                                        ? 'text-pink-300 hover:text-white bg-white/5' 
                                         : 'text-gray-600'
                                 }
                             `}
                         >
                             <i className={`ph-fill ${step.icon} text-lg ${isActive ? 'animate-pulse' : ''}`}></i>
-                            <span className={`text-xs sm:text-sm ${isActive ? 'block' : 'hidden sm:block'}`}>{step.label}</span>
+                            <span className={`text-sm ${isActive ? 'block' : 'hidden sm:block'}`}>{step.label}</span>
                         </div>
-                        {step.num < 2 && (
-                            <div className={`w-6 h-0.5 mx-1 transition-colors duration-300 ${isPast ? 'bg-purple-500/30' : 'bg-white/5'}`}></div>
+                        {idx < steps.length - 1 && (
+                            <div className={`w-8 h-0.5 mx-1 transition-colors duration-300 ${isPast ? 'bg-purple-500/50' : 'bg-white/5'}`}></div>
                         )}
                     </div>
                 );
@@ -263,7 +264,6 @@ const ProfessionalScriptEditor: React.FC<{
     onUpdate: (updatedJsonString: string) => void;
     onExpand: () => Promise<void>; 
     isExpanding: boolean;
-    // Removed pageIndex to fix TS6133
 }> = ({ panel, onUpdate, onExpand, isExpanding }) => {
     const [pageData, setPageData] = useState<ScriptPage | null>(null);
 
@@ -357,58 +357,70 @@ const ProfessionalScriptEditor: React.FC<{
 
     if (!pageData) {
         return (
-            <div className="flex flex-col items-center justify-center p-4 bg-black/30 rounded-lg border border-white/10 min-h-[200px]">
-                <p className="text-sm text-gray-400 mb-4 italic text-center">
+            <div className="flex flex-col items-center justify-center p-6 bg-black/20 rounded-xl border border-white/10 min-h-[150px]">
+                <p className="text-sm text-gray-400 mb-4 italic text-center max-w-md">
                     "{panel.plot_summary || 'Trang này chưa có nội dung tóm tắt.'}"
                 </p>
                 <button 
                     onClick={onExpand}
                     disabled={isExpanding}
-                    className={`themed-button-primary px-4 py-2 rounded-lg font-bold flex items-center gap-2 text-sm ${panel.visual_description ? 'bg-red-500' : ''}`}
+                    className={`themed-button-primary px-5 py-2 rounded-full font-bold flex items-center gap-2 text-sm ${panel.visual_description ? 'bg-red-500' : ''}`}
                 >
                     {isExpanding ? <i className="ph-fill ph-spinner animate-spin"></i> : <i className="ph-fill ph-magic-wand"></i>}
-                    {isExpanding ? 'Đang phân tích...' : 'Phân tích chi tiết'}
+                    {isExpanding ? 'Đang phân tích...' : 'Phân tích chi tiết (Miễn phí)'}
                 </button>
             </div>
         );
     }
 
     return (
-        <div className="space-y-4">
-            <div className="bg-blue-500/10 border border-blue-500/30 p-2 rounded-lg text-xs text-gray-300 mb-2">
-                <strong className="text-blue-300">Tóm tắt:</strong> {panel.plot_summary}
+        <div className="space-y-4 animate-fade-in">
+            <div className="bg-blue-500/10 border border-blue-500/30 p-3 rounded-lg text-sm text-gray-300 mb-2 flex gap-2 items-start">
+                <i className="ph-fill ph-info text-blue-400 mt-0.5"></i>
+                <div>
+                    <strong className="text-blue-300">Cốt truyện gốc:</strong> {panel.plot_summary}
+                </div>
             </div>
             {pageData.panels.map((p, pIdx) => (
-                <div key={pIdx} className="bg-[#1E1B25] border border-white/10 rounded-lg p-3">
+                <div key={pIdx} className="bg-[#1E1B25] border border-white/10 rounded-lg p-4 hover:border-white/20 transition-colors">
                     <div className="flex justify-between items-center mb-2">
-                        <span className="text-[10px] font-bold text-pink-400 uppercase">Panel {p.panel_id}</span>
+                        <span className="text-xs font-bold text-pink-400 uppercase tracking-wider bg-pink-500/10 px-2 py-0.5 rounded">Khung tranh (Panel) {p.panel_id}</span>
                     </div>
                     <div className="mb-3">
+                        <label className="text-[10px] text-gray-500 uppercase font-bold mb-1 block">Mô tả hình ảnh / Hành động (Prompt cho AI)</label>
                         <textarea 
-                            className="w-full bg-black/30 border border-white/10 rounded-md p-2 text-xs text-white focus:border-pink-500 transition resize-none h-16"
+                            className="w-full bg-black/30 border border-white/10 rounded-md p-3 text-sm text-white focus:border-pink-500 transition resize-none h-24 leading-relaxed"
                             value={p.description}
                             onChange={(e) => handlePanelDescChange(pIdx, e.target.value)}
-                            placeholder="Mô tả hành động, bối cảnh..."
+                            placeholder="Mô tả hành động, bối cảnh, góc máy..."
                         />
                     </div>
                     <div className="space-y-2">
+                        <label className="text-[10px] text-gray-500 uppercase font-bold mb-1 block">Lời thoại</label>
                         {p.dialogues && p.dialogues.map((d, dIdx) => (
                             <div key={dIdx} className="flex gap-2 items-center group">
                                 <input 
                                     type="text" 
-                                    className="w-1/4 bg-black/30 border border-white/10 rounded p-1.5 text-[10px] text-yellow-300 font-bold"
+                                    className="w-1/4 bg-black/30 border border-white/10 rounded p-2 text-xs text-yellow-300 font-bold focus:border-yellow-500 outline-none"
                                     value={d.speaker}
+                                    placeholder="Tên NV"
                                     onChange={(e) => handleDialogueChange(pIdx, dIdx, 'speaker', e.target.value)}
                                 />
                                 <input 
-                                    className="flex-grow bg-black/30 border border-white/10 rounded p-1.5 text-[10px] text-white"
+                                    className="flex-grow bg-black/30 border border-white/10 rounded p-2 text-xs text-white focus:border-white/50 outline-none"
                                     value={d.text}
+                                    placeholder="Nội dung thoại..."
                                     onChange={(e) => handleDialogueChange(pIdx, dIdx, 'text', e.target.value)}
                                 />
-                                <button onClick={() => removeDialogue(pIdx, dIdx)} className="text-gray-600 hover:text-red-500"><i className="ph-fill ph-trash"></i></button>
+                                <button onClick={() => removeDialogue(pIdx, dIdx)} className="text-gray-600 hover:text-red-500 p-1"><i className="ph-fill ph-trash"></i></button>
                             </div>
                         ))}
-                        <button onClick={() => addDialogue(pIdx)} className="text-[10px] text-cyan-400 hover:text-cyan-300 font-bold">+ Thêm thoại</button>
+                        {(!p.dialogues || p.dialogues.length === 0) && <p className="text-xs text-gray-600 italic pl-2">Không có lời thoại (Panel câm)</p>}
+                        <div className="text-right">
+                            <button onClick={() => addDialogue(pIdx)} className="text-xs text-cyan-400 hover:text-cyan-300 font-bold flex items-center gap-1 justify-end ml-auto mt-1">
+                                <i className="ph-bold ph-plus"></i> Thêm thoại
+                            </button>
+                        </div>
                     </div>
                 </div>
             ))}
@@ -507,7 +519,7 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
 
             setComicPages(newPages);
             updateUserDiamonds(data.newDiamondCount);
-            setCurrentStep(2);
+            setCurrentStep(2); // Move to Scripting Step
             showToast('Đã tạo khung kịch bản! Hệ thống sẽ tự động phân tích chi tiết từng trang.', 'success');
             setExpansionQueue(Array.from({ length: newPages.length }, (_, i) => i));
 
@@ -624,10 +636,8 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                 
                 // Handle Batch Logic
                 if (isBatchRendering) {
-                    // Find next page that needs rendering
                     const nextPageIdx = comicPages.findIndex((p, idx) => idx > pageIndex && p.status !== 'completed' && p.status !== 'rendering');
                     if (nextPageIdx !== -1) {
-                        // Small delay to be safe
                         setTimeout(() => handleRenderPage(nextPageIdx), 1000);
                     } else {
                         setIsBatchRendering(false);
@@ -640,10 +650,8 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
 
     const handleRenderAll = () => {
         if (isBatchRendering) return;
-        // Find first non-completed page
         const firstPageToRender = comicPages.findIndex(p => p.status !== 'completed' && p.status !== 'rendering');
         if (firstPageToRender === -1) return showToast("Tất cả các trang đã được vẽ!", "success");
-        
         if (user && user.diamonds < RENDER_COST) return showToast(`Cần ${RENDER_COST} kim cương để bắt đầu.`, 'error');
         
         setIsBatchRendering(true);
@@ -680,6 +688,7 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                 <StepIndicator currentStep={currentStep} />
             </div>
 
+            {/* --- STEP 1: SETUP --- */}
             {currentStep === 1 && (
                 <>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-2">
@@ -738,11 +747,13 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                                     </div>
                                 </div>
                             </SettingsBlock>
+                            
+                            {/* Removed Instruction Key here to hide help button */}
                             <SettingsBlock title="Ý Tưởng Cốt Truyện">
                                 <div className="relative">
                                     <textarea className="auth-input min-h-[150px] text-sm leading-relaxed resize-none" placeholder="Nhập tóm tắt câu chuyện của bạn..." value={premise} onChange={(e) => setPremise(e.target.value)} />
                                     <div className="absolute bottom-2 right-2">
-                                        <button onClick={() => setIsPremiseModalOpen(true)} className="text-xs bg-purple-500/20 text-purple-300 px-2 py-1 rounded hover:bg-purple-500/40 transition flex items-center gap-1">
+                                        <button onClick={() => setIsPremiseModalOpen(true)} className="text-xs bg-purple-500/20 text-purple-300 px-2 py-1 rounded hover:bg-purple-500/40 transition flex items-center gap-1 font-bold">
                                             <i className="ph-fill ph-lightbulb"></i> Gợi ý kịch bản
                                         </button>
                                     </div>
@@ -750,7 +761,7 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                             </SettingsBlock>
                         </div>
                         <div className="lg:col-span-2">
-                            <div className="bg-[#12121A]/80 border border-white/10 rounded-2xl p-6 h-full">
+                            <div className="bg-[#12121A]/80 border border-white/10 rounded-2xl p-6 h-full flex flex-col">
                                 <div className="flex justify-between items-center mb-4">
                                     <h3 className="text-xl font-bold text-white flex items-center gap-2"><i className="ph-fill ph-users-three text-pink-500"></i> Nhân Vật ({characters.length}/{MAX_CHARACTERS})</h3>
                                     <div className="flex items-center gap-2">
@@ -764,7 +775,7 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                                         <p>Thêm nhân vật để AI nhận diện khuôn mặt & trang phục</p>
                                     </div>
                                 ) : (
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[600px] overflow-y-auto custom-scrollbar pr-2">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[600px] overflow-y-auto custom-scrollbar pr-2 flex-grow">
                                         {characters.map((char, idx) => (
                                             <div key={char.id} className="bg-[#1E1B25] p-4 rounded-xl border border-white/5 relative group">
                                                 <button onClick={() => handleRemoveCharacter(char.id)} className="absolute top-2 right-2 text-gray-500 hover:text-red-500 opacity-0 group-hover:opacity-100 transition p-1"><i className="ph-fill ph-x"></i></button>
@@ -780,21 +791,82 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                                         ))}
                                     </div>
                                 )}
+                                
+                                <div className="mt-6 pt-4 border-t border-white/10 flex items-center justify-between">
+                                    <div>
+                                        <p className="text-xs text-gray-400">Chi phí kịch bản</p>
+                                        <p className="text-xl font-black text-pink-400">2 💎</p>
+                                    </div>
+                                    <button onClick={handleGenerateScript} disabled={isGeneratingScript} className="themed-button-primary px-8 py-3 text-lg font-bold rounded-xl shadow-lg hover:shadow-pink-500/40 transition transform hover:-translate-y-1 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                                        {isGeneratingScript ? (<><div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> Đang tạo...</>) : (<>Tạo Kịch Bản <i className="ph-fill ph-arrow-right"></i></>)}
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </>
             )}
 
-            {currentStep >= 2 && (
-                <div className="w-full max-w-5xl mx-auto">
+            {/* --- STEP 2: SCRIPTING (TEXT ONLY) --- */}
+            {currentStep === 2 && (
+                <div className="max-w-4xl mx-auto">
+                    <div className="mb-6 bg-[#1E1B25] p-4 rounded-xl border border-white/10 flex justify-between items-center">
+                        <div>
+                            <h2 className="text-xl font-bold text-white">Biên Tập Kịch Bản</h2>
+                            <p className="text-xs text-gray-400">Phân tích chi tiết và chỉnh sửa lời thoại trước khi vẽ.</p>
+                        </div>
+                        <div className="flex gap-2">
+                            <button onClick={() => setCurrentStep(1)} className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-lg text-sm font-semibold">Quay lại</button>
+                            <button onClick={() => setCurrentStep(3)} className="px-4 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg text-sm font-bold flex items-center gap-2">
+                                Xong, chuyển sang Vẽ <i className="ph-bold ph-arrow-right"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="space-y-6">
+                        {comicPages.map((page, idx) => (
+                            <div key={page.id} className="bg-[#12121A]/90 border border-white/10 rounded-xl p-6 relative">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h3 className="font-bold text-white flex items-center gap-2">
+                                        <span className="bg-white/10 px-2 py-1 rounded text-sm">#{idx === 0 ? 'COVER' : idx}</span>
+                                        {idx === 0 ? 'Kịch bản Trang Bìa' : `Kịch bản Trang ${idx}`}
+                                    </h3>
+                                </div>
+                                <ProfessionalScriptEditor 
+                                    panel={page} 
+                                    onUpdate={(jsonStr) => {
+                                        setComicPages(prev => {
+                                            const next = [...prev];
+                                            if (next[idx]) next[idx] = { ...next[idx], visual_description: jsonStr };
+                                            return next;
+                                        });
+                                    }}
+                                    onExpand={() => handleExpandPage(idx)}
+                                    isExpanding={expandingPageId === page.id}
+                                />
+                            </div>
+                        ))}
+                    </div>
+                    
+                    <div className="flex justify-center mt-8">
+                        <button onClick={() => setCurrentStep(3)} className="themed-button-primary px-10 py-3 text-lg font-bold rounded-full shadow-lg">
+                            Hoàn tất kịch bản & Chuyển sang Vẽ
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* --- STEP 3: PRODUCTION (IMAGE ONLY) --- */}
+            {currentStep === 3 && (
+                <div className="w-full max-w-6xl mx-auto">
                     {/* Main Action Bar */}
-                    <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6 bg-[#1E1B25] p-4 rounded-xl border border-white/10 shadow-xl">
+                    <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6 bg-[#1E1B25] p-4 rounded-xl border border-white/10 shadow-xl sticky top-20 z-30">
                         <div className="text-white">
-                            <h2 className="text-xl font-bold">{comicTitle || 'Truyện Tranh Của Tôi'}</h2>
+                            <h2 className="text-xl font-bold">{comicTitle || 'Phòng Tranh & Xuất Bản'}</h2>
                             <p className="text-xs text-gray-400 mt-1">{comicPages.filter(p => p.status === 'completed').length} / {comicPages.length} trang hoàn tất</p>
                         </div>
                         <div className="flex gap-3">
+                            <button onClick={() => setCurrentStep(2)} className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-lg text-sm font-semibold">Sửa kịch bản</button>
                             <button 
                                 onClick={handleRenderAll}
                                 disabled={isBatchRendering}
@@ -812,98 +884,55 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                         </div>
                     </div>
 
-                    {/* Unified Page List */}
-                    <div className="space-y-8">
+                    {/* Unified Grid View */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {comicPages.map((page, idx) => (
-                            <div key={page.id} className="bg-[#12121A]/90 border border-white/10 rounded-2xl p-6 relative overflow-hidden group">
-                                <div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-pink-500 to-purple-600"></div>
-                                
-                                <div className="flex justify-between items-center mb-6 pl-4">
-                                    <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                                        <span className="bg-white/10 px-2 py-1 rounded text-sm">#{idx === 0 ? 'COVER' : idx}</span>
-                                        {idx === 0 ? 'Trang Bìa' : `Trang Nội Dung`}
+                            <div key={page.id} className="bg-[#12121A]/90 border border-white/10 rounded-2xl p-4 relative overflow-hidden group flex flex-col h-full">
+                                <div className="flex justify-between items-center mb-3">
+                                    <h3 className="font-bold text-white text-sm flex items-center gap-2">
+                                        <span className="bg-white/10 px-2 py-0.5 rounded text-xs">#{idx === 0 ? 'COVER' : idx}</span>
+                                        {page.status === 'completed' && <span className="text-green-400 text-xs flex items-center gap-1"><i className="ph-fill ph-check-circle"></i> Xong</span>}
+                                        {page.status === 'rendering' && <span className="text-yellow-400 text-xs flex items-center gap-1 animate-pulse"><i className="ph-fill ph-spinner animate-spin"></i> Đang vẽ...</span>}
                                     </h3>
-                                    <div className="flex items-center gap-3">
-                                        {page.status === 'rendering' && <span className="text-xs text-yellow-400 animate-pulse flex items-center gap-1"><i className="ph-fill ph-spinner animate-spin"></i> Đang vẽ...</span>}
-                                        {page.status === 'completed' && <span className="text-xs text-green-400 flex items-center gap-1"><i className="ph-fill ph-check-circle"></i> Hoàn tất</span>}
-                                        
-                                        <button 
-                                            onClick={() => handleRenderPage(idx)} 
-                                            disabled={!!renderingPageId || page.status === 'rendering' || !page.visual_description}
-                                            className="text-xs bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg font-bold transition disabled:opacity-50 disabled:bg-gray-700"
-                                        >
-                                            {page.status === 'completed' ? 'Vẽ lại (10💎)' : 'Vẽ Trang Này (10💎)'}
-                                        </button>
-                                    </div>
+                                    <button 
+                                        onClick={() => handleRenderPage(idx)} 
+                                        disabled={!!renderingPageId || page.status === 'rendering' || !page.visual_description}
+                                        className="text-[10px] bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded font-bold transition disabled:opacity-50 disabled:bg-gray-700"
+                                    >
+                                        {page.status === 'completed' ? 'Vẽ lại (10💎)' : 'Vẽ Trang Này (10💎)'}
+                                    </button>
                                 </div>
 
-                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pl-4">
-                                    {/* Script Editor */}
-                                    <div className="flex flex-col h-full">
-                                        <h4 className="text-xs font-bold text-gray-500 uppercase mb-3 flex items-center gap-2">
-                                            <i className="ph-fill ph-text-aa"></i> Kịch bản & Lời thoại
-                                        </h4>
-                                        <ProfessionalScriptEditor 
-                                            panel={page} 
-                                            onUpdate={(jsonStr) => {
-                                                setComicPages(prev => {
-                                                    const next = [...prev];
-                                                    if (next[idx]) next[idx] = { ...next[idx], visual_description: jsonStr };
-                                                    return next;
-                                                });
-                                            }}
-                                            onExpand={() => handleExpandPage(idx)}
-                                            isExpanding={expandingPageId === page.id}
-                                        />
-                                    </div>
-
-                                    {/* Image Preview */}
-                                    <div>
-                                        <h4 className="text-xs font-bold text-gray-500 uppercase mb-3 flex items-center gap-2">
-                                            <i className="ph-fill ph-image"></i> Minh họa
-                                        </h4>
-                                        <div className="bg-black/40 rounded-xl border border-white/10 aspect-[3/4] flex items-center justify-center relative overflow-hidden group-hover:border-white/30 transition-colors">
-                                            {page.image_url && page.image_url !== 'PENDING' ? (
-                                                <>
-                                                    <img src={page.image_url} alt={`Page ${idx}`} className="w-full h-full object-contain" />
-                                                    <a href={page.image_url} download={`page_${idx}.png`} target="_blank" rel="noreferrer" className="absolute bottom-4 right-4 p-2 bg-black/60 text-white rounded-full hover:bg-pink-500 transition opacity-0 group-hover:opacity-100">
-                                                        <i className="ph-fill ph-download-simple text-xl"></i>
-                                                    </a>
-                                                </>
-                                            ) : (
-                                                <div className="text-center text-gray-600 p-8">
-                                                    {page.status === 'rendering' ? (
-                                                        <div className="flex flex-col items-center gap-2">
-                                                            <div className="w-8 h-8 border-2 border-pink-500 border-t-transparent rounded-full animate-spin"></div>
-                                                            <p className="text-xs">AI đang xử lý...</p>
-                                                        </div>
-                                                    ) : (
-                                                        <>
-                                                            <i className="ph-fill ph-image-square text-4xl mb-2 opacity-30"></i>
-                                                            <p className="text-xs">Chưa có hình ảnh</p>
-                                                        </>
-                                                    )}
+                                <div className="flex-grow bg-black/40 rounded-xl border border-white/10 aspect-[2/3] flex items-center justify-center relative overflow-hidden group-hover:border-white/30 transition-colors">
+                                    {page.image_url && page.image_url !== 'PENDING' ? (
+                                        <>
+                                            <img src={page.image_url} alt={`Page ${idx}`} className="w-full h-full object-contain" />
+                                            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-4">
+                                                <p className="text-white text-xs line-clamp-3 italic mb-2">{page.plot_summary}</p>
+                                                <a href={page.image_url} download={`page_${idx}.png`} target="_blank" rel="noreferrer" className="self-end p-2 bg-white/20 text-white rounded-full hover:bg-pink-500 transition">
+                                                    <i className="ph-fill ph-download-simple text-lg"></i>
+                                                </a>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <div className="text-center text-gray-600 p-8">
+                                            {page.status === 'rendering' ? (
+                                                <div className="flex flex-col items-center gap-2">
+                                                    <div className="w-8 h-8 border-2 border-pink-500 border-t-transparent rounded-full animate-spin"></div>
+                                                    <p className="text-xs">AI đang xử lý...</p>
                                                 </div>
+                                            ) : (
+                                                <>
+                                                    <i className="ph-fill ph-image-square text-4xl mb-2 opacity-30"></i>
+                                                    <p className="text-xs">Chưa có hình ảnh</p>
+                                                    <p className="text-[10px] mt-1 text-gray-700">{page.plot_summary.substring(0, 30)}...</p>
+                                                </>
                                             )}
                                         </div>
-                                    </div>
+                                    )}
                                 </div>
                             </div>
                         ))}
-                    </div>
-                </div>
-            )}
-
-            {currentStep === 1 && (
-                <div className="flex justify-center mt-8 pb-12">
-                    <div className="bg-[#1E1B25] p-4 rounded-2xl border border-white/10 flex items-center gap-6 shadow-2xl">
-                        <div className="text-right">
-                            <p className="text-xs text-gray-400">Tổng chi phí dự kiến</p>
-                            <p className="text-xl font-black text-pink-400">2 💎 <span className="text-sm font-normal text-white">+ {(pageCount + 1) * RENDER_COST} 💎 (Vẽ {pageCount+1} trang)</span></p>
-                        </div>
-                        <button onClick={handleGenerateScript} disabled={isGeneratingScript} className="themed-button-primary px-10 py-4 text-lg font-bold rounded-xl shadow-lg hover:shadow-pink-500/40 transition transform hover:-translate-y-1 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-3">
-                            {isGeneratingScript ? (<><div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> Đang tạo kịch bản...</>) : (<>Tạo Kịch Bản <i className="ph-fill ph-arrow-right"></i></>)}
-                        </button>
                     </div>
                 </div>
             )}

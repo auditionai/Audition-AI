@@ -34,7 +34,6 @@ const failJob = async (jobId: string, userId: string, reason: string, totalCost:
 };
 
 const handler: Handler = async (event: HandlerEvent) => {
-    // Background functions respond with 202 immediately, but we still return 200 for good measure in logic
     if (event.httpMethod !== 'POST') return { statusCode: 200 };
 
     const { jobId } = JSON.parse(event.body || '{}');
@@ -54,9 +53,8 @@ const handler: Handler = async (event: HandlerEvent) => {
         
         userId = jobData.user_id;
         const jobConfig = JSON.parse(jobData.prompt);
-        const { panel, characters, storyTitle, style, aspectRatio, colorFormat, visualEffect, isCover, premise, globalContext, imageQuality = '1K' } = jobConfig.payload;
+        const { panel, characters, style, aspectRatio, colorFormat, visualEffect, premise, globalContext, imageQuality = '1K' } = jobConfig.payload;
         
-        // Recalculate cost for refund handling
         if (imageQuality === '2K') totalCost += 10;
         if (imageQuality === '4K') totalCost += 15;
 
@@ -67,78 +65,53 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         const parts: any[] = [];
         
-        // --- PARSE STRUCTURED SCRIPT ---
+        // --- PARSE SCRIPT ---
         let scriptData;
         let visualDirectives = "";
         let dialogueListText = "";
 
         try {
             scriptData = JSON.parse(panel.visual_description);
-            visualDirectives = `**PAGE LAYOUT INSTRUCTION:** ${scriptData.layout_note || "Standard Comic Grid"}\n\n`;
+            visualDirectives = `**PAGE LAYOUT:** ${scriptData.layout_note || "Standard Comic Grid"}\n`;
             
             const panelsList = Array.isArray(scriptData.panels) ? scriptData.panels : (scriptData.panels ? [scriptData.panels] : []);
-
+            
             if (panelsList.length > 0) {
                 panelsList.forEach((p: any) => {
-                    const pid = p.panel_id || 1;
-                    visualDirectives += `[PANEL ${pid} ACTION]: ${p.description}\n`;
-                    
-                    if (p.dialogues && Array.isArray(p.dialogues)) {
+                    visualDirectives += `[PANEL ${p.panel_id}]: ${p.description}\n`;
+                    if (p.dialogues) {
                         p.dialogues.forEach((d: any) => {
-                            if (d.text && d.text.trim() !== "..." && d.text.trim() !== "") {
-                                dialogueListText += `Panel ${pid} bubble: "${d.text}" (Speaker: ${d.speaker})\n`;
+                            if (d.text && d.text.trim().length > 1) {
+                                dialogueListText += `Panel ${p.panel_id} - ${d.speaker}: "${d.text}"\n`;
                             }
                         });
                     }
                 });
-            } else {
-                visualDirectives = "Create a comic page based on the story context.";
             }
         } catch (e) {
             visualDirectives = panel.visual_description;
-            dialogueListText = "No dialogue specified.";
         }
 
-        const lowerStyle = style.toLowerCase();
-        const isWebtoon = lowerStyle.includes('webtoon') || lowerStyle.includes('manhwa');
-        
-        let layoutInstruction = isWebtoon 
-            ? `**MODE: WEBTOON (Vertical)**. Draw one high-quality vertical strip composition containing the described panels.`
-            : `**MODE: COMIC PAGE**. Draw a full page with distinct panels separated by white gutters.`;
-
-        let colorInstruction = `- Palette: ${colorFormat}`;
-        
-        // Global Context Injection
-        const contextString = globalContext ? `\n**FULL STORY CONTEXT (REFERENCE ONLY):**\n${globalContext.substring(0, 2000)}\n` : '';
-
-        // --- CRITICAL: CONSISTENCY ENFORCEMENT ---
+        // --- PROMPT CONSTRUCTION ---
         const systemPrompt = `
-            You are a legendary Comic Book Artist and Director (Gemini 3 Pro Vision).
+            You are a legendary Comic Book Artist (Gemini 3 Pro Vision).
             
-            **CORE DIRECTIVE: MAXIMUM VISUAL CONSISTENCY.**
-            This is one page of a continuous story. The characters and background MUST remain consistent with the provided Reference Images and Global Context.
+            **CORE DIRECTIVE: CHARACTER & VISUAL CONSISTENCY IS LAW.**
+            1. **REFERENCE LOCK:** I will provide reference images for the characters. You MUST use these EXACT visual identities (Hair, Face, Body Type, **OUTFIT**).
+            2. **OUTFIT RULE:** Characters MUST wear the same clothes as in the reference images. Do not change them randomly between panels.
+            3. **STAGING RULE:** Follow the "Left/Right" positioning instructions in the Visual Script exactly. This is required for dialogue placement.
             
-            **1. GLOBAL CONTEXT (THE SETTING):**
+            **CONTEXT:**
             "${premise}"
-            ${contextString}
-            *You MUST use this context to determine the static background environment. Do NOT change the setting randomly between panels unless the script says "Change Scene".*
             
-            **2. ARTISTIC DIRECTION:**
-            - Style: ${style} (High quality, ${imageQuality} resolution, consistent lineart).
-            - Palette: ${colorFormat}
-            ${visualEffect !== 'none' ? `- Effect: ${visualEffect}` : ''}
-            - ${layoutInstruction}
+            **STYLE:** ${style}. ${colorFormat}. ${visualEffect !== 'none' ? `Effect: ${visualEffect}` : ''}.
+            Resolution: ${imageQuality}. High Detail.
             
-            **3. CHARACTER CONSISTENCY (STRICT ENFORCEMENT):**
-            - **OUTFIT RULE:** The characters MUST wear the **EXACT SAME OUTFIT** as shown in their Reference Images. Do not hallucinate new jackets, colors, or accessories. Copy the reference outfit details precisely.
-            - **FACE RULE:** Maintain facial structure identity across all panels and angles.
-            - **BODY RULE:** Maintain character body type and height relative to others.
-            
-            **4. CURRENT PAGE SCRIPT:**
+            **VISUAL SCRIPT (THE PAGE):**
             ${visualDirectives}
             
-            **5. TEXT RENDERING:**
-            Add speech bubbles. Text MUST be legible Vietnamese.
+            **DIALOGUE (TEXT PLACEMENT):**
+            Render speech bubbles with legible Vietnamese text. Place bubbles near the speaking characters based on the Staging rules.
             ${dialogueListText}
         `;
 
@@ -149,15 +122,15 @@ const handler: Handler = async (event: HandlerEvent) => {
                 if (char.image_url) {
                     const imgData = processDataUrl(char.image_url);
                     if (imgData) {
-                        parts.push({ text: `[REFERENCE] CHARACTER: ${char.name} (LOCK THIS OUTFIT & FACE)` });
+                        // Strong reinforcement
+                        parts.push({ text: `[STRICT REFERENCE] CHARACTER: ${char.name}. VISUAL DNA: Maintain this exact face and outfit.` });
                         parts.push({ inlineData: { data: imgData.base64, mimeType: imgData.mimeType } });
                     }
                 }
             }
         }
 
-        // Use Gemini 3 Pro for rendering (High Quality)
-        console.log(`[WORKER] Calling Gemini 3 Pro for job ${jobId} (Quality: ${imageQuality})...`);
+        console.log(`[WORKER] Rendering ${jobId} with Gemini 3 Pro...`);
         const response = await ai.models.generateContent({
             model: 'gemini-3-pro-image-preview',
             contents: { parts },
@@ -165,7 +138,7 @@ const handler: Handler = async (event: HandlerEvent) => {
                 responseModalities: [Modality.IMAGE],
                 imageConfig: {
                     aspectRatio: aspectRatio || '3:4',
-                    imageSize: imageQuality // Dynamic Quality
+                    imageSize: imageQuality
                 }
             }
         });
@@ -189,26 +162,18 @@ const handler: Handler = async (event: HandlerEvent) => {
             ContentType: 'image/png'
         }));
 
-        const baseUrl = process.env.R2_PUBLIC_URL!.replace(/\/$/, '');
-        const publicUrl = `${baseUrl}/${fileName}`;
-
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        const publicUrl = `${process.env.R2_PUBLIC_URL}/${fileName}`;
 
         await Promise.all([
             supabaseAdmin.from('generated_images').update({ 
                 image_url: publicUrl,
-                // Keep the JSON prompt structure in DB for future reference
                 prompt: panel.visual_description 
             }).eq('id', jobId),
             supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id })
         ]);
 
-        console.log(`[WORKER] Job ${jobId} completed successfully.`);
-
     } catch (error: any) {
-        if (userId) {
-            await failJob(jobId, userId, error.message, totalCost);
-        }
+        if (userId) await failJob(jobId, userId, error.message, totalCost);
     }
 
     return { statusCode: 200 };

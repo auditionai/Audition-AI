@@ -33,7 +33,7 @@ const LANGUAGES = [
     'Chinese'
 ];
 
-const MAX_CHARACTERS = 10; // Increased limit for better layout
+const MAX_CHARACTERS = 10;
 
 const ART_STYLES = [
     { label: 'Mặc định (Audition)', value: 'Audition 3D Game Style' },
@@ -395,12 +395,12 @@ const ProfessionalScriptEditor: React.FC<{
         );
     }
 
-    // UPDATED: Professional Screenplay-like Design in Dark Mode
+    // UPDATED: Improved Dark Mode UI
     return (
-        <div className="animate-fade-in bg-[#1E1B25] text-gray-200 rounded-xl shadow-2xl border border-white/10 overflow-hidden font-sans">
+        <div className="animate-fade-in bg-[#121212] text-gray-200 rounded-xl shadow-2xl border border-white/10 overflow-hidden font-sans">
             
             {/* Header: Page Info */}
-            <div className="bg-[#181820] p-6 border-b border-white/10">
+            <div className="bg-[#1A1A1A] p-6 border-b border-white/10">
                 <div className="flex justify-between items-start mb-4">
                     <div className="space-y-1">
                         <h4 className="text-xs font-black tracking-[0.2em] text-pink-500 uppercase">KỊCH BẢN PHÂN CẢNH</h4>
@@ -411,9 +411,9 @@ const ProfessionalScriptEditor: React.FC<{
                         <div className="text-sm font-mono text-cyan-400">{pageData.layout_note}</div>
                     </div>
                 </div>
-                <div className="bg-white/5 p-3 rounded-lg border-l-4 border-pink-500">
-                    <p className="text-xs font-bold text-gray-400 uppercase mb-1">Tóm tắt cốt truyện</p>
-                    <p className="text-sm text-gray-200 italic leading-relaxed">{panel.plot_summary}</p>
+                <div className="bg-white/5 p-4 rounded-lg border-l-4 border-pink-500">
+                    <p className="text-xs font-bold text-gray-400 uppercase mb-1">Cốt truyện</p>
+                    <p className="text-sm text-gray-300 italic leading-relaxed">{panel.plot_summary}</p>
                 </div>
             </div>
 
@@ -421,19 +421,16 @@ const ProfessionalScriptEditor: React.FC<{
             <div className="p-6 space-y-8">
                 {pageData.panels.map((p, pIdx) => (
                     <div key={pIdx} className="relative pl-6 md:pl-0">
-                        {/* Vertical Line for Mobile */}
-                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-white/10 md:hidden rounded-full"></div>
-
                         {/* Panel Header */}
-                        <div className="flex items-center gap-4 mb-3">
-                            <div className="bg-white/10 text-white font-black text-sm px-3 py-1 rounded uppercase tracking-wider shadow-sm border border-white/5">
+                        <div className="flex items-center gap-4 mb-4">
+                            <div className="bg-blue-600/20 text-blue-300 font-black text-xs px-3 py-1 rounded uppercase tracking-wider border border-blue-500/30">
                                 Panel {p.panel_id}
                             </div>
                             <div className="h-px flex-grow bg-white/10"></div>
                         </div>
                         
                         {/* Content Grid */}
-                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 bg-[#181818] p-4 rounded-xl border border-white/5">
                             {/* Left: Visual Description */}
                             <div className="lg:col-span-7 space-y-2">
                                 <label className="flex items-center gap-2 text-[10px] font-bold text-gray-500 uppercase tracking-wider">
@@ -441,7 +438,7 @@ const ProfessionalScriptEditor: React.FC<{
                                 </label>
                                 <div className="relative group">
                                     <textarea 
-                                        className="w-full bg-[#12121A] border border-white/10 rounded-lg p-4 text-sm text-gray-200 focus:border-pink-500 focus:ring-1 focus:ring-pink-500/50 transition-all shadow-inner min-h-[120px] leading-relaxed resize-y font-sans"
+                                        className="w-full bg-[#0F0F0F] border border-white/10 rounded-lg p-4 text-sm text-gray-300 focus:border-pink-500 focus:ring-1 focus:ring-pink-500/50 transition-all shadow-inner min-h-[140px] leading-relaxed resize-y font-sans"
                                         value={p.description}
                                         onChange={(e) => handlePanelDescChange(pIdx, e.target.value)}
                                         placeholder="Mô tả chi tiết khung cảnh..."
@@ -454,24 +451,24 @@ const ProfessionalScriptEditor: React.FC<{
                                 <label className="flex items-center gap-2 text-[10px] font-bold text-gray-500 uppercase tracking-wider">
                                     <i className="ph-fill ph-chats-circle"></i> Thoại (Dialogue)
                                 </label>
-                                <div className="bg-[#12121A] rounded-lg border border-white/10 p-2 space-y-2 shadow-inner min-h-[120px]">
+                                <div className="bg-[#0F0F0F] rounded-lg border border-white/10 p-3 space-y-3 shadow-inner min-h-[140px]">
                                     {p.dialogues && p.dialogues.length > 0 ? (
                                         p.dialogues.map((d, dIdx) => (
                                             <div key={dIdx} className="flex gap-2 group/row items-start animate-fade-in-up">
-                                                <div className="w-[80px] flex-shrink-0">
+                                                <div className="w-[90px] flex-shrink-0">
                                                     <input 
                                                         type="text" 
-                                                        className="w-full bg-white/5 border-none rounded px-2 py-1.5 text-[11px] font-bold text-cyan-300 uppercase text-center focus:ring-1 focus:ring-cyan-500 transition-all placeholder-gray-600"
+                                                        className="w-full bg-white/5 border border-white/5 rounded px-2 py-2 text-[10px] font-bold text-cyan-400 uppercase text-center focus:ring-1 focus:ring-cyan-500 transition-all placeholder-gray-600"
                                                         value={d.speaker}
-                                                        placeholder="TÊN"
+                                                        placeholder="NHÂN VẬT"
                                                         onChange={(e) => handleDialogueChange(pIdx, dIdx, 'speaker', e.target.value)}
                                                     />
                                                 </div>
                                                 <div className="flex-grow relative">
                                                     <textarea 
-                                                        className="w-full bg-transparent border-b border-white/10 focus:border-white p-1.5 text-sm text-white focus:ring-0 resize-none overflow-hidden min-h-[34px] leading-snug transition-colors placeholder-gray-600"
+                                                        className="w-full bg-transparent border-b border-white/10 focus:border-white/50 p-2 text-sm text-gray-300 focus:ring-0 resize-none overflow-hidden min-h-[38px] leading-snug transition-colors placeholder-gray-700"
                                                         value={d.text}
-                                                        placeholder="Lời thoại..."
+                                                        placeholder="Nội dung thoại..."
                                                         rows={1}
                                                         onInput={(e) => {
                                                             e.currentTarget.style.height = 'auto';
@@ -485,19 +482,19 @@ const ProfessionalScriptEditor: React.FC<{
                                                     className="text-gray-600 hover:text-red-500 p-1 opacity-0 group-hover/row:opacity-100 transition-all"
                                                     title="Xóa dòng thoại"
                                                 >
-                                                    <i className="ph-fill ph-x-circle text-sm"></i>
+                                                    <i className="ph-fill ph-x-circle text-lg"></i>
                                                 </button>
                                             </div>
                                         ))
                                     ) : (
-                                        <div className="h-full flex flex-col items-center justify-center text-gray-600 text-xs italic py-4">
-                                            Không có thoại
+                                        <div className="h-full flex flex-col items-center justify-center text-gray-700 text-xs italic py-4">
+                                            Không có lời thoại
                                         </div>
                                     )}
                                     
                                     <button 
                                         onClick={() => addDialogue(pIdx)} 
-                                        className="w-full py-1.5 mt-2 border border-dashed border-white/10 rounded text-[10px] font-bold text-gray-500 hover:text-white hover:bg-white/5 hover:border-white/30 transition-all flex items-center justify-center gap-1"
+                                        className="w-full py-2 mt-2 border border-dashed border-white/10 rounded text-[10px] font-bold text-gray-500 hover:text-white hover:bg-white/5 hover:border-white/30 transition-all flex items-center justify-center gap-1"
                                     >
                                         <i className="ph-bold ph-plus"></i> Thêm thoại
                                     </button>
@@ -628,7 +625,7 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
         if (!page) return;
         setExpandingPageId(page.id);
         
-        // IMPROVED: Generate Context Summary from previous pages
+        // IMPROVED: Generate Context Summary from previous pages to maintain narrative flow
         const previousPages = comicPages.slice(0, pageIndex);
         const contextSummary = previousPages.map(p => `Page ${p.panel_number}: ${p.plot_summary}`).join('\n');
 
@@ -693,7 +690,7 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                 body: JSON.stringify({
                     panel: page,
                     premise: premise,
-                    globalContext: globalContext, // NEW: Send full context
+                    globalContext: globalContext, // Send full context
                     characters: characters.map(c => ({ name: c.name, image_url: c.image_url })),
                     storyTitle: comicTitle,
                     style: artStyle,
@@ -796,7 +793,6 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
         if (user && user.diamonds < cost) return showToast(`Cần ${cost} kim cương để bắt đầu.`, 'error');
         
         setIsBatchRendering(true);
-        // The useEffect above will pick it up
     };
 
     const handleDownloadAllImages = async () => {
@@ -807,20 +803,19 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
         
         for (let i = 0; i < completedPages.length; i++) {
             const page = completedPages[i];
-            // Create a download link for each image
             const a = document.createElement('a');
-            // Clean title for filename
             const cleanTitle = (comicTitle || 'comic').replace(/[^a-z0-9]/gi, '_').toLowerCase();
-            const filename = `${cleanTitle}_Page_${page.panel_number}.png`;
+            // Add padded page number (01, 02) for correct ordering
+            const pageNumStr = String(page.panel_number).padStart(2, '0');
+            const filename = `${cleanTitle}_Page_${pageNumStr}.png`;
             
-            // Use the download proxy function
             a.href = `/.netlify/functions/download-image?url=${encodeURIComponent(page.image_url!)}`;
             a.download = filename;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
             
-            // Increased delay between downloads to prevent browser blocking (1.5s)
+            // Increase delay to 1.5s to prevent browser throttling
             await new Promise(r => setTimeout(r, 1500));
         }
     };
@@ -949,7 +944,6 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                                         <p>Thêm nhân vật để AI nhận diện khuôn mặt & trang phục</p>
                                     </div>
                                 ) : (
-                                    // Grid fixed to match card aspect ratio
                                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 max-h-[600px] overflow-y-auto custom-scrollbar pr-2 flex-grow content-start">
                                         {characters.map((char, idx) => (
                                             <div key={char.id} className="bg-[#1E1B25] p-2 rounded-xl border border-white/5 relative group flex flex-col h-full">
@@ -968,7 +962,6 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                                 )}
                             </div>
                             
-                            {/* Separate Create Script Button */}
                             <div className="bg-[#1E1B25] p-4 rounded-xl border border-white/10 flex items-center justify-between shadow-lg">
                                 <div>
                                     <p className="text-xs text-gray-400">Chi phí tạo kịch bản</p>
@@ -1035,18 +1028,14 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
             {/* --- STEP 3: PRODUCTION (IMAGE ONLY) --- */}
             {currentStep === 3 && (
                 <div className="w-full max-w-6xl mx-auto">
-                    {/* Main Action Bar */}
                     <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6 bg-[#1E1B25] p-4 rounded-xl border border-white/10 shadow-xl sticky top-20 z-30">
                         <div className="text-white">
                             <h2 className="text-xl font-bold">{comicTitle || 'Phòng Tranh & Xuất Bản'}</h2>
                             <p className="text-xs text-gray-400 mt-1">{comicPages.filter(p => p.status === 'completed').length} / {comicPages.length} trang hoàn tất</p>
                         </div>
                         <div className="flex gap-3 items-center">
-                             {/* Re-add script edit for quick fixes */}
                             <button onClick={() => setCurrentStep(2)} className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-lg text-sm font-semibold">Sửa kịch bản</button>
-                            
                             <div className="h-8 w-px bg-white/10 mx-1"></div>
-                            
                             <button 
                                 onClick={handleRenderAll}
                                 disabled={isBatchRendering}
@@ -1064,7 +1053,6 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                         </div>
                     </div>
 
-                    {/* Unified Grid View */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {comicPages.map((page, idx) => (
                             <div key={page.id} className="bg-[#12121A]/90 border border-white/10 rounded-2xl p-4 relative overflow-hidden group flex flex-col h-full shadow-lg">

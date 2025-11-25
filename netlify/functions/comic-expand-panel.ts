@@ -48,23 +48,21 @@ const handler: Handler = async (event: HandlerEvent) => {
             panelInstruction = `
             **SPECIAL MODE: COVER PAGE / POSTER**
             - You MUST create EXACTLY 1 (ONE) Panel.
-            - The description must be a high-quality, detailed prompt for a comic book cover.
-            - Focus on the main title composition, central characters, and dramatic lighting.
             - Layout Note should be "Full Page Poster".
+            - Focus on title composition and main character introduction.
             `;
         } else {
             panelInstruction = `
             **MODE: STORY PAGE**
-            - Create exactly 3 to 5 panels based on the summary.
-            - Break down the action logically.
-            - **CRITICAL: Ensure the panel flow matches the 'STORY CONTEXT' provided below.**
+            - Create exactly 3 to 5 panels.
+            - **CRITICAL - STAGING DIRECTIONS:** In the 'description' for each panel, you MUST specify where characters stand relative to each other (e.g., "Character A (Left) shouting at Character B (Right)"). This is required for the renderer to place speech bubbles correctly.
             `;
         }
 
         const prompt = `
-            You are a professional Comic Script Writer.
+            You are a professional Comic Script Writer (Layout & Staging Specialist).
             
-            **TASK:** Break down this Page Summary into detailed Panels for an AI image generator.
+            **TASK:** Break down this Page Summary into detailed Panels.
             
             **INPUT INFO:**
             - Page Summary: "${plot_summary}"
@@ -74,26 +72,26 @@ const handler: Handler = async (event: HandlerEvent) => {
             - Characters:
             ${characterContext}
             
-            **STORY CONTEXT (PREVIOUS PAGES):**
+            **STORY CONTEXT (PREVIOUS EVENTS):**
             ${story_context || "Start of story."}
+            *Use this context to ensure continuity (e.g., if they were injured in the previous page, they should look injured here).*
             
             ${panelInstruction}
             
             **STRICT RULES:**
-            1. **description**: Must be a detailed visual instruction for an artist/AI. Describe the action, camera angle, background, and character expressions vividly. **MUST BE IN VIETNAMESE (TIẾNG VIỆT)**.
-            2. **dialogues**: Must be natural conversation in **${targetLanguage}**. If it is a Cover Page, dialogue is usually empty or just the Title.
-            3. **IMPORTANT**: Ensure every panel has a "description" and "dialogues" array.
-            4. Output MUST be valid JSON matching the schema below.
+            1. **description**: Detailed visual instruction in **VIETNAMESE (TIẾNG VIỆT)**. Include Staging directions (Left/Right/Center).
+            2. **dialogues**: Natural conversation in **${targetLanguage}**.
+            3. Output JSON.
             
             **JSON Schema:**
             {
-              "layout_note": "String (e.g., 2x2 Grid, Dynamic Action, Full Page Poster)",
+              "layout_note": "String (e.g., Dynamic Action, 3-Tier Grid)",
               "panels": [
                 {
                   "panel_id": Integer,
-                  "description": "String (Visual description in Vietnamese)",
+                  "description": "String (Visual description + Staging)",
                   "dialogues": [
-                    { "speaker": "String (Character Name)", "text": "String (Dialogue Content)" }
+                    { "speaker": "String", "text": "String" }
                   ]
                 }
               ]
@@ -103,42 +101,29 @@ const handler: Handler = async (event: HandlerEvent) => {
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: { parts: [{ text: prompt }] },
-            config: {
-                responseMimeType: "application/json"
-            }
+            config: { responseMimeType: "application/json" }
         });
 
         let resultJson = { layout_note: "Standard Layout", panels: [] };
         try {
             const text = response.text || '{}';
-            // Extract JSON from potential markdown code blocks
             const jsonMatch = text.match(/\{[\s\S]*\}/);
             const cleanText = jsonMatch ? jsonMatch[0] : text;
-            
             const parsed = JSON.parse(cleanText);
             
             if (parsed && typeof parsed === 'object') {
                 resultJson = parsed;
-                // Normalize structure if AI wraps it weirdly
+                // Normalization logic
                 if (!resultJson.panels || !Array.isArray(resultJson.panels)) {
-                    if (Array.isArray((parsed as any).script?.panels)) resultJson = (parsed as any).script;
-                    else if (Array.isArray((parsed as any).result?.panels)) resultJson = (parsed as any).result;
-                    else {
-                        // Fallback: If structure is weird, treat whole object as single panel context
-                        resultJson.panels = [{ 
-                            panel_id: 1, 
-                            description: plot_summary + " (AI parsing fallback)", 
-                            dialogues: [] 
-                        }] as any;
-                    }
+                    if (Array.isArray((parsed as any).result?.panels)) resultJson = (parsed as any).result;
+                    else resultJson.panels = [];
                 }
             }
         } catch (e) {
             console.error("JSON Parse Error:", e);
-            // Fallback: If JSON fails completely, create a valid structure manually so the frontend doesn't crash
-            resultJson.panels = [{ 
+             resultJson.panels = [{ 
                 panel_id: 1, 
-                description: `Cảnh: ${plot_summary}. (Tự động tạo do lỗi định dạng AI).`, 
+                description: `Cảnh: ${plot_summary}. (Lỗi phân tích AI).`, 
                 dialogues: [] 
             }] as any;
         }

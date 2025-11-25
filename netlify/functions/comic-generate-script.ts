@@ -45,53 +45,48 @@ const handler: Handler = async (event: HandlerEvent) => {
         // Người dùng chọn X trang truyện.
         // Hệ thống tạo X + 1 trang. Trang 1 là Bìa. Trang 2 -> X+1 là nội dung.
         const totalPages = typeof pageCount === 'number' ? pageCount + 1 : 2;
+        const contentPages = totalPages - 1;
 
-        let coverInstruction = "";
-        if (coverPage === 'start' || coverPage === 'both') {
-            coverInstruction = `
-            CRITICAL STRUCTURE REQUIREMENT:
-            - You MUST create exactly ${totalPages} items in the output array.
-            - Item 1 (panel_number: 1) MUST be the "Comic Cover" (Trang bìa). Plot Summary: "Trang bìa nghệ thuật với tên truyện: [${premise.substring(0, 20)}...], hình ảnh minh họa chính của nhân vật và không khí của bộ truyện."
-            - Items 2 to ${totalPages} are the actual story pages based on the premise.
-            `;
-        } else {
-            // Fallback if no cover selected (rare based on UI)
-             coverInstruction = `Create exactly ${pageCount} story pages.`;
-        }
-        
-        // Logic Dialogue Density
         let densityInstruction = "Dialogue Density: Normal balanced conversation.";
         if (dialogueDensity === 'low') densityInstruction = "Dialogue Density: LOW. Focus on visual storytelling, minimal text.";
         if (dialogueDensity === 'high') densityInstruction = "Dialogue Density: HIGH. Detailed conversations and narration.";
 
-        // Prompt optimized for OUTLINING with Narrative Cohesion
+        // NEW PROMPT STRATEGY: 3-Layer Scripting Structure
         const prompt = `
-            You are a professional Comic Script Writer.
-            **Task:** Create a cohesive, logical structural outline for a comic script.
+            You are a professional Comic Script Director and Writer.
             
-            **Input Story:** "${premise}"
-            **Genre:** ${genre}
-            **Total Output Length:** ${totalPages} PAGES.
-            **Characters:** ${characterNames}
-            **Language:** ${targetLanguage} (Strictly).
+            **TASK:** Create a structured breakdown for a comic book based on the user's premise.
+            **INPUT PREMISE:** "${premise}"
+            **GENRE:** ${genre}
+            **CHARACTERS:** ${characterNames}
+            **TARGET LANGUAGE:** ${targetLanguage} (Strictly).
+            
+            **STRUCTURE REQUIREMENTS:**
+            You must output an array of ${totalPages} objects.
+            
+            **STEP 1: THINK LIKE A DIRECTOR (Mental Sandbox)**
+            Before listing the pages, plan the FULL STORY ARC for ${contentPages} content pages:
+            - **Beginning (Page 2-3):** Establish the setting, characters, and the inciting incident.
+            - **Middle (Page 4...):** Rising action, conflict, or development.
+            - **Climax/End (Last Page):** The peak of the action or a strong cliffhanger/resolution.
+            - **Continuity Rule:** Ensure Page N+1 logically follows Page N. If a character falls in Page 2, they must be on the ground in Page 3.
+            
+            **STEP 2: GENERATE THE OUTPUT LIST**
+            
+            **Item 1 (Cover Page):**
+            - panel_number: 1
+            - plot_summary: "Trang bìa nghệ thuật: Tên truyện [Title], hình ảnh minh họa [Main Character Action], thể hiện không khí [Mood]."
+            
+            **Items 2 to ${totalPages} (Story Pages):**
+            - panel_number: [Page Number]
+            - plot_summary: [A concise 2-sentence summary of what happens on this page. Focus on the key action beat. MUST BE IN ${targetLanguage}.]
+            
             ${densityInstruction}
-            
-            ${coverInstruction}
-            
-            **STORYTELLING REQUIREMENTS:**
-            1. **Continuity:** The story MUST flow logically from Page 1 to the end. Do not create disconnected scenes. Page N+1 must be a direct consequence of Page N.
-            2. **Pacing:** Ensure the climax happens towards the end.
-            3. **Character Arc:** Characters should stay consistent in their roles.
-            
-            **Requirement:**
-            - For each PAGE, provide a **concise 'plot_summary'** (2-3 sentences max).
-            - Focus on the key event of the page.
-            - **Do not** write detailed panels yet.
             
             **Output Format:** JSON Array of objects.
         `;
 
-        // Use gemini-2.5-flash for speed
+        // Use gemini-2.5-flash for speed but instructed for logic
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash', 
             contents: { parts: [{ text: prompt }] },
@@ -116,36 +111,27 @@ const handler: Handler = async (event: HandlerEvent) => {
             const cleanText = text.replace(/```json|```/g, '').trim();
             const parsed = JSON.parse(cleanText);
 
-            // ROBUSTNESS: Handle different AI return formats
             if (Array.isArray(parsed)) {
                 scriptJson = parsed;
             } else if (typeof parsed === 'object' && parsed !== null) {
-                // Check for wrapped keys
+                // Handle wrapped objects
                 if (Array.isArray(parsed.outline)) scriptJson = parsed.outline;
                 else if (Array.isArray(parsed.pages)) scriptJson = parsed.pages;
-                else if (Array.isArray(parsed.panels)) scriptJson = parsed.panels;
-                else if (Array.isArray(parsed.result)) scriptJson = parsed.result;
                 else {
-                    // Only one object? Wrap it
                     scriptJson = [parsed];
                 }
             }
         } catch (parseError) {
             console.error("JSON Parse Error:", parseError);
-            // Don't throw, return empty array to prevent crash
             scriptJson = []; 
         }
 
-        // FINAL SAFETY CHECK: Must be an array
-        if (!Array.isArray(scriptJson)) {
-            scriptJson = [];
-        }
-
-        // If empty, create dummy data so user doesn't lose money for nothing
-        if (scriptJson.length === 0) {
-            scriptJson.push({ panel_number: 1, plot_summary: `Trang Bìa: Tên truyện và hình ảnh chủ đạo.` });
-            for(let i=2; i<=totalPages; i++) {
-                scriptJson.push({ panel_number: i, plot_summary: `Trang ${i}: (AI chưa tạo được nội dung, bạn hãy nhập thủ công)` });
+        // Validation and Fallback
+        if (!Array.isArray(scriptJson) || scriptJson.length === 0) {
+             scriptJson = [];
+             scriptJson.push({ panel_number: 1, plot_summary: `Trang Bìa: ${premise.substring(0,50)}...` });
+             for(let i=2; i<=totalPages; i++) {
+                scriptJson.push({ panel_number: i, plot_summary: `Trang ${i}: Diễn biến tiếp theo của câu chuyện.` });
             }
         }
 

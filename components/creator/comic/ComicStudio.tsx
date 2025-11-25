@@ -8,7 +8,6 @@ import { COMIC_PREMISES } from '../../../constants/comicPremises';
 import { useTranslation } from '../../../hooks/useTranslation';
 import ImageUploader from '../../ai-tool/ImageUploader';
 import Modal from '../../common/Modal';
-import ImageModal from '../../common/ImageModal'; // Reusing ImageModal for Lightbox
 
 // --- CONSTANTS ---
 

@@ -138,6 +138,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         userId = jobData.user_id;
         
         const { characters, model: selectedModel, imageSize = '1K', removeWatermark = false } = payload;
+        const numCharacters = characters?.length || 0;
         
         let baseCost = 1;
         if (selectedModel === 'pro') {
@@ -145,13 +146,12 @@ const handler: Handler = async (event: HandlerEvent) => {
             else if (imageSize === '2K') baseCost = 15;
             else baseCost = 10;
         }
-        totalCost = baseCost + (characters?.length || 0);
+        totalCost = baseCost + numCharacters;
         if (removeWatermark) totalCost += 1;
 
         await updateJobProgress(jobId, jobPromptData, 'Máy chủ đang xử lý dữ liệu...');
 
         const { referenceImage, prompt, style, aspectRatio, useSearch = false } = payload;
-        const numCharacters = characters.length;
 
         const { data: apiKeyData, error: apiKeyError } = await supabaseAdmin.from('api_keys').select('id, key_value').eq('status', 'active').order('usage_count', { ascending: true }).limit(1).single();
         if (apiKeyError || !apiKeyData) throw new Error('Hết tài nguyên AI. Vui lòng thử lại sau.');
@@ -223,7 +223,9 @@ const handler: Handler = async (event: HandlerEvent) => {
         } else {
             // Generate Background First
             await updateJobProgress(jobId, jobPromptData, 'Đang tạo bối cảnh từ prompt...');
-            const bgPrompt = `Create a high-quality, cinematic background scene: "${prompt}". Style: "${style}". NO people. Ratio: ${aspectRatio}.`;
+            
+            // [STRICT] FORCE EMPTY BACKGROUND
+            const bgPrompt = `Create a high-quality, cinematic background scene: "${prompt}". Style: "${style}". EXTREMELY IMPORTANT: EMPTY SCENE, NO PEOPLE, NO CHARACTERS, NO CROWDS. Just the environment. Ratio: ${aspectRatio}.`;
             
             const bgConfig: any = { 
                 responseModalities: [Modality.IMAGE],
@@ -278,8 +280,11 @@ const handler: Handler = async (event: HandlerEvent) => {
         if (!finalLayout) throw new Error("Lỗi xử lý layout canvas.");
 
         // --- STEP 3: FINAL BLEND ---
+        // [STRICT] Force Quantity Constraint
         const compositePrompt = [
             `**TASK: GROUP PHOTO COMPOSITION (HYPER-REALISTIC 3D RENDER)**`,
+            `**STRICT QUANTITY CONTROL:** The final image MUST contain EXACTLY ${numCharacters} main characters.`,
+            `**ABSOLUTE PROHIBITION:** Do NOT generate any extra people, bystanders, crowds, or background characters. The background must remain strictly environmental as provided.`,
             `**ASPECT RATIO IS LAW:** The input [CANVAS_WITH_CHARACTER_AND_GREY_BG] sets the absolute size. DO NOT CHANGE IT.`,
             `---`,
             `**CRITICAL: VIBE & SOUL**`,
@@ -291,8 +296,9 @@ const handler: Handler = async (event: HandlerEvent) => {
             `**TECHNICAL EXECUTION:**`,
             `1. **ANCHOR:** Place characters firmly on the ground.`,
             `2. **RELIGHT:** Use global illumination.`,
-            `3. **OUTFIT:** Preserve outfit details.`,
-            `4. **STYLE:** Hyper-realistic 3D Render (Audition Game High-End).`
+            `3. **OUTFIT:** Preserve outfit details from input.`,
+            `4. **STYLE:** Hyper-realistic 3D Render (Audition Game High-End).`,
+            `--no extra people, crowd, audience, bystanders, distorted faces, bad anatomy, blurry, low quality`
         ].join('\n');
         
         const finalParts = [

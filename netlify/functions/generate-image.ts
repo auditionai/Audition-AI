@@ -1,16 +1,13 @@
 
 import type { Handler, HandlerEvent } from "@netlify/functions";
-import { GoogleGenAI, Modality } from "@google/genai";
 import { supabaseAdmin } from './utils/supabaseClient';
 import { Buffer } from 'buffer';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
-import { addSmartWatermark } from './watermark-service';
 
 const COST_UPSCALE = 1;
 const COST_REMOVE_WATERMARK = 1; 
 
 const handler: Handler = async (event: HandlerEvent) => {
-    // Initialize S3 Client
     const s3Client = new S3Client({
         region: "auto",
         endpoint: process.env.R2_ENDPOINT!,
@@ -33,7 +30,6 @@ const handler: Handler = async (event: HandlerEvent) => {
         const { data: { user }, error: authError } = await (supabaseAdmin.auth as any).getUser(token);
         if (authError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized: Invalid token.' }) };
         
-        // Safety parsing
         let body;
         try {
             body = JSON.parse(event.body || '{}');
@@ -64,192 +60,105 @@ const handler: Handler = async (event: HandlerEvent) => {
         if (useUpscaler) totalCost += COST_UPSCALE;
         if (removeWatermark) totalCost += COST_REMOVE_WATERMARK; 
         
-        // --- 2. CHECK BALANCE (READ ONLY - NO DEDUCTION YET) ---
+        // --- 2. CHECK BALANCE & DEDUCT UPFRONT ---
         const { data: userData, error: userError } = await supabaseAdmin.from('users').select('diamonds, xp').eq('id', user.id).single();
         if (userError || !userData) return { statusCode: 404, body: JSON.stringify({ error: 'User not found.' }) };
         
-        // Strict check before processing
         if (userData.diamonds < totalCost) {
             return { statusCode: 402, body: JSON.stringify({ error: `Không đủ kim cương. Cần ${totalCost}, bạn có ${userData.diamonds}.` }) };
         }
         
-        // --- 3. AI PROCESSING ---
-        // Fetch API Key
-        const { data: apiKeyData, error: apiKeyError } = await supabaseAdmin.from('api_keys').select('id, key_value').eq('status', 'active').order('usage_count', { ascending: true }).limit(1).single();
-        if (apiKeyError || !apiKeyData) throw new Error('Hết tài nguyên AI. Vui lòng thử lại sau.');
-        
-        const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
-
-        // Construct Prompt
-        let fullPrompt = "";
-        const hasInputImage = !!characterImage;
-        
-        // ==================================================================================
-        // 🔒 LOCK CODE: ASPECT RATIO ENFORCEMENT & OUTPAINTING LOGIC
-        // ==================================================================================
-        if (hasInputImage) {
-            fullPrompt = `
-            *** SYSTEM COMMAND: OUTPAINTING & EXPANSION ***
-            
-            1. [INPUT ANALYSIS]: The image labeled 'INPUT_CANVAS' contains a subject placed on a GRAY (#808080) or WHITE padding background.
-            2. [MANDATORY ACTION]: The GRAY/WHITE area is VOID space. You MUST NOT preserve it.
-            3. [GENERATION]:
-               - EXTEND the scene from the central subject outwards to FILL the entire canvas.
-               - GENERATE new background details (scenery, lighting, environment) to replace the gray/white bars.
-               - The final image MUST NOT have any solid color borders or bars. It must be a full-bleed illustration.
-            
-            4. [SUBJECT PRESERVATION]: Keep the character's Pose, Outfit, and Identity exactly as shown in the non-gray parts. Blend them seamlessly into the newly generated background.
-
-            **USER PROMPT:** ${prompt}
-
-            **STYLE:** Hyper-realistic 3D Render, Audition Game Style, High Fidelity, Volumetric Lighting.
-            `;
-        } else {
-            fullPrompt = `${prompt}\n\n**STYLE:**\n- **Hyper-realistic 3D Render** (High-end Game Cinematic style, Unreal Engine 5).\n- Detailed skin texture, volumetric lighting, raytracing reflections.`;
-        }
-        // ==================================================================================
-        // 🔒 END LOCK CODE
-        // ==================================================================================
-
-        if (faceReferenceImage) {
-            fullPrompt += `\n\n**FACE ID:**\n- Use the exact facial structure from 'Face Reference'. Blend it seamlessly.`;
-        }
-
-        const hardNegative = "photorealistic, real photo, grainy, low quality, 2D, sketch, cartoon, flat color, stiff pose, t-pose, mannequin, looking at camera blankly, distorted face, ugly, blurry, deformed hands, gray borders, gray bars, letterbox, pillarbox, cropped, vertical crop, monochrome background, gray background, border, frame, blank space, white background";
-        fullPrompt += ` --no ${hardNegative}, ${negativePrompt || ''}`;
-
-        // Prepare Parts
-        const parts: any[] = [];
-        parts.push({ text: fullPrompt });
-
-        const addImagePart = (imageDataUrl: string | null, label: string) => {
-            if (!imageDataUrl || typeof imageDataUrl !== 'string') return;
-            try {
-                const partsSplit = imageDataUrl.split(',');
-                if (partsSplit.length < 2) {
-                    console.warn(`Skipping invalid image data for ${label}`);
-                    return;
-                }
-                const header = partsSplit[0];
-                const base64 = partsSplit[1];
-                
-                // Robust MIME extraction
-                let mimeType = 'image/jpeg'; // Default to JPEG to be safe
-                const match = header.match(/:(.*?);/);
-                if (match && match[1]) {
-                    mimeType = match[1];
-                }
-                
-                // Ensure we don't send empty base64
-                if (base64 && base64.length > 100) {
-                    parts.push({ text: `[${label}]` });
-                    parts.push({ inlineData: { data: base64, mimeType } });
-                } else {
-                    console.warn(`Image data for ${label} is empty or too short.`);
-                }
-            } catch (e) {
-                console.error(`Error processing image part ${label}`, e);
-            }
-        };
-
-        addImagePart(characterImage, "INPUT_CANVAS");
-        addImagePart(styleImage, "STYLE_REFERENCE");
-        addImagePart(faceReferenceImage, "FACE_REFERENCE");
-        
-        // API Config
-        const config: any = { 
-            responseModalities: [Modality.IMAGE],
-            seed: seed ? Number(seed) : undefined,
-            imageConfig: { 
-                aspectRatio: aspectRatio, 
-                imageSize: isProModel ? imageSize : undefined
-            }
-        };
-
-        if (isProModel && useGoogleSearch) {
-            config.tools = [{ googleSearch: {} }]; 
-        }
-
-        // CALL GEMINI
-        console.log(`Sending request to model ${apiModel} with ${parts.length} parts...`);
-        const response = await ai.models.generateContent({
-            model: apiModel,
-            contents: { parts: parts },
-            config: config,
-        });
-
-        const imagePartResponse = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-        if (!imagePartResponse?.inlineData) {
-            throw new Error("AI không thể tạo hình ảnh từ mô tả này (Lỗi Model Output).");
-        }
-
-        const finalImageBase64 = imagePartResponse.inlineData.data;
-        const finalImageMimeType = imagePartResponse.inlineData.mimeType.includes('png') ? 'image/png' : 'image/jpeg';
-        
-        // --- 4. WATERMARK & UPLOAD ---
-        let imageBuffer = Buffer.from(finalImageBase64, 'base64');
-
-        if (!removeWatermark) {
-            const siteUrl = process.env.URL || 'https://auditionai.io.vn';
-            const watermarkUrl = `${siteUrl}/watermark.png`;
-            imageBuffer = await addSmartWatermark(imageBuffer, watermarkUrl);
-        }
-
-        const fileExtension = finalImageMimeType.split('/')[1] || 'png';
-        const fileName = `${user.id}/${Date.now()}_${isProModel ? 'pro' : 'flash'}.${fileExtension}`;
-
-        const putCommand = new PutObjectCommand({
-            Bucket: process.env.R2_BUCKET_NAME!,
-            Key: fileName,
-            Body: imageBuffer,
-            ContentType: finalImageMimeType,
-        });
-        await (s3Client as any).send(putCommand);
-        const publicUrl = `${process.env.R2_PUBLIC_URL}/${fileName}`;
-
-        // --- 5. TRANSACTION (PAY ON SUCCESS) ---
-        // Crucial Step: Only deduct NOW, after image is safely secured.
-        
-        // Re-fetch user data to ensure atomic safety (though low risk of race condition for single user)
-        const { data: userRecheck } = await supabaseAdmin.from('users').select('diamonds').eq('id', user.id).single();
-        
-        // Even if balance dropped (rare), we allow it to go negative slightly as we already incurred the AI cost.
-        // Better to give user the image than to fail after generation.
-        const currentDiamonds = userRecheck?.diamonds ?? userData.diamonds;
-        const newDiamondCount = currentDiamonds - totalCost;
-        const newXp = userData.xp + 10;
+        const newDiamondCount = userData.diamonds - totalCost;
+        const newXp = userData.xp + 10; // Anticipated XP
         
         let logDescription = `Tạo ảnh`;
         if (isProModel) logDescription += ` (Pro ${imageSize})`; else logDescription += ` (Flash)`;
         if (useUpscaler) logDescription += " + Upscale";
         if (removeWatermark) logDescription += " + NoWatermark";
 
+        // --- 3. CREATE JOB RECORD & UPLOAD INPUTS ---
+        const jobId = crypto.randomUUID();
+
+        // Helper to upload input to R2 Temp
+        const uploadInput = async (base64Data: string | null): Promise<string | null> => {
+            if (!base64Data) return null;
+            try {
+                const [header, base64] = base64Data.split(',');
+                const mimeType = header.match(/:(.*?);/)?.[1] || 'image/jpeg';
+                const ext = mimeType.split('/')[1] || 'jpg';
+                const buffer = Buffer.from(base64, 'base64');
+                const key = `temp/${user.id}/${jobId}_${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`;
+                
+                await (s3Client as any).send(new PutObjectCommand({
+                    Bucket: process.env.R2_BUCKET_NAME!,
+                    Key: key,
+                    Body: buffer,
+                    ContentType: mimeType
+                }));
+                return `${process.env.R2_PUBLIC_URL}/${key}`;
+            } catch (e) {
+                console.error("Input upload failed", e);
+                return null;
+            }
+        };
+
+        const [charUrl, faceUrl, styleUrl] = await Promise.all([
+            uploadInput(characterImage),
+            uploadInput(faceReferenceImage),
+            uploadInput(styleImage)
+        ]);
+
+        // Save job payload (JSON) to 'prompt' column temporarily
+        const jobPayload = {
+            prompt, apiModel, 
+            characterImageUrl: charUrl, 
+            faceReferenceImageUrl: faceUrl, 
+            styleImageUrl: styleUrl,
+            aspectRatio, negativePrompt, seed, useUpscaler,
+            imageSize, useGoogleSearch, removeWatermark,
+            totalCost // Save cost for refunding if failure
+        };
+
         await Promise.all([
+            // Deduct Money
             supabaseAdmin.from('users').update({ diamonds: newDiamondCount, xp: newXp }).eq('id', user.id),
-            supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id }),
-            supabaseAdmin.from('generated_images').insert({
-                user_id: user.id,
-                prompt: prompt,
-                image_url: publicUrl,
-                model_used: apiModel,
-                used_face_enhancer: !!faceReferenceImage
-            }),
+            // Log Transaction
             supabaseAdmin.from('diamond_transactions_log').insert({
                 user_id: user.id,
                 amount: -totalCost,
                 transaction_type: 'IMAGE_GENERATION',
                 description: logDescription
+            }),
+            // Create PENDING Job
+            supabaseAdmin.from('generated_images').insert({
+                id: jobId,
+                user_id: user.id,
+                prompt: JSON.stringify(jobPayload), // Store full payload here for worker
+                image_url: 'PENDING',
+                model_used: apiModel,
+                used_face_enhancer: !!faceReferenceImage
             })
         ]);
 
+        // --- 4. TRIGGER WORKER ---
+        fetch(`${process.env.URL}/.netlify/functions/generate-image-background`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ jobId })
+        }).catch(e => console.error("Failed to trigger worker", e));
+
         return {
-            statusCode: 200,
-            body: JSON.stringify({ imageUrl: publicUrl, newDiamondCount, newXp }),
+            statusCode: 202, // Accepted
+            body: JSON.stringify({ 
+                jobId, 
+                newDiamondCount, 
+                newXp,
+                message: "Tác vụ đang được xử lý nền." 
+            }),
         };
 
     } catch (error: any) {
-        console.error("Generate image function error:", error);
-        // Return specific error message. Since we haven't deducted, no refund needed.
+        console.error("Generate image spawner error:", error);
         return { statusCode: 500, body: JSON.stringify({ error: error.message || 'Lỗi không xác định từ máy chủ.' }) };
     }
 };

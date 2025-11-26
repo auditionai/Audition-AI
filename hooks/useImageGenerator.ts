@@ -1,3 +1,4 @@
+
 import { useState, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { AIModel } from '../types';
@@ -39,11 +40,13 @@ export const useImageGenerator = () => {
         abortControllerRef.current = new AbortController();
 
         let progressInterval: ReturnType<typeof setInterval> | null = null;
+        let realtimeChannel: any = null;
 
         try {
+            // Simulated progress for UX
             progressInterval = setInterval(() => {
                 setProgress(prev => (prev < 8 ? prev + 1 : prev));
-            }, 2000); // Slower progress for Pro models
+            }, 1800);
 
             const processInput = async (file: File | null, targetRatio: string) => {
                 if (!file) return null;
@@ -90,30 +93,72 @@ export const useImageGenerator = () => {
             if (progressInterval) clearInterval(progressInterval);
 
             if (!response.ok) {
-                let errorMessage = 'Lỗi máy chủ không xác định.';
-                try {
-                    const errorText = await response.text();
-                    try {
-                        // Try to parse as JSON
-                        const errorJson = JSON.parse(errorText);
-                        errorMessage = errorJson.error || errorMessage;
-                    } catch (e) {
-                        // If parsing fails, it's likely HTML (Server Error/Timeout)
-                        console.error("Server returned non-JSON response:", errorText);
-                        if (response.status === 504 || response.status === 502) {
-                            errorMessage = 'Hệ thống đang quá tải hoặc kết nối bị gián đoạn (Timeout). Vui lòng thử lại.';
-                        } else if (response.status === 413) {
-                            errorMessage = 'Dữ liệu ảnh quá lớn. Vui lòng chọn ảnh nhỏ hơn.';
-                        } else {
-                            errorMessage = `Lỗi kết nối (${response.status}). Vui lòng thử lại sau.`;
-                        }
-                    }
-                } catch (e) {
-                    errorMessage = `Lỗi mạng: ${response.statusText}`;
-                }
-                throw new Error(errorMessage);
+                const errorResult = await response.json();
+                throw new Error(errorResult.error || 'Lỗi không xác định từ máy chủ.');
             }
 
+            // --- ASYNC JOB HANDLING (Status 202) ---
+            if (response.status === 202) {
+                const { jobId, newDiamondCount, newXp } = await response.json();
+                
+                // Update balance immediately (deducted upfront)
+                updateUserProfile({ diamonds: newDiamondCount, xp: newXp });
+                
+                setProgress(5); // Job started
+                
+                // Poll/Listen for completion
+                return new Promise<void>((resolve, reject) => {
+                    if (!supabase) return reject(new Error("Realtime connection failed"));
+
+                    // Use Realtime for faster updates
+                    realtimeChannel = supabase.channel(`job-${jobId}`)
+                        .on('postgres_changes', {
+                            event: 'UPDATE',
+                            schema: 'public',
+                            table: 'generated_images',
+                            filter: `id=eq.${jobId}`
+                        }, (payload: any) => {
+                            const newRecord = payload.new;
+                            if (newRecord.image_url && newRecord.image_url !== 'PENDING') {
+                                setGeneratedImage(newRecord.image_url);
+                                setProgress(10);
+                                showToast('Tạo ảnh thành công!', 'success');
+                                if (realtimeChannel) supabase.removeChannel(realtimeChannel);
+                                resolve();
+                            }
+                        })
+                        .on('postgres_changes', {
+                             event: 'DELETE', // Job failed and was deleted (refunded)
+                             schema: 'public',
+                             table: 'generated_images',
+                             filter: `id=eq.${jobId}`
+                        }, () => {
+                             if (realtimeChannel) supabase.removeChannel(realtimeChannel);
+                             reject(new Error("Tạo ảnh thất bại. Hệ thống đã hoàn tiền."));
+                        })
+                        .subscribe();
+
+                    // Backup Polling (in case realtime misses)
+                    const poll = setInterval(async () => {
+                        const { data } = await supabase.from('generated_images').select('image_url').eq('id', jobId).single();
+                        if (data?.image_url && data.image_url !== 'PENDING') {
+                            clearInterval(poll);
+                            if (realtimeChannel) supabase.removeChannel(realtimeChannel);
+                            setGeneratedImage(data.image_url);
+                            setProgress(10);
+                            showToast('Tạo ảnh thành công!', 'success');
+                            resolve();
+                        } else if (!data) {
+                             // Record gone = failed/refunded
+                             clearInterval(poll);
+                             if (realtimeChannel) supabase.removeChannel(realtimeChannel);
+                             reject(new Error("Tạo ảnh thất bại (Timeout). Đã hoàn tiền."));
+                        }
+                    }, 4000);
+                });
+            }
+
+            // --- LEGACY SYNC HANDLING (Status 200) ---
             const result = await response.json();
             
             setProgress(9);
@@ -128,51 +173,20 @@ export const useImageGenerator = () => {
                 resetGenerator();
                 return;
             }
-
-            // --- SMART RECOVERY LOGIC ---
-            if (supabase && session?.user?.id) {
-                console.log("Checking for recovered image...");
-                await new Promise(r => setTimeout(r, 2000));
-
-                try {
-                    const { data: recentImages } = await supabase
-                        .from('generated_images')
-                        .select('image_url, created_at')
-                        .eq('user_id', session.user.id)
-                        .not('image_url', 'eq', 'PENDING')
-                        .not('image_url', 'is', null)
-                        .order('created_at', { ascending: false })
-                        .limit(1);
-
-                    if (recentImages && recentImages.length > 0) {
-                        const latestImage = recentImages[0];
-                        const timeDiff = Date.now() - new Date(latestImage.created_at).getTime();
-                        
-                        if (timeDiff < 180000) { // 3 minutes tolerance
-                            console.log("Recovered image from DB:", latestImage.image_url);
-                            setGeneratedImage(latestImage.image_url);
-                            
-                            const userRes = await supabase.from('users').select('diamonds, xp').eq('id', session.user.id).single();
-                            if (userRes.data) {
-                                updateUserProfile({ diamonds: userRes.data.diamonds, xp: userRes.data.xp });
-                            }
-                            
-                            showToast('Tạo ảnh thành công (Đã khôi phục)!', 'success');
-                            setProgress(10);
-                            return; 
-                        }
-                    }
-                } catch (recoveryErr) {
-                    console.error("Recovery failed:", recoveryErr);
-                }
-            }
+            
+            // Clean up channel if error
+            if (realtimeChannel && supabase) supabase.removeChannel(realtimeChannel);
 
             setError(err.message || 'Đã xảy ra lỗi trong quá trình tạo ảnh.');
             showToast(err.message || 'Tạo ảnh thất bại.', 'error');
             setProgress(0);
         } finally {
             if (progressInterval) clearInterval(progressInterval);
-            setIsGenerating(false);
+            // Only stop loading if we are not waiting for async result
+            // If we are in the Promise above, isGenerating stays true until resolve/reject
+            if (!realtimeChannel) {
+                setIsGenerating(false);
+            }
             abortControllerRef.current = null;
         }
     };

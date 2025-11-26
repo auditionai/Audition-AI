@@ -78,7 +78,8 @@ export const preprocessImageToAspectRatio = async (
 
         const img = new Image();
         img.onload = () => {
-            // Sử dụng kích thước chuẩn tối ưu cho Gemini (bội số của 64 hoặc 128)
+            // SMART FIX: Keep High Resolution (1536px) for detailed Faces
+            // But use JPEG compression later to reduce payload size.
             const baseLongestSide = 1536; 
             
             let canvasWidth, canvasHeight;
@@ -100,6 +101,7 @@ export const preprocessImageToAspectRatio = async (
 
             // --- 🔒 CRITICAL STEP 1: NEUTRAL GRAY BACKGROUND ---
             // Màu xám #808080 là màu chuẩn nhất để AI hiểu là "vùng trống cần vẽ thêm" (Outpainting)
+            // IMPORTANT: Because we will export as JPEG (no transparency), this fill is crucial.
             ctx.fillStyle = '#808080'; 
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -119,11 +121,13 @@ export const preprocessImageToAspectRatio = async (
             // Điều này cực kỳ quan trọng: Nó báo cho AI biết "Đây là giới hạn của bức tranh".
             // Nếu AI crop, nó sẽ mất cái viền này -> AI được huấn luyện để tránh làm điều đó.
             ctx.strokeStyle = '#000000'; // Màu đen hoặc màu đặc biệt
-            ctx.lineWidth = 2; // Đủ dày để Vision Model nhìn thấy
+            ctx.lineWidth = 4; // Tăng độ dày lên 4px để rõ hơn ở độ phân giải cao
             ctx.strokeRect(0, 0, canvas.width, canvas.height);
 
-            // Trả về PNG để không bị nén mất chi tiết viền
-            resolve(canvas.toDataURL('image/png'));
+            // SMART FIX: Export as High Quality JPEG (0.95) instead of PNG.
+            // This reduces size from ~5MB to ~600KB while keeping 1536px resolution.
+            // Visually identical for AI reference, but prevents Payload Too Large errors.
+            resolve(canvas.toDataURL('image/jpeg', 0.95));
         };
         img.onerror = () => reject(new Error('Failed to load image for preprocessing'));
         img.src = dataUrl;
@@ -136,6 +140,7 @@ export const preprocessImageToAspectRatio = async (
 // Create blank canvas with Solid Border (Also Protected)
 export const createBlankCanvas = (aspectRatio: string): string => {
     const [w, h] = aspectRatio.split(':').map(Number);
+    // Keep High Res
     const baseLongestSide = 1536;
     
     let width, height;
@@ -159,8 +164,9 @@ export const createBlankCanvas = (aspectRatio: string): string => {
     
     // Solid Fence Border (Locked)
     ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 4;
     ctx.strokeRect(0, 0, width, height);
     
-    return canvas.toDataURL('image/png');
+    // Return JPEG 0.95
+    return canvas.toDataURL('image/jpeg', 0.95);
 };

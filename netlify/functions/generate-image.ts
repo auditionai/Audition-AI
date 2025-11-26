@@ -121,7 +121,11 @@ const handler: Handler = async (event: HandlerEvent) => {
         // [CRITICAL FIX] Inject the exact system instruction required to prevent cropping
         if (characterImage) {
             fullPrompt = `
-${prompt} | TECHNICAL REQUIREMENT: The input reference image has been PRE-FORMATTED with WHITE PADDING to rigidly enforce a target aspect ratio of ${aspectRatio}. Do NOT crop this image. You MUST perform OUTPAINTING. Your task is to keep the central character intact but verify the white padded areas and fill them completely with a seamless background that matches the scene's context. The final output MUST be exactly ${aspectRatio} and contain NO remaining white borders.
+${prompt} 
+| CRITICAL INSTRUCTION: The input reference image labeled 'INPUT_IMAGE_WITH_WHITE_PADDING' has been PRE-FORMATTED with WHITE PADDING to rigidly enforce a target aspect ratio of ${aspectRatio}. 
+| DO NOT CROP. DO NOT RESIZE. DO NOT CHANGE ASPECT RATIO.
+| You MUST perform OUTPAINTING to fill these white padded areas with a seamless background that matches the prompt.
+| The final output MUST match the dimensions of the input image exactly.
 
 [ADDITIONAL STYLE INSTRUCTIONS]
 - **STYLE:** Hyper-realistic 3D Render (High-end Game Cinematic style, Unreal Engine 5).
@@ -137,7 +141,7 @@ ${prompt} | TECHNICAL REQUIREMENT: The input reference image has been PRE-FORMAT
             fullPrompt += `\n\n**FACE ID:**\n- Use the exact facial structure from 'Face Reference'. Blend it seamlessly.`;
         }
 
-        const hardNegative = "photorealistic, real photo, grainy, low quality, 2D, sketch, cartoon, flat color, stiff pose, t-pose, mannequin, looking at camera blankly, distorted face, ugly, blurry, deformed hands, white borders, white bars, letterboxing, cropped";
+        const hardNegative = "photorealistic, real photo, grainy, low quality, 2D, sketch, cartoon, flat color, stiff pose, t-pose, mannequin, looking at camera blankly, distorted face, ugly, blurry, deformed hands, white borders, white bars, cropped, vertical crop";
         fullPrompt += ` --no ${hardNegative}, ${negativePrompt || ''}`;
 
         const parts: any[] = [];

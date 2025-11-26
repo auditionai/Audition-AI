@@ -182,7 +182,11 @@ const handler: Handler = async (event: HandlerEvent) => {
         
         // UPDATED COMPOSITE PROMPT WITH STRICT OUTPAINTING INSTRUCTION
         const compositePrompt = [
-            `${prompt} | TECHNICAL REQUIREMENT: The input image labeled 'MASTER CANVAS' below has been PRE-FORMATTED with WHITE PADDING to rigidly enforce a target aspect ratio of ${aspectRatio}. Do NOT crop this image. You MUST perform OUTPAINTING. Your task is to keep the central character intact but verify the white padded areas and fill them completely with a seamless background that matches the scene's context. The final output MUST be exactly ${aspectRatio} and contain NO remaining white borders.`,
+            `**CRITICAL INSTRUCTION: PRESERVE CANVAS DIMENSIONS**`,
+            `The input image labeled 'MASTER CANVAS' determines the EXACT output resolution (aspect ratio ${aspectRatio}).`,
+            `DO NOT CROP. DO NOT RESIZE. DO NOT CHANGE ASPECT RATIO.`,
+            `The 'MASTER CANVAS' contains WHITE PADDING (whitespace). You MUST perform OUTPAINTING to fill this whitespace with background scenery matching the prompt.`,
+            `The output image MUST include the entire area of the input canvas.`,
             `---`,
             `**TASK: GROUP PHOTO COMPOSITION**`,
             `**SCENE DESCRIPTION:** ${prompt}`,
@@ -194,12 +198,12 @@ const handler: Handler = async (event: HandlerEvent) => {
             `**QUANTITY LOCK:** The final image must contain EXACTLY ${numCharacters} people. NO MORE, NO LESS.`,
             `**NO EXTRAS:** Do NOT generate any extra people, crowd, or background characters.`,
             `---`,
-            `**NEGATIVE PROMPT:** extra people, crowd, audience, bystanders, distorted faces, bad anatomy, blurry, watermark, text, low resolution, white borders, white bars, cropped.`
+            `**NEGATIVE PROMPT:** extra people, crowd, audience, bystanders, distorted faces, bad anatomy, blurry, watermark, text, low resolution, white borders, white bars, cropped, vertical crop.`
         ].join('\n');
         
         const finalParts: any[] = [
             { inlineData: { data: masterLayoutData.data, mimeType: masterLayoutData.mimeType } },
-            { text: `[MASTER CANVAS - BASE LAYOUT - DO NOT CROP - FILL WHITE SPACE]` },
+            { text: `[MASTER CANVAS - FIXED RESOLUTION TEMPLATE - DO NOT CROP]` },
             { text: compositePrompt },
         ];
 

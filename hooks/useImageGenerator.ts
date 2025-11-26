@@ -1,4 +1,3 @@
-
 import { useState, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { AIModel } from '../types';
@@ -44,7 +43,7 @@ export const useImageGenerator = () => {
         try {
             progressInterval = setInterval(() => {
                 setProgress(prev => (prev < 8 ? prev + 1 : prev));
-            }, 1800);
+            }, 2000); // Slower progress for Pro models
 
             const processInput = async (file: File | null, targetRatio: string) => {
                 if (!file) return null;
@@ -91,8 +90,28 @@ export const useImageGenerator = () => {
             if (progressInterval) clearInterval(progressInterval);
 
             if (!response.ok) {
-                const errorResult = await response.json();
-                throw new Error(errorResult.error || 'Lỗi không xác định từ máy chủ.');
+                let errorMessage = 'Lỗi máy chủ không xác định.';
+                try {
+                    const errorText = await response.text();
+                    try {
+                        // Try to parse as JSON
+                        const errorJson = JSON.parse(errorText);
+                        errorMessage = errorJson.error || errorMessage;
+                    } catch (e) {
+                        // If parsing fails, it's likely HTML (Server Error/Timeout)
+                        console.error("Server returned non-JSON response:", errorText);
+                        if (response.status === 504 || response.status === 502) {
+                            errorMessage = 'Hệ thống đang quá tải hoặc kết nối bị gián đoạn (Timeout). Vui lòng thử lại.';
+                        } else if (response.status === 413) {
+                            errorMessage = 'Dữ liệu ảnh quá lớn. Vui lòng chọn ảnh nhỏ hơn.';
+                        } else {
+                            errorMessage = `Lỗi kết nối (${response.status}). Vui lòng thử lại sau.`;
+                        }
+                    }
+                } catch (e) {
+                    errorMessage = `Lỗi mạng: ${response.statusText}`;
+                }
+                throw new Error(errorMessage);
             }
 
             const result = await response.json();
@@ -111,13 +130,11 @@ export const useImageGenerator = () => {
             }
 
             // --- SMART RECOVERY LOGIC ---
-            // Check if the image was actually generated but the response failed (e.g. timeout)
             if (supabase && session?.user?.id) {
-                console.log("Attempting smart recovery...");
-                try {
-                    // Wait a moment for DB to potentially update if it was a race condition
-                    await new Promise(r => setTimeout(r, 2000));
+                console.log("Checking for recovered image...");
+                await new Promise(r => setTimeout(r, 2000));
 
+                try {
                     const { data: recentImages } = await supabase
                         .from('generated_images')
                         .select('image_url, created_at')
@@ -131,12 +148,10 @@ export const useImageGenerator = () => {
                         const latestImage = recentImages[0];
                         const timeDiff = Date.now() - new Date(latestImage.created_at).getTime();
                         
-                        // If image created within last 2 minutes
-                        if (timeDiff < 120000) { 
+                        if (timeDiff < 180000) { // 3 minutes tolerance
                             console.log("Recovered image from DB:", latestImage.image_url);
                             setGeneratedImage(latestImage.image_url);
                             
-                            // Sync balance
                             const userRes = await supabase.from('users').select('diamonds, xp').eq('id', session.user.id).single();
                             if (userRes.data) {
                                 updateUserProfile({ diamonds: userRes.data.diamonds, xp: userRes.data.xp });
@@ -144,7 +159,7 @@ export const useImageGenerator = () => {
                             
                             showToast('Tạo ảnh thành công (Đã khôi phục)!', 'success');
                             setProgress(10);
-                            return; // Exit success path
+                            return; 
                         }
                     }
                 } catch (recoveryErr) {

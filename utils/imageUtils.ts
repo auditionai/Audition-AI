@@ -1,4 +1,3 @@
-
 // Helper function to resize an image file before uploading
 export const resizeImage = (file: File, maxSize: number): Promise<{ file: File; dataUrl: string }> => {
     return new Promise((resolve, reject) => {
@@ -28,13 +27,10 @@ export const resizeImage = (file: File, maxSize: number): Promise<{ file: File; 
                 if (!ctx) return reject(new Error('Could not get canvas context'));
 
                 // Force JPEG for AI inputs to ensure small payload size (<1MB).
-                // PNGs can easily exceed 6MB limit of Netlify Functions when base64 encoded.
-                // 0.95 quality is visually identical to source for AI purposes.
                 const outputMimeType = 'image/jpeg'; 
-                const outputQuality = 0.95;
+                const outputQuality = 0.85; // Reduced slightly for safety
 
-                // Draw white background first in case original was transparent PNG
-                // to prevent black background in JPEG
+                // Draw white background first
                 ctx.fillStyle = '#FFFFFF';
                 ctx.fillRect(0, 0, width, height);
                 
@@ -70,10 +66,6 @@ export const base64ToFile = (base64: string, filename: string, mimeType: string)
 
 // ==================================================================================
 // 🔒 LOCKED LOGIC: ASPECT RATIO ENFORCEMENT (SOLID BORDER STRATEGY)
-// ⛔ WARNING: DO NOT MODIFY THIS FUNCTION UNDER ANY CIRCUMSTANCES.
-// ⛔ LÝ DO: Logic này vẽ một viền cứng (Solid Border) và nền xám để ép Google Gemini
-//    không được tự động crop ảnh. Việc thay đổi dù chỉ 1 dòng cũng sẽ làm hỏng tính năng
-//    giữ tỉ lệ khung hình (Aspect Ratio) của toàn bộ ứng dụng.
 // ==================================================================================
 export const preprocessImageToAspectRatio = async (
     dataUrl: string,
@@ -81,13 +73,13 @@ export const preprocessImageToAspectRatio = async (
 ): Promise<string> => {
     return new Promise((resolve, reject) => {
         const [w, h] = targetAspectRatio.split(':').map(Number);
-        if (!w || !h) return resolve(dataUrl); // Fallback if invalid ratio
+        if (!w || !h) return resolve(dataUrl);
 
         const img = new Image();
         img.onload = () => {
-            // SMART FIX: Keep High Resolution (1536px) for detailed Faces
-            // But use JPEG compression later to reduce payload size.
-            const baseLongestSide = 1536; 
+            // OPTIMIZATION: Use 1024px max dimension. 
+            // 1536px was causing timeouts/payload errors on Netlify Functions with Gemini 3.
+            const baseLongestSide = 1024; 
             
             let canvasWidth, canvasHeight;
             
@@ -107,13 +99,10 @@ export const preprocessImageToAspectRatio = async (
             if (!ctx) return reject(new Error('Canvas context error'));
 
             // --- 🔒 CRITICAL STEP 1: NEUTRAL GRAY BACKGROUND ---
-            // Màu xám #808080 là màu chuẩn nhất để AI hiểu là "vùng trống cần vẽ thêm" (Outpainting)
-            // IMPORTANT: Because we will export as JPEG (no transparency), this fill is crucial.
             ctx.fillStyle = '#808080'; 
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
             // --- 🔒 CRITICAL STEP 2: CALCULATE CONTAIN FIT ---
-            // Tính toán để ảnh nhân vật nằm giữa, giữ nguyên tỉ lệ
             const scale = Math.min(canvas.width / img.width, canvas.height / img.height);
             const drawWidth = img.width * scale;
             const drawHeight = img.height * scale;
@@ -124,31 +113,23 @@ export const preprocessImageToAspectRatio = async (
             ctx.drawImage(img, offsetX, offsetY, drawWidth, drawHeight);
 
             // --- 🔒 CRITICAL STEP 3: THE "SOLID FENCE" (HÀNG RÀO CỨNG) ---
-            // Vẽ viền 1px bao quanh sát mép Canvas.
-            // Điều này cực kỳ quan trọng: Nó báo cho AI biết "Đây là giới hạn của bức tranh".
-            // Nếu AI crop, nó sẽ mất cái viền này -> AI được huấn luyện để tránh làm điều đó.
-            ctx.strokeStyle = '#000000'; // Màu đen hoặc màu đặc biệt
-            ctx.lineWidth = 4; // Tăng độ dày lên 4px để rõ hơn ở độ phân giải cao
+            ctx.strokeStyle = '#000000'; 
+            ctx.lineWidth = 4; 
             ctx.strokeRect(0, 0, canvas.width, canvas.height);
 
-            // SMART FIX: Export as High Quality JPEG (0.95) instead of PNG.
-            // This reduces size from ~5MB to ~600KB while keeping 1536px resolution.
-            // Visually identical for AI reference, but prevents Payload Too Large errors.
-            resolve(canvas.toDataURL('image/jpeg', 0.95));
+            // OPTIMIZATION: Export as JPEG 0.85 quality.
+            // Reduces size significantly while maintaining structure for ControlNet/IP-Adapter usage.
+            resolve(canvas.toDataURL('image/jpeg', 0.85));
         };
         img.onerror = () => reject(new Error('Failed to load image for preprocessing'));
         img.src = dataUrl;
     });
 };
-// ==================================================================================
-// 🔒 END OF LOCKED LOGIC
-// ==================================================================================
 
-// Create blank canvas with Solid Border (Also Protected)
+// Create blank canvas with Solid Border
 export const createBlankCanvas = (aspectRatio: string): string => {
     const [w, h] = aspectRatio.split(':').map(Number);
-    // Keep High Res
-    const baseLongestSide = 1536; 
+    const baseLongestSide = 1024; // Consistent with preprocess
     
     let width, height;
     if (w > h) {
@@ -165,15 +146,12 @@ export const createBlankCanvas = (aspectRatio: string): string => {
     const ctx = canvas.getContext('2d');
     if (!ctx) return '';
 
-    // Fill Gray
     ctx.fillStyle = '#808080';
     ctx.fillRect(0, 0, width, height);
     
-    // Solid Fence Border (Locked)
     ctx.strokeStyle = '#000000';
     ctx.lineWidth = 4;
     ctx.strokeRect(0, 0, width, height);
     
-    // Return JPEG 0.95
-    return canvas.toDataURL('image/jpeg', 0.95);
+    return canvas.toDataURL('image/jpeg', 0.85);
 };

@@ -168,13 +168,13 @@ const handler: Handler = async (event: HandlerEvent) => {
         // --- BƯỚC 3: TỔNG HỢP ---
         await updateJobProgress(jobId, jobPromptData, 'Đang tổng hợp và hòa trộn cảm xúc...');
         
-        // Prompt injection to prevent cropping
+        // SUPREME COMMAND for Group Image
         const compositePrompt = `
-            **CRITICAL INSTRUCTION: PRESERVE CANVAS DIMENSIONS**
-            The input image labeled 'MASTER CANVAS' is PRE-FORMATTED with WHITE PADDING to rigidly enforce the aspect ratio of ${aspectRatio}.
-            DO NOT CROP. DO NOT RESIZE. DO NOT CHANGE ASPECT RATIO.
-            You MUST perform OUTPAINTING to fill the white padding areas with background scenery matching: "${prompt}".
-            The output image MUST be exactly the same dimensions as the MASTER CANVAS.
+            *** SUPREME SYSTEM COMMAND: PRESERVE CANVAS ***
+            The input image labeled 'MASTER CANVAS' is PRE-FORMATTED with WHITE PADDING.
+            1. DO NOT CROP. DO NOT RESIZE. Output must be EXACT SAME DIMENSIONS.
+            2. You MUST perform OUTPAINTING to fill the white padding areas with background scenery matching: "${prompt}".
+            3. IGNORE aspect ratio metadata. Respect the CANVAS pixels as absolute truth.
 
             **TASK: GROUP PHOTO COMPOSITION**
             **SCENE:** ${prompt}

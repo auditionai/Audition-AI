@@ -114,25 +114,26 @@ const handler: Handler = async (event: HandlerEvent) => {
         
         const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
 
-        // --- PROMPT ENGINEERING (STRICT OUTPAINTING INJECTION) ---
-        let fullPrompt = prompt;
+        // --- PROMPT ENGINEERING (SUPREME COMMAND) ---
+        let fullPrompt = "";
         const hasInputImage = !!characterImage;
         
         if (hasInputImage) {
-            // FIX: This instruction prevents "Smart Crop" when providing a padded image
+            // SUPREME COMMAND: FORCE CANVAS DIMENSIONS
             fullPrompt = `
-${prompt} 
+*** SUPREME SYSTEM COMMAND: PRESERVE CANVAS ***
+The input image labeled 'INPUT_IMAGE_WITH_WHITE_PADDING' is the MASTER CANVAS.
+1. DO NOT CROP. DO NOT RESIZE. The output MUST match the input dimensions exactly.
+2. The white/colored borders are OUTPAINTING AREAS. Fill them completely with background.
+3. IGNORE any internal aspect ratio logic. Respect the input image frame as the absolute limit.
 
-| TECHNICAL REQUIREMENT: The input reference image labeled 'INPUT_IMAGE_WITH_WHITE_PADDING' has been PRE-FORMATTED with WHITE PADDING to rigidly enforce a target aspect ratio of ${aspectRatio}. 
-| DO NOT CROP. DO NOT RESIZE. DO NOT CHANGE ASPECT RATIO.
-| You MUST perform OUTPAINTING to fill these white padded areas with a seamless background that matches the scene's context.
-| The final output MUST be exactly ${aspectRatio} and contain NO remaining white borders.
+${prompt} 
 
 [STYLE]: Hyper-realistic 3D Render, Unreal Engine 5, Volumetric Lighting.
 `;
         } else {
             // Text-to-Image only
-            fullPrompt += `\n\n**STYLE:**\n- **Hyper-realistic 3D Render** (High-end Game Cinematic style, Unreal Engine 5).\n- Detailed skin texture, volumetric lighting, raytracing reflections.`;
+            fullPrompt = `${prompt}\n\n**STYLE:**\n- **Hyper-realistic 3D Render** (High-end Game Cinematic style, Unreal Engine 5).\n- Detailed skin texture, volumetric lighting, raytracing reflections.`;
         }
 
         if (faceReferenceImage) {
@@ -175,7 +176,7 @@ ${prompt}
             // Image-to-Image Mode: 
             // CRITICAL: DO NOT add imageConfig.aspectRatio. 
             // Providing it alongside an input image causes INVALID_ARGUMENT or unexpected cropping.
-            // The prompt injection above handles the aspect ratio enforcement.
+            // The "SUPREME COMMAND" prompt injection above handles the aspect ratio enforcement.
         }
 
         if (isProModel && useGoogleSearch) {

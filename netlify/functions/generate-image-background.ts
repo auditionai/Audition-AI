@@ -6,7 +6,7 @@ import { Buffer } from 'buffer';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { addSmartWatermark } from './watermark-service';
 
-// Helper to fetch image from URL back to base64/buffer (Node.js compatible)
+// Helper to fetch image from URL back to base64/buffer
 const fetchImage = async (url: string | null): Promise<{ data: string; mimeType: string } | null> => {
     if (!url) return null;
     try {
@@ -95,9 +95,19 @@ const handler: Handler = async (event: HandlerEvent) => {
         // 3. Construct Prompt & Fetch Inputs
         let fullPrompt = "";
         
-        // System Instruction for Outpainting if Input Canvas (Character Image) is present
+        // --- STYLE INJECTION (SMART FIX) ---
+        // Instead of banning "camera", we enforce the "3D Render Medium".
+        const styleEnforcement = `
+        ** AESTHETIC RULES: AUDITION GAME STYLE **
+        1. [MEDIUM]: 3D CGI Render (Unreal Engine 5 / Octane Render style).
+        2. [SKIN]: Smooth, stylized 3D skin texture (like high-end game cinematic). Avoid gritty realism.
+        3. [LIGHTING]: Volumetric lighting, bloom, dreamy atmosphere.
+        4. [CONSTRAINT]: NOT a photograph. NOT live action. 
+        `;
+
         if (characterImageUrl) {
             fullPrompt = `
+            ${styleEnforcement}
             *** SYSTEM COMMAND: OUTPAINTING & EXPANSION ***
             1. [INPUT ANALYSIS]: The image labeled 'INPUT_CANVAS' contains a subject placed on a GRAY (#808080) or WHITE padding background with a SOLID BORDER.
             2. [MANDATORY ACTION]: The GRAY/WHITE area is VOID space. You MUST NOT preserve it.
@@ -107,18 +117,23 @@ const handler: Handler = async (event: HandlerEvent) => {
                - The final image MUST NOT have any solid color borders or bars. It must be a full-bleed illustration.
             4. [SUBJECT PRESERVATION]: Keep the character's Pose, Outfit, and Identity exactly as shown in the non-gray parts. Blend them seamlessly into the newly generated background.
             
-            **USER PROMPT:** ${prompt}
-            **STYLE:** Hyper-realistic 3D Render, Audition Game Style, High Fidelity, Volumetric Lighting.
+            **USER SCENE DESCRIPTION:** ${prompt}
             `;
         } else {
-            fullPrompt = `${prompt}\n\n**STYLE:**\n- **Hyper-realistic 3D Render** (High-end Game Cinematic style, Unreal Engine 5).\n- Detailed skin texture, volumetric lighting, raytracing reflections.`;
+            fullPrompt = `
+            ${styleEnforcement}
+            **USER SCENE DESCRIPTION:** ${prompt}
+            `;
         }
 
         if (faceReferenceImageUrl) {
-            fullPrompt += `\n\n**FACE ID:**\n- Use the exact facial structure from 'Face Reference'. Blend it seamlessly.`;
+            fullPrompt += `\n\n**FACE ID:**\n- Use the exact facial structure from 'Face Reference'. Blend it seamlessly into the 3D style.`;
         }
 
-        const hardNegative = "photorealistic, real photo, grainy, low quality, 2D, sketch, cartoon, flat color, stiff pose, t-pose, mannequin, looking at camera blankly, distorted face, ugly, blurry, deformed hands, gray borders, gray bars, letterbox, pillarbox, cropped, vertical crop, monochrome background, gray background, border, frame, blank space, white background";
+        // REFINED NEGATIVE PROMPT
+        // We ban "photograph" (the medium) but allow "camera" (the object).
+        // We ban "rough skin" but allow "detailed skin".
+        const hardNegative = "photograph, real life, real person, live action, movie frame, grainy, noise, jpeg artifacts, low quality, distorted, ugly, blurry, gray borders, letterbox, watermark, text, signature, rough skin texture, photo-realistic skin";
         fullPrompt += ` --no ${hardNegative}, ${negativePrompt || ''}`;
 
         const parts: any[] = [];

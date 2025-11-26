@@ -180,13 +180,13 @@ const handler: Handler = async (event: HandlerEvent) => {
         // --- BƯỚC 3: TỔNG HỢP TRÊN MASTER CANVAS ---
         await updateJobProgress(jobId, jobPromptData, 'Đang tổng hợp và hòa trộn cảm xúc...');
         
+        // UPDATED COMPOSITE PROMPT WITH STRICT OUTPAINTING INSTRUCTION
         const compositePrompt = [
-            `[SYSTEM INSTRUCTION: ASPECT RATIO ENFORCEMENT]`,
-            `The input image labeled 'MASTER CANVAS' below has been PRE-FORMATTED with WHITE PADDING to rigidly enforce the target aspect ratio of ${aspectRatio}.`,
-            `1. **DO NOT CROP** these white areas.`,
-            `2. **DO NOT RESIZE** to remove them.`,
-            `3. **MANDATORY**: Perform **OUTPAINTING** to fill the white space with a seamless background that matches the scene context.`,
-            `4. The final output MUST be exactly the same dimensions as the input MASTER CANVAS.`,
+            `| TECHNICAL REQUIREMENT: The input image labeled 'MASTER CANVAS' below has been PRE-FORMATTED with WHITE PADDING to rigidly enforce a target aspect ratio of ${aspectRatio}.`,
+            `| 1. **DO NOT CROP** these white areas.`,
+            `| 2. **DO NOT RESIZE** to remove them.`,
+            `| 3. **MANDATORY**: Perform **OUTPAINTING** to fill the white space with a seamless background that matches the scene context.`,
+            `| 4. The final output MUST be exactly the same dimensions as the input MASTER CANVAS and contain NO remaining white borders.`,
             `---`,
             `**TASK: GROUP PHOTO COMPOSITION**`,
             `**SCENE DESCRIPTION:** ${prompt}`,
@@ -212,18 +212,11 @@ const handler: Handler = async (event: HandlerEvent) => {
             finalParts.push({ inlineData: charData });
         });
         
-        // FIX: DO NOT send imageConfig.aspectRatio here because we are providing an input image (Master Canvas).
-        // Sending config + input image causes API crashes on some models.
-        // We rely on the prompt "DO NOT CROP" and "OUTPAINTING" to handle the aspect ratio from the input.
+        // We provide an input image (Master Canvas) which already has the correct dimensions.
+        // So we do NOT send imageConfig.aspectRatio to avoid conflict.
         const finalConfig: any = { 
             responseModalities: [Modality.IMAGE],
         };
-        
-        // Only set imageSize if strictly needed and supported by model when input exists
-        if (isPro && !referenceImage) { 
-             // If we didn't have a reference image (unlikely here), we might set this.
-             // But since we always have Master Canvas, we omit size config to avoid conflict.
-        }
         
         if (isPro && useSearch) {
             finalConfig.tools = [{ googleSearch: {} }];

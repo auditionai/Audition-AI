@@ -119,26 +119,22 @@ const handler: Handler = async (event: HandlerEvent) => {
         // --- PROMPT ENGINEERING (UPDATED) ---
         let fullPrompt = prompt;
         
-        // CRITICAL INSTRUCTION: OUTPAINTING
-        // This overrides the AI's tendency to crop padded images.
+        // CRITICAL INSTRUCTION: OUTPAINTING SYSTEM INJECTION
+        // This forces the AI to treat white padding as canvas to fill, NOT cropping.
         if (characterImage) {
             fullPrompt = `
-[SYSTEM INSTRUCTION: ASPECT RATIO ENFORCEMENT]
-The provided input image contains deliberate WHITE PADDING/BARS to establish a specific aspect ratio of ${aspectRatio}.
-1. **DO NOT CROP** these white areas.
-2. **DO NOT RESIZE** the image content to remove them.
-3. **MANDATORY**: Perform **OUTPAINTING** to fill the white space with seamless background content matching the scene described below.
-4. The final output MUST preserve the exact dimensions of the input image.
+${prompt}
 
-[SCENE DESCRIPTION]
-${fullPrompt}
+| TECHNICAL REQUIREMENT: The input reference image has been PRE-FORMATTED with WHITE PADDING to rigidly enforce a target aspect ratio of ${aspectRatio}.
+| 1. **DO NOT CROP** this image.
+| 2. **DO NOT RESIZE** the image content to remove the white borders.
+| 3. **MANDATORY**: Perform **OUTPAINTING**. Your task is to keep the central character intact but verify the white padded areas and fill them completely with a seamless background that matches the scene's context.
+| 4. The final output MUST be exactly ${aspectRatio} and contain NO remaining white borders.
 
-[ADDITIONAL INSTRUCTIONS]
+[ADDITIONAL STYLE INSTRUCTIONS]
 - **STYLE:** Hyper-realistic 3D Render (High-end Game Cinematic style, Unreal Engine 5).
 - Detailed skin texture, volumetric lighting, raytracing reflections.
 - **OUTFIT:** Keep the exact clothing design from the reference image.
-- **POSE:** Create a NEW, NATURAL pose based on the prompt, fitting within the padded frame.
-- **INTERACTION:** Interact naturally with the environment generated in the white padded areas.
 `;
         } else {
             // Text-to-Image only
@@ -181,22 +177,20 @@ ${fullPrompt}
 
         // CRITICAL FIX: Only add aspectRatio to config if we are NOT providing a character image.
         // If a character image is provided, we rely on its dimensions (which are padded client-side)
-        // sending both causes "INVALID_ARGUMENT" errors on some models.
+        // AND the strong prompt instructions to prevent cropping.
+        // Sending config.aspectRatio with input image often causes "INVALID_ARGUMENT" or cropping.
         const supportedRatios = ['1:1', '3:4', '4:3', '9:16', '16:9'];
         if (supportedRatios.includes(aspectRatio)) {
-            // Only send aspect ratio config for Text-to-Image. 
-            // For Image-to-Image, the input image (processedCharacterImage) dictates the ratio.
             if (!processedCharacterImage) {
                 config.imageConfig = { aspectRatio: aspectRatio };
             }
         }
 
         if (isProModel) {
-            // For Pro model, we can try setting imageSize, but we must be careful not to conflict.
             if (!config.imageConfig) config.imageConfig = {};
             
-            // Only set imageSize if strictly needed, usually Pro handles resolution well.
-            // If user requested 4K, we might hint it, but avoid conflict if input image exists.
+            // Only set imageSize if we are NOT doing Image-to-Image or if strictly necessary.
+            // Usually, passing strict size with input image can cause conflict.
             if (!processedCharacterImage) {
                  config.imageConfig.imageSize = imageSize;
             }

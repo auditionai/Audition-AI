@@ -27,17 +27,24 @@ export const resizeImage = (file: File, maxSize: number): Promise<{ file: File; 
                 const ctx = canvas.getContext('2d');
                 if (!ctx) return reject(new Error('Could not get canvas context'));
 
-                // Preserve transparency for PNG files
-                const outputMimeType = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
-                const outputQuality = 0.9;
+                // Force JPEG for AI inputs to ensure small payload size (<1MB).
+                // PNGs can easily exceed 6MB limit of Netlify Functions when base64 encoded.
+                // 0.95 quality is visually identical to source for AI purposes.
+                const outputMimeType = 'image/jpeg'; 
+                const outputQuality = 0.95;
 
+                // Draw white background first in case original was transparent PNG
+                // to prevent black background in JPEG
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillRect(0, 0, width, height);
+                
                 ctx.drawImage(img, 0, 0, width, height);
 
                 const dataUrl = canvas.toDataURL(outputMimeType, outputQuality);
                 
                 canvas.toBlob((blob) => {
                     if (!blob) return reject(new Error('Canvas to Blob conversion failed'));
-                    const resizedFile = new File([blob], file.name, { type: outputMimeType });
+                    const resizedFile = new File([blob], file.name.replace(/\.[^/.]+$/, ".jpg"), { type: outputMimeType });
                     resolve({ file: resizedFile, dataUrl });
                 }, outputMimeType, outputQuality);
             };
@@ -141,7 +148,7 @@ export const preprocessImageToAspectRatio = async (
 export const createBlankCanvas = (aspectRatio: string): string => {
     const [w, h] = aspectRatio.split(':').map(Number);
     // Keep High Res
-    const baseLongestSide = 1536;
+    const baseLongestSide = 1536; 
     
     let width, height;
     if (w > h) {

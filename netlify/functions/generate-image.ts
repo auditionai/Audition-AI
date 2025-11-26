@@ -120,17 +120,29 @@ const handler: Handler = async (event: HandlerEvent) => {
         let fullPrompt = prompt;
         
         // CRITICAL INSTRUCTION: OUTPAINTING
+        // This overrides the AI's tendency to crop padded images.
         if (characterImage) {
-            fullPrompt += ` | **IMPORTANT:** The input image has been PADDED with WHITE BORDERS to enforce the target aspect ratio (${aspectRatio}). You MUST perform **OUTPAINTING** to fill these white areas with a background that matches the scene. **DO NOT CROP** or resize the image. The final output MUST have the exact same dimensions and aspect ratio as the input image.`;
-        }
+            fullPrompt = `
+[SYSTEM INSTRUCTION: ASPECT RATIO ENFORCEMENT]
+The provided input image contains deliberate WHITE PADDING/BARS to establish a specific aspect ratio of ${aspectRatio}.
+1. **DO NOT CROP** these white areas.
+2. **DO NOT RESIZE** the image content to remove them.
+3. **MANDATORY**: Perform **OUTPAINTING** to fill the white space with seamless background content matching the scene described below.
+4. The final output MUST preserve the exact dimensions of the input image.
 
-        fullPrompt += `\n\n**STYLE:**\n- **Hyper-realistic 3D Render** (High-end Game Cinematic style, Unreal Engine 5).\n- Detailed skin texture, volumetric lighting, raytracing reflections.\n- **NOT** "Photorealistic" (Do not make it look like a real camera photo).\n- **NOT** "Cartoon" or "2D".`;
+[SCENE DESCRIPTION]
+${fullPrompt}
 
-        if (characterImage) {
-             fullPrompt += `\n\n**CHARACTER & POSE INSTRUCTIONS:**\n`;
-             fullPrompt += `- **OUTFIT:** Keep the exact clothing design from the reference image.\n`;
-             fullPrompt += `- **POSE:** Create a NEW, NATURAL pose based on the prompt, but ensure the character fits within the provided composition.\n`;
-             fullPrompt += `- **INTERACTION:** Interact naturally with the environment generated in the white padded areas.`;
+[ADDITIONAL INSTRUCTIONS]
+- **STYLE:** Hyper-realistic 3D Render (High-end Game Cinematic style, Unreal Engine 5).
+- Detailed skin texture, volumetric lighting, raytracing reflections.
+- **OUTFIT:** Keep the exact clothing design from the reference image.
+- **POSE:** Create a NEW, NATURAL pose based on the prompt, fitting within the padded frame.
+- **INTERACTION:** Interact naturally with the environment generated in the white padded areas.
+`;
+        } else {
+            // Text-to-Image only
+            fullPrompt += `\n\n**STYLE:**\n- **Hyper-realistic 3D Render** (High-end Game Cinematic style, Unreal Engine 5).\n- Detailed skin texture, volumetric lighting, raytracing reflections.\n- **NOT** "Photorealistic" (Do not make it look like a real camera photo).\n- **NOT** "Cartoon" or "2D".`;
         }
 
         if (faceReferenceImage) {

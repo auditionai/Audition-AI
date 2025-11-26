@@ -181,13 +181,14 @@ const handler: Handler = async (event: HandlerEvent) => {
         await updateJobProgress(jobId, jobPromptData, 'Đang tổng hợp và hòa trộn cảm xúc...');
         
         const compositePrompt = [
-            `**TASK: GROUP PHOTO COMPOSITION**`,
-            `**ASPECT RATIO ENFORCEMENT:**`,
-            `I have provided a MASTER CANVAS image first. You MUST use this canvas as the base.`,
-            `| **CRITICAL:** The input MASTER CANVAS has been PRE-FORMATTED with WHITE PADDING to rigidly enforce the target aspect ratio of ${aspectRatio}.`,
-            `| **YOU MUST PERFORM OUTPAINTING:** Verify the white padded areas and fill them completely with a seamless background that matches the scene's context.`,
-            `| **DO NOT CROP:** The final output MUST be exactly the same dimensions as the input MASTER CANVAS. Do not remove the white bars; fill them with art!`,
+            `[SYSTEM INSTRUCTION: ASPECT RATIO ENFORCEMENT]`,
+            `The input image labeled 'MASTER CANVAS' below has been PRE-FORMATTED with WHITE PADDING to rigidly enforce the target aspect ratio of ${aspectRatio}.`,
+            `1. **DO NOT CROP** these white areas.`,
+            `2. **DO NOT RESIZE** to remove them.`,
+            `3. **MANDATORY**: Perform **OUTPAINTING** to fill the white space with a seamless background that matches the scene context.`,
+            `4. The final output MUST be exactly the same dimensions as the input MASTER CANVAS.`,
             `---`,
+            `**TASK: GROUP PHOTO COMPOSITION**`,
             `**SCENE DESCRIPTION:** ${prompt}`,
             `**STYLE:** Hyper-realistic 3D Render (Audition Game Style), Volumetric Lighting, ${style || 'Cinematic'}.`,
             `---`,

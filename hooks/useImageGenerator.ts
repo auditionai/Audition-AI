@@ -1,4 +1,3 @@
-
 import { useState, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { AIModel } from '../types';
@@ -108,14 +107,15 @@ export const useImageGenerator = () => {
                 setProgress(5); // Job registered
                 
                 // 2. TRIGGER WORKER FROM CLIENT (Fire and Forget style)
-                // This prevents the 'generate-image' lambda from timing out waiting for the worker
+                // This is crucial: Client triggers the worker to avoid Server Function Timeout
                 fetch('/.netlify/functions/generate-image-background', {
                     method: 'POST',
                     body: JSON.stringify({ jobId })
                 }).catch(e => console.warn("Worker trigger warning:", e));
 
-                // 3. START POLLING / LISTENING
-                return new Promise<void>((resolve, reject) => {
+                // 3. START POLLING / LISTENING (MUST AWAIT THIS!)
+                // IMPORTANT: We use 'await' here so the function doesn't exit and hit 'finally' block immediately
+                await new Promise<void>((resolve, reject) => {
                     if (!supabase) return reject(new Error("Realtime connection failed"));
 
                     const cleanup = () => {
@@ -151,7 +151,7 @@ export const useImageGenerator = () => {
                         })
                         .subscribe();
 
-                    // B. Polling Backup with Timeout
+                    // B. Polling Backup with Timeout (5 minutes max)
                     let pollCount = 0;
                     const MAX_POLLS = 100; // ~5 minutes
                     
@@ -160,6 +160,7 @@ export const useImageGenerator = () => {
                         
                         if (pollCount > MAX_POLLS) {
                             cleanup();
+                            // Don't reject, just resolve to stop loading but inform user
                             showToast("Tác vụ đang mất nhiều thời gian hơn dự kiến. Vui lòng kiểm tra lại trong mục 'Tác phẩm của tôi' sau vài phút.", "success"); 
                             resolve(); 
                             return;
@@ -173,14 +174,17 @@ export const useImageGenerator = () => {
                             showToast('Tạo ảnh thành công!', 'success');
                             resolve();
                         } else if (!data) {
+                             // Job disappeared (likely deleted by worker due to error)
                              cleanup();
-                             reject(new Error("Tạo ảnh thất bại (Record deleted). Đã hoàn tiền."));
+                             reject(new Error("Tạo ảnh thất bại (Dữ liệu bị hủy). Đã hoàn tiền."));
                         }
                     }, 3000);
                 });
+                
+                return; // Exit function gracefully after await finishes
             }
 
-            // Legacy/Fallback path
+            // Legacy/Fallback path (for synchronous responses, if any)
             const result = await response.json();
             setProgress(9);
             updateUserProfile({ diamonds: result.newDiamondCount, xp: result.newXp });
@@ -203,7 +207,7 @@ export const useImageGenerator = () => {
             setProgress(0);
         } finally {
             if (progressInterval) clearInterval(progressInterval);
-            setIsGenerating(false);
+            setIsGenerating(false); // This hides the loading screen
             abortControllerRef.current = null;
         }
     };

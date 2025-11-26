@@ -149,6 +149,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             contents: { parts },
             config: {
                 responseModalities: [Modality.IMAGE],
+                // FIX: Force aspect ratio in config for all models
                 imageConfig: {
                     aspectRatio: aspectRatio || '3:4',
                     imageSize: imageQuality

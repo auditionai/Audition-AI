@@ -210,15 +210,16 @@ const handler: Handler = async (event: HandlerEvent) => {
             finalParts.push({ inlineData: charData });
         });
         
+        // FIX: Force aspect ratio in config for ALL models (including flash) to ensure output matches user selection
         const finalConfig: any = { 
-            responseModalities: [Modality.IMAGE] 
+            responseModalities: [Modality.IMAGE],
+            imageConfig: {
+                aspectRatio: aspectRatio
+            }
         };
 
         if (isPro) {
-            finalConfig.imageConfig = {
-                aspectRatio: aspectRatio,
-                imageSize: imageSize
-            };
+            finalConfig.imageConfig.imageSize = imageSize;
             if (useSearch) {
                 finalConfig.tools = [{ googleSearch: {} }];
             }

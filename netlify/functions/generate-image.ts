@@ -120,7 +120,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         let fullPrompt = prompt;
         
         // SYSTEM INSTRUCTION INJECTION (OUTPAINTING ENFORCEMENT)
-        fullPrompt += ` | TECHNICAL REQUIREMENT: The input reference image has been PRE-FORMATTED with WHITE PADDING to rigidly enforce a target aspect ratio of ${aspectRatio}. Do NOT crop this image. You MUST perform OUTPAINTING. Your task is to keep the central character intact but verify the white padded areas and fill them completely with a seamless background that matches the scene's context. The final output MUST be exactly ${aspectRatio} and contain NO remaining white borders.`;
+        fullPrompt += ` | TECHNICAL REQUIREMENT: The final output MUST be exactly aspect ratio ${aspectRatio}. The input reference image might have a different aspect ratio or white padding; you MUST respect the requested ${aspectRatio} output ratio. Perform outpainting or inpainting as necessary to fit the scene naturally into this frame.`;
 
         fullPrompt += `\n\n**STYLE:**\n- **Hyper-realistic 3D Render** (High-end Game Cinematic style, Unreal Engine 5).\n- Detailed skin texture, volumetric lighting, raytracing reflections.\n- **NOT** "Photorealistic" (Do not make it look like a real camera photo).\n- **NOT** "Cartoon" or "2D".`;
 
@@ -165,13 +165,16 @@ const handler: Handler = async (event: HandlerEvent) => {
         const config: any = { 
             responseModalities: [Modality.IMAGE],
             seed: seed ? Number(seed) : undefined,
+            // FIX: Force aspect ratio in config for ALL models to prevent cropping to reference
+            imageConfig: {
+                aspectRatio: aspectRatio
+            }
         };
 
         if (isProModel) {
-            config.imageConfig = {
-                aspectRatio: aspectRatio,
-                imageSize: imageSize 
-            };
+            // Pro-only configurations
+            config.imageConfig.imageSize = imageSize;
+            
             if (useGoogleSearch) {
                 config.tools = [{ googleSearch: {} }]; 
             }

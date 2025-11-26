@@ -14,6 +14,7 @@ const CheckInModal: React.FC<{ isOpen: boolean; onClose: () => void; }> = ({ isO
     const { t } = useTranslation();
     const [checkIns, setCheckIns] = useState<Set<string>>(new Set());
     const [isCheckingIn, setIsCheckingIn] = useState(false);
+    const [claimingMilestone, setClaimingMilestone] = useState<number | null>(null);
 
     const today = useMemo(() => new Date(), []);
     const [currentMonth, setCurrentMonth] = useState(today.getMonth());
@@ -63,16 +64,45 @@ const CheckInModal: React.FC<{ isOpen: boolean; onClose: () => void; }> = ({ isO
         }
     };
 
+    const handleClaimMilestone = async (days: number) => {
+        if (!session) return;
+        setClaimingMilestone(days);
+        try {
+            const response = await fetch('/.netlify/functions/claim-milestone-reward', {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session.access_token}` 
+                },
+                body: JSON.stringify({ milestoneDays: days })
+            });
+            const data = await response.json();
+            
+            if (!response.ok) {
+                throw new Error(data.error || 'Không thể nhận thưởng.');
+            }
+
+            showToast(data.message, 'success');
+            if (data.newDiamonds) {
+                updateUserProfile({ diamonds: data.newDiamonds });
+            }
+        } catch (error: any) {
+            showToast(error.message, 'error');
+        } finally {
+            setClaimingMilestone(null);
+        }
+    };
+
     const firstDayOfMonth = new Date(currentYear, currentMonth, 1).getDay();
     const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
     const dayBlanks = Array(firstDayOfMonth).fill(null);
     const dayCells = Array.from({ length: daysInMonth }, (_, i) => i + 1);
     
-    // Fix: Safe check for translation array. If missing or string, fallback to default array.
     const rawWeekdays = t('modals.checkIn.weekdays');
     const weekdays: string[] = Array.isArray(rawWeekdays) ? rawWeekdays : ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
     
     const hasCheckedInToday = checkIns.has(todayVnString) || (user?.last_check_in_at && getVNDateString(new Date(user.last_check_in_at)) === todayVnString);
+    const streak = user?.consecutive_check_in_days || 0;
 
     const rewards = [
         { day: 7, prize: '20 Kim Cương', icon: 'ph-gift' },
@@ -85,7 +115,7 @@ const CheckInModal: React.FC<{ isOpen: boolean; onClose: () => void; }> = ({ isO
             <div className="text-skin-base max-h-[80vh] overflow-y-auto custom-scrollbar">
                 <div className="themed-checkin-modal__streak-box">
                     <p className="text-skin-muted">{t('modals.checkIn.streak')}</p>
-                    <p className="themed-checkin-modal__streak-number">{user?.consecutive_check_in_days || 0} {t('modals.checkIn.days')}</p>
+                    <p className="themed-checkin-modal__streak-number">{streak} {t('modals.checkIn.days')}</p>
                 </div>
 
                 <div className="themed-checkin-modal__calendar-bg">
@@ -133,13 +163,32 @@ const CheckInModal: React.FC<{ isOpen: boolean; onClose: () => void; }> = ({ isO
                 <div className="mt-4">
                     <h4 className="font-semibold mb-2">{t('modals.checkIn.milestones')}</h4>
                     <div className="grid grid-cols-3 gap-2">
-                        {rewards.map(reward => (
-                             <div key={reward.day} className="themed-checkin-modal__reward-box">
-                                <i className={`ph-fill ${reward.icon} icon`}></i>
-                                <p className="day">{t('langName') === 'English' ? 'Day' : 'Ngày'} {reward.day}</p>
-                                <p className="prize">{reward.prize}</p>
-                            </div>
-                        ))}
+                        {rewards.map(reward => {
+                            const isEligible = streak >= reward.day;
+                            return (
+                                <div key={reward.day} className="flex flex-col gap-1">
+                                    <div className={`themed-checkin-modal__reward-box ${isEligible ? 'border-yellow-500/50 bg-yellow-500/10' : ''}`}>
+                                        <i className={`ph-fill ${reward.icon} icon ${isEligible ? 'text-yellow-400 animate-bounce' : ''}`}></i>
+                                        <p className="day">{t('langName') === 'English' ? 'Day' : 'Ngày'} {reward.day}</p>
+                                        <p className="prize">{reward.prize}</p>
+                                    </div>
+                                    
+                                    {isEligible ? (
+                                        <button 
+                                            onClick={() => handleClaimMilestone(reward.day)}
+                                            disabled={claimingMilestone === reward.day}
+                                            className="w-full py-1.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white text-[10px] font-bold rounded hover:opacity-90 transition shadow-md disabled:opacity-50"
+                                        >
+                                            {claimingMilestone === reward.day ? <i className="ph ph-spinner animate-spin"></i> : 'Nhận thưởng'}
+                                        </button>
+                                    ) : (
+                                        <div className="w-full py-1.5 bg-white/5 text-gray-500 text-[10px] font-bold rounded text-center border border-white/5 cursor-not-allowed">
+                                            <i className="ph-fill ph-lock"></i> Chưa đạt
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
 

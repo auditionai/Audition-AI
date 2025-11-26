@@ -9,6 +9,7 @@ export const vi = {
     cancel: 'Hủy',
     confirm: 'Xác nhận',
     download: 'Tải về',
+    downloading: 'Đang tải...',
     loading: 'Đang tải...',
   },
   landing: {

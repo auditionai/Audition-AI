@@ -143,36 +143,14 @@ const handler: Handler = async (event: HandlerEvent) => {
             })
         ]);
 
-        // --- 4. TRIGGER WORKER ---
-        // Robust URL determination: Prefer process.env.URL (Netlify) but fallback for safety
-        const siteUrl = process.env.URL || 'https://auditionai.io.vn'; 
-        const workerUrl = `${siteUrl}/.netlify/functions/generate-image-background`;
-
-        console.log(`[Spawner] Triggering worker at ${workerUrl} for Job ${jobId}`);
-
-        // CRITICAL: We MUST await this fetch. Even though we want it to be async,
-        // if we don't await, the Netlify Function context might freeze/close before
-        // the request is actually sent to the background worker.
-        // Background functions return 202 immediately, so this await is very fast.
-        try {
-            await fetch(workerUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ jobId })
-            });
-        } catch (e) {
-            console.error("[Spawner] Failed to trigger worker:", e);
-            // If we fail to trigger the worker, we should probably refund and error out,
-            // OR rely on a fallback mechanism. For now, logging it is essential.
-        }
-
+        // --- 4. RETURN IMMEDIATELY (Client triggers worker) ---
         return {
             statusCode: 202, // Accepted
             body: JSON.stringify({ 
                 jobId, 
                 newDiamondCount, 
                 newXp,
-                message: "Tác vụ đang được xử lý nền." 
+                message: "Tác vụ đã được tạo. Đang kích hoạt xử lý..." 
             }),
         };
 

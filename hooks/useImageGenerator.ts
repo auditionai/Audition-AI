@@ -67,6 +67,7 @@ export const useImageGenerator = () => {
                 resolveFaceImage()
             ]);
 
+            // 1. CALL SPAWNER (Creates Job + Deducts Money)
             const response = await fetch('/.netlify/functions/generate-image', {
                 method: 'POST',
                 headers: {
@@ -98,26 +99,31 @@ export const useImageGenerator = () => {
                 throw new Error(errorResult.error || 'Lỗi không xác định từ máy chủ.');
             }
 
-            // --- ASYNC JOB HANDLING (Status 202) ---
+            // --- ASYNC JOB HANDLING ---
             if (response.status === 202) {
                 const { jobId, newDiamondCount, newXp } = await response.json();
                 
-                // Update balance immediately (deducted upfront)
+                // Update balance immediately
                 updateUserProfile({ diamonds: newDiamondCount, xp: newXp });
+                setProgress(5); // Job registered
                 
-                setProgress(5); // Job started
-                
-                // Poll/Listen for completion with Timeout
+                // 2. TRIGGER WORKER FROM CLIENT (Fire and Forget style)
+                // This prevents the 'generate-image' lambda from timing out waiting for the worker
+                fetch('/.netlify/functions/generate-image-background', {
+                    method: 'POST',
+                    body: JSON.stringify({ jobId })
+                }).catch(e => console.warn("Worker trigger warning:", e));
+
+                // 3. START POLLING / LISTENING
                 return new Promise<void>((resolve, reject) => {
                     if (!supabase) return reject(new Error("Realtime connection failed"));
 
-                    // Cleanup function
                     const cleanup = () => {
                         if (realtimeChannel) supabase.removeChannel(realtimeChannel);
                         if (pollInterval) clearInterval(pollInterval);
                     };
 
-                    // 1. Realtime Listener
+                    // A. Realtime Listener
                     realtimeChannel = supabase.channel(`job-${jobId}`)
                         .on('postgres_changes', {
                             event: 'UPDATE',
@@ -145,18 +151,15 @@ export const useImageGenerator = () => {
                         })
                         .subscribe();
 
-                    // 2. Polling Backup with Timeout
+                    // B. Polling Backup with Timeout
                     let pollCount = 0;
-                    // INCREASED TIMEOUT: 100 polls * 3s = 300 seconds (5 minutes)
-                    // Pro model 4K generation can take longer than 90s.
-                    const MAX_POLLS = 100; 
+                    const MAX_POLLS = 100; // ~5 minutes
                     
                     pollInterval = setInterval(async () => {
                         pollCount++;
                         
                         if (pollCount > MAX_POLLS) {
                             cleanup();
-                            // Don't reject, just resolve to stop loading. The job might still finish in background.
                             showToast("Tác vụ đang mất nhiều thời gian hơn dự kiến. Vui lòng kiểm tra lại trong mục 'Tác phẩm của tôi' sau vài phút.", "success"); 
                             resolve(); 
                             return;
@@ -170,7 +173,6 @@ export const useImageGenerator = () => {
                             showToast('Tạo ảnh thành công!', 'success');
                             resolve();
                         } else if (!data) {
-                             // Record gone = failed/refunded
                              cleanup();
                              reject(new Error("Tạo ảnh thất bại (Record deleted). Đã hoàn tiền."));
                         }
@@ -178,9 +180,8 @@ export const useImageGenerator = () => {
                 });
             }
 
-            // --- LEGACY SYNC HANDLING (Status 200) ---
+            // Legacy/Fallback path
             const result = await response.json();
-            
             setProgress(9);
             updateUserProfile({ diamonds: result.newDiamondCount, xp: result.newXp });
             setGeneratedImage(result.imageUrl);

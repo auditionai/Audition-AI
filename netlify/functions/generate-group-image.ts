@@ -26,7 +26,6 @@ const handler: Handler = async (event: HandlerEvent) => {
         const payload = JSON.parse(rawPayload);
         const { jobId, characters, referenceImage, model, imageSize = '1K', useSearch = false, removeWatermark = false } = payload;
         
-        // FIX: Removed '!referenceImage' from validation. It is optional.
         if (!jobId || !characters || !Array.isArray(characters) || characters.length === 0) {
             return { statusCode: 400, body: JSON.stringify({ error: 'Job ID and character data are required.' }) };
         }
@@ -54,7 +53,7 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         // WORKAROUND: Store progress and payload in the 'prompt' column
         const initialJobData = {
-            payload: { ...payload, imageSize, useSearch, removeWatermark }, // Include removeWatermark
+            payload: { ...payload, imageSize, useSearch, removeWatermark }, 
             progress: 'Đang khởi tạo tác vụ...'
         };
 
@@ -86,6 +85,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             }),
         ]);
 
+        // Return Success Immediately (Client will trigger worker)
         return {
             statusCode: 200,
             body: JSON.stringify({ message: 'Job record created successfully.', newDiamondCount })

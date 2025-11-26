@@ -182,11 +182,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         
         // UPDATED COMPOSITE PROMPT WITH STRICT OUTPAINTING INSTRUCTION
         const compositePrompt = [
-            `| TECHNICAL REQUIREMENT: The input image labeled 'MASTER CANVAS' below has been PRE-FORMATTED with WHITE PADDING to rigidly enforce a target aspect ratio of ${aspectRatio}.`,
-            `| 1. **DO NOT CROP** these white areas.`,
-            `| 2. **DO NOT RESIZE** to remove them.`,
-            `| 3. **MANDATORY**: Perform **OUTPAINTING** to fill the white space with a seamless background that matches the scene context.`,
-            `| 4. The final output MUST be exactly the same dimensions as the input MASTER CANVAS and contain NO remaining white borders.`,
+            `${prompt} | TECHNICAL REQUIREMENT: The input image labeled 'MASTER CANVAS' below has been PRE-FORMATTED with WHITE PADDING to rigidly enforce a target aspect ratio of ${aspectRatio}. Do NOT crop this image. You MUST perform OUTPAINTING. Your task is to keep the central character intact but verify the white padded areas and fill them completely with a seamless background that matches the scene's context. The final output MUST be exactly ${aspectRatio} and contain NO remaining white borders.`,
             `---`,
             `**TASK: GROUP PHOTO COMPOSITION**`,
             `**SCENE DESCRIPTION:** ${prompt}`,
@@ -212,8 +208,8 @@ const handler: Handler = async (event: HandlerEvent) => {
             finalParts.push({ inlineData: charData });
         });
         
-        // We provide an input image (Master Canvas) which already has the correct dimensions.
-        // So we do NOT send imageConfig.aspectRatio to avoid conflict.
+        // [CRITICAL] Remove aspectRatio from config here too, as we are providing a Master Canvas input.
+        // Providing input image + aspectRatio config causes INVALID_ARGUMENT or cropping.
         const finalConfig: any = { 
             responseModalities: [Modality.IMAGE],
         };

@@ -4,7 +4,6 @@ import { GoogleGenAI, Modality } from "@google/genai";
 import { supabaseAdmin } from './utils/supabaseClient';
 import { Buffer } from 'buffer';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
-// Removed Jimp import as it is no longer used for input processing
 import { addSmartWatermark } from './watermark-service';
 
 const COST_UPSCALE = 1;
@@ -116,20 +115,13 @@ const handler: Handler = async (event: HandlerEvent) => {
         
         const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
 
-        // --- PROMPT ENGINEERING (UPDATED) ---
+        // --- PROMPT ENGINEERING (STRICT OUTPAINTING INJECTION) ---
         let fullPrompt = prompt;
         
-        // CRITICAL INSTRUCTION: OUTPAINTING SYSTEM INJECTION
-        // This forces the AI to treat white padding as canvas to fill, NOT cropping.
+        // [CRITICAL FIX] Inject the exact system instruction required to prevent cropping
         if (characterImage) {
             fullPrompt = `
-${prompt}
-
-| TECHNICAL REQUIREMENT: The input reference image has been PRE-FORMATTED with WHITE PADDING to rigidly enforce a target aspect ratio of ${aspectRatio}.
-| 1. **DO NOT CROP** this image.
-| 2. **DO NOT RESIZE** the image content to remove the white borders.
-| 3. **MANDATORY**: Perform **OUTPAINTING**. Your task is to keep the central character intact but verify the white padded areas and fill them completely with a seamless background that matches the scene's context.
-| 4. The final output MUST be exactly ${aspectRatio} and contain NO remaining white borders.
+${prompt} | TECHNICAL REQUIREMENT: The input reference image has been PRE-FORMATTED with WHITE PADDING to rigidly enforce a target aspect ratio of ${aspectRatio}. Do NOT crop this image. You MUST perform OUTPAINTING. Your task is to keep the central character intact but verify the white padded areas and fill them completely with a seamless background that matches the scene's context. The final output MUST be exactly ${aspectRatio} and contain NO remaining white borders.
 
 [ADDITIONAL STYLE INSTRUCTIONS]
 - **STYLE:** Hyper-realistic 3D Render (High-end Game Cinematic style, Unreal Engine 5).
@@ -170,34 +162,32 @@ ${prompt}
         addImagePart(processedStyleImage, "STYLE_REFERENCE");
         addImagePart(actualFaceImage, "FACE_REFERENCE");
         
+        // --- CONFIGURATION LOGIC (CRITICAL FIX) ---
+        // If we send `imageConfig` with `characterImage`, Gemini often throws INVALID_ARGUMENT or behaves unpredictably.
+        // We rely on the INPUT IMAGE dimensions + PROMPT INSTRUCTION to enforce aspect ratio in Image-to-Image mode.
+        
         const config: any = { 
             responseModalities: [Modality.IMAGE],
             seed: seed ? Number(seed) : undefined,
         };
 
-        // CRITICAL FIX: Only add aspectRatio to config if we are NOT providing a character image.
-        // If a character image is provided, we rely on its dimensions (which are padded client-side)
-        // AND the strong prompt instructions to prevent cropping.
-        // Sending config.aspectRatio with input image often causes "INVALID_ARGUMENT" or cropping.
-        const supportedRatios = ['1:1', '3:4', '4:3', '9:16', '16:9'];
-        if (supportedRatios.includes(aspectRatio)) {
-            if (!processedCharacterImage) {
-                config.imageConfig = { aspectRatio: aspectRatio };
+        if (!processedCharacterImage) {
+            // Text-to-Image Mode: We MUST specify aspect ratio and size via config
+            config.imageConfig = { aspectRatio: aspectRatio };
+            
+            // Only add imageSize for Pro model in T2I mode
+            if (isProModel) {
+                config.imageConfig.imageSize = imageSize;
             }
+        } else {
+            // Image-to-Image Mode: 
+            // DO NOT add config.imageConfig. The input image sets the dimensions.
+            // The Prompt Injection handles the cropping prevention.
         }
 
-        if (isProModel) {
-            if (!config.imageConfig) config.imageConfig = {};
-            
-            // Only set imageSize if we are NOT doing Image-to-Image or if strictly necessary.
-            // Usually, passing strict size with input image can cause conflict.
-            if (!processedCharacterImage) {
-                 config.imageConfig.imageSize = imageSize;
-            }
-            
-            if (useGoogleSearch) {
-                config.tools = [{ googleSearch: {} }]; 
-            }
+        // Google Search Tool (Only for Pro)
+        if (isProModel && useGoogleSearch) {
+            config.tools = [{ googleSearch: {} }]; 
         }
 
         const response = await ai.models.generateContent({

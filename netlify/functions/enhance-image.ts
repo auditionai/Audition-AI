@@ -39,7 +39,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         }
 
         // 2. AI Processing
-        const { data: apiKeyData } = await supabaseAdmin.from('api_keys').select('key_value, id').eq('status', 'active').limit(1).single();
+        const { data: apiKeyData } = await supabaseAdmin.from('api_keys').select('key_value, id').eq('status', 'active').order('usage_count', { ascending: true }).limit(1).single();
         if (!apiKeyData) return { statusCode: 503, body: JSON.stringify({ error: 'Service busy.' }) };
 
         const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
@@ -109,10 +109,14 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         return {
             statusCode: 200,
+            headers: {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-store' // Prevent caching
+            },
             body: JSON.stringify({ 
                 success: true, 
                 imageUrl: publicUrl, 
-                imageBase64: finalImageBase64,
+                // imageBase64 removed to prevent timeout/payload size issues
                 mimeType: finalMimeType,
                 newDiamondCount: newBalance 
             }),

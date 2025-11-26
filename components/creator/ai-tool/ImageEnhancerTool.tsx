@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
 import ConfirmationModal from '../../ConfirmationModal';
-import { resizeImage, base64ToFile } from '../../../utils/imageUtils';
+import { resizeImage } from '../../../utils/imageUtils';
 import Modal from '../../common/Modal';
 import { useTranslation } from '../../../hooks/useTranslation';
 
@@ -14,7 +14,6 @@ interface EnhancedImage {
     id: string;
     originalUrl: string;
     processedUrl: string;
-    imageBase64: string;
     mimeType: string;
     fileName: string;
     mode: 'flash' | 'pro';
@@ -41,17 +40,14 @@ const ImageEnhancerTool: React.FC<ImageEnhancerToolProps> = ({ onSendToBgRemover
         }
     }, []);
 
-    // Save Session (Optimized: Don't save base64 to prevent QuotaExceededError)
+    // Save Session
     useEffect(() => {
         try {
-            // Create a lightweight version for storage
-            const imagesToSave = enhancedImages.map(img => ({
-                ...img,
-                imageBase64: '' // Strip heavy base64 data
-            }));
-            sessionStorage.setItem('enhancedImages', JSON.stringify(imagesToSave));
+            // Limit history to last 5 images to strictly prevent storage overflow/browser lag
+            const historyToSave = enhancedImages.slice(0, 5); 
+            sessionStorage.setItem('enhancedImages', JSON.stringify(historyToSave));
         } catch (e) {
-            console.warn("Session storage full, history not saved to prevent crash.", e);
+            console.warn("Session storage full or error.", e);
         }
     }, [enhancedImages]);
 
@@ -87,57 +83,67 @@ const ImageEnhancerTool: React.FC<ImageEnhancerToolProps> = ({ onSendToBgRemover
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
                 body: JSON.stringify({ image: inputImage.url, mode: selectedMode }),
             });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error);
+            
+            if (!res.ok) {
+                const errorData = await res.json();
+                throw new Error(errorData.error || 'Lỗi xử lý ảnh.');
+            }
 
+            const data = await res.json();
             updateUserDiamonds(data.newDiamondCount);
+            
+            // Only store metadata and URL. No heavy base64 strings.
             const newImage: EnhancedImage = {
                 id: crypto.randomUUID(),
                 originalUrl: inputImage.url,
                 processedUrl: data.imageUrl,
-                imageBase64: data.imageBase64,
                 mimeType: data.mimeType,
                 fileName: `enhanced_${Date.now()}.png`,
                 mode: selectedMode
             };
-            setEnhancedImages(prev => [newImage, ...prev]);
+            
+            // Keep only latest 5 images in state to keep DOM light
+            setEnhancedImages(prev => [newImage, ...prev].slice(0, 5));
             showToast('Làm nét thành công!', 'success');
         } catch (e: any) {
-            showToast(e.message, 'error');
+            showToast(e.message || 'Lỗi kết nối.', 'error');
         } finally {
             setIsProcessing(false);
         }
     };
 
     const handleDownload = (img: EnhancedImage) => {
+        // Use the proxy endpoint to force download instead of opening in new tab
+        const downloadUrl = `/.netlify/functions/download-image?url=${encodeURIComponent(img.processedUrl)}`;
         const a = document.createElement('a');
-        a.href = img.processedUrl; // R2 public URL works for download usually, or use download function
+        a.style.display = 'none';
+        a.href = downloadUrl;
         a.download = img.fileName;
-        a.target = '_blank';
+        document.body.appendChild(a);
         a.click();
+        
+        // Cleanup
+        setTimeout(() => {
+            document.body.removeChild(a);
+        }, 1000);
     };
 
     const handleTransferToBg = async (img: EnhancedImage) => {
         try {
-            let file: File;
-            let url: string;
-
-            // If base64 is available (freshly created), use it
-            if (img.imageBase64) {
-                file = base64ToFile(img.imageBase64, img.fileName, img.mimeType);
-                url = `data:${img.mimeType};base64,${img.imageBase64}`;
-            } else {
-                // If base64 is missing (loaded from storage), fetch from URL
-                const response = await fetch(img.processedUrl);
-                const blob = await response.blob();
-                file = new File([blob], img.fileName, { type: img.mimeType });
-                url = URL.createObjectURL(blob);
-            }
+            showToast('Đang tải dữ liệu ảnh...', 'success');
+            // Fetch the image blob from the URL
+            const response = await fetch(img.processedUrl);
+            if (!response.ok) throw new Error("Không thể tải ảnh từ server.");
+            
+            const blob = await response.blob();
+            const file = new File([blob], img.fileName, { type: img.mimeType });
+            const url = URL.createObjectURL(blob);
 
             onSendToBgRemover({ url, file });
             setViewingImage(null);
             showToast('Đã chuyển ảnh sang công cụ Tách Nền!', 'success');
         } catch (e) {
+            console.error(e);
             showToast('Không thể tải dữ liệu ảnh. Vui lòng thử lại.', 'error');
         }
     };

@@ -84,29 +84,38 @@ const handler: Handler = async (event: HandlerEvent) => {
         let fullPrompt = "";
         const hasInputImage = !!characterImage;
         
+        // ==================================================================================
+        // 🔒 LOCK CODE: ASPECT RATIO ENFORCEMENT & OUTPAINTING LOGIC
+        // ==================================================================================
         if (hasInputImage) {
             fullPrompt = `
-** SYSTEM COMMAND: BOUNDARY & DIMENSION PRESERVATION **
-You are provided with an input image labeled 'INPUT_CANVAS'.
-This image contains a SOLID BLACK BORDER defining the EXACT output dimensions.
+            *** SYSTEM COMMAND: OUTPAINTING & EXPANSION ***
+            
+            1. [INPUT ANALYSIS]: The image labeled 'INPUT_CANVAS' contains a subject placed on a GRAY (#808080) or WHITE padding background.
+            2. [MANDATORY ACTION]: The GRAY/WHITE area is VOID space. You MUST NOT preserve it.
+            3. [GENERATION]:
+               - EXTEND the scene from the central subject outwards to FILL the entire canvas.
+               - GENERATE new background details (scenery, lighting, environment) to replace the gray/white bars.
+               - The final image MUST NOT have any solid color borders or bars. It must be a full-bleed illustration.
+            
+            4. [SUBJECT PRESERVATION]: Keep the character's Pose, Outfit, and Identity exactly as shown in the non-gray parts. Blend them seamlessly into the newly generated background.
 
-1. [NON-NEGOTIABLE] You MUST output an image with the EXACT same aspect ratio as the input. DO NOT CROP. DO NOT RESIZE.
-2. [OUTPAINTING] The GRAY area (#808080) inside the border is void space. You MUST completely fill it with the environment described in the prompt.
-3. [SUBJECT PRESERVATION] Keep the character's Pose, Outfit, and Gender exactly as shown in the non-gray parts. Blend them seamlessly into the new background.
+            **USER PROMPT:** ${prompt}
 
-**USER PROMPT:** ${prompt}
-
-**STYLE:** Hyper-realistic 3D Render, Audition Game Style, High Fidelity, Volumetric Lighting.
-`;
+            **STYLE:** Hyper-realistic 3D Render, Audition Game Style, High Fidelity, Volumetric Lighting.
+            `;
         } else {
             fullPrompt = `${prompt}\n\n**STYLE:**\n- **Hyper-realistic 3D Render** (High-end Game Cinematic style, Unreal Engine 5).\n- Detailed skin texture, volumetric lighting, raytracing reflections.`;
         }
+        // ==================================================================================
+        // 🔒 END LOCK CODE
+        // ==================================================================================
 
         if (faceReferenceImage) {
             fullPrompt += `\n\n**FACE ID:**\n- Use the exact facial structure from 'Face Reference'. Blend it seamlessly.`;
         }
 
-        const hardNegative = "photorealistic, real photo, grainy, low quality, 2D, sketch, cartoon, flat color, stiff pose, t-pose, mannequin, looking at camera blankly, distorted face, ugly, blurry, deformed hands, gray borders, gray bars, cropped, vertical crop, monochrome background, gray background, border, frame";
+        const hardNegative = "photorealistic, real photo, grainy, low quality, 2D, sketch, cartoon, flat color, stiff pose, t-pose, mannequin, looking at camera blankly, distorted face, ugly, blurry, deformed hands, gray borders, gray bars, letterbox, pillarbox, cropped, vertical crop, monochrome background, gray background, border, frame, blank space, white background";
         fullPrompt += ` --no ${hardNegative}, ${negativePrompt || ''}`;
 
         // Prepare Parts

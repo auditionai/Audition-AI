@@ -31,7 +31,7 @@ export const useImageGenerator = () => {
         useUpscaler: boolean,
         imageResolution: string = '1K',
         useGoogleSearch: boolean = false,
-        removeWatermark: boolean = false // Added param
+        removeWatermark: boolean = false 
     ) => {
         setIsGenerating(true);
         setProgress(1);
@@ -42,21 +42,16 @@ export const useImageGenerator = () => {
         let progressInterval: ReturnType<typeof setInterval> | null = null;
 
         try {
-            // Simulate initial steps
             progressInterval = setInterval(() => {
                 setProgress(prev => (prev < 8 ? prev + 1 : prev));
             }, 1800);
 
-            // PRE-PROCESS IMAGES: Apply Supreme Gray Padding + Anchors
-            // This forces the aspect ratio on the client side before sending to AI.
             const processInput = async (file: File | null, targetRatio: string) => {
                 if (!file) return null;
                 const rawBase64 = await fileToBase64(file);
-                // Apply Gray Padding logic based on Aspect Ratio
                 return await preprocessImageToAspectRatio(rawBase64, targetRatio);
             };
 
-            // Resolve Face Image (File or Base64 string)
             const resolveFaceImage = async () => {
                 if (!faceImage) return null;
                 if (faceImage instanceof File) return await fileToBase64(faceImage);
@@ -64,8 +59,8 @@ export const useImageGenerator = () => {
             };
 
             const [poseImageBase64, styleImageBase64, faceImageBase64] = await Promise.all([
-                processInput(poseImageFile, aspectRatio), // Force Aspect Ratio on Pose Image
-                processInput(styleImageFile, "1:1"), // Style image doesn't need strict ratio, square is fine
+                processInput(poseImageFile, aspectRatio), 
+                processInput(styleImageFile, "1:1"), 
                 resolveFaceImage()
             ]);
 
@@ -79,10 +74,10 @@ export const useImageGenerator = () => {
                     prompt, 
                     modelId: model.id, 
                     apiModel: model.apiModel,
-                    characterImage: poseImageBase64, // This is now PADDED with ANCHORS
+                    characterImage: poseImageBase64, 
                     styleImage: styleImageBase64, 
                     faceReferenceImage: faceImageBase64,
-                    aspectRatio, // Sent for fallback, but logic in backend will ignore it if characterImage exists
+                    aspectRatio, 
                     negativePrompt,
                     seed, 
                     useUpscaler,
@@ -115,10 +110,14 @@ export const useImageGenerator = () => {
                 return;
             }
 
-            // Smart Recovery Logic
+            // --- SMART RECOVERY LOGIC ---
+            // Check if the image was actually generated but the response failed (e.g. timeout)
             if (supabase && session?.user?.id) {
-                console.log("Attempting recovery check for generated image...");
+                console.log("Attempting smart recovery...");
                 try {
+                    // Wait a moment for DB to potentially update if it was a race condition
+                    await new Promise(r => setTimeout(r, 2000));
+
                     const { data: recentImages } = await supabase
                         .from('generated_images')
                         .select('image_url, created_at')
@@ -132,16 +131,20 @@ export const useImageGenerator = () => {
                         const latestImage = recentImages[0];
                         const timeDiff = Date.now() - new Date(latestImage.created_at).getTime();
                         
+                        // If image created within last 2 minutes
                         if (timeDiff < 120000) { 
                             console.log("Recovered image from DB:", latestImage.image_url);
                             setGeneratedImage(latestImage.image_url);
+                            
+                            // Sync balance
                             const userRes = await supabase.from('users').select('diamonds, xp').eq('id', session.user.id).single();
                             if (userRes.data) {
                                 updateUserProfile({ diamonds: userRes.data.diamonds, xp: userRes.data.xp });
                             }
+                            
                             showToast('Tạo ảnh thành công (Đã khôi phục)!', 'success');
                             setProgress(10);
-                            return;
+                            return; // Exit success path
                         }
                     }
                 } catch (recoveryErr) {

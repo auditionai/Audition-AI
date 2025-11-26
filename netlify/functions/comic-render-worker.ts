@@ -20,6 +20,8 @@ const failJob = async (jobId: string, userId: string, reason: string, totalCost:
     try {
         await Promise.all([
             supabaseAdmin.from('generated_images').delete().eq('id', jobId),
+            supabaseAdmin.from('users').update({ diamonds: undefined }), // Cannot invoke increment_user_diamonds simply here
+            // Manually fetch and update since RPC might be missing or limited
             supabaseAdmin.rpc('increment_user_diamonds', { user_id_param: userId, diamond_amount: totalCost }),
             supabaseAdmin.from('diamond_transactions_log').insert({
                 user_id: userId,
@@ -53,7 +55,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         
         userId = jobData.user_id;
         const jobConfig = JSON.parse(jobData.prompt);
-        const { panel, characters, style, aspectRatio, colorFormat, visualEffect, premise, globalContext, imageQuality = '1K', previousPageUrl } = jobConfig.payload;
+        const { panel, characters, style, aspectRatio, colorFormat, visualEffect, premise, imageQuality = '1K', previousPageUrl } = jobConfig.payload;
         
         if (imageQuality === '2K') totalCost += 10;
         if (imageQuality === '4K') totalCost += 15;
@@ -75,7 +77,6 @@ const handler: Handler = async (event: HandlerEvent) => {
             visualDirectives = `**PAGE LAYOUT:** ${scriptData.layout_note || "Standard Comic Grid"}\n`;
             
             const panelsList = Array.isArray(scriptData.panels) ? scriptData.panels : (scriptData.panels ? [scriptData.panels] : []);
-            
             if (panelsList.length > 0) {
                 panelsList.forEach((p: any) => {
                     visualDirectives += `[PANEL ${p.panel_id}]: ${p.description}\n`;
@@ -92,41 +93,51 @@ const handler: Handler = async (event: HandlerEvent) => {
             visualDirectives = panel.visual_description;
         }
 
-        // --- PROMPT CONSTRUCTION ---
-        const systemPrompt = `
-            You are a legendary Comic Book Artist (Gemini 3 Pro Vision).
-            
-            **CORE DIRECTIVE: VISUAL CONSISTENCY IS LAW.**
-            1. **PREVIOUS PAGE CONTEXT:** Use the provided previous page image as the ABSOLUTE TRUTH for style, lighting, and environment. Continue the scene directly from there.
-            2. **REFERENCE LOCK:** Use the character reference images for outfit/face consistency.
-            3. **STAGING RULE:** Follow the positioning instructions in the Visual Script exactly.
-            
+        // --- PROMPT ---
+        let systemPrompt = `You are a legendary Comic Book Artist (Gemini 3 Pro Vision).`;
+        const hasInputImages = !!previousPageUrl || (characters && characters.length > 0);
+        
+        if (hasInputImages) {
+            systemPrompt += `
+            *** SUPREME SYSTEM COMMAND: PRESERVE CANVAS ***
+            If a canvas with GRAY PADDING is provided (e.g., 'Previous Page Context'):
+            1. [BOUNDARIES]: Respect the corners. DO NOT CROP.
+            2. [OUTPAINTING]: Fill gray areas with comic panel content.
+            3. [LOGIC]: Ignore aspect ratio config, use input canvas pixels.
+            `;
+        } else {
+            systemPrompt += `
+            **OUTPUT REQUIREMENT:** Create a new image with aspect ratio ${aspectRatio}.
+            `;
+        }
+
+        systemPrompt += `
             **CONTEXT:**
             "${premise}"
             
             **STYLE:** ${style}. ${colorFormat}. ${visualEffect !== 'none' ? `Effect: ${visualEffect}` : ''}.
-            Resolution: ${imageQuality}. High Detail.
+            Resolution: ${imageQuality}.
             
-            **VISUAL SCRIPT (THE PAGE):**
+            **VISUAL SCRIPT:**
             ${visualDirectives}
             
-            **DIALOGUE (TEXT PLACEMENT):**
-            Render speech bubbles with legible Vietnamese text.
+            **DIALOGUE:**
+            Render speech bubbles with legible text:
             ${dialogueListText}
         `;
 
         parts.push({ text: systemPrompt });
 
-        // 1. Inject Previous Page (Visual Continuity)
+        // 1. Inject Previous Page
         if (previousPageUrl) {
             try {
                 const response = await fetch(previousPageUrl);
                 const buffer = await response.arrayBuffer();
                 const base64 = Buffer.from(buffer).toString('base64');
-                parts.push({ text: "**[IMPORTANT] CONTEXT IMAGE (PREVIOUS PAGE):** This is the immediately preceding page. Continue the action visually from here." });
+                parts.push({ text: "**PREVIOUS PAGE CONTEXT (DO NOT CROP THIS CANVAS):**" });
                 parts.push({ inlineData: { data: base64, mimeType: 'image/png' } });
             } catch (e) {
-                console.error("[WORKER] Failed to fetch previous page image. Continuing without it.", e);
+                console.error("[WORKER] Failed to fetch previous page image.", e);
             }
         }
 
@@ -136,25 +147,26 @@ const handler: Handler = async (event: HandlerEvent) => {
                 if (char.image_url) {
                     const imgData = processDataUrl(char.image_url);
                     if (imgData) {
-                        parts.push({ text: `[REFERENCE] CHARACTER: ${char.name}. VISUAL DNA: Maintain this exact face and outfit.` });
+                        parts.push({ text: `Reference for ${char.name}:` });
                         parts.push({ inlineData: { data: imgData.base64, mimeType: imgData.mimeType } });
                     }
                 }
             }
         }
 
-        console.log(`[WORKER] Rendering ${jobId} with Gemini 3 Pro...`);
+        // CONFIG HANDLING:
+        const config: any = {
+            responseModalities: [Modality.IMAGE],
+        };
+
+        if (!hasInputImages) {
+             config.imageConfig = { aspectRatio: aspectRatio, imageSize: imageQuality };
+        }
+
         const response = await ai.models.generateContent({
             model: 'gemini-3-pro-image-preview',
             contents: { parts },
-            config: {
-                responseModalities: [Modality.IMAGE],
-                // FIX: Force aspect ratio in config for all models
-                imageConfig: {
-                    aspectRatio: aspectRatio || '3:4',
-                    imageSize: imageQuality
-                }
-            }
+            config: config
         });
 
         const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);

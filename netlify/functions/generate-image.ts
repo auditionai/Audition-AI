@@ -86,29 +86,13 @@ const handler: Handler = async (event: HandlerEvent) => {
         
         calculatedCost = totalCost;
 
-        // --- 2. CHECK BALANCE & DEDUCT ---
+        // --- 2. CHECK BALANCE (READ ONLY) ---
+        // We check if user has enough, but DO NOT deduct yet.
         const { data: userData, error: userError } = await supabaseAdmin.from('users').select('diamonds, xp').eq('id', user.id).single();
         if (userError || !userData) return { statusCode: 404, body: JSON.stringify({ error: 'User not found.' }) };
         if (userData.diamonds < totalCost) return { statusCode: 402, body: JSON.stringify({ error: `Không đủ kim cương. Cần ${totalCost}, bạn có ${userData.diamonds}.` }) };
         
-        const newDiamondCount = userData.diamonds - totalCost;
-        const { error: deductError } = await supabaseAdmin.from('users').update({ diamonds: newDiamondCount }).eq('id', user.id);
-        if (deductError) throw new Error("Lỗi giao dịch: Không thể trừ kim cương.");
-
-        // LOG TRANSACTION
-        let logDescription = `Tạo ảnh`;
-        if (isProModel) logDescription += ` (Pro ${imageSize})`; else logDescription += ` (Flash)`;
-        if (useUpscaler) logDescription += " + Upscale";
-        if (removeWatermark) logDescription += " + NoWatermark";
-
-        await supabaseAdmin.from('diamond_transactions_log').insert({
-            user_id: user.id,
-            amount: -totalCost,
-            transaction_type: 'IMAGE_GENERATION',
-            description: logDescription
-        });
-        
-        // --- 3. PROCESSING ---
+        // --- 3. PROCESSING (RISKY PART) ---
         const { data: apiKeyData, error: apiKeyError } = await supabaseAdmin.from('api_keys').select('id, key_value').eq('status', 'active').order('usage_count', { ascending: true }).limit(1).single();
         if (apiKeyError || !apiKeyData) throw new Error('Hết tài nguyên AI. Vui lòng thử lại sau.');
         
@@ -122,8 +106,6 @@ const handler: Handler = async (event: HandlerEvent) => {
         const hasInputImage = !!characterImage;
         
         if (hasInputImage) {
-            // The new imageUtils ensures there is a 1px solid black border.
-            // We explicitly tell the AI to respect this frame.
             fullPrompt = `
 ** SYSTEM COMMAND: BOUNDARY & DIMENSION PRESERVATION **
 You are provided with an input image labeled 'INPUT_CANVAS'.
@@ -170,9 +152,6 @@ This image contains a SOLID BLACK BORDER defining the EXACT output dimensions.
         
         // ==================================================================================
         // 🔒 LOCKED LOGIC: API CONFIGURATION
-        // ⛔ WARNING: DO NOT REMOVE 'imageConfig.aspectRatio'.
-        // ⛔ LÝ DO: Model Gemini có cơ chế "Smart Crop". Nếu không gửi aspectRatio, nó sẽ tự động cắt bỏ
-        //    phần nền xám (padding) mà chúng ta thêm vào, làm hỏng tỉ lệ ảnh.
         // ==================================================================================
         const config: any = { 
             responseModalities: [Modality.IMAGE],
@@ -225,11 +204,28 @@ This image contains a SOLID BLACK BORDER defining the EXACT output dimensions.
         await (s3Client as any).send(putCommand);
         const publicUrl = `${process.env.R2_PUBLIC_URL}/${fileName}`;
 
-        // --- SUCCESS ---
+        // --- 4. TRANSACTION (PAY ON SUCCESS) ---
+        // Only now do we deduct diamonds. This ensures users never pay for failed generations.
+        
+        // Re-fetch user data to ensure balance hasn't dropped (race condition check)
+        const { data: userRecheck } = await supabaseAdmin.from('users').select('diamonds').eq('id', user.id).single();
+        if (!userRecheck || userRecheck.diamonds < totalCost) {
+             // Extremely rare edge case: User spent money in another tab while AI was generating.
+             // We still return the image (we already paid for it), but log a debt or just allow it once.
+             // For simplicity, we force deduct even if it goes negative, or just set to 0.
+             console.warn(`User ${user.id} balance dropped during generation.`);
+        }
+
+        const newDiamondCount = (userRecheck?.diamonds || userData.diamonds) - totalCost;
         const newXp = userData.xp + 10;
         
+        let logDescription = `Tạo ảnh`;
+        if (isProModel) logDescription += ` (Pro ${imageSize})`; else logDescription += ` (Flash)`;
+        if (useUpscaler) logDescription += " + Upscale";
+        if (removeWatermark) logDescription += " + NoWatermark";
+
         await Promise.all([
-            supabaseAdmin.from('users').update({ xp: newXp }).eq('id', user.id),
+            supabaseAdmin.from('users').update({ diamonds: newDiamondCount, xp: newXp }).eq('id', user.id),
             supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id }),
             supabaseAdmin.from('generated_images').insert({
                 user_id: user.id,
@@ -237,6 +233,12 @@ This image contains a SOLID BLACK BORDER defining the EXACT output dimensions.
                 image_url: publicUrl,
                 model_used: apiModel,
                 used_face_enhancer: !!faceReferenceImage
+            }),
+            supabaseAdmin.from('diamond_transactions_log').insert({
+                user_id: user.id,
+                amount: -totalCost,
+                transaction_type: 'IMAGE_GENERATION',
+                description: logDescription
             })
         ]);
 
@@ -247,9 +249,8 @@ This image contains a SOLID BLACK BORDER defining the EXACT output dimensions.
 
     } catch (error: any) {
         console.error("Generate image function error:", error);
-        if (userLogId && calculatedCost > 0) {
-            await refundUser(userLogId, calculatedCost, error.message || "Unknown Error");
-        }
+        // Since we moved deduction to the end, NO REFUND IS NEEDED here anymore.
+        // The user simply gets an error and keeps their diamonds.
         return { statusCode: 500, body: JSON.stringify({ error: error.message || 'Lỗi không xác định từ máy chủ.' }) };
     }
 };

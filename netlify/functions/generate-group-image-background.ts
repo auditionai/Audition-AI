@@ -168,13 +168,13 @@ const handler: Handler = async (event: HandlerEvent) => {
         // --- BƯỚC 3: TỔNG HỢP ---
         await updateJobProgress(jobId, jobPromptData, 'Đang tổng hợp và hòa trộn cảm xúc...');
         
-        // SUPREME COMMAND for Group Image
+        // SUPREME COMMAND for Group Image (Apply Gray Padding Rule)
         const compositePrompt = `
-            *** SUPREME SYSTEM COMMAND: PRESERVE CANVAS DIMENSIONS ***
-            The input image labeled 'MASTER CANVAS' is PADDED with GRAY (#888888) and CORNER ANCHORS.
-            1. [BOUNDARIES]: Respect the absolute pixels. Do NOT crop or resize.
-            2. [OUTPAINTING]: Replace ALL gray padding with the scene environment.
-            3. [COMPOSITION]: Place the characters into the scene.
+            *** SUPREME SYSTEM COMMAND: OUTPAINTING ON GRAY CANVAS ***
+            The input image labeled 'MASTER CANVAS' is a predefined layout with GRAY PADDING (#888888) and CORNER ANCHORS.
+            1. [BOUNDARIES]: Respect the absolute pixels of the anchors. DO NOT CROP. DO NOT RESIZE.
+            2. [OUTPAINTING]: COMPLETELY replace the gray padding with the scene environment.
+            3. [COMPOSITION]: Place the provided character inputs into the scene.
 
             **TASK: GROUP PHOTO COMPOSITION**
             **SCENE:** ${prompt}
@@ -197,6 +197,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         });
         
         // CRITICAL: NO imageConfig.aspectRatio here because we have a master canvas input.
+        // Rely solely on the "Supreme Command" and the Anchor Pixels.
         const finalConfig: any = { 
             responseModalities: [Modality.IMAGE],
         };

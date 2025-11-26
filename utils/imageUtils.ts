@@ -62,6 +62,7 @@ export const base64ToFile = (base64: string, filename: string, mimeType: string)
 };
 
 // NEW: Letterboxing / Outpainting Preprocessor
+// ROBUST VERSION: Uses Gray background + Corner Anchors to force Aspect Ratio
 export const preprocessImageToAspectRatio = async (
     dataUrl: string,
     targetAspectRatio: string // e.g., "16:9", "1:1", "3:4"
@@ -82,18 +83,20 @@ export const preprocessImageToAspectRatio = async (
             if (!ctx) return reject(new Error('Canvas context error'));
 
             // STEP 1: Fill with GRAY background (Neutral color for Outpainting, less likely to be treated as alpha/void)
+            // Using #888888 helps the AI understand this is "content to be filled" rather than "empty space to be cropped"
             ctx.fillStyle = '#888888'; 
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
             // STEP 2: Add "Anchor Pixels" in the corners. 
-            // This forces the AI to recognize the full canvas boundaries and prevents auto-cropping.
-            ctx.fillStyle = '#111111'; // Dark grey anchors
+            // This is a CRITICAL TRICK. It forces the AI to recognize the full canvas boundaries 
+            // and prevents it from auto-cropping the gray padding.
+            ctx.fillStyle = '#111111'; // Dark grey anchors, nearly invisible but effective
             ctx.fillRect(0, 0, 4, 4); // Top-Left
             ctx.fillRect(canvas.width - 4, 0, 4, 4); // Top-Right
             ctx.fillRect(0, canvas.height - 4, 4, 4); // Bottom-Left
             ctx.fillRect(canvas.width - 4, canvas.height - 4, 4, 4); // Bottom-Right
 
-            // STEP 3: Calculate "Contain" dimensions
+            // STEP 3: Calculate "Contain" dimensions to fit the original image inside
             const scale = Math.min(canvas.width / img.width, canvas.height / img.height);
             const drawWidth = img.width * scale;
             const drawHeight = img.height * scale;
@@ -104,7 +107,7 @@ export const preprocessImageToAspectRatio = async (
 
             ctx.drawImage(img, offsetX, offsetY, drawWidth, drawHeight);
 
-            // Return result as Data URL (PNG to preserve quality)
+            // Return result as Data URL (PNG to preserve quality and prevent compression artifacts on anchors)
             resolve(canvas.toDataURL('image/png'));
         };
         // FIX: Removed unused variable 'e' to satisfy TS6133
@@ -113,7 +116,7 @@ export const preprocessImageToAspectRatio = async (
     });
 };
 
-// NEW: Create a blank gray canvas with specific aspect ratio
+// NEW: Create a blank gray canvas with specific aspect ratio and anchors
 export const createBlankCanvas = (aspectRatio: string): string => {
     const [w, h] = aspectRatio.split(':').map(Number);
     const baseWidth = 1024;

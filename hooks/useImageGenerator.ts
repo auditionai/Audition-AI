@@ -48,18 +48,18 @@ export const useImageGenerator = () => {
             }, 1800);
 
             // PRE-PROCESS IMAGES: Apply Letterboxing/Padding on Client Side
-            // This rigidly enforces the aspect ratio by padding with WHITE before sending to AI
+            // This rigidly enforces the aspect ratio by padding with GRAY + ANCHORS before sending to AI
             const processInput = async (file: File | null) => {
                 if (!file) return null;
                 const rawBase64 = await fileToBase64(file);
-                // Apply White Padding logic based on Aspect Ratio
+                // Apply Gray Padding logic based on Aspect Ratio
                 return await preprocessImageToAspectRatio(rawBase64, aspectRatio);
             };
 
             const [poseImageBase64, styleImageBase64, faceImageBase64] = await Promise.all([
-                processInput(poseImageFile), // Letterbox Pose
-                processInput(styleImageFile), // Letterbox Style (optional but good for consistency)
-                faceImage instanceof File ? fileToBase64(faceImage) : Promise.resolve(faceImage) // Do NOT letterbox Face ID
+                processInput(poseImageFile), // Letterbox Pose is CRITICAL
+                processInput(styleImageFile), // Letterbox Style (good for consistency)
+                faceImage instanceof File ? fileToBase64(faceImage) : Promise.resolve(faceImage) // Do NOT letterbox Face ID, keep it raw
             ]);
 
             const response = await fetch('/.netlify/functions/generate-image', {
@@ -72,7 +72,7 @@ export const useImageGenerator = () => {
                     prompt, 
                     modelId: model.id, 
                     apiModel: model.apiModel,
-                    characterImage: poseImageBase64,
+                    characterImage: poseImageBase64, // This is now padded gray image
                     styleImage: styleImageBase64, 
                     faceReferenceImage: faceImageBase64,
                     aspectRatio, 
@@ -81,7 +81,7 @@ export const useImageGenerator = () => {
                     useUpscaler,
                     imageSize: imageResolution,
                     useGoogleSearch,
-                    removeWatermark // Pass to backend
+                    removeWatermark
                 }),
                 signal: abortControllerRef.current.signal,
             });

@@ -119,15 +119,16 @@ const handler: Handler = async (event: HandlerEvent) => {
         const hasInputImage = !!characterImage;
         
         if (hasInputImage) {
-            // SUPREME COMMAND: FORCE CANVAS DIMENSIONS
+            // SUPREME COMMAND: FORCE CANVAS DIMENSIONS & OUTPAINTING
+            // Explicitly instruction Gemini about the Gray Padding strategy
             fullPrompt = `
-*** SUPREME SYSTEM COMMAND: PRESERVE CANVAS ***
-The input image labeled 'INPUT_IMAGE_WITH_GRAY_PADDING' is the MASTER CANVAS with strict corners.
-1. [BOUNDARIES]: The output image MUST extend to the 4 corners of the input. DO NOT CROP. DO NOT RESIZE.
-2. [OUTPAINTING]: The GRAY areas (#888888) are void space. You MUST completely replace the gray color with background scenery matching the prompt.
-3. [CONTENT]: Keep the central character intact but blend them into the new background.
+*** SUPREME SYSTEM COMMAND: OUTPAINTING ON GRAY CANVAS ***
+The input image labeled 'INPUT_IMAGE_WITH_GRAY_PADDING' has a central content area surrounded by GRAY PADDING (#888888) and 4 CORNER ANCHORS.
+1. [BOUNDARIES]: The output image MUST extend to the exact 4 corners of the input image. DO NOT CROP. DO NOT RESIZE.
+2. [OUTPAINTING TASK]: The GRAY areas are VOID SPACE. You MUST completely replace ALL gray pixels with the background scenery described in the prompt.
+3. [CONTENT PRESERVATION]: Keep the central character intact (pose and outfit) but blend them seamlessly into the new background.
 
-${prompt} 
+[USER PROMPT]: ${prompt} 
 
 [STYLE]: Hyper-realistic 3D Render, Unreal Engine 5, Volumetric Lighting.
 `;
@@ -140,7 +141,7 @@ ${prompt}
             fullPrompt += `\n\n**FACE ID:**\n- Use the exact facial structure from 'Face Reference'. Blend it seamlessly.`;
         }
 
-        const hardNegative = "photorealistic, real photo, grainy, low quality, 2D, sketch, cartoon, flat color, stiff pose, t-pose, mannequin, looking at camera blankly, distorted face, ugly, blurry, deformed hands, gray borders, gray bars, cropped, vertical crop";
+        const hardNegative = "photorealistic, real photo, grainy, low quality, 2D, sketch, cartoon, flat color, stiff pose, t-pose, mannequin, looking at camera blankly, distorted face, ugly, blurry, deformed hands, gray borders, gray bars, cropped, vertical crop, monochrome background, gray background";
         fullPrompt += ` --no ${hardNegative}, ${negativePrompt || ''}`;
 
         const parts: any[] = [];
@@ -160,7 +161,7 @@ ${prompt}
         addImagePart(styleImage, "STYLE_REFERENCE");
         addImagePart(faceReferenceImage, "FACE_REFERENCE");
         
-        // --- CONFIGURATION LOGIC (CRITICAL FIX) ---
+        // --- CONFIGURATION LOGIC (CRITICAL FIX FOR ASPECT RATIO) ---
         const config: any = { 
             responseModalities: [Modality.IMAGE],
             seed: seed ? Number(seed) : undefined,
@@ -174,9 +175,9 @@ ${prompt}
             }
         } else {
             // Image-to-Image Mode: 
-            // CRITICAL: DO NOT add imageConfig.aspectRatio. 
-            // We rely on the input image dimensions (which are pre-padded to correct ratio).
-            // Sending aspectRatio here causes INVALID_ARGUMENT error.
+            // CRITICAL: DO NOT add imageConfig.aspectRatio or imageSize. 
+            // We rely ENTIRELY on the input image dimensions (which are pre-padded to correct ratio).
+            // Sending aspectRatio here causes conflict with the input image dimensions.
         }
 
         if (isProModel && useGoogleSearch) {

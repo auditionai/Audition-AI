@@ -141,7 +141,13 @@ const handler: Handler = async (event: HandlerEvent) => {
         ]);
 
         // --- 4. TRIGGER WORKER ---
-        fetch(`${process.env.URL}/.netlify/functions/generate-image-background`, {
+        // Robust URL determination
+        const siteUrl = process.env.URL || 'http://localhost:8888'; // Fallback for local dev
+        const workerUrl = `${siteUrl}/.netlify/functions/generate-image-background`;
+
+        console.log(`[Spawner] Triggering worker at ${workerUrl} for Job ${jobId}`);
+
+        fetch(workerUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ jobId })

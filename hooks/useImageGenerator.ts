@@ -41,6 +41,7 @@ export const useImageGenerator = () => {
 
         let progressInterval: ReturnType<typeof setInterval> | null = null;
         let realtimeChannel: any = null;
+        let pollInterval: ReturnType<typeof setInterval> | null = null;
 
         try {
             // Simulated progress for UX
@@ -106,11 +107,17 @@ export const useImageGenerator = () => {
                 
                 setProgress(5); // Job started
                 
-                // Poll/Listen for completion
+                // Poll/Listen for completion with Timeout
                 return new Promise<void>((resolve, reject) => {
                     if (!supabase) return reject(new Error("Realtime connection failed"));
 
-                    // Use Realtime for faster updates
+                    // Cleanup function
+                    const cleanup = () => {
+                        if (realtimeChannel) supabase.removeChannel(realtimeChannel);
+                        if (pollInterval) clearInterval(pollInterval);
+                    };
+
+                    // 1. Realtime Listener
                     realtimeChannel = supabase.channel(`job-${jobId}`)
                         .on('postgres_changes', {
                             event: 'UPDATE',
@@ -123,38 +130,49 @@ export const useImageGenerator = () => {
                                 setGeneratedImage(newRecord.image_url);
                                 setProgress(10);
                                 showToast('Tạo ảnh thành công!', 'success');
-                                if (realtimeChannel) supabase.removeChannel(realtimeChannel);
+                                cleanup();
                                 resolve();
                             }
                         })
                         .on('postgres_changes', {
-                             event: 'DELETE', // Job failed and was deleted (refunded)
+                             event: 'DELETE',
                              schema: 'public',
                              table: 'generated_images',
                              filter: `id=eq.${jobId}`
                         }, () => {
-                             if (realtimeChannel) supabase.removeChannel(realtimeChannel);
+                             cleanup();
                              reject(new Error("Tạo ảnh thất bại. Hệ thống đã hoàn tiền."));
                         })
                         .subscribe();
 
-                    // Backup Polling (in case realtime misses)
-                    const poll = setInterval(async () => {
+                    // 2. Polling Backup with Timeout
+                    let pollCount = 0;
+                    const MAX_POLLS = 30; // 30 * 3s = 90 seconds timeout
+                    
+                    pollInterval = setInterval(async () => {
+                        pollCount++;
+                        
+                        if (pollCount > MAX_POLLS) {
+                            cleanup();
+                            // Don't reject, just resolve to stop loading. The job might still finish in background.
+                            showToast("Tác vụ đang mất nhiều thời gian hơn dự kiến. Vui lòng kiểm tra lại trong mục 'Tác phẩm của tôi' sau vài phút.", "success"); // Show as info/success to not alarm user
+                            resolve(); 
+                            return;
+                        }
+
                         const { data } = await supabase.from('generated_images').select('image_url').eq('id', jobId).single();
                         if (data?.image_url && data.image_url !== 'PENDING') {
-                            clearInterval(poll);
-                            if (realtimeChannel) supabase.removeChannel(realtimeChannel);
+                            cleanup();
                             setGeneratedImage(data.image_url);
                             setProgress(10);
                             showToast('Tạo ảnh thành công!', 'success');
                             resolve();
                         } else if (!data) {
                              // Record gone = failed/refunded
-                             clearInterval(poll);
-                             if (realtimeChannel) supabase.removeChannel(realtimeChannel);
-                             reject(new Error("Tạo ảnh thất bại (Timeout). Đã hoàn tiền."));
+                             cleanup();
+                             reject(new Error("Tạo ảnh thất bại (Record deleted). Đã hoàn tiền."));
                         }
-                    }, 4000);
+                    }, 3000);
                 });
             }
 
@@ -174,19 +192,15 @@ export const useImageGenerator = () => {
                 return;
             }
             
-            // Clean up channel if error
             if (realtimeChannel && supabase) supabase.removeChannel(realtimeChannel);
+            if (pollInterval) clearInterval(pollInterval);
 
             setError(err.message || 'Đã xảy ra lỗi trong quá trình tạo ảnh.');
             showToast(err.message || 'Tạo ảnh thất bại.', 'error');
             setProgress(0);
         } finally {
             if (progressInterval) clearInterval(progressInterval);
-            // Only stop loading if we are not waiting for async result
-            // If we are in the Promise above, isGenerating stays true until resolve/reject
-            if (!realtimeChannel) {
-                setIsGenerating(false);
-            }
+            setIsGenerating(false);
             abortControllerRef.current = null;
         }
     };

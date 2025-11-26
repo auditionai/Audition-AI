@@ -61,8 +61,8 @@ export const base64ToFile = (base64: string, filename: string, mimeType: string)
     return new File([blob], filename, { type: mimeType });
 };
 
-// NEW: Letterboxing / Outpainting Preprocessor (ANCHOR STRATEGY)
-// ROBUST VERSION: Uses Gray background + Corner Anchors to force Aspect Ratio
+// NEW: Letterboxing / Outpainting Preprocessor (SOLID BORDER STRATEGY)
+// Vẽ một khung viền 1px bao quanh toàn bộ ảnh để AI nhận diện đây là giới hạn Canvas
 export const preprocessImageToAspectRatio = async (
     dataUrl: string,
     targetAspectRatio: string // e.g., "16:9", "1:1", "3:4"
@@ -73,8 +73,7 @@ export const preprocessImageToAspectRatio = async (
 
         const img = new Image();
         img.onload = () => {
-            // Standardize base size. 
-            // Using a slightly larger base ensures anchors are distinct.
+            // Sử dụng kích thước chuẩn tối ưu cho Gemini (bội số của 64 hoặc 128)
             const baseLongestSide = 1536; 
             
             let canvasWidth, canvasHeight;
@@ -94,48 +93,39 @@ export const preprocessImageToAspectRatio = async (
             const ctx = canvas.getContext('2d');
             if (!ctx) return reject(new Error('Canvas context error'));
 
-            // --- STEP 1: SUPREME GRAY PADDING ---
-            // Neutral Gray #888888 signals "Outpaint Area" to modern diffusion models better than black/white
-            ctx.fillStyle = '#888888'; 
+            // --- STEP 1: NEUTRAL GRAY BACKGROUND ---
+            // Màu xám #808080 là màu chuẩn nhất để AI hiểu là "vùng trống cần vẽ thêm" (Outpainting)
+            ctx.fillStyle = '#808080'; 
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
             // --- STEP 2: CALCULATE CONTAIN FIT ---
+            // Tính toán để ảnh nhân vật nằm giữa, giữ nguyên tỉ lệ
             const scale = Math.min(canvas.width / img.width, canvas.height / img.height);
             const drawWidth = img.width * scale;
             const drawHeight = img.height * scale;
             
-            // Center the image
             const offsetX = (canvas.width - drawWidth) / 2;
             const offsetY = (canvas.height - drawHeight) / 2;
 
             ctx.drawImage(img, offsetX, offsetY, drawWidth, drawHeight);
 
-            // --- STEP 3: ANCHOR PIXELS (THE "FORCE" TRICK) ---
-            // Draw small distinct pixels in the exact 4 corners.
-            // This forces the AI's vision encoder to recognize the full bounds of the canvas.
-            // Without this, AI often auto-crops empty space.
-            ctx.fillStyle = '#111111'; // Dark Anchor
-            const anchorSize = 8; // Large enough to be seen by encoder, small enough to be ignored in final art ideally
-            
-            // Top-Left
-            ctx.fillRect(0, 0, anchorSize, anchorSize);
-            // Top-Right
-            ctx.fillRect(canvas.width - anchorSize, 0, anchorSize, anchorSize);
-            // Bottom-Left
-            ctx.fillRect(0, canvas.height - anchorSize, anchorSize, anchorSize);
-            // Bottom-Right
-            ctx.fillRect(canvas.width - anchorSize, canvas.height - anchorSize, anchorSize, anchorSize);
+            // --- STEP 3: THE "SOLID FENCE" (HÀNG RÀO CỨNG) ---
+            // Vẽ viền 1px bao quanh sát mép Canvas.
+            // Điều này cực kỳ quan trọng: Nó báo cho AI biết "Đây là giới hạn của bức tranh".
+            // Nếu AI crop, nó sẽ mất cái viền này -> AI được huấn luyện để tránh làm điều đó.
+            ctx.strokeStyle = '#000000'; // Màu đen hoặc màu đặc biệt
+            ctx.lineWidth = 2; // Đủ dày để Vision Model nhìn thấy
+            ctx.strokeRect(0, 0, canvas.width, canvas.height);
 
-            // Return result as PNG to avoid compression artifacts on anchors
+            // Trả về PNG để không bị nén mất chi tiết viền
             resolve(canvas.toDataURL('image/png'));
         };
-        // FIX: Removed unused variable 'e' to satisfy TS6133
         img.onerror = () => reject(new Error('Failed to load image for preprocessing'));
         img.src = dataUrl;
     });
 };
 
-// NEW: Create a blank gray canvas with specific aspect ratio and anchors
+// Create blank canvas with Solid Border
 export const createBlankCanvas = (aspectRatio: string): string => {
     const [w, h] = aspectRatio.split(':').map(Number);
     const baseLongestSide = 1536;
@@ -155,17 +145,14 @@ export const createBlankCanvas = (aspectRatio: string): string => {
     const ctx = canvas.getContext('2d');
     if (!ctx) return '';
 
-    // Fill with Gray
-    ctx.fillStyle = '#888888';
+    // Fill Gray
+    ctx.fillStyle = '#808080';
     ctx.fillRect(0, 0, width, height);
     
-    // Add Anchors
-    ctx.fillStyle = '#111111';
-    const anchorSize = 8;
-    ctx.fillRect(0, 0, anchorSize, anchorSize);
-    ctx.fillRect(width - anchorSize, 0, anchorSize, anchorSize);
-    ctx.fillRect(0, height - anchorSize, anchorSize, anchorSize);
-    ctx.fillRect(width - anchorSize, height - anchorSize, anchorSize, anchorSize);
+    // Solid Fence Border
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(0, 0, width, height);
     
     return canvas.toDataURL('image/png');
 };

@@ -112,7 +112,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         let masterLayoutData: { data: string; mimeType: string } | null = null;
 
         // --- BƯỚC 1: LẤY MASTER CANVAS ---
-        // Master Canvas đã được client tạo sẵn (bao gồm padding XÁM và Anchor Pixels)
+        // Master Canvas đã được client tạo sẵn (bao gồm padding XÁM và khung viền cứng)
         await updateJobProgress(jobId, jobPromptData, 'Đang thiết lập khung tranh chuẩn...');
         
         if (referenceImage) {
@@ -168,12 +168,12 @@ const handler: Handler = async (event: HandlerEvent) => {
         // --- BƯỚC 3: TỔNG HỢP ---
         await updateJobProgress(jobId, jobPromptData, 'Đang tổng hợp và hòa trộn cảm xúc...');
         
-        // SUPREME COMMAND for Group Image (Apply Anchor & Gray Padding Rule)
+        // SUPREME COMMAND for Group Image (Apply Solid Border Rule)
         const compositePrompt = `
-            *** SUPREME SYSTEM COMMAND: CANVAS PRESERVATION ***
-            The input image labeled 'MASTER CANVAS' contains a predefined layout with GRAY PADDING (#888888) and 4 CORNER ANCHOR PIXELS.
-            1. [BOUNDARIES]: You MUST preserve the exact canvas dimensions defined by the anchors. DO NOT CROP. DO NOT RESIZE.
-            2. [OUTPAINTING]: COMPLETELY replace the gray padding with the scene environment described below.
+            *** SUPREME SYSTEM COMMAND: BOUNDARY PRESERVATION ***
+            The input labeled 'MASTER CANVAS' has a SOLID BORDER identifying the exact target dimensions.
+            1. [BOUNDARIES]: You MUST preserve the exact canvas dimensions defined by the border. DO NOT CROP. DO NOT RESIZE.
+            2. [OUTPAINTING]: COMPLETELY replace the gray padding inside the border with the scene environment.
             3. [COMPOSITION]: Place the provided character inputs into the scene naturally.
 
             **TASK: GROUP PHOTO COMPOSITION**
@@ -187,7 +187,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         
         const finalParts: any[] = [
             { inlineData: { data: masterLayoutData.data, mimeType: masterLayoutData.mimeType } },
-            { text: `[MASTER CANVAS - ANCHORED]` },
+            { text: `[MASTER CANVAS - FRAMED]` },
             { text: compositePrompt },
         ];
 
@@ -196,10 +196,14 @@ const handler: Handler = async (event: HandlerEvent) => {
             finalParts.push({ inlineData: charData });
         });
         
-        // CRITICAL: NO imageConfig.aspectRatio here because we have a master canvas input.
-        // Rely solely on the "Supreme Command" and the Anchor Pixels.
+        // CRITICAL: Re-enable imageConfig.aspectRatio
+        // We reinforce the aspect ratio command both visually (border) and technically (config)
         const finalConfig: any = { 
             responseModalities: [Modality.IMAGE],
+            imageConfig: { 
+                aspectRatio: aspectRatio,
+                imageSize: isPro ? imageSize : undefined
+            }
         };
         
         if (isPro && useSearch) {

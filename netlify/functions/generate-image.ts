@@ -114,32 +114,27 @@ const handler: Handler = async (event: HandlerEvent) => {
         
         const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
 
-        // --- PROMPT ENGINEERING (SUPREME COMMAND WITH ANCHORS) ---
+        // --- PROMPT ENGINEERING (SOLID BORDER STRATEGY) ---
         let fullPrompt = "";
         const hasInputImage = !!characterImage;
         
         if (hasInputImage) {
-            // SUPREME COMMAND: ANCHOR & OUTPAINT
-            // We explicitly instruct the AI to recognize the anchors and fill the gray.
+            // The new imageUtils ensures there is a 1px solid black border.
+            // We explicitly tell the AI to respect this frame.
             fullPrompt = `
-*** SUPREME SYSTEM COMMAND: CANVAS PRESERVATION & OUTPAINTING ***
-You are provided with an input image labeled 'INPUT_IMAGE_WITH_ANCHORS'.
-This image contains:
-1. A central character/pose.
-2. **GRAY PADDING (#888888)** filling the rest of the canvas.
-3. **4 DARK ANCHOR PIXELS** in the extreme corners.
+** INSTRUCTION: OUTPAINTING & BOUNDARY PRESERVATION **
+You are provided with an input image labeled 'INPUT_CANVAS'.
+This image has a SOLID BORDER identifying the exact target dimensions.
 
-**YOUR INSTRUCTIONS:**
-1. [BOUNDARIES]: You MUST output an image with the **EXACT SAME PIXEL DIMENSIONS** as the input. DO NOT CROP. DO NOT RESIZE. The 4 anchor pixels define the absolute limits.
-2. [OUTPAINTING]: Identify all GRAY (#888888) areas. Treat them as "Void". You MUST completely replace ALL gray pixels with the background scenery described below.
-3. [SUBJECT]: Keep the central character's pose and outfit structure intact, but blend them realistically into the new environment.
+1. **CRITICAL:** You MUST generate the output to match the EXACT dimensions of the input image. DO NOT CROP. DO NOT RESIZE.
+2. **OUTPAINTING:** The Gray area (#808080) inside the border is empty space. You MUST fill it completely with the scene described in the prompt.
+3. **SUBJECT:** Keep the central character's pose and outfit structure, blending them naturally into the new background.
 
 **USER PROMPT:** ${prompt}
 
 **STYLE:** Hyper-realistic 3D Render, Audition Game Style, High Fidelity, Volumetric Lighting.
 `;
         } else {
-            // Text-to-Image only
             fullPrompt = `${prompt}\n\n**STYLE:**\n- **Hyper-realistic 3D Render** (High-end Game Cinematic style, Unreal Engine 5).\n- Detailed skin texture, volumetric lighting, raytracing reflections.`;
         }
 
@@ -163,30 +158,23 @@ This image contains:
             parts.push({ inlineData: { data: base64, mimeType } });
         };
 
-        // The characterImage is already Padded & Anchored from the client side
-        addImagePart(characterImage, "INPUT_IMAGE_WITH_ANCHORS");
+        addImagePart(characterImage, "INPUT_CANVAS");
         addImagePart(styleImage, "STYLE_REFERENCE");
         addImagePart(faceReferenceImage, "FACE_REFERENCE");
         
-        // --- CONFIGURATION LOGIC (CRITICAL FIX FOR ASPECT RATIO) ---
+        // --- CONFIGURATION LOGIC ---
         const config: any = { 
             responseModalities: [Modality.IMAGE],
             seed: seed ? Number(seed) : undefined,
-        };
-
-        if (!hasInputImage) {
-            // Text-to-Image Mode: We MUST specify aspect ratio via config
-            config.imageConfig = { aspectRatio: aspectRatio };
-            if (isProModel) {
-                config.imageConfig.imageSize = imageSize;
+            // FORCE ASPECT RATIO:
+            // Even with Image Input, we MUST send aspect ratio to prevent the model from auto-cropping "empty" space.
+            // Since our input image is already pre-processed to this exact ratio, telling the API to enforce it
+            // doubles the protection against auto-cropping.
+            imageConfig: { 
+                aspectRatio: aspectRatio,
+                imageSize: isProModel ? imageSize : undefined
             }
-        } else {
-            // Image-to-Image Mode (With Anchors): 
-            // CRITICAL: DO NOT add imageConfig.aspectRatio or imageSize. 
-            // We rely ENTIRELY on the input image's pixel dimensions + Anchors.
-            // Sending aspectRatio here causes conflict because the model tries to crop to that ratio
-            // instead of respecting the input canvas.
-        }
+        };
 
         if (isProModel && useGoogleSearch) {
             config.tools = [{ googleSearch: {} }]; 

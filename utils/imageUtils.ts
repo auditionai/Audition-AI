@@ -61,7 +61,7 @@ export const base64ToFile = (base64: string, filename: string, mimeType: string)
     return new File([blob], filename, { type: mimeType });
 };
 
-// NEW: Letterboxing / Outpainting Preprocessor
+// NEW: Letterboxing / Outpainting Preprocessor (ANCHOR STRATEGY)
 // ROBUST VERSION: Uses Gray background + Corner Anchors to force Aspect Ratio
 export const preprocessImageToAspectRatio = async (
     dataUrl: string,
@@ -73,30 +73,33 @@ export const preprocessImageToAspectRatio = async (
 
         const img = new Image();
         img.onload = () => {
-            // Standardize base width to ensure high quality input for AI
-            const baseWidth = 1024;
+            // Standardize base size. 
+            // Using a slightly larger base ensures anchors are distinct.
+            const baseLongestSide = 1536; 
+            
+            let canvasWidth, canvasHeight;
+            
+            if (w > h) {
+                canvasWidth = baseLongestSide;
+                canvasHeight = Math.round(baseLongestSide * (h / w));
+            } else {
+                canvasHeight = baseLongestSide;
+                canvasWidth = Math.round(baseLongestSide * (w / h));
+            }
+
             const canvas = document.createElement('canvas');
-            canvas.width = baseWidth;
-            canvas.height = Math.round(baseWidth * (h / w));
+            canvas.width = canvasWidth;
+            canvas.height = canvasHeight;
 
             const ctx = canvas.getContext('2d');
             if (!ctx) return reject(new Error('Canvas context error'));
 
-            // STEP 1: Fill with GRAY background (Neutral color for Outpainting, less likely to be treated as alpha/void)
-            // Using #888888 helps the AI understand this is "content to be filled" rather than "empty space to be cropped"
+            // --- STEP 1: SUPREME GRAY PADDING ---
+            // Neutral Gray #888888 signals "Outpaint Area" to modern diffusion models better than black/white
             ctx.fillStyle = '#888888'; 
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // STEP 2: Add "Anchor Pixels" in the corners. 
-            // This is a CRITICAL TRICK. It forces the AI to recognize the full canvas boundaries 
-            // and prevents it from auto-cropping the gray padding.
-            ctx.fillStyle = '#111111'; // Dark grey anchors, nearly invisible but effective
-            ctx.fillRect(0, 0, 4, 4); // Top-Left
-            ctx.fillRect(canvas.width - 4, 0, 4, 4); // Top-Right
-            ctx.fillRect(0, canvas.height - 4, 4, 4); // Bottom-Left
-            ctx.fillRect(canvas.width - 4, canvas.height - 4, 4, 4); // Bottom-Right
-
-            // STEP 3: Calculate "Contain" dimensions to fit the original image inside
+            // --- STEP 2: CALCULATE CONTAIN FIT ---
             const scale = Math.min(canvas.width / img.width, canvas.height / img.height);
             const drawWidth = img.width * scale;
             const drawHeight = img.height * scale;
@@ -107,7 +110,23 @@ export const preprocessImageToAspectRatio = async (
 
             ctx.drawImage(img, offsetX, offsetY, drawWidth, drawHeight);
 
-            // Return result as Data URL (PNG to preserve quality and prevent compression artifacts on anchors)
+            // --- STEP 3: ANCHOR PIXELS (THE "FORCE" TRICK) ---
+            // Draw small distinct pixels in the exact 4 corners.
+            // This forces the AI's vision encoder to recognize the full bounds of the canvas.
+            // Without this, AI often auto-crops empty space.
+            ctx.fillStyle = '#111111'; // Dark Anchor
+            const anchorSize = 8; // Large enough to be seen by encoder, small enough to be ignored in final art ideally
+            
+            // Top-Left
+            ctx.fillRect(0, 0, anchorSize, anchorSize);
+            // Top-Right
+            ctx.fillRect(canvas.width - anchorSize, 0, anchorSize, anchorSize);
+            // Bottom-Left
+            ctx.fillRect(0, canvas.height - anchorSize, anchorSize, anchorSize);
+            // Bottom-Right
+            ctx.fillRect(canvas.width - anchorSize, canvas.height - anchorSize, anchorSize, anchorSize);
+
+            // Return result as PNG to avoid compression artifacts on anchors
             resolve(canvas.toDataURL('image/png'));
         };
         // FIX: Removed unused variable 'e' to satisfy TS6133
@@ -119,9 +138,16 @@ export const preprocessImageToAspectRatio = async (
 // NEW: Create a blank gray canvas with specific aspect ratio and anchors
 export const createBlankCanvas = (aspectRatio: string): string => {
     const [w, h] = aspectRatio.split(':').map(Number);
-    const baseWidth = 1024;
-    const width = baseWidth;
-    const height = Math.round(baseWidth * (h / w));
+    const baseLongestSide = 1536;
+    
+    let width, height;
+    if (w > h) {
+        width = baseLongestSide;
+        height = Math.round(baseLongestSide * (h / w));
+    } else {
+        height = baseLongestSide;
+        width = Math.round(baseLongestSide * (w / h));
+    }
 
     const canvas = document.createElement('canvas');
     canvas.width = width;
@@ -129,16 +155,17 @@ export const createBlankCanvas = (aspectRatio: string): string => {
     const ctx = canvas.getContext('2d');
     if (!ctx) return '';
 
-    // Fill with Gray for optimal AI outpainting
+    // Fill with Gray
     ctx.fillStyle = '#888888';
     ctx.fillRect(0, 0, width, height);
     
     // Add Anchors
     ctx.fillStyle = '#111111';
-    ctx.fillRect(0, 0, 4, 4);
-    ctx.fillRect(width - 4, 0, 4, 4);
-    ctx.fillRect(0, height - 4, 4, 4);
-    ctx.fillRect(width - 4, height - 4, 4, 4);
+    const anchorSize = 8;
+    ctx.fillRect(0, 0, anchorSize, anchorSize);
+    ctx.fillRect(width - anchorSize, 0, anchorSize, anchorSize);
+    ctx.fillRect(0, height - anchorSize, anchorSize, anchorSize);
+    ctx.fillRect(width - anchorSize, height - anchorSize, anchorSize, anchorSize);
     
     return canvas.toDataURL('image/png');
 };

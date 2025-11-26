@@ -114,23 +114,29 @@ const handler: Handler = async (event: HandlerEvent) => {
         
         const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
 
-        // --- PROMPT ENGINEERING (SUPREME COMMAND) ---
+        // --- PROMPT ENGINEERING (SUPREME COMMAND WITH ANCHORS) ---
         let fullPrompt = "";
         const hasInputImage = !!characterImage;
         
         if (hasInputImage) {
-            // SUPREME COMMAND: FORCE CANVAS DIMENSIONS & OUTPAINTING
-            // Explicitly instruction Gemini about the Gray Padding strategy
+            // SUPREME COMMAND: ANCHOR & OUTPAINT
+            // We explicitly instruct the AI to recognize the anchors and fill the gray.
             fullPrompt = `
-*** SUPREME SYSTEM COMMAND: OUTPAINTING ON GRAY CANVAS ***
-The input image labeled 'INPUT_IMAGE_WITH_GRAY_PADDING' has a central content area surrounded by GRAY PADDING (#888888) and 4 CORNER ANCHORS.
-1. [BOUNDARIES]: The output image MUST extend to the exact 4 corners of the input image. DO NOT CROP. DO NOT RESIZE.
-2. [OUTPAINTING TASK]: The GRAY areas are VOID SPACE. You MUST completely replace ALL gray pixels with the background scenery described in the prompt.
-3. [CONTENT PRESERVATION]: Keep the central character intact (pose and outfit) but blend them seamlessly into the new background.
+*** SUPREME SYSTEM COMMAND: CANVAS PRESERVATION & OUTPAINTING ***
+You are provided with an input image labeled 'INPUT_IMAGE_WITH_ANCHORS'.
+This image contains:
+1. A central character/pose.
+2. **GRAY PADDING (#888888)** filling the rest of the canvas.
+3. **4 DARK ANCHOR PIXELS** in the extreme corners.
 
-[USER PROMPT]: ${prompt} 
+**YOUR INSTRUCTIONS:**
+1. [BOUNDARIES]: You MUST output an image with the **EXACT SAME PIXEL DIMENSIONS** as the input. DO NOT CROP. DO NOT RESIZE. The 4 anchor pixels define the absolute limits.
+2. [OUTPAINTING]: Identify all GRAY (#888888) areas. Treat them as "Void". You MUST completely replace ALL gray pixels with the background scenery described below.
+3. [SUBJECT]: Keep the central character's pose and outfit structure intact, but blend them realistically into the new environment.
 
-[STYLE]: Hyper-realistic 3D Render, Unreal Engine 5, Volumetric Lighting.
+**USER PROMPT:** ${prompt}
+
+**STYLE:** Hyper-realistic 3D Render, Audition Game Style, High Fidelity, Volumetric Lighting.
 `;
         } else {
             // Text-to-Image only
@@ -141,7 +147,7 @@ The input image labeled 'INPUT_IMAGE_WITH_GRAY_PADDING' has a central content ar
             fullPrompt += `\n\n**FACE ID:**\n- Use the exact facial structure from 'Face Reference'. Blend it seamlessly.`;
         }
 
-        const hardNegative = "photorealistic, real photo, grainy, low quality, 2D, sketch, cartoon, flat color, stiff pose, t-pose, mannequin, looking at camera blankly, distorted face, ugly, blurry, deformed hands, gray borders, gray bars, cropped, vertical crop, monochrome background, gray background";
+        const hardNegative = "photorealistic, real photo, grainy, low quality, 2D, sketch, cartoon, flat color, stiff pose, t-pose, mannequin, looking at camera blankly, distorted face, ugly, blurry, deformed hands, gray borders, gray bars, cropped, vertical crop, monochrome background, gray background, border, frame";
         fullPrompt += ` --no ${hardNegative}, ${negativePrompt || ''}`;
 
         const parts: any[] = [];
@@ -157,7 +163,8 @@ The input image labeled 'INPUT_IMAGE_WITH_GRAY_PADDING' has a central content ar
             parts.push({ inlineData: { data: base64, mimeType } });
         };
 
-        addImagePart(characterImage, "INPUT_IMAGE_WITH_GRAY_PADDING");
+        // The characterImage is already Padded & Anchored from the client side
+        addImagePart(characterImage, "INPUT_IMAGE_WITH_ANCHORS");
         addImagePart(styleImage, "STYLE_REFERENCE");
         addImagePart(faceReferenceImage, "FACE_REFERENCE");
         
@@ -174,10 +181,11 @@ The input image labeled 'INPUT_IMAGE_WITH_GRAY_PADDING' has a central content ar
                 config.imageConfig.imageSize = imageSize;
             }
         } else {
-            // Image-to-Image Mode: 
+            // Image-to-Image Mode (With Anchors): 
             // CRITICAL: DO NOT add imageConfig.aspectRatio or imageSize. 
-            // We rely ENTIRELY on the input image dimensions (which are pre-padded to correct ratio).
-            // Sending aspectRatio here causes conflict with the input image dimensions.
+            // We rely ENTIRELY on the input image's pixel dimensions + Anchors.
+            // Sending aspectRatio here causes conflict because the model tries to crop to that ratio
+            // instead of respecting the input canvas.
         }
 
         if (isProModel && useGoogleSearch) {

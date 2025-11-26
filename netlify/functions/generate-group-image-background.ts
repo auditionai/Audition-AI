@@ -112,7 +112,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         let masterLayoutData: { data: string; mimeType: string } | null = null;
 
         // --- BƯỚC 1: LẤY MASTER CANVAS ---
-        // Master Canvas đã được client tạo sẵn (bao gồm padding XÁM và Neo)
+        // Master Canvas đã được client tạo sẵn (bao gồm padding XÁM và Anchor Pixels)
         await updateJobProgress(jobId, jobPromptData, 'Đang thiết lập khung tranh chuẩn...');
         
         if (referenceImage) {
@@ -168,26 +168,26 @@ const handler: Handler = async (event: HandlerEvent) => {
         // --- BƯỚC 3: TỔNG HỢP ---
         await updateJobProgress(jobId, jobPromptData, 'Đang tổng hợp và hòa trộn cảm xúc...');
         
-        // SUPREME COMMAND for Group Image (Apply Gray Padding Rule)
+        // SUPREME COMMAND for Group Image (Apply Anchor & Gray Padding Rule)
         const compositePrompt = `
-            *** SUPREME SYSTEM COMMAND: OUTPAINTING ON GRAY CANVAS ***
-            The input image labeled 'MASTER CANVAS' is a predefined layout with GRAY PADDING (#888888) and CORNER ANCHORS.
-            1. [BOUNDARIES]: Respect the absolute pixels of the anchors. DO NOT CROP. DO NOT RESIZE.
-            2. [OUTPAINTING]: COMPLETELY replace the gray padding with the scene environment.
-            3. [COMPOSITION]: Place the provided character inputs into the scene.
+            *** SUPREME SYSTEM COMMAND: CANVAS PRESERVATION ***
+            The input image labeled 'MASTER CANVAS' contains a predefined layout with GRAY PADDING (#888888) and 4 CORNER ANCHOR PIXELS.
+            1. [BOUNDARIES]: You MUST preserve the exact canvas dimensions defined by the anchors. DO NOT CROP. DO NOT RESIZE.
+            2. [OUTPAINTING]: COMPLETELY replace the gray padding with the scene environment described below.
+            3. [COMPOSITION]: Place the provided character inputs into the scene naturally.
 
             **TASK: GROUP PHOTO COMPOSITION**
             **SCENE:** ${prompt}
             **STYLE:** Hyper-realistic 3D Render (Audition Game Style), Volumetric Lighting, ${style || 'Cinematic'}.
             
             **CHARACTERS:**
-            Composite the ${numCharacters} provided characters into the scene naturally.
+            Composite the ${numCharacters} provided characters into the scene.
             NO EXTRA PEOPLE.
         `;
         
         const finalParts: any[] = [
             { inlineData: { data: masterLayoutData.data, mimeType: masterLayoutData.mimeType } },
-            { text: `[MASTER CANVAS - GRAY PADDED]` },
+            { text: `[MASTER CANVAS - ANCHORED]` },
             { text: compositePrompt },
         ];
 

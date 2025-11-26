@@ -47,19 +47,26 @@ export const useImageGenerator = () => {
                 setProgress(prev => (prev < 8 ? prev + 1 : prev));
             }, 1800);
 
-            // PRE-PROCESS IMAGES: Apply Letterboxing/Padding on Client Side
-            // This rigidly enforces the aspect ratio by padding with GRAY + ANCHORS before sending to AI
-            const processInput = async (file: File | null) => {
+            // PRE-PROCESS IMAGES: Apply Supreme Gray Padding + Anchors
+            // This forces the aspect ratio on the client side before sending to AI.
+            const processInput = async (file: File | null, targetRatio: string) => {
                 if (!file) return null;
                 const rawBase64 = await fileToBase64(file);
                 // Apply Gray Padding logic based on Aspect Ratio
-                return await preprocessImageToAspectRatio(rawBase64, aspectRatio);
+                return await preprocessImageToAspectRatio(rawBase64, targetRatio);
+            };
+
+            // Resolve Face Image (File or Base64 string)
+            const resolveFaceImage = async () => {
+                if (!faceImage) return null;
+                if (faceImage instanceof File) return await fileToBase64(faceImage);
+                return faceImage as string;
             };
 
             const [poseImageBase64, styleImageBase64, faceImageBase64] = await Promise.all([
-                processInput(poseImageFile), // Letterbox Pose is CRITICAL
-                processInput(styleImageFile), // Letterbox Style (good for consistency)
-                faceImage instanceof File ? fileToBase64(faceImage) : Promise.resolve(faceImage) // Do NOT letterbox Face ID, keep it raw
+                processInput(poseImageFile, aspectRatio), // Force Aspect Ratio on Pose Image
+                processInput(styleImageFile, "1:1"), // Style image doesn't need strict ratio, square is fine
+                resolveFaceImage()
             ]);
 
             const response = await fetch('/.netlify/functions/generate-image', {
@@ -72,10 +79,10 @@ export const useImageGenerator = () => {
                     prompt, 
                     modelId: model.id, 
                     apiModel: model.apiModel,
-                    characterImage: poseImageBase64, // This is now padded gray image
+                    characterImage: poseImageBase64, // This is now PADDED with ANCHORS
                     styleImage: styleImageBase64, 
                     faceReferenceImage: faceImageBase64,
-                    aspectRatio, 
+                    aspectRatio, // Sent for fallback, but logic in backend will ignore it if characterImage exists
                     negativePrompt,
                     seed, 
                     useUpscaler,

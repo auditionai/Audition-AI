@@ -8,7 +8,7 @@ import InstructionModal from '../common/InstructionModal';
 import SignatureTool from './tools/SignatureTool';
 import ComicStudio from './comic/ComicStudio';
 import { useAuth } from '../../contexts/AuthContext';
-import UtilInstructionModal from './ai-tool/InstructionModal'; 
+import UtilInstructionModal from '../ai-tool/InstructionModal'; 
 import { useTranslation } from '../../hooks/useTranslation';
 
 type AIToolTab = 'generator' | 'group-studio' | 'comic-studio' | 'utilities'; 

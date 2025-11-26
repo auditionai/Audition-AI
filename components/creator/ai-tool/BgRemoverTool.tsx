@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../../contexts/AuthContext';
 import { useBackgroundRemover } from '../../../hooks/useBackgroundRemover';
 import ConfirmationModal from '../../ConfirmationModal';
 import { resizeImage, base64ToFile } from '../../../utils/imageUtils';
@@ -11,7 +11,7 @@ interface BgRemoverToolProps {
     onMoveToGenerator: (image: { url: string; file: File }) => void;
     onMoveFaceToGenerator: (image: { url: string; file: File }) => void;
     onInstructionClick: () => void;
-    initialImage?: { url: string; file: File } | null; // NEW PROP
+    initialImage?: { url: string; file: File } | null; 
 }
 
 // Define a serializable structure for session storage

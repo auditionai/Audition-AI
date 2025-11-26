@@ -7,12 +7,10 @@ import { resizeImage, base64ToFile, preprocessImageToAspectRatio, createBlankCan
 import ProcessedImagePickerModal from './ProcessedImagePickerModal';
 import GenerationProgress from '../../ai-tool/GenerationProgress';
 import ImageModal from '../../common/ImageModal';
-import ProcessedImageModal from '../../ai-tool/ProcessedImageModal';
 import SettingsBlock from '../../ai-tool/SettingsBlock';
 import { useTranslation } from '../../../hooks/useTranslation';
 import PromptLibraryModal from './PromptLibraryModal';
 import ToggleSwitch from '../../ai-tool/ToggleSwitch';
-import { useGameConfig } from '../../../contexts/GameConfigContext';
 
 
 // Mock data for styles
@@ -564,17 +562,6 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
         setGeneratedImage(null);
         setProgressText('');
         handleNumCharactersSelect(numCharacters); 
-    };
-    
-    const handleDownloadResult = () => {
-        if (!generatedImage) return;
-        const downloadUrl = `/.netlify/functions/download-image?url=${encodeURIComponent(generatedImage)}`;
-        const a = document.createElement('a');
-        a.href = downloadUrl;
-        a.download = `audition-ai-group-${Date.now()}.png`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
     };
     
     const resultImageForModal = generatedImage ? {

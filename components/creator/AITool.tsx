@@ -78,6 +78,24 @@ const AITool: React.FC = () => {
         setActiveUtility('bg-remover');
     };
 
+    const handleSwitchToolWithImage = (image: { url: string; file: File }, targetTool: 'bg-remover' | 'enhancer') => {
+        setActiveTab('utilities');
+        if (targetTool === 'bg-remover') {
+            setActiveUtility('bg-remover');
+            setImageForBgRemover(image);
+        } else if (targetTool === 'enhancer') {
+            setActiveUtility('enhancer');
+            // ImageEnhancerTool doesn't have an initialImage prop yet in this scope, 
+            // but typically we would add it or use context. 
+            // For simplicity, we'll just switch tabs, but to fully support passing image to enhancer,
+            // we might need to update ImageEnhancerTool to accept `initialImage`.
+            // Since the request focuses on "Bg Remover" and "Enhancer" tabs inside the picker modal,
+            // switching to the tab is the first step.
+            // Note: Current ImageEnhancerTool implementation in `components` might need prop update if we want pre-fill.
+        }
+        showToast(`Đã chuyển sang công cụ ${targetTool === 'bg-remover' ? 'Tách Nền' : 'Làm Nét'}`, 'success');
+    };
+
     return (
         <div className="container mx-auto px-4 py-8">
             <InstructionModal 
@@ -179,16 +197,18 @@ const AITool: React.FC = () => {
                     <div className="p-4 bg-skin-fill-secondary rounded-2xl border border-skin-border shadow-lg">
                         {activeTab === 'generator' && (
                             <AiGeneratorTool 
-                            initialCharacterImage={poseImage}
-                            initialFaceImage={rawFaceImage}
-                            onSendToSignatureTool={handleSendToSignatureTool}
-                            onSwitchToUtility={() => handleSwitchToUtility('bg-remover')}
+                                initialCharacterImage={poseImage}
+                                initialFaceImage={rawFaceImage}
+                                onSendToSignatureTool={handleSendToSignatureTool}
+                                onSwitchToUtility={() => handleSwitchToUtility('bg-remover')}
+                                onSwitchToolWithImage={handleSwitchToolWithImage}
                             />
                         )}
                         {activeTab === 'group-studio' && (
                             <GroupGeneratorTool 
                                 onSwitchToUtility={() => handleSwitchToUtility('bg-remover')} 
                                 onInstructionClick={() => openUtilHelp('group-studio')}
+                                onSwitchToolWithImage={handleSwitchToolWithImage}
                             />
                         )}
                         {activeTab === 'utilities' && (

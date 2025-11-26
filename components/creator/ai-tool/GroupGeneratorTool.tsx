@@ -12,6 +12,7 @@ import SettingsBlock from '../../ai-tool/SettingsBlock';
 import { useTranslation } from '../../../hooks/useTranslation';
 import PromptLibraryModal from './PromptLibraryModal';
 import ToggleSwitch from '../../ai-tool/ToggleSwitch';
+import { useGameConfig } from '../../../contexts/GameConfigContext';
 
 
 // Mock data for styles
@@ -49,7 +50,7 @@ interface CharacterState {
 
 interface ProcessedImageData {
     id: string;
-    imageBase64: string;
+    imageBase64?: string;
     mimeType: string;
     fileName: string;
     processedUrl: string;
@@ -59,10 +60,12 @@ interface ProcessedImageData {
 interface GroupGeneratorToolProps {
     onSwitchToUtility: () => void;
     onInstructionClick: () => void;
+    // Callback to switch tool and load image
+    onSwitchToolWithImage?: (image: { url: string; file: File }, targetTool: 'bg-remover' | 'enhancer') => void;
 }
 
 // Main Component
-const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtility, onInstructionClick }) => {
+const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtility, onInstructionClick, onSwitchToolWithImage }) => {
     const { user, session, showToast, supabase, updateUserDiamonds } = useAuth();
     const { t } = useTranslation();
     const [numCharacters, setNumCharacters] = useState<number>(0);
@@ -87,10 +90,11 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
     const [generatedImage, setGeneratedImage] = useState<string | null>(null);
     const [progressText, setProgressText] = useState('');
     const [processingFaceIndex, setProcessingFaceIndex] = useState<number | null>(null);
+    
     const [isPickerOpen, setIsPickerOpen] = useState(false);
     const [pickerTarget, setPickerTarget] = useState<{ index: number; type: 'pose' | 'face' } | null>(null);
+    
     const [isResultModalOpen, setIsResultModalOpen] = useState(false);
-    const [imageToProcess, setImageToProcess] = useState<ProcessedImageData | null>(null);
     const [isPromptLibraryOpen, setIsPromptLibraryOpen] = useState(false);
 
     // Refs for cleanup
@@ -194,11 +198,92 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
         setPickerTarget({ index, type });
         setIsPickerOpen(true);
     };
+    
+    // 1. Handle "Use Image" (Direct Fill)
+    const handleImageSelectFromPicker = async (imageData: ProcessedImageData) => {
+        if (!pickerTarget) return;
+        
+        let dataUrl = imageData.processedUrl;
+        let file: File;
 
-    const handleImageSelectFromPicker = (imageData: ProcessedImageData) => {
+        // Construct proper file object.
+        if (imageData.imageBase64) {
+             dataUrl = `data:${imageData.mimeType};base64,${imageData.imageBase64}`;
+             file = base64ToFile(imageData.imageBase64, imageData.fileName, imageData.mimeType);
+        } else {
+             // Fetch blob if missing base64 (common for Enhanced images)
+             try {
+                 const res = await fetch(imageData.processedUrl);
+                 const blob = await res.blob();
+                 dataUrl = URL.createObjectURL(blob);
+                 file = new File([blob], imageData.fileName, { type: imageData.mimeType });
+             } catch(e) {
+                 showToast("Không thể tải ảnh. Vui lòng thử lại.", "error");
+                 return;
+             }
+        }
+        
+        const newImage = { url: dataUrl, file };
+        
+        setCharacters(prev => prev.map((char, i) => {
+            if (i === pickerTarget.index) {
+                if (pickerTarget.type === 'pose') return { ...char, poseImage: newImage };
+                return { ...char, faceImage: newImage, processedFace: null };
+            }
+            return char;
+        }));
+        
         setIsPickerOpen(false);
-        setImageToProcess(imageData);
+        setPickerTarget(null);
+        showToast(t('modals.processedImage.success.full'), 'success');
     };
+
+    // 2. Handle "Use Cropped" (From Picker's cropper)
+    const handleCropSelectFromPicker = (croppedImage: { url: string; file: File }) => {
+        if (!pickerTarget) return;
+         setCharacters(prev => prev.map((char, i) => {
+            if (i === pickerTarget.index) {
+                if (pickerTarget.type === 'face') {
+                    return { ...char, faceImage: croppedImage, processedFace: null };
+                }
+                return { ...char, poseImage: croppedImage };
+            }
+            return char;
+        }));
+        setIsPickerOpen(false);
+        setPickerTarget(null);
+        showToast(t('modals.processedImage.success.cropped'), 'success');
+    };
+
+    // 3. Handle Cross-Tool Actions (Send to Bg/Enhancer)
+    const handleProcessAction = async (image: ProcessedImageData, action: 'bg-remover' | 'enhancer') => {
+        if (!onSwitchToolWithImage) return;
+
+        try {
+            // Must convert to file to pass to other tools
+            let file: File;
+            let url: string;
+
+             if (image.imageBase64) {
+                 url = `data:${image.mimeType};base64,${image.imageBase64}`;
+                 file = base64ToFile(image.imageBase64, image.fileName, image.mimeType);
+            } else {
+                 const res = await fetch(image.processedUrl);
+                 const blob = await res.blob();
+                 url = URL.createObjectURL(blob);
+                 file = new File([blob], image.fileName, { type: image.mimeType });
+            }
+            
+            setIsPickerOpen(false);
+            setPickerTarget(null);
+            
+            onSwitchToolWithImage({ url, file }, action);
+
+        } catch(e) {
+            showToast("Lỗi chuyển công cụ.", "error");
+        }
+    };
+
 
     const handleProcessFace = async (index: number, modelType: 'flash' | 'pro') => {
         const char = characters[index];
@@ -564,47 +649,15 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
 
     return (
         <div className="animate-fade-in">
-             <ProcessedImagePickerModal isOpen={isPickerOpen} onClose={() => setIsPickerOpen(false)} onSelect={handleImageSelectFromPicker} />
-             <PromptLibraryModal isOpen={isPromptLibraryOpen} onClose={() => setIsPromptLibraryOpen(false)} onSelectPrompt={(p) => setPrompt(p)} category={numCharacters > 2 ? 'group-photo' : 'couple-photo'} />
-             <ProcessedImageModal
-                isOpen={!!imageToProcess}
-                onClose={() => { setImageToProcess(null); setPickerTarget(null); }}
-                image={imageToProcess}
-                onUseFull={() => {
-                    if (!imageToProcess || !pickerTarget) return;
-                    const { imageBase64, mimeType, fileName } = imageToProcess;
-                    const file = base64ToFile(imageBase64, `processed_${fileName}`, mimeType);
-                    const newImage = { url: `data:${mimeType};base64,${imageBase64}`, file };
-
-                    setCharacters(prev => prev.map((char, i) => {
-                        if (i === pickerTarget.index) {
-                            if (pickerTarget.type === 'pose') return { ...char, poseImage: newImage };
-                            return { ...char, faceImage: newImage, processedFace: null };
-                        }
-                        return char;
-                    }));
-                    setImageToProcess(null);
-                    setPickerTarget(null);
-                }}
-                onUseCropped={(croppedImage: { url: string; file: File }) => {
-                    if (!pickerTarget) return;
-                    setCharacters(prev => prev.map((char, i) => {
-                        if (i === pickerTarget.index) {
-                            if (pickerTarget.type === 'face') {
-                                return { ...char, faceImage: croppedImage, processedFace: null };
-                            }
-                            return { ...char, poseImage: croppedImage };
-                        }
-                        return char;
-                    }));
-                    setImageToProcess(null);
-                    setPickerTarget(null);
-                    showToast(t('modals.processedImage.success.cropped'), 'success');
-                }}
-                onDownload={() => {
-                    if (imageToProcess) handleDownloadResult();
-                }}
+             <ProcessedImagePickerModal 
+                isOpen={isPickerOpen} 
+                onClose={() => setIsPickerOpen(false)} 
+                onSelect={handleImageSelectFromPicker}
+                onCropSelect={handleCropSelectFromPicker}
+                onProcessAction={handleProcessAction}
             />
+             <PromptLibraryModal isOpen={isPromptLibraryOpen} onClose={() => setIsPromptLibraryOpen(false)} onSelectPrompt={(p) => setPrompt(p)} category={numCharacters > 2 ? 'group-photo' : 'couple-photo'} />
+             
             <ConfirmationModal isOpen={isConfirmOpen} onClose={() => setConfirmOpen(false)} onConfirm={handleConfirmGeneration} cost={totalCost} />
             
              <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 text-yellow-300 rounded-lg text-sm flex items-start gap-3 mb-6">

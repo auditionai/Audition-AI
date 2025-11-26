@@ -384,8 +384,8 @@ export const en = {
         errorRefOrPrompt: 'Please upload a "Reference Image" or enter a "Prompt".',
         errorPoseImage: 'Please provide a "Character Image" for Character {{index}}.',
         errorGender: 'Please select a gender for Character {{index}}.',
-        pickFromProcessed: 'Pick',
-        pickFromProcessedTooltip: 'Pick a processed image',
+        pickFromProcessed: 'Choose processed image',
+        pickFromProcessedTooltip: 'Pick from BG Removed or Enhanced library',
       },
       bgRemover: {
         uploadTitle: '1. Upload Images',
@@ -969,6 +969,16 @@ export const en = {
         title: 'Select Processed Image',
         empty: 'No images yet',
         empty_desc: 'Use the Background Remover or Super Face Lock tool first.',
+        tabs: {
+            bgRemoved: 'BG Removed',
+            enhanced: 'Enhanced'
+        },
+        actions: {
+            use: 'Use Image',
+            crop: 'Crop Face',
+            toBg: 'Remove BG',
+            toEnhance: 'Enhance'
+        }
     },
     promptLibrary: {
         title: 'Prompt Library (Suggestions)',

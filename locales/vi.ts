@@ -385,8 +385,8 @@ export const vi = {
         errorRefOrPrompt: 'Vui lòng tải lên "Ảnh Tham Chiếu" hoặc nhập "Mô tả".',
         errorPoseImage: 'Vui lòng cung cấp "Ảnh Nhân vật" cho Nhân vật {{index}}.',
         errorGender: 'Vui lòng chọn giới tính cho Nhân vật {{index}}.',
-        pickFromProcessed: 'Chọn',
-        pickFromProcessedTooltip: 'Chọn ảnh đã xử lý',
+        pickFromProcessed: 'Chọn ảnh đã xử lý',
+        pickFromProcessedTooltip: 'Chọn từ kho ảnh Tách Nền hoặc Làm Nét',
       },
       bgRemover: {
         uploadTitle: '1. Tải lên ảnh',
@@ -978,6 +978,16 @@ export const vi = {
         title: 'Chọn ảnh đã xử lý',
         empty: 'Chưa có ảnh nào',
         empty_desc: 'Hãy sử dụng công cụ Tách Nền hoặc Siêu Khóa Mặt trước.',
+        tabs: {
+            bgRemoved: 'Ảnh Tách Nền',
+            enhanced: 'Ảnh Làm Nét'
+        },
+        actions: {
+            use: 'Sử dụng ảnh',
+            crop: 'Cắt lấy mặt',
+            toBg: 'Tách nền',
+            toEnhance: 'Làm nét'
+        }
     },
     promptLibrary: {
         title: 'Thư Viện Prompt (Gợi Ý)',

@@ -58,10 +58,10 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({ onUpload, image, onRemove
                         e.stopPropagation();
                         onPickFromProcessed();
                     }}
-                    className="absolute bottom-1 right-1 bg-cyan-500/20 text-cyan-300 rounded-md px-1.5 py-0.5 text-[10px] font-bold hover:bg-cyan-500/30 transition-colors z-10 flex items-center gap-1"
+                    className="absolute bottom-2 right-2 bg-pink-500/90 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg hover:bg-pink-600 transition flex items-center gap-1 z-20 border border-white/20"
                     title={t('creator.aiTool.groupStudio.pickFromProcessedTooltip')}
                 >
-                    <i className="ph-fill ph-archive-box"></i>
+                    <i className="ph-bold ph-images"></i> {t('creator.aiTool.groupStudio.pickFromProcessed')}
                 </button>
             )}
         </div>

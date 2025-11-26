@@ -17,6 +17,7 @@ import ShopPage from './pages/ShopPage'; // NEW
 // Import Common Components
 import RewardNotification from './components/common/RewardNotification';
 import GlobalChat from './components/chat/GlobalChat';
+import MarqueeBanner from './components/common/MarqueeBanner';
 
 const AppContent: React.FC = () => {
     const { user, loading, route, currentPath, toast, reward, clearReward } = useAuth();
@@ -69,6 +70,9 @@ const AppContent: React.FC = () => {
 
     return (
         <>
+            {/* GLOBAL PROMOTION BANNER */}
+            {user && <MarqueeBanner />}
+
             {renderPage()}
             
             {/* Global Chat is always available if logged in */}

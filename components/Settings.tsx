@@ -12,7 +12,8 @@ import AnnouncementManager from './admin/AnnouncementManager';
 import ApiKeyManager from './admin/ApiKeyManager';
 import GameConfigManager from './admin/GameConfigManager'; 
 import LuckyWheelManager from './admin/LuckyWheelManager'; 
-import SystemMessageManager from './admin/SystemMessageManager'; // NEW IMPORT
+import SystemMessageManager from './admin/SystemMessageManager'; 
+import PromotionManager from './admin/PromotionManager'; // NEW
 import { resizeImage } from '../utils/imageUtils';
 import { useTranslation } from '../hooks/useTranslation';
 import UserAvatar from './common/UserAvatar';
@@ -123,7 +124,7 @@ const ReferralPanel: React.FC = () => {
 // Admin Panel
 const AdminPanel: React.FC = () => {
     const { t } = useTranslation();
-    type AdminTab = 'dashboard' | 'transactions' | 'users' | 'gift_codes' | 'packages' | 'rewards' | 'announcements' | 'api_keys' | 'game_config' | 'lucky_wheel' | 'broadcast';
+    type AdminTab = 'dashboard' | 'transactions' | 'users' | 'gift_codes' | 'packages' | 'promotions' | 'rewards' | 'announcements' | 'api_keys' | 'game_config' | 'lucky_wheel' | 'broadcast';
     const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
 
     const renderContent = () => {
@@ -133,12 +134,13 @@ const AdminPanel: React.FC = () => {
             case 'users': return <UserManager />;
             case 'gift_codes': return <GiftCodeManager />;
             case 'packages': return <CreditPackageManager />;
+            case 'promotions': return <PromotionManager />; // NEW
             case 'rewards': return <CheckInRewardManager />;
             case 'announcements': return <AnnouncementManager />;
             case 'api_keys': return <ApiKeyManager />;
             case 'game_config': return <GameConfigManager />;
             case 'lucky_wheel': return <LuckyWheelManager />;
-            case 'broadcast': return <SystemMessageManager />; // NEW
+            case 'broadcast': return <SystemMessageManager />;
             default: return <p className="text-center text-gray-500 py-8">Chức năng này đang được phát triển.</p>;
         }
     };
@@ -155,6 +157,8 @@ const AdminPanel: React.FC = () => {
                 <button onClick={() => setActiveTab('users')} className={activeTab === 'users' ? 'admin-tab-active' : 'admin-tab'}>{t('creator.settings.admin.tabs.users')}</button>
                 <button onClick={() => setActiveTab('gift_codes')} className={activeTab === 'gift_codes' ? 'admin-tab-active' : 'admin-tab'}>{t('creator.settings.admin.tabs.giftCodes')}</button>
                 <button onClick={() => setActiveTab('packages')} className={activeTab === 'packages' ? 'admin-tab-active' : 'admin-tab'}>{t('creator.settings.admin.tabs.packages')}</button>
+                {/* NEW PROMOTION TAB */}
+                <button onClick={() => setActiveTab('promotions')} className={activeTab === 'promotions' ? 'admin-tab-active' : 'admin-tab'}><i className="ph-fill ph-percent mr-1"></i> Khuyến Mại</button>
                 <button onClick={() => setActiveTab('rewards')} className={activeTab === 'rewards' ? 'admin-tab-active' : 'admin-tab'}>{t('creator.settings.admin.tabs.rewards')}</button>
                 <button onClick={() => setActiveTab('announcements')} className={activeTab === 'announcements' ? 'admin-tab-active' : 'admin-tab'}>{t('creator.settings.admin.tabs.announcements')}</button>
                 <button onClick={() => setActiveTab('api_keys')} className={activeTab === 'api_keys' ? 'admin-tab-active' : 'admin-tab'}>{t('creator.settings.admin.tabs.apiKeys')}</button>

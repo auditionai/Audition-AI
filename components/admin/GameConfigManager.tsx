@@ -137,6 +137,30 @@ $$;
 SELECT 'Sửa lỗi thành công! (Clean Install)' as status;
 `;
 
+const SQL_CREATE_PROMOTIONS = `-- TẠO BẢNG KHUYẾN MẠI (PROMOTIONS)
+
+CREATE TABLE IF NOT EXISTS public.promotions (
+    id UUID DEFAULT extensions.uuid_generate_v4() PRIMARY KEY,
+    title TEXT NOT NULL,
+    description TEXT,
+    bonus_percentage INTEGER DEFAULT 0,
+    start_time TIMESTAMP WITH TIME ZONE NOT NULL,
+    end_time TIMESTAMP WITH TIME ZONE NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- Enable RLS
+ALTER TABLE public.promotions ENABLE ROW LEVEL SECURITY;
+
+-- Policy: Public Read (Everyone can see promotions)
+CREATE POLICY "Public Read Promotions" ON public.promotions
+    FOR SELECT USING (true);
+
+-- Policy: Admin Write (Only service role can write - handled by Admin API)
+-- No policy needed for insert/update/delete if using service role key in Edge Functions.
+`;
+
 const GameConfigManager: React.FC = () => {
     const { session, showToast } = useAuth();
     const { t } = useTranslation();
@@ -396,23 +420,24 @@ const GameConfigManager: React.FC = () => {
             {activeSubTab === 'db_tools' && (
                 <div className="space-y-4">
                     <div className="bg-yellow-500/10 border border-yellow-500/30 p-4 rounded-lg">
-                        <h4 className="text-yellow-400 font-bold mb-2 flex items-center gap-2"><i className="ph-fill ph-warning-circle"></i> SỬA LỖI CHAT & KẾT NỐI (TRIỆT ĐỂ)</h4>
-                        <p className="text-sm text-gray-300 mb-4">
-                            Đoạn mã này sẽ <strong>xóa toàn bộ Policies cũ</strong> và cài đặt lại hệ thống quyền bảo mật "sạch sẽ" để khắc phục lỗi Infinite Recursion (42P17).
-                        </p>
+                        <h4 className="text-yellow-400 font-bold mb-2 flex items-center gap-2"><i className="ph-fill ph-warning-circle"></i> SỬA LỖI CHAT (RLS FIX)</h4>
                         <div className="relative">
-                            <pre className="bg-black/50 p-3 rounded-lg text-xs text-green-400 overflow-x-auto font-mono border border-white/10 h-64 custom-scrollbar">
+                            <pre className="bg-black/50 p-3 rounded-lg text-xs text-green-400 overflow-x-auto font-mono border border-white/10 h-32 custom-scrollbar">
                                 {SQL_FIX_SCRIPT}
                             </pre>
-                            <button 
-                                onClick={() => { navigator.clipboard.writeText(SQL_FIX_SCRIPT); showToast("Đã sao chép SQL!", "success"); }}
-                                className="absolute top-2 right-2 bg-blue-500/20 hover:bg-blue-500/40 text-blue-300 px-3 py-1 rounded text-xs font-bold"
-                            >
-                                Sao Chép
-                            </button>
+                            <button onClick={() => { navigator.clipboard.writeText(SQL_FIX_SCRIPT); showToast("Đã sao chép!", "success"); }} className="absolute top-2 right-2 bg-blue-500/20 hover:bg-blue-500/40 text-blue-300 px-3 py-1 rounded text-xs font-bold">Copy</button>
                         </div>
-                        <div className="mt-4 text-xs text-gray-400">
-                            <strong>Hướng dẫn:</strong> Copy đoạn mã trên &rarr; Vào Supabase &rarr; SQL Editor &rarr; Paste &rarr; Run.
+                    </div>
+
+                    {/* PROMOTIONS TABLE CREATE SCRIPT */}
+                    <div className="bg-green-500/10 border border-green-500/30 p-4 rounded-lg">
+                        <h4 className="text-green-400 font-bold mb-2 flex items-center gap-2"><i className="ph-fill ph-database"></i> TẠO BẢNG PROMOTIONS</h4>
+                        <p className="text-sm text-gray-300 mb-2">Chạy lệnh này để tạo bảng lưu trữ khuyến mại nếu chưa có.</p>
+                        <div className="relative">
+                            <pre className="bg-black/50 p-3 rounded-lg text-xs text-green-400 overflow-x-auto font-mono border border-white/10 h-32 custom-scrollbar">
+                                {SQL_CREATE_PROMOTIONS}
+                            </pre>
+                            <button onClick={() => { navigator.clipboard.writeText(SQL_CREATE_PROMOTIONS); showToast("Đã sao chép!", "success"); }} className="absolute top-2 right-2 bg-blue-500/20 hover:bg-blue-500/40 text-blue-300 px-3 py-1 rounded text-xs font-bold">Copy</button>
                         </div>
                     </div>
                 </div>
@@ -602,7 +627,7 @@ const GameConfigManager: React.FC = () => {
                                         type="number" 
                                         value={editingCosmetic.price || 0} 
                                         onChange={e => setEditingCosmetic({...editingCosmetic, price: Number(e.target.value)})} 
-                                        className="auth-input mt-1 border-yellow-500/50 focus:border-yellow-500" 
+                                        className="auth-input mt-1" 
                                     />
                                 </div>
                             </div>

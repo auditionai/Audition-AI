@@ -29,8 +29,12 @@ const handler: Handler = async () => {
         const userIds = [...new Set(images.map(img => img.user_id))];
 
         // 3. Fetch creator profiles for those IDs
-        // Flattened query to prevent build parser errors
-        const { data: creators, error: creatorsError } = await supabaseAdmin.from('users').select('*').in('id', userIds);
+        // Fix: Split query construction to avoid parser errors with chained .in()
+        let userQuery = supabaseAdmin.from('users').select('*');
+        if (userIds.length > 0) {
+            userQuery = userQuery.in('id', userIds);
+        }
+        const { data: creators, error: creatorsError } = await userQuery;
 
         if (creatorsError) {
             throw new Error(`DB Error fetching creators: ${creatorsError.message}`);
@@ -38,8 +42,8 @@ const handler: Handler = async () => {
 
         // 4. Create a map for easy lookup, handling potential duplicates
         const creatorMap = new Map<string, any>();
-        for (const creator of creators) {
-            if (!creatorMap.has(creator.id)) { // Only add the first one found for a given ID
+        for (const creator of (creators || [])) {
+            if (!creatorMap.has(creator.id)) { 
                 creatorMap.set(creator.id, creator);
             }
         }

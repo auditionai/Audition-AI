@@ -13,15 +13,27 @@ import GenerationProgress from '../../ai-tool/GenerationProgress';
 import ConfirmationModal from '../../ConfirmationModal';
 import ImageModal from '../../common/ImageModal';
 import ToggleSwitch from '../../ai-tool/ToggleSwitch';
-import { resizeImage } from '../../../utils/imageUtils';
+import { resizeImage, base64ToFile } from '../../../utils/imageUtils';
 import { useTranslation } from '../../../hooks/useTranslation';
 import PromptLibraryModal from './PromptLibraryModal';
+import ProcessedImagePickerModal from './ProcessedImagePickerModal';
 
 interface AiGeneratorToolProps {
     initialCharacterImage?: { url: string; file: File } | null;
     initialFaceImage?: { url: string; file: File } | null;
     onSendToSignatureTool: (imageUrl: string) => void;
     onSwitchToUtility: () => void;
+    // Callback to switch tool and load image
+    onSwitchToolWithImage?: (image: { url: string; file: File }, targetTool: 'bg-remover' | 'enhancer') => void;
+}
+
+interface ProcessedImageData {
+    id: string;
+    imageBase64?: string;
+    mimeType: string;
+    fileName: string;
+    processedUrl: string;
+    originalUrl?: string;
 }
 
 const ASPECT_RATIOS = [
@@ -38,7 +50,7 @@ const ASPECT_RATIOS = [
     { label: '21:9', value: '21:9', icon: 'ph-arrows-out-line-horizontal' },
 ];
 
-const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage, initialFaceImage, onSendToSignatureTool, onSwitchToUtility }) => {
+const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage, initialFaceImage, onSendToSignatureTool, onSwitchToUtility, onSwitchToolWithImage }) => {
     const { user, session, showToast, updateUserDiamonds } = useAuth();
     const { t } = useTranslation();
     const { isGenerating, progress, generatedImage, error, generateImage, resetGenerator, cancelGeneration } = useImageGenerator();
@@ -51,6 +63,10 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
     const [isResultModalOpen, setIsResultModalOpen] = useState(false);
     const [isPromptLibraryOpen, setIsPromptLibraryOpen] = useState(false);
     
+    // Picker State
+    const [isPickerOpen, setIsPickerOpen] = useState(false);
+    const [pickerTarget, setPickerTarget] = useState<'pose' | 'face' | null>(null);
+
     // Feature States
     const [poseImage, setPoseImage] = useState<{ url: string; file: File } | null>(null);
     const [rawFaceImage, setRawFaceImage] = useState<{ url: string; file: File } | null>(null);
@@ -60,7 +76,12 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
 
     const [prompt, setPrompt] = useState('');
     const [negativePrompt, setNegativePrompt] = useState('');
-    const [selectedModel, setSelectedModel] = useState<AIModel>(DETAILED_AI_MODELS[0]); // Default to Pro
+    
+    // Default to Flash (Nano Banana) - id: 'audition-ai-v4'
+    const [selectedModel, setSelectedModel] = useState<AIModel>(
+        DETAILED_AI_MODELS.find(m => m.id === 'audition-ai-v4') || DETAILED_AI_MODELS[1]
+    ); 
+    
     const [selectedStyle, setSelectedStyle] = useState('none');
     const [aspectRatio, setAspectRatio] = useState('3:4');
     const [seed, setSeed] = useState<number | ''>('');
@@ -137,6 +158,94 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
         }
         else if (type === 'style') setStyleImage(null);
     }
+    
+    const handleOpenPicker = (type: 'pose' | 'face') => {
+        setPickerTarget(type);
+        setIsPickerOpen(true);
+    }
+
+    // 1. Handle "Use Image" (Direct Fill)
+    const handleImageSelectFromPicker = async (imageData: ProcessedImageData) => {
+        if (!pickerTarget) return;
+        
+        let dataUrl = imageData.processedUrl;
+        let file: File;
+
+        // Construct proper file object.
+        if (imageData.imageBase64) {
+             dataUrl = `data:${imageData.mimeType};base64,${imageData.imageBase64}`;
+             file = base64ToFile(imageData.imageBase64, imageData.fileName, imageData.mimeType);
+        } else {
+             // Fetch blob if missing base64 (common for Enhanced images)
+             try {
+                 const res = await fetch(imageData.processedUrl);
+                 const blob = await res.blob();
+                 dataUrl = URL.createObjectURL(blob);
+                 file = new File([blob], imageData.fileName, { type: imageData.mimeType });
+             } catch(e) {
+                 showToast("Không thể tải ảnh. Vui lòng thử lại.", "error");
+                 return;
+             }
+        }
+        
+        const newImage = { url: dataUrl, file };
+        
+        if (pickerTarget === 'pose') setPoseImage(newImage);
+        else if (pickerTarget === 'face') {
+            setRawFaceImage(newImage);
+            setProcessedFaceImage(null);
+        }
+        
+        setIsPickerOpen(false);
+        setPickerTarget(null);
+        showToast(t('modals.processedImage.success.full'), 'success');
+    };
+
+    // 2. Handle "Use Cropped" (From Picker's cropper)
+    const handleCropSelectFromPicker = (croppedImage: { url: string; file: File }) => {
+        if (!pickerTarget) return;
+        
+        if (pickerTarget === 'face') {
+             setRawFaceImage(croppedImage);
+             setProcessedFaceImage(null);
+        } else {
+             setPoseImage(croppedImage);
+        }
+
+        setIsPickerOpen(false);
+        setPickerTarget(null);
+        showToast(t('modals.processedImage.success.cropped'), 'success');
+    };
+
+    // 3. Handle Cross-Tool Actions (Send to Bg/Enhancer)
+    const handleProcessAction = async (image: ProcessedImageData, action: 'bg-remover' | 'enhancer') => {
+        if (!onSwitchToolWithImage) return;
+
+        try {
+            // Must convert to file to pass to other tools
+            let file: File;
+            let url: string;
+
+             if (image.imageBase64) {
+                 url = `data:${image.mimeType};base64,${image.imageBase64}`;
+                 file = base64ToFile(image.imageBase64, image.fileName, image.mimeType);
+            } else {
+                 const res = await fetch(image.processedUrl);
+                 const blob = await res.blob();
+                 url = URL.createObjectURL(blob);
+                 file = new File([blob], image.fileName, { type: image.mimeType });
+            }
+            
+            setIsPickerOpen(false);
+            setPickerTarget(null);
+            
+            onSwitchToolWithImage({ url, file }, action);
+
+        } catch(e) {
+            showToast("Lỗi chuyển công cụ.", "error");
+        }
+    };
+
     
     const handleProcessFace = async (modelType: 'flash' | 'pro') => {
         if (!rawFaceImage || !session) return;
@@ -314,6 +423,13 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
 
     return (
         <>
+            <ProcessedImagePickerModal 
+                isOpen={isPickerOpen} 
+                onClose={() => setIsPickerOpen(false)} 
+                onSelect={handleImageSelectFromPicker}
+                onCropSelect={handleCropSelectFromPicker}
+                onProcessAction={handleProcessAction}
+            />
             <ConfirmationModal isOpen={isConfirmOpen} onClose={() => setConfirmOpen(false)} onConfirm={handleConfirmGeneration} cost={generationCost} />
             <ModelSelectionModal isOpen={isModelModalOpen} onClose={() => setModelModalOpen(false)} selectedModelId={selectedModel.id} onSelectModel={(id: string) => setSelectedModel(DETAILED_AI_MODELS.find((m: AIModel) => m.id === id) || selectedModel)} characterImage={!!poseImage} />
             <InstructionModal isOpen={isInstructionModalOpen} onClose={() => setInstructionModalOpen(false)} instructionKey={instructionKey} />
@@ -353,14 +469,14 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <SettingsBlock title={t('creator.aiTool.singlePhoto.characterTitle')} instructionKey="character" onInstructionClick={() => openInstructionModal('character')}>
-                            <ImageUploader onUpload={(e) => handleImageUpload(e, 'pose')} image={poseImage} onRemove={() => handleRemoveImage('pose')} text={t('creator.aiTool.singlePhoto.characterUploadText')} disabled={isImageInputDisabled} />
+                            <ImageUploader onUpload={(e) => handleImageUpload(e, 'pose')} image={poseImage} onRemove={() => handleRemoveImage('pose')} text={t('creator.aiTool.singlePhoto.characterUploadText')} disabled={isImageInputDisabled} onPickFromProcessed={() => handleOpenPicker('pose')} />
                             <div className="mt-2 space-y-2">
                                 <ToggleSwitch label={t('creator.aiTool.singlePhoto.faceLockLabel')} checked={useBasicFaceLock} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUseBasicFaceLock(e.target.checked)} disabled={isImageInputDisabled || !poseImage} />
                                 <p className="text-xs text-skin-muted px-1 leading-relaxed">{t('creator.aiTool.singlePhoto.faceLockDesc')}</p>
                             </div>
                         </SettingsBlock>
                          <SettingsBlock title={t('creator.aiTool.singlePhoto.superFaceLockTitle')} instructionKey="face" onInstructionClick={() => openInstructionModal('face')}>
-                            <ImageUploader onUpload={(e) => handleImageUpload(e, 'face')} image={rawFaceImage ? { url: processedFaceImage ? `data:image/png;base64,${processedFaceImage}` : rawFaceImage.url } : null} onRemove={() => handleRemoveImage('face')} text={t('creator.aiTool.singlePhoto.superFaceLockUploadText')} disabled={isImageInputDisabled} />
+                            <ImageUploader onUpload={(e) => handleImageUpload(e, 'face')} image={rawFaceImage ? { url: processedFaceImage ? `data:image/png;base64,${processedFaceImage}` : rawFaceImage.url } : null} onRemove={() => handleRemoveImage('face')} text={t('creator.aiTool.singlePhoto.superFaceLockUploadText')} disabled={isImageInputDisabled} onPickFromProcessed={() => handleOpenPicker('face')} />
                              <div className="mt-2 space-y-2">
                                 {rawFaceImage && !processedFaceImage && (
                                     <div className="flex flex-col gap-2">

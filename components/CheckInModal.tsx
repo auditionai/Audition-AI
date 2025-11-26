@@ -14,6 +14,7 @@ const CheckInModal: React.FC<{ isOpen: boolean; onClose: () => void; }> = ({ isO
     const { t } = useTranslation();
     const [checkIns, setCheckIns] = useState<Set<string>>(new Set());
     const [isCheckingIn, setIsCheckingIn] = useState(false);
+    const [claimingMilestone, setClaimingMilestone] = useState<number | null>(null);
 
     const today = useMemo(() => new Date(), []);
     const [currentMonth, setCurrentMonth] = useState(today.getMonth());
@@ -63,16 +64,45 @@ const CheckInModal: React.FC<{ isOpen: boolean; onClose: () => void; }> = ({ isO
         }
     };
 
+    const handleClaimMilestone = async (days: number) => {
+        if (!session) return;
+        setClaimingMilestone(days);
+        try {
+            const response = await fetch('/.netlify/functions/claim-milestone-reward', {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session.access_token}` 
+                },
+                body: JSON.stringify({ milestoneDays: days })
+            });
+            const data = await response.json();
+            
+            if (!response.ok) {
+                throw new Error(data.error || 'Không thể nhận thưởng.');
+            }
+
+            showToast(data.message, 'success');
+            if (data.newDiamonds) {
+                updateUserProfile({ diamonds: data.newDiamonds });
+            }
+        } catch (error: any) {
+            showToast(error.message, 'error');
+        } finally {
+            setClaimingMilestone(null);
+        }
+    };
+
     const firstDayOfMonth = new Date(currentYear, currentMonth, 1).getDay();
     const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
     const dayBlanks = Array(firstDayOfMonth).fill(null);
     const dayCells = Array.from({ length: daysInMonth }, (_, i) => i + 1);
     
-    // Fix: Safe check for translation array. If missing or string, fallback to default array.
     const rawWeekdays = t('modals.checkIn.weekdays');
     const weekdays: string[] = Array.isArray(rawWeekdays) ? rawWeekdays : ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
     
     const hasCheckedInToday = checkIns.has(todayVnString) || (user?.last_check_in_at && getVNDateString(new Date(user.last_check_in_at)) === todayVnString);
+    const streak = user?.consecutive_check_in_days || 0;
 
     const rewards = [
         { day: 7, prize: '20 Kim Cương', icon: 'ph-gift' },
@@ -83,25 +113,33 @@ const CheckInModal: React.FC<{ isOpen: boolean; onClose: () => void; }> = ({ isO
     return (
         <Modal isOpen={isOpen} onClose={onClose} title={t('modals.checkIn.title')}>
             <div className="text-skin-base max-h-[80vh] overflow-y-auto custom-scrollbar">
-                <div className="themed-checkin-modal__streak-box">
-                    <p className="text-skin-muted">{t('modals.checkIn.streak')}</p>
-                    <p className="themed-checkin-modal__streak-number">{user?.consecutive_check_in_days || 0} {t('modals.checkIn.days')}</p>
+                {/* Compact Streak Box */}
+                <div className="themed-checkin-modal__streak-box !mb-3 !p-3 flex justify-between items-center bg-skin-fill-secondary rounded-lg border border-skin-border">
+                    <div className="flex items-center gap-2">
+                         <div className="w-8 h-8 rounded-full bg-skin-accent/20 flex items-center justify-center text-skin-accent">
+                            <i className="ph-fill ph-fire text-xl"></i>
+                         </div>
+                         <p className="text-sm text-skin-muted">{t('modals.checkIn.streak')}</p>
+                    </div>
+                    <p className="themed-checkin-modal__streak-number !text-xl">{streak} {t('modals.checkIn.days')}</p>
                 </div>
 
-                <div className="themed-checkin-modal__calendar-bg">
-                    <div className="flex justify-between items-center mb-4">
+                <div className="themed-checkin-modal__calendar-bg !p-3">
+                    <div className="flex justify-between items-center mb-2">
                         <button onClick={() => {
                             setCurrentMonth(m => m === 0 ? 11 : m - 1);
                             if (currentMonth === 0) setCurrentYear(y => y - 1);
-                        }} className="p-2 rounded-full hover:bg-skin-fill-secondary"><i className="ph-fill ph-caret-left"></i></button>
-                        <h3 className="font-bold text-lg">{t('modals.checkIn.month')} {currentMonth + 1}, {currentYear}</h3>
+                        }} className="p-1.5 rounded-full hover:bg-skin-fill-secondary text-skin-muted hover:text-white"><i className="ph-fill ph-caret-left"></i></button>
+                        
+                        <h3 className="font-bold text-sm uppercase tracking-wide">{t('modals.checkIn.month')} {currentMonth + 1}, {currentYear}</h3>
+                        
                         <button onClick={() => {
                             setCurrentMonth(m => m === 11 ? 0 : m + 1);
                             if (currentMonth === 11) setCurrentYear(y => y - 1);
-                        }} className="p-2 rounded-full hover:bg-skin-fill-secondary"><i className="ph-fill ph-caret-right"></i></button>
+                        }} className="p-1.5 rounded-full hover:bg-skin-fill-secondary text-skin-muted hover:text-white"><i className="ph-fill ph-caret-right"></i></button>
                     </div>
 
-                    <div className="grid grid-cols-7 gap-1 text-center text-xs font-semibold text-skin-muted mb-2">
+                    <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-skin-muted mb-1">
                         {weekdays.map((day: string) => <div key={day}>{day}</div>)}
                     </div>
 
@@ -115,6 +153,7 @@ const CheckInModal: React.FC<{ isOpen: boolean; onClose: () => void; }> = ({ isO
                             
                             const dayClasses = `
                                 themed-checkin-modal__day
+                                !text-xs !rounded-md
                                 ${isCheckedIn ? 'themed-checkin-modal__day--checked-in' : ''}
                                 ${isToday ? 'themed-checkin-modal__day--today' : ''}
                                 ${isFuture ? 'themed-checkin-modal__day--future' : ''}
@@ -123,31 +162,53 @@ const CheckInModal: React.FC<{ isOpen: boolean; onClose: () => void; }> = ({ isO
                             return (
                                 <div key={day} className={dayClasses.trim()}>
                                     <span className={`themed-checkin-modal__day-number ${isCheckedIn ? '' : 'text-skin-muted'}`}>{day}</span>
-                                    {isCheckedIn && <i className="ph-fill ph-check-circle themed-checkin-modal__checkmark absolute bottom-1 right-1 text-xs"></i>}
+                                    {isCheckedIn && <i className="ph-fill ph-check-circle themed-checkin-modal__checkmark absolute bottom-0.5 right-0.5 text-[10px]"></i>}
                                 </div>
                             );
                         })}
                     </div>
                 </div>
 
-                <div className="mt-4">
-                    <h4 className="font-semibold mb-2">{t('modals.checkIn.milestones')}</h4>
+                <div className="mt-3">
+                    <h4 className="font-semibold mb-2 text-xs uppercase text-skin-muted tracking-wider">{t('modals.checkIn.milestones')}</h4>
                     <div className="grid grid-cols-3 gap-2">
-                        {rewards.map(reward => (
-                             <div key={reward.day} className="themed-checkin-modal__reward-box">
-                                <i className={`ph-fill ${reward.icon} icon`}></i>
-                                <p className="day">{t('langName') === 'English' ? 'Day' : 'Ngày'} {reward.day}</p>
-                                <p className="prize">{reward.prize}</p>
-                            </div>
-                        ))}
+                        {rewards.map(reward => {
+                            const isEligible = streak >= reward.day;
+                            return (
+                                <div key={reward.day} className="flex flex-col gap-1">
+                                    <div className={`themed-checkin-modal__reward-box !p-2 ${isEligible ? 'border-yellow-500/50 bg-yellow-500/10' : ''}`}>
+                                        <div className="flex justify-center">
+                                            <i className={`ph-fill ${reward.icon} text-xl mb-1 ${isEligible ? 'text-yellow-400 animate-bounce' : 'text-skin-muted'}`}></i>
+                                        </div>
+                                        <p className="day text-[10px]">{t('langName') === 'English' ? 'Day' : 'Ngày'} {reward.day}</p>
+                                        <p className="prize text-[10px] leading-tight">{reward.prize}</p>
+                                    </div>
+                                    
+                                    {isEligible ? (
+                                        <button 
+                                            onClick={() => handleClaimMilestone(reward.day)}
+                                            disabled={claimingMilestone === reward.day}
+                                            className="w-full py-1 bg-gradient-to-r from-green-500 to-emerald-600 text-white text-[10px] font-bold rounded hover:opacity-90 transition shadow-md disabled:opacity-50"
+                                        >
+                                            {claimingMilestone === reward.day ? <i className="ph ph-spinner animate-spin"></i> : 'Nhận'}
+                                        </button>
+                                    ) : (
+                                        <div className="w-full py-1 bg-white/5 text-gray-500 text-[10px] font-bold rounded text-center border border-white/5 cursor-not-allowed">
+                                            <i className="ph-fill ph-lock text-[10px]"></i>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
 
-                <div className="mt-6">
+                <div className="mt-4 sticky bottom-0 z-10">
                     <button 
                         onClick={handleCheckIn}
                         disabled={hasCheckedInToday || isCheckingIn}
-                        className="w-full py-3 font-bold themed-button-primary disabled:cursor-not-allowed">
+                        className="w-full py-3 font-bold themed-button-primary disabled:cursor-not-allowed shadow-lg text-sm uppercase tracking-wide"
+                    >
                         {isCheckingIn ? t('modals.checkIn.buttonProcessing') : hasCheckedInToday ? t('modals.checkIn.buttonCheckedIn') : t('modals.checkIn.button')}
                     </button>
                 </div>

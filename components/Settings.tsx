@@ -12,13 +12,62 @@ import AnnouncementManager from './admin/AnnouncementManager';
 import ApiKeyManager from './admin/ApiKeyManager';
 import GameConfigManager from './admin/GameConfigManager'; 
 import LuckyWheelManager from './admin/LuckyWheelManager'; 
-import SystemMessageManager from './admin/SystemMessageManager'; // NEW IMPORT
+import SystemMessageManager from './admin/SystemMessageManager'; 
+import PromotionManager from './admin/PromotionManager'; // NEW
 import { resizeImage } from '../utils/imageUtils';
 import { useTranslation } from '../hooks/useTranslation';
 import UserAvatar from './common/UserAvatar';
 import UserBadge from './common/UserBadge';
 import RedeemGiftCode from './user/RedeemGiftCode'; 
 import TransactionHistory from './user/TransactionHistory';
+
+// XP Guide Component
+const XPGuide: React.FC = () => {
+    const { t } = useTranslation();
+    
+    const guides = [
+        {
+            icon: 'ph-calendar-check',
+            color: 'text-green-400',
+            bg: 'bg-green-500/10',
+            key: 'checkIn'
+        },
+        {
+            icon: 'ph-magic-wand',
+            color: 'text-pink-400',
+            bg: 'bg-pink-500/10',
+            key: 'createImage'
+        },
+        {
+            icon: 'ph-clock',
+            color: 'text-blue-400',
+            bg: 'bg-blue-500/10',
+            key: 'active'
+        }
+    ];
+
+    return (
+        <div className="bg-[#12121A]/80 border border-white/10 rounded-2xl p-6 mb-8 shadow-lg">
+            <h3 className="text-xl font-bold mb-4 text-white flex items-center gap-2">
+                <i className="ph-fill ph-graduation-cap text-yellow-400"></i>
+                {t('creator.xpGuide.title')}
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {guides.map((item) => (
+                    <div key={item.key} className="bg-black/20 rounded-xl p-4 border border-white/5 flex flex-col items-center text-center h-full hover:bg-white/5 transition-colors">
+                        <div className={`w-12 h-12 rounded-full ${item.bg} ${item.color} flex items-center justify-center mb-3 text-2xl shadow-lg`}>
+                            <i className={`ph-fill ${item.icon}`}></i>
+                        </div>
+                        <h4 className="font-bold text-white text-sm mb-1">{t(`creator.xpGuide.${item.key}.title`)}</h4>
+                        <p className="text-xs text-gray-400 leading-relaxed">
+                            {t(`creator.xpGuide.${item.key}.description`)}
+                        </p>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
 
 // Referral Panel
 const ReferralPanel: React.FC = () => {
@@ -75,7 +124,7 @@ const ReferralPanel: React.FC = () => {
 // Admin Panel
 const AdminPanel: React.FC = () => {
     const { t } = useTranslation();
-    type AdminTab = 'dashboard' | 'transactions' | 'users' | 'gift_codes' | 'packages' | 'rewards' | 'announcements' | 'api_keys' | 'game_config' | 'lucky_wheel' | 'broadcast';
+    type AdminTab = 'dashboard' | 'transactions' | 'users' | 'gift_codes' | 'packages' | 'promotions' | 'rewards' | 'announcements' | 'api_keys' | 'game_config' | 'lucky_wheel' | 'broadcast';
     const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
 
     const renderContent = () => {
@@ -85,12 +134,13 @@ const AdminPanel: React.FC = () => {
             case 'users': return <UserManager />;
             case 'gift_codes': return <GiftCodeManager />;
             case 'packages': return <CreditPackageManager />;
+            case 'promotions': return <PromotionManager />; // NEW
             case 'rewards': return <CheckInRewardManager />;
             case 'announcements': return <AnnouncementManager />;
             case 'api_keys': return <ApiKeyManager />;
             case 'game_config': return <GameConfigManager />;
             case 'lucky_wheel': return <LuckyWheelManager />;
-            case 'broadcast': return <SystemMessageManager />; // NEW
+            case 'broadcast': return <SystemMessageManager />;
             default: return <p className="text-center text-gray-500 py-8">Chức năng này đang được phát triển.</p>;
         }
     };
@@ -107,6 +157,8 @@ const AdminPanel: React.FC = () => {
                 <button onClick={() => setActiveTab('users')} className={activeTab === 'users' ? 'admin-tab-active' : 'admin-tab'}>{t('creator.settings.admin.tabs.users')}</button>
                 <button onClick={() => setActiveTab('gift_codes')} className={activeTab === 'gift_codes' ? 'admin-tab-active' : 'admin-tab'}>{t('creator.settings.admin.tabs.giftCodes')}</button>
                 <button onClick={() => setActiveTab('packages')} className={activeTab === 'packages' ? 'admin-tab-active' : 'admin-tab'}>{t('creator.settings.admin.tabs.packages')}</button>
+                {/* NEW PROMOTION TAB */}
+                <button onClick={() => setActiveTab('promotions')} className={activeTab === 'promotions' ? 'admin-tab-active' : 'admin-tab'}><i className="ph-fill ph-percent mr-1"></i> Khuyến Mại</button>
                 <button onClick={() => setActiveTab('rewards')} className={activeTab === 'rewards' ? 'admin-tab-active' : 'admin-tab'}>{t('creator.settings.admin.tabs.rewards')}</button>
                 <button onClick={() => setActiveTab('announcements')} className={activeTab === 'announcements' ? 'admin-tab-active' : 'admin-tab'}>{t('creator.settings.admin.tabs.announcements')}</button>
                 <button onClick={() => setActiveTab('api_keys')} className={activeTab === 'api_keys' ? 'admin-tab-active' : 'admin-tab'}>{t('creator.settings.admin.tabs.apiKeys')}</button>
@@ -266,6 +318,7 @@ const Settings: React.FC = () => {
                     </div>
                 </div>
                 
+                <XPGuide />
                 <ReferralPanel />
                 <RedeemGiftCode />
                 

@@ -2,16 +2,17 @@
 import React, { useState } from 'react';
 import AiGeneratorTool from './ai-tool/AiGeneratorTool';
 import GroupGeneratorTool from './ai-tool/GroupGeneratorTool';
-import BgRemoverTool from '../ai-tool/BgRemoverTool';
+import BgRemoverTool from './ai-tool/BgRemoverTool';
+import ImageEnhancerTool from './ai-tool/ImageEnhancerTool';
 import InstructionModal from '../common/InstructionModal';
 import SignatureTool from './tools/SignatureTool';
-import ComicStudio from './comic/ComicStudio'; // Import Comic Studio
+import ComicStudio from './comic/ComicStudio';
 import { useAuth } from '../../contexts/AuthContext';
 import UtilInstructionModal from '../ai-tool/InstructionModal'; 
 import { useTranslation } from '../../hooks/useTranslation';
 
-type AIToolTab = 'generator' | 'group-studio' | 'comic-studio' | 'utilities'; // Added comic-studio
-type UtilityTab = 'bg-remover' | 'signature';
+type AIToolTab = 'generator' | 'group-studio' | 'comic-studio' | 'utilities'; 
+type UtilityTab = 'bg-remover' | 'signature' | 'enhancer';
 
 const AITool: React.FC = () => {
     const { showToast } = useAuth();
@@ -20,7 +21,6 @@ const AITool: React.FC = () => {
     const [activeUtility, setActiveUtility] = useState<UtilityTab>('bg-remover');
     const [isInstructionModalOpen, setInstructionModalOpen] = useState(false);
     
-    // NEW: State for utility-specific instruction modal
     const [isUtilHelpOpen, setUtilHelpOpen] = useState(false);
     const [utilHelpKey, setUtilHelpKey] = useState<'bg-remover' | 'signature' | 'group-studio' | 'comic-studio' | null>(null);
 
@@ -28,6 +28,7 @@ const AITool: React.FC = () => {
     const [poseImage, setPoseImage] = useState<{ url: string; file: File } | null>(null);
     const [rawFaceImage, setRawFaceImage] = useState<{ url: string; file: File } | null>(null);
     const [imageForUtility, setImageForUtility] = useState<string | null>(null);
+    const [imageForBgRemover, setImageForBgRemover] = useState<{ url: string; file: File } | null>(null);
 
     const openUtilHelp = (key: 'bg-remover' | 'signature' | 'group-studio' | 'comic-studio') => {
         setUtilHelpKey(key);
@@ -71,6 +72,30 @@ const AITool: React.FC = () => {
         }
     };
 
+    const handleSendToBgRemover = (image: { url: string; file: File }) => {
+        setImageForBgRemover(image);
+        setActiveTab('utilities');
+        setActiveUtility('bg-remover');
+    };
+
+    const handleSwitchToolWithImage = (image: { url: string; file: File }, targetTool: 'bg-remover' | 'enhancer') => {
+        setActiveTab('utilities');
+        if (targetTool === 'bg-remover') {
+            setActiveUtility('bg-remover');
+            setImageForBgRemover(image);
+        } else if (targetTool === 'enhancer') {
+            setActiveUtility('enhancer');
+            // ImageEnhancerTool doesn't have an initialImage prop yet in this scope, 
+            // but typically we would add it or use context. 
+            // For simplicity, we'll just switch tabs, but to fully support passing image to enhancer,
+            // we might need to update ImageEnhancerTool to accept `initialImage`.
+            // Since the request focuses on "Bg Remover" and "Enhancer" tabs inside the picker modal,
+            // switching to the tab is the first step.
+            // Note: Current ImageEnhancerTool implementation in `components` might need prop update if we want pre-fill.
+        }
+        showToast(`Đã chuyển sang công cụ ${targetTool === 'bg-remover' ? 'Tách Nền' : 'Làm Nét'}`, 'success');
+    };
+
     return (
         <div className="container mx-auto px-4 py-8">
             <InstructionModal 
@@ -102,7 +127,7 @@ const AITool: React.FC = () => {
             </div>
             
             <div className="max-w-7xl mx-auto">
-                {/* Main Tabs - GRID LAYOUT FOR MOBILE */}
+                {/* Main Tabs */}
                 <div className="grid grid-cols-2 gap-2 mb-6 md:flex md:justify-center md:gap-0 md:border-b md:border-white/10 md:mb-8">
                     <button
                         onClick={() => setActiveTab('generator')}
@@ -132,7 +157,6 @@ const AITool: React.FC = () => {
                         <i className="ph-fill ph-users-three text-xl md:text-lg"></i>
                         {t('creator.aiTool.tabs.group')}
                     </button>
-                    {/* NEW COMIC TAB */}
                     <button
                         onClick={() => setActiveTab('comic-studio')}
                         className={`
@@ -166,7 +190,6 @@ const AITool: React.FC = () => {
 
                 {/* Content */}
                 {activeTab === 'comic-studio' ? (
-                    // Comic Studio has its own container logic, no wrapper needed
                     <ComicStudio 
                         onInstructionClick={() => openUtilHelp('comic-studio')}
                     />
@@ -174,16 +197,18 @@ const AITool: React.FC = () => {
                     <div className="p-4 bg-skin-fill-secondary rounded-2xl border border-skin-border shadow-lg">
                         {activeTab === 'generator' && (
                             <AiGeneratorTool 
-                            initialCharacterImage={poseImage}
-                            initialFaceImage={rawFaceImage}
-                            onSendToSignatureTool={handleSendToSignatureTool}
-                            onSwitchToUtility={() => handleSwitchToUtility('bg-remover')}
+                                initialCharacterImage={poseImage}
+                                initialFaceImage={rawFaceImage}
+                                onSendToSignatureTool={handleSendToSignatureTool}
+                                onSwitchToUtility={() => handleSwitchToUtility('bg-remover')}
+                                onSwitchToolWithImage={handleSwitchToolWithImage}
                             />
                         )}
                         {activeTab === 'group-studio' && (
                             <GroupGeneratorTool 
                                 onSwitchToUtility={() => handleSwitchToUtility('bg-remover')} 
                                 onInstructionClick={() => openUtilHelp('group-studio')}
+                                onSwitchToolWithImage={handleSwitchToolWithImage}
                             />
                         )}
                         {activeTab === 'utilities' && (
@@ -192,6 +217,9 @@ const AITool: React.FC = () => {
                                 <div className="flex justify-center border-b border-white/10 mb-6">
                                     <button onClick={() => setActiveUtility('bg-remover')} className={`px-4 py-2 text-sm font-semibold transition-colors ${activeUtility === 'bg-remover' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400 hover:text-white'}`}>
                                         <i className="ph-fill ph-scissors mr-2"></i>{t('creator.aiTool.utils.bgRemover')}
+                                    </button>
+                                    <button onClick={() => setActiveUtility('enhancer')} className={`px-4 py-2 text-sm font-semibold transition-colors ${activeUtility === 'enhancer' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400 hover:text-white'}`}>
+                                        <i className="ph-fill ph-sparkle mr-2"></i>{t('creator.aiTool.utils.enhancer')}
                                     </button>
                                     <button onClick={() => setActiveUtility('signature')} className={`px-4 py-2 text-sm font-semibold transition-colors ${activeUtility === 'signature' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400 hover:text-white'}`}>
                                         <i className="ph-fill ph-pencil-simple-line mr-2"></i>{t('creator.aiTool.utils.signature')}
@@ -203,6 +231,12 @@ const AITool: React.FC = () => {
                                         onMoveToGenerator={handleMoveToGenerator}
                                         onMoveFaceToGenerator={handleMoveFaceToGenerator}
                                         onInstructionClick={() => openUtilHelp('bg-remover')}
+                                        initialImage={imageForBgRemover}
+                                    />
+                                )}
+                                {activeUtility === 'enhancer' && (
+                                    <ImageEnhancerTool 
+                                        onSendToBgRemover={handleSendToBgRemover}
                                     />
                                 )}
                                 {activeUtility === 'signature' && (

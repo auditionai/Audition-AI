@@ -1,21 +1,19 @@
 
-// FIX: Import 'useState' from 'react' to resolve 'Cannot find name' errors.
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
 import ConfirmationModal from '../../ConfirmationModal';
 import ImageUploader from '../../ai-tool/ImageUploader';
-import { resizeImage, base64ToFile } from '../../../utils/imageUtils';
+import { resizeImage, base64ToFile, preprocessImageToAspectRatio, createBlankCanvas } from '../../../utils/imageUtils';
 import ProcessedImagePickerModal from './ProcessedImagePickerModal';
 import GenerationProgress from '../../ai-tool/GenerationProgress';
 import ImageModal from '../../common/ImageModal';
-import ProcessedImageModal from '../../ai-tool/ProcessedImageModal';
 import SettingsBlock from '../../ai-tool/SettingsBlock';
 import { useTranslation } from '../../../hooks/useTranslation';
 import PromptLibraryModal from './PromptLibraryModal';
 import ToggleSwitch from '../../ai-tool/ToggleSwitch';
 
 
-// Mock data for presets - in a real app, this would come from a database
+// Mock data for styles
 const MOCK_STYLES = [
     { id: 'cinematic', name: 'Điện ảnh' },
     { id: 'anime', name: 'Hoạt hình Anime' },
@@ -50,29 +48,22 @@ interface CharacterState {
 
 interface ProcessedImageData {
     id: string;
-    imageBase64: string;
+    imageBase64?: string;
     mimeType: string;
     fileName: string;
-    // Add missing properties to match the type used in ProcessedImageModal
     processedUrl: string;
     originalUrl?: string;
 }
 
 interface GroupGeneratorToolProps {
     onSwitchToUtility: () => void;
-    // FIX: Add missing 'onInstructionClick' prop to align with its usage in AITool.tsx.
     onInstructionClick: () => void;
+    // Callback to switch tool and load image
+    onSwitchToolWithImage?: (image: { url: string; file: File }, targetTool: 'bg-remover' | 'enhancer') => void;
 }
 
-const fileToBase64 = (file: File): Promise<string> => new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-});
-
 // Main Component
-const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtility, onInstructionClick }) => {
+const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtility, onInstructionClick, onSwitchToolWithImage }) => {
     const { user, session, showToast, supabase, updateUserDiamonds } = useAuth();
     const { t } = useTranslation();
     const [numCharacters, setNumCharacters] = useState<number>(0);
@@ -90,23 +81,23 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
     // New features state
     const [imageResolution, setImageResolution] = useState<'1K' | '2K' | '4K'>('1K');
     const [useGoogleSearch, setUseGoogleSearch] = useState(true);
-    const [removeWatermark, setRemoveWatermark] = useState(false); // New
+    const [removeWatermark, setRemoveWatermark] = useState(false);
 
     // New states for generation flow
     const [isGenerating, setIsGenerating] = useState(false);
     const [generatedImage, setGeneratedImage] = useState<string | null>(null);
     const [progressText, setProgressText] = useState('');
     const [processingFaceIndex, setProcessingFaceIndex] = useState<number | null>(null);
+    
     const [isPickerOpen, setIsPickerOpen] = useState(false);
     const [pickerTarget, setPickerTarget] = useState<{ index: number; type: 'pose' | 'face' } | null>(null);
+    
     const [isResultModalOpen, setIsResultModalOpen] = useState(false);
-    const [imageToProcess, setImageToProcess] = useState<ProcessedImageData | null>(null);
     const [isPromptLibraryOpen, setIsPromptLibraryOpen] = useState(false);
 
     // Refs for cleanup
     const pollingInterval = useRef<ReturnType<typeof setInterval> | null>(null);
 
-    // Effect to clean up any dangling subscriptions on unmount
     useEffect(() => {
         return () => {
             supabase?.removeAllChannels();
@@ -169,7 +160,7 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
         const file = e.target.files?.[0];
         if (!file) return;
 
-        resizeImage(file, 1024).then(({ file: resizedFile, dataUrl: resizedDataUrl }) => {
+        resizeImage(file, 800).then(({ file: resizedFile, dataUrl: resizedDataUrl }) => {
             const newImage = { url: resizedDataUrl, file: resizedFile };
             if (type === 'reference') {
                 setReferenceImage(newImage);
@@ -205,17 +196,97 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
         setPickerTarget({ index, type });
         setIsPickerOpen(true);
     };
+    
+    // 1. Handle "Use Image" (Direct Fill)
+    const handleImageSelectFromPicker = async (imageData: ProcessedImageData) => {
+        if (!pickerTarget) return;
+        
+        let dataUrl = imageData.processedUrl;
+        let file: File;
 
-    const handleImageSelectFromPicker = (imageData: ProcessedImageData) => {
+        // Construct proper file object.
+        if (imageData.imageBase64) {
+             dataUrl = `data:${imageData.mimeType};base64,${imageData.imageBase64}`;
+             file = base64ToFile(imageData.imageBase64, imageData.fileName, imageData.mimeType);
+        } else {
+             // Fetch blob if missing base64 (common for Enhanced images)
+             try {
+                 const res = await fetch(imageData.processedUrl);
+                 const blob = await res.blob();
+                 dataUrl = URL.createObjectURL(blob);
+                 file = new File([blob], imageData.fileName, { type: imageData.mimeType });
+             } catch(e) {
+                 showToast("Không thể tải ảnh. Vui lòng thử lại.", "error");
+                 return;
+             }
+        }
+        
+        const newImage = { url: dataUrl, file };
+        
+        setCharacters(prev => prev.map((char, i) => {
+            if (i === pickerTarget.index) {
+                if (pickerTarget.type === 'pose') return { ...char, poseImage: newImage };
+                return { ...char, faceImage: newImage, processedFace: null };
+            }
+            return char;
+        }));
+        
         setIsPickerOpen(false);
-        setImageToProcess(imageData);
+        setPickerTarget(null);
+        showToast(t('modals.processedImage.success.full'), 'success');
     };
+
+    // 2. Handle "Use Cropped" (From Picker's cropper)
+    const handleCropSelectFromPicker = (croppedImage: { url: string; file: File }) => {
+        if (!pickerTarget) return;
+         setCharacters(prev => prev.map((char, i) => {
+            if (i === pickerTarget.index) {
+                if (pickerTarget.type === 'face') {
+                    return { ...char, faceImage: croppedImage, processedFace: null };
+                }
+                return { ...char, poseImage: croppedImage };
+            }
+            return char;
+        }));
+        setIsPickerOpen(false);
+        setPickerTarget(null);
+        showToast(t('modals.processedImage.success.cropped'), 'success');
+    };
+
+    // 3. Handle Cross-Tool Actions (Send to Bg/Enhancer)
+    const handleProcessAction = async (image: ProcessedImageData, action: 'bg-remover' | 'enhancer') => {
+        if (!onSwitchToolWithImage) return;
+
+        try {
+            // Must convert to file to pass to other tools
+            let file: File;
+            let url: string;
+
+             if (image.imageBase64) {
+                 url = `data:${image.mimeType};base64,${image.imageBase64}`;
+                 file = base64ToFile(image.imageBase64, image.fileName, image.mimeType);
+            } else {
+                 const res = await fetch(image.processedUrl);
+                 const blob = await res.blob();
+                 url = URL.createObjectURL(blob);
+                 file = new File([blob], image.fileName, { type: image.mimeType });
+            }
+            
+            setIsPickerOpen(false);
+            setPickerTarget(null);
+            
+            onSwitchToolWithImage({ url, file }, action);
+
+        } catch(e) {
+            showToast("Lỗi chuyển công cụ.", "error");
+        }
+    };
+
 
     const handleProcessFace = async (index: number, modelType: 'flash' | 'pro') => {
         const char = characters[index];
         if (!char.faceImage || !session) return;
         
-        // Cost check
         const cost = modelType === 'pro' ? 10 : 1;
         if (user && user.diamonds < cost) {
              showToast(t('creator.aiTool.common.errorCredits', { cost, balance: user.diamonds }), 'error');
@@ -250,15 +321,11 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
         }
     };
 
-    // Cost Calculation
-    // Base: Pro (1K) = 10, Pro (2K) = 15, Pro (4K) = 20. Flash = 1.
-    // + Characters count.
-    // + Watermark removal (+1)
     const getBaseCost = () => {
         if (selectedModel === 'pro') {
             if (imageResolution === '4K') return 20;
             if (imageResolution === '2K') return 15;
-            return 10; // 1K Base
+            return 10;
         }
         return 1;
     };
@@ -289,6 +356,25 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
         setConfirmOpen(true);
     };
     
+    // --- UPLOAD HELPER ---
+    const uploadImageToR2 = async (file: File): Promise<string> => {
+        const { dataUrl } = await resizeImage(file, 1024); // 1024 for high quality
+        const res = await fetch('/.netlify/functions/upload-temp-image', {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json', 
+                Authorization: `Bearer ${session?.access_token}` 
+            },
+            body: JSON.stringify({ image: dataUrl }),
+        });
+        if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.error || "Upload failed");
+        }
+        const data = await res.json();
+        return data.url;
+    };
+
     const handleConfirmGeneration = async () => {
         setConfirmOpen(false);
         setIsGenerating(true);
@@ -359,33 +445,71 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                  table: 'generated_images',
                  filter: `id=eq.${jobId}`
             }, () => {
-                 showToast('Tạo ảnh nhóm thất bại do lỗi xử lý. Kim cương đã được hoàn lại.', 'error');
+                 showToast('Tạo ảnh thất bại. Hệ thống đã hoàn tiền cho bạn.', 'error');
                  setIsGenerating(false);
                  cleanup();
             })
             .subscribe(async (status, err) => {
                 if (status === 'SUBSCRIBED') {
                     try {
-                        const charactersPayload = await Promise.all(characters.map(async char => ({
-                            poseImage: char.poseImage ? await fileToBase64(char.poseImage.file) : null,
-                            faceImage: char.processedFace ? `data:image/png;base64,${char.processedFace}` : (char.faceImage ? await fileToBase64(char.faceImage.file) : null),
-                            gender: char.gender,
-                        })));
+                        // --- PREPARE AND UPLOAD IMAGES ---
+                        setProgressText('Đang chuẩn bị dữ liệu...');
+                        
+                        // 1. Prepare Master Canvas (Client-side Preprocessing)
+                        // This replaces the server-side Jimp processing to avoid timeouts
+                        let masterCanvasBase64 = '';
+                        if (referenceImage) {
+                            // Letterbox the user's reference image to match the target aspect ratio
+                            masterCanvasBase64 = await preprocessImageToAspectRatio(referenceImage.url, aspectRatio);
+                        } else {
+                            // Create a blank white canvas with the target aspect ratio
+                            masterCanvasBase64 = createBlankCanvas(aspectRatio);
+                        }
+
+                        // Upload the preprocessed master canvas
+                        const masterCanvasFile = base64ToFile(masterCanvasBase64.split(',')[1], 'master_canvas.png', 'image/png');
+                        const uploadedRefUrl = await uploadImageToR2(masterCanvasFile);
+
+                        // 2. Upload Character Images (Parallel)
+                        const charactersPayload = await Promise.all(characters.map(async (char, idx) => {
+                            let poseUrl = null;
+                            let faceUrl = null;
+
+                            // Pose is mandatory
+                            if (char.poseImage) {
+                                poseUrl = await uploadImageToR2(char.poseImage.file);
+                            }
+
+                            // Face: Either use processed base64 (from face lock) OR upload raw file
+                            if (char.processedFace) {
+                                const file = base64ToFile(char.processedFace, `char_${idx}_face.png`, 'image/png');
+                                faceUrl = await uploadImageToR2(file);
+                            } else if (char.faceImage) {
+                                faceUrl = await uploadImageToR2(char.faceImage.file);
+                            }
+
+                            return {
+                                poseImage: poseUrl,
+                                faceImage: faceUrl, 
+                                gender: char.gender,
+                            };
+                        }));
             
+                        // 3. Send Lightweight Payload (URLs only)
                         const spawnerResponse = await fetch('/.netlify/functions/generate-group-image', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
                             body: JSON.stringify({
                                 jobId, 
                                 characters: charactersPayload,
-                                referenceImage: referenceImage ? await fileToBase64(referenceImage.file) : null,
+                                referenceImage: uploadedRefUrl, // Now points to the pre-processed canvas
                                 prompt,
                                 style: selectedStyle,
                                 aspectRatio: aspectRatio,
                                 model: selectedModel,
                                 imageSize: imageResolution, 
                                 useSearch: useGoogleSearch,
-                                removeWatermark // New Param
+                                removeWatermark 
                             }),
                         });
 
@@ -397,13 +521,14 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                         const spawnerResult = await spawnerResponse.json();
                         updateUserDiamonds(spawnerResult.newDiamondCount);
 
+                        // Trigger Worker
                         fetch('/.netlify/functions/generate-group-image-background', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ jobId }),
                         });
 
-                        // 2. Polling Fallback (in case socket events are missed)
+                        // 2. Polling Fallback
                         pollingInterval.current = setInterval(async () => {
                             const { data } = await supabase
                                 .from('generated_images')
@@ -417,7 +542,7 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                                 setIsGenerating(false);
                                 cleanup();
                             }
-                        }, 3000); // Check every 3 seconds
+                        }, 3000);
 
                     } catch (error: any) {
                         showToast(error.message, 'error');
@@ -437,17 +562,6 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
         setGeneratedImage(null);
         setProgressText('');
         handleNumCharactersSelect(numCharacters); 
-    };
-    
-    const handleDownloadResult = () => {
-        if (!generatedImage) return;
-        const downloadUrl = `/.netlify/functions/download-image?url=${encodeURIComponent(generatedImage)}`;
-        const a = document.createElement('a');
-        a.href = downloadUrl;
-        a.download = `audition-ai-group-${Date.now()}.png`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
     };
     
     const resultImageForModal = generatedImage ? {
@@ -522,47 +636,15 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
 
     return (
         <div className="animate-fade-in">
-             <ProcessedImagePickerModal isOpen={isPickerOpen} onClose={() => setIsPickerOpen(false)} onSelect={handleImageSelectFromPicker} />
-             <PromptLibraryModal isOpen={isPromptLibraryOpen} onClose={() => setIsPromptLibraryOpen(false)} onSelectPrompt={(p) => setPrompt(p)} category={numCharacters > 2 ? 'group-photo' : 'couple-photo'} />
-             <ProcessedImageModal
-                isOpen={!!imageToProcess}
-                onClose={() => { setImageToProcess(null); setPickerTarget(null); }}
-                image={imageToProcess}
-                onUseFull={() => {
-                    if (!imageToProcess || !pickerTarget) return;
-                    const { imageBase64, mimeType, fileName } = imageToProcess;
-                    const file = base64ToFile(imageBase64, `processed_${fileName}`, mimeType);
-                    const newImage = { url: `data:${mimeType};base64,${imageBase64}`, file };
-
-                    setCharacters(prev => prev.map((char, i) => {
-                        if (i === pickerTarget.index) {
-                            if (pickerTarget.type === 'pose') return { ...char, poseImage: newImage };
-                            return { ...char, faceImage: newImage, processedFace: null };
-                        }
-                        return char;
-                    }));
-                    setImageToProcess(null);
-                    setPickerTarget(null);
-                }}
-                onUseCropped={(croppedImage: { url: string; file: File }) => {
-                    if (!pickerTarget) return;
-                    setCharacters(prev => prev.map((char, i) => {
-                        if (i === pickerTarget.index) {
-                            if (pickerTarget.type === 'face') {
-                                return { ...char, faceImage: croppedImage, processedFace: null };
-                            }
-                            return { ...char, poseImage: croppedImage };
-                        }
-                        return char;
-                    }));
-                    setImageToProcess(null);
-                    setPickerTarget(null);
-                    showToast(t('modals.processedImage.success.cropped'), 'success');
-                }}
-                onDownload={() => {
-                    if (imageToProcess) handleDownloadResult();
-                }}
+             <ProcessedImagePickerModal 
+                isOpen={isPickerOpen} 
+                onClose={() => setIsPickerOpen(false)} 
+                onSelect={handleImageSelectFromPicker}
+                onCropSelect={handleCropSelectFromPicker}
+                onProcessAction={handleProcessAction}
             />
+             <PromptLibraryModal isOpen={isPromptLibraryOpen} onClose={() => setIsPromptLibraryOpen(false)} onSelectPrompt={(p) => setPrompt(p)} category={numCharacters > 2 ? 'group-photo' : 'couple-photo'} />
+             
             <ConfirmationModal isOpen={isConfirmOpen} onClose={() => setConfirmOpen(false)} onConfirm={handleConfirmGeneration} cost={totalCost} />
             
              <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 text-yellow-300 rounded-lg text-sm flex items-start gap-3 mb-6">

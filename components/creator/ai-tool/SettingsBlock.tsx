@@ -6,10 +6,10 @@ type InstructionKey = 'character' | 'style' | 'prompt' | 'advanced' | 'face' | '
 
 interface SettingsBlockProps {
     title: string;
-    instructionKey: InstructionKey;
+    instructionKey?: InstructionKey;
     children: React.ReactNode;
     step?: number;
-    onInstructionClick: (key: InstructionKey) => void;
+    onInstructionClick?: (key: InstructionKey) => void;
     extraHeaderContent?: React.ReactNode;
     className?: string;
 }
@@ -23,9 +23,11 @@ const SettingsBlock: React.FC<SettingsBlockProps> = ({ title, instructionKey, ch
                     <label className="themed-heading text-lg font-bold themed-title-glow whitespace-nowrap">{title}</label>
                     {extraHeaderContent}
                 </div>
-                <button onClick={() => onInstructionClick(instructionKey)} className="flex items-center gap-1 text-xs text-skin-accent hover:opacity-80 transition-all px-2 py-1 rounded-md bg-skin-accent/10 border border-skin-border-accent hover:bg-skin-accent/20 shadow-accent hover:shadow-accent-lg flex-shrink-0">
-                    <i className="ph-fill ph-book-open"></i> {t('creator.aiTool.common.help')}
-                </button>
+                {onInstructionClick && instructionKey && (
+                    <button onClick={() => onInstructionClick(instructionKey)} className="flex items-center gap-1 text-xs text-skin-accent hover:opacity-80 transition-all px-2 py-1 rounded-md bg-skin-accent/10 border border-skin-border-accent hover:bg-skin-accent/20 shadow-accent hover:shadow-accent-lg flex-shrink-0">
+                        <i className="ph-fill ph-book-open"></i> {t('creator.aiTool.common.help')}
+                    </button>
+                )}
             </div>
             <div className="flex flex-col flex-grow">{children}</div>
         </div>

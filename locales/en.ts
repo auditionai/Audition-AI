@@ -1,7 +1,16 @@
 
-
 export const en = {
   langName: 'English',
+  common: {
+    edit: 'Edit',
+    delete: 'Delete',
+    save: 'Save',
+    saving: 'Saving...',
+    cancel: 'Cancel',
+    confirm: 'Confirm',
+    download: 'Download',
+    loading: 'Loading...',
+  },
   landing: {
     header: {
       features: 'Features',
@@ -277,7 +286,7 @@ export const en = {
       quickGuide: 'View Quick Guide',
       upgradeBanner: {
         title: 'Upgrade: Nano Banana Pro (Gemini 3) is Live!',
-        desc: 'The app now defaults to Gemini 3 Pro for 4K ultra-sharp images. Cost: 10-20 Diamonds/image (depends on resolution). You can switch back to the standard version (1 Diamond) using the button or in Advanced Settings.',
+        desc: 'The default model is currently Nano Banana (Standard). To use the new Nano Banana Pro (Gemini 3) for 4K ultra-sharp images (10-20 Diamonds), please click "Change Now".',
         button: 'Change Now',
       },
       tabs: {
@@ -288,6 +297,7 @@ export const en = {
       utils: {
         bgRemover: 'BG Remover',
         signature: 'Signature',
+        enhancer: 'Image Enhancer',
       },
       common: {
         help: 'Help',
@@ -310,6 +320,7 @@ export const en = {
         unavailableDesc: 'This model does not support image input.',
         flashModel: 'Flash (1 💎)',
         proModel: 'Pro 4K (2 💎)',
+        processing: 'Processing...',
       },
       singlePhoto: {
         bgRemoverTip: 'Tip: For the best quality, please use character images with the background removed.',
@@ -373,8 +384,8 @@ export const en = {
         errorRefOrPrompt: 'Please upload a "Reference Image" or enter a "Prompt".',
         errorPoseImage: 'Please provide a "Character Image" for Character {{index}}.',
         errorGender: 'Please select a gender for Character {{index}}.',
-        pickFromProcessed: 'Pick',
-        pickFromProcessedTooltip: 'Pick a processed image',
+        pickFromProcessed: 'Choose processed image',
+        pickFromProcessedTooltip: 'Pick from BG Removed or Enhanced library',
       },
       bgRemover: {
         uploadTitle: '1. Upload Images',
@@ -388,6 +399,19 @@ export const en = {
         viewDetails: 'View Details',
         flashButton: 'Flash Remove (1 💎)',
         proButton: 'Pro Remove (10 💎)',
+      },
+      enhancer: {
+        title: 'Image Enhancer',
+        uploadTitle: '1. Upload Image',
+        uploadButton: 'Select Image',
+        uploadDesc: 'Upload low quality image',
+        resultTitle: '2. Result',
+        resultDesc: 'Images deleted on page reload',
+        placeholder: 'Result will appear here',
+        flashButton: 'Flash Enhance (1 💎)',
+        proButton: 'Pro Enhance (10 💎)',
+        sendToBg: 'Send to BG Remover',
+        download: 'Download',
       },
       signature: {
         title: 'Signature Tool',
@@ -487,7 +511,8 @@ export const en = {
             luckyWheel: 'Lucky Wheel',
             signature: 'Signature',
             faceLock: 'Face Lock Process',
-            refund: 'Refund'
+            refund: 'Refund',
+            enhance: 'Image Enhance'
         }
       },
       redeem: {
@@ -819,6 +844,9 @@ export const en = {
     'neon-vibe': 'Crystal Palace',
   },
   modals: {
+    announcement: {
+        button: 'Got it',
+    },
     styles: {
         none: 'Default',
         cinematic: 'Cinematic',
@@ -941,6 +969,16 @@ export const en = {
         title: 'Select Processed Image',
         empty: 'No images yet',
         empty_desc: 'Use the Background Remover or Super Face Lock tool first.',
+        tabs: {
+            bgRemoved: 'BG Removed',
+            enhanced: 'Enhanced'
+        },
+        actions: {
+            use: 'Use Image',
+            crop: 'Crop Face',
+            toBg: 'Remove BG',
+            toEnhance: 'Enhance'
+        }
     },
     promptLibrary: {
         title: 'Prompt Library (Suggestions)',

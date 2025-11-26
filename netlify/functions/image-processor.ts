@@ -25,7 +25,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         const token = authHeader.split(' ')[1];
         if (!token) return { statusCode: 401, body: JSON.stringify({ error: 'Bearer token is missing.' }) };
 
-        const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+        const { data: { user }, error: authError } = await (supabaseAdmin.auth as any).getUser(token);
         if (authError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized: Invalid token.' }) };
 
         const { image: imageDataUrl, model } = JSON.parse(event.body || '{}');
@@ -33,9 +33,9 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         // Validate Cost
         const isPro = model === 'gemini-3-pro-image-preview';
-        // UPDATE: Pro cost = 10
         const cost = isPro ? 10 : 1;
 
+        // Check Balance (Read Only)
         const { data: userData, error: userError } = await supabaseAdmin
             .from('users')
             .select('diamonds')
@@ -71,9 +71,6 @@ const handler: Handler = async (event: HandlerEvent) => {
             responseModalities: [Modality.IMAGE] 
         };
         
-        // Note: We don't set imageConfig for editing/bg removal usually, as we want to preserve input aspect ratio if possible.
-        // However, if Pro requires it, we might default to 1K, but usually it's safer to omit for editing tasks unless generating new content.
-
         const response = await ai.models.generateContent({
             model: selectedModel,
             contents: { parts: parts },
@@ -105,7 +102,10 @@ const handler: Handler = async (event: HandlerEvent) => {
         const publicUrl = `${process.env.R2_PUBLIC_URL}/${fileName}`;
         // --- END OF R2 UPLOAD LOGIC ---
 
-        const newDiamondCount = userData.diamonds - cost;
+        // --- TRANSACTION (Pay on Success) ---
+        const { data: latestUser } = await supabaseAdmin.from('users').select('diamonds').eq('id', user.id).single();
+        const newDiamondCount = (latestUser?.diamonds || userData.diamonds) - cost;
+
         await Promise.all([
             supabaseAdmin.from('users').update({ diamonds: newDiamondCount }).eq('id', user.id),
             supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id }),
@@ -128,11 +128,12 @@ const handler: Handler = async (event: HandlerEvent) => {
         };
 
     } catch (error: any) {
-        console.error(`A FATAL ERROR occurred in the image-processor function:`, error);
+        console.error(`Image Processor Error:`, error);
+        // No refund needed as deduction is at the end
         return { 
             statusCode: 500, 
             body: JSON.stringify({ 
-                error: `Lỗi máy chủ nghiêm trọng: ${error.message || 'Unknown server error.'}` 
+                error: `Lỗi xử lý: ${error.message}` 
             }) 
         };
     }

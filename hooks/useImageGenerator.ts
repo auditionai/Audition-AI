@@ -1,7 +1,7 @@
-
 import { useState, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { AIModel } from '../types';
+import { preprocessImageToAspectRatio } from '../utils/imageUtils';
 
 const fileToBase64 = (file: File): Promise<string> => new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -30,7 +30,7 @@ export const useImageGenerator = () => {
         useUpscaler: boolean,
         imageResolution: string = '1K',
         useGoogleSearch: boolean = false,
-        removeWatermark: boolean = false // Added param
+        removeWatermark: boolean = false 
     ) => {
         setIsGenerating(true);
         setProgress(1);
@@ -39,19 +39,34 @@ export const useImageGenerator = () => {
         abortControllerRef.current = new AbortController();
 
         let progressInterval: ReturnType<typeof setInterval> | null = null;
+        let realtimeChannel: any = null;
+        let pollInterval: ReturnType<typeof setInterval> | null = null;
 
         try {
-            // Simulate initial steps
+            // Simulated progress for UX
             progressInterval = setInterval(() => {
                 setProgress(prev => (prev < 8 ? prev + 1 : prev));
             }, 1800);
 
+            const processInput = async (file: File | null, targetRatio: string) => {
+                if (!file) return null;
+                const rawBase64 = await fileToBase64(file);
+                return await preprocessImageToAspectRatio(rawBase64, targetRatio);
+            };
+
+            const resolveFaceImage = async () => {
+                if (!faceImage) return null;
+                if (faceImage instanceof File) return await fileToBase64(faceImage);
+                return faceImage as string;
+            };
+
             const [poseImageBase64, styleImageBase64, faceImageBase64] = await Promise.all([
-                poseImageFile ? fileToBase64(poseImageFile) : Promise.resolve(null),
-                styleImageFile ? fileToBase64(styleImageFile) : Promise.resolve(null),
-                faceImage instanceof File ? fileToBase64(faceImage) : Promise.resolve(faceImage)
+                processInput(poseImageFile, aspectRatio), 
+                processInput(styleImageFile, "1:1"), 
+                resolveFaceImage()
             ]);
 
+            // 1. CALL SPAWNER (Creates Job + Deducts Money)
             const response = await fetch('/.netlify/functions/generate-image', {
                 method: 'POST',
                 headers: {
@@ -62,7 +77,7 @@ export const useImageGenerator = () => {
                     prompt, 
                     modelId: model.id, 
                     apiModel: model.apiModel,
-                    characterImage: poseImageBase64,
+                    characterImage: poseImageBase64, 
                     styleImage: styleImageBase64, 
                     faceReferenceImage: faceImageBase64,
                     aspectRatio, 
@@ -71,7 +86,7 @@ export const useImageGenerator = () => {
                     useUpscaler,
                     imageSize: imageResolution,
                     useGoogleSearch,
-                    removeWatermark // Pass to backend
+                    removeWatermark
                 }),
                 signal: abortControllerRef.current.signal,
             });
@@ -83,8 +98,94 @@ export const useImageGenerator = () => {
                 throw new Error(errorResult.error || 'Lỗi không xác định từ máy chủ.');
             }
 
+            // --- ASYNC JOB HANDLING ---
+            if (response.status === 202) {
+                const { jobId, newDiamondCount, newXp } = await response.json();
+                
+                // Update balance immediately
+                updateUserProfile({ diamonds: newDiamondCount, xp: newXp });
+                setProgress(5); // Job registered
+                
+                // 2. TRIGGER WORKER FROM CLIENT (Fire and Forget style)
+                // This is crucial: Client triggers the worker to avoid Server Function Timeout
+                fetch('/.netlify/functions/generate-image-background', {
+                    method: 'POST',
+                    body: JSON.stringify({ jobId })
+                }).catch(e => console.warn("Worker trigger warning:", e));
+
+                // 3. START POLLING / LISTENING (MUST AWAIT THIS!)
+                // IMPORTANT: We use 'await' here so the function doesn't exit and hit 'finally' block immediately
+                await new Promise<void>((resolve, reject) => {
+                    if (!supabase) return reject(new Error("Realtime connection failed"));
+
+                    const cleanup = () => {
+                        if (realtimeChannel) supabase.removeChannel(realtimeChannel);
+                        if (pollInterval) clearInterval(pollInterval);
+                    };
+
+                    // A. Realtime Listener
+                    realtimeChannel = supabase.channel(`job-${jobId}`)
+                        .on('postgres_changes', {
+                            event: 'UPDATE',
+                            schema: 'public',
+                            table: 'generated_images',
+                            filter: `id=eq.${jobId}`
+                        }, (payload: any) => {
+                            const newRecord = payload.new;
+                            if (newRecord.image_url && newRecord.image_url !== 'PENDING') {
+                                setGeneratedImage(newRecord.image_url);
+                                setProgress(10);
+                                showToast('Tạo ảnh thành công!', 'success');
+                                cleanup();
+                                resolve();
+                            }
+                        })
+                        .on('postgres_changes', {
+                             event: 'DELETE',
+                             schema: 'public',
+                             table: 'generated_images',
+                             filter: `id=eq.${jobId}`
+                        }, () => {
+                             cleanup();
+                             reject(new Error("Tạo ảnh thất bại. Hệ thống đã hoàn tiền."));
+                        })
+                        .subscribe();
+
+                    // B. Polling Backup with Timeout (5 minutes max)
+                    let pollCount = 0;
+                    const MAX_POLLS = 100; // ~5 minutes
+                    
+                    pollInterval = setInterval(async () => {
+                        pollCount++;
+                        
+                        if (pollCount > MAX_POLLS) {
+                            cleanup();
+                            // Don't reject, just resolve to stop loading but inform user
+                            showToast("Tác vụ đang mất nhiều thời gian hơn dự kiến. Vui lòng kiểm tra lại trong mục 'Tác phẩm của tôi' sau vài phút.", "success"); 
+                            resolve(); 
+                            return;
+                        }
+
+                        const { data } = await supabase.from('generated_images').select('image_url').eq('id', jobId).single();
+                        if (data?.image_url && data.image_url !== 'PENDING') {
+                            cleanup();
+                            setGeneratedImage(data.image_url);
+                            setProgress(10);
+                            showToast('Tạo ảnh thành công!', 'success');
+                            resolve();
+                        } else if (!data) {
+                             // Job disappeared (likely deleted by worker due to error)
+                             cleanup();
+                             reject(new Error("Tạo ảnh thất bại (Dữ liệu bị hủy). Đã hoàn tiền."));
+                        }
+                    }, 3000);
+                });
+                
+                return; // Exit function gracefully after await finishes
+            }
+
+            // Legacy/Fallback path (for synchronous responses, if any)
             const result = await response.json();
-            
             setProgress(9);
             updateUserProfile({ diamonds: result.newDiamondCount, xp: result.newXp });
             setGeneratedImage(result.imageUrl);
@@ -97,51 +198,16 @@ export const useImageGenerator = () => {
                 resetGenerator();
                 return;
             }
-
-            // Smart Recovery Logic
-            // If the request failed (e.g. timeout), check if an image was actually created in the DB recently.
-            // This handles cases where the server finished but the client connection dropped.
-            if (supabase && session?.user?.id) {
-                console.log("Attempting recovery check for generated image...");
-                try {
-                    const { data: recentImages } = await supabase
-                        .from('generated_images')
-                        .select('image_url, created_at')
-                        .eq('user_id', session.user.id)
-                        .not('image_url', 'eq', 'PENDING') // Only completed ones
-                        .not('image_url', 'is', null)
-                        .order('created_at', { ascending: false })
-                        .limit(1);
-
-                    if (recentImages && recentImages.length > 0) {
-                        const latestImage = recentImages[0];
-                        const timeDiff = Date.now() - new Date(latestImage.created_at).getTime();
-                        
-                        // If the latest image was created in the last 2 minutes, assume it's the one we wanted
-                        if (timeDiff < 120000) { 
-                            console.log("Recovered image from DB:", latestImage.image_url);
-                            setGeneratedImage(latestImage.image_url);
-                            // Refresh user profile to sync diamonds/xp just in case
-                            const userRes = await supabase.from('users').select('diamonds, xp').eq('id', session.user.id).single();
-                            if (userRes.data) {
-                                updateUserProfile({ diamonds: userRes.data.diamonds, xp: userRes.data.xp });
-                            }
-                            showToast('Tạo ảnh thành công (Đã khôi phục)!', 'success');
-                            setProgress(10);
-                            return; // Exit without showing error
-                        }
-                    }
-                } catch (recoveryErr) {
-                    console.error("Recovery failed:", recoveryErr);
-                }
-            }
+            
+            if (realtimeChannel && supabase) supabase.removeChannel(realtimeChannel);
+            if (pollInterval) clearInterval(pollInterval);
 
             setError(err.message || 'Đã xảy ra lỗi trong quá trình tạo ảnh.');
             showToast(err.message || 'Tạo ảnh thất bại.', 'error');
             setProgress(0);
         } finally {
             if (progressInterval) clearInterval(progressInterval);
-            setIsGenerating(false);
+            setIsGenerating(false); // This hides the loading screen
             abortControllerRef.current = null;
         }
     };

@@ -5,7 +5,7 @@ import { supabaseAdmin } from './utils/supabaseClient';
 import { Buffer } from 'buffer';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 
-const BASE_COST = 10; 
+const COST = 10; 
 
 const processDataUrl = (dataUrl: string | null) => {
     if (!dataUrl) return null;
@@ -15,17 +15,15 @@ const processDataUrl = (dataUrl: string | null) => {
     return { base64, mimeType };
 };
 
-const failJob = async (jobId: string, userId: string, reason: string, totalCost: number) => {
+const failJob = async (jobId: string, userId: string, reason: string) => {
     console.error(`[COMIC WORKER] Failing job ${jobId}: ${reason}`);
     try {
         await Promise.all([
             supabaseAdmin.from('generated_images').delete().eq('id', jobId),
-            supabaseAdmin.from('users').update({ diamonds: undefined }), // Cannot invoke increment_user_diamonds simply here
-            // Manually fetch and update since RPC might be missing or limited
-            supabaseAdmin.rpc('increment_user_diamonds', { user_id_param: userId, diamond_amount: totalCost }),
+            supabaseAdmin.rpc('increment_user_diamonds', { user_id_param: userId, diamond_amount: COST }),
             supabaseAdmin.from('diamond_transactions_log').insert({
                 user_id: userId,
-                amount: totalCost,
+                amount: COST,
                 transaction_type: 'REFUND',
                 description: `Hoàn tiền vẽ truyện thất bại (Lỗi: ${reason.substring(0, 50)})`,
             })
@@ -36,15 +34,16 @@ const failJob = async (jobId: string, userId: string, reason: string, totalCost:
 };
 
 const handler: Handler = async (event: HandlerEvent) => {
+    // Background functions respond with 202 immediately, but we still return 200 for good measure in logic
     if (event.httpMethod !== 'POST') return { statusCode: 200 };
 
     const { jobId } = JSON.parse(event.body || '{}');
     if (!jobId) return { statusCode: 400, body: "Missing Job ID" };
 
     let userId = "";
-    let totalCost = BASE_COST;
 
     try {
+        console.log(`[WORKER] Starting job ${jobId}`);
         const { data: jobData, error: fetchError } = await supabaseAdmin
             .from('generated_images')
             .select('prompt, user_id')
@@ -55,10 +54,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         
         userId = jobData.user_id;
         const jobConfig = JSON.parse(jobData.prompt);
-        const { panel, characters, style, aspectRatio, colorFormat, visualEffect, premise, imageQuality = '1K', previousPageUrl } = jobConfig.payload;
-        
-        if (imageQuality === '2K') totalCost += 10;
-        if (imageQuality === '4K') totalCost += 15;
+        const { panel, characters, storyTitle, style, aspectRatio, colorFormat, visualEffect, isCover } = jobConfig.payload;
 
         const { data: apiKeyData } = await supabaseAdmin.from('api_keys').select('key_value, id').eq('status', 'active').limit(1).single();
         if (!apiKeyData) throw new Error('Hết tài nguyên AI.');
@@ -67,81 +63,68 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         const parts: any[] = [];
         
-        // --- PARSE SCRIPT ---
+        // --- PARSE STRUCTURED SCRIPT ---
         let scriptData;
-        let visualDirectives = "";
+        let fullPageDescription = "";
         let dialogueListText = "";
 
         try {
             scriptData = JSON.parse(panel.visual_description);
-            visualDirectives = `**PAGE LAYOUT:** ${scriptData.layout_note || "Standard Comic Grid"}\n`;
             
-            const panelsList = Array.isArray(scriptData.panels) ? scriptData.panels : (scriptData.panels ? [scriptData.panels] : []);
-            if (panelsList.length > 0) {
-                panelsList.forEach((p: any) => {
-                    visualDirectives += `[PANEL ${p.panel_id}]: ${p.description}\n`;
-                    if (p.dialogues) {
+            // Construct Visual Prompt from Panels
+            fullPageDescription = `**PAGE LAYOUT:** ${scriptData.layout_note || "Standard Comic Grid"}\n\n`;
+            
+            if (scriptData.panels && Array.isArray(scriptData.panels)) {
+                scriptData.panels.forEach((p: any) => {
+                    fullPageDescription += `**PANEL ${p.panel_id}:** ${p.description}\n`;
+                    
+                    // Construct Dialogue for this panel
+                    if (p.dialogues && Array.isArray(p.dialogues)) {
                         p.dialogues.forEach((d: any) => {
-                            if (d.text && d.text.trim().length > 1) {
-                                dialogueListText += `Panel ${p.panel_id} - ${d.speaker}: "${d.text}"\n`;
-                            }
+                            dialogueListText += `- Panel ${p.panel_id} (${d.speaker}): "${d.text}"\n`;
                         });
                     }
                 });
             }
         } catch (e) {
-            visualDirectives = panel.visual_description;
+            // Fallback for legacy text format
+            fullPageDescription = panel.visual_description;
+            dialogueListText = "No dialogue specified.";
         }
 
-        // --- PROMPT ---
-        let systemPrompt = `You are a legendary Comic Book Artist (Gemini 3 Pro Vision).`;
-        const hasInputImages = !!previousPageUrl || (characters && characters.length > 0);
+        // --- STYLE & FORMAT ---
+        const lowerStyle = style.toLowerCase();
+        const isWebtoon = lowerStyle.includes('webtoon') || lowerStyle.includes('manhwa');
         
-        if (hasInputImages) {
-            systemPrompt += `
-            *** SUPREME SYSTEM COMMAND: PRESERVE CANVAS ***
-            If a canvas with GRAY PADDING is provided (e.g., 'Previous Page Context'):
-            1. [BOUNDARIES]: Respect the corners. DO NOT CROP.
-            2. [OUTPAINTING]: Fill gray areas with comic panel content.
-            3. [LOGIC]: Ignore aspect ratio config, use input canvas pixels.
-            `;
-        } else {
-            systemPrompt += `
-            **OUTPUT REQUIREMENT:** Create a new image with aspect ratio ${aspectRatio}.
-            `;
-        }
+        let layoutInstruction = isWebtoon 
+            ? `**MODE: WEBTOON (Vertical)**. Draw one high-quality vertical strip composition containing the described panels.`
+            : `**MODE: COMIC PAGE**. Draw a full page with distinct panels separated by white gutters.`;
 
-        systemPrompt += `
-            **CONTEXT:**
-            "${premise}"
+        let colorInstruction = `- Palette: ${colorFormat}`;
+        
+        const systemPrompt = `
+            You are a master comic artist (Gemini 3 Pro Vision).
             
-            **STYLE:** ${style}. ${colorFormat}. ${visualEffect !== 'none' ? `Effect: ${visualEffect}` : ''}.
-            Resolution: ${imageQuality}.
+            ${layoutInstruction}
             
             **VISUAL SCRIPT:**
-            ${visualDirectives}
+            ${fullPageDescription}
             
-            **DIALOGUE:**
-            Render speech bubbles with legible text:
+            **DIALOGUE & TEXT (VIETNAMESE):**
+            You MUST render speech bubbles with the following text exactly:
             ${dialogueListText}
+            * Ensure text is legible, clear, and correctly placed in bubbles within the correct panels.
+            
+            **ART STYLE:** ${style}. High quality, 8k resolution, detailed lineart.
+            ${colorInstruction}
+            ${visualEffect !== 'none' ? `- Effect: ${visualEffect}` : ''}
+            
+            **CHARACTERS:**
+            (Use provided reference images. If gender/appearance is unclear, infer from context).
         `;
 
         parts.push({ text: systemPrompt });
 
-        // 1. Inject Previous Page
-        if (previousPageUrl) {
-            try {
-                const response = await fetch(previousPageUrl);
-                const buffer = await response.arrayBuffer();
-                const base64 = Buffer.from(buffer).toString('base64');
-                parts.push({ text: "**PREVIOUS PAGE CONTEXT (DO NOT CROP THIS CANVAS):**" });
-                parts.push({ inlineData: { data: base64, mimeType: 'image/png' } });
-            } catch (e) {
-                console.error("[WORKER] Failed to fetch previous page image.", e);
-            }
-        }
-
-        // 2. Inject Character References
         if (characters && Array.isArray(characters)) {
             for (const char of characters) {
                 if (char.image_url) {
@@ -154,24 +137,24 @@ const handler: Handler = async (event: HandlerEvent) => {
             }
         }
 
-        // CONFIG HANDLING:
-        const config: any = {
-            responseModalities: [Modality.IMAGE],
-        };
-
-        if (!hasInputImages) {
-             config.imageConfig = { aspectRatio: aspectRatio, imageSize: imageQuality };
-        }
-
+        // Use Gemini 3 Pro for rendering (High Quality)
+        console.log(`[WORKER] Calling Gemini 3 Pro for job ${jobId}...`);
         const response = await ai.models.generateContent({
             model: 'gemini-3-pro-image-preview',
             contents: { parts },
-            config: config
+            config: {
+                responseModalities: [Modality.IMAGE],
+                imageConfig: {
+                    aspectRatio: aspectRatio || '3:4',
+                    imageSize: '2K' 
+                }
+            }
         });
 
         const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
         if (!imagePart?.inlineData) throw new Error("AI failed to render.");
 
+        console.log(`[WORKER] Uploading result for job ${jobId}...`);
         const s3Client = new S3Client({
             region: "auto",
             endpoint: process.env.R2_ENDPOINT!,
@@ -188,18 +171,28 @@ const handler: Handler = async (event: HandlerEvent) => {
             ContentType: 'image/png'
         }));
 
-        const publicUrl = `${process.env.R2_PUBLIC_URL}/${fileName}`;
+        const baseUrl = process.env.R2_PUBLIC_URL!.replace(/\/$/, '');
+        const publicUrl = `${baseUrl}/${fileName}`;
+
+        // Simulate some processing time to ensure DB consistency
+        await new Promise(resolve => setTimeout(resolve, 1000));
 
         await Promise.all([
             supabaseAdmin.from('generated_images').update({ 
                 image_url: publicUrl,
+                // Keep the JSON prompt structure in DB for future reference
                 prompt: panel.visual_description 
             }).eq('id', jobId),
             supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id })
         ]);
 
+        console.log(`[WORKER] Job ${jobId} completed successfully.`);
+
     } catch (error: any) {
-        if (userId) await failJob(jobId, userId, error.message, totalCost);
+        console.error(`[WORKER] Error in job ${jobId}:`, error);
+        if (userId) {
+            await failJob(jobId, userId, error.message);
+        }
     }
 
     return { statusCode: 200 };

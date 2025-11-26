@@ -7,8 +7,6 @@ const PAYOS_CLIENT_ID = process.env.PAYOS_CLIENT_ID;
 const PAYOS_API_KEY = process.env.PAYOS_API_KEY;
 const PAYOS_CHECKSUM_KEY = process.env.PAYOS_CHECKSUM_KEY;
 
-// PayOS docs: The signature is created by sorting parameters alphabetically,
-// joining them with '&', and then creating an HMAC-SHA256 hash.
 const createSignature = (data: Record<string, any>, checksumKey: string): string => {
     const sortedKeys = Object.keys(data).sort();
     const dataString = sortedKeys.map(key => `${key}=${data[key]}`).join('&');
@@ -21,29 +19,21 @@ const handler: Handler = async (event: HandlerEvent) => {
     }
     
     if (!PAYOS_CLIENT_ID || !PAYOS_API_KEY || !PAYOS_CHECKSUM_KEY) {
-        console.error('PayOS environment variables are not set.');
         return { statusCode: 500, body: JSON.stringify({ error: 'Cổng thanh toán chưa được cấu hình.' }) };
     }
 
     const authHeader = event.headers['authorization'];
     const token = authHeader?.split(' ')[1];
-    if (!token) {
-        return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized.' }) };
-    }
+    if (!token) return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized.' }) };
 
-    // FIX: Use Supabase v2 `auth.getUser` by casting to any
     const { data: { user }, error: authError } = await (supabaseAdmin.auth as any).getUser(token);
-    if (authError || !user) {
-        return { statusCode: 401, body: JSON.stringify({ error: 'Invalid token.' }) };
-    }
+    if (authError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'Invalid token.' }) };
 
     const { packageId } = JSON.parse(event.body || '{}');
-    if (!packageId) {
-        return { statusCode: 400, body: JSON.stringify({ error: 'Package ID is required.' }) };
-    }
+    if (!packageId) return { statusCode: 400, body: JSON.stringify({ error: 'Package ID is required.' }) };
 
     try {
-        // 1. Fetch user profile and package details simultaneously
+        // 1. Fetch User & Package
         const [
             { data: userProfile, error: profileError },
             { data: pkg, error: pkgError }
@@ -52,17 +42,32 @@ const handler: Handler = async (event: HandlerEvent) => {
             supabaseAdmin.from('credit_packages').select('*').eq('id', packageId).eq('is_active', true).single()
         ]);
 
-        if (profileError || !userProfile) {
-            return { statusCode: 404, body: JSON.stringify({ error: 'Không tìm thấy hồ sơ người dùng.' }) };
-        }
-        if (pkgError || !pkg) {
-            return { statusCode: 404, body: JSON.stringify({ error: 'Gói nạp không tồn tại hoặc đã bị vô hiệu hóa.' }) };
+        if (profileError || !userProfile) return { statusCode: 404, body: JSON.stringify({ error: 'Không tìm thấy hồ sơ người dùng.' }) };
+        if (pkgError || !pkg) return { statusCode: 404, body: JSON.stringify({ error: 'Gói nạp không tồn tại.' }) };
+
+        // 2. Check Promotion
+        const now = new Date().toISOString();
+        const { data: activePromo } = await supabaseAdmin
+            .from('promotions')
+            .select('bonus_percentage')
+            .eq('is_active', true)
+            .lte('start_time', now)
+            .gte('end_time', now)
+            .limit(1)
+            .maybeSingle();
+
+        // 3. Calculate FINAL Diamonds Received (Base + Static Bonus + Promo Bonus)
+        let totalDiamonds = pkg.credits_amount + pkg.bonus_credits;
+        
+        if (activePromo) {
+            // Promo bonus is usually based on base credits
+            const promoBonus = Math.floor(pkg.credits_amount * (activePromo.bonus_percentage / 100));
+            totalDiamonds += promoBonus;
         }
 
-        // 2. Create a new transaction record
-        const orderCode = Date.now(); // Using timestamp is simpler and sufficient for uniqueness
-        const totalDiamonds = pkg.credits_amount + pkg.bonus_credits;
-
+        // 4. Create Transaction Record (Pending)
+        // IMPORTANT: Store the CALCULATED total here. When admin approves, this is the amount used.
+        const orderCode = Date.now();
         const { error: transactionError } = await supabaseAdmin
             .from('transactions')
             .insert({
@@ -70,21 +75,18 @@ const handler: Handler = async (event: HandlerEvent) => {
                 user_id: user.id,
                 package_id: pkg.id,
                 amount_vnd: pkg.price_vnd,
-                diamonds_received: totalDiamonds,
+                diamonds_received: totalDiamonds, // Contains promo bonus!
                 status: 'pending',
             });
 
-        if (transactionError) {
-            throw new Error(`Không thể tạo bản ghi giao dịch: ${transactionError.message}`);
-        }
+        if (transactionError) throw new Error(`DB Error: ${transactionError.message}`);
 
-        // 3. Prepare data for PayOS, separating signed data from the full payload
-        const description = `NAP AUAI ${pkg.credits_amount}KC`;
+        // 5. Create PayOS Link
+        const description = `NAP AUAI ${pkg.credits_amount}KC`; // Keep description simple
         const baseUrl = process.env.URL || 'https://auditionai.io.vn';
         const returnUrl = `${baseUrl}/buy-credits`;
         const cancelUrl = `${baseUrl}/buy-credits`;
 
-        // CORRECT APPROACH: This object contains ONLY the fields required for the signature.
         const dataToSign = {
             orderCode,
             amount: pkg.price_vnd,
@@ -93,10 +95,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             returnUrl,
         };
         
-        // Generate the signature from the specific data object.
         const signature = createSignature(dataToSign, PAYOS_CHECKSUM_KEY);
-
-        // This is the final payload sent to PayOS, including the non-signed data and the signature.
         const finalPayload = {
             ...dataToSign,
             buyerName: userProfile.display_name,
@@ -104,7 +103,6 @@ const handler: Handler = async (event: HandlerEvent) => {
             signature,
         };
 
-        // 4. Call PayOS API to create payment link
         const payosResponse = await fetch('https://api-merchant.payos.vn/v2/payment-requests', {
             method: 'POST',
             headers: {
@@ -118,11 +116,9 @@ const handler: Handler = async (event: HandlerEvent) => {
         const payosResult = await payosResponse.json();
         
         if (payosResult.code !== '00' || !payosResult.data) {
-            // Forward the specific error from PayOS to the client
-            throw new Error(payosResult.desc || 'Không thể tạo liên kết thanh toán từ PayOS.');
+            throw new Error(payosResult.desc || 'Lỗi tạo link PayOS.');
         }
 
-        // 5. Return the checkout URL
         return {
             statusCode: 200,
             body: JSON.stringify({ checkoutUrl: payosResult.data.checkoutUrl }),
@@ -130,7 +126,6 @@ const handler: Handler = async (event: HandlerEvent) => {
 
     } catch (error: any) {
         console.error('Create payment link error:', error);
-        // Return the specific error message to be displayed in the toast
         return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
     }
 };

@@ -14,7 +14,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         const token = authHeader.split(' ')[1];
         if (!token) return { statusCode: 401, body: JSON.stringify({ error: 'Bearer token is missing.' }) };
 
-        const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+        const { data: { user }, error: authError } = await (supabaseAdmin.auth as any).getUser(token);
         if (authError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized: Invalid token.' }) };
 
         const { 
@@ -29,6 +29,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             return { statusCode: 400, body: JSON.stringify({ error: 'Missing required parameters for AI signature.' }) };
         }
         
+        // Check Balance (Read Only)
         const { data: userData, error: userError } = await supabaseAdmin.from('users').select('diamonds').eq('id', user.id).single();
         if (userError || !userData) return { statusCode: 404, body: JSON.stringify({ error: 'User not found.' }) };
         if (userData.diamonds < cost) return { statusCode: 402, body: JSON.stringify({ error: `Không đủ kim cương. Cần ${cost}, bạn có ${userData.diamonds}.` }) };
@@ -37,7 +38,6 @@ const handler: Handler = async (event: HandlerEvent) => {
         if (apiKeyError || !apiKeyData) return { statusCode: 503, body: JSON.stringify({ error: 'Hết tài nguyên AI. Vui lòng thử lại sau.' }) };
         
         const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
-        // Use the model passed from frontend (validated cost above) or fallback
         const selectedModel = model === 'gemini-3-pro-image-preview' ? 'gemini-3-pro-image-preview' : 'gemini-2.5-flash-image';
 
         // --- SERVER-SIDE PROMPT CONSTRUCTION (IN ENGLISH) ---
@@ -80,7 +80,9 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         const finalImageBase64 = imagePartResponse.inlineData.data;
         
-        const newDiamondCount = userData.diamonds - cost;
+        // --- TRANSACTION (Pay on Success) ---
+        const { data: latestUser } = await supabaseAdmin.from('users').select('diamonds').eq('id', user.id).single();
+        const newDiamondCount = (latestUser?.diamonds || userData.diamonds) - cost;
         
         await Promise.all([
             supabaseAdmin.from('users').update({ diamonds: newDiamondCount }).eq('id', user.id),

@@ -17,6 +17,7 @@ import ShopPage from './pages/ShopPage'; // NEW
 // Import Common Components
 import RewardNotification from './components/common/RewardNotification';
 import GlobalChat from './components/chat/GlobalChat';
+import MarqueeBanner from './components/common/MarqueeBanner';
 
 const AppContent: React.FC = () => {
     const { user, loading, route, currentPath, toast, reward, clearReward } = useAuth();
@@ -54,7 +55,7 @@ const AppContent: React.FC = () => {
                 pageComponent = user ? <ShopPage /> : <HomePage />;
                 break;
             case 'buy-credits':
-                pageComponent = user ? <BuyCreditsPage /> : <HomePage />;
+                pageComponent = <BuyCreditsPage />; // Buy Credits is public/hybrid now
                 break;
             case 'gallery':
                 pageComponent = <GalleryPage />;
@@ -69,6 +70,9 @@ const AppContent: React.FC = () => {
 
     return (
         <>
+            {/* GLOBAL PROMOTION BANNER - VISIBLE TO ALL */}
+            <MarqueeBanner />
+
             {renderPage()}
             
             {/* Global Chat is always available if logged in */}

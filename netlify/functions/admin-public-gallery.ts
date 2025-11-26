@@ -40,13 +40,16 @@ const handler: Handler = async (event: HandlerEvent) => {
         // Step 2: Fetch Creators
         const userIds = [...new Set(images.map(img => img.user_id))];
         
-        // Flattened query to prevent build parser errors
-        const { data: creators, error: creatorsError } = await supabaseAdmin.from('users').select('*').in('id', userIds);
+        // Fix: Split query construction to avoid parser errors
+        let userQuery = supabaseAdmin.from('users').select('*');
+        if (userIds.length > 0) {
+            userQuery = userQuery.in('id', userIds);
+        }
+        const { data: creators, error: creatorsError } = await userQuery;
 
         if (creatorsError) throw creatorsError;
 
         // Step 3: Combine Data
-        // Explicitly type Map to return 'any' for values so properties can be accessed
         const creatorMap = new Map<string, any>((creators || []).map((c: any) => [c.id, c]));
 
         const processedData = images.map((image: any) => {

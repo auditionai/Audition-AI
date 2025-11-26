@@ -16,21 +16,19 @@ const handler: Handler = async (event: HandlerEvent) => {
     if (authError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'Invalid token.' }) };
 
     try {
-        const { premise, genre, artStyle, pageCount, characters, language, coverPage } = JSON.parse(event.body || '{}');
+        const { premise, genre, artStyle, pageCount, characters, language, coverPage, dialogueDensity } = JSON.parse(event.body || '{}');
         
         if (!premise) return { statusCode: 400, body: JSON.stringify({ error: 'Missing premise.' }) };
 
-        // 1. Check & Deduct Cost (2 Diamonds for Scripting)
         const COST = 2;
         const { data: userData } = await supabaseAdmin.from('users').select('diamonds').eq('id', user.id).single();
         if (!userData || userData.diamonds < COST) {
             return { statusCode: 402, body: JSON.stringify({ error: 'Không đủ kim cương. Cần 2 Kim Cương để tạo kịch bản.' }) };
         }
 
-        // 2. Get API Key
         const { data: apiKeyData } = await supabaseAdmin
             .from('api_keys')
-            .select('key_value, id')
+            .select('key_value')
             .eq('status', 'active')
             .order('usage_count', { ascending: true })
             .limit(1)
@@ -40,42 +38,62 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
 
-        // 3. Construct Prompt - PHASE 1: OUTLINE ONLY
-        // We ask for a skeletal structure. This is very fast.
         const characterNames = characters.map((c: any) => c.name).join(', ');
         const targetLanguage = language || 'Tiếng Việt';
 
-        let coverInstruction = "";
-        if (coverPage === 'start' || coverPage === 'both') {
-            coverInstruction += `\n- Page 1 MUST be a 'Title Cover Page' (Trang bìa). Summary: 'Trang bìa với tên truyện: [Insert Title Here] và hình ảnh minh họa chính'.`;
-        }
+        // --- LOGIC TRANG BÌA ---
+        // Người dùng chọn X trang truyện.
+        // Hệ thống tạo X + 1 trang. Trang 1 là Bìa. Trang 2 -> X+1 là nội dung.
+        const totalPages = typeof pageCount === 'number' ? pageCount + 1 : 2;
+        const contentPages = totalPages - 1;
 
+        let densityInstruction = "Dialogue Density: Normal balanced conversation.";
+        if (dialogueDensity === 'low') densityInstruction = "Dialogue Density: LOW. Focus on visual storytelling, minimal text.";
+        if (dialogueDensity === 'high') densityInstruction = "Dialogue Density: HIGH. Detailed conversations and narration.";
+
+        // NEW PROMPT STRATEGY: Chain of Consequence
         const prompt = `
-            You are a professional comic book writer.
-            **Task:** Create a structural outline for a comic script based on the user's idea.
+            You are a professional Comic Script Director.
             
-            **Input Story:** "${premise}"
-            **Genre:** ${genre}
-            **Target Length:** ${pageCount} PAGES (Each page contains 3-6 panels).
-            **Characters:** ${characterNames}
-            **Language for Summary:** ${targetLanguage}
+            **TASK:** Create a strictly causal, logical breakdown for a comic book based on the premise.
+            **INPUT PREMISE:** "${premise}"
+            **GENRE:** ${genre}
+            **CHARACTERS:** ${characterNames}
+            **LANGUAGE:** ${targetLanguage}.
             
-            **Cover Page Settings:** ${coverPage}
-            ${coverInstruction}
+            **STRUCTURE REQUIREMENTS:**
+            Output an array of ${totalPages} objects.
             
-            **Requirement:**
-            Break the story down into a sequence of PAGES (Trang). 
-            For each PAGE, provide a brief 'plot_summary' of what happens on that entire page (e.g., "Page 1: Introduction of the hero...").
-            Do NOT write detailed visual descriptions or dialogue yet. Just the story beats per page.
+            **CRITICAL LOGIC: CHAIN OF CONSEQUENCE**
+            You must ensure a tight narrative flow. Page N must be the direct result of Page N-1.
+            - **Beginning (Page 2-3):** Setup and Inciting Incident.
+            - **Middle (Page 4...):** Rising Action. EACH page must physically and logically continue the previous action.
+            - **End (Last Page):** Climax/Resolution.
+            
+            **EXAMPLE OF CAUSAL CHAIN:**
+            - Page 2: Hero punches Villain. Villain stumbles back.
+            - Page 3: Villain recovers from the stumble and counter-attacks. Hero dodges.
+            *(Do NOT jump scenes randomly. Maintain time and space continuity.)*
+            
+            **STEP 2: GENERATE THE OUTPUT LIST**
+            
+            **Item 1 (Cover Page):**
+            - panel_number: 1
+            - plot_summary: "Trang bìa nghệ thuật: Tên truyện [Title], hình ảnh minh họa [Main Character Action], thể hiện không khí [Mood]."
+            
+            **Items 2 to ${totalPages} (Story Pages):**
+            - panel_number: [Page Number]
+            - plot_summary: [A concise 2-sentence summary. MUST explicitly state how it connects to the previous page action. MUST BE IN ${targetLanguage}.]
+            
+            ${densityInstruction}
             
             **Output Format:** JSON Array of objects.
         `;
 
+        // Use gemini-2.5-flash for speed but instructed for logic
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash', // Flash is perfect for outlining
-            contents: {
-                parts: [{ text: prompt }]
-            },
+            model: 'gemini-2.5-flash', 
+            contents: { parts: [{ text: prompt }] },
             config: {
                 responseMimeType: "application/json",
                 responseSchema: {
@@ -83,31 +101,50 @@ const handler: Handler = async (event: HandlerEvent) => {
                     items: {
                         type: Type.OBJECT,
                         properties: {
-                            panel_number: { type: Type.INTEGER, description: "Page Number" },
-                            plot_summary: { type: Type.STRING, description: "Brief summary of the action in this PAGE" },
+                            panel_number: { type: Type.INTEGER },
+                            plot_summary: { type: Type.STRING },
                         }
                     }
                 }
             }
         });
 
-        let scriptJson;
+        let scriptJson: any[] = [];
         try {
             const text = response.text || '[]';
             const cleanText = text.replace(/```json|```/g, '').trim();
-            scriptJson = JSON.parse(cleanText);
+            const parsed = JSON.parse(cleanText);
+
+            if (Array.isArray(parsed)) {
+                scriptJson = parsed;
+            } else if (typeof parsed === 'object' && parsed !== null) {
+                // Handle wrapped objects
+                if (Array.isArray(parsed.outline)) scriptJson = parsed.outline;
+                else if (Array.isArray(parsed.pages)) scriptJson = parsed.pages;
+                else {
+                    scriptJson = [parsed];
+                }
+            }
         } catch (parseError) {
             console.error("JSON Parse Error:", parseError);
-            return { statusCode: 500, body: JSON.stringify({ error: 'AI returned invalid format. Please try again.' }) };
+            scriptJson = []; 
         }
 
-        // 5. Deduct Gems
+        // Validation and Fallback
+        if (!Array.isArray(scriptJson) || scriptJson.length === 0) {
+             scriptJson = [];
+             scriptJson.push({ panel_number: 1, plot_summary: `Trang Bìa: ${premise.substring(0,50)}...` });
+             for(let i=2; i<=totalPages; i++) {
+                scriptJson.push({ panel_number: i, plot_summary: `Trang ${i}: Diễn biến tiếp theo của câu chuyện.` });
+            }
+        }
+
         await supabaseAdmin.rpc('increment_user_diamonds', { user_id_param: user.id, diamond_amount: -COST });
         await supabaseAdmin.from('diamond_transactions_log').insert({
             user_id: user.id,
             amount: -COST,
             transaction_type: 'COMIC_SCRIPT',
-            description: `Tạo kịch bản truyện tranh: ${premise.substring(0, 20)}...`
+            description: `Tạo kịch bản truyện tranh (${pageCount} trang + 1 bìa)`
         });
 
         return {

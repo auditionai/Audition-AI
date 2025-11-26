@@ -11,7 +11,18 @@ export const COMIC_PREMISES: Record<string, string[]> = {
         "Bạn thức dậy và phát hiện ra mọi đồ vật trong nhà đều có linh hồn và đang phàn nàn về cách bạn sử dụng chúng.",
         "Trong một cuộc thi nhảy Audition, nhân vật chính phát hiện ra chiếc bàn phím của mình có khả năng điều khiển thực tại.",
         "Một NPC trong thành phố vũ hội Audition bỗng nhiên có ý thức và muốn tìm cách thoát ra khỏi thế giới ảo.",
-        "Cặp đôi nhảy đôi ăn ý nhất server thực ra là hai kẻ thù không đội trời chung ngoài đời thực."
+        "Cặp đôi nhảy đôi ăn ý nhất server thực ra là hai kẻ thù không đội trời chung ngoài đời thực.",
+        // NEW AUDITION THEMES
+        "Thành phố Audition bỗng nhiên xuất hiện ngoài đời thực, và bạn phải nhảy để di chuyển thay vì đi bộ.",
+        "Một ngày nọ, bạn nhận ra thanh 'Perfect' xuất hiện trên đầu mọi người mỗi khi họ làm đúng việc gì đó.",
+        "Chuyện gì xảy ra khi DJ của sàn nhảy Audition đình công và bật nhạc Bolero trong chế độ nhảy Crazy?",
+        "Bạn vô tình mua được bộ đồ 'Tàng Hình' trong Shop thời trang và đi trêu chọc các cặp đôi đang hẹn hò trong Game.",
+        "Hành trình của một chiếc Bàn Phím cơ đi tìm người chủ xứng đáng sau khi bị 'đập' hỏng nút Space quá nhiều lần.",
+        "Thế giới nơi đơn vị tiền tệ không phải là tiền mà là V-coin và DEN. Người giàu nhất là người nhảy giỏi nhất.",
+        "Một người chơi Audition phát hiện ra các NPC bán đồ thực chất là những người chơi bị kẹt trong game từ 10 năm trước.",
+        "Cuộc sống của những 'dân bay' Audition khi về già: Thay vì tập dưỡng sinh, họ rủ nhau ra công viên nhảy 8k.",
+        "Bạn nhặt được chiếc 'Nhẫn Đôi' kỳ lạ, khi đeo vào thì tự động bị hút về phía người đeo chiếc nhẫn còn lại, dù họ ở đâu.",
+        "Cả thế giới bị biến thành đồ họa 3D phong cách Audition cũ kỹ, và bạn là người duy nhất còn giữ được hình dạng HD."
     ],
     'Hành động / Phiêu lưu': [
         "Năm 2077, Sài Gòn trở thành thành phố Cyberpunk. Một shipper giao hàng vô tình nắm giữ con chip chứa bí mật đen tối của tập đoàn thống trị.",
@@ -23,7 +34,18 @@ export const COMIC_PREMISES: Record<string, string[]> = {
         "Một cựu đặc công về hưu mở quán phở, nhưng quá khứ đẫm máu vẫn không buông tha anh khi kẻ thù cũ tìm đến.",
         "Cuộc chiến giành quyền kiểm soát khu tự do 101 giữa các Fam Audition bằng những vũ điệu chết người.",
         "Săn lùng hacker bí ẩn đang thao túng kết quả của giải đấu Audition thế giới.",
-        "Hành trình của một vũ công đi tìm đôi cánh thiên thần huyền thoại bị thất lạc trong rừng sâu."
+        "Hành trình của một vũ công đi tìm đôi cánh thiên thần huyền thoại bị thất lạc trong rừng sâu.",
+        // NEW AUDITION THEMES
+        "Nhóm điệp viên sử dụng chế độ nhảy 'Beat Up' để đánh bại hệ thống an ninh của tập đoàn đối thủ.",
+        "Một cuộc truy đuổi nghẹt thở trên ván trượt Audition để giành lại chiếc thẻ V-coin trị giá 1 tỷ.",
+        "Thảm họa sập Server khiến các quái vật trong chế độ 'Đấu Boss' thoát ra ngoài đời thực tàn phá thành phố.",
+        "Main chính là một 'Vệ Thần' bảo vệ Thành phố Vũ hội khỏi những kẻ sử dụng phần mềm Hack/Cheat đen tối.",
+        "Cuộc phiêu lưu vào Deep Web của Audition để tìm lại tài khoản VIP bị đánh cắp của người yêu.",
+        "Đấu trường sinh tử: 100 vũ công bị nhốt trên đảo hoang, người nhảy sai nhịp 'Perfect' sẽ bị loại bỏ thực sự.",
+        "Hành trình leo lên đỉnh tháp Audition, mỗi tầng là một thể loại nhạc khác nhau với độ khó tăng dần.",
+        "Một nhóm Fam đi phượt vô tình lạc vào vùng đất cấm, nơi các vũ điệu có thể triệu hồi thiên tai.",
+        "Cuộc chiến chống lại 'Đội quân Del', những kẻ muốn xóa sổ phím Space khỏi thế giới.",
+        "Điệp vụ giải cứu GM (Game Master) bị bắt cóc bởi một trùm Fam xã hội đen."
     ],
     'Trận chiến / Shonen': [
         "Trong thế giới nơi sức mạnh được quyết định bởi lượng 'Follower' trên mạng xã hội. Main chính là kẻ bị cả thế giới hủy follow.",
@@ -35,7 +57,18 @@ export const COMIC_PREMISES: Record<string, string[]> = {
         "Cuộc chiến giữa các gia tộc Ninja hiện đại ngay giữa lòng thành phố Tokyo sầm uất.",
         "Đại chiến Boss đôi 8k: Nhóm bạn thân phải đánh bại Boss NPC siêu mạnh để bảo vệ khu vườn tình yêu.",
         "Thế giới nơi Perfect càng nhiều thì sức mạnh càng lớn. Main chính là người duy nhất có thể Perfect x100 liên tục.",
-        "Cuộc đối đầu giữa hai Fam mạnh nhất server để tranh giành quyền sở hữu Thành phố Vũ hội."
+        "Cuộc đối đầu giữa hai Fam mạnh nhất server để tranh giành quyền sở hữu Thành phố Vũ hội.",
+        // NEW AUDITION THEMES
+        "Main chính sở hữu 'Đôi Tay Thần Sầu', có thể gõ phím với tốc độ ánh sáng trong chế độ Crazy 8k.",
+        "Học viện Vũ Đạo: Nơi các học sinh giải quyết mâu thuẫn bằng các trận đấu nhảy 'One-Two Party'.",
+        "Tuyệt kỹ bí truyền 'Finish Move': Ai thi triển được sẽ tạo ra vụ nổ năng lượng thổi bay đối thủ.",
+        "Một cậu bé bị coi thường vì chỉ biết nhảy nhạc 80 bpm, quyết tâm luyện tập để chinh phục bài nhạc 200 bpm huyền thoại.",
+        "Đại hội võ lâm Audition: Các môn phái (Fam) tranh giành bí kíp 'Hack Per' thất truyền.",
+        "Sức mạnh tình bạn: Nhóm bạn yếu kém hợp sức nhảy 'Nhảy Nhóm' (Team Battle) để đánh bại đội tuyển quốc gia kiêu ngạo.",
+        "Main chính phát hiện mình là truyền nhân của 'Vũ Vương' đời đầu, người đã sáng tạo ra phím Del ngược.",
+        "Đối đầu với 'Hắc Vũ Công', kẻ có khả năng làm lag màn hình đối thủ chỉ bằng ánh mắt.",
+        "Giải đấu sinh tử 'Khóa Nhịp': Nhảy sai một nhịp sẽ bị trừ đi tuổi thọ.",
+        "Thức tỉnh sức mạnh: Khi Main đạt trạng thái 'Max Combo', hào quang tỏa ra làm lóa mắt cả khán đài."
     ],
     'Lãng mạn / Shoujo': [
         "Tổng tài bá đạo bị mất trí nhớ, trở thành nhân viên phục vụ bàn và yêu cô chủ quán đanh đá.",
@@ -48,7 +81,18 @@ export const COMIC_PREMISES: Record<string, string[]> = {
         "Cô thư ký hoàn hảo quyết định xin nghỉ việc, khiến chàng giám đốc lạnh lùng hoảng loạn tìm mọi cách níu kéo.",
         "Ghép đôi nhầm với Idol nổi tiếng trong game Audition và câu chuyện tình yêu từ ảo ra thật.",
         "Chàng trai nghèo nạp thẻ lần đầu để mua nhẫn cầu hôn bạn nhảy trong game, nhưng cô ấy lại là tiểu thư nhà giàu.",
-        "Mối tình tay ba giữa hai chàng trai top server và cô gái mới tập chơi (Newbie) ngây thơ."
+        "Mối tình tay ba giữa hai chàng trai top server và cô gái mới tập chơi (Newbie) ngây thơ.",
+        // NEW AUDITION THEMES
+        "Cô gái giả trai vào Fam nam để tiếp cận Crush, nhưng lại được chính Crush... tỏ tình.",
+        "Hợp đồng hôn nhân trong game: Chỉ cưới để làm nhiệm vụ lên nhẫn, ai ngờ yêu thật lúc nào không hay.",
+        "Chàng trai bí ẩn luôn đứng AFK ở sảnh chờ thực ra là hồn ma chờ đợi người yêu cũ online.",
+        "Cặp đôi 'Khu Vườn Tình Yêu': Cùng nhau chăm sóc khu vườn ảo và hàn gắn những vết nứt trong mối quan hệ thực.",
+        "Nữ chính bị ép gả cho một đại gia trong game, nhưng cô lại bỏ trốn cùng chàng 'nhảy đôi' nghèo khó.",
+        "Yêu nhầm NPC: Cô gái đem lòng yêu chàng NPC bán vé số trong game vì anh ta quá đẹp trai.",
+        "Mối tình 'Đũa Lệch': Chàng trai Level 99 yêu cô gái Level 1 mới tạo nick hôm qua.",
+        "Bức thư tình giấu trong lời nhắn của 'Giấy Chứng Nhận Kết Hôn' mà 10 năm sau nữ chính mới đọc được.",
+        "Anh chàng IT lạnh lùng bí mật lập trình một sàn nhảy riêng chỉ dành cho cô gái anh thầm thương.",
+        "Cuộc hẹn hò giấu mặt của Fam: Cặp đôi ghét nhau nhất trong Chat lại vô tình được ghép đôi với nhau."
     ],
     'Hài hước / Vui nhộn': [
         "Nhật ký sinh tồn của một du học sinh tại Việt Nam: Sốc văn hóa với giao thông, đồ ăn và cách qua đường.",
@@ -61,7 +105,18 @@ export const COMIC_PREMISES: Record<string, string[]> = {
         "Hai tên trộm ngốc nghếch đột nhập vào nhà của một nhà ảo thuật gia và bị quay như chong chóng.",
         "Khi các nhân vật Audition đình công đòi tăng lương và không chịu nhảy.",
         "Chuyện về một anh chàng chuyên đi 'spam' nút Space quá mạnh khiến bàn phím nào cũng hỏng trong 1 ngày.",
-        "Hội những người già neo đơn rủ nhau vào Audition 'quẩy' nhạc 180 bpm để hồi xuân."
+        "Hội những người già neo đơn rủ nhau vào Audition 'quẩy' nhạc 180 bpm để hồi xuân.",
+        // NEW AUDITION THEMES
+        "Sự cố nhớ đời: Đang nhảy 'Finish Move' hoành tráng thì mẹ rút dây mạng bắt đi nấu cơm.",
+        "Chuyện về một anh chàng nạp nhầm thẻ điện thoại vào game Audition và cố gắng đòi lại từ GM.",
+        "Khi nhân vật nam mặc váy nhảy 'Vũ điệu hoang dã' để troll các thanh niên nghiêm túc trong phòng.",
+        "Cuộc thi 'Ai gõ phím to nhất' tại quán Net, khiến chủ quán phải ra tay đuổi cổ.",
+        "Nhật ký của một cái phím Space: Nỗi đau khổ khi bị đập liên tục mỗi ngày.",
+        "Thảm họa thời trang: Mặc đồ 'Mặc định' vào phòng VIP và bị các dân chơi kì thị, nhưng lại nhảy thắng tất cả.",
+        "Chàng trai dùng Audition để tập thể dục giảm cân bằng cách nhảy theo nhân vật ngoài đời thực.",
+        "Khi phụ huynh lập nick Audition để theo dõi con cái và trở thành Top Server.",
+        "Sự cố 'Lag' huyền thoại: Nhân vật bị kẹt trong tư thế kỳ quặc giữa sàn nhảy suốt 3 tiếng đồng hồ.",
+        "Hội những người chuyên vào phòng nhảy chỉ để chat chit và 'hóng drama' chứ không bao giờ nhảy."
     ],
     'Kinh dị / Ly kỳ': [
         "Một nhóm Chat bí ẩn tự thêm bạn vào. Mỗi khi có thành viên rời nhóm, họ sẽ chết ngoài đời thực.",
@@ -73,7 +128,18 @@ export const COMIC_PREMISES: Record<string, string[]> = {
         "Chiếc gương trong phòng tắm phản chiếu hành động của bạn chậm hơn thực tế 2 giây.",
         "Ứng dụng giao đồ ăn giao đến những món thịt kỳ lạ mà bạn không hề đặt, kèm theo lời nhắn: 'Phần của bạn đây'.",
         "Bản nhạc bị nguyền rủa trong Audition: Bất cứ ai nhảy bài này lúc 12 giờ đêm đều biến mất.",
-        "Phòng nhảy số 404 không ai tạo ra nhưng luôn đầy người, và những người vào đó không bao giờ online trở lại."
+        "Phòng nhảy số 404 không ai tạo ra nhưng luôn đầy người, và những người vào đó không bao giờ online trở lại.",
+        // NEW AUDITION THEMES
+        "Chiếc 'Cánh Ác Quỷ' trong Shop không thể tháo ra được, và nó bắt đầu hút sinh lực của nhân vật.",
+        "Một tài khoản bí ẩn luôn nhảy Perfect 100% mọi bài hát, nhưng IP lại đến từ... nghĩa địa thành phố.",
+        "Lời nguyền 'Đứt kết nối': Mỗi khi bạn nhảy cùng người mình yêu, server sẽ tự động ngắt kết nối vĩnh viễn.",
+        "NPC DJ trong sàn nhảy cứ nhìn chằm chằm vào bạn, dù bạn di chuyển góc camera đi đâu.",
+        "Tin nhắn từ một người bạn đã mất 5 năm trước bỗng xuất hiện trong hộp thư Audition: 'Vào nhảy cùng tớ đi'.",
+        "Bí ẩn về Fam 'Bóng Ma': Thành viên Fam này chưa bao giờ online ban ngày, và avatar của họ không có bóng.",
+        "Trò chơi 'Trốn Tìm' trong chế độ Quan Sát: Nếu bạn nhìn thấy 'nó' qua camera, nó cũng sẽ nhìn thấy bạn.",
+        "Tiếng gõ phím Space vang lên trong phòng ngủ của bạn lúc nửa đêm, dù máy tính đã tắt.",
+        "Một bản Update game kỳ lạ biến khuôn mặt của tất cả nhân vật thành khuôn mặt của chính bạn đang sợ hãi.",
+        "Những người sử dụng phần mềm Hack Per đều nhận được một vé mời đến 'Sàn nhảy địa ngục'."
     ],
     'Lát cắt cuộc sống': [
         "Nhật ký của một Shipper: Những câu chuyện ấm lòng và kỳ quặc gặp phải trên đường giao hàng.",
@@ -84,7 +150,18 @@ export const COMIC_PREMISES: Record<string, string[]> = {
         "Chuyện nghề nghiệp: Góc khuất hài hước và áp lực của nghề Lập trình viên (Dev).",
         "Nhật ký nuôi mèo: Khi 'Hoàng thượng' mới là chủ thực sự của ngôi nhà.",
         "Câu chuyện về những người bạn quen nhau qua Audition được 10 năm và buổi offline đầy cảm xúc.",
-        "Một ngày bình thường của GM (Game Master) Audition: Giải quyết khiếu nại và những drama không hồi kết."
+        "Một ngày bình thường của GM (Game Master) Audition: Giải quyết khiếu nại và những drama không hồi kết.",
+        // NEW AUDITION THEMES
+        "Tiệm Nét cỏ ngày xưa: Nơi những đứa trẻ trốn ngủ trưa để vào nhảy Audition.",
+        "Cô chủ quán Net khó tính và nhóm khách quen chỉ toàn nhảy Audition hỏng phím Space.",
+        "Hành trình tiết kiệm tiền ăn sáng của một học sinh để mua bộ đồ VIP trong game.",
+        "Chuyện tình của cặp đôi yêu xa, chỉ gặp nhau qua những điệu nhảy trong game mỗi tối.",
+        "Nỗi lòng của một thanh niên chuyên đi 'cày thuê' nhẫn đôi cho các cặp đại gia.",
+        "Buổi họp lớp cấp 3, nơi mọi người nhận ra ai cũng từng có một thời 'trẻ trâu' đặt tên nick Audition kí tự đặc biệt.",
+        "Cuộc sống của một Streamer Audition: Đằng sau ánh hào quang là những giờ tập luyện đau cả ngón tay.",
+        "Người mẹ đơn thân tìm thấy niềm vui và những người bạn mới qua cộng đồng Audition.",
+        "Quá trình phục hồi chức năng của một game thủ bị chấn thương tay, nỗ lực quay lại sàn nhảy.",
+        "Tình bạn xuyên biên giới của những người chơi từ các quốc gia khác nhau trong server Audition Quốc tế."
     ],
     'Khoa học viễn tưởng / Mecha': [
         "Trí tuệ nhân tạo (AI) nổi dậy, nhưng thay vì tiêu diệt loài người, chúng quyết định... nuôi con người làm thú cưng.",
@@ -94,7 +171,18 @@ export const COMIC_PREMISES: Record<string, string[]> = {
         "Các chiến binh điều khiển Robot khổng lồ (Mecha) để chống lại cuộc xâm lăng của quái vật Kaiju từ chiều không gian khác.",
         "Công nghệ cấy ghép ký ức trở nên phổ biến. Một người đàn ông phát hiện ra ký ức về vợ mình là giả.",
         "Thế giới nơi con người có thể upload ý thức lên đám mây (Cloud) để sống bất tử.",
-        "Audition thực tế ảo (VR): Khi người chơi bị kẹt trong game và phải nhảy để duy trì sự sống."
+        "Audition thực tế ảo (VR): Khi người chơi bị kẹt trong game và phải nhảy để duy trì sự sống.",
+        // NEW AUDITION THEMES
+        "Năm 3000, Audition trở thành phương thức giao tiếp chính của loài người. Ai nhảy đẹp hơn sẽ có quyền lực hơn.",
+        "Các Robot Mecha khổng lồ chiến đấu bằng cách thực hiện các điệu nhảy Audition để tích tụ năng lượng.",
+        "Thành phố Vũ hội là một trạm không gian khổng lồ trôi dạt ngoài vũ trụ, nơi lưu giữ văn hóa âm nhạc của Trái Đất.",
+        "Công nghệ cấy chip vào não giúp con người thực hiện các động tác nhảy Audition ngoài đời thực với tốc độ siêu phàm.",
+        "Một loại virus máy tính biến các nhân vật trong game thành AI có tri giác và muốn xâm chiếm thế giới thực.",
+        "Cuộc đua xe vũ trụ Audition: Các phi thuyền lướt trên dải ngân hà theo nhịp điệu của các bài hát.",
+        "Thế giới Cyberpunk nơi người dân phải mua 'Skin' (trang phục ảo) để che đi cơ thể máy móc của mình.",
+        "Hệ thống 'Perfect' được áp dụng vào quân đội: Binh lính phải bấm nút đúng nhịp để bắn súng chính xác.",
+        "Một Hacker tìm ra cách truy cập vào mã nguồn của vũ trụ thông qua một bài hát bí mật trong Audition.",
+        "Loài người di cư sang hành tinh khác và dùng Audition để giao tiếp với người ngoài hành tinh (vì âm nhạc là ngôn ngữ chung)."
     ],
     'Giả tưởng / Isekai': [
         "Chuyển sinh thành Slime (hoặc cục đá, cái cây) nhưng lại sở hữu kỹ năng bá đạo nhất thế giới.",
@@ -104,7 +192,18 @@ export const COMIC_PREMISES: Record<string, string[]> = {
         "Một con rồng hùng mạnh bị biến thành người và phải đi làm thêm ở cửa hàng tiện lợi để kiếm sống.",
         "Cuộc hành trình của một Bác sĩ thú y chuyên chữa bệnh cho các loài sinh vật huyền bí (Rồng, Kỳ lân, Phượng hoàng).",
         "Thế giới bị đảo ngược: Quỷ vương là người tốt cai trị vương quốc hòa bình, còn Anh hùng là kẻ xâm lược tham lam.",
-        "Xuyên không vào thế giới Audition, nơi mọi mâu thuẫn đều được giải quyết bằng nhảy Beat Up."
+        "Xuyên không vào thế giới Audition, nơi mọi mâu thuẫn đều được giải quyết bằng nhảy Beat Up.",
+        // NEW AUDITION THEMES
+        "Chuyển sinh thành NPC DJ trong Audition, nhiệm vụ của bạn là chọn nhạc sao cho người chơi không bị 'Dis' mạng.",
+        "Lạc vào thế giới Kiếm Hiệp nhưng lại sở hữu hệ thống 'Nhảy Âu': Dùng vũ đạo để né chiêu và phản công.",
+        "Trở thành chủ Shop thời trang trong thế giới Fantasy, bán cánh thiên thần và đồ Hip-hop cho các Hiệp sĩ.",
+        "Main chính là một Ma Vương nhưng lại nghiện nhảy Audition, ngày ngày trốn việc triều chính để 'quẩy'.",
+        "Xuyên không làm 'Thú Cưng' (Pet) của một Top Player xinh đẹp, giúp cô ấy chiến thắng các cuộc thi nhảy.",
+        "Thế giới nơi phép thuật được thi triển bằng cách gõ các phím mũi tên (Lên, Xuống, Trái, Phải) trên không khí.",
+        "Cuộc phiêu lưu của một nhóm bạn bị hút vào màn hình máy tính và phải vượt qua 7 tầng tháp Audition để trở về.",
+        "Nữ hoàng của Vương quốc Âm nhạc triệu hồi Main chính - một game thủ Audition - để cứu thế giới khỏi sự im lặng.",
+        "Hệ thống 'Nhiệm vụ Truyền thuyết': Phải nhảy Perfect x20 liên tục để rút được thanh kiếm Excalibur.",
+        "Biến thành nhân vật nam chính trong game, nhưng lại bị mắc kẹt trong bộ đồ 'Gấu Trúc' vĩnh viễn."
     ],
     'Bí ẩn / Thám tử': [
         "Một thám tử có khả năng nhìn thấy 5 phút trước khi nạn nhân qua đời.",
@@ -114,7 +213,18 @@ export const COMIC_PREMISES: Record<string, string[]> = {
         "Cô gái tỉnh dậy trong bệnh viện và nhận ra mình đã chết, cô phải tìm ra ai đã giết mình trong vòng 49 ngày.",
         "Bí ẩn về chuyến tàu điện ngầm số 0 chỉ xuất hiện vào những đêm mưa bão.",
         "Thám tử thú cưng: Chuyên điều tra các vụ án trong thế giới động vật (Mèo mất tích, Chó bị vu oan).",
-        "Vụ án mất tích bí ẩn của top 1 server Audition ngay trước đêm chung kết."
+        "Vụ án mất tích bí ẩn của top 1 server Audition ngay trước đêm chung kết.",
+        // NEW AUDITION THEMES
+        "Ai là kẻ đã đánh cắp chiếc nhẫn cưới cấp 99 của cặp đôi huyền thoại? Một cuộc điều tra trong thế giới ảo.",
+        "Bí ẩn về 'Bóng ma Sàn nhảy': Một nhân vật luôn xuất hiện trong các bức ảnh chụp màn hình nhưng không có tên trong danh sách phòng.",
+        "Vụ án 'V-coin Giả': Truy tìm đường dây tội phạm đang thao túng nền kinh tế của Thành phố Vũ hội.",
+        "Một mật mã bí ẩn được giấu trong lời bài hát mới cập nhật, dẫn đến kho báu thực sự ngoài đời.",
+        "Thám tử tư chuyên điều tra các vụ ngoại tình 'ảo' trong game Audition theo đơn đặt hàng.",
+        "Sự mất tích của NPC quản lý khu vườn tình yêu và những bông hoa hồng đen bí ẩn để lại hiện trường.",
+        "Kẻ nặc danh gửi tin nhắn đe dọa đến tất cả các chủ Fam lớn, yêu cầu giải tán Fam nếu không sẽ tiết lộ bí mật động trời.",
+        "Truy tìm nguồn gốc của bản Hack 'Auto Perfect' đang phá hủy sự cân bằng của game.",
+        "Vụ án 'Chiếc Áo Tàng Hình': Ai đó đã lợi dụng lỗi game để thực hiện những vụ trộm cắp trong shop.",
+        "Bí mật đằng sau danh tính thực sự của GM (Game Master) - người chưa bao giờ lộ mặt."
     ],
     'Bẩn thỉu và thô tục': [
         "Cuộc thi 'Vua Xì Hơi' toàn cầu: Nơi các thí sinh tranh tài bằng... khí gas tự nhiên.",
@@ -123,6 +233,17 @@ export const COMIC_PREMISES: Record<string, string[]> = {
         "Siêu anh hùng có sức mạnh... nôn mửa vào kẻ thù.",
         "Cuộc nổi dậy của các nhà vệ sinh công cộng chống lại loài người.",
         "Chuyện tình 'bốc mùi' giữa cô nàng hôi nách và chàng trai mất khứu giác.",
-        "Một zombie ăn chay, chỉ thích ăn... mụn nhọt của người sống."
+        "Một zombie ăn chay, chỉ thích ăn... mụn nhọt của người sống.",
+        // NEW AUDITION THEMES
+        "Cuộc thi nhảy Audition nơi người thua cuộc phải... liếm bàn phím của người thắng.",
+        "Chuyện về một anh chàng ở bẩn đến mức chuột làm tổ trong case máy tính, nhưng vẫn nhảy Pro nhờ chuột 'phụ' bấm nút.",
+        "Đại chiến tại quán Net: Khi một đứa trẻ trâu 'xả nỗi buồn' ngay tại ghế vì đang dở ván nhảy Boss.",
+        "Tuyệt chiêu cuối: Nhảy đến mức mồ hôi tuôn như mưa, bắn vào đối thủ khiến họ trượt tay khỏi bàn phím.",
+        "Một nhân vật trong game bị lỗi đồ họa khiến mông to bất thường và chuyên đi 'cọ xát' vào người khác.",
+        "Thảm họa Offline Fam: Khi Hot girl trên mạng lộ diện là một bà cô ngoáy mũi và ở dơ.",
+        "Vũ điệu 'Gãi Ghẻ': Phong cách nhảy mới do một người bị nấm da sáng tạo ra.",
+        "Chiếc tai nghe bốc mùi của quán Net đã qua tay 1000 người chưa từng được vệ sinh, trở thành vũ khí sinh học.",
+        "Anh chàng chuyên đi spam biểu cảm 'Oẹ' vào mặt các cặp đôi đang âu yếm trong game.",
+        "Sự tích cái quần chip '7 ngày chưa giặt' đem lại may mắn nhảy Perfect cho game thủ."
     ]
 };

@@ -16,7 +16,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     if (authError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'Invalid token.' }) };
 
     try {
-        const { plot_summary, characters, style, genre, previous_panels } = JSON.parse(event.body || '{}');
+        const { plot_summary, characters, style, genre, language, story_context } = JSON.parse(event.body || '{}');
         
         if (!plot_summary) return { statusCode: 400, body: JSON.stringify({ error: 'Missing plot summary.' }) };
 
@@ -32,106 +32,105 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
 
-        // Determine Layout Type for Context
-        const lowerStyle = style.toLowerCase();
-        const isWebtoon = lowerStyle.includes('webtoon') || lowerStyle.includes('manhwa');
-        const layoutContext = isWebtoon 
-            ? "This is a Webtoon/Manhwa. Describe a SINGLE, large vertical image (Long Strip format). Focus on the main action/emotion of this section."
-            : "This is a Traditional Comic Page. Describe a FULL PAGE LAYOUT consisting of 3-6 distinct panels arranged in a dynamic grid (e.g., wide establishing shot at top, smaller action panels below).";
-
-        // 1. Prepare Character Context (Consistency)
         const characterContext = characters.map((c: any) => 
-            `### Character Name: ${c.name}
-             Visual Description (MUST FOLLOW): ${c.description || "No specific description provided."}`
-        ).join('\n\n');
+            `- ${c.name}: ${c.description ? c.description.substring(0, 100) + '...' : "N/A"}`
+        ).join('\n');
 
-        // 2. Prepare Story Memory (Context Awareness)
-        let memoryContext = "No previous context (Start of story).";
-        if (previous_panels && Array.isArray(previous_panels) && previous_panels.length > 0) {
-            // Use last 3 pages for immediate context
-            const recentPanels = previous_panels.slice(-3); 
-            memoryContext = recentPanels.map((p: any) => 
-                `[Page ${p.panel_number}]: 
-                 - Visual Context: ${p.visual_description}
-                 - Dialogue: ${p.dialogue ? p.dialogue.map((d: any) => `${d.speaker}: ${d.text}`).join(' | ') : 'None'}`
-            ).join('\n');
+        const targetLanguage = language || 'Tiếng Việt';
+
+        // DETECT IF THIS IS A COVER PAGE
+        const isCover = plot_summary.toLowerCase().includes('trang bìa') || 
+                        plot_summary.toLowerCase().includes('cover') || 
+                        plot_summary.toLowerCase().includes('poster');
+
+        let panelInstruction = "";
+        if (isCover) {
+            panelInstruction = `
+            **SPECIAL MODE: COVER PAGE / POSTER**
+            - You MUST create EXACTLY 1 (ONE) Panel.
+            - Layout Note should be "Full Page Poster".
+            - Focus on title composition and main character introduction.
+            `;
+        } else {
+            panelInstruction = `
+            **MODE: STORY PAGE**
+            - Create exactly 3 to 5 panels.
+            - **CRITICAL - STAGING DIRECTIONS:** In the 'description' for each panel, you MUST specify where characters stand relative to each other (e.g., "Character A (Left) shouting at Character B (Right)"). This is required for the renderer to place speech bubbles correctly.
+            `;
         }
 
         const prompt = `
-            You are an expert comic artist and writer specializing in ${genre} stories.
+            You are a professional Comic Script Writer (Layout & Staging Specialist).
             
-            **Task:** Expand a brief plot summary into a detailed visual description (Prompt for AI Image Gen) and dialogue.
+            **TASK:** Break down this Page Summary into detailed Panels.
             
-            **LAYOUT CONTEXT:** ${layoutContext}
-            
-            **STORY MEMORY (PREVIOUS CONTEXT):**
-            Use this to maintain continuity, logic flow, and character state:
-            ${memoryContext}
-            
-            **CHARACTER VISUAL GUIDE (STRICT CONSISTENCY):**
+            **INPUT INFO:**
+            - Page Summary: "${plot_summary}"
+            - Genre: ${genre}
+            - Style: ${style}
+            - Language: ${targetLanguage}.
+            - Characters:
             ${characterContext}
             
-            **CURRENT PAGE SUMMARY:** "${plot_summary}"
-            **ART STYLE:** ${style}
+            **STORY CONTEXT (PREVIOUS EVENTS):**
+            ${story_context || "Start of story."}
+            *Use this context to ensure continuity (e.g., if they were injured in the previous page, they should look injured here).*
             
-            **Requirements:**
-            1.  **visual_description (English):** Write a highly detailed prompt for an AI Image Generator (Midjourney/Stable Diffusion style). 
-                *   **CRITICAL:** Describe the **Layout** (e.g., "A comic page split into 4 panels...").
-                *   Describe what happens in each panel within the page.
-                *   When mentioning a character, you MUST explicitly repeat their visual traits from the guide (e.g., "pink hair", "wearing hoodie").
-                *   Ensure visual continuity with previous pages.
+            ${panelInstruction}
             
-            2.  **dialogue (Vietnamese):** Write natural, engaging dialogue for this PAGE.
-                *   If characters are speaking, use their names.
-                *   If characters are silent or thinking, use "(Suy nghĩ)".
-                *   If it is a narration box, use Speaker: "Lời dẫn".
-                *   Ensure dialogue flows logically.
+            **STRICT RULES:**
+            1. **description**: Detailed visual instruction in **VIETNAMESE (TIẾNG VIỆT)**. Include Staging directions (Left/Right/Center).
+            2. **dialogues**: Natural conversation in **${targetLanguage}**.
+            3. Output JSON.
             
-            Return a single JSON object.
+            **JSON Schema:**
+            {
+              "layout_note": "String (e.g., Dynamic Action, 3-Tier Grid)",
+              "panels": [
+                {
+                  "panel_id": Integer,
+                  "description": "String (Visual description + Staging)",
+                  "dialogues": [
+                    { "speaker": "String", "text": "String" }
+                  ]
+                }
+              ]
+            }
         `;
 
         const response = await ai.models.generateContent({
-            model: 'gemini-3-pro-preview',
+            model: 'gemini-2.5-flash',
             contents: { parts: [{ text: prompt }] },
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: {
-                    type: Type.OBJECT,
-                    properties: {
-                        visual_description: { type: Type.STRING },
-                        dialogue: {
-                            type: Type.ARRAY,
-                            items: {
-                                type: Type.OBJECT,
-                                properties: {
-                                    speaker: { type: Type.STRING },
-                                    text: { type: Type.STRING }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            config: { responseMimeType: "application/json" }
         });
 
-        let detailJson;
+        let resultJson = { layout_note: "Standard Layout", panels: [] };
         try {
             const text = response.text || '{}';
-            detailJson = JSON.parse(text);
+            const jsonMatch = text.match(/\{[\s\S]*\}/);
+            const cleanText = jsonMatch ? jsonMatch[0] : text;
+            const parsed = JSON.parse(cleanText);
             
-            if (!Array.isArray(detailJson.dialogue)) {
-                detailJson.dialogue = [];
+            if (parsed && typeof parsed === 'object') {
+                resultJson = parsed;
+                // Normalization logic
+                if (!resultJson.panels || !Array.isArray(resultJson.panels)) {
+                    if (Array.isArray((parsed as any).result?.panels)) resultJson = (parsed as any).result;
+                    else resultJson.panels = [];
+                }
             }
         } catch (e) {
-            detailJson = { 
-                visual_description: plot_summary, 
-                dialogue: [{ speaker: "Lời dẫn", text: "..." }] 
-            };
+            console.error("JSON Parse Error:", e);
+             resultJson.panels = [{ 
+                panel_id: 1, 
+                description: `Cảnh: ${plot_summary}. (Lỗi phân tích AI).`, 
+                dialogues: [] 
+            }] as any;
         }
 
         return {
             statusCode: 200,
-            body: JSON.stringify(detailJson),
+            body: JSON.stringify({ script_data: resultJson }),
         };
 
     } catch (error: any) {

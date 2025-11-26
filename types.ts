@@ -159,6 +159,21 @@ export interface CreditPackage {
     created_at: string;
     tag?: string | null;
     is_featured: boolean;
+    // NEW: Dynamic promo fields (calculated on fetch)
+    promo_bonus_credits?: number;
+    promo_percent?: number;
+}
+
+// NEW: Promotion Campaign
+export interface Promotion {
+    id: string;
+    title: string;
+    description: string;
+    bonus_percentage: number;
+    start_time: string;
+    end_time: string;
+    is_active: boolean;
+    created_at?: string;
 }
 
 // Dành cho lịch sử giao dịch
@@ -432,6 +447,7 @@ export interface ComicPanel {
     dialogue: ComicDialogue[];
     image_url?: string;
     is_rendering?: boolean;
+    status?: 'draft' | 'rendering' | 'completed';
 }
 
 export interface ComicDialogue {

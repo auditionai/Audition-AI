@@ -1,8 +1,17 @@
 
-
-
 export const vi = {
   langName: 'Tiếng Việt',
+  common: {
+    edit: 'Sửa',
+    delete: 'Xóa',
+    save: 'Lưu',
+    saving: 'Đang lưu...',
+    cancel: 'Hủy',
+    confirm: 'Xác nhận',
+    download: 'Tải về',
+    downloading: 'Đang tải...',
+    loading: 'Đang tải...',
+  },
   landing: {
     header: {
       features: 'Tính năng',
@@ -278,7 +287,7 @@ export const vi = {
       quickGuide: 'Xem hướng dẫn nhanh',
       upgradeBanner: {
         title: 'Nâng Cấp: Nano Banana Pro (Gemini 3) đã ra mắt!',
-        desc: 'Ứng dụng hiện mặc định sử dụng Gemini 3 Pro cho ảnh 4K siêu nét. Chi phí: 10-20 Kim cương/ảnh (tùy độ phân giải). Bạn có thể đổi lại bản tiêu chuẩn (1 Kim cương) bằng nút bên cạnh hoặc trong Cài đặt Nâng cao.',
+        desc: 'Mô hình mặc định hiện tại là Nano Banana (Tiêu chuẩn). Để sử dụng mô hình AI mới Nano Banana Pro (Gemini 3) cho ảnh 4K siêu nét (10-20 Kim cương), vui lòng ấn nút "Đổi ngay".',
         button: 'Đổi ngay',
       },
       tabs: {
@@ -289,6 +298,7 @@ export const vi = {
       utils: {
         bgRemover: 'Tách Nền',
         signature: 'Chèn Chữ Ký',
+        enhancer: 'Làm Nét Ảnh',
       },
       common: {
         help: 'Hướng dẫn',
@@ -311,6 +321,7 @@ export const vi = {
         unavailableDesc: 'Model này không hỗ trợ ảnh đầu vào.',
         flashModel: 'Flash (1 💎)',
         proModel: 'Pro 4K (2 💎)',
+        processing: 'Đang xử lý...',
       },
       singlePhoto: {
         bgRemoverTip: 'Mẹo: Để có chất lượng tốt nhất, vui lòng sử dụng ảnh nhân vật đã được tách nền.',
@@ -374,8 +385,8 @@ export const vi = {
         errorRefOrPrompt: 'Vui lòng tải lên "Ảnh Tham Chiếu" hoặc nhập "Mô tả".',
         errorPoseImage: 'Vui lòng cung cấp "Ảnh Nhân vật" cho Nhân vật {{index}}.',
         errorGender: 'Vui lòng chọn giới tính cho Nhân vật {{index}}.',
-        pickFromProcessed: 'Chọn',
-        pickFromProcessedTooltip: 'Chọn ảnh đã xử lý',
+        pickFromProcessed: 'Chọn ảnh đã xử lý',
+        pickFromProcessedTooltip: 'Chọn từ kho ảnh Tách Nền hoặc Làm Nét',
       },
       bgRemover: {
         uploadTitle: '1. Tải lên ảnh',
@@ -389,6 +400,19 @@ export const vi = {
         viewDetails: 'Xem chi tiết',
         flashButton: 'Tách nền Flash (1 💎)',
         proButton: 'Tách nền Pro (10 💎)',
+      },
+      enhancer: {
+        title: 'Công cụ Làm Nét Ảnh',
+        uploadTitle: '1. Tải ảnh mờ',
+        uploadButton: 'Chọn ảnh cần làm nét',
+        uploadDesc: 'Tải lên ảnh chất lượng thấp',
+        resultTitle: '2. Ảnh đã làm nét',
+        resultDesc: 'Ảnh sẽ bị xóa khi tắt trình duyệt',
+        placeholder: 'Kết quả sẽ hiện ở đây',
+        flashButton: 'Làm nét Flash (1 💎)',
+        proButton: 'Làm nét Pro 4K (10 💎)',
+        sendToBg: 'Chuyển sang Tách Nền',
+        download: 'Tải về',
       },
       signature: {
         title: 'Công cụ Chèn Chữ Ký',
@@ -488,7 +512,8 @@ export const vi = {
             luckyWheel: 'Vòng quay',
             signature: 'Chèn chữ ký',
             faceLock: 'Xử lý gương mặt',
-            refund: 'Hoàn tiền'
+            refund: 'Hoàn tiền',
+            enhance: 'Làm nét ảnh'
         }
       },
       redeem: {
@@ -828,6 +853,9 @@ export const vi = {
     'neon-vibe': 'Cung Điện Pha Lê',
   },
   modals: {
+    announcement: {
+        button: 'Đã hiểu',
+    },
     styles: {
         none: 'Mặc định',
         cinematic: 'Điện ảnh',
@@ -950,6 +978,16 @@ export const vi = {
         title: 'Chọn ảnh đã xử lý',
         empty: 'Chưa có ảnh nào',
         empty_desc: 'Hãy sử dụng công cụ Tách Nền hoặc Siêu Khóa Mặt trước.',
+        tabs: {
+            bgRemoved: 'Ảnh Tách Nền',
+            enhanced: 'Ảnh Làm Nét'
+        },
+        actions: {
+            use: 'Sử dụng ảnh',
+            crop: 'Cắt lấy mặt',
+            toBg: 'Tách nền',
+            toEnhance: 'Làm nét'
+        }
     },
     promptLibrary: {
         title: 'Thư Viện Prompt (Gợi Ý)',

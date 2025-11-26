@@ -1,3 +1,4 @@
+
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
 
@@ -14,8 +15,8 @@ const handler: Handler = async (event: HandlerEvent) => {
     if (!token) {
         return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized' }) };
     }
-    // FIX: Use Supabase v2 `auth.getUser` as `auth.api` is from v1.
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+    // FIX: Use Supabase v2 `auth.getUser` by casting to any
+    const { data: { user }, error: authError } = await (supabaseAdmin.auth as any).getUser(token);
     if (authError || !user) {
         return { statusCode: 401, body: JSON.stringify({ error: 'Invalid token' }) };
     }
@@ -51,24 +52,9 @@ const handler: Handler = async (event: HandlerEvent) => {
             newConsecutiveDays = (userProfile.consecutive_check_in_days || 0) + 1;
         }
 
-        // Fetch the highest applicable reward from the database
-        // Fix: Changed const to let to allow reassignment for fallback reward.
-        let { data: rewardData, error: rewardError } = await supabaseAdmin
-            .from('check_in_rewards')
-            .select('diamond_reward, xp_reward')
-            .eq('is_active', true)
-            .lte('consecutive_days', newConsecutiveDays)
-            .order('consecutive_days', { ascending: false })
-            .limit(1)
-            .single();
-
-        if (rewardError || !rewardData) {
-            // Fallback to a default reward if none is configured
-            console.error("Could not find a valid check-in reward, using fallback.", rewardError);
-            rewardData = { diamond_reward: 1, xp_reward: 10 };
-        }
-
-        const { diamond_reward: diamondReward, xp_reward: xpReward } = rewardData;
+        // BASE REWARD ONLY - Milestones are manual claims now
+        const diamondReward = 1;
+        const xpReward = 10;
 
         let message = `Điểm danh thành công! Bạn nhận được ${diamondReward} Kim cương và ${xpReward} XP.`;
 
@@ -94,7 +80,7 @@ const handler: Handler = async (event: HandlerEvent) => {
                 user_id: user.id,
                 amount: diamondReward,
                 transaction_type: 'DAILY_CHECK_IN',
-                description: `Điểm danh chuỗi ${newConsecutiveDays} ngày`
+                description: `Điểm danh ngày thứ ${newConsecutiveDays}`
              })
         ]);
 

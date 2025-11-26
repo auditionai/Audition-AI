@@ -212,7 +212,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                         setSession(newSession);
                         if (newSession?.user) {
                             await fetchAndSetUser(newSession);
-                            if (_event === 'SIGNED_IN') navigate('tool');
+                            
+                            // FIX: Chỉ điều hướng về tool nếu đang ở trang chủ (landing page).
+                            // Nếu người dùng đang ở trang khác (VD: settings), việc refresh token/focus lại tab sẽ không reset trang.
+                            if (_event === 'SIGNED_IN') {
+                                const currentPath = window.location.pathname;
+                                if (currentPath === '/' || currentPath === '/index.html') {
+                                    navigate('tool');
+                                }
+                            }
                         } else {
                             setUser(null);
                             if (_event === 'SIGNED_OUT') navigate('home');

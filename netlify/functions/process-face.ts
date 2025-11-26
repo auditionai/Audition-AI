@@ -11,7 +11,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     const token = authHeader?.split(' ')[1];
     if (!token) return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized' }) };
 
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+    const { data: { user }, error: authError } = await (supabaseAdmin.auth as any).getUser(token);
     if (authError || !user) return { statusCode: 401, body: JSON.stringify({ error: 'Invalid token' }) };
 
     try {
@@ -23,6 +23,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         // Determine Cost based on model (Pro = 10, Flash = 1)
         const cost = (model === 'gemini-3-pro-image-preview') ? 10 : 1;
 
+        // Check Balance (Read Only)
         const { data: userData, error: userError } = await supabaseAdmin
             .from('users')
             .select('diamonds')
@@ -37,13 +38,15 @@ const handler: Handler = async (event: HandlerEvent) => {
         }
 
         // 3. Simulate AI processing (or actual implementation if available)
+        // If this step fails (e.g. invalid image format), the user hasn't paid yet.
         console.log(`[FACE PROCESS] Simulating AI (${model}) face crop/sharpen for user ${user.id}...`);
         await new Promise(resolve => setTimeout(resolve, 1500)); 
         const [_header, base64] = imageDataUrl.split(',');
         const processedImageBase64 = base64; // Placeholder
 
-        // 4. Deduct cost and log transaction
-        const newDiamondCount = userData.diamonds - cost;
+        // 4. Transaction (Pay on Success)
+        const { data: latestUser } = await supabaseAdmin.from('users').select('diamonds').eq('id', user.id).single();
+        const newDiamondCount = (latestUser?.diamonds || userData.diamonds) - cost;
         
         let description = `Xử lý Gương Mặt`;
         description += (model === 'gemini-3-pro-image-preview') ? ` (Pro)` : ` (Flash)`;

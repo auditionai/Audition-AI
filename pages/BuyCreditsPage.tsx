@@ -3,13 +3,90 @@ import React, { useState, useEffect, useRef } from 'react';
 import CreatorHeader from '../components/creator/CreatorHeader';
 import CreatorFooter from '../components/creator/CreatorFooter';
 import { useAuth } from '../contexts/AuthContext';
-import { CreditPackage } from '../types';
+import { CreditPackage, Promotion } from '../types';
 import InfoModal from '../components/creator/InfoModal';
 import CheckInModal from '../components/CheckInModal';
 import BottomNavBar from '../components/common/BottomNavBar';
 import { useTheme } from '../contexts/ThemeContext';
 import ThemeEffects from '../components/themes/ThemeEffects';
 import { useTranslation } from '../hooks/useTranslation';
+
+// --- Countdown Component ---
+const PromoCountdown: React.FC<{ endTime: string; title: string }> = ({ endTime, title }) => {
+    const [timeLeft, setTimeLeft] = useState<{ d: number, h: number, m: number, s: number } | null>(null);
+
+    useEffect(() => {
+        const calculateTimeLeft = () => {
+            const difference = +new Date(endTime) - +new Date();
+            
+            if (difference > 0) {
+                return {
+                    d: Math.floor(difference / (1000 * 60 * 60 * 24)),
+                    h: Math.floor((difference / (1000 * 60 * 60)) % 24),
+                    m: Math.floor((difference / 1000 / 60) % 60),
+                    s: Math.floor((difference / 1000) % 60)
+                };
+            }
+            return null;
+        };
+
+        // Initial calc
+        setTimeLeft(calculateTimeLeft());
+
+        const timer = setInterval(() => {
+            const tl = calculateTimeLeft();
+            if (!tl) {
+                clearInterval(timer);
+                // Optional: reload page or trigger parent update when promo ends
+            }
+            setTimeLeft(tl);
+        }, 1000);
+
+        return () => clearInterval(timer);
+    }, [endTime]);
+
+    if (!timeLeft) return null;
+
+    const TimeBox = ({ value, label }: { value: number, label: string }) => (
+        <div className="flex flex-col items-center">
+            <div className="w-12 h-12 md:w-14 md:h-14 bg-black/40 border border-red-500/50 rounded-lg flex items-center justify-center backdrop-blur-sm shadow-[0_0_15px_rgba(220,38,38,0.3)]">
+                <span className="text-xl md:text-2xl font-black text-yellow-400 font-mono">
+                    {value < 10 ? `0${value}` : value}
+                </span>
+            </div>
+            <span className="text-[10px] md:text-xs text-red-300 mt-1 font-bold uppercase">{label}</span>
+        </div>
+    );
+
+    return (
+        <div className="max-w-2xl mx-auto mb-8 animate-fade-in-up">
+            <div className="bg-gradient-to-r from-red-900/80 via-orange-900/80 to-red-900/80 border-y-2 border-yellow-500/50 p-4 md:p-6 rounded-xl relative overflow-hidden shadow-2xl group">
+                {/* Background Shine */}
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-yellow-500/10 to-transparent -translate-x-full group-hover:animate-[shimmer_2s_infinite]"></div>
+                
+                <div className="relative z-10 flex flex-col items-center">
+                    <div className="flex items-center gap-2 mb-3">
+                        <i className="ph-fill ph-alarm text-yellow-400 text-xl animate-bounce"></i>
+                        <h3 className="text-sm md:text-base font-bold text-white uppercase tracking-wider text-center">
+                            {title} <span className="text-yellow-400">KẾT THÚC SAU</span>
+                        </h3>
+                        <i className="ph-fill ph-alarm text-yellow-400 text-xl animate-bounce"></i>
+                    </div>
+                    
+                    <div className="flex items-center gap-2 md:gap-4">
+                        <TimeBox value={timeLeft.d} label="Ngày" />
+                        <span className="text-2xl font-bold text-white pb-4">:</span>
+                        <TimeBox value={timeLeft.h} label="Giờ" />
+                        <span className="text-2xl font-bold text-white pb-4">:</span>
+                        <TimeBox value={timeLeft.m} label="Phút" />
+                        <span className="text-2xl font-bold text-white pb-4">:</span>
+                        <TimeBox value={timeLeft.s} label="Giây" />
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 // --- Enhanced 3D Pricing Card Component ---
 const PricingCard: React.FC<{ pkg: CreditPackage; onBuy: () => void; isProcessing: boolean }> = ({ pkg, onBuy, isProcessing }) => {
@@ -158,6 +235,7 @@ const BuyCreditsPage: React.FC = () => {
     const { t } = useTranslation();
     const { theme } = useTheme();
     const [packages, setPackages] = useState<CreditPackage[]>([]);
+    const [activePromo, setActivePromo] = useState<Promotion | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isProcessingPayment, setIsProcessingPayment] = useState<string | null>(null);
     const [infoModalKey, setInfoModalKey] = useState<'terms' | 'policy' | 'contact' | null>(null);
@@ -167,20 +245,30 @@ const BuyCreditsPage: React.FC = () => {
     const containerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        const fetchPackages = async () => {
+        const fetchData = async () => {
             try {
-                // Add timestamp to prevent caching
-                const res = await fetch(`/.netlify/functions/credit-packages?t=${Date.now()}`);
-                if (!res.ok) throw new Error(t('creator.buyCredits.error.load'));
-                const data = await res.json();
-                setPackages(data);
+                // 1. Fetch Active Promo
+                const promoRes = await fetch(`/.netlify/functions/get-active-promotion?t=${Date.now()}`);
+                if (promoRes.ok) {
+                    const promoData = await promoRes.json();
+                    if (promoData && promoData.id) {
+                        setActivePromo(promoData);
+                    }
+                }
+
+                // 2. Fetch Packages
+                const pkgRes = await fetch(`/.netlify/functions/credit-packages?t=${Date.now()}`);
+                if (!pkgRes.ok) throw new Error(t('creator.buyCredits.error.load'));
+                const pkgData = await pkgRes.json();
+                setPackages(pkgData);
+
             } catch (error: any) {
                 showToast(error.message, 'error');
             } finally {
                 setIsLoading(false);
             }
         };
-        fetchPackages();
+        fetchData();
     }, [showToast, t]);
 
     const handleBuyClick = async (pkg: CreditPackage) => {
@@ -250,7 +338,7 @@ const BuyCreditsPage: React.FC = () => {
                 <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-4xl h-96 bg-skin-accent/10 blur-[100px] rounded-full pointer-events-none -z-10"></div>
 
                 <div className="container mx-auto px-4 relative z-10">
-                    <div className="themed-main-title-container text-center max-w-4xl mx-auto mb-12 animate-fade-in-down">
+                    <div className="themed-main-title-container text-center max-w-4xl mx-auto mb-4 animate-fade-in-down">
                          <h1 
                             className="themed-main-title text-4xl md:text-5xl font-black mb-4 leading-tight"
                             data-text={t('creator.buyCredits.title')}
@@ -261,6 +349,11 @@ const BuyCreditsPage: React.FC = () => {
                            {t('creator.buyCredits.description')}
                         </p>
                     </div>
+
+                    {/* ACTIVE PROMOTION COUNTDOWN */}
+                    {activePromo && (
+                        <PromoCountdown endTime={activePromo.end_time} title={activePromo.title} />
+                    )}
 
                     {/* Support Banner */}
                     <div className="max-w-4xl mx-auto mb-8 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>

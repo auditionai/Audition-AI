@@ -14,7 +14,12 @@ import { useTranslation } from '../hooks/useTranslation';
 // --- Enhanced 3D Pricing Card Component ---
 const PricingCard: React.FC<{ pkg: CreditPackage; onBuy: () => void; isProcessing: boolean }> = ({ pkg, onBuy, isProcessing }) => {
     const { t, language } = useTranslation();
-    const totalCredits = pkg.credits_amount + pkg.bonus_credits;
+    
+    // Calculate totals including promo
+    const baseTotal = pkg.credits_amount + pkg.bonus_credits;
+    const promoBonus = pkg.promo_bonus_credits || 0;
+    const totalCredits = baseTotal + promoBonus;
+    const hasPromo = promoBonus > 0;
     
     // Determine visual tier based on price for gradient styling (Background Card)
     let tierClass = 'from-blue-500/20 to-purple-500/20 border-blue-500/30';
@@ -43,6 +48,12 @@ const PricingCard: React.FC<{ pkg: CreditPackage; onBuy: () => void; isProcessin
         glowColor = 'shadow-red-500/40';
         buttonStyle = "bg-gradient-to-r from-rose-600 to-red-600 text-white shadow-red-500/40";
     }
+    
+    // Override styles if PROMO active to make it look super hot
+    if (hasPromo) {
+        tierClass = 'from-red-600/30 to-orange-500/30 border-red-500/50';
+        glowColor = 'shadow-red-500/40';
+    }
 
     // Helper to translate tags safely
     const getTranslatedTag = (tag: string | null | undefined) => {
@@ -54,8 +65,15 @@ const PricingCard: React.FC<{ pkg: CreditPackage; onBuy: () => void; isProcessin
 
     return (
         <div 
-            className={`group relative rounded-2xl p-1 transition-all duration-500 hover:-translate-y-2 interactive-3d h-full flex flex-col`}
+            className={`group relative rounded-2xl p-1 transition-all duration-500 hover:-translate-y-2 interactive-3d h-full flex flex-col ${hasPromo ? 'scale-105 z-10' : ''}`}
         >
+            {/* Promo Badge */}
+            {hasPromo && (
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 bg-gradient-to-r from-red-600 to-yellow-500 text-white font-black text-xs px-4 py-1 rounded-full shadow-lg border border-yellow-300 animate-pulse whitespace-nowrap flex items-center gap-1">
+                    <i className="ph-fill ph-fire"></i> KHUYẾN MẠI +{pkg.promo_percent}%
+                </div>
+            )}
+
             {/* Glow Effect */}
             <div className={`absolute inset-0 bg-gradient-to-br ${tierClass} rounded-2xl blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-500`}></div>
             
@@ -65,7 +83,7 @@ const PricingCard: React.FC<{ pkg: CreditPackage; onBuy: () => void; isProcessin
                 <div className="absolute inset-0 bg-gradient-to-br from-white/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
 
                 {/* Best Seller / Tag */}
-                {pkg.tag && (
+                {pkg.tag && !hasPromo && (
                     <div className="absolute top-0 right-0">
                         <div className="bg-gradient-to-bl from-pink-500 to-purple-600 text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl rounded-tr-xl shadow-md uppercase tracking-wider">
                             {getTranslatedTag(pkg.tag)}
@@ -74,7 +92,7 @@ const PricingCard: React.FC<{ pkg: CreditPackage; onBuy: () => void; isProcessin
                 )}
 
                 {/* Icon */}
-                <div className="mb-4 relative">
+                <div className="mb-4 relative mt-2">
                     <div className={`absolute inset-0 bg-current opacity-20 blur-xl rounded-full transform scale-150 ${accentColor}`}></div>
                     <i className={`ph-fill ph-diamonds-four text-5xl ${accentColor} drop-shadow-[0_0_10px_rgba(255,255,255,0.3)] transform transition-transform duration-700 group-hover:rotate-[360deg]`}></i>
                 </div>
@@ -82,14 +100,27 @@ const PricingCard: React.FC<{ pkg: CreditPackage; onBuy: () => void; isProcessin
                 {/* Content */}
                 <h3 className="text-lg font-bold text-white mb-1">AU AI {pkg.credits_amount}</h3>
                 
-                <div className="flex items-baseline gap-1 mb-1">
-                    <span className={`text-3xl font-black ${accentColor}`}>{totalCredits.toLocaleString()}</span>
+                <div className="flex flex-col items-center mb-1">
+                    {hasPromo ? (
+                        <>
+                            <span className="text-sm text-gray-500 line-through decoration-red-500 decoration-2">{baseTotal.toLocaleString()} KC</span>
+                            <span className={`text-3xl font-black text-yellow-400 drop-shadow-md`}>{totalCredits.toLocaleString()}</span>
+                        </>
+                    ) : (
+                        <span className={`text-3xl font-black ${accentColor}`}>{totalCredits.toLocaleString()}</span>
+                    )}
                     <span className="text-xs text-skin-muted font-bold">{t('creator.buyCredits.card.diamonds')}</span>
                 </div>
 
-                {pkg.bonus_credits > 0 && (
+                {pkg.bonus_credits > 0 && !hasPromo && (
                     <div className="bg-white/5 px-2 py-0.5 rounded text-[10px] font-bold text-green-400 mb-4 border border-white/5">
                         +{pkg.bonus_credits.toLocaleString()} {t('creator.buyCredits.card.bonus')}
+                    </div>
+                )}
+                
+                {hasPromo && (
+                    <div className="bg-red-500/20 px-2 py-0.5 rounded text-[10px] font-bold text-red-400 mb-4 border border-red-500/30">
+                        Tặng thêm {promoBonus.toLocaleString()} KC
                     </div>
                 )}
 
@@ -138,7 +169,8 @@ const BuyCreditsPage: React.FC = () => {
     useEffect(() => {
         const fetchPackages = async () => {
             try {
-                const res = await fetch('/.netlify/functions/credit-packages');
+                // Add timestamp to prevent caching
+                const res = await fetch(`/.netlify/functions/credit-packages?t=${Date.now()}`);
                 if (!res.ok) throw new Error(t('creator.buyCredits.error.load'));
                 const data = await res.json();
                 setPackages(data);
@@ -210,7 +242,9 @@ const BuyCreditsPage: React.FC = () => {
         <div data-theme={theme} className="flex flex-col min-h-screen bg-skin-fill text-skin-base pb-16 md:pb-0">
             <ThemeEffects />
             <CreatorHeader onTopUpClick={() => {}} activeTab={'tool'} onNavigate={navigate} onCheckInClick={() => setCheckInModalOpen(true)} />
-            <main className="flex-grow pt-24 md:pt-28 relative overflow-hidden" onMouseMove={handleMouseMove} ref={containerRef}>
+            
+            {/* Marquee spacer handled by global component, here we add extra padding if needed */}
+            <main className="flex-grow pt-32 md:pt-36 relative overflow-hidden" onMouseMove={handleMouseMove} ref={containerRef}>
                 
                 {/* Background Decor */}
                 <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-4xl h-96 bg-skin-accent/10 blur-[100px] rounded-full pointer-events-none -z-10"></div>

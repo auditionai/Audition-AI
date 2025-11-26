@@ -8,8 +8,8 @@ const MarqueeBanner: React.FC = () => {
     useEffect(() => {
         const fetchPromo = async () => {
             try {
-                // Only fetching checking for active promos
-                const res = await fetch('/.netlify/functions/get-active-promotion');
+                // Add cache busting timestamp
+                const res = await fetch(`/.netlify/functions/get-active-promotion?t=${Date.now()}`);
                 if (res.ok) {
                     const data = await res.json();
                     if (data && data.id) {

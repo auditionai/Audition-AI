@@ -55,7 +55,7 @@ const AppContent: React.FC = () => {
                 pageComponent = user ? <ShopPage /> : <HomePage />;
                 break;
             case 'buy-credits':
-                pageComponent = user ? <BuyCreditsPage /> : <HomePage />;
+                pageComponent = <BuyCreditsPage />; // Buy Credits is public/hybrid now
                 break;
             case 'gallery':
                 pageComponent = <GalleryPage />;
@@ -70,8 +70,8 @@ const AppContent: React.FC = () => {
 
     return (
         <>
-            {/* GLOBAL PROMOTION BANNER */}
-            {user && <MarqueeBanner />}
+            {/* GLOBAL PROMOTION BANNER - VISIBLE TO ALL */}
+            <MarqueeBanner />
 
             {renderPage()}
             

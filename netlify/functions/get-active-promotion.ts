@@ -4,6 +4,12 @@ import { supabaseAdmin } from './utils/supabaseClient';
 
 // Function to check Active Promotion (Public)
 const handler: Handler = async () => {
+    const headers = {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+    };
+
     try {
         const now = new Date().toISOString();
         
@@ -22,10 +28,11 @@ const handler: Handler = async () => {
 
         return {
             statusCode: 200,
+            headers,
             body: JSON.stringify(data || {}), // Return empty object if no active promo
         };
     } catch (error: any) {
-        return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
+        return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
     }
 };
 

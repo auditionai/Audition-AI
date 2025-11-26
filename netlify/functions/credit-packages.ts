@@ -3,6 +3,12 @@ import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
 
 const handler: Handler = async (event: HandlerEvent) => {
+    const headers = {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+    };
+
     // PUBLIC: GET request to fetch active packages
     if (event.httpMethod === 'GET' && !event.headers['authorization']) {
         const { featured } = event.queryStringParameters || {};
@@ -40,8 +46,7 @@ const handler: Handler = async (event: HandlerEvent) => {
 
                 if (activePromo) {
                     promoPercent = activePromo.bonus_percentage;
-                    // Bonus calculated on base amount (or base + static bonus depending on strategy, usually base)
-                    // Strategy: Bonus applied to (Base)
+                    // Bonus calculated on base amount (pkg.credits_amount)
                     promoBonus = Math.floor(pkg.credits_amount * (promoPercent / 100));
                 }
 
@@ -52,10 +57,14 @@ const handler: Handler = async (event: HandlerEvent) => {
                 };
             });
 
-            return { statusCode: 200, body: JSON.stringify(enhancedPackages) };
+            return { 
+                statusCode: 200, 
+                headers,
+                body: JSON.stringify(enhancedPackages) 
+            };
 
         } catch (error: any) {
-            return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
+            return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
         }
     }
 

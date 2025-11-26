@@ -147,7 +147,9 @@ export const useImageGenerator = () => {
 
                     // 2. Polling Backup with Timeout
                     let pollCount = 0;
-                    const MAX_POLLS = 30; // 30 * 3s = 90 seconds timeout
+                    // INCREASED TIMEOUT: 100 polls * 3s = 300 seconds (5 minutes)
+                    // Pro model 4K generation can take longer than 90s.
+                    const MAX_POLLS = 100; 
                     
                     pollInterval = setInterval(async () => {
                         pollCount++;
@@ -155,7 +157,7 @@ export const useImageGenerator = () => {
                         if (pollCount > MAX_POLLS) {
                             cleanup();
                             // Don't reject, just resolve to stop loading. The job might still finish in background.
-                            showToast("Tác vụ đang mất nhiều thời gian hơn dự kiến. Vui lòng kiểm tra lại trong mục 'Tác phẩm của tôi' sau vài phút.", "success"); // Show as info/success to not alarm user
+                            showToast("Tác vụ đang mất nhiều thời gian hơn dự kiến. Vui lòng kiểm tra lại trong mục 'Tác phẩm của tôi' sau vài phút.", "success"); 
                             resolve(); 
                             return;
                         }

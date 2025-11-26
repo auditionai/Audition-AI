@@ -297,6 +297,7 @@ export const en = {
       utils: {
         bgRemover: 'BG Remover',
         signature: 'Signature',
+        enhancer: 'Image Enhancer',
       },
       common: {
         help: 'Help',
@@ -319,6 +320,7 @@ export const en = {
         unavailableDesc: 'This model does not support image input.',
         flashModel: 'Flash (1 💎)',
         proModel: 'Pro 4K (2 💎)',
+        processing: 'Processing...',
       },
       singlePhoto: {
         bgRemoverTip: 'Tip: For the best quality, please use character images with the background removed.',
@@ -397,6 +399,19 @@ export const en = {
         viewDetails: 'View Details',
         flashButton: 'Flash Remove (1 💎)',
         proButton: 'Pro Remove (10 💎)',
+      },
+      enhancer: {
+        title: 'Image Enhancer',
+        uploadTitle: '1. Upload Image',
+        uploadButton: 'Select Image',
+        uploadDesc: 'Upload low quality image',
+        resultTitle: '2. Result',
+        resultDesc: 'Images deleted on page reload',
+        placeholder: 'Result will appear here',
+        flashButton: 'Flash Enhance (1 💎)',
+        proButton: 'Pro Enhance (10 💎)',
+        sendToBg: 'Send to BG Remover',
+        download: 'Download',
       },
       signature: {
         title: 'Signature Tool',
@@ -496,7 +511,8 @@ export const en = {
             luckyWheel: 'Lucky Wheel',
             signature: 'Signature',
             faceLock: 'Face Lock Process',
-            refund: 'Refund'
+            refund: 'Refund',
+            enhance: 'Image Enhance'
         }
       },
       redeem: {

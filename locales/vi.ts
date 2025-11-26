@@ -298,6 +298,7 @@ export const vi = {
       utils: {
         bgRemover: 'Tách Nền',
         signature: 'Chèn Chữ Ký',
+        enhancer: 'Làm Nét Ảnh',
       },
       common: {
         help: 'Hướng dẫn',
@@ -320,6 +321,7 @@ export const vi = {
         unavailableDesc: 'Model này không hỗ trợ ảnh đầu vào.',
         flashModel: 'Flash (1 💎)',
         proModel: 'Pro 4K (2 💎)',
+        processing: 'Đang xử lý...',
       },
       singlePhoto: {
         bgRemoverTip: 'Mẹo: Để có chất lượng tốt nhất, vui lòng sử dụng ảnh nhân vật đã được tách nền.',
@@ -398,6 +400,19 @@ export const vi = {
         viewDetails: 'Xem chi tiết',
         flashButton: 'Tách nền Flash (1 💎)',
         proButton: 'Tách nền Pro (10 💎)',
+      },
+      enhancer: {
+        title: 'Công cụ Làm Nét Ảnh',
+        uploadTitle: '1. Tải ảnh mờ',
+        uploadButton: 'Chọn ảnh cần làm nét',
+        uploadDesc: 'Tải lên ảnh chất lượng thấp',
+        resultTitle: '2. Ảnh đã làm nét',
+        resultDesc: 'Ảnh sẽ bị xóa khi tắt trình duyệt',
+        placeholder: 'Kết quả sẽ hiện ở đây',
+        flashButton: 'Làm nét Flash (1 💎)',
+        proButton: 'Làm nét Pro 4K (10 💎)',
+        sendToBg: 'Chuyển sang Tách Nền',
+        download: 'Tải về',
       },
       signature: {
         title: 'Công cụ Chèn Chữ Ký',
@@ -497,7 +512,8 @@ export const vi = {
             luckyWheel: 'Vòng quay',
             signature: 'Chèn chữ ký',
             faceLock: 'Xử lý gương mặt',
-            refund: 'Hoàn tiền'
+            refund: 'Hoàn tiền',
+            enhance: 'Làm nét ảnh'
         }
       },
       redeem: {

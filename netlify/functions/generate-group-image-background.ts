@@ -210,12 +210,16 @@ const handler: Handler = async (event: HandlerEvent) => {
             finalParts.push({ inlineData: charData });
         });
         
-        // CRITICAL FIX: We rely on the Master Canvas (which is already padded to the correct ratio).
-        // Sending `aspectRatio` in imageConfig creates a conflict with the Master Canvas dimensions.
-        // Therefore, we DO NOT send `aspectRatio` in `imageConfig` for Group Photos.
+        // Force Aspect Ratio in config to prevent cropping.
+        // We rely on client-side padding to match this ratio.
+        const validRatios = ['1:1', '3:4', '4:3', '9:16', '16:9'];
         const finalConfig: any = { 
             responseModalities: [Modality.IMAGE],
         };
+        
+        if (validRatios.includes(aspectRatio)) {
+            finalConfig.imageConfig = { aspectRatio: aspectRatio };
+        }
 
         if (isPro) {
             if (!finalConfig.imageConfig) finalConfig.imageConfig = {};

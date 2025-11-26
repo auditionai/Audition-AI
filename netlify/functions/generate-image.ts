@@ -167,14 +167,11 @@ const handler: Handler = async (event: HandlerEvent) => {
             seed: seed ? Number(seed) : undefined,
         };
 
-        // CRITICAL FIX: If `characterImage` exists, it is already padded to the correct ratio.
-        // Sending `aspectRatio` in `imageConfig` creates a conflict with the input image dimensions in Gemini API.
-        // WE ONLY SEND aspectRatio IF THERE IS NO INPUT IMAGE (Text-to-Image mode).
-        if (!processedCharacterImage) {
-            const supportedRatios = ['1:1', '3:4', '4:3', '9:16', '16:9'];
-            if (supportedRatios.includes(aspectRatio)) {
-                config.imageConfig = { aspectRatio: aspectRatio };
-            }
+        // Force aspect ratio in config if valid.
+        // We rely on Client-side padding to match this ratio, preventing "INVALID_ARGUMENT" errors.
+        const supportedRatios = ['1:1', '3:4', '4:3', '9:16', '16:9'];
+        if (supportedRatios.includes(aspectRatio)) {
+            config.imageConfig = { aspectRatio: aspectRatio };
         }
 
         if (isProModel) {

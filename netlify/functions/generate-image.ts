@@ -8,7 +8,6 @@ import { addSmartWatermark } from './watermark-service';
 
 const COST_UPSCALE = 1;
 const COST_REMOVE_WATERMARK = 1; 
-const XP_PER_GENERATION = 10;
 
 // Helper function to refund user reliably
 const refundUser = async (userId: string, amount: number, reason: string) => {
@@ -117,24 +116,23 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         // --- PROMPT ENGINEERING (STRICT OUTPAINTING INJECTION) ---
         let fullPrompt = prompt;
+        const hasInputImage = !!characterImage;
         
-        // [CRITICAL FIX] Inject the exact system instruction required to prevent cropping
-        if (characterImage) {
+        if (hasInputImage) {
+            // FIX: This instruction prevents "Smart Crop" when providing a padded image
             fullPrompt = `
 ${prompt} 
-| CRITICAL INSTRUCTION: The input reference image labeled 'INPUT_IMAGE_WITH_WHITE_PADDING' has been PRE-FORMATTED with WHITE PADDING to rigidly enforce a target aspect ratio of ${aspectRatio}. 
-| DO NOT CROP. DO NOT RESIZE. DO NOT CHANGE ASPECT RATIO.
-| You MUST perform OUTPAINTING to fill these white padded areas with a seamless background that matches the prompt.
-| The final output MUST match the dimensions of the input image exactly.
 
-[ADDITIONAL STYLE INSTRUCTIONS]
-- **STYLE:** Hyper-realistic 3D Render (High-end Game Cinematic style, Unreal Engine 5).
-- Detailed skin texture, volumetric lighting, raytracing reflections.
-- **OUTFIT:** Keep the exact clothing design from the reference image.
+| TECHNICAL REQUIREMENT: The input reference image labeled 'INPUT_IMAGE_WITH_WHITE_PADDING' has been PRE-FORMATTED with WHITE PADDING to rigidly enforce a target aspect ratio of ${aspectRatio}. 
+| DO NOT CROP. DO NOT RESIZE. DO NOT CHANGE ASPECT RATIO.
+| You MUST perform OUTPAINTING to fill these white padded areas with a seamless background that matches the scene's context.
+| The final output MUST be exactly ${aspectRatio} and contain NO remaining white borders.
+
+[STYLE]: Hyper-realistic 3D Render, Unreal Engine 5, Volumetric Lighting.
 `;
         } else {
             // Text-to-Image only
-            fullPrompt += `\n\n**STYLE:**\n- **Hyper-realistic 3D Render** (High-end Game Cinematic style, Unreal Engine 5).\n- Detailed skin texture, volumetric lighting, raytracing reflections.\n- **NOT** "Photorealistic" (Do not make it look like a real camera photo).\n- **NOT** "Cartoon" or "2D".`;
+            fullPrompt += `\n\n**STYLE:**\n- **Hyper-realistic 3D Render** (High-end Game Cinematic style, Unreal Engine 5).\n- Detailed skin texture, volumetric lighting, raytracing reflections.`;
         }
 
         if (faceReferenceImage) {
@@ -147,11 +145,6 @@ ${prompt}
         const parts: any[] = [];
         
         // --- IMAGE PROCESSING ---
-        // Use client-side processed images directly.
-        const processedCharacterImage = characterImage;
-        const processedStyleImage = styleImage;
-        const actualFaceImage = faceReferenceImage;
-
         parts.push({ text: fullPrompt });
 
         const addImagePart = (imageDataUrl: string | null, label: string) => {
@@ -162,34 +155,29 @@ ${prompt}
             parts.push({ inlineData: { data: base64, mimeType } });
         };
 
-        addImagePart(processedCharacterImage, "INPUT_IMAGE_WITH_WHITE_PADDING");
-        addImagePart(processedStyleImage, "STYLE_REFERENCE");
-        addImagePart(actualFaceImage, "FACE_REFERENCE");
+        addImagePart(characterImage, "INPUT_IMAGE_WITH_WHITE_PADDING");
+        addImagePart(styleImage, "STYLE_REFERENCE");
+        addImagePart(faceReferenceImage, "FACE_REFERENCE");
         
         // --- CONFIGURATION LOGIC (CRITICAL FIX) ---
-        // If we send `imageConfig` with `characterImage`, Gemini often throws INVALID_ARGUMENT or behaves unpredictably.
-        // We rely on the INPUT IMAGE dimensions + PROMPT INSTRUCTION to enforce aspect ratio in Image-to-Image mode.
-        
         const config: any = { 
             responseModalities: [Modality.IMAGE],
             seed: seed ? Number(seed) : undefined,
         };
 
-        if (!processedCharacterImage) {
-            // Text-to-Image Mode: We MUST specify aspect ratio and size via config
+        if (!hasInputImage) {
+            // Text-to-Image Mode: We MUST specify aspect ratio via config
             config.imageConfig = { aspectRatio: aspectRatio };
-            
-            // Only add imageSize for Pro model in T2I mode
             if (isProModel) {
                 config.imageConfig.imageSize = imageSize;
             }
         } else {
             // Image-to-Image Mode: 
-            // DO NOT add config.imageConfig. The input image sets the dimensions.
-            // The Prompt Injection handles the cropping prevention.
+            // CRITICAL: DO NOT add imageConfig.aspectRatio. 
+            // Providing it alongside an input image causes INVALID_ARGUMENT or unexpected cropping.
+            // The prompt injection above handles the aspect ratio enforcement.
         }
 
-        // Google Search Tool (Only for Pro)
         if (isProModel && useGoogleSearch) {
             config.tools = [{ googleSearch: {} }]; 
         }
@@ -202,8 +190,7 @@ ${prompt}
 
         const imagePartResponse = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
         if (!imagePartResponse?.inlineData) {
-            console.error("Gemini Response Error:", JSON.stringify(response, null, 2));
-            throw new Error("AI không thể tạo hình ảnh từ mô tả này.");
+            throw new Error("AI không thể tạo hình ảnh từ mô tả này (Lỗi Model Output).");
         }
 
         const finalImageBase64 = imagePartResponse.inlineData.data;
@@ -231,7 +218,7 @@ ${prompt}
         const publicUrl = `${process.env.R2_PUBLIC_URL}/${fileName}`;
 
         // --- SUCCESS ---
-        const newXp = userData.xp + XP_PER_GENERATION;
+        const newXp = userData.xp + 10;
         
         await Promise.all([
             supabaseAdmin.from('users').update({ xp: newXp }).eq('id', user.id),
@@ -255,15 +242,7 @@ ${prompt}
         if (userLogId && calculatedCost > 0) {
             await refundUser(userLogId, calculatedCost, error.message || "Unknown Error");
         }
-        let clientFriendlyError = 'Lỗi không xác định từ máy chủ.';
-        if (error?.message) {
-            if (error.message.includes('INVALID_ARGUMENT')) {
-                 clientFriendlyError = 'Lỗi cấu hình AI: Vui lòng thử lại hoặc chọn tỷ lệ khác.';
-            } else {
-                clientFriendlyError = error.message;
-            }
-        }
-        return { statusCode: 500, body: JSON.stringify({ error: clientFriendlyError }) };
+        return { statusCode: 500, body: JSON.stringify({ error: error.message || 'Lỗi không xác định từ máy chủ.' }) };
     }
 };
 

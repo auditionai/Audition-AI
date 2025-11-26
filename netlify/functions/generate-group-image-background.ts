@@ -8,7 +8,6 @@ import { addSmartWatermark } from './watermark-service';
 
 const XP_PER_CHARACTER = 5;
 
-// FIX: Refund logic using Direct Database Update instead of RPC
 const failJob = async (jobId: string, reason: string, userId: string, cost: number) => {
     console.error(`[WORKER] Failing job ${jobId}. Reason: ${reason}. Refunding: ${cost}`);
     try {
@@ -25,7 +24,6 @@ const failJob = async (jobId: string, reason: string, userId: string, cost: numb
                     description: `Hoàn tiền lỗi tạo ảnh: ${reason.substring(0, 50)}`,
                 })
             ]);
-            console.log(`[WORKER] Refund successful for ${userId}`);
         }
     } catch (e) {
         console.error(`[WORKER] CRITICAL: Failed to clean up or refund for job ${jobId}`, e);
@@ -80,7 +78,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             .single();
 
         if (fetchError || !jobData || !jobData.prompt) {
-            throw new Error(fetchError?.message || 'Job not found or payload is missing.');
+            throw new Error(fetchError?.message || 'Job not found.');
         }
 
         jobPromptData = JSON.parse(jobData.prompt);
@@ -113,10 +111,10 @@ const handler: Handler = async (event: HandlerEvent) => {
         const generatedCharacters = [];
         let masterLayoutData: { data: string; mimeType: string } | null = null;
 
-        // --- BƯỚC 1: LẤY MASTER CANVAS (ĐÃ PRE-PROCESS Ở CLIENT) ---
+        // --- BƯỚC 1: LẤY MASTER CANVAS ---
+        // Master Canvas đã được client tạo sẵn (bao gồm padding trắng nếu cần)
         await updateJobProgress(jobId, jobPromptData, 'Đang thiết lập khung tranh chuẩn...');
         
-        // The referenceImage URL is now GUARANTEED to be the master canvas (either user ref or blank)
         if (referenceImage) {
             masterLayoutData = await fetchImageToBase64(referenceImage);
         } else {
@@ -125,21 +123,12 @@ const handler: Handler = async (event: HandlerEvent) => {
         
         if (!masterLayoutData) throw new Error("Lỗi tải khung ảnh nền.");
 
-        // --- BƯỚC 2: XỬ LÝ NHÂN VẬT (SONG SONG) ---
+        // --- BƯỚC 2: TẠO NHÂN VẬT ---
         await updateJobProgress(jobId, jobPromptData, `Đang xử lý đồng thời ${numCharacters} nhân vật...`);
         
         const charPromises = characters.map(async (char: any, i: number) => {
             try {
-                const isMale = char.gender === 'male';
-                const vibe = isMale ? 'Cool, confident, masculine' : 'Muse-like, graceful, sexy';
-                
-                const charPrompt = [
-                    `Create a full-body 3D character of a **${char.gender}**.`,
-                    `**OUTFIT:** Strictly maintain the outfit from the input image.`,
-                    `**POSE:** Create a pose fitting the description: "${prompt}".`,
-                    `**VIBE:** ${vibe}.`,
-                    `**BACKGROUND:** Solid Grey Background.`,
-                ].join('\n');
+                const charPrompt = `Create a full-body 3D character of a **${char.gender}**. Outfit: Maintain from image. Pose: "${prompt}". Background: Grey.`;
 
                 const [poseData, faceData] = await Promise.all([
                     fetchImageToBase64(char.poseImage),
@@ -154,7 +143,7 @@ const handler: Handler = async (event: HandlerEvent) => {
                 ];
                 
                 if (faceData) {
-                    parts.push({ text: "Face Reference (High Priority):" });
+                    parts.push({ text: "Face Reference:" });
                     parts.push({ inlineData: { data: faceData.data, mimeType: faceData.mimeType } });
                 }
 
@@ -169,7 +158,6 @@ const handler: Handler = async (event: HandlerEvent) => {
                 
                 return imagePart.inlineData;
             } catch (charErr) {
-                console.error(`Error generating character ${i}:`, charErr);
                 throw charErr;
             }
         });
@@ -177,33 +165,29 @@ const handler: Handler = async (event: HandlerEvent) => {
         const results = await Promise.all(charPromises);
         generatedCharacters.push(...results);
 
-        // --- BƯỚC 3: TỔNG HỢP TRÊN MASTER CANVAS ---
+        // --- BƯỚC 3: TỔNG HỢP ---
         await updateJobProgress(jobId, jobPromptData, 'Đang tổng hợp và hòa trộn cảm xúc...');
         
-        // UPDATED COMPOSITE PROMPT WITH STRICT OUTPAINTING INSTRUCTION
-        const compositePrompt = [
-            `**CRITICAL INSTRUCTION: PRESERVE CANVAS DIMENSIONS**`,
-            `The input image labeled 'MASTER CANVAS' determines the EXACT output resolution (aspect ratio ${aspectRatio}).`,
-            `DO NOT CROP. DO NOT RESIZE. DO NOT CHANGE ASPECT RATIO.`,
-            `The 'MASTER CANVAS' contains WHITE PADDING (whitespace). You MUST perform OUTPAINTING to fill this whitespace with background scenery matching the prompt.`,
-            `The output image MUST include the entire area of the input canvas.`,
-            `---`,
-            `**TASK: GROUP PHOTO COMPOSITION**`,
-            `**SCENE DESCRIPTION:** ${prompt}`,
-            `**STYLE:** Hyper-realistic 3D Render (Audition Game Style), Volumetric Lighting, ${style || 'Cinematic'}.`,
-            `---`,
-            `**CHARACTERS:**`,
-            `I have provided ${numCharacters} individual character images below.`,
-            `You MUST composite ALL ${numCharacters} characters into the scene.`,
-            `**QUANTITY LOCK:** The final image must contain EXACTLY ${numCharacters} people. NO MORE, NO LESS.`,
-            `**NO EXTRAS:** Do NOT generate any extra people, crowd, or background characters.`,
-            `---`,
-            `**NEGATIVE PROMPT:** extra people, crowd, audience, bystanders, distorted faces, bad anatomy, blurry, watermark, text, low resolution, white borders, white bars, cropped, vertical crop.`
-        ].join('\n');
+        // Prompt injection to prevent cropping
+        const compositePrompt = `
+            **CRITICAL INSTRUCTION: PRESERVE CANVAS DIMENSIONS**
+            The input image labeled 'MASTER CANVAS' is PRE-FORMATTED with WHITE PADDING to rigidly enforce the aspect ratio of ${aspectRatio}.
+            DO NOT CROP. DO NOT RESIZE. DO NOT CHANGE ASPECT RATIO.
+            You MUST perform OUTPAINTING to fill the white padding areas with background scenery matching: "${prompt}".
+            The output image MUST be exactly the same dimensions as the MASTER CANVAS.
+
+            **TASK: GROUP PHOTO COMPOSITION**
+            **SCENE:** ${prompt}
+            **STYLE:** Hyper-realistic 3D Render (Audition Game Style), Volumetric Lighting, ${style || 'Cinematic'}.
+            
+            **CHARACTERS:**
+            Composite the ${numCharacters} provided characters into the scene naturally.
+            NO EXTRA PEOPLE.
+        `;
         
         const finalParts: any[] = [
             { inlineData: { data: masterLayoutData.data, mimeType: masterLayoutData.mimeType } },
-            { text: `[MASTER CANVAS - FIXED RESOLUTION TEMPLATE - DO NOT CROP]` },
+            { text: `[MASTER CANVAS - DO NOT CROP]` },
             { text: compositePrompt },
         ];
 
@@ -212,8 +196,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             finalParts.push({ inlineData: charData });
         });
         
-        // [CRITICAL] Remove aspectRatio from config here too, as we are providing a Master Canvas input.
-        // Providing input image + aspectRatio config causes INVALID_ARGUMENT or cropping.
+        // CRITICAL: NO imageConfig.aspectRatio here because we have a master canvas input.
         const finalConfig: any = { 
             responseModalities: [Modality.IMAGE],
         };
@@ -254,14 +237,10 @@ const handler: Handler = async (event: HandlerEvent) => {
              supabaseAdmin.rpc('increment_user_xp', { user_id_param: userId, xp_amount: xpToAward }),
              supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id })
         ]);
-        
-        console.log(`[WORKER ${jobId}] Job finalized successfully.`);
 
     } catch (error: any) {
         if (userId && totalCost > 0) {
             await failJob(jobId, error.message, userId, totalCost);
-        } else {
-             console.error(`[WORKER ${jobId}] Failed without user/cost info. No refund possible. Error:`, error);
         }
     }
 

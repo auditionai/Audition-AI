@@ -31,16 +31,28 @@ const ImageEnhancerTool: React.FC<ImageEnhancerToolProps> = ({ onSendToBgRemover
     const [selectedMode, setSelectedMode] = useState<'flash' | 'pro'>('flash');
     const [viewingImage, setViewingImage] = useState<EnhancedImage | null>(null);
 
-    // Load/Save Session
+    // Load Session
     useEffect(() => {
         try {
             const saved = sessionStorage.getItem('enhancedImages');
             if (saved) setEnhancedImages(JSON.parse(saved));
-        } catch (e) {}
+        } catch (e) {
+            console.error("Failed to load history", e);
+        }
     }, []);
 
+    // Save Session (Optimized: Don't save base64 to prevent QuotaExceededError)
     useEffect(() => {
-        sessionStorage.setItem('enhancedImages', JSON.stringify(enhancedImages));
+        try {
+            // Create a lightweight version for storage
+            const imagesToSave = enhancedImages.map(img => ({
+                ...img,
+                imageBase64: '' // Strip heavy base64 data
+            }));
+            sessionStorage.setItem('enhancedImages', JSON.stringify(imagesToSave));
+        } catch (e) {
+            console.warn("Session storage full, history not saved to prevent crash.", e);
+        }
     }, [enhancedImages]);
 
     const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -105,11 +117,29 @@ const ImageEnhancerTool: React.FC<ImageEnhancerToolProps> = ({ onSendToBgRemover
         a.click();
     };
 
-    const handleTransferToBg = (img: EnhancedImage) => {
-        const file = base64ToFile(img.imageBase64, img.fileName, img.mimeType);
-        onSendToBgRemover({ url: `data:${img.mimeType};base64,${img.imageBase64}`, file });
-        setViewingImage(null);
-        showToast('Đã chuyển ảnh sang công cụ Tách Nền!', 'success');
+    const handleTransferToBg = async (img: EnhancedImage) => {
+        try {
+            let file: File;
+            let url: string;
+
+            // If base64 is available (freshly created), use it
+            if (img.imageBase64) {
+                file = base64ToFile(img.imageBase64, img.fileName, img.mimeType);
+                url = `data:${img.mimeType};base64,${img.imageBase64}`;
+            } else {
+                // If base64 is missing (loaded from storage), fetch from URL
+                const response = await fetch(img.processedUrl);
+                const blob = await response.blob();
+                file = new File([blob], img.fileName, { type: img.mimeType });
+                url = URL.createObjectURL(blob);
+            }
+
+            onSendToBgRemover({ url, file });
+            setViewingImage(null);
+            showToast('Đã chuyển ảnh sang công cụ Tách Nền!', 'success');
+        } catch (e) {
+            showToast('Không thể tải dữ liệu ảnh. Vui lòng thử lại.', 'error');
+        }
     };
 
     return (

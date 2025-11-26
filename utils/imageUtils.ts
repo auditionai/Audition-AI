@@ -81,11 +81,19 @@ export const preprocessImageToAspectRatio = async (
             const ctx = canvas.getContext('2d');
             if (!ctx) return reject(new Error('Canvas context error'));
 
-            // STEP 1: Fill with WHITE background (Required for Outpainting)
-            ctx.fillStyle = '#FFFFFF';
+            // STEP 1: Fill with GRAY background (Neutral color for Outpainting, less likely to be treated as alpha/void)
+            ctx.fillStyle = '#888888'; 
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // STEP 2: Calculate "Contain" dimensions
+            // STEP 2: Add "Anchor Pixels" in the corners. 
+            // This forces the AI to recognize the full canvas boundaries and prevents auto-cropping.
+            ctx.fillStyle = '#111111'; // Dark grey anchors
+            ctx.fillRect(0, 0, 4, 4); // Top-Left
+            ctx.fillRect(canvas.width - 4, 0, 4, 4); // Top-Right
+            ctx.fillRect(0, canvas.height - 4, 4, 4); // Bottom-Left
+            ctx.fillRect(canvas.width - 4, canvas.height - 4, 4, 4); // Bottom-Right
+
+            // STEP 3: Calculate "Contain" dimensions
             const scale = Math.min(canvas.width / img.width, canvas.height / img.height);
             const drawWidth = img.width * scale;
             const drawHeight = img.height * scale;
@@ -105,7 +113,7 @@ export const preprocessImageToAspectRatio = async (
     });
 };
 
-// NEW: Create a blank white canvas with specific aspect ratio
+// NEW: Create a blank gray canvas with specific aspect ratio
 export const createBlankCanvas = (aspectRatio: string): string => {
     const [w, h] = aspectRatio.split(':').map(Number);
     const baseWidth = 1024;
@@ -118,8 +126,16 @@ export const createBlankCanvas = (aspectRatio: string): string => {
     const ctx = canvas.getContext('2d');
     if (!ctx) return '';
 
-    // Fill with White for optimal AI outpainting
-    ctx.fillStyle = '#FFFFFF';
+    // Fill with Gray for optimal AI outpainting
+    ctx.fillStyle = '#888888';
     ctx.fillRect(0, 0, width, height);
+    
+    // Add Anchors
+    ctx.fillStyle = '#111111';
+    ctx.fillRect(0, 0, 4, 4);
+    ctx.fillRect(width - 4, 0, 4, 4);
+    ctx.fillRect(0, height - 4, 4, 4);
+    ctx.fillRect(width - 4, height - 4, 4, 4);
+    
     return canvas.toDataURL('image/png');
 };

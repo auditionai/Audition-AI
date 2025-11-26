@@ -122,10 +122,10 @@ const handler: Handler = async (event: HandlerEvent) => {
             // SUPREME COMMAND: FORCE CANVAS DIMENSIONS
             fullPrompt = `
 *** SUPREME SYSTEM COMMAND: PRESERVE CANVAS ***
-The input image labeled 'INPUT_IMAGE_WITH_WHITE_PADDING' is the MASTER CANVAS.
-1. DO NOT CROP. DO NOT RESIZE. The output MUST match the input dimensions exactly.
-2. The white/colored borders are OUTPAINTING AREAS. Fill them completely with background.
-3. IGNORE any internal aspect ratio logic. Respect the input image frame as the absolute limit.
+The input image labeled 'INPUT_IMAGE_WITH_GRAY_PADDING' is the MASTER CANVAS with strict corners.
+1. [BOUNDARIES]: The output image MUST extend to the 4 corners of the input. DO NOT CROP. DO NOT RESIZE.
+2. [OUTPAINTING]: The GRAY areas (#888888) are void space. You MUST completely replace the gray color with background scenery matching the prompt.
+3. [CONTENT]: Keep the central character intact but blend them into the new background.
 
 ${prompt} 
 
@@ -140,7 +140,7 @@ ${prompt}
             fullPrompt += `\n\n**FACE ID:**\n- Use the exact facial structure from 'Face Reference'. Blend it seamlessly.`;
         }
 
-        const hardNegative = "photorealistic, real photo, grainy, low quality, 2D, sketch, cartoon, flat color, stiff pose, t-pose, mannequin, looking at camera blankly, distorted face, ugly, blurry, deformed hands, white borders, white bars, cropped, vertical crop";
+        const hardNegative = "photorealistic, real photo, grainy, low quality, 2D, sketch, cartoon, flat color, stiff pose, t-pose, mannequin, looking at camera blankly, distorted face, ugly, blurry, deformed hands, gray borders, gray bars, cropped, vertical crop";
         fullPrompt += ` --no ${hardNegative}, ${negativePrompt || ''}`;
 
         const parts: any[] = [];
@@ -156,7 +156,7 @@ ${prompt}
             parts.push({ inlineData: { data: base64, mimeType } });
         };
 
-        addImagePart(characterImage, "INPUT_IMAGE_WITH_WHITE_PADDING");
+        addImagePart(characterImage, "INPUT_IMAGE_WITH_GRAY_PADDING");
         addImagePart(styleImage, "STYLE_REFERENCE");
         addImagePart(faceReferenceImage, "FACE_REFERENCE");
         
@@ -175,8 +175,8 @@ ${prompt}
         } else {
             // Image-to-Image Mode: 
             // CRITICAL: DO NOT add imageConfig.aspectRatio. 
-            // Providing it alongside an input image causes INVALID_ARGUMENT or unexpected cropping.
-            // The "SUPREME COMMAND" prompt injection above handles the aspect ratio enforcement.
+            // We rely on the input image dimensions (which are pre-padded to correct ratio).
+            // Sending aspectRatio here causes INVALID_ARGUMENT error.
         }
 
         if (isProModel && useGoogleSearch) {

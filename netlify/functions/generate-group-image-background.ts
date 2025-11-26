@@ -112,7 +112,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         let masterLayoutData: { data: string; mimeType: string } | null = null;
 
         // --- BƯỚC 1: LẤY MASTER CANVAS ---
-        // Master Canvas đã được client tạo sẵn (bao gồm padding trắng nếu cần)
+        // Master Canvas đã được client tạo sẵn (bao gồm padding XÁM và Neo)
         await updateJobProgress(jobId, jobPromptData, 'Đang thiết lập khung tranh chuẩn...');
         
         if (referenceImage) {
@@ -170,11 +170,11 @@ const handler: Handler = async (event: HandlerEvent) => {
         
         // SUPREME COMMAND for Group Image
         const compositePrompt = `
-            *** SUPREME SYSTEM COMMAND: PRESERVE CANVAS ***
-            The input image labeled 'MASTER CANVAS' is PRE-FORMATTED with WHITE PADDING.
-            1. DO NOT CROP. DO NOT RESIZE. Output must be EXACT SAME DIMENSIONS.
-            2. You MUST perform OUTPAINTING to fill the white padding areas with background scenery matching: "${prompt}".
-            3. IGNORE aspect ratio metadata. Respect the CANVAS pixels as absolute truth.
+            *** SUPREME SYSTEM COMMAND: PRESERVE CANVAS DIMENSIONS ***
+            The input image labeled 'MASTER CANVAS' is PADDED with GRAY (#888888) and CORNER ANCHORS.
+            1. [BOUNDARIES]: Respect the absolute pixels. Do NOT crop or resize.
+            2. [OUTPAINTING]: Replace ALL gray padding with the scene environment.
+            3. [COMPOSITION]: Place the characters into the scene.
 
             **TASK: GROUP PHOTO COMPOSITION**
             **SCENE:** ${prompt}
@@ -187,7 +187,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         
         const finalParts: any[] = [
             { inlineData: { data: masterLayoutData.data, mimeType: masterLayoutData.mimeType } },
-            { text: `[MASTER CANVAS - DO NOT CROP]` },
+            { text: `[MASTER CANVAS - GRAY PADDED]` },
             { text: compositePrompt },
         ];
 

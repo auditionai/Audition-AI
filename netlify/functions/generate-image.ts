@@ -114,7 +114,10 @@ const handler: Handler = async (event: HandlerEvent) => {
         
         const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
 
-        // --- PROMPT ENGINEERING (SOLID BORDER STRATEGY) ---
+        // ==================================================================================
+        // 🔒 LOCKED LOGIC: SUPREME COMMAND FOR ASPECT RATIO & OUTPAINTING
+        // ⛔ WARNING: DO NOT MODIFY THE PROMPT STRUCTURE BELOW.
+        // ==================================================================================
         let fullPrompt = "";
         const hasInputImage = !!characterImage;
         
@@ -122,13 +125,13 @@ const handler: Handler = async (event: HandlerEvent) => {
             // The new imageUtils ensures there is a 1px solid black border.
             // We explicitly tell the AI to respect this frame.
             fullPrompt = `
-** INSTRUCTION: OUTPAINTING & BOUNDARY PRESERVATION **
+** SYSTEM COMMAND: BOUNDARY & DIMENSION PRESERVATION **
 You are provided with an input image labeled 'INPUT_CANVAS'.
-This image has a SOLID BORDER identifying the exact target dimensions.
+This image contains a SOLID BLACK BORDER defining the EXACT output dimensions.
 
-1. **CRITICAL:** You MUST generate the output to match the EXACT dimensions of the input image. DO NOT CROP. DO NOT RESIZE.
-2. **OUTPAINTING:** The Gray area (#808080) inside the border is empty space. You MUST fill it completely with the scene described in the prompt.
-3. **SUBJECT:** Keep the central character's pose and outfit structure, blending them naturally into the new background.
+1. [NON-NEGOTIABLE] You MUST output an image with the EXACT same aspect ratio as the input. DO NOT CROP. DO NOT RESIZE.
+2. [OUTPAINTING] The GRAY area (#808080) inside the border is void space. You MUST completely fill it with the environment described in the prompt.
+3. [SUBJECT PRESERVATION] Keep the character's Pose, Outfit, and Gender exactly as shown in the non-gray parts. Blend them seamlessly into the new background.
 
 **USER PROMPT:** ${prompt}
 
@@ -137,6 +140,9 @@ This image has a SOLID BORDER identifying the exact target dimensions.
         } else {
             fullPrompt = `${prompt}\n\n**STYLE:**\n- **Hyper-realistic 3D Render** (High-end Game Cinematic style, Unreal Engine 5).\n- Detailed skin texture, volumetric lighting, raytracing reflections.`;
         }
+        // ==================================================================================
+        // 🔒 END OF LOCKED PROMPT LOGIC
+        // ==================================================================================
 
         if (faceReferenceImage) {
             fullPrompt += `\n\n**FACE ID:**\n- Use the exact facial structure from 'Face Reference'. Blend it seamlessly.`;
@@ -162,19 +168,23 @@ This image has a SOLID BORDER identifying the exact target dimensions.
         addImagePart(styleImage, "STYLE_REFERENCE");
         addImagePart(faceReferenceImage, "FACE_REFERENCE");
         
-        // --- CONFIGURATION LOGIC ---
+        // ==================================================================================
+        // 🔒 LOCKED LOGIC: API CONFIGURATION
+        // ⛔ WARNING: DO NOT REMOVE 'imageConfig.aspectRatio'.
+        // ⛔ LÝ DO: Model Gemini có cơ chế "Smart Crop". Nếu không gửi aspectRatio, nó sẽ tự động cắt bỏ
+        //    phần nền xám (padding) mà chúng ta thêm vào, làm hỏng tỉ lệ ảnh.
+        // ==================================================================================
         const config: any = { 
             responseModalities: [Modality.IMAGE],
             seed: seed ? Number(seed) : undefined,
-            // FORCE ASPECT RATIO:
-            // Even with Image Input, we MUST send aspect ratio to prevent the model from auto-cropping "empty" space.
-            // Since our input image is already pre-processed to this exact ratio, telling the API to enforce it
-            // doubles the protection against auto-cropping.
             imageConfig: { 
-                aspectRatio: aspectRatio,
+                aspectRatio: aspectRatio, // MUST BE PRESENT TO FORCE MODEL NOT TO CROP
                 imageSize: isProModel ? imageSize : undefined
             }
         };
+        // ==================================================================================
+        // 🔒 END OF LOCKED CONFIG
+        // ==================================================================================
 
         if (isProModel && useGoogleSearch) {
             config.tools = [{ googleSearch: {} }]; 

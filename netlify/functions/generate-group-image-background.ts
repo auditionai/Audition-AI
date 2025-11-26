@@ -111,8 +111,11 @@ const handler: Handler = async (event: HandlerEvent) => {
         const generatedCharacters = [];
         let masterLayoutData: { data: string; mimeType: string } | null = null;
 
-        // --- BƯỚC 1: LẤY MASTER CANVAS ---
-        // Master Canvas đã được client tạo sẵn (bao gồm padding XÁM và khung viền cứng)
+        // --- BƯỚC 1: LẤY MASTER CANVAS (LOCKED) ---
+        // ==================================================================================
+        // 🔒 LOCKED LOGIC: MASTER CANVAS
+        // ⛔ WARNING: DO NOT MODIFY. This ensures the aspect ratio is preserved.
+        // ==================================================================================
         await updateJobProgress(jobId, jobPromptData, 'Đang thiết lập khung tranh chuẩn...');
         
         if (referenceImage) {
@@ -122,13 +125,33 @@ const handler: Handler = async (event: HandlerEvent) => {
         }
         
         if (!masterLayoutData) throw new Error("Lỗi tải khung ảnh nền.");
+        // ==================================================================================
+        // 🔒 END LOCKED LOGIC
+        // ==================================================================================
 
-        // --- BƯỚC 2: TẠO NHÂN VẬT ---
-        await updateJobProgress(jobId, jobPromptData, `Đang xử lý đồng thời ${numCharacters} nhân vật...`);
+        // --- BƯỚC 2: TẠO NHÂN VẬT (ISOLATION PIPELINE) ---
+        await updateJobProgress(jobId, jobPromptData, `Đang xử lý từng nhân vật theo quy trình...`);
+        
+        // Sử dụng vòng lặp for...of thay vì Promise.all để đảm bảo tính tuần tự nếu cần, 
+        // hoặc giữ Promise.all nhưng với Prompt cực kỳ nghiêm ngặt để cách ly dữ liệu.
+        // Ở đây ta dùng Promise.all để giữ tốc độ, nhưng Prompt được thiết kế lại để "CÁCH LY".
         
         const charPromises = characters.map(async (char: any, i: number) => {
             try {
-                const charPrompt = `Create a full-body 3D character of a **${char.gender}**. Outfit: Maintain from image. Pose: "${prompt}". Background: Grey.`;
+                const genderUpper = char.gender.toUpperCase();
+                const genderPrompt = genderUpper === 'MALE' ? 'MALE, MAN, BOY, MASCULINE' : 'FEMALE, WOMAN, GIRL, FEMININE';
+                
+                // BRUTAL PROMPT: FORCES ISOLATION OF ATTRIBUTES
+                const isolationPrompt = `
+                ** SYSTEM COMMAND: CHARACTER GENERATION **
+                ** TASK: ** Generate a single 3D Character Sprite.
+                ** STRICT CONSTRAINT: **
+                1. [GENDER]: **${genderUpper}** (${genderPrompt}). DO NOT SWAP GENDER.
+                2. [INPUT ADHERENCE]: You MUST look at the provided 'CHARACTER_REF' image. COPY the Outfit, Hair, and Face exactly.
+                3. [ISOLATION]: Ignore any other context. Focus ONLY on this single character.
+                4. [BACKGROUND]: Solid Green (#00FF00) for easy masking.
+                5. [POSE]: ${prompt} (Apply this pose to THIS character only).
+                `;
 
                 const [poseData, faceData] = await Promise.all([
                     fetchImageToBase64(char.poseImage),
@@ -139,14 +162,16 @@ const handler: Handler = async (event: HandlerEvent) => {
 
                 const parts: any[] = [
                     { inlineData: { data: poseData.data, mimeType: poseData.mimeType } },
-                    { text: charPrompt },
+                    { text: "[CHARACTER_REF]" }, // Label the input explicitly
+                    { text: isolationPrompt },
                 ];
                 
                 if (faceData) {
-                    parts.push({ text: "Face Reference:" });
+                    parts.push({ text: "[FACE_REF (Use for ID)]" });
                     parts.push({ inlineData: { data: faceData.data, mimeType: faceData.mimeType } });
                 }
 
+                // Use Flash for intermediate generation (Faster, cheaper, good enough for sprites)
                 const response = await ai.models.generateContent({ 
                     model: 'gemini-2.5-flash-image', 
                     contents: { parts }, 
@@ -156,55 +181,68 @@ const handler: Handler = async (event: HandlerEvent) => {
                 const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
                 if (!imagePart?.inlineData) throw new Error(`AI không thể tạo nhân vật ${i + 1}.`);
                 
-                return imagePart.inlineData;
+                return {
+                    index: i,
+                    gender: char.gender,
+                    data: imagePart.inlineData
+                };
             } catch (charErr) {
                 throw charErr;
             }
         });
 
         const results = await Promise.all(charPromises);
+        // Sort results to match input order (critical for mapping)
+        results.sort((a, b) => a.index - b.index);
         generatedCharacters.push(...results);
 
-        // --- BƯỚC 3: TỔNG HỢP ---
-        await updateJobProgress(jobId, jobPromptData, 'Đang tổng hợp và hòa trộn cảm xúc...');
+        // --- BƯỚC 3: TỔNG HỢP (COMPOSITION) ---
+        await updateJobProgress(jobId, jobPromptData, 'Đang lắp ráp đội hình và hoàn thiện...');
         
-        // SUPREME COMMAND for Group Image (Apply Solid Border Rule)
+        // SUPREME COMMAND for Group Image (Apply Solid Border Rule + Character Mapping)
         const compositePrompt = `
-            *** SUPREME SYSTEM COMMAND: BOUNDARY PRESERVATION ***
-            The input labeled 'MASTER CANVAS' has a SOLID BORDER identifying the exact target dimensions.
-            1. [BOUNDARIES]: You MUST preserve the exact canvas dimensions defined by the border. DO NOT CROP. DO NOT RESIZE.
-            2. [OUTPAINTING]: COMPLETELY replace the gray padding inside the border with the scene environment.
-            3. [COMPOSITION]: Place the provided character inputs into the scene naturally.
-
-            **TASK: GROUP PHOTO COMPOSITION**
-            **SCENE:** ${prompt}
-            **STYLE:** Hyper-realistic 3D Render (Audition Game Style), Volumetric Lighting, ${style || 'Cinematic'}.
+            *** SUPREME SYSTEM COMMAND: BOUNDARY & COMPOSITION ***
             
-            **CHARACTERS:**
-            Composite the ${numCharacters} provided characters into the scene.
-            NO EXTRA PEOPLE.
+            1. [FRAME RULE]: The input 'MASTER CANVAS' has a SOLID BORDER. You MUST preserve the aspect ratio defined by this border. DO NOT CROP.
+            2. [OUTPAINTING]: Fill the gray area inside the border with the scene: "${prompt}".
+            
+            3. [STRICT ASSEMBLY]:
+            I have provided ${numCharacters} pre-generated character sprites labeled [SPRITE_1], [SPRITE_2], etc.
+            You MUST place these specific sprites into the scene.
+            - [SPRITE_1] is Character 1 (${generatedCharacters[0].gender}).
+            ${generatedCharacters[1] ? `- [SPRITE_2] is Character 2 (${generatedCharacters[1].gender}).` : ''}
+            ${generatedCharacters[2] ? `- [SPRITE_3] is Character 3 (${generatedCharacters[2].gender}).` : ''}
+            
+            **RULE:** DO NOT regenerate their features (Face/Clothes/Gender). USE THE SPRITES PROVIDED. Blend them into the lighting of the scene.
+            
+            **STYLE:** Hyper-realistic 3D Render (Audition Game Style), Volumetric Lighting, ${style || 'Cinematic'}.
         `;
         
         const finalParts: any[] = [
             { inlineData: { data: masterLayoutData.data, mimeType: masterLayoutData.mimeType } },
-            { text: `[MASTER CANVAS - FRAMED]` },
+            { text: `[MASTER CANVAS]` },
             { text: compositePrompt },
         ];
 
-        generatedCharacters.forEach((charData, idx) => {
-            finalParts.push({ text: `[Input Character ${idx + 1}]` });
-            finalParts.push({ inlineData: charData });
+        generatedCharacters.forEach((char, idx) => {
+            finalParts.push({ text: `[SPRITE_${idx + 1} (${char.gender.toUpperCase()})]` });
+            finalParts.push({ inlineData: char.data });
         });
         
-        // CRITICAL: Re-enable imageConfig.aspectRatio
-        // We reinforce the aspect ratio command both visually (border) and technically (config)
+        // ==================================================================================
+        // 🔒 LOCKED LOGIC: CONFIG RE-ENFORCEMENT
+        // ⛔ WARNING: DO NOT MODIFY imageConfig.aspectRatio
+        // ==================================================================================
         const finalConfig: any = { 
             responseModalities: [Modality.IMAGE],
             imageConfig: { 
-                aspectRatio: aspectRatio,
+                aspectRatio: aspectRatio, // ENFORCED
                 imageSize: isPro ? imageSize : undefined
             }
         };
+        // ==================================================================================
+        // 🔒 END LOCKED LOGIC
+        // ==================================================================================
         
         if (isPro && useSearch) {
             finalConfig.tools = [{ googleSearch: {} }];

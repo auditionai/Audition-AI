@@ -61,8 +61,13 @@ export const base64ToFile = (base64: string, filename: string, mimeType: string)
     return new File([blob], filename, { type: mimeType });
 };
 
-// NEW: Letterboxing / Outpainting Preprocessor (SOLID BORDER STRATEGY)
-// Vẽ một khung viền 1px bao quanh toàn bộ ảnh để AI nhận diện đây là giới hạn Canvas
+// ==================================================================================
+// 🔒 LOCKED LOGIC: ASPECT RATIO ENFORCEMENT (SOLID BORDER STRATEGY)
+// ⛔ WARNING: DO NOT MODIFY THIS FUNCTION UNDER ANY CIRCUMSTANCES.
+// ⛔ LÝ DO: Logic này vẽ một viền cứng (Solid Border) và nền xám để ép Google Gemini
+//    không được tự động crop ảnh. Việc thay đổi dù chỉ 1 dòng cũng sẽ làm hỏng tính năng
+//    giữ tỉ lệ khung hình (Aspect Ratio) của toàn bộ ứng dụng.
+// ==================================================================================
 export const preprocessImageToAspectRatio = async (
     dataUrl: string,
     targetAspectRatio: string // e.g., "16:9", "1:1", "3:4"
@@ -93,12 +98,12 @@ export const preprocessImageToAspectRatio = async (
             const ctx = canvas.getContext('2d');
             if (!ctx) return reject(new Error('Canvas context error'));
 
-            // --- STEP 1: NEUTRAL GRAY BACKGROUND ---
+            // --- 🔒 CRITICAL STEP 1: NEUTRAL GRAY BACKGROUND ---
             // Màu xám #808080 là màu chuẩn nhất để AI hiểu là "vùng trống cần vẽ thêm" (Outpainting)
             ctx.fillStyle = '#808080'; 
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // --- STEP 2: CALCULATE CONTAIN FIT ---
+            // --- 🔒 CRITICAL STEP 2: CALCULATE CONTAIN FIT ---
             // Tính toán để ảnh nhân vật nằm giữa, giữ nguyên tỉ lệ
             const scale = Math.min(canvas.width / img.width, canvas.height / img.height);
             const drawWidth = img.width * scale;
@@ -109,7 +114,7 @@ export const preprocessImageToAspectRatio = async (
 
             ctx.drawImage(img, offsetX, offsetY, drawWidth, drawHeight);
 
-            // --- STEP 3: THE "SOLID FENCE" (HÀNG RÀO CỨNG) ---
+            // --- 🔒 CRITICAL STEP 3: THE "SOLID FENCE" (HÀNG RÀO CỨNG) ---
             // Vẽ viền 1px bao quanh sát mép Canvas.
             // Điều này cực kỳ quan trọng: Nó báo cho AI biết "Đây là giới hạn của bức tranh".
             // Nếu AI crop, nó sẽ mất cái viền này -> AI được huấn luyện để tránh làm điều đó.
@@ -124,8 +129,11 @@ export const preprocessImageToAspectRatio = async (
         img.src = dataUrl;
     });
 };
+// ==================================================================================
+// 🔒 END OF LOCKED LOGIC
+// ==================================================================================
 
-// Create blank canvas with Solid Border
+// Create blank canvas with Solid Border (Also Protected)
 export const createBlankCanvas = (aspectRatio: string): string => {
     const [w, h] = aspectRatio.split(':').map(Number);
     const baseLongestSide = 1536;
@@ -149,7 +157,7 @@ export const createBlankCanvas = (aspectRatio: string): string => {
     ctx.fillStyle = '#808080';
     ctx.fillRect(0, 0, width, height);
     
-    // Solid Fence Border
+    // Solid Fence Border (Locked)
     ctx.strokeStyle = '#000000';
     ctx.lineWidth = 2;
     ctx.strokeRect(0, 0, width, height);

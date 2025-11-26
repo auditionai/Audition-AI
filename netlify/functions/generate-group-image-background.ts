@@ -120,7 +120,6 @@ const handler: Handler = async (event: HandlerEvent) => {
         if (referenceImage) {
             masterLayoutData = await fetchImageToBase64(referenceImage);
         } else {
-            // Should typically not happen as client always sends it, but robust fallback check
             throw new Error("Dữ liệu khung tranh bị thiếu.");
         }
         
@@ -185,7 +184,9 @@ const handler: Handler = async (event: HandlerEvent) => {
             `**TASK: GROUP PHOTO COMPOSITION**`,
             `**ASPECT RATIO ENFORCEMENT:**`,
             `I have provided a MASTER CANVAS image first. You MUST use this canvas as the base.`,
-            `| TECHNICAL REQUIREMENT: The input MASTER CANVAS has been PRE-FORMATTED with WHITE PADDING to rigidly enforce a target aspect ratio of ${aspectRatio}. Do NOT crop this image. You MUST perform OUTPAINTING. Verify the white padded areas and fill them completely with a seamless background that matches the scene's context. The final output MUST be exactly ${aspectRatio} and contain NO remaining white borders.`,
+            `| **CRITICAL:** The input MASTER CANVAS has been PRE-FORMATTED with WHITE PADDING to rigidly enforce the target aspect ratio of ${aspectRatio}.`,
+            `| **YOU MUST PERFORM OUTPAINTING:** Verify the white padded areas and fill them completely with a seamless background that matches the scene's context.`,
+            `| **DO NOT CROP:** The final output MUST be exactly the same dimensions as the input MASTER CANVAS. Do not remove the white bars; fill them with art!`,
             `---`,
             `**SCENE DESCRIPTION:** ${prompt}`,
             `**STYLE:** Hyper-realistic 3D Render (Audition Game Style), Volumetric Lighting, ${style || 'Cinematic'}.`,
@@ -196,12 +197,12 @@ const handler: Handler = async (event: HandlerEvent) => {
             `**QUANTITY LOCK:** The final image must contain EXACTLY ${numCharacters} people. NO MORE, NO LESS.`,
             `**NO EXTRAS:** Do NOT generate any extra people, crowd, or background characters.`,
             `---`,
-            `**NEGATIVE PROMPT:** extra people, crowd, audience, bystanders, distorted faces, bad anatomy, blurry, watermark, text, low resolution, white borders, white bars.`
+            `**NEGATIVE PROMPT:** extra people, crowd, audience, bystanders, distorted faces, bad anatomy, blurry, watermark, text, low resolution, white borders, white bars, cropped.`
         ].join('\n');
         
         const finalParts: any[] = [
             { inlineData: { data: masterLayoutData.data, mimeType: masterLayoutData.mimeType } },
-            { text: `[MASTER CANVAS - BASE LAYOUT - DO NOT RESIZE]` },
+            { text: `[MASTER CANVAS - BASE LAYOUT - DO NOT CROP - FILL WHITE SPACE]` },
             { text: compositePrompt },
         ];
 
@@ -210,24 +211,21 @@ const handler: Handler = async (event: HandlerEvent) => {
             finalParts.push({ inlineData: charData });
         });
         
-        // Force Aspect Ratio in config to prevent cropping.
-        // We rely on client-side padding to match this ratio.
-        const validRatios = ['1:1', '3:4', '4:3', '9:16', '16:9'];
+        // FIX: DO NOT send imageConfig.aspectRatio here because we are providing an input image (Master Canvas).
+        // Sending config + input image causes API crashes on some models.
+        // We rely on the prompt "DO NOT CROP" and "OUTPAINTING" to handle the aspect ratio from the input.
         const finalConfig: any = { 
             responseModalities: [Modality.IMAGE],
         };
         
-        if (validRatios.includes(aspectRatio)) {
-            finalConfig.imageConfig = { aspectRatio: aspectRatio };
+        // Only set imageSize if strictly needed and supported by model when input exists
+        if (isPro && !referenceImage) { 
+             // If we didn't have a reference image (unlikely here), we might set this.
+             // But since we always have Master Canvas, we omit size config to avoid conflict.
         }
-
-        if (isPro) {
-            if (!finalConfig.imageConfig) finalConfig.imageConfig = {};
-            finalConfig.imageConfig.imageSize = imageSize;
-            
-            if (useSearch) {
-                finalConfig.tools = [{ googleSearch: {} }];
-            }
+        
+        if (isPro && useSearch) {
+            finalConfig.tools = [{ googleSearch: {} }];
         }
 
         const finalResponse = await ai.models.generateContent({

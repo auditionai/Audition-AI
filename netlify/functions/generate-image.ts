@@ -116,11 +116,13 @@ const handler: Handler = async (event: HandlerEvent) => {
         
         const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
 
-        // --- PROMPT ENGINEERING (UPDATED WITH TECHNICAL INSTRUCTION) ---
+        // --- PROMPT ENGINEERING (UPDATED) ---
         let fullPrompt = prompt;
         
-        // SYSTEM INSTRUCTION INJECTION (OUTPAINTING ENFORCEMENT)
-        fullPrompt += ` | TECHNICAL REQUIREMENT: The final output MUST be exactly aspect ratio ${aspectRatio}. The input reference image ALREADY HAS WHITE PADDING matching this ratio. You MUST perform outpainting or inpainting to fill this frame. Do NOT crop or resize.`;
+        // CRITICAL INSTRUCTION: OUTPAINTING
+        if (characterImage) {
+            fullPrompt += ` | **IMPORTANT:** The input image has been PADDED with WHITE BORDERS to enforce the target aspect ratio (${aspectRatio}). You MUST perform **OUTPAINTING** to fill these white areas with a background that matches the scene. **DO NOT CROP** or resize the image. The final output MUST have the exact same dimensions and aspect ratio as the input image.`;
+        }
 
         fullPrompt += `\n\n**STYLE:**\n- **Hyper-realistic 3D Render** (High-end Game Cinematic style, Unreal Engine 5).\n- Detailed skin texture, volumetric lighting, raytracing reflections.\n- **NOT** "Photorealistic" (Do not make it look like a real camera photo).\n- **NOT** "Cartoon" or "2D".`;
 
@@ -135,17 +137,15 @@ const handler: Handler = async (event: HandlerEvent) => {
             fullPrompt += `\n\n**FACE ID:**\n- Use the exact facial structure from 'Face Reference'. Blend it seamlessly.`;
         }
 
-        const hardNegative = "photorealistic, real photo, grainy, low quality, 2D, sketch, cartoon, flat color, stiff pose, t-pose, mannequin, looking at camera blankly, distorted face, ugly, blurry, deformed hands, white borders, white bars, letterboxing";
+        const hardNegative = "photorealistic, real photo, grainy, low quality, 2D, sketch, cartoon, flat color, stiff pose, t-pose, mannequin, looking at camera blankly, distorted face, ugly, blurry, deformed hands, white borders, white bars, letterboxing, cropped";
         fullPrompt += ` --no ${hardNegative}, ${negativePrompt || ''}`;
 
         const parts: any[] = [];
         
-        // --- IMAGE PROCESSING OPTIMIZATION ---
-        // Client-side has already processed the images (letterboxing/resizing).
-        // We use them directly to save server resources and time.
+        // --- IMAGE PROCESSING ---
+        // Use client-side processed images directly.
         const processedCharacterImage = characterImage;
         const processedStyleImage = styleImage;
-        // Face Image is always used raw for Face ID
         const actualFaceImage = faceReferenceImage;
 
         parts.push({ text: fullPrompt });
@@ -167,17 +167,27 @@ const handler: Handler = async (event: HandlerEvent) => {
             seed: seed ? Number(seed) : undefined,
         };
 
-        // Force aspect ratio in config if valid.
-        // We rely on Client-side padding to match this ratio, preventing "INVALID_ARGUMENT" errors.
+        // CRITICAL FIX: Only add aspectRatio to config if we are NOT providing a character image.
+        // If a character image is provided, we rely on its dimensions (which are padded client-side)
+        // sending both causes "INVALID_ARGUMENT" errors on some models.
         const supportedRatios = ['1:1', '3:4', '4:3', '9:16', '16:9'];
         if (supportedRatios.includes(aspectRatio)) {
-            config.imageConfig = { aspectRatio: aspectRatio };
+            // Only send aspect ratio config for Text-to-Image. 
+            // For Image-to-Image, the input image (processedCharacterImage) dictates the ratio.
+            if (!processedCharacterImage) {
+                config.imageConfig = { aspectRatio: aspectRatio };
+            }
         }
 
         if (isProModel) {
-            // Ensure imageConfig exists before adding imageSize
+            // For Pro model, we can try setting imageSize, but we must be careful not to conflict.
             if (!config.imageConfig) config.imageConfig = {};
-            config.imageConfig.imageSize = imageSize;
+            
+            // Only set imageSize if strictly needed, usually Pro handles resolution well.
+            // If user requested 4K, we might hint it, but avoid conflict if input image exists.
+            if (!processedCharacterImage) {
+                 config.imageConfig.imageSize = imageSize;
+            }
             
             if (useGoogleSearch) {
                 config.tools = [{ googleSearch: {} }]; 
@@ -248,7 +258,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         let clientFriendlyError = 'Lỗi không xác định từ máy chủ.';
         if (error?.message) {
             if (error.message.includes('INVALID_ARGUMENT')) {
-                 clientFriendlyError = 'Lỗi cấu hình AI (Tỷ lệ/Model): Hệ thống đang khắc phục, vui lòng thử lại.';
+                 clientFriendlyError = 'Lỗi cấu hình AI: Vui lòng thử lại hoặc chọn tỷ lệ khác.';
             } else {
                 clientFriendlyError = error.message;
             }

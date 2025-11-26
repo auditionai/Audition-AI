@@ -120,7 +120,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         let fullPrompt = prompt;
         
         // SYSTEM INSTRUCTION INJECTION (OUTPAINTING ENFORCEMENT)
-        fullPrompt += ` | TECHNICAL REQUIREMENT: The final output MUST be exactly aspect ratio ${aspectRatio}. The input reference image might have a different aspect ratio or white padding; you MUST respect the requested ${aspectRatio} output ratio. Perform outpainting or inpainting as necessary to fit the scene naturally into this frame.`;
+        fullPrompt += ` | TECHNICAL REQUIREMENT: The final output MUST be exactly aspect ratio ${aspectRatio}. The input reference image ALREADY HAS WHITE PADDING matching this ratio. You MUST perform outpainting or inpainting to fill this frame. Do NOT crop or resize.`;
 
         fullPrompt += `\n\n**STYLE:**\n- **Hyper-realistic 3D Render** (High-end Game Cinematic style, Unreal Engine 5).\n- Detailed skin texture, volumetric lighting, raytracing reflections.\n- **NOT** "Photorealistic" (Do not make it look like a real camera photo).\n- **NOT** "Cartoon" or "2D".`;
 
@@ -165,14 +165,21 @@ const handler: Handler = async (event: HandlerEvent) => {
         const config: any = { 
             responseModalities: [Modality.IMAGE],
             seed: seed ? Number(seed) : undefined,
-            // FIX: Force aspect ratio in config for ALL models to prevent cropping to reference
-            imageConfig: {
-                aspectRatio: aspectRatio
-            }
         };
 
+        // CRITICAL FIX: If `characterImage` exists, it is already padded to the correct ratio.
+        // Sending `aspectRatio` in `imageConfig` creates a conflict with the input image dimensions in Gemini API.
+        // WE ONLY SEND aspectRatio IF THERE IS NO INPUT IMAGE (Text-to-Image mode).
+        if (!processedCharacterImage) {
+            const supportedRatios = ['1:1', '3:4', '4:3', '9:16', '16:9'];
+            if (supportedRatios.includes(aspectRatio)) {
+                config.imageConfig = { aspectRatio: aspectRatio };
+            }
+        }
+
         if (isProModel) {
-            // Pro-only configurations
+            // Ensure imageConfig exists before adding imageSize
+            if (!config.imageConfig) config.imageConfig = {};
             config.imageConfig.imageSize = imageSize;
             
             if (useGoogleSearch) {
@@ -244,7 +251,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         let clientFriendlyError = 'Lỗi không xác định từ máy chủ.';
         if (error?.message) {
             if (error.message.includes('INVALID_ARGUMENT')) {
-                 clientFriendlyError = 'Lỗi cấu hình AI: Vui lòng thử lại hoặc đổi model.';
+                 clientFriendlyError = 'Lỗi cấu hình AI (Tỷ lệ/Model): Hệ thống đang khắc phục, vui lòng thử lại.';
             } else {
                 clientFriendlyError = error.message;
             }

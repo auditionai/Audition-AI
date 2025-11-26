@@ -210,16 +210,17 @@ const handler: Handler = async (event: HandlerEvent) => {
             finalParts.push({ inlineData: charData });
         });
         
-        // FIX: Force aspect ratio in config for ALL models (including flash) to ensure output matches user selection
+        // CRITICAL FIX: We rely on the Master Canvas (which is already padded to the correct ratio).
+        // Sending `aspectRatio` in imageConfig creates a conflict with the Master Canvas dimensions.
+        // Therefore, we DO NOT send `aspectRatio` in `imageConfig` for Group Photos.
         const finalConfig: any = { 
             responseModalities: [Modality.IMAGE],
-            imageConfig: {
-                aspectRatio: aspectRatio
-            }
         };
 
         if (isPro) {
+            if (!finalConfig.imageConfig) finalConfig.imageConfig = {};
             finalConfig.imageConfig.imageSize = imageSize;
+            
             if (useSearch) {
                 finalConfig.tools = [{ googleSearch: {} }];
             }

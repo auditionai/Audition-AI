@@ -2,14 +2,19 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useTranslation } from '../../../hooks/useTranslation';
-import { resizeImage } from '../../../utils/imageUtils';
+import { resizeImage, base64ToFile } from '../../../utils/imageUtils';
 import ReactCrop, { Crop, PixelCrop, centerCrop, makeAspectCrop } from 'react-image-crop';
+import Modal from '../../common/Modal';
 
 interface EditedImage {
     id: string;
     processedUrl: string; // dataURL
     fileName: string;
     timestamp: number;
+}
+
+interface ImageEditorToolProps {
+    onSwitchToolWithImage?: (image: { url: string; file: File }, targetTool: 'bg-remover' | 'enhancer') => void;
 }
 
 const ASPECT_RATIOS = [
@@ -20,7 +25,7 @@ const ASPECT_RATIOS = [
     { label: '3:4', value: 3/4, icon: 'ph-device-mobile' },
 ];
 
-const ImageEditorTool: React.FC = () => {
+const ImageEditorTool: React.FC<ImageEditorToolProps> = ({ onSwitchToolWithImage }) => {
     const { showToast } = useAuth();
     const { t } = useTranslation();
     
@@ -28,6 +33,7 @@ const ImageEditorTool: React.FC = () => {
     const [inputImage, setInputImage] = useState<{ url: string; file: File } | null>(null); // For Crop
     const [mergeImages, setMergeImages] = useState<Array<{ id: string; url: string; file: File }>>([]); // For Merge
     const [editedImages, setEditedImages] = useState<EditedImage[]>([]);
+    const [viewingImage, setViewingImage] = useState<EditedImage | null>(null);
     
     // Crop State
     const [crop, setCrop] = useState<Crop>();
@@ -208,6 +214,28 @@ const ImageEditorTool: React.FC = () => {
         a.click();
         document.body.removeChild(a);
     };
+    
+    const handleDelete = (id: string) => {
+        setEditedImages(prev => prev.filter(i => i.id !== id));
+        setViewingImage(null);
+    };
+
+    const handleTransfer = (img: EditedImage, target: 'bg-remover' | 'enhancer') => {
+        if (!onSwitchToolWithImage) return;
+        try {
+            const split = img.processedUrl.split(',');
+            const base64 = split[1];
+            const mime = split[0].match(/:(.*?);/)?.[1] || 'image/png';
+            
+            const file = base64ToFile(base64, img.fileName, mime);
+            
+            onSwitchToolWithImage({ url: img.processedUrl, file }, target);
+            setViewingImage(null);
+        } catch (e) {
+            console.error("Transfer failed", e);
+            showToast('Lỗi chuyển ảnh.', 'error');
+        }
+    };
 
     return (
         <div className="flex flex-col lg:grid lg:grid-cols-2 gap-6 h-full">
@@ -329,13 +357,11 @@ const ImageEditorTool: React.FC = () => {
                      ) : (
                         <div className="grid grid-cols-2 gap-3">
                             {editedImages.map(img => (
-                                <div key={img.id} className="group relative rounded overflow-hidden border border-white/10 bg-black/40">
+                                <div key={img.id} className="group relative rounded overflow-hidden border border-white/10 bg-black/40 cursor-pointer" onClick={() => setViewingImage(img)}>
                                     <img src={img.processedUrl} alt="Result" className="w-full h-auto object-contain" />
-                                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-2">
-                                        <button onClick={() => handleDownload(img)} className="p-2 bg-white/20 hover:bg-green-600 rounded-full text-white transition"><i className="ph-fill ph-download-simple"></i></button>
-                                        <button onClick={() => {
-                                            setEditedImages(prev => prev.filter(i => i.id !== img.id));
-                                        }} className="p-2 bg-white/20 hover:bg-red-600 rounded-full text-white transition"><i className="ph-fill ph-trash"></i></button>
+                                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition flex flex-col items-center justify-center gap-1">
+                                        <i className="ph-fill ph-eye text-2xl text-white"></i>
+                                        <span className="text-[10px] font-bold text-white">{t('creator.aiTool.editor.viewResult')}</span>
                                     </div>
                                 </div>
                             ))}
@@ -343,6 +369,36 @@ const ImageEditorTool: React.FC = () => {
                      )}
                 </div>
             </div>
+
+            {/* IMAGE VIEWER MODAL */}
+            {viewingImage && (
+                <Modal isOpen={!!viewingImage} onClose={() => setViewingImage(null)} title={viewingImage.fileName}>
+                    <div className="flex flex-col gap-4">
+                        <div className="bg-black/50 rounded-lg overflow-hidden border border-white/10 flex items-center justify-center p-2">
+                            <img 
+                                src={viewingImage.processedUrl} 
+                                alt="Full size" 
+                                className="max-w-full max-h-[60vh] object-contain"
+                            />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                            <button onClick={() => handleDownload(viewingImage)} className="py-3 bg-green-600 hover:bg-green-500 text-white rounded-lg font-bold text-sm flex items-center justify-center gap-2">
+                                <i className="ph-fill ph-download-simple text-lg"></i> {t('creator.aiTool.editor.actions.download')}
+                            </button>
+                            <button onClick={() => handleDelete(viewingImage.id)} className="py-3 bg-red-600 hover:bg-red-500 text-white rounded-lg font-bold text-sm flex items-center justify-center gap-2">
+                                <i className="ph-fill ph-trash text-lg"></i> {t('creator.aiTool.editor.actions.delete')}
+                            </button>
+                            
+                            <button onClick={() => handleTransfer(viewingImage, 'bg-remover')} className="py-3 bg-blue-500/20 border border-blue-500/50 hover:bg-blue-500/30 text-blue-300 rounded-lg font-bold text-sm flex items-center justify-center gap-2">
+                                <i className="ph-fill ph-scissors text-lg"></i> {t('creator.aiTool.editor.actions.toBg')}
+                            </button>
+                             <button onClick={() => handleTransfer(viewingImage, 'enhancer')} className="py-3 bg-yellow-500/20 border border-yellow-500/50 hover:bg-yellow-500/30 text-yellow-300 rounded-lg font-bold text-sm flex items-center justify-center gap-2">
+                                <i className="ph-fill ph-sparkle text-lg"></i> {t('creator.aiTool.editor.actions.toEnhance')}
+                            </button>
+                        </div>
+                    </div>
+                </Modal>
+            )}
         </div>
     );
 };

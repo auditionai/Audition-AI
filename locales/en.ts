@@ -483,6 +483,13 @@ export const en = {
         tips: {
             crop: 'Drag the frame to select crop area.',
             merge: 'Add multiple images to combine them.',
+        },
+        viewResult: 'View Image',
+        actions: {
+            toBg: 'BG Remove',
+            toEnhance: 'Enhance',
+            download: 'Download',
+            delete: 'Delete'
         }
       }
     },

@@ -484,6 +484,13 @@ export const vi = {
         tips: {
             crop: 'Kéo khung để chọn vùng cắt.',
             merge: 'Thêm nhiều ảnh để ghép lại với nhau.',
+        },
+        viewResult: 'Xem ảnh',
+        actions: {
+            toBg: 'Tách nền',
+            toEnhance: 'Làm nét',
+            download: 'Tải về',
+            delete: 'Xóa'
         }
       }
     },

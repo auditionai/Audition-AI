@@ -86,7 +86,10 @@ const AITool: React.FC = () => {
             setImageForBgRemover(image);
         } else if (targetTool === 'enhancer') {
             setActiveUtility('enhancer');
-            // ImageEnhancerTool logic for initial image would go here if updated
+            // If ImageEnhancerTool supported pre-filling via props, we would pass it here.
+            // Currently ImageEnhancerTool handles its own state but we can extend it later.
+            // For now, show toast.
+            // Ideally we should lift inputImage state up from ImageEnhancerTool too.
         }
         showToast(`Đã chuyển sang công cụ ${targetTool === 'bg-remover' ? 'Tách Nền' : 'Làm Nét'}`, 'success');
     };
@@ -238,7 +241,9 @@ const AITool: React.FC = () => {
                                     />
                                 )}
                                 {activeUtility === 'editor' && (
-                                    <ImageEditorTool />
+                                    <ImageEditorTool 
+                                        onSwitchToolWithImage={handleSwitchToolWithImage}
+                                    />
                                 )}
                                 {activeUtility === 'signature' && (
                                     <SignatureTool 

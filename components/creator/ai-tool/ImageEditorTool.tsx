@@ -2,9 +2,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useTranslation } from '../../../hooks/useTranslation';
-import { resizeImage, base64ToFile } from '../../../utils/imageUtils';
+import { resizeImage } from '../../../utils/imageUtils';
 import ReactCrop, { Crop, PixelCrop, centerCrop, makeAspectCrop } from 'react-image-crop';
-import Modal from '../../common/Modal';
 
 interface EditedImage {
     id: string;
@@ -133,9 +132,6 @@ const ImageEditorTool: React.FC = () => {
             return img;
         });
 
-        // Wait for all images to load (they are dataURLs so should be fast)
-        // But for safety in React, we rely on them already being loaded in UI or quick load.
-        // Better approach: promisify load
         Promise.all(images.map(img => new Promise<HTMLImageElement>((resolve) => {
             if (img.complete) resolve(img);
             else img.onload = () => resolve(img);
@@ -202,9 +198,6 @@ const ImageEditorTool: React.FC = () => {
         };
         setEditedImages(prev => [newImage, ...prev]);
         showToast('Đã lưu vào danh sách kết quả!', 'success');
-        // Optional: Clear inputs after save
-        // setInputImage(null); 
-        // setMergeImages([]);
     };
 
     const handleDownload = (img: EditedImage) => {

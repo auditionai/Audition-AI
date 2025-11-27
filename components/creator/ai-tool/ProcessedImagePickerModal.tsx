@@ -5,12 +5,13 @@ import { useTranslation } from '../../../hooks/useTranslation';
 import { base64ToFile } from '../../../utils/imageUtils';
 import { ReactCrop, centerCrop, makeAspectCrop, type Crop, type PixelCrop } from 'react-image-crop';
 
+// Standardized Interface (mimeType is mandatory string)
 interface ProcessedImageData {
     id: string;
     originalUrl?: string;
     processedUrl: string; // R2 URL or DataURL
     imageBase64?: string; // Base64 might be missing for Enhanced images to save storage
-    mimeType?: string;
+    mimeType: string; // REQUIRED
     fileName: string;
     mode?: string; // 'flash' or 'pro' (from enhancer)
 }
@@ -58,7 +59,14 @@ const ProcessedImagePickerModal: React.FC<ProcessedImagePickerModalProps> = ({ i
 
             const stored = sessionStorage.getItem(key);
             if (stored) {
-                setImages(JSON.parse(stored));
+                const rawImages = JSON.parse(stored);
+                // Normalize data to ensure mimeType exists
+                const normalizedImages = rawImages.map((img: any) => ({
+                    ...img,
+                    // Fallback for images saved before this strict type change
+                    mimeType: img.mimeType || 'image/png' 
+                }));
+                setImages(normalizedImages);
             } else {
                 setImages([]);
             }
@@ -100,17 +108,13 @@ const ProcessedImagePickerModal: React.FC<ProcessedImagePickerModalProps> = ({ i
 
     const handleUseFull = () => {
         if (!selectedImage) return;
-        // If base64 is missing, we need to construct full object. But for now, pass what we have.
-        // Ideally `onSelect` handler handles fetching blob if needed. 
-        // But to keep consistency, we can ensure base64 if we fetched blob.
         
-        let finalImage = { ...selectedImage };
-        // Note: converting blob url back to base64 is heavy, better to pass url if possible
-        // But parent component expects ProcessedImageData structure.
-        // For simplicity, we pass the object. The parent handles it.
-        
-        // If we have a blob URL but no base64, we might want to convert it if parent strictly needs base64.
-        // But let's assume parent handles `processedUrl`.
+        // Construct final object satisfying interface
+        const finalImage: ProcessedImageData = { 
+            ...selectedImage,
+            mimeType: selectedImage.mimeType || 'image/png'
+        };
+
         onSelect(finalImage);
     };
 
@@ -157,7 +161,7 @@ const ProcessedImagePickerModal: React.FC<ProcessedImagePickerModalProps> = ({ i
         if (onCropSelect) {
             onCropSelect({ url: base64Url, file });
         } else {
-            // Fallback if no specific crop handler, treat as generic selection but updated data
+            // Fallback if no specific crop handler
             onSelect({ ...selectedImage, imageBase64: base64Url.split(',')[1], mimeType: 'image/png' });
         }
     };

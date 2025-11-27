@@ -4,6 +4,7 @@ import AiGeneratorTool from './ai-tool/AiGeneratorTool';
 import GroupGeneratorTool from './ai-tool/GroupGeneratorTool';
 import BgRemoverTool from './ai-tool/BgRemoverTool';
 import ImageEnhancerTool from './ai-tool/ImageEnhancerTool';
+import ImageEditorTool from './ai-tool/ImageEditorTool';
 import InstructionModal from '../common/InstructionModal';
 import SignatureTool from './tools/SignatureTool';
 import ComicStudio from './comic/ComicStudio';
@@ -12,7 +13,7 @@ import UtilInstructionModal from '../ai-tool/InstructionModal';
 import { useTranslation } from '../../hooks/useTranslation';
 
 type AIToolTab = 'generator' | 'group-studio' | 'comic-studio' | 'utilities'; 
-type UtilityTab = 'bg-remover' | 'signature' | 'enhancer';
+type UtilityTab = 'bg-remover' | 'signature' | 'enhancer' | 'editor';
 
 const AITool: React.FC = () => {
     const { showToast } = useAuth();
@@ -85,13 +86,7 @@ const AITool: React.FC = () => {
             setImageForBgRemover(image);
         } else if (targetTool === 'enhancer') {
             setActiveUtility('enhancer');
-            // ImageEnhancerTool doesn't have an initialImage prop yet in this scope, 
-            // but typically we would add it or use context. 
-            // For simplicity, we'll just switch tabs, but to fully support passing image to enhancer,
-            // we might need to update ImageEnhancerTool to accept `initialImage`.
-            // Since the request focuses on "Bg Remover" and "Enhancer" tabs inside the picker modal,
-            // switching to the tab is the first step.
-            // Note: Current ImageEnhancerTool implementation in `components` might need prop update if we want pre-fill.
+            // ImageEnhancerTool logic for initial image would go here if updated
         }
         showToast(`Đã chuyển sang công cụ ${targetTool === 'bg-remover' ? 'Tách Nền' : 'Làm Nét'}`, 'success');
     };
@@ -214,14 +209,17 @@ const AITool: React.FC = () => {
                         {activeTab === 'utilities' && (
                             <div>
                                 {/* Utility Sub-tabs */}
-                                <div className="flex justify-center border-b border-white/10 mb-6">
-                                    <button onClick={() => setActiveUtility('bg-remover')} className={`px-4 py-2 text-sm font-semibold transition-colors ${activeUtility === 'bg-remover' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400 hover:text-white'}`}>
+                                <div className="flex justify-center border-b border-white/10 mb-6 overflow-x-auto pb-2">
+                                    <button onClick={() => setActiveUtility('bg-remover')} className={`px-4 py-2 text-sm font-semibold transition-colors whitespace-nowrap ${activeUtility === 'bg-remover' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400 hover:text-white'}`}>
                                         <i className="ph-fill ph-scissors mr-2"></i>{t('creator.aiTool.utils.bgRemover')}
                                     </button>
-                                    <button onClick={() => setActiveUtility('enhancer')} className={`px-4 py-2 text-sm font-semibold transition-colors ${activeUtility === 'enhancer' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400 hover:text-white'}`}>
+                                    <button onClick={() => setActiveUtility('enhancer')} className={`px-4 py-2 text-sm font-semibold transition-colors whitespace-nowrap ${activeUtility === 'enhancer' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400 hover:text-white'}`}>
                                         <i className="ph-fill ph-sparkle mr-2"></i>{t('creator.aiTool.utils.enhancer')}
                                     </button>
-                                    <button onClick={() => setActiveUtility('signature')} className={`px-4 py-2 text-sm font-semibold transition-colors ${activeUtility === 'signature' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400 hover:text-white'}`}>
+                                    <button onClick={() => setActiveUtility('editor')} className={`px-4 py-2 text-sm font-semibold transition-colors whitespace-nowrap ${activeUtility === 'editor' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400 hover:text-white'}`}>
+                                        <i className="ph-fill ph-crop mr-2"></i>{t('creator.aiTool.utils.editor')}
+                                    </button>
+                                    <button onClick={() => setActiveUtility('signature')} className={`px-4 py-2 text-sm font-semibold transition-colors whitespace-nowrap ${activeUtility === 'signature' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400 hover:text-white'}`}>
                                         <i className="ph-fill ph-pencil-simple-line mr-2"></i>{t('creator.aiTool.utils.signature')}
                                     </button>
                                 </div>
@@ -238,6 +236,9 @@ const AITool: React.FC = () => {
                                     <ImageEnhancerTool 
                                         onSendToBgRemover={handleSendToBgRemover}
                                     />
+                                )}
+                                {activeUtility === 'editor' && (
+                                    <ImageEditorTool />
                                 )}
                                 {activeUtility === 'signature' && (
                                     <SignatureTool 

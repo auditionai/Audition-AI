@@ -7,10 +7,10 @@ import { ReactCrop, centerCrop, makeAspectCrop, type Crop, type PixelCrop } from
 
 interface ProcessedImageData {
     id: string;
-    originalUrl: string;
-    processedUrl: string; // R2 URL
+    originalUrl?: string;
+    processedUrl: string; // R2 URL or DataURL
     imageBase64?: string; // Base64 might be missing for Enhanced images to save storage
-    mimeType: string;
+    mimeType?: string;
     fileName: string;
     mode?: string; // 'flash' or 'pro' (from enhancer)
 }
@@ -23,7 +23,7 @@ interface ProcessedImagePickerModalProps {
   onProcessAction?: (image: ProcessedImageData, action: 'bg-remover' | 'enhancer') => void;
 }
 
-type TabType = 'bg-removed' | 'enhanced';
+type TabType = 'bg-removed' | 'enhanced' | 'edited';
 
 const ProcessedImagePickerModal: React.FC<ProcessedImagePickerModalProps> = ({ isOpen, onClose, onSelect, onCropSelect, onProcessAction }) => {
     const { t } = useTranslation();
@@ -51,7 +51,11 @@ const ProcessedImagePickerModal: React.FC<ProcessedImagePickerModalProps> = ({ i
 
     const loadImagesForTab = (tab: TabType) => {
         try {
-            const key = tab === 'bg-removed' ? 'processedBgImages' : 'enhancedImages';
+            let key = '';
+            if (tab === 'bg-removed') key = 'processedBgImages';
+            else if (tab === 'enhanced') key = 'enhancedImages';
+            else if (tab === 'edited') key = 'editedImages';
+
             const stored = sessionStorage.getItem(key);
             if (stored) {
                 setImages(JSON.parse(stored));
@@ -69,8 +73,14 @@ const ProcessedImagePickerModal: React.FC<ProcessedImagePickerModalProps> = ({ i
         setSelectedImage(img);
         setIsCropping(false);
         
+        // Determine MIME type if missing (fallback for Edited images which are usually PNG dataURLs)
+        const mime = img.mimeType || (img.processedUrl.startsWith('data:image/jpeg') ? 'image/jpeg' : 'image/png');
+
         if (img.imageBase64) {
-            setImageBlobUrl(`data:${img.mimeType};base64,${img.imageBase64}`);
+            setImageBlobUrl(`data:${mime};base64,${img.imageBase64}`);
+        } else if (img.processedUrl.startsWith('data:')) {
+            // Already a data URL (common for Edited tab)
+            setImageBlobUrl(img.processedUrl);
         } else {
             setIsLoadingImage(true);
             try {
@@ -164,20 +174,27 @@ const ProcessedImagePickerModal: React.FC<ProcessedImagePickerModalProps> = ({ i
             
             {/* TABS (Only visible if not in detail mode) */}
             {!selectedImage && (
-                <div className="flex border-b border-white/10 mb-4">
+                <div className="flex border-b border-white/10 mb-4 overflow-x-auto">
                     <button 
                         onClick={() => setActiveTab('bg-removed')} 
-                        className={`flex-1 py-3 text-sm font-bold transition-colors relative ${activeTab === 'bg-removed' ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                        className={`flex-1 py-3 px-2 text-sm font-bold transition-colors relative whitespace-nowrap ${activeTab === 'bg-removed' ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}
                     >
                         {t('modals.picker.tabs.bgRemoved')}
                         {activeTab === 'bg-removed' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-pink-500"></div>}
                     </button>
                     <button 
                         onClick={() => setActiveTab('enhanced')} 
-                        className={`flex-1 py-3 text-sm font-bold transition-colors relative ${activeTab === 'enhanced' ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                        className={`flex-1 py-3 px-2 text-sm font-bold transition-colors relative whitespace-nowrap ${activeTab === 'enhanced' ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}
                     >
                         {t('modals.picker.tabs.enhanced')}
                         {activeTab === 'enhanced' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-cyan-500"></div>}
+                    </button>
+                    <button 
+                        onClick={() => setActiveTab('edited')} 
+                        className={`flex-1 py-3 px-2 text-sm font-bold transition-colors relative whitespace-nowrap ${activeTab === 'edited' ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                    >
+                        {t('modals.picker.tabs.edited')}
+                        {activeTab === 'edited' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-purple-500"></div>}
                     </button>
                 </div>
             )}

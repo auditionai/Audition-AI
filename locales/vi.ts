@@ -299,6 +299,7 @@ export const vi = {
         bgRemover: 'Tách Nền',
         signature: 'Chèn Chữ Ký',
         enhancer: 'Làm Nét Ảnh',
+        editor: 'Cắt & Ghép',
       },
       common: {
         help: 'Hướng dẫn',
@@ -457,6 +458,34 @@ export const vi = {
           monochrome: 'ĐƠN SẮC',
         }
       },
+      editor: {
+        title: 'Cắt & Ghép Ảnh',
+        uploadTitle: '1. Tải Ảnh',
+        mode: 'Chế độ:',
+        crop: 'Cắt Ảnh',
+        merge: 'Ghép Ảnh',
+        uploadButton: 'Chọn Ảnh',
+        uploadDesc: 'Hỗ trợ JPG, PNG',
+        resultTitle: '2. Kết quả',
+        resultDesc: 'Lưu trữ tạm thời',
+        placeholder: 'Kết quả hiển thị tại đây',
+        cropActions: {
+            apply: 'Cắt Ngay',
+            reset: 'Đặt lại',
+            aspectFree: 'Tự do',
+        },
+        mergeActions: {
+            horizontal: 'Ghép Ngang',
+            vertical: 'Ghép Dọc',
+            grid: 'Ghép Lưới',
+            clear: 'Xóa tất cả',
+        },
+        emptyMerge: 'Chưa có ảnh nào được chọn.',
+        tips: {
+            crop: 'Kéo khung để chọn vùng cắt.',
+            merge: 'Thêm nhiều ảnh để ghép lại với nhau.',
+        }
+      }
     },
     xpBar: {
       progress: 'Tiến độ cấp',
@@ -980,7 +1009,8 @@ export const vi = {
         empty_desc: 'Hãy sử dụng công cụ Tách Nền hoặc Siêu Khóa Mặt trước.',
         tabs: {
             bgRemoved: 'Ảnh Tách Nền',
-            enhanced: 'Ảnh Làm Nét'
+            enhanced: 'Ảnh Làm Nét',
+            edited: 'Ảnh Đã Chỉnh Sửa'
         },
         actions: {
             use: 'Sử dụng ảnh',

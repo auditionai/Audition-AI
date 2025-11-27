@@ -35,10 +35,12 @@ const BgRemoverTool: React.FC<BgRemoverToolProps> = ({ onMoveToGenerator, onMove
     const [selectedProcessedImage, setSelectedProcessedImage] = useState<ProcessedImageData | null>(null);
     const [processingModel, setProcessingModel] = useState<'flash' | 'pro'>('flash');
     
-    // Handle initial image from other tools
+    // Handle initial image from other tools (including new Editor)
     useEffect(() => {
         if (initialImage) {
+            // Ensure unique ID
             const newImage = { id: crypto.randomUUID(), url: initialImage.url, file: initialImage.file };
+            // Append to list or Replace? Append is safer.
             setImagesForBgRemoval(prev => [...prev, newImage]);
         }
     }, [initialImage]);

@@ -1,0 +1,38 @@
+@import 'react-image-crop/dist/ReactCrop.css';
+@import './themes/landing.css';
+@import './themes/creator.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+    /* --- Keyframe Animations --- */
+    @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes fade-in-up { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes fade-in-down { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* --- Animation Utility Classes --- */
+    .animate-fade-in { animation: fade-in 0.6s ease-out forwards; }
+    .animate-fade-in-up { animation: fade-in-up 0.6s ease-out forwards; }
+    .animate-fade-in-down { animation: fade-in-down 0.6s ease-out forwards; }
+}
+
+/* Custom styles for react-image-crop to match the app's theme */
+.ReactCrop {
+  --ReactCrop-selection-color: rgba(247, 37, 133, 0.4);
+  --ReactCrop-drag-handle-color: rgba(255, 255, 255, 0.8);
+  --ReactCrop-rule-of-thirds-color: rgba(255, 255, 255, 0.4);
+}
+
+.ReactCrop__crop-selection {
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.6);
+}
+
+.ReactCrop__drag-handle {
+  border-radius: 50%;
+  border: 2px solid var(--ReactCrop-drag-handle-color);
+  background-color: rgba(0,0,0,0.5);
+  width: 12px;
+  height: 12px;
+}

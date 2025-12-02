@@ -149,14 +149,10 @@ CREATE TABLE IF NOT EXISTS public.system_settings (
 ALTER TABLE public.system_settings ENABLE ROW LEVEL SECURITY;
 
 -- Policy: Public Read (Everyone can read settings like video url)
-DROP POLICY IF EXISTS "Public Read Settings" ON public.system_settings;
 CREATE POLICY "Public Read Settings" ON public.system_settings
     FOR SELECT USING (true);
 
--- Policy: Admin Write (Optional, if using service role key this is bypassed)
-DROP POLICY IF EXISTS "Admin Full Access" ON public.system_settings;
-CREATE POLICY "Admin Full Access" ON public.system_settings
-    FOR ALL USING ( (SELECT is_admin FROM users WHERE id = auth.uid()) = true );
+-- Policy: Admin Write (Handled via Admin API, no policy needed for inserts if using service role key)
 `;
 
 const GameConfigManager: React.FC = () => {
@@ -416,17 +412,10 @@ const GameConfigManager: React.FC = () => {
                     } 
                 }),
             });
-            if (!res.ok) {
-                const data = await res.json();
-                throw new Error(data.error || 'Failed');
-            }
+            if (!res.ok) throw new Error('Failed');
             showToast(t('creator.settings.admin.system.success'), 'success');
-        } catch(e: any) {
-            if (e.message && e.message.includes('relation "public.system_settings" does not exist')) {
-                showToast("Lỗi: Bảng system_settings chưa được tạo. Hãy chạy SQL trong tab 'Sửa lỗi DB'.", 'error');
-            } else {
-                showToast(t('creator.settings.admin.system.error') + ': ' + e.message, 'error');
-            }
+        } catch(e) {
+            showToast(t('creator.settings.admin.system.error'), 'error');
         } finally {
             setIsSaving(false);
         }
@@ -520,24 +509,7 @@ const GameConfigManager: React.FC = () => {
             {activeSubTab === 'system' && (
                 <div className="space-y-4">
                     <h4 className="text-xl font-bold text-white mb-2">{t('creator.settings.admin.system.title')}</h4>
-                    
-                    {/* Helper Note for Video */}
-                    <div className="bg-blue-500/10 border border-blue-500/30 p-3 rounded-lg mb-2 text-xs text-blue-200">
-                        <i className="ph-fill ph-info mr-2"></i>
-                        Lưu ý: Video YouTube phải ở chế độ <strong>Công khai</strong> (Public) và cho phép <strong>Nhúng</strong> (Embedding).
-                    </div>
-
                     <div className="bg-white/5 p-4 rounded-lg space-y-4">
-                        <div className="bg-yellow-500/10 border border-yellow-500/30 p-3 rounded-lg mb-2 text-xs text-yellow-200 flex justify-between items-center">
-                            <span><i className="ph-fill ph-info mr-1"></i> Nếu không lưu được, vui lòng chạy SQL tạo bảng.</span>
-                            <button 
-                                onClick={() => { navigator.clipboard.writeText(SQL_SYSTEM_SETTINGS); showToast("Đã sao chép SQL!", "success"); }}
-                                className="bg-yellow-500 hover:bg-yellow-600 text-black px-3 py-1 rounded font-bold text-xs"
-                            >
-                                Copy SQL Cài Đặt
-                            </button>
-                        </div>
-
                         <div>
                             <label className="block text-sm font-bold text-gray-300 mb-2">Video Hướng Dẫn: Tạo Ảnh Đơn</label>
                             <input 
@@ -547,7 +519,6 @@ const GameConfigManager: React.FC = () => {
                                 className="auth-input"
                                 placeholder={t('creator.settings.admin.system.placeholderVideo')}
                             />
-                            <p className="text-[10px] text-gray-500 mt-1">Hỗ trợ link: YouTube Watch, Shorts, Embed, Google Drive.</p>
                         </div>
                         <div>
                             <label className="block text-sm font-bold text-gray-300 mb-2">Video Hướng Dẫn: Studio Nhóm</label>
@@ -558,7 +529,6 @@ const GameConfigManager: React.FC = () => {
                                 className="auth-input"
                                 placeholder={t('creator.settings.admin.system.placeholderVideo')}
                             />
-                            <p className="text-[10px] text-gray-500 mt-1">Hỗ trợ link: YouTube Watch, Shorts, Embed, Google Drive.</p>
                         </div>
                         <div>
                             <label className="block text-sm font-bold text-gray-300 mb-2">Video Hướng Dẫn: Comic Studio</label>
@@ -569,7 +539,6 @@ const GameConfigManager: React.FC = () => {
                                 className="auth-input"
                                 placeholder={t('creator.settings.admin.system.placeholderVideo')}
                             />
-                            <p className="text-[10px] text-gray-500 mt-1">Hỗ trợ link: YouTube Watch, Shorts, Embed, Google Drive.</p>
                         </div>
                     </div>
                     <button onClick={saveSystemSettings} disabled={isSaving} className="themed-button-primary w-full md:w-auto px-6 py-2">

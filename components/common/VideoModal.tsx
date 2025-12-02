@@ -13,31 +13,27 @@ const VideoModal: React.FC<VideoModalProps> = ({ isOpen, onClose, videoUrl }) =>
 
     // Helper to process YouTube links
     const getEmbedUrl = (url: string) => {
-        const cleanUrl = url.trim();
         try {
-            // Robust Regex to match 11-char YouTube ID from various URL formats:
-            // - youtube.com/watch?v=ID
-            // - youtube.com/embed/ID
-            // - youtube.com/v/ID
-            // - youtube.com/shorts/ID
-            // - youtu.be/ID
-            const ytRegex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|shorts)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
-            const match = cleanUrl.match(ytRegex);
-            
-            if (match && match[1]) {
-                // Return clean embed URL with autoplay
-                return `https://www.youtube.com/embed/${match[1]}?autoplay=1&rel=0`;
+            if (url.includes('youtube.com/watch')) {
+                const urlObj = new URL(url);
+                const videoId = urlObj.searchParams.get('v');
+                return `https://www.youtube.com/embed/${videoId}`;
             }
-            
-            // Handle Google Drive preview link fix
-            if (cleanUrl.includes('drive.google.com') && cleanUrl.includes('/view')) {
-                return cleanUrl.replace('/view', '/preview');
+            if (url.includes('youtu.be')) {
+                // Use URL object to safely extract pathname without query params
+                // e.g. https://youtu.be/ID?t=1 -> /ID -> ID
+                const urlObj = new URL(url);
+                const videoId = urlObj.pathname.substring(1); // remove leading slash
+                return `https://www.youtube.com/embed/${videoId}`;
             }
-            
-            // If it's already a direct embed link or other supported iframe source, return as is
-            return cleanUrl;
+            // Google Drive preview link fix (replace view with preview)
+            if (url.includes('drive.google.com') && url.includes('/view')) {
+                return url.replace('/view', '/preview');
+            }
+            // Direct embed links or other formats - try as is
+            return url;
         } catch (e) {
-            return cleanUrl;
+            return url;
         }
     };
 
@@ -45,22 +41,14 @@ const VideoModal: React.FC<VideoModalProps> = ({ isOpen, onClose, videoUrl }) =>
 
     return (
         <Modal isOpen={isOpen} onClose={onClose} title="Hướng Dẫn Sử Dụng">
-            <div className="aspect-video w-full bg-black rounded-lg overflow-hidden relative shadow-lg border border-white/10">
-                {embedUrl ? (
-                    <iframe 
-                        src={embedUrl} 
-                        className="w-full h-full" 
-                        frameBorder="0" 
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-                        allowFullScreen
-                        title="Video Tutorial"
-                    ></iframe>
-                ) : (
-                    <div className="flex flex-col items-center justify-center h-full text-gray-500 gap-2">
-                        <i className="ph-fill ph-video-camera-slash text-4xl opacity-50"></i>
-                        <p className="text-sm">Không tìm thấy video hợp lệ.</p>
-                    </div>
-                )}
+            <div className="aspect-video w-full bg-black rounded-lg overflow-hidden">
+                <iframe 
+                    src={embedUrl} 
+                    className="w-full h-full" 
+                    frameBorder="0" 
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                    allowFullScreen
+                ></iframe>
             </div>
             <div className="mt-4 text-center">
                 <button onClick={onClose} className="themed-button-secondary px-6 py-2 text-sm">

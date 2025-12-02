@@ -11,6 +11,7 @@ import SettingsBlock from '../../ai-tool/SettingsBlock';
 import { useTranslation } from '../../../hooks/useTranslation';
 import PromptLibraryModal from './PromptLibraryModal';
 import ToggleSwitch from '../../ai-tool/ToggleSwitch';
+import VideoModal from '../../common/VideoModal';
 
 
 // Mock data for styles
@@ -94,9 +95,29 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
     
     const [isResultModalOpen, setIsResultModalOpen] = useState(false);
     const [isPromptLibraryOpen, setIsPromptLibraryOpen] = useState(false);
+    
+    // Video Tutorial State
+    const [tutorialUrl, setTutorialUrl] = useState('');
+    const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
 
     // Refs for cleanup
     const pollingInterval = useRef<ReturnType<typeof setInterval> | null>(null);
+
+    // Fetch Video Tutorial URL
+    useEffect(() => {
+        const fetchSettings = async () => {
+            try {
+                const res = await fetch('/.netlify/functions/admin-system-settings');
+                if (res.ok) {
+                    const settings = await res.json();
+                    if (settings.tutorial_video_group) {
+                        setTutorialUrl(settings.tutorial_video_group);
+                    }
+                }
+            } catch (e) { console.error(e); }
+        };
+        fetchSettings();
+    }, []);
 
     useEffect(() => {
         return () => {
@@ -644,16 +665,37 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                 onProcessAction={handleProcessAction}
             />
              <PromptLibraryModal isOpen={isPromptLibraryOpen} onClose={() => setIsPromptLibraryOpen(false)} onSelectPrompt={(p) => setPrompt(p)} category={numCharacters > 2 ? 'group-photo' : 'couple-photo'} />
+             <VideoModal isOpen={isVideoModalOpen} onClose={() => setIsVideoModalOpen(false)} videoUrl={tutorialUrl} />
              
             <ConfirmationModal isOpen={isConfirmOpen} onClose={() => setConfirmOpen(false)} onConfirm={handleConfirmGeneration} cost={totalCost} />
             
              <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 text-yellow-300 rounded-lg text-sm flex items-start gap-3 mb-6">
                 <i className="ph-fill ph-info text-2xl flex-shrink-0"></i>
                 <div>
-                    <span className="font-bold">{t('langName') === 'English' ? 'Tip:' : 'Mẹo:'}</span> {t('creator.aiTool.singlePhoto.bgRemoverTip')}
+                     {/* Removed "Mẹo:" redundant prefix */}
+                    <span className="font-bold">{t('creator.aiTool.singlePhoto.bgRemoverTip')}</span>
                     <button onClick={onSwitchToUtility} className="font-bold underline ml-2 hover:text-white">{t('creator.aiTool.singlePhoto.switchToBgRemover')}</button>
                 </div>
             </div>
+
+            {/* Video Tutorial Box */}
+            {tutorialUrl && (
+                <div className="p-4 bg-purple-500/10 border border-purple-500/30 text-purple-300 rounded-lg text-sm flex items-center justify-between gap-3 mb-6">
+                    <div className="flex items-center gap-3">
+                        <i className="ph-fill ph-video text-2xl flex-shrink-0"></i>
+                        <div>
+                            <span className="font-bold block">Hướng dẫn sử dụng</span>
+                            <span className="text-xs opacity-80">Xem video hướng dẫn chi tiết cách tạo ảnh nhóm.</span>
+                        </div>
+                    </div>
+                    <button 
+                        onClick={() => setIsVideoModalOpen(true)} 
+                        className="px-4 py-2 bg-purple-500 hover:bg-purple-400 text-white text-xs font-bold rounded-full flex items-center gap-2 transition-colors"
+                    >
+                        <i className="ph-fill ph-play-circle text-lg"></i> Xem Video
+                    </button>
+                </div>
+            )}
 
             <div className="flex flex-col lg:flex-row gap-6">
                  {/* Left Column: Character Inputs */}

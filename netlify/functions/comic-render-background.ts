@@ -54,7 +54,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         
         userId = jobData.user_id;
         const jobConfig = JSON.parse(jobData.prompt);
-        const { panel, characters, storyTitle, style, aspectRatio, colorFormat, visualEffect, isCover } = jobConfig.payload;
+        const { panel, characters, storyTitle, style, aspectRatio, colorFormat, visualEffect, isCover, imageQuality = '1K' } = jobConfig.payload;
 
         const { data: apiKeyData } = await supabaseAdmin.from('api_keys').select('key_value, id').eq('status', 'active').limit(1).single();
         if (!apiKeyData) throw new Error('Hết tài nguyên AI.');
@@ -139,16 +139,23 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         // Use Gemini 3 Pro for rendering (High Quality)
         console.log(`[WORKER] Calling Gemini 3 Pro for job ${jobId}...`);
+        
+        const config: any = {
+            responseModalities: [Modality.IMAGE],
+            imageConfig: {
+                aspectRatio: aspectRatio || '3:4',
+            }
+        };
+
+        // Only add imageSize if explicitly not 1K (default)
+        if (imageQuality && imageQuality !== '1K') {
+             config.imageConfig.imageSize = imageQuality;
+        }
+
         const response = await ai.models.generateContent({
             model: 'gemini-3-pro-image-preview',
             contents: { parts },
-            config: {
-                responseModalities: [Modality.IMAGE],
-                imageConfig: {
-                    aspectRatio: aspectRatio || '3:4',
-                    imageSize: '2K' 
-                }
-            }
+            config: config
         });
 
         const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);

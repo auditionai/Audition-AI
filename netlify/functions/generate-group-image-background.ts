@@ -230,19 +230,38 @@ const handler: Handler = async (event: HandlerEvent) => {
             responseModalities: [Modality.IMAGE],
             imageConfig: { 
                 aspectRatio: aspectRatio, // ENFORCED
-                imageSize: isPro ? imageSize : undefined
             }
         };
         
-        if (isPro && useSearch) {
-            finalConfig.tools = [{ googleSearch: {} }];
+        // Only set imageSize if explicitly requested non-default
+        if (isPro && imageSize && imageSize !== '1K') {
+            finalConfig.imageConfig.imageSize = imageSize;
         }
+        
+        // Retry Logic for Search
+        let finalResponse;
+        let attemptSearch = isPro && useSearch;
 
-        const finalResponse = await ai.models.generateContent({
-            model: modelName,
-            contents: { parts: finalParts },
-            config: finalConfig,
-        });
+        try {
+            if (attemptSearch) finalConfig.tools = [{ googleSearch: {} }];
+            finalResponse = await ai.models.generateContent({
+                model: modelName,
+                contents: { parts: finalParts },
+                config: finalConfig,
+            });
+        } catch (err: any) {
+            if (attemptSearch) {
+                console.warn(`[WORKER] Group Job ${jobId} search failed. Retrying...`);
+                delete finalConfig.tools;
+                finalResponse = await ai.models.generateContent({
+                    model: modelName,
+                    contents: { parts: finalParts },
+                    config: finalConfig,
+                });
+            } else {
+                throw err;
+            }
+        }
 
         const finalImagePart = finalResponse.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
         if (!finalImagePart?.inlineData) throw new Error("AI failed to composite the final image.");
@@ -252,7 +271,6 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         let imageBuffer = Buffer.from(finalImageBase64, 'base64');
         if (!removeWatermark) {
-            // Pass empty string as URL since the service now loads local file
             imageBuffer = await addSmartWatermark(imageBuffer, '');
         }
 

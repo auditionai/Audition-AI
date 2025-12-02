@@ -131,8 +131,6 @@ const handler: Handler = async (event: HandlerEvent) => {
         }
 
         // REFINED NEGATIVE PROMPT
-        // We ban "photograph" (the medium) but allow "camera" (the object).
-        // We ban "rough skin" but allow "detailed skin".
         const hardNegative = "photograph, real life, real person, live action, movie frame, grainy, noise, jpeg artifacts, low quality, distorted, ugly, blurry, gray borders, letterbox, watermark, text, signature, rough skin texture, photo-realistic skin";
         fullPrompt += ` --no ${hardNegative}, ${negativePrompt || ''}`;
 
@@ -159,27 +157,49 @@ const handler: Handler = async (event: HandlerEvent) => {
             parts.push({ inlineData: { data: faceData.data, mimeType: faceData.mimeType } });
         }
 
+        // Prepare Config
         const config: any = { 
             responseModalities: [Modality.IMAGE],
             seed: seed ? Number(seed) : undefined,
             imageConfig: { 
                 aspectRatio: aspectRatio, 
-                imageSize: isProModel ? imageSize : undefined
             }
         };
 
-        if (isProModel && useGoogleSearch) {
-            config.tools = [{ googleSearch: {} }]; 
+        // Only add imageSize if Pro model AND not default 1K (to avoid potential defaults issues)
+        if (isProModel && imageSize && imageSize !== '1K') {
+             config.imageConfig.imageSize = imageSize;
         }
 
         console.log(`[WORKER] Generating image for Job ${jobId} using ${apiModel}...`);
         
-        // Call Gemini API
-        const response = await ai.models.generateContent({
-            model: apiModel,
-            contents: { parts: parts },
-            config: config,
-        });
+        // Retry Logic for Google Search Grounding (often flaky)
+        let response;
+        let attemptSearch = isProModel && useGoogleSearch;
+        
+        try {
+            if (attemptSearch) {
+                config.tools = [{ googleSearch: {} }];
+            }
+            response = await ai.models.generateContent({
+                model: apiModel,
+                contents: { parts: parts },
+                config: config,
+            });
+        } catch (err: any) {
+            // If failed with search, retry without search
+            if (attemptSearch) {
+                console.warn(`[WORKER] Job ${jobId} failed with Google Search. Retrying without search...`, err.message);
+                delete config.tools;
+                response = await ai.models.generateContent({
+                    model: apiModel,
+                    contents: { parts: parts },
+                    config: config,
+                });
+            } else {
+                throw err;
+            }
+        }
 
         const imagePartResponse = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
         if (!imagePartResponse?.inlineData) {
@@ -193,11 +213,9 @@ const handler: Handler = async (event: HandlerEvent) => {
         let imageBuffer = Buffer.from(finalImageBase64, 'base64');
         
         if (!removeWatermark) {
-            // Pass empty string as URL since the service now loads local file
             imageBuffer = await addSmartWatermark(imageBuffer, '');
         }
 
-        // Init S3 Client for R2
         const s3Client = new S3Client({
             region: "auto",
             endpoint: process.env.R2_ENDPOINT!,
@@ -217,7 +235,6 @@ const handler: Handler = async (event: HandlerEvent) => {
         const publicUrl = `${process.env.R2_PUBLIC_URL}/${fileName}`;
 
         // 5. Update DB (Completion)
-        // Overwrite the complex payload JSON in 'prompt' column with the simple user prompt string for clean display in UI
         await Promise.all([
             supabaseAdmin.from('generated_images').update({ 
                 image_url: publicUrl,

@@ -1,4 +1,3 @@
-
 import React from 'react';
 import Modal from './Modal';
 
@@ -11,70 +10,41 @@ interface VideoModalProps {
 const VideoModal: React.FC<VideoModalProps> = ({ isOpen, onClose, videoUrl }) => {
     if (!isOpen || !videoUrl) return null;
 
-    // Helper to process YouTube links
+    // Helper: Trình phân tích URL thông minh
     const getEmbedUrl = (url: string) => {
+        if (!url) return '';
         const cleanUrl = url.trim();
-        
-        // Case 0: Already an embed URL or generic iframe src
-        if (cleanUrl.includes('/embed/') || cleanUrl.includes('player.vimeo.com')) {
-            return cleanUrl;
+
+        // 1. Xử lý Google Drive (Chuyển view -> preview)
+        if (cleanUrl.includes('drive.google.com')) {
+             if (cleanUrl.includes('/view')) return cleanUrl.replace('/view', '/preview');
+             return cleanUrl; 
         }
 
-        // Case 1: Google Drive
-        if (cleanUrl.includes('drive.google.com') && cleanUrl.includes('/view')) {
-            return cleanUrl.replace('/view', '/preview');
-        }
-
-        try {
-            // Use URL object for safer parsing
-            let urlObj: URL;
-            try {
-                urlObj = new URL(cleanUrl);
-            } catch {
-                // If invalid URL string, try adding protocol
-                urlObj = new URL(`https://${cleanUrl}`);
-            }
-
-            const hostname = urlObj.hostname.toLowerCase();
-
-            // Case 2: Standard YouTube (youtube.com)
-            if (hostname.includes('youtube.com')) {
-                // Standard Watch: v=ID
-                const v = urlObj.searchParams.get('v');
-                if (v) {
-                    return `https://www.youtube.com/embed/${v}?autoplay=1&rel=0&origin=${window.location.origin}`;
-                }
-                
-                // Shorts: /shorts/ID
-                if (urlObj.pathname.startsWith('/shorts/')) {
-                    const id = urlObj.pathname.split('/')[2];
-                    if (id) return `https://www.youtube.com/embed/${id}?autoplay=1&rel=0&origin=${window.location.origin}`;
-                }
-
-                // Live: /live/ID
-                if (urlObj.pathname.startsWith('/live/')) {
-                     const id = urlObj.pathname.split('/')[2];
-                     if (id) return `https://www.youtube.com/embed/${id}?autoplay=1&rel=0&origin=${window.location.origin}`;
-                }
-            }
-
-            // Case 3: Shortened YouTube (youtu.be/ID)
-            if (hostname.includes('youtu.be')) {
-                const id = urlObj.pathname.slice(1);
-                if (id) {
-                    return `https://www.youtube.com/embed/${id}?autoplay=1&rel=0&origin=${window.location.origin}`;
-                }
-            }
-
-        } catch (e) {
-             // Fallback Regex if URL parsing totally fails
-             const ytRegex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|shorts)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
-             const match = cleanUrl.match(ytRegex);
-             if (match && match[1]) {
-                 return `https://www.youtube.com/embed/${match[1]}?autoplay=1&rel=0&origin=${window.location.origin}`;
+        // 2. Xử lý các link đã là Embed sẵn (Vimeo, hoặc Youtube Embed thủ công)
+        if (cleanUrl.includes('player.vimeo.com') || cleanUrl.includes('youtube.com/embed/')) {
+             // Nếu là Youtube embed nhưng thiếu origin, tự động thêm vào để tránh lỗi
+             if (cleanUrl.includes('youtube.com/embed/') && !cleanUrl.includes('origin=')) {
+                 const sep = cleanUrl.includes('?') ? '&' : '?';
+                 return `${cleanUrl}${sep}origin=${window.location.origin}`;
              }
+             return cleanUrl;
         }
 
+        // 3. Trích xuất Youtube ID "thông minh" bằng Regex (Dứt điểm mọi loại link)
+        // Hỗ trợ: youtube.com/watch?v=ID, youtu.be/ID, shorts/ID, live/ID, embed/ID
+        const youtubeRegex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|shorts|live)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
+        const match = cleanUrl.match(youtubeRegex);
+
+        if (match && match[1]) {
+            const videoId = match[1];
+            const origin = typeof window !== 'undefined' ? window.location.origin : '';
+            // enablejsapi=1 & origin: Khắc phục lỗi "Video unavailable" do chính sách bảo mật
+            // playsinline=1: Giúp chạy mượt trên mobile (iOS) không bị bung full màn hình
+            return `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1&playsinline=1&enablejsapi=1&origin=${origin}`;
+        }
+
+        // 4. Fallback: Trả về nguyên gốc nếu không nhận diện được (cho các video server khác)
         return cleanUrl;
     };
 
@@ -91,6 +61,8 @@ const VideoModal: React.FC<VideoModalProps> = ({ isOpen, onClose, videoUrl }) =>
                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
                         allowFullScreen
                         title="Video Tutorial"
+                        loading="lazy"
+                        referrerPolicy="strict-origin-when-cross-origin" // Quan trọng cho bảo mật Youtube mới
                     ></iframe>
                 ) : (
                     <div className="flex flex-col items-center justify-center h-full text-gray-500 gap-2">

@@ -1,4 +1,5 @@
 
+
 export const vi = {
   langName: 'Tiếng Việt',
   common: {
@@ -285,6 +286,7 @@ export const vi = {
       title: 'Audition AI Studio',
       description: 'Nền tảng sáng tạo ảnh 3D AI theo phong cách Audition độc đáo.',
       quickGuide: 'Xem hướng dẫn nhanh',
+      watchVideo: 'Xem video hướng dẫn',
       upgradeBanner: {
         title: 'Nâng Cấp: Nano Banana Pro (Gemini 3) đã ra mắt!',
         desc: 'Mô hình mặc định hiện tại là Nano Banana (Tiêu chuẩn). Để sử dụng mô hình AI mới Nano Banana Pro (Gemini 3) cho ảnh 4K siêu nét (10-20 Kim cương), vui lòng ấn nút "Đổi ngay".',
@@ -325,7 +327,7 @@ export const vi = {
         processing: 'Đang xử lý...',
       },
       singlePhoto: {
-        bgRemoverTip: 'Mẹo: Để có chất lượng tốt nhất, vui lòng sử dụng ảnh nhân vật đã được tách nền.',
+        bgRemoverTip: 'Để có chất lượng tốt nhất, vui lòng sử dụng ảnh nhân vật đã được tách nền.',
         switchToBgRemover: 'Đến công cụ tách nền',
         characterTitle: 'Ảnh Nhân Vật',
         characterUploadText: 'Dáng & Trang Phục',
@@ -585,7 +587,8 @@ export const vi = {
           broadcast: 'Phát Sóng',
           name_effects: 'Hiệu ứng Tên',
           chat: 'Chat',
-          db_tools: 'Công cụ DB'
+          db_tools: 'Công cụ DB',
+          system: 'Cài đặt chung'
         },
         dashboard: {
           title: 'Bảng Điều Khiển Dữ Liệu',
@@ -788,6 +791,14 @@ export const vi = {
           confirmGlobal: 'Gửi thông báo ra kênh Chat Chung?',
           errorMsg: 'Vui lòng nhập nội dung tin nhắn.',
         },
+        system: {
+            title: 'Cài Đặt Hệ Thống',
+            videoUrl: 'Link Video Hướng Dẫn (Youtube/Drive)',
+            placeholderVideo: 'https://www.youtube.com/embed/VIDEO_ID',
+            save: 'Lưu Cài Đặt',
+            success: 'Đã lưu cài đặt thành công!',
+            error: 'Lỗi lưu cài đặt.',
+        }
       },
     },
   },

@@ -52,9 +52,18 @@ const handler: Handler = async (event: HandlerEvent) => {
             newConsecutiveDays = (userProfile.consecutive_check_in_days || 0) + 1;
         }
 
-        // BASE REWARD ONLY - Milestones are manual claims now
-        const diamondReward = 1;
-        const xpReward = 10;
+        // FETCH DYNAMIC REWARD FROM DB
+        // We look for the config for '1 day' to represent the standard daily reward
+        const { data: dailyConfig } = await supabaseAdmin
+            .from('check_in_rewards')
+            .select('diamond_reward, xp_reward')
+            .eq('consecutive_days', 1)
+            .limit(1)
+            .maybeSingle();
+
+        // Use DB config if exists, otherwise default to 5 Diamonds (as requested) and 10 XP
+        const diamondReward = dailyConfig?.diamond_reward ?? 5;
+        const xpReward = dailyConfig?.xp_reward ?? 10;
 
         let message = `Điểm danh thành công! Bạn nhận được ${diamondReward} Kim cương và ${xpReward} XP.`;
 

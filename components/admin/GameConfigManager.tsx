@@ -137,28 +137,22 @@ $$;
 SELECT 'Sửa lỗi thành công! (Clean Install)' as status;
 `;
 
-const SQL_CREATE_PROMOTIONS = `-- TẠO BẢNG KHUYẾN MẠI (PROMOTIONS)
+const SQL_SYSTEM_SETTINGS = `-- TẠO BẢNG CÀI ĐẶT HỆ THỐNG (SYSTEM SETTINGS)
 
-CREATE TABLE IF NOT EXISTS public.promotions (
-    id UUID DEFAULT extensions.uuid_generate_v4() PRIMARY KEY,
-    title TEXT NOT NULL,
-    description TEXT,
-    bonus_percentage INTEGER DEFAULT 0,
-    start_time TIMESTAMP WITH TIME ZONE NOT NULL,
-    end_time TIMESTAMP WITH TIME ZONE NOT NULL,
-    is_active BOOLEAN DEFAULT TRUE,
+CREATE TABLE IF NOT EXISTS public.system_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
 -- Enable RLS
-ALTER TABLE public.promotions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.system_settings ENABLE ROW LEVEL SECURITY;
 
--- Policy: Public Read (Everyone can see promotions)
-CREATE POLICY "Public Read Promotions" ON public.promotions
+-- Policy: Public Read (Everyone can read settings like video url)
+CREATE POLICY "Public Read Settings" ON public.system_settings
     FOR SELECT USING (true);
 
--- Policy: Admin Write (Only service role can write - handled by Admin API)
--- No policy needed for insert/update/delete if using service role key in Edge Functions.
+-- Policy: Admin Write (Handled via Admin API, no policy needed for inserts if using service role key)
 `;
 
 const GameConfigManager: React.FC = () => {
@@ -168,7 +162,7 @@ const GameConfigManager: React.FC = () => {
     const { chatConfig, updateChatConfig } = useChat();
     
     // Tabs
-    const [activeSubTab, setActiveSubTab] = useState<'ranks' | 'frames' | 'titles' | 'name_effects' | 'chat' | 'db_tools'>('frames');
+    const [activeSubTab, setActiveSubTab] = useState<'ranks' | 'frames' | 'titles' | 'name_effects' | 'chat' | 'db_tools' | 'system'>('frames');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     
@@ -183,11 +177,30 @@ const GameConfigManager: React.FC = () => {
     // Chat Config State
     const [forbiddenInput, setForbiddenInput] = useState('');
 
+    // System Settings State
+    const [videoUrl, setVideoUrl] = useState('');
+
     useEffect(() => {
         if (chatConfig) {
             setForbiddenInput(chatConfig.forbidden_words.join(', '));
         }
     }, [chatConfig]);
+
+    // Fetch System Settings
+    useEffect(() => {
+        const fetchSettings = async () => {
+            if (activeSubTab === 'system') {
+                try {
+                    const res = await fetch('/.netlify/functions/admin-system-settings');
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data.tutorial_video_url) setVideoUrl(data.tutorial_video_url);
+                    }
+                } catch (e) { console.error(e); }
+            }
+        };
+        fetchSettings();
+    }, [activeSubTab]);
 
     // Helper to check valid UUID
     const isUUID = (str?: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str || '');
@@ -377,6 +390,23 @@ const GameConfigManager: React.FC = () => {
         }
     };
 
+    const saveSystemSettings = async () => {
+        setIsSaving(true);
+        try {
+            const res = await fetch('/.netlify/functions/admin-system-settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+                body: JSON.stringify({ settings: { tutorial_video_url: videoUrl } }),
+            });
+            if (!res.ok) throw new Error('Failed');
+            showToast(t('creator.settings.admin.system.success'), 'success');
+        } catch(e) {
+            showToast(t('creator.settings.admin.system.error'), 'error');
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
     const getCosmeticList = () => {
         let list: CosmeticItem[] = [];
         switch(activeSubTab) {
@@ -412,6 +442,7 @@ const GameConfigManager: React.FC = () => {
                      <button onClick={() => setActiveSubTab('name_effects')} className={`px-3 py-1 rounded whitespace-nowrap ${activeSubTab === 'name_effects' ? 'bg-blue-500 text-white' : 'bg-white/5 text-gray-400'}`}>Hiệu Ứng Tên</button>
                      <button onClick={() => setActiveSubTab('ranks')} className={`px-3 py-1 rounded whitespace-nowrap ${activeSubTab === 'ranks' ? 'bg-blue-500 text-white' : 'bg-white/5 text-gray-400'}`}>Cấp Bậc</button>
                      <button onClick={() => setActiveSubTab('chat')} className={`px-3 py-1 rounded whitespace-nowrap ${activeSubTab === 'chat' ? 'bg-blue-500 text-white' : 'bg-white/5 text-gray-400'}`}>Chat</button>
+                     <button onClick={() => setActiveSubTab('system')} className={`px-3 py-1 rounded whitespace-nowrap ${activeSubTab === 'system' ? 'bg-blue-500 text-white' : 'bg-white/5 text-gray-400'}`}>Cài đặt chung</button>
                      <button onClick={() => setActiveSubTab('db_tools')} className={`px-3 py-1 rounded whitespace-nowrap ${activeSubTab === 'db_tools' ? 'bg-red-500 text-white' : 'bg-white/5 text-gray-400'}`}>Sửa Lỗi DB</button>
                 </div>
             </div>
@@ -429,15 +460,13 @@ const GameConfigManager: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* PROMOTIONS TABLE CREATE SCRIPT */}
-                    <div className="bg-green-500/10 border border-green-500/30 p-4 rounded-lg">
-                        <h4 className="text-green-400 font-bold mb-2 flex items-center gap-2"><i className="ph-fill ph-database"></i> TẠO BẢNG PROMOTIONS</h4>
-                        <p className="text-sm text-gray-300 mb-2">Chạy lệnh này để tạo bảng lưu trữ khuyến mại nếu chưa có.</p>
+                     <div className="bg-cyan-500/10 border border-cyan-500/30 p-4 rounded-lg">
+                        <h4 className="text-cyan-400 font-bold mb-2 flex items-center gap-2"><i className="ph-fill ph-gear"></i> TẠO BẢNG SETTINGS</h4>
                         <div className="relative">
                             <pre className="bg-black/50 p-3 rounded-lg text-xs text-green-400 overflow-x-auto font-mono border border-white/10 h-32 custom-scrollbar">
-                                {SQL_CREATE_PROMOTIONS}
+                                {SQL_SYSTEM_SETTINGS}
                             </pre>
-                            <button onClick={() => { navigator.clipboard.writeText(SQL_CREATE_PROMOTIONS); showToast("Đã sao chép!", "success"); }} className="absolute top-2 right-2 bg-blue-500/20 hover:bg-blue-500/40 text-blue-300 px-3 py-1 rounded text-xs font-bold">Copy</button>
+                            <button onClick={() => { navigator.clipboard.writeText(SQL_SYSTEM_SETTINGS); showToast("Đã sao chép!", "success"); }} className="absolute top-2 right-2 bg-blue-500/20 hover:bg-blue-500/40 text-blue-300 px-3 py-1 rounded text-xs font-bold">Copy</button>
                         </div>
                     </div>
                 </div>
@@ -458,6 +487,26 @@ const GameConfigManager: React.FC = () => {
                     </div>
                     <button onClick={saveChatConfig} disabled={isSaving} className="themed-button-primary w-full md:w-auto px-6 py-2">
                         {isSaving ? 'Đang lưu...' : 'Lưu Cấu Hình Chat'}
+                    </button>
+                </div>
+            )}
+
+            {/* SYSTEM SETTINGS TAB */}
+            {activeSubTab === 'system' && (
+                <div className="space-y-4">
+                    <h4 className="text-xl font-bold text-white mb-2">{t('creator.settings.admin.system.title')}</h4>
+                    <div className="bg-white/5 p-4 rounded-lg">
+                        <label className="block text-sm font-bold text-gray-300 mb-2">{t('creator.settings.admin.system.videoUrl')}</label>
+                        <input 
+                            type="text"
+                            value={videoUrl}
+                            onChange={e => setVideoUrl(e.target.value)}
+                            className="auth-input"
+                            placeholder={t('creator.settings.admin.system.placeholderVideo')}
+                        />
+                    </div>
+                    <button onClick={saveSystemSettings} disabled={isSaving} className="themed-button-primary w-full md:w-auto px-6 py-2">
+                        {isSaving ? 'Đang lưu...' : t('creator.settings.admin.system.save')}
                     </button>
                 </div>
             )}

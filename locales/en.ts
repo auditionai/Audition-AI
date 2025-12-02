@@ -298,6 +298,7 @@ export const en = {
         bgRemover: 'BG Remover',
         signature: 'Signature',
         enhancer: 'Image Enhancer',
+        editor: 'Crop & Merge',
       },
       common: {
         help: 'Help',
@@ -456,6 +457,41 @@ export const en = {
           monochrome: 'MONO',
         }
       },
+      editor: {
+        title: 'Crop & Merge',
+        uploadTitle: '1. Upload Image',
+        mode: 'Mode:',
+        crop: 'Crop',
+        merge: 'Merge',
+        uploadButton: 'Select Images',
+        uploadDesc: 'Supports JPG, PNG',
+        resultTitle: '2. Result',
+        resultDesc: 'Temporary Storage',
+        placeholder: 'Result will appear here',
+        cropActions: {
+            apply: 'Apply Crop',
+            reset: 'Reset',
+            aspectFree: 'Free',
+        },
+        mergeActions: {
+            horizontal: 'Horizontal',
+            vertical: 'Vertical',
+            grid: 'Grid',
+            clear: 'Clear All',
+        },
+        emptyMerge: 'No images selected.',
+        tips: {
+            crop: 'Drag the frame to select crop area.',
+            merge: 'Add multiple images to combine them.',
+        },
+        viewResult: 'View Image',
+        actions: {
+            toBg: 'BG Remove',
+            toEnhance: 'Enhance',
+            download: 'Download',
+            delete: 'Delete'
+        }
+      }
     },
     xpBar: {
       progress: 'Level Progress',
@@ -743,6 +779,14 @@ export const en = {
           confirmGlobal: 'Send broadcast to Global Chat?',
           errorMsg: 'Please enter message content.',
         },
+        system: {
+            title: 'System Settings',
+            videoUrl: 'Tutorial Video Link (Youtube/Drive)',
+            placeholderVideo: 'https://www.youtube.com/watch?v=VIDEO_ID',
+            save: 'Save Settings',
+            success: 'Settings saved successfully!',
+            error: 'Error saving settings.',
+        }
       },
     },
   },
@@ -852,7 +896,7 @@ export const en = {
         cinematic: 'Cinematic',
         photographic: 'Photographic',
         anime: 'Anime',
-        fantasy: 'Fantasy',
+        fantasy: 'Kỳ ảo',
         '3d_model': '3D Model',
         dival_art: 'Digital Art',
         pixel_art: 'Pixel Art',
@@ -971,7 +1015,8 @@ export const en = {
         empty_desc: 'Use the Background Remover or Super Face Lock tool first.',
         tabs: {
             bgRemoved: 'BG Removed',
-            enhanced: 'Enhanced'
+            enhanced: 'Enhanced',
+            edited: 'Edited'
         },
         actions: {
             use: 'Use Image',

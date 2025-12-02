@@ -1,5 +1,4 @@
 
-
 export const vi = {
   langName: 'Tiếng Việt',
   common: {
@@ -794,7 +793,7 @@ export const vi = {
         system: {
             title: 'Cài Đặt Hệ Thống',
             videoUrl: 'Link Video Hướng Dẫn (Youtube/Drive)',
-            placeholderVideo: 'https://www.youtube.com/embed/VIDEO_ID',
+            placeholderVideo: 'https://www.youtube.com/watch?v=VIDEO_ID',
             save: 'Lưu Cài Đặt',
             success: 'Đã lưu cài đặt thành công!',
             error: 'Lỗi lưu cài đặt.',

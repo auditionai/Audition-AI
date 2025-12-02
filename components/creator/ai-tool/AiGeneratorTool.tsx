@@ -120,8 +120,8 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                 const res = await fetch('/.netlify/functions/admin-system-settings');
                 if (res.ok) {
                     const settings = await res.json();
-                    if (settings.tutorial_video_url) {
-                        setTutorialUrl(settings.tutorial_video_url);
+                    if (settings.tutorial_video_single) {
+                        setTutorialUrl(settings.tutorial_video_single);
                     }
                 }
             } catch (e) { console.error(e); }
@@ -499,7 +499,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                                 <i className="ph-fill ph-video text-2xl flex-shrink-0"></i>
                                 <div>
                                     <span className="font-bold block">Hướng dẫn sử dụng</span>
-                                    <span className="text-xs opacity-80">Xem video hướng dẫn chi tiết cách tạo ảnh đẹp.</span>
+                                    <span className="text-xs opacity-80">Xem video hướng dẫn chi tiết cách tạo ảnh đơn.</span>
                                 </div>
                             </div>
                             <button 

@@ -178,7 +178,11 @@ const GameConfigManager: React.FC = () => {
     const [forbiddenInput, setForbiddenInput] = useState('');
 
     // System Settings State
-    const [videoUrl, setVideoUrl] = useState('');
+    const [videoUrls, setVideoUrls] = useState({
+        single: '',
+        group: '',
+        comic: ''
+    });
 
     useEffect(() => {
         if (chatConfig) {
@@ -194,7 +198,11 @@ const GameConfigManager: React.FC = () => {
                     const res = await fetch('/.netlify/functions/admin-system-settings');
                     if (res.ok) {
                         const data = await res.json();
-                        if (data.tutorial_video_url) setVideoUrl(data.tutorial_video_url);
+                        setVideoUrls({
+                            single: data.tutorial_video_single || '',
+                            group: data.tutorial_video_group || '',
+                            comic: data.tutorial_video_comic || ''
+                        });
                     }
                 } catch (e) { console.error(e); }
             }
@@ -396,7 +404,13 @@ const GameConfigManager: React.FC = () => {
             const res = await fetch('/.netlify/functions/admin-system-settings', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
-                body: JSON.stringify({ settings: { tutorial_video_url: videoUrl } }),
+                body: JSON.stringify({ 
+                    settings: { 
+                        tutorial_video_single: videoUrls.single,
+                        tutorial_video_group: videoUrls.group,
+                        tutorial_video_comic: videoUrls.comic
+                    } 
+                }),
             });
             if (!res.ok) throw new Error('Failed');
             showToast(t('creator.settings.admin.system.success'), 'success');
@@ -495,15 +509,37 @@ const GameConfigManager: React.FC = () => {
             {activeSubTab === 'system' && (
                 <div className="space-y-4">
                     <h4 className="text-xl font-bold text-white mb-2">{t('creator.settings.admin.system.title')}</h4>
-                    <div className="bg-white/5 p-4 rounded-lg">
-                        <label className="block text-sm font-bold text-gray-300 mb-2">{t('creator.settings.admin.system.videoUrl')}</label>
-                        <input 
-                            type="text"
-                            value={videoUrl}
-                            onChange={e => setVideoUrl(e.target.value)}
-                            className="auth-input"
-                            placeholder={t('creator.settings.admin.system.placeholderVideo')}
-                        />
+                    <div className="bg-white/5 p-4 rounded-lg space-y-4">
+                        <div>
+                            <label className="block text-sm font-bold text-gray-300 mb-2">Video Hướng Dẫn: Tạo Ảnh Đơn</label>
+                            <input 
+                                type="text"
+                                value={videoUrls.single}
+                                onChange={e => setVideoUrls({...videoUrls, single: e.target.value})}
+                                className="auth-input"
+                                placeholder={t('creator.settings.admin.system.placeholderVideo')}
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-bold text-gray-300 mb-2">Video Hướng Dẫn: Studio Nhóm</label>
+                            <input 
+                                type="text"
+                                value={videoUrls.group}
+                                onChange={e => setVideoUrls({...videoUrls, group: e.target.value})}
+                                className="auth-input"
+                                placeholder={t('creator.settings.admin.system.placeholderVideo')}
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-bold text-gray-300 mb-2">Video Hướng Dẫn: Comic Studio</label>
+                            <input 
+                                type="text"
+                                value={videoUrls.comic}
+                                onChange={e => setVideoUrls({...videoUrls, comic: e.target.value})}
+                                className="auth-input"
+                                placeholder={t('creator.settings.admin.system.placeholderVideo')}
+                            />
+                        </div>
                     </div>
                     <button onClick={saveSystemSettings} disabled={isSaving} className="themed-button-primary w-full md:w-auto px-6 py-2">
                         {isSaving ? 'Đang lưu...' : t('creator.settings.admin.system.save')}

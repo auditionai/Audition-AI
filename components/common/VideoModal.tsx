@@ -20,13 +20,17 @@ const VideoModal: React.FC<VideoModalProps> = ({ isOpen, onClose, videoUrl }) =>
                 return `https://www.youtube.com/embed/${videoId}`;
             }
             if (url.includes('youtu.be')) {
-                const videoId = url.split('/').pop();
+                // Use URL object to safely extract pathname without query params
+                // e.g. https://youtu.be/ID?t=1 -> /ID -> ID
+                const urlObj = new URL(url);
+                const videoId = urlObj.pathname.substring(1); // remove leading slash
                 return `https://www.youtube.com/embed/${videoId}`;
             }
             // Google Drive preview link fix (replace view with preview)
             if (url.includes('drive.google.com') && url.includes('/view')) {
                 return url.replace('/view', '/preview');
             }
+            // Direct embed links or other formats - try as is
             return url;
         } catch (e) {
             return url;

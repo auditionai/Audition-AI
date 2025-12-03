@@ -128,14 +128,28 @@ const ImageEnhancerTool: React.FC<ImageEnhancerToolProps> = ({ onSendToBgRemover
         }, 1000);
     };
 
+    // Helper for robust fetching
+    const smartFetchBlob = async (url: string): Promise<Blob> => {
+        try {
+            // Try direct fetch first
+            const response = await fetch(url);
+            if (!response.ok) throw new Error("Direct fetch failed");
+            return await response.blob();
+        } catch (e) {
+            // Fallback to proxy if CORS fails
+            console.warn("Direct fetch failed, trying proxy...", e);
+            const proxyUrl = `/.netlify/functions/download-image?url=${encodeURIComponent(url)}`;
+            const proxyResponse = await fetch(proxyUrl);
+            if (!proxyResponse.ok) throw new Error("Proxy fetch failed");
+            return await proxyResponse.blob();
+        }
+    };
+
     const handleTransferToBg = async (img: EnhancedImage) => {
         try {
             showToast('Đang tải dữ liệu ảnh...', 'success');
-            // Fetch the image blob from the URL
-            const response = await fetch(img.processedUrl);
-            if (!response.ok) throw new Error("Không thể tải ảnh từ server.");
             
-            const blob = await response.blob();
+            const blob = await smartFetchBlob(img.processedUrl);
             const file = new File([blob], img.fileName, { type: img.mimeType });
             const url = URL.createObjectURL(blob);
 
@@ -144,7 +158,7 @@ const ImageEnhancerTool: React.FC<ImageEnhancerToolProps> = ({ onSendToBgRemover
             showToast('Đã chuyển ảnh sang công cụ Tách Nền!', 'success');
         } catch (e) {
             console.error(e);
-            showToast('Không thể tải dữ liệu ảnh. Vui lòng thử lại.', 'error');
+            showToast('Không thể tải dữ liệu ảnh (Lỗi mạng/CORS).', 'error');
         }
     };
 

@@ -2,6 +2,8 @@
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { GoogleGenAI, Modality } from "@google/genai";
 import { supabaseAdmin } from './utils/supabaseClient';
+import Jimp from 'jimp';
+import { Buffer } from 'buffer';
 
 const handler: Handler = async (event: HandlerEvent) => {
     try {
@@ -22,53 +24,74 @@ const handler: Handler = async (event: HandlerEvent) => {
             aiFont, aiSize, aiIsBold, aiIsItalic, aiCustomColor, model 
         } = JSON.parse(event.body || '{}');
 
-        // Validate cost based on selected model (Pro = 10, Flash = 1)
+        // 1. Cost Config
         const cost = (model === 'gemini-3-pro-image-preview') ? 10 : 1;
 
-        if (!imageDataUrl || !text || !aiStyle || !aiColor || !signaturePosition || !aiFont || !aiSize || aiIsBold === undefined || aiIsItalic === undefined || !aiCustomColor) {
-            return { statusCode: 400, body: JSON.stringify({ error: 'Missing required parameters for AI signature.' }) };
+        if (!imageDataUrl || !text || !aiStyle) {
+            return { statusCode: 400, body: JSON.stringify({ error: 'Missing parameters.' }) };
         }
         
-        // Check Balance (Read Only)
+        // 2. Check Balance (Read Only)
         const { data: userData, error: userError } = await supabaseAdmin.from('users').select('diamonds').eq('id', user.id).single();
         if (userError || !userData) return { statusCode: 404, body: JSON.stringify({ error: 'User not found.' }) };
         if (userData.diamonds < cost) return { statusCode: 402, body: JSON.stringify({ error: `Không đủ kim cương. Cần ${cost}, bạn có ${userData.diamonds}.` }) };
         
+        // 3. Prepare Image with MARKER
+        console.log("[Signature] Applying Marker Strategy...");
+        
+        const [header, base64] = imageDataUrl.split(',');
+        const imageBuffer = Buffer.from(base64, 'base64');
+        
+        // Load image into Jimp
+        const image = await (Jimp as any).read(imageBuffer);
+        const width = image.getWidth();
+        const height = image.getHeight();
+        
+        // Draw a GREEN BOX at the target position
+        // The model will be instructed to replace this green box
+        const boxWidth = Math.max(150, Math.floor(width * 0.3)); // 30% width
+        const boxHeight = Math.max(80, Math.floor(height * 0.15)); // 15% height
+        
+        const targetX = Math.floor(width * signaturePosition.x - boxWidth / 2);
+        const targetY = Math.floor(height * signaturePosition.y - boxHeight / 2);
+        
+        // Ensure within bounds
+        const safeX = Math.max(0, Math.min(width - boxWidth, targetX));
+        const safeY = Math.max(0, Math.min(height - boxHeight, targetY));
+
+        // Create Green Box Image
+        const greenBox = new (Jimp as any)(boxWidth, boxHeight, '#00FF00'); // Bright Green
+        
+        // Composite Green Box
+        image.composite(greenBox, safeX, safeY);
+        
+        // Get Modified Image as Base64
+        const markedImageBuffer = await image.getBufferAsync((Jimp as any).MIME_JPEG);
+        const markedBase64 = markedImageBuffer.toString('base64');
+
+        // 4. AI Generation
         const { data: apiKeyData, error: apiKeyError } = await supabaseAdmin.from('api_keys').select('id, key_value').eq('status', 'active').order('usage_count', { ascending: true }).limit(1).single();
-        if (apiKeyError || !apiKeyData) return { statusCode: 503, body: JSON.stringify({ error: 'Hết tài nguyên AI. Vui lòng thử lại sau.' }) };
+        if (apiKeyError || !apiKeyData) return { statusCode: 503, body: JSON.stringify({ error: 'Hết tài nguyên AI.' }) };
         
         const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
         const selectedModel = model === 'gemini-3-pro-image-preview' ? 'gemini-3-pro-image-preview' : 'gemini-2.5-flash-image';
 
-        // --- SERVER-SIDE PROMPT CONSTRUCTION (IN ENGLISH) ---
-        let promptParts = [
-            "You are an AI specializing in typography and image editing. Your task is to add text to an image with absolute precision. Follow these rules strictly:",
-            `1.  **Text Content:** You MUST add the following text exactly as written: "${text}"`,
-            `2.  **Placement Rule:** The absolute center of the text block you create **MUST** be placed at this precise location: ${Math.round(signaturePosition.x * 100)}% from the left edge and ${Math.round(signaturePosition.y * 100)}% from the top edge of the image. This is a non-negotiable placement requirement.`,
-            "3.  **Visual Style Rules:**",
-            `    - **Overall Style:** The text must be legible and have an artistic style described as '${aiStyle}'.`,
-            `    - **Font Family:** Use a font that visually resembles "${aiFont}".`,
-            `    - **Font Attributes:** The font weight must be ${aiIsBold ? 'Bold' : 'Normal'}. The font style must be ${aiIsItalic ? 'Italic' : 'Upright'}.`,
-            `    - **Font Size:** The text's height should be approximately ${aiSize} pixels, assuming the input image is 1024px tall. You must scale this size proportionally if the image has a different height.`,
-        ];
-
-        if (aiColor === 'custom') {
-            promptParts.push(`    - **Coloring:** The text color **MUST** be the exact hex code: ${aiCustomColor}. Do not use any other colors, gradients, or variations.`);
-        } else {
-            promptParts.push(`    - **Coloring:** The text must have a vibrant and artistic color palette best described as '${aiColor}'.`);
-        }
-
-        promptParts.push("4.  **Preservation Rule:** DO NOT alter, crop, or change any part of the original image. The final output must be the original image with ONLY the specified text added according to all the rules above.");
-
-        const aiPrompt = promptParts.join('\n');
-        // --- END ---
+        // Marker-based Prompt
+        const aiPrompt = `
+        **TASK:** IMAGE EDITING & INPAINTING
+        
+        1. [TARGET]: Locate the SOLID GREEN RECTANGLE (#00FF00) in the image.
+        2. [ACTION]: REPLACE the green rectangle with the stylized text: "${text}".
+        3. [STYLE]: ${aiStyle} style (e.g. Neon, Fire, Metal). Font: ${aiFont}. Color: ${aiColor === 'custom' ? aiCustomColor : aiColor}.
+        4. [INTEGRATION]: The text must fit perfectly where the green box was. Remove the green box completely.
+        5. [PRESERVATION]: DO NOT CHANGE any other part of the image. Keep background, characters, and lighting exactly as is.
+        `;
 
         const parts: any[] = [];
-        const [header, base64] = imageDataUrl.split(',');
-        const mimeType = header.match(/:(.*?);/)?.[1] || 'image/png';
-        parts.push({ inlineData: { data: base64, mimeType } });
+        parts.push({ inlineData: { data: markedBase64, mimeType: 'image/jpeg' } });
         parts.push({ text: aiPrompt });
 
+        console.log("[Signature] Sending to AI...");
         const response = await ai.models.generateContent({
             model: selectedModel,
             contents: { parts },
@@ -76,11 +99,11 @@ const handler: Handler = async (event: HandlerEvent) => {
         });
 
         const imagePartResponse = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-        if (!imagePartResponse?.inlineData) throw new Error("AI không thể chèn chữ ký vào ảnh này. Hãy thử lại.");
+        if (!imagePartResponse?.inlineData) throw new Error("AI Generation Failed.");
 
         const finalImageBase64 = imagePartResponse.inlineData.data;
         
-        // --- TRANSACTION (Pay on Success) ---
+        // 5. Transaction (Pay on Success)
         const { data: latestUser } = await supabaseAdmin.from('users').select('diamonds').eq('id', user.id).single();
         const newDiamondCount = (latestUser?.diamonds || userData.diamonds) - cost;
         
@@ -101,8 +124,8 @@ const handler: Handler = async (event: HandlerEvent) => {
         };
 
     } catch (error: any) {
-        console.error("Add signature AI function error:", error);
-        return { statusCode: 500, body: JSON.stringify({ error: error.message || 'Lỗi không xác định từ máy chủ.' }) };
+        console.error("Signature Tool Error:", error);
+        return { statusCode: 500, body: JSON.stringify({ error: error.message || 'Lỗi xử lý.' }) };
     }
 };
 

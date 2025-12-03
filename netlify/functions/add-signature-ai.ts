@@ -38,36 +38,44 @@ const handler: Handler = async (event: HandlerEvent) => {
         
         // 3. Prepare Image with MARKER
         console.log("[Signature] Applying Marker Strategy...");
+        let markedBase64 = '';
         
-        const [header, base64] = imageDataUrl.split(',');
-        const imageBuffer = Buffer.from(base64, 'base64');
-        
-        // Load image into Jimp
-        const image = await (Jimp as any).read(imageBuffer);
-        const width = image.getWidth();
-        const height = image.getHeight();
-        
-        // Draw a GREEN BOX at the target position
-        // The model will be instructed to replace this green box
-        const boxWidth = Math.max(150, Math.floor(width * 0.3)); // 30% width
-        const boxHeight = Math.max(80, Math.floor(height * 0.15)); // 15% height
-        
-        const targetX = Math.floor(width * signaturePosition.x - boxWidth / 2);
-        const targetY = Math.floor(height * signaturePosition.y - boxHeight / 2);
-        
-        // Ensure within bounds
-        const safeX = Math.max(0, Math.min(width - boxWidth, targetX));
-        const safeY = Math.max(0, Math.min(height - boxHeight, targetY));
+        try {
+            const [header, base64] = imageDataUrl.split(',');
+            const imageBuffer = Buffer.from(base64, 'base64');
+            
+            // Load image into Jimp
+            const image = await (Jimp as any).read(imageBuffer);
+            const width = image.getWidth();
+            const height = image.getHeight();
+            
+            // Draw a GREEN BOX at the target position
+            // The model will be instructed to replace this green box
+            const boxWidth = Math.max(150, Math.floor(width * 0.3)); // 30% width
+            const boxHeight = Math.max(80, Math.floor(height * 0.15)); // 15% height
+            
+            const targetX = Math.floor(width * signaturePosition.x - boxWidth / 2);
+            const targetY = Math.floor(height * signaturePosition.y - boxHeight / 2);
+            
+            // Ensure within bounds
+            const safeX = Math.max(0, Math.min(width - boxWidth, targetX));
+            const safeY = Math.max(0, Math.min(height - boxHeight, targetY));
 
-        // Create Green Box Image
-        const greenBox = new (Jimp as any)(boxWidth, boxHeight, '#00FF00'); // Bright Green
-        
-        // Composite Green Box
-        image.composite(greenBox, safeX, safeY);
-        
-        // Get Modified Image as Base64
-        const markedImageBuffer = await image.getBufferAsync((Jimp as any).MIME_JPEG);
-        const markedBase64 = markedImageBuffer.toString('base64');
+            // Create Green Box Image
+            // Note: Jimp v0.22 constructor usage: new Jimp(w, h, color)
+            const greenBox = new (Jimp as any)(boxWidth, boxHeight, '#00FF00'); // Bright Green
+            
+            // Composite Green Box
+            image.composite(greenBox, safeX, safeY);
+            
+            // Get Modified Image as Base64
+            const markedImageBuffer = await image.getBufferAsync((Jimp as any).MIME_JPEG);
+            markedBase64 = markedImageBuffer.toString('base64');
+
+        } catch (jimpError: any) {
+             console.error("Jimp processing failed:", jimpError);
+             return { statusCode: 500, body: JSON.stringify({ error: `Lỗi xử lý ảnh nền (Jimp): ${jimpError.message}` }) };
+        }
 
         // 4. AI Generation
         const { data: apiKeyData, error: apiKeyError } = await supabaseAdmin.from('api_keys').select('id, key_value').eq('status', 'active').order('usage_count', { ascending: true }).limit(1).single();

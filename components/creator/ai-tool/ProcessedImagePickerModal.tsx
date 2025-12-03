@@ -76,15 +76,15 @@ const ProcessedImagePickerModal: React.FC<ProcessedImagePickerModalProps> = ({ i
         }
     };
 
-    // Helper to fetch blob safely
+    // Helper to fetch blob safely with Proxy Fallback
     const smartFetchBlob = async (url: string): Promise<Blob> => {
         try {
             const response = await fetch(url);
             if (!response.ok) throw new Error("Direct fetch failed");
             return await response.blob();
         } catch (e) {
-            // Fallback
-            const proxyUrl = `/.netlify/functions/download-image?url=${encodeURIComponent(url)}`;
+            // Fallback with Proxy Mode
+            const proxyUrl = `/.netlify/functions/download-image?mode=proxy&url=${encodeURIComponent(url)}`;
             const proxyResponse = await fetch(proxyUrl);
             if (!proxyResponse.ok) throw new Error("Proxy fetch failed");
             return await proxyResponse.blob();
@@ -123,21 +123,19 @@ const ProcessedImagePickerModal: React.FC<ProcessedImagePickerModalProps> = ({ i
     const handleUseFull = async () => {
         if (!selectedImage) return;
         
-        // If base64 is missing (enhanced images), we need to fetch it properly to pass full data
         let finalImage = { ...selectedImage };
         
+        // Ensure we have data if it was lazy loaded
         if (!finalImage.imageBase64 && !finalImage.processedUrl.startsWith('data:')) {
              try {
                 const blob = await smartFetchBlob(finalImage.processedUrl);
-                // Read as base64 to ensure compatibility
                 const base64 = await new Promise<string>((resolve) => {
                     const reader = new FileReader();
                     reader.onloadend = () => resolve(reader.result as string);
                     reader.readAsDataURL(blob);
                 });
-                // Split "data:type;base64," from string
                 finalImage.imageBase64 = base64.split(',')[1];
-                finalImage.processedUrl = base64; // Update URL to dataURL for consistency downstream
+                finalImage.processedUrl = base64; 
              } catch(e) {
                  console.error("Failed to prep image for use", e);
              }
@@ -194,8 +192,36 @@ const ProcessedImagePickerModal: React.FC<ProcessedImagePickerModalProps> = ({ i
         }
     };
 
-    const handleProcessAction = (action: 'bg-remover' | 'enhancer') => {
-        if (selectedImage && onProcessAction) {
+    const handleProcessAction = async (action: 'bg-remover' | 'enhancer') => {
+        if (!selectedImage || !onProcessAction) return;
+        
+        // Pre-fetch image if necessary to ensure we have a local Blob URL.
+        // This avoids CORS issues when the receiving tool tries to fetch the image.
+        
+        try {
+            let url: string;
+
+            if (selectedImage.imageBase64) {
+                 url = `data:${selectedImage.mimeType};base64,${selectedImage.imageBase64}`;
+            } else {
+                 // Use smartFetchBlob to handle CORS/Proxy
+                 const blob = await smartFetchBlob(selectedImage.processedUrl);
+                 url = URL.createObjectURL(blob);
+            }
+            
+            // We construct a new temporary object where 'processedUrl' is now a local Safe URL (Data or Blob).
+            // The receiving tool will use this URL to create a File object.
+            const transferImage = {
+                ...selectedImage,
+                processedUrl: url 
+            };
+            
+            onProcessAction(transferImage, action);
+            onClose();
+            
+        } catch(e) {
+            console.error("Error preparing transfer:", e);
+            // Fallback: try passing the original if fetch failed
             onProcessAction(selectedImage, action);
             onClose();
         }

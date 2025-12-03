@@ -4,10 +4,11 @@ import { useAuth } from '../../../contexts/AuthContext';
 import ConfirmationModal from '../../ConfirmationModal';
 import { DiamondIcon } from '../../common/DiamondIcon';
 import { useTranslation } from '../../../hooks/useTranslation';
+import { resizeImage } from '../../../utils/imageUtils';
 
 const COST_MANUAL = 0;
 const COST_AI_FLASH = 1;
-const COST_AI_PRO = 10; // UPDATE: Changed to 10
+const COST_AI_PRO = 10; 
 
 const FONTS = [
     { name: 'Poppins', class: 'font-["Poppins"]' },
@@ -36,7 +37,7 @@ interface SignatureToolProps {
 
 interface SignatureState {
     mode: ToolMode;
-    aiModelType: 'flash' | 'pro'; // Added model type
+    aiModelType: 'flash' | 'pro';
     text: string;
     // Manual
     font: string;
@@ -192,12 +193,13 @@ const SignatureTool: React.FC<SignatureToolProps> = ({ initialImage, onClearInit
     const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                setSourceImage(event.target?.result as string);
-                setResultImage(null);
-            };
-            reader.readAsDataURL(file);
+            // Resize before setting state to prevent massive payload
+            resizeImage(file, 1024).then(({ dataUrl }) => {
+                 setSourceImage(dataUrl);
+                 setResultImage(null);
+            }).catch(() => {
+                 showToast("Lỗi xử lý ảnh.", "error");
+            });
         }
         e.target.value = '';
     };
@@ -278,7 +280,7 @@ const SignatureTool: React.FC<SignatureToolProps> = ({ initialImage, onClearInit
             </div>
             <div className="flex flex-col lg:flex-row gap-6">
                 <div className="w-full lg:w-2/3">
-                    <div ref={imageContainerRef} className="relative w-full aspect-square bg-black/20 rounded-lg border border-skin-border flex items-center justify-center p-2">
+                    <div ref={imageContainerRef} className="relative w-full aspect-square bg-black/20 rounded-lg border border-skin-border flex items-center justify-center p-2 overflow-hidden">
                         {displayImage ? (
                             <>
                                 <img src={displayImage} className="max-w-full max-h-full object-contain" alt="Preview"/>
@@ -288,7 +290,7 @@ const SignatureTool: React.FC<SignatureToolProps> = ({ initialImage, onClearInit
                                         left: `${signaturePosition.x * 100}%`,
                                         top: `${signaturePosition.y * 100}%`,
                                     }}
-                                    className="absolute -translate-x-1/2 -translate-y-1/2 w-20 h-20 border-2 border-dashed border-white/80 cursor-move bg-black/40 rounded-md flex items-center justify-center text-white text-xs font-bold shadow-lg"
+                                    className="absolute -translate-x-1/2 -translate-y-1/2 w-20 h-20 border-2 border-dashed border-white/80 cursor-move bg-black/40 rounded-md flex items-center justify-center text-white text-xs font-bold shadow-lg z-10 hover:bg-black/60 transition-colors"
                                 >
                                     {t('creator.aiTool.signature.position')}
                                 </div>

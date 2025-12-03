@@ -136,9 +136,9 @@ const ImageEnhancerTool: React.FC<ImageEnhancerToolProps> = ({ onSendToBgRemover
             if (!response.ok) throw new Error("Direct fetch failed");
             return await response.blob();
         } catch (e) {
-            // Fallback to proxy if CORS fails
+            // Fallback to proxy with mode=proxy to ensure CORS headers and direct data
             console.warn("Direct fetch failed, trying proxy...", e);
-            const proxyUrl = `/.netlify/functions/download-image?url=${encodeURIComponent(url)}`;
+            const proxyUrl = `/.netlify/functions/download-image?mode=proxy&url=${encodeURIComponent(url)}`;
             const proxyResponse = await fetch(proxyUrl);
             if (!proxyResponse.ok) throw new Error("Proxy fetch failed");
             return await proxyResponse.blob();

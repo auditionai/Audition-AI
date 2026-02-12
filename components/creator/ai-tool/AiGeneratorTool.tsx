@@ -288,34 +288,42 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
             <InstructionModal isOpen={isInstructionModalOpen} onClose={() => setInstructionModalOpen(false)} instructionKey={instructionKey} />
             <PromptLibraryModal isOpen={isPromptLibraryOpen} onClose={() => setIsPromptLibraryOpen(false)} onSelectPrompt={(p) => setPrompt(p)} category="single-photo" />
 
-            <div className="flex flex-col lg:flex-row gap-8 pb-24">
+            <div className="flex flex-col lg:flex-row gap-6 pb-24">
                 
                 {/* --- LEFT COLUMN: INPUTS --- */}
-                <div className="w-full lg:w-2/3 flex flex-col gap-8">
+                <div className="w-full lg:w-2/3 flex flex-col gap-6">
                      
                      {/* TIP BANNER */}
-                     <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 text-yellow-200 rounded-xl text-sm flex items-start gap-3 shadow-lg">
-                        <div className="bg-yellow-500/20 p-2 rounded-full"><i className="ph-fill ph-lightbulb text-xl text-yellow-400"></i></div>
-                        <div className="mt-1">
-                            <span className="font-bold text-yellow-400">{t('langName') === 'English' ? 'Tip:' : 'Mẹo:'}</span> {t('creator.aiTool.singlePhoto.bgRemoverTip')}
-                            <button onClick={onSwitchToUtility} className="font-bold underline ml-2 hover:text-white transition-colors">{t('creator.aiTool.singlePhoto.switchToBgRemover')}</button>
+                     <div className="p-3 bg-yellow-500/5 border border-yellow-500/20 text-yellow-200 rounded-xl text-xs flex items-center gap-3 shadow-md">
+                        <div className="bg-yellow-500/20 p-1.5 rounded-full"><i className="ph-fill ph-lightbulb text-base text-yellow-400"></i></div>
+                        <div className="flex-grow">
+                             <span className="font-bold text-yellow-400 mr-1">{t('langName') === 'English' ? 'Tip:' : 'Mẹo:'}</span> 
+                             {t('creator.aiTool.singlePhoto.bgRemoverTip')}
                         </div>
+                         <button onClick={onSwitchToUtility} className="text-white bg-white/10 hover:bg-white/20 px-3 py-1 rounded-lg text-xs font-bold transition-colors whitespace-nowrap">
+                             {t('creator.aiTool.singlePhoto.switchToBgRemover')}
+                         </button>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {/* CHARACTER IMAGE */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* CHARACTER IMAGE - HORIZONTAL LAYOUT */}
                         <SettingsBlock title={t('creator.aiTool.singlePhoto.characterTitle')} instructionKey="character" onInstructionClick={() => openInstructionModal('character')} variant="pink" className="md:col-span-2">
-                            <div className="flex flex-col md:flex-row gap-6">
-                                <div className="w-full md:w-1/2 aspect-[3/4]">
+                            <div className="flex flex-col sm:flex-row gap-4 h-full">
+                                <div className="w-40 sm:w-48 aspect-[3/4] flex-shrink-0 mx-auto sm:mx-0">
                                     <ImageUploader onUpload={(e) => handleImageUpload(e, 'pose')} image={poseImage} onRemove={() => handleRemoveImage('pose')} text={t('creator.aiTool.singlePhoto.characterUploadText')} disabled={isImageInputDisabled} className="w-full h-full" />
                                 </div>
-                                <div className="w-full md:w-1/2 flex flex-col justify-center gap-4">
-                                     <div className="bg-white/5 p-4 rounded-xl border border-white/5">
+                                <div className="flex-grow flex flex-col gap-3 justify-center">
+                                     <div className="bg-black/20 p-3 rounded-xl border border-white/5 h-full flex flex-col justify-center">
                                         <div className="flex items-center justify-between mb-2">
-                                            <label className="font-bold text-sm text-pink-300"><i className="ph-fill ph-face-mask mr-1"></i> {t('creator.aiTool.singlePhoto.faceLockLabel')}</label>
+                                            <label className="font-bold text-xs text-pink-300 flex items-center gap-2">
+                                                <i className="ph-fill ph-face-mask text-lg"></i> 
+                                                {t('creator.aiTool.singlePhoto.faceLockLabel')}
+                                            </label>
                                             <ToggleSwitch label="" checked={useBasicFaceLock} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUseBasicFaceLock(e.target.checked)} disabled={isImageInputDisabled || !poseImage} />
                                         </div>
-                                        <p className="text-xs text-gray-400 leading-relaxed">{t('creator.aiTool.singlePhoto.faceLockDesc')}</p>
+                                        <p className="text-[11px] text-gray-400 leading-relaxed border-l-2 border-gray-600 pl-2">
+                                            {t('creator.aiTool.singlePhoto.faceLockDesc')}
+                                        </p>
                                      </div>
                                 </div>
                             </div>
@@ -323,30 +331,35 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
 
                         {/* FACE ID */}
                          <SettingsBlock title={t('creator.aiTool.singlePhoto.superFaceLockTitle')} instructionKey="face" onInstructionClick={() => openInstructionModal('face')} variant="pink">
-                            <div className="aspect-square w-full mb-3">
-                                <ImageUploader onUpload={(e) => handleImageUpload(e, 'face')} image={rawFaceImage ? { url: processedFaceImage ? `data:image/png;base64,${processedFaceImage}` : rawFaceImage.url } : null} onRemove={() => handleRemoveImage('face')} text={t('creator.aiTool.singlePhoto.superFaceLockUploadText')} disabled={isImageInputDisabled} className="w-full h-full" />
-                            </div>
-                             <div className="space-y-3">
-                                {rawFaceImage && !processedFaceImage && (
-                                    <button onClick={handleProcessFace} disabled={isProcessingFace} className="w-full text-sm font-bold py-3 px-4 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-xl hover:shadow-lg hover:shadow-orange-500/30 transition-all disabled:opacity-50 disabled:cursor-wait flex items-center justify-center gap-2">
-                                        {isProcessingFace ? <i className="ph-fill ph-spinner animate-spin"></i> : <i className="ph-fill ph-scan"></i>}
-                                        {isProcessingFace ? t('creator.aiTool.singlePhoto.superFaceLockProcessing') : t('creator.aiTool.singlePhoto.superFaceLockProcess')}
-                                    </button>
-                                )}
-                                {processedFaceImage && (
-                                     <div className="w-full text-sm font-bold py-3 px-4 bg-green-500/20 text-green-300 border border-green-500/30 rounded-xl text-center flex items-center justify-center gap-2">
-                                        <i className="ph-fill ph-check-circle text-lg"></i> {t('creator.aiTool.singlePhoto.superFaceLockProcessed')}
-                                    </div>
-                                )}
-                                <p className="text-[11px] text-gray-400 px-1 leading-relaxed border-l-2 border-gray-600 pl-2">{t('creator.aiTool.singlePhoto.superFaceLockDesc')}</p>
+                            <div className="flex gap-4">
+                                <div className="w-32 h-32 flex-shrink-0">
+                                     <ImageUploader onUpload={(e) => handleImageUpload(e, 'face')} image={rawFaceImage ? { url: processedFaceImage ? `data:image/png;base64,${processedFaceImage}` : rawFaceImage.url } : null} onRemove={() => handleRemoveImage('face')} text="Face ID" disabled={isImageInputDisabled} className="w-full h-full" />
+                                </div>
+                                <div className="flex-grow flex flex-col justify-center gap-2">
+                                    {rawFaceImage && !processedFaceImage && (
+                                        <button onClick={handleProcessFace} disabled={isProcessingFace} className="w-full text-xs font-bold py-2 px-3 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-lg hover:shadow-lg hover:shadow-orange-500/30 transition-all disabled:opacity-50 disabled:cursor-wait flex items-center justify-center gap-2">
+                                            {isProcessingFace ? <i className="ph-fill ph-spinner animate-spin"></i> : <i className="ph-fill ph-scan"></i>}
+                                            {isProcessingFace ? 'Đang xử lý...' : 'Xử lý (-1💎)'}
+                                        </button>
+                                    )}
+                                    {processedFaceImage && (
+                                         <div className="w-full text-xs font-bold py-2 px-3 bg-green-500/20 text-green-300 border border-green-500/30 rounded-lg text-center flex items-center justify-center gap-1">
+                                            <i className="ph-fill ph-check-circle"></i> Đã khóa
+                                        </div>
+                                    )}
+                                    <p className="text-[10px] text-gray-500 leading-tight">
+                                        Tăng độ chính xác khuôn mặt lên 95%.
+                                    </p>
+                                </div>
                             </div>
                         </SettingsBlock>
 
-                        {/* STYLE REF (Updated to match Group Tool) */}
+                        {/* STYLE REF */}
                          <SettingsBlock title={t('creator.aiTool.singlePhoto.styleTitle')} instructionKey="style" onInstructionClick={() => openInstructionModal('style')} variant="blue">
-                            <p className="text-xs text-gray-400 mb-3">{t('creator.aiTool.groupStudio.refImageDesc')}</p>
-                            <div className="h-48 w-full">
-                                <ImageUploader onUpload={(e) => handleImageUpload(e, 'style')} image={styleImage} onRemove={() => handleRemoveImage('style')} text={t('creator.aiTool.singlePhoto.styleUploadText')} processType="style" disabled={isImageInputDisabled} className="w-full h-full" />
+                            <div className="flex gap-4 items-center h-full">
+                                <div className="w-full h-32">
+                                    <ImageUploader onUpload={(e) => handleImageUpload(e, 'style')} image={styleImage} onRemove={() => handleRemoveImage('style')} text={t('creator.aiTool.singlePhoto.styleUploadText')} processType="style" disabled={isImageInputDisabled} className="w-full h-full" />
+                                </div>
                             </div>
                         </SettingsBlock>
                     </div>
@@ -357,14 +370,14 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                                 value={prompt} 
                                 onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setPrompt(e.target.value)} 
                                 placeholder={t('creator.aiTool.singlePhoto.promptPlaceholder')} 
-                                className="w-full p-4 bg-black/40 rounded-xl border border-white/10 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition text-base text-white flex-grow resize-none min-h-[160px] shadow-inner leading-relaxed" 
+                                className="w-full p-4 bg-black/40 rounded-xl border border-white/10 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition text-sm text-white flex-grow resize-none min-h-[120px] shadow-inner leading-relaxed" 
                             />
                             <button
                                 onClick={() => setIsPromptLibraryOpen(true)}
-                                className="absolute bottom-3 right-3 flex items-center gap-2 text-xs text-cyan-300 bg-cyan-900/30 hover:bg-cyan-500/20 border border-cyan-500/30 rounded-full px-4 py-2 font-bold transition shadow-lg backdrop-blur-md"
+                                className="absolute bottom-3 right-3 flex items-center gap-2 text-xs text-cyan-300 bg-cyan-900/30 hover:bg-cyan-500/20 border border-cyan-500/30 rounded-full px-3 py-1.5 font-bold transition shadow-lg backdrop-blur-md"
                                 title={t('modals.promptLibrary.buttonTooltip')}
                             >
-                                <i className="ph-fill ph-book-bookmark text-lg"></i>
+                                <i className="ph-fill ph-book-bookmark"></i>
                                 {t('modals.promptLibrary.button')}
                             </button>
                         </div>
@@ -374,11 +387,11 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                 {/* --- RIGHT COLUMN: SETTINGS --- */}
                 <div className="w-full lg:w-1/3 flex flex-col gap-6">
                     <SettingsBlock title={t('creator.aiTool.singlePhoto.advancedSettingsTitle')} instructionKey="advanced" onInstructionClick={() => openInstructionModal('advanced')} variant="yellow">
-                        <div className="space-y-6">
+                        <div className="space-y-5">
                             
-                            {/* AI MODEL SELECTOR (Redesigned) */}
+                            {/* AI MODEL SELECTOR */}
                             <div>
-                                <label className="text-xs font-bold text-gray-400 mb-2 block uppercase tracking-wide">
+                                <label className="text-[10px] font-bold text-gray-400 mb-2 block uppercase tracking-wide">
                                     <i className="ph-fill ph-robot mr-1"></i> {t('creator.aiTool.singlePhoto.modelLabel')}
                                 </label>
                                 <div className="grid grid-cols-2 gap-2 p-1 bg-black/40 rounded-xl border border-white/10">
@@ -401,38 +414,37 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
 
                             {/* PRO OPTIONS: RESOLUTION & SEARCH */}
                             {modelType === 'pro' && (
-                                <div className="bg-yellow-500/5 border border-yellow-500/20 rounded-xl p-4 space-y-4 animate-fade-in-down">
+                                <div className="bg-yellow-500/5 border border-yellow-500/20 rounded-xl p-3 space-y-3 animate-fade-in-down">
                                     <div>
-                                        <label className="text-[10px] font-bold text-yellow-500 uppercase mb-2 block">Chất lượng ảnh (Pro)</label>
+                                        <label className="text-[9px] font-bold text-yellow-500 uppercase mb-1.5 block">Chất lượng (Pro)</label>
                                         <div className="grid grid-cols-3 gap-2">
                                             {(['1K', '2K', '4K'] as const).map(res => (
                                                 <button 
                                                     key={res} 
                                                     onClick={() => setImageResolution(res)}
-                                                    className={`py-1.5 text-xs font-bold rounded border transition-all ${imageResolution === res ? 'bg-yellow-500 text-black border-yellow-500' : 'bg-transparent text-gray-400 border-white/10 hover:border-white/30'}`}
+                                                    className={`py-1 text-[10px] font-bold rounded border transition-all ${imageResolution === res ? 'bg-yellow-500 text-black border-yellow-500' : 'bg-transparent text-gray-400 border-white/10 hover:border-white/30'}`}
                                                 >
                                                     {res}
                                                 </button>
                                             ))}
                                         </div>
                                     </div>
-                                    <div className="flex items-center justify-between border-t border-yellow-500/10 pt-3">
+                                    <div className="flex items-center justify-between border-t border-yellow-500/10 pt-2">
                                         <div className="flex items-center gap-2">
-                                            <div className="p-1.5 bg-blue-500/20 rounded text-blue-400"><i className="ph-bold ph-google-logo"></i></div>
-                                            <span className="text-xs font-bold text-gray-300">Google Grounding</span>
+                                            <div className="p-1 bg-blue-500/20 rounded text-blue-400"><i className="ph-bold ph-google-logo text-xs"></i></div>
+                                            <span className="text-[10px] font-bold text-gray-300">Grounding</span>
                                         </div>
                                         <ToggleSwitch label="" checked={enableGoogleSearch} onChange={(e) => setEnableGoogleSearch(e.target.checked)} />
                                     </div>
-                                    <p className="text-[10px] text-gray-500 italic">*Tìm kiếm thông tin thực tế mới nhất để vẽ chính xác hơn.</p>
                                 </div>
                             )}
                             
                             {/* STYLE SELECTOR */}
                             <div className="relative" ref={styleDropdownRef}>
-                                <label className="text-xs font-bold text-gray-400 mb-2 block uppercase tracking-wide">{t('creator.aiTool.singlePhoto.styleLabel')}</label>
+                                <label className="text-[10px] font-bold text-gray-400 mb-2 block uppercase tracking-wide">{t('creator.aiTool.singlePhoto.styleLabel')}</label>
                                 <button 
                                     onClick={() => setIsStyleDropdownOpen(!isStyleDropdownOpen)} 
-                                    className="w-full bg-black/40 border border-white/10 hover:border-white/30 rounded-xl px-4 py-3 flex items-center justify-between text-sm text-white font-medium transition-all"
+                                    className="w-full bg-black/40 border border-white/10 hover:border-white/30 rounded-xl px-4 py-2.5 flex items-center justify-between text-sm text-white font-medium transition-all"
                                 >
                                     <span className="flex items-center gap-2">
                                         <i className="ph-fill ph-palette text-pink-400"></i>
@@ -446,7 +458,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                                             <button 
                                                 key={p.id} 
                                                 onClick={() => { setSelectedStyle(p.id); setIsStyleDropdownOpen(false); }} 
-                                                className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors flex items-center justify-between ${selectedStyle === p.id ? 'bg-pink-500/20 text-pink-300 font-bold' : 'text-gray-300 hover:bg-white/10'}`}
+                                                className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-colors flex items-center justify-between ${selectedStyle === p.id ? 'bg-pink-500/20 text-pink-300 font-bold' : 'text-gray-300 hover:bg-white/10'}`}
                                             >
                                                 <span>{t(p.name)}</span>
                                                 {selectedStyle === p.id && <i className="ph-fill ph-check"></i>}
@@ -458,13 +470,13 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
 
                              {/* ASPECT RATIO */}
                              <div>
-                                <label className="text-xs font-bold text-gray-400 mb-2 block uppercase tracking-wide">{t('creator.aiTool.singlePhoto.aspectRatioLabel')}</label>
+                                <label className="text-[10px] font-bold text-gray-400 mb-2 block uppercase tracking-wide">{t('creator.aiTool.singlePhoto.aspectRatioLabel')}</label>
                                 <div className="grid grid-cols-5 gap-2">
                                     {(['3:4', '1:1', '4:3', '9:16', '16:9'] as const).map(ar => {
-                                        const dims: { [key: string]: string } = { '3:4': 'w-3 h-4', '1:1': 'w-4 h-4', '4:3': 'w-4 h-3', '9:16': 'w-[0.8rem] h-4', '16:9': 'w-5 h-[0.9rem]' };
+                                        const dims: { [key: string]: string } = { '3:4': 'w-2.5 h-3.5', '1:1': 'w-3 h-3', '4:3': 'w-3.5 h-2.5', '9:16': 'w-2 h-3.5', '16:9': 'w-3.5 h-2' };
                                         return (
-                                            <button key={ar} onClick={() => setAspectRatio(ar)} className={`p-2 rounded-lg flex flex-col items-center justify-center gap-1 border transition-all ${aspectRatio === ar ? 'border-pink-500 bg-pink-500/10 text-white shadow-lg shadow-pink-500/10' : 'border-white/10 bg-white/5 text-gray-500 hover:bg-white/10 hover:text-gray-300'}`}>
-                                                <div className={`${dims[ar]} border border-current rounded-sm`}/>
+                                            <button key={ar} onClick={() => setAspectRatio(ar)} className={`p-2 rounded-lg flex flex-col items-center justify-center gap-1.5 border transition-all ${aspectRatio === ar ? 'border-pink-500 bg-pink-500/10 text-white shadow-lg shadow-pink-500/10' : 'border-white/10 bg-white/5 text-gray-500 hover:bg-white/10 hover:text-gray-300'}`}>
+                                                <div className={`${dims[ar]} border border-current rounded-[1px]`}/>
                                                 <span className="text-[9px] font-bold">{ar}</span>
                                             </button>
                                         );
@@ -475,22 +487,22 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                             {/* OTHER TOGGLES */}
                             <div className="space-y-3 bg-white/5 p-4 rounded-xl border border-white/5">
                                  <div>
-                                    <div className="flex justify-between items-center">
-                                        <label className="text-sm font-bold text-gray-300">Negative Prompt</label>
-                                        <i className="ph-fill ph-minus-circle text-gray-500"></i>
+                                    <div className="flex justify-between items-center mb-1.5">
+                                        <label className="text-[10px] font-bold text-gray-300 uppercase">Negative Prompt</label>
+                                        <i className="ph-fill ph-minus-circle text-gray-500 text-xs"></i>
                                     </div>
-                                    <input type="text" value={negativePrompt} onChange={(e) => setNegativePrompt(e.target.value)} placeholder="VD: ugly, bad anatomy..." className="w-full mt-2 bg-black/30 rounded-lg border border-white/10 px-3 py-2 text-xs text-white focus:border-white/30 outline-none" />
+                                    <input type="text" value={negativePrompt} onChange={(e) => setNegativePrompt(e.target.value)} placeholder="VD: ugly, bad anatomy..." className="w-full bg-black/30 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white focus:border-white/30 outline-none" />
                                 </div>
 
                                 <div className="h-px bg-white/10"></div>
                                 
                                 <div className="flex items-center justify-between">
-                                    <span className="text-xs font-bold text-gray-300 flex items-center gap-2"><i className="ph-fill ph-magic-wand text-pink-400"></i> Upscaler (Làm nét)</span>
+                                    <span className="text-[10px] font-bold text-gray-300 flex items-center gap-2"><i className="ph-fill ph-magic-wand text-pink-400"></i> Upscaler (Làm nét)</span>
                                     <ToggleSwitch label="" checked={useUpscaler} onChange={(e) => setUseUpscaler(e.target.checked)} />
                                 </div>
                                 
                                 <div className="flex items-center justify-between">
-                                    <span className="text-xs font-bold text-gray-300 flex items-center gap-2"><i className="ph-fill ph-eraser text-red-400"></i> Xóa Watermark</span>
+                                    <span className="text-[10px] font-bold text-gray-300 flex items-center gap-2"><i className="ph-fill ph-eraser text-red-400"></i> Xóa Watermark</span>
                                     <ToggleSwitch label="" checked={removeWatermark} onChange={(e) => setRemoveWatermark(e.target.checked)} />
                                 </div>
                             </div>
@@ -501,11 +513,11 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                     <div className="mt-auto bg-[#1e1b25] p-5 rounded-2xl border border-white/10 shadow-2xl sticky bottom-4 z-10">
                         <div className="flex justify-between items-end mb-4">
                              <div>
-                                <p className="text-xs text-gray-400 font-bold uppercase">Tổng Chi phí</p>
+                                <p className="text-[10px] text-gray-400 font-bold uppercase">Tổng Chi phí</p>
                                 <p className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-purple-400">{generationCost} 💎</p>
                              </div>
                              <div className="text-right">
-                                <p className="text-xs text-gray-400 font-bold uppercase">Số dư</p>
+                                <p className="text-[10px] text-gray-400 font-bold uppercase">Số dư</p>
                                 <p className="text-lg font-bold text-white">{user?.diamonds.toLocaleString()} 💎</p>
                              </div>
                         </div>

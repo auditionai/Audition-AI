@@ -1,3 +1,4 @@
+
 import React, { createContext, useState, useEffect, ReactNode, useMemo, useCallback } from 'react';
 import { translations } from '../locales';
 
@@ -6,7 +7,6 @@ export type Language = 'vi' | 'en';
 interface LanguageContextType {
     language: Language;
     setLanguage: (language: Language) => void;
-    // FIX: Changed return type to `any` to support arrays and other non-string translations.
     t: (key: string, replacements?: Record<string, string | number>) => any;
 }
 
@@ -26,7 +26,6 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
         setLanguageState(lang);
     };
 
-    // FIX: Updated `t` function logic to correctly handle non-string values like arrays.
     const t = useCallback((key: string, replacements?: Record<string, string | number>): any => {
         const langTranslations = translations[language];
         let translation = key.split('.').reduce((acc: any, k) => acc?.[k], langTranslations);
@@ -38,7 +37,8 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
         }
         
         if (translation === undefined) {
-            console.warn(`Translation not found for key: ${key}`);
+            // Commented out warning to reduce console noise
+            // console.warn(`Translation not found for key: ${key}`);
             return key;
         }
 

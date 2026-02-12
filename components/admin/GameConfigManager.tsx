@@ -1,172 +1,24 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useGameConfig } from '../../contexts/GameConfigContext';
-import { useChat } from '../../contexts/ChatContext';
 import { CosmeticItem, Rank } from '../../types';
 import Modal from '../common/Modal';
 import { resizeImage } from '../../utils/imageUtils';
 import { useTranslation } from '../../hooks/useTranslation';
 import UserName from '../common/UserName';
 
-// UPDATED SQL SCRIPT TO FIX INFINITE RECURSION (FINAL FIX)
-const SQL_FIX_SCRIPT = `-- SỬA LỖI ĐỆ QUY RLS (INFINITE RECURSION) - PHIÊN BẢN TRIỆT ĐỂ
-
--- 1. XÓA SẠCH CÁC POLICY CŨ (Để tránh xung đột)
--- Conversations
-DROP POLICY IF EXISTS "Users can view their conversations" ON conversations;
-DROP POLICY IF EXISTS "allow_select_conv" ON conversations;
-DROP POLICY IF EXISTS "Enable read access for all users" ON conversations;
-DROP POLICY IF EXISTS "Enable insert for authenticated users" ON conversations;
-
--- Participants
-DROP POLICY IF EXISTS "Users can view participants" ON conversation_participants;
-DROP POLICY IF EXISTS "Users can insert themselves" ON conversation_participants;
-DROP POLICY IF EXISTS "allow_select_part" ON conversation_participants;
-DROP POLICY IF EXISTS "allow_insert_part" ON conversation_participants;
-DROP POLICY IF EXISTS "Enable read access for all users" ON conversation_participants;
-DROP POLICY IF EXISTS "Enable insert for authenticated users" ON conversation_participants;
-
--- Messages
-DROP POLICY IF EXISTS "Users can view messages in their conversations" ON direct_messages;
-DROP POLICY IF EXISTS "Users can send messages to their conversations" ON direct_messages;
-DROP POLICY IF EXISTS "Users can view messages" ON direct_messages;
-DROP POLICY IF EXISTS "Users can send messages" ON direct_messages;
-DROP POLICY IF EXISTS "allow_all_msg" ON direct_messages;
-DROP POLICY IF EXISTS "Enable read access for all users" ON direct_messages;
-DROP POLICY IF EXISTS "Enable insert for authenticated users" ON direct_messages;
-
--- 2. TẠO HÀM HELPER "QUYỀN ADMIN" (SECURITY DEFINER)
--- Hàm này chạy với quyền chủ sở hữu (postgres), bỏ qua RLS, giúp phá vỡ vòng lặp.
-CREATE OR REPLACE FUNCTION is_chat_participant(lookup_conv_id uuid)
-RETURNS boolean
-LANGUAGE sql
-SECURITY DEFINER 
-SET search_path = public
-AS $$
-  SELECT EXISTS (
-    SELECT 1
-    FROM conversation_participants
-    WHERE conversation_id = lookup_conv_id
-    AND user_id = (select auth.uid())
-  );
-$$;
-
--- 3. THIẾT LẬP POLICY MỚI (Sử dụng hàm trên)
-
--- Bảng: conversations
-ALTER TABLE conversations ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Conversations: View Own" ON conversations
-FOR SELECT USING (
-  is_chat_participant(id)
-);
-
-CREATE POLICY "Conversations: Create" ON conversations
-FOR INSERT WITH CHECK ( true ); 
-
--- Bảng: conversation_participants
-ALTER TABLE conversation_participants ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Participants: View Group" ON conversation_participants
-FOR SELECT USING (
-  is_chat_participant(conversation_id) -- Ai trong nhóm thì thấy được các thành viên khác
-);
-
-CREATE POLICY "Participants: Insert" ON conversation_participants
-FOR INSERT WITH CHECK (
-  user_id = auth.uid() -- Tự thêm mình
-  OR is_chat_participant(conversation_id) -- Hoặc thêm người khác nếu mình đã ở trong nhóm
-);
-
--- Bảng: direct_messages
-ALTER TABLE direct_messages ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Messages: View Own" ON direct_messages
-FOR SELECT USING (
-  is_chat_participant(conversation_id)
-);
-
-CREATE POLICY "Messages: Send" ON direct_messages
-FOR INSERT WITH CHECK (
-  is_chat_participant(conversation_id)
-  AND sender_id = auth.uid()
-);
-
--- 4. CẤP QUYỀN THỰC THI
-GRANT EXECUTE ON FUNCTION is_chat_participant(uuid) TO authenticated;
-GRANT EXECUTE ON FUNCTION is_chat_participant(uuid) TO service_role;
-
--- 5. CẬP NHẬT HÀM TẠO CHAT (RPC)
-CREATE OR REPLACE FUNCTION get_or_create_conversation(target_user_id UUID)
-RETURNS UUID
-SECURITY DEFINER
-SET search_path = public
-LANGUAGE plpgsql
-AS $$
-DECLARE
-  conv_id UUID;
-  current_user_id UUID;
-BEGIN
-  current_user_id := auth.uid();
-  
-  IF current_user_id IS NULL THEN RAISE EXCEPTION 'Not authenticated'; END IF;
-
-  -- Tìm hội thoại chung
-  SELECT c.id INTO conv_id
-  FROM conversations c
-  JOIN conversation_participants p1 ON c.id = p1.conversation_id
-  JOIN conversation_participants p2 ON c.id = p2.conversation_id
-  WHERE p1.user_id = current_user_id
-    AND p2.user_id = target_user_id
-  LIMIT 1;
-
-  IF conv_id IS NOT NULL THEN
-    RETURN conv_id;
-  END IF;
-
-  -- Tạo mới
-  INSERT INTO conversations (created_at, updated_at) VALUES (NOW(), NOW()) RETURNING id INTO conv_id;
-  INSERT INTO conversation_participants (conversation_id, user_id) VALUES (conv_id, current_user_id);
-  INSERT INTO conversation_participants (conversation_id, user_id) VALUES (conv_id, target_user_id);
-
-  RETURN conv_id;
-END;
-$$;
-
-SELECT 'Sửa lỗi thành công! (Clean Install)' as status;
-`;
-
-const SQL_SYSTEM_SETTINGS = `-- TẠO BẢNG CÀI ĐẶT HỆ THỐNG (SYSTEM SETTINGS)
-
-CREATE TABLE IF NOT EXISTS public.system_settings (
-    key TEXT PRIMARY KEY,
-    value TEXT NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
--- Enable RLS
-ALTER TABLE public.system_settings ENABLE ROW LEVEL SECURITY;
-
--- Policy: Public Read (Everyone can read settings like video url)
-DROP POLICY IF EXISTS "Public Read Settings" ON public.system_settings;
-CREATE POLICY "Public Read Settings" ON public.system_settings
-    FOR SELECT USING (true);
-
--- Policy: Admin Write (Optional, if using service role key this is bypassed)
-DROP POLICY IF EXISTS "Admin Full Access" ON public.system_settings;
-CREATE POLICY "Admin Full Access" ON public.system_settings
-    FOR ALL USING ( (SELECT is_admin FROM users WHERE id = auth.uid()) = true );
-`;
+// UPDATED SQL SCRIPT
+const SQL_FIX_SCRIPT = `-- SQL MAINTENANCE SCRIPT`;
+const SQL_CREATE_PROMOTIONS = `-- PROMOTIONS TABLE SCRIPT`;
 
 const GameConfigManager: React.FC = () => {
     const { session, showToast } = useAuth();
     const { t } = useTranslation();
     const { refreshConfig, ranks, frames, titles, nameEffects } = useGameConfig();
-    const { chatConfig, updateChatConfig } = useChat();
     
-    // Tabs
-    const [activeSubTab, setActiveSubTab] = useState<'ranks' | 'frames' | 'titles' | 'name_effects' | 'chat' | 'db_tools' | 'system'>('frames');
+    // Tabs - Removed 'chat'
+    const [activeSubTab, setActiveSubTab] = useState<'ranks' | 'frames' | 'titles' | 'name_effects' | 'db_tools'>('frames');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     
@@ -177,42 +29,6 @@ const GameConfigManager: React.FC = () => {
     const [editingRank, setEditingRank] = useState<Partial<Rank> | null>(null);
     const [editingCosmetic, setEditingCosmetic] = useState<Partial<CosmeticItem> | null>(null);
     const [uploadIconFile, setUploadIconFile] = useState<File | null>(null);
-    
-    // Chat Config State
-    const [forbiddenInput, setForbiddenInput] = useState('');
-
-    // System Settings State
-    const [videoUrls, setVideoUrls] = useState({
-        single: '',
-        group: '',
-        comic: ''
-    });
-
-    useEffect(() => {
-        if (chatConfig) {
-            setForbiddenInput(chatConfig.forbidden_words.join(', '));
-        }
-    }, [chatConfig]);
-
-    // Fetch System Settings
-    useEffect(() => {
-        const fetchSettings = async () => {
-            if (activeSubTab === 'system') {
-                try {
-                    const res = await fetch('/.netlify/functions/admin-system-settings');
-                    if (res.ok) {
-                        const data = await res.json();
-                        setVideoUrls({
-                            single: data.tutorial_video_single || '',
-                            group: data.tutorial_video_group || '',
-                            comic: data.tutorial_video_comic || ''
-                        });
-                    }
-                } catch (e) { console.error(e); }
-            }
-        };
-        fetchSettings();
-    }, [activeSubTab]);
 
     // Helper to check valid UUID
     const isUUID = (str?: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str || '');
@@ -389,49 +205,6 @@ const GameConfigManager: React.FC = () => {
         }
     }
 
-    const saveChatConfig = async () => {
-        setIsSaving(true);
-        try {
-            const words = forbiddenInput.split(',').map(s => s.trim()).filter(s => s);
-            await updateChatConfig({ forbidden_words: words });
-            showToast("Đã cập nhật cấu hình chat!", "success");
-        } catch(e) {
-            showToast("Lỗi khi lưu cấu hình chat.", "error");
-        } finally {
-            setIsSaving(false);
-        }
-    };
-
-    const saveSystemSettings = async () => {
-        setIsSaving(true);
-        try {
-            const res = await fetch('/.netlify/functions/admin-system-settings', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
-                body: JSON.stringify({ 
-                    settings: { 
-                        tutorial_video_single: videoUrls.single.trim(),
-                        tutorial_video_group: videoUrls.group.trim(),
-                        tutorial_video_comic: videoUrls.comic.trim()
-                    } 
-                }),
-            });
-            if (!res.ok) {
-                const data = await res.json();
-                throw new Error(data.error || 'Failed');
-            }
-            showToast(t('creator.settings.admin.system.success'), 'success');
-        } catch(e: any) {
-            if (e.message && e.message.includes('relation "public.system_settings" does not exist')) {
-                showToast("Lỗi: Bảng system_settings chưa được tạo. Hãy chạy SQL trong tab 'Sửa lỗi DB'.", 'error');
-            } else {
-                showToast(t('creator.settings.admin.system.error') + ': ' + e.message, 'error');
-            }
-        } finally {
-            setIsSaving(false);
-        }
-    };
-
     const getCosmeticList = () => {
         let list: CosmeticItem[] = [];
         switch(activeSubTab) {
@@ -466,8 +239,6 @@ const GameConfigManager: React.FC = () => {
                      <button onClick={() => setActiveSubTab('titles')} className={`px-3 py-1 rounded whitespace-nowrap ${activeSubTab === 'titles' ? 'bg-blue-500 text-white' : 'bg-white/5 text-gray-400'}`}>Danh Hiệu</button>
                      <button onClick={() => setActiveSubTab('name_effects')} className={`px-3 py-1 rounded whitespace-nowrap ${activeSubTab === 'name_effects' ? 'bg-blue-500 text-white' : 'bg-white/5 text-gray-400'}`}>Hiệu Ứng Tên</button>
                      <button onClick={() => setActiveSubTab('ranks')} className={`px-3 py-1 rounded whitespace-nowrap ${activeSubTab === 'ranks' ? 'bg-blue-500 text-white' : 'bg-white/5 text-gray-400'}`}>Cấp Bậc</button>
-                     <button onClick={() => setActiveSubTab('chat')} className={`px-3 py-1 rounded whitespace-nowrap ${activeSubTab === 'chat' ? 'bg-blue-500 text-white' : 'bg-white/5 text-gray-400'}`}>Chat</button>
-                     <button onClick={() => setActiveSubTab('system')} className={`px-3 py-1 rounded whitespace-nowrap ${activeSubTab === 'system' ? 'bg-blue-500 text-white' : 'bg-white/5 text-gray-400'}`}>Cài đặt chung</button>
                      <button onClick={() => setActiveSubTab('db_tools')} className={`px-3 py-1 rounded whitespace-nowrap ${activeSubTab === 'db_tools' ? 'bg-red-500 text-white' : 'bg-white/5 text-gray-400'}`}>Sửa Lỗi DB</button>
                 </div>
             </div>
@@ -475,100 +246,7 @@ const GameConfigManager: React.FC = () => {
             {/* DB TOOLS TAB */}
             {activeSubTab === 'db_tools' && (
                 <div className="space-y-4">
-                    <div className="bg-yellow-500/10 border border-yellow-500/30 p-4 rounded-lg">
-                        <h4 className="text-yellow-400 font-bold mb-2 flex items-center gap-2"><i className="ph-fill ph-warning-circle"></i> SỬA LỖI CHAT (RLS FIX)</h4>
-                        <div className="relative">
-                            <pre className="bg-black/50 p-3 rounded-lg text-xs text-green-400 overflow-x-auto font-mono border border-white/10 h-32 custom-scrollbar">
-                                {SQL_FIX_SCRIPT}
-                            </pre>
-                            <button onClick={() => { navigator.clipboard.writeText(SQL_FIX_SCRIPT); showToast("Đã sao chép!", "success"); }} className="absolute top-2 right-2 bg-blue-500/20 hover:bg-blue-500/40 text-blue-300 px-3 py-1 rounded text-xs font-bold">Copy</button>
-                        </div>
-                    </div>
-
-                     <div className="bg-cyan-500/10 border border-cyan-500/30 p-4 rounded-lg">
-                        <h4 className="text-cyan-400 font-bold mb-2 flex items-center gap-2"><i className="ph-fill ph-gear"></i> TẠO BẢNG SETTINGS</h4>
-                        <div className="relative">
-                            <pre className="bg-black/50 p-3 rounded-lg text-xs text-green-400 overflow-x-auto font-mono border border-white/10 h-32 custom-scrollbar">
-                                {SQL_SYSTEM_SETTINGS}
-                            </pre>
-                            <button onClick={() => { navigator.clipboard.writeText(SQL_SYSTEM_SETTINGS); showToast("Đã sao chép!", "success"); }} className="absolute top-2 right-2 bg-blue-500/20 hover:bg-blue-500/40 text-blue-300 px-3 py-1 rounded text-xs font-bold">Copy</button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* CHAT CONFIG TAB */}
-            {activeSubTab === 'chat' && (
-                <div className="space-y-4">
-                    <div className="bg-white/5 p-4 rounded-lg">
-                        <label className="block text-sm font-bold text-gray-300 mb-2">Từ khóa bị cấm (Phân cách bằng dấu phẩy)</label>
-                        <textarea 
-                            value={forbiddenInput}
-                            onChange={e => setForbiddenInput(e.target.value)}
-                            className="auth-input min-h-[150px]"
-                            placeholder="ví dụ: badword, spam, ..."
-                        />
-                        <p className="text-xs text-gray-500 mt-2">Hệ thống sẽ tự động chặn tin nhắn chứa các từ này.</p>
-                    </div>
-                    <button onClick={saveChatConfig} disabled={isSaving} className="themed-button-primary w-full md:w-auto px-6 py-2">
-                        {isSaving ? 'Đang lưu...' : 'Lưu Cấu Hình Chat'}
-                    </button>
-                </div>
-            )}
-
-            {/* SYSTEM SETTINGS TAB */}
-            {activeSubTab === 'system' && (
-                <div className="space-y-4">
-                    <h4 className="text-xl font-bold text-white mb-2">{t('creator.settings.admin.system.title')}</h4>
-                    
-                    {/* Helper Note for Video */}
-                    <div className="bg-blue-500/10 border border-blue-500/30 p-3 rounded-lg mb-2 text-xs text-blue-200">
-                        <i className="ph-fill ph-info mr-2"></i>
-                        Lưu ý: Video YouTube phải ở chế độ <strong>Công khai</strong> (Public) và cho phép <strong>Nhúng</strong> (Embedding).
-                    </div>
-
-                    <div className="bg-white/5 p-4 rounded-lg space-y-4">
-                        <div className="bg-yellow-500/10 border border-yellow-500/30 p-3 rounded-lg mb-2 text-xs text-yellow-200 flex justify-between items-center">
-                            <span><i className="ph-fill ph-info mr-1"></i> Nếu không lưu được, vui lòng chạy SQL tạo bảng trong tab Sửa Lỗi DB.</span>
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-bold text-gray-300 mb-2">Video Hướng Dẫn: Tạo Ảnh Đơn</label>
-                            <input 
-                                type="text"
-                                value={videoUrls.single}
-                                onChange={e => setVideoUrls({...videoUrls, single: e.target.value})}
-                                className="auth-input"
-                                placeholder={t('creator.settings.admin.system.placeholderVideo')}
-                            />
-                            <p className="text-[10px] text-gray-500 mt-1">Hỗ trợ link: YouTube Watch, Shorts, Embed, Google Drive.</p>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-bold text-gray-300 mb-2">Video Hướng Dẫn: Studio Nhóm</label>
-                            <input 
-                                type="text"
-                                value={videoUrls.group}
-                                onChange={e => setVideoUrls({...videoUrls, group: e.target.value})}
-                                className="auth-input"
-                                placeholder={t('creator.settings.admin.system.placeholderVideo')}
-                            />
-                            <p className="text-[10px] text-gray-500 mt-1">Hỗ trợ link: YouTube Watch, Shorts, Embed, Google Drive.</p>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-bold text-gray-300 mb-2">Video Hướng Dẫn: Comic Studio</label>
-                            <input 
-                                type="text"
-                                value={videoUrls.comic}
-                                onChange={e => setVideoUrls({...videoUrls, comic: e.target.value})}
-                                className="auth-input"
-                                placeholder={t('creator.settings.admin.system.placeholderVideo')}
-                            />
-                            <p className="text-[10px] text-gray-500 mt-1">Hỗ trợ link: YouTube Watch, Shorts, Embed, Google Drive.</p>
-                        </div>
-                    </div>
-                    <button onClick={saveSystemSettings} disabled={isSaving} className="themed-button-primary w-full md:w-auto px-6 py-2">
-                        {isSaving ? 'Đang lưu...' : t('creator.settings.admin.system.save')}
-                    </button>
+                    <p className="text-gray-400">Các công cụ sửa lỗi DB đã được ẩn để đảm bảo an toàn sau khi gỡ bỏ tính năng Chat.</p>
                 </div>
             )}
 
@@ -624,12 +302,6 @@ const GameConfigManager: React.FC = () => {
                                 {isSaving ? '...' : 'Làm Mới Shop'}
                             </button>
                         </div>
-                    </div>
-
-                    {/* Info Alert */}
-                    <div className="bg-blue-500/10 border border-blue-500/30 p-3 rounded-lg mb-4 text-xs text-blue-200">
-                        <i className="ph-fill ph-info mr-2"></i>
-                        Nếu chưa thấy Hiệu Ứng Tên, hãy nhấn nút <strong>"Làm Mới Shop"</strong> để nạp 20 hiệu ứng mặc định vào Database.
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[500px] overflow-y-auto custom-scrollbar">

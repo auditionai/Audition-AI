@@ -2,12 +2,11 @@
 import React, { useState } from 'react';
 import { GalleryImage } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
-import { useChat } from '../../contexts/ChatContext';
 import { getRankForLevel } from '../../utils/rankUtils';
 import { useTranslation } from '../../hooks/useTranslation';
 import UserAvatar from './UserAvatar';
 import UserBadge from './UserBadge';
-import UserName from './UserName'; // Import UserName
+import UserName from './UserName';
 
 interface ImageModalProps {
   isOpen: boolean;
@@ -19,10 +18,8 @@ interface ImageModalProps {
 
 const ImageModal: React.FC<ImageModalProps> = ({ isOpen, onClose, image, showInfoPanel = true, onShare }) => {
   const { showToast, user } = useAuth();
-  const { shareImageToChat } = useChat();
   const { t } = useTranslation();
   const [isCopied, setIsCopied] = useState(false);
-  const [isSharingToChat, setIsSharingToChat] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
 
   if (!isOpen || !image) return null;
@@ -58,19 +55,6 @@ const ImageModal: React.FC<ImageModalProps> = ({ isOpen, onClose, image, showInf
         setIsDownloading(false);
     }, 2000);
   };
-  
-  const handleShareToChat = async () => {
-      if (!image.image_url) return;
-      setIsSharingToChat(true);
-      try {
-          await shareImageToChat(image.image_url);
-          showToast("Đã chia sẻ ảnh lên Global Chat!", "success");
-      } catch (error) {
-          showToast("Lỗi khi chia sẻ.", "error");
-      } finally {
-          setIsSharingToChat(false);
-      }
-  }
   
   const rank = image.creator ? getRankForLevel(image.creator.level) : getRankForLevel(1);
 
@@ -133,18 +117,6 @@ const ImageModal: React.FC<ImageModalProps> = ({ isOpen, onClose, image, showInf
 
             {/* Actions at the bottom of the panel */}
             <div className="p-4 border-t border-white/10 space-y-2">
-                {/* Share to Chat Button (New) */}
-                {user && (
-                    <button 
-                        onClick={handleShareToChat}
-                        disabled={isSharingToChat}
-                        className="w-full px-4 py-2 text-sm font-semibold rounded-lg flex items-center justify-center gap-2 transition-all duration-300 bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 disabled:opacity-50"
-                    >
-                        {isSharingToChat ? <i className="ph-fill ph-spinner animate-spin"></i> : <i className="ph-fill ph-chat-teardrop-text"></i>}
-                        <span>Khoe lên Global Chat</span>
-                    </button>
-                )}
-
                  <button
                     onClick={handleCopyPrompt}
                     className={`w-full px-4 py-2 text-sm font-semibold rounded-lg flex items-center justify-center gap-2 transition-all duration-300 ${isCopied ? 'bg-green-500/20 text-green-300' : 'bg-pink-500/20 text-pink-300 hover:bg-pink-500/30'}`}

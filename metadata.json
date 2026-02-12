@@ -1,0 +1,5 @@
+{
+  "name": "AUDITION AI",
+  "description": "A demo preview for AUDITION AI, an application to create 3D AI avatars of Audition game characters, including poses, outfits, and dance floors. This demo showcases the UI/UX flow using mocked data and does not connect to any real backend services.",
+  "requestFramePermissions": []
+}

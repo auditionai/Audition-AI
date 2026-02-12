@@ -27,15 +27,15 @@ const LiquidShell: React.FC<LiquidShellProps> = ({
 
     // NAVIGATION: Home -> Studio -> Creations -> CheckIn -> TopUp -> Balance -> Avatar
     return (
-        <div className="relative min-h-screen w-full overflow-hidden text-white flex flex-col font-barlow bg-black selection:bg-red-500 selection:text-white">
+        <div className="relative min-h-screen w-full overflow-hidden text-white flex flex-col font-barlow selection:bg-red-500 selection:text-white" style={{ background: 'var(--color-fill)' }}>
             
             {/* --- MAIN GLASS STAGE (Content) --- */}
             <main className="flex-grow w-full h-screen overflow-hidden pt-4 pb-36 px-2 md:px-4 flex flex-col items-center">
                 <div className="w-full max-w-[1280px] h-full relative z-10 flex flex-col">
-                     {/* Thick Glass Container (Fixed Frame) */}
-                     <div className="liquid-content-container w-full h-full relative flex flex-col">
-                         {/* Inner Scrollable Area - Separated from container styles to avoid overflow conflict */}
-                         <div className="w-full h-full overflow-y-auto custom-scrollbar p-1 rounded-[32px]">
+                     {/* Thick Glass Container (Fixed Frame) with shadow for depth */}
+                     <div className="liquid-content-container w-full h-full relative flex flex-col shadow-2xl">
+                         {/* Inner Scrollable Area */}
+                         <div className="w-full h-full overflow-y-auto custom-scrollbar p-1 rounded-[var(--radius-lg)]">
                             {children}
                          </div>
                      </div>
@@ -99,10 +99,10 @@ const LiquidShell: React.FC<LiquidShellProps> = ({
 
                     {/* 5. BALANCE */}
                     <div className="flex flex-col items-end justify-center px-4 h-full select-none min-w-[80px]">
-                        <span className="text-[9px] text-gray-500 font-bold tracking-widest uppercase">Số Dư KC</span>
+                        <span className="text-[9px] text-gray-400 font-bold tracking-widest uppercase">Số Dư KC</span>
                         <div className="flex items-center gap-1.5">
-                            <span className="text-xl font-black text-white leading-none tracking-tight">{user.diamonds}</span>
-                            <i className="ph-fill ph-diamonds-four text-red-500 text-xs"></i>
+                            <span className="text-xl font-black text-white leading-none tracking-tight drop-shadow-md">{user.diamonds}</span>
+                            <i className="ph-fill ph-diamonds-four text-red-500 text-xs drop-shadow-[0_0_5px_rgba(220,38,38,0.8)]"></i>
                         </div>
                     </div>
 

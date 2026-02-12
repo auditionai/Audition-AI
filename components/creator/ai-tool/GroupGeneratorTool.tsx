@@ -45,7 +45,8 @@ const GroupStudioForm: React.FC<{
     const [style] = useState('Cinematic');
     
     // Fixed settings for now as per UI request
-    const imageSize: '1K' | '2K' | '4K' = '1K';
+    // Use state to avoid TS "no overlap" error in cost calculation due to const narrowing
+    const [imageSize] = useState<'1K' | '2K' | '4K'>('1K');
     const enableGoogleSearch = false;
 
     const [removeWatermark, setRemoveWatermark] = useState(false);
@@ -206,7 +207,7 @@ const GroupStudioForm: React.FC<{
                             <div className="aspect-square w-full bg-black/20 rounded-lg overflow-hidden border border-dashed border-white/20">
                                 <ImageUploader onUpload={(e) => handleImageUpload(e, (img) => setReferenceImage(img))} image={referenceImage} onRemove={() => setReferenceImage(null)} text="Tải ảnh tham chiếu" className="w-full h-full" />
                             </div>
-                            <p className="text-[10px] text-gray-500 mt-1 leading-tight">AI sẽ học bố cục, dáng, bối cảnh từ ảnh này.</p>
+                            <p className="text-[10px] text-gray-500 mt-1 leading-tight">AI sẽ học bố cục, dáng, bối cảnh và phong cách của ảnh này để tạo ra ảnh cuối cùng.</p>
                         </div>
 
                         {/* Prompt */}

@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useImageGenerator } from '../../../hooks/useImageGenerator';
 import { useAuth } from '../../../contexts/AuthContext';
 import { STYLE_PRESETS_NEW } from '../../../constants/aiToolData';
-import { AIModel, StylePreset } from '../../../types';
+import { AIModel } from '../../../types';
 
 import SettingsBlock from './SettingsBlock';
 import ImageUploader from '../../ai-tool/ImageUploader';
@@ -43,7 +43,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
     const [isProcessingFace, setIsProcessingFace] = useState(false);
 
     const [prompt, setPrompt] = useState('');
-    const [negativePrompt, setNegativePrompt] = useState('');
+    // Removed unused negativePrompt state
     
     // Config
     const [modelType, setModelType] = useState<'flash' | 'pro'>('flash');
@@ -85,7 +85,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                 if (type === 'pose') setPoseImage(newImage);
                 else if (type === 'face') { setRawFaceImage(newImage); setProcessedFaceImage(null); }
                 else if (type === 'style') setStyleImage(newImage);
-            }).catch((err) => showToast(t('creator.aiTool.common.errorProcessImage'), "error"));
+            }).catch(() => showToast(t('creator.aiTool.common.errorProcessImage'), "error"));
         }
     };
 
@@ -148,7 +148,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
             tags: [], details: [], supportedModes: ['text-to-image', 'image-to-image']
         };
 
-        generateImage(prompt, selectedModelObj, poseImage?.file ?? null, styleImage?.file ?? null, finalFaceImage, aspectRatio, negativePrompt, undefined, useUpscaler, imageResolution, enableGoogleSearch, removeWatermark);
+        generateImage(prompt, selectedModelObj, poseImage?.file ?? null, styleImage?.file ?? null, finalFaceImage, aspectRatio, "", undefined, useUpscaler, imageResolution, enableGoogleSearch, removeWatermark);
     };
     
     const resultImageForModal = generatedImage ? {

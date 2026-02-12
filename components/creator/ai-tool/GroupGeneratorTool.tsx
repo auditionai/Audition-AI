@@ -226,7 +226,7 @@ const ModeCard: React.FC<{ icon: string; title: string; description: string; onC
     </button>
 );
 
-const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtility, onInstructionClick, onSwitchToolWithImage }) => {
+const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtility, onInstructionClick }) => {
     const [mode, setMode] = useState<StudioMode>('menu');
     if (mode === 'solo') return (<div className="animate-fade-in"><div className="flex items-center gap-2 mb-3"><button onClick={() => setMode('menu')} className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"><i className="ph-bold ph-arrow-left text-white"></i></button><h3 className="text-base font-bold text-white">Tạo Ảnh Đơn (Solo)</h3></div><AiGeneratorTool onSendToSignatureTool={() => {}} onSwitchToUtility={onSwitchToUtility} /></div>);
     if (mode === 'comic') return (<ComicStudio onInstructionClick={() => onInstructionClick('comic-studio')} onBack={() => setMode('menu')} />);

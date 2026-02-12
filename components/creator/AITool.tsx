@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-// import AiGeneratorTool from './ai-tool/AiGeneratorTool'; // REMOVED
+// import AiGeneratorTool from './ai-tool/AiGeneratorTool'; // REMOVED as requested, but file exists for reference
 import GroupGeneratorTool from './ai-tool/GroupGeneratorTool';
 import BgRemoverTool from './ai-tool/BgRemoverTool';
 import ImageEnhancerTool from './ai-tool/ImageEnhancerTool';

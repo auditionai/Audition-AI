@@ -30,13 +30,17 @@ const failJob = async (jobId: string, userId: string, reason: string, cost: numb
         if (userNow) {
             const refundBalance = userNow.diamonds + cost;
             await Promise.all([
-                supabaseAdmin.from('generated_images').delete().eq('id', jobId),
+                // UPDATE: Instead of deleting, mark as FAILED so client sees the error message
+                supabaseAdmin.from('generated_images').update({ 
+                    image_url: `FAILED: ${reason.substring(0, 200)}` // Limit length
+                }).eq('id', jobId),
+                
                 supabaseAdmin.from('users').update({ diamonds: refundBalance }).eq('id', userId),
                 supabaseAdmin.from('diamond_transactions_log').insert({
                     user_id: userId,
                     amount: cost,
                     transaction_type: 'REFUND',
-                    description: `Hoàn tiền lỗi Tạo ảnh: ${reason.substring(0, 50)}`,
+                    description: `Hoàn tiền: ${reason.substring(0, 50)}...`,
                 })
             ]);
         }
@@ -63,7 +67,7 @@ const handler: Handler = async (event: HandlerEvent) => {
             .eq('id', jobId)
             .single();
 
-        if (fetchError || !jobData) throw new Error("Job not found");
+        if (fetchError || !jobData) throw new Error("Job not found in database");
         
         userId = jobData.user_id;
         
@@ -87,7 +91,7 @@ const handler: Handler = async (event: HandlerEvent) => {
 
         // 2. Setup AI
         const { data: apiKeyData, error: apiKeyError } = await supabaseAdmin.from('api_keys').select('id, key_value').eq('status', 'active').order('usage_count', { ascending: true }).limit(1).single();
-        if (apiKeyError || !apiKeyData) throw new Error('Hết tài nguyên AI. Vui lòng thử lại sau.');
+        if (apiKeyError || !apiKeyData) throw new Error('Hệ thống đang bận (Hết tài nguyên AI). Vui lòng thử lại sau.');
         
         const ai = new GoogleGenAI({ apiKey: apiKeyData.key_value });
         const isProModel = apiModel === 'gemini-3-pro-image-preview';
@@ -95,8 +99,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         // 3. Construct Prompt & Fetch Inputs
         let fullPrompt = "";
         
-        // --- STYLE INJECTION (SMART FIX) ---
-        // Instead of banning "camera", we enforce the "3D Render Medium".
+        // --- STYLE INJECTION ---
         const styleEnforcement = `
         ** AESTHETIC RULES: AUDITION GAME STYLE **
         1. [MEDIUM]: 3D CGI Render (Unreal Engine 5 / Octane Render style).
@@ -157,93 +160,99 @@ const handler: Handler = async (event: HandlerEvent) => {
             parts.push({ inlineData: { data: faceData.data, mimeType: faceData.mimeType } });
         }
 
-        // Prepare Config
+        // Add Safety Settings to prevent generic "Blocked" errors
+        const safetySettings = [
+            { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
+            { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_ONLY_HIGH' },
+            { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_ONLY_HIGH' },
+            { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_ONLY_HIGH' }
+        ];
+
         const config: any = { 
-            responseModalities: [Modality.IMAGE],
+            responseModalities: ['IMAGE'], // STRICTLY 'IMAGE'
             seed: seed ? Number(seed) : undefined,
+            safetySettings: safetySettings,
             imageConfig: { 
                 aspectRatio: aspectRatio, 
+                imageSize: isProModel ? imageSize : undefined
             }
         };
 
-        // Only add imageSize if Pro model AND not default 1K (to avoid potential defaults issues)
-        if (isProModel && imageSize && imageSize !== '1K') {
-             config.imageConfig.imageSize = imageSize;
+        if (isProModel && useGoogleSearch) {
+            config.tools = [{ googleSearch: {} }]; 
         }
 
         console.log(`[WORKER] Generating image for Job ${jobId} using ${apiModel}...`);
         
-        // Retry Logic for Google Search Grounding (often flaky)
-        let response;
-        let attemptSearch = isProModel && useGoogleSearch;
-        
+        // Call Gemini API
         try {
-            if (attemptSearch) {
-                config.tools = [{ googleSearch: {} }];
-            }
-            response = await ai.models.generateContent({
+            const response = await ai.models.generateContent({
                 model: apiModel,
                 contents: { parts: parts },
                 config: config,
             });
-        } catch (err: any) {
-            // If failed with search, retry without search
-            if (attemptSearch) {
-                console.warn(`[WORKER] Job ${jobId} failed with Google Search. Retrying without search...`, err.message);
-                delete config.tools;
-                response = await ai.models.generateContent({
-                    model: apiModel,
-                    contents: { parts: parts },
-                    config: config,
-                });
-            } else {
-                throw err;
+
+            const imagePartResponse = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+            
+            if (!imagePartResponse?.inlineData) {
+                // Check if it was blocked
+                if (response.promptFeedback?.blockReason) {
+                     throw new Error(`AI từ chối tạo ảnh do vi phạm an toàn: ${response.promptFeedback.blockReason}. Vui lòng thử prompt khác.`);
+                }
+                throw new Error("AI không trả về kết quả hình ảnh. (Lỗi Server AI)");
             }
+
+            // 4. Watermark & Upload Final Result
+            const finalImageBase64 = imagePartResponse.inlineData.data;
+            const finalImageMimeType = imagePartResponse.inlineData.mimeType.includes('png') ? 'image/png' : 'image/jpeg';
+            
+            let imageBuffer = Buffer.from(finalImageBase64, 'base64');
+            
+            if (!removeWatermark) {
+                // Pass empty string as URL since the service now loads local file
+                imageBuffer = await addSmartWatermark(imageBuffer, '');
+            }
+
+            // Init S3 Client for R2
+            const s3Client = new S3Client({
+                region: "auto",
+                endpoint: process.env.R2_ENDPOINT!,
+                credentials: { accessKeyId: process.env.R2_ACCESS_KEY_ID!, secretAccessKey: process.env.R2_SECRET_ACCESS_KEY! },
+            });
+
+            const fileExtension = finalImageMimeType.split('/')[1] || 'png';
+            const fileName = `${userId}/${Date.now()}_${isProModel ? 'pro' : 'flash'}.${fileExtension}`;
+
+            await (s3Client as any).send(new PutObjectCommand({
+                Bucket: process.env.R2_BUCKET_NAME!,
+                Key: fileName,
+                Body: imageBuffer,
+                ContentType: finalImageMimeType,
+            }));
+
+            const publicUrl = `${process.env.R2_PUBLIC_URL}/${fileName}`;
+
+            // 5. Update DB (Completion)
+            await Promise.all([
+                supabaseAdmin.from('generated_images').update({ 
+                    image_url: publicUrl,
+                    prompt: prompt // Restore simple prompt text
+                }).eq('id', jobId),
+                supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id })
+            ]);
+
+            console.log(`[WORKER] Job ${jobId} completed.`);
+        } catch (genError: any) {
+            // Capture specific API errors like 400 Bad Request
+            let detailedError = genError.message;
+            if (genError.response) {
+                 try {
+                     const errBody = await genError.response.json();
+                     detailedError = errBody.error?.message || detailedError;
+                 } catch(e) {}
+            }
+            throw new Error(detailedError);
         }
-
-        const imagePartResponse = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-        if (!imagePartResponse?.inlineData) {
-            throw new Error("AI Generation failed (No output).");
-        }
-
-        // 4. Watermark & Upload Final Result
-        const finalImageBase64 = imagePartResponse.inlineData.data;
-        const finalImageMimeType = imagePartResponse.inlineData.mimeType.includes('png') ? 'image/png' : 'image/jpeg';
-        
-        let imageBuffer = Buffer.from(finalImageBase64, 'base64');
-        
-        if (!removeWatermark) {
-            imageBuffer = await addSmartWatermark(imageBuffer, '');
-        }
-
-        const s3Client = new S3Client({
-            region: "auto",
-            endpoint: process.env.R2_ENDPOINT!,
-            credentials: { accessKeyId: process.env.R2_ACCESS_KEY_ID!, secretAccessKey: process.env.R2_SECRET_ACCESS_KEY! },
-        });
-
-        const fileExtension = finalImageMimeType.split('/')[1] || 'png';
-        const fileName = `${userId}/${Date.now()}_${isProModel ? 'pro' : 'flash'}.${fileExtension}`;
-
-        await (s3Client as any).send(new PutObjectCommand({
-            Bucket: process.env.R2_BUCKET_NAME!,
-            Key: fileName,
-            Body: imageBuffer,
-            ContentType: finalImageMimeType,
-        }));
-
-        const publicUrl = `${process.env.R2_PUBLIC_URL}/${fileName}`;
-
-        // 5. Update DB (Completion)
-        await Promise.all([
-            supabaseAdmin.from('generated_images').update({ 
-                image_url: publicUrl,
-                prompt: prompt // Restore simple prompt text
-            }).eq('id', jobId),
-            supabaseAdmin.rpc('increment_key_usage', { key_id: apiKeyData.id })
-        ]);
-
-        console.log(`[WORKER] Job ${jobId} completed.`);
 
     } catch (error: any) {
         if (userId) {

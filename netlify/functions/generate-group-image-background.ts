@@ -1,6 +1,6 @@
 
 import type { Handler, HandlerEvent } from "@netlify/functions";
-import { GoogleGenAI, Modality } from "@google/genai";
+import { GoogleGenAI, Modality, HarmCategory, HarmBlockThreshold } from "@google/genai";
 import { supabaseAdmin } from './utils/supabaseClient';
 import { Buffer } from 'buffer';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
@@ -10,19 +10,18 @@ const XP_PER_CHARACTER = 5;
 
 // Refund Function used by Worker
 const failJob = async (jobId: string, reason: string, userId: string, cost: number) => {
-    console.error(`[WORKER] Failing job ${jobId}. Reason: ${reason}. Refunding: ${cost}`);
+    console.error(`[GROUP WORKER] Failing job ${jobId}. Reason: ${reason}. Refunding: ${cost}`);
     try {
-        // 1. Get current balance to add back
         const { data: userNow } = await supabaseAdmin.from('users').select('diamonds').eq('id', userId).single();
-        
         if (userNow) {
             const refundBalance = userNow.diamonds + cost;
             await Promise.all([
-                // Delete the failed job or mark as failed (here we delete to clean up)
-                supabaseAdmin.from('generated_images').delete().eq('id', jobId),
-                // Refund diamonds
+                // UPDATE: Mark as FAILED so client sees message
+                supabaseAdmin.from('generated_images').update({ 
+                    image_url: `FAILED: ${reason.substring(0, 200)}` 
+                }).eq('id', jobId),
+
                 supabaseAdmin.from('users').update({ diamonds: refundBalance }).eq('id', userId),
-                // Log Refund
                 supabaseAdmin.from('diamond_transactions_log').insert({
                     user_id: userId,
                     amount: cost,
@@ -65,7 +64,6 @@ const updateJobProgress = async (jobId: string, currentPromptData: any, progress
         console.warn("Failed to update progress:", e);
     }
 };
-
 
 const handler: Handler = async (event: HandlerEvent) => {
     if (event.httpMethod !== 'POST') return { statusCode: 200 };
@@ -115,6 +113,14 @@ const handler: Handler = async (event: HandlerEvent) => {
         const modelName = selectedModel === 'pro' ? 'gemini-3-pro-image-preview' : 'gemini-2.5-flash-image';
         const isPro = selectedModel === 'pro';
         
+        // Safety Settings
+        const safetySettings = [
+            { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+            { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+            { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+            { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH }
+        ];
+        
         const generatedCharacters = [];
         let masterLayoutData: { data: string; mimeType: string } | null = null;
 
@@ -137,7 +143,6 @@ const handler: Handler = async (event: HandlerEvent) => {
                 const genderUpper = char.gender.toUpperCase();
                 const genderPrompt = genderUpper === 'MALE' ? 'MALE, MAN, BOY, MASCULINE' : 'FEMALE, WOMAN, GIRL, FEMININE';
                 
-                // Refined Isolation Prompt: 3D Game Asset Style
                 const isolationPrompt = `
                 ** SYSTEM COMMAND: CHARACTER GENERATION **
                 ** TASK: ** Generate a single 3D Character Sprite.
@@ -172,7 +177,10 @@ const handler: Handler = async (event: HandlerEvent) => {
                 const response = await ai.models.generateContent({ 
                     model: 'gemini-2.5-flash-image', 
                     contents: { parts }, 
-                    config: { responseModalities: [Modality.IMAGE] } 
+                    config: { 
+                        responseModalities: [Modality.IMAGE],
+                        safetySettings: safetySettings
+                    } 
                 });
                 
                 const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
@@ -228,43 +236,30 @@ const handler: Handler = async (event: HandlerEvent) => {
         
         const finalConfig: any = { 
             responseModalities: [Modality.IMAGE],
+            safetySettings: safetySettings,
             imageConfig: { 
                 aspectRatio: aspectRatio, // ENFORCED
+                imageSize: isPro ? imageSize : undefined
             }
         };
         
-        // Only set imageSize if explicitly requested non-default
-        if (isPro && imageSize && imageSize !== '1K') {
-            finalConfig.imageConfig.imageSize = imageSize;
+        if (isPro && useSearch) {
+            finalConfig.tools = [{ googleSearch: {} }];
         }
-        
-        // Retry Logic for Search
-        let finalResponse;
-        let attemptSearch = isPro && useSearch;
 
-        try {
-            if (attemptSearch) finalConfig.tools = [{ googleSearch: {} }];
-            finalResponse = await ai.models.generateContent({
-                model: modelName,
-                contents: { parts: finalParts },
-                config: finalConfig,
-            });
-        } catch (err: any) {
-            if (attemptSearch) {
-                console.warn(`[WORKER] Group Job ${jobId} search failed. Retrying...`);
-                delete finalConfig.tools;
-                finalResponse = await ai.models.generateContent({
-                    model: modelName,
-                    contents: { parts: finalParts },
-                    config: finalConfig,
-                });
-            } else {
-                throw err;
-            }
-        }
+        const finalResponse = await ai.models.generateContent({
+            model: modelName,
+            contents: { parts: finalParts },
+            config: finalConfig,
+        });
 
         const finalImagePart = finalResponse.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-        if (!finalImagePart?.inlineData) throw new Error("AI failed to composite the final image.");
+        if (!finalImagePart?.inlineData) {
+            if (finalResponse.promptFeedback?.blockReason) {
+                 throw new Error(`Ảnh cuối bị chặn do vi phạm an toàn: ${finalResponse.promptFeedback.blockReason}`);
+            }
+            throw new Error("AI failed to composite the final image.");
+        }
 
         const finalImageBase64 = finalImagePart.inlineData.data;
         const finalImageMimeType = finalImagePart.inlineData.mimeType;

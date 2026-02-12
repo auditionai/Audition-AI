@@ -7,23 +7,20 @@ import { useTheme } from '../contexts/ThemeContext';
 import CreatorHeader from '../components/creator/CreatorHeader';
 import CreatorFooter from '../components/creator/CreatorFooter';
 import AITool from '../components/creator/AITool';
-import Leaderboard from '../components/Leaderboard';
 import MyCreationsPage from './MyCreationsPage';
 import Settings from '../components/Settings';
-import AdminGalleryPage from './AdminGalleryPage';
 import BottomNavBar from '../components/common/BottomNavBar';
 import InfoModal from '../components/creator/InfoModal';
 import TopUpModal from '../components/creator/TopUpModal';
 import CheckInModal from '../components/CheckInModal';
 import AnnouncementModal from '../components/AnnouncementModal';
 import ThemeEffects from '../components/themes/ThemeEffects';
-import FloatingLuckyWheel from '../components/FloatingLuckyWheel';
 
 // Define the possible tabs for type safety
-export type CreatorTab = 'tool' | 'leaderboard' | 'my-creations' | 'settings';
+export type CreatorTab = 'tool' | 'my-creations' | 'settings';
 
 interface CreatorPageProps {
-  activeTab: CreatorTab | 'admin-gallery'; // Include admin tab here
+  activeTab: CreatorTab; 
 }
 
 const CreatorPage: React.FC<CreatorPageProps> = ({ activeTab }) => {
@@ -36,13 +33,11 @@ const CreatorPage: React.FC<CreatorPageProps> = ({ activeTab }) => {
     const [isCheckInModalOpen, setCheckInModalOpen] = useState(false);
 
     if (!user) {
-        // This should ideally not happen if routing is correct, but as a safeguard:
         navigate('home');
         return null; 
     }
     
     const handleTopUpClick = () => {
-        // This is now handled by the BuyCreditsPage, but the modal can be a quick-access point.
         navigate('buy-credits');
     };
 
@@ -52,14 +47,10 @@ const CreatorPage: React.FC<CreatorPageProps> = ({ activeTab }) => {
 
     const renderActiveTab = () => {
         switch (activeTab) {
-            case 'leaderboard':
-                return <Leaderboard />;
             case 'my-creations':
                 return <MyCreationsPage />;
             case 'settings':
                 return <Settings />;
-            case 'admin-gallery':
-                return user.is_admin ? <AdminGalleryPage /> : <AITool />; // Fallback for non-admins
             case 'tool':
             default:
                 return <AITool />;
@@ -80,14 +71,11 @@ const CreatorPage: React.FC<CreatorPageProps> = ({ activeTab }) => {
                 {renderActiveTab()}
             </main>
 
-            <FloatingLuckyWheel />
-
             <CreatorFooter onInfoLinkClick={setInfoModalKey} />
 
             <BottomNavBar
-                activeTab={activeTab === 'admin-gallery' ? 'tool' : activeTab} // Highlight 'tool' for admin gallery for now
+                activeTab={activeTab}
                 onTabChange={navigate}
-                onCheckInClick={handleCheckIn}
             />
 
             {/* Global Modals for Creator Page */}

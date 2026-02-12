@@ -2,25 +2,19 @@
 import React from 'react';
 import { useAuth } from './contexts/AuthContext';
 import { GameConfigProvider } from './contexts/GameConfigContext';
-import { ChatProvider } from './contexts/ChatContext';
 
 // Import Pages
 import HomePage from './pages/HomePage';
 import CreatorPage from './pages/CreatorPage';
 import GalleryPage from './pages/GalleryPage';
 import BuyCreditsPage from './pages/BuyCreditsPage';
-import ProfilePage from './pages/ProfilePage';
-import UserProfilePage from './pages/UserProfilePage';
-import MessagesPage from './pages/MessagesPage';
-import ShopPage from './pages/ShopPage'; // NEW
 
 // Import Common Components
 import RewardNotification from './components/common/RewardNotification';
-import GlobalChat from './components/chat/GlobalChat';
 import MarqueeBanner from './components/common/MarqueeBanner';
 
 const AppContent: React.FC = () => {
-    const { user, loading, route, currentPath, toast, reward, clearReward } = useAuth();
+    const { user, loading, route, toast, reward, clearReward } = useAuth();
 
     if (loading) {
         return (
@@ -35,27 +29,12 @@ const AppContent: React.FC = () => {
 
         switch (route) {
             case 'tool':
-            case 'leaderboard':
             case 'my-creations':
             case 'settings':
-            case 'admin-gallery':
                 pageComponent = user ? <CreatorPage activeTab={route} /> : <HomePage />;
                 break;
-            case 'profile':
-                pageComponent = user ? <ProfilePage /> : <HomePage />;
-                break;
-            case 'user':
-                pageComponent = user ? <UserProfilePage key={window.location.pathname} /> : <HomePage />;
-                break;
-            case 'messages':
-                // QUAN TRỌNG: Dùng full path làm key để buộc React mount lại MessagesPage khi ID thay đổi
-                pageComponent = user ? <MessagesPage key={currentPath} /> : <HomePage />;
-                break;
-            case 'shop':
-                pageComponent = user ? <ShopPage /> : <HomePage />;
-                break;
             case 'buy-credits':
-                pageComponent = <BuyCreditsPage />; // Buy Credits is public/hybrid now
+                pageComponent = <BuyCreditsPage />;
                 break;
             case 'gallery':
                 pageComponent = <GalleryPage />;
@@ -74,9 +53,6 @@ const AppContent: React.FC = () => {
             <MarqueeBanner />
 
             {renderPage()}
-            
-            {/* Global Chat is always available if logged in */}
-            {user && <GlobalChat />}
             
             {toast && (
                 <div 
@@ -97,9 +73,7 @@ const AppContent: React.FC = () => {
 const App: React.FC = () => {
     return (
         <GameConfigProvider>
-            <ChatProvider>
-                <AppContent />
-            </ChatProvider>
+            <AppContent />
         </GameConfigProvider>
     );
 }

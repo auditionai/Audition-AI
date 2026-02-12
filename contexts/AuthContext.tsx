@@ -18,7 +18,7 @@ const getRouteFromPath = (path: string): string => {
     // Tách phần path thực tế khỏi query params (vd: messages?id=1 -> messages)
     const cleanPath = path.split('?')[0]; 
     const pathSegment = cleanPath.split('/').filter(Boolean)[0];
-    const validRoutes = ['tool', 'leaderboard', 'my-creations', 'settings', 'buy-credits', 'gallery', 'admin-gallery', 'profile', 'user', 'shop', 'messages'];
+    const validRoutes = ['tool', 'my-creations', 'settings', 'buy-credits', 'gallery'];
     if (validRoutes.includes(pathSegment)) {
         return pathSegment;
     }

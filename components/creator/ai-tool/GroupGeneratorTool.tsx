@@ -11,7 +11,6 @@ import SettingsBlock from '../../ai-tool/SettingsBlock';
 import { useTranslation } from '../../../hooks/useTranslation';
 import PromptLibraryModal from './PromptLibraryModal';
 import ToggleSwitch from '../../ai-tool/ToggleSwitch';
-import VideoModal from '../../common/VideoModal';
 
 
 // Mock data for styles
@@ -63,12 +62,37 @@ interface GroupGeneratorToolProps {
     onSwitchToolWithImage?: (image: { url: string; file: File }, targetTool: 'bg-remover' | 'enhancer') => void;
 }
 
+// Helper Component for Mode Selection Card
+const ModeCard: React.FC<{
+    icon: string;
+    title: string;
+    description: string;
+    colorClass: string;
+    onClick: () => void;
+}> = ({ icon, title, description, colorClass, onClick }) => (
+    <button 
+        onClick={onClick}
+        className={`group relative flex flex-col items-center justify-center p-6 rounded-2xl border-2 border-white/5 bg-[#181820] hover:bg-white/5 transition-all duration-300 w-full hover:-translate-y-2 hover:shadow-xl ${colorClass} interactive-3d overflow-hidden`}
+    >
+        <div className="absolute inset-0 bg-gradient-to-br opacity-0 group-hover:opacity-10 transition-opacity duration-500 from-white to-transparent pointer-events-none"></div>
+        <div className={`w-16 h-16 rounded-full flex items-center justify-center text-3xl mb-4 bg-white/5 shadow-inner transition-transform duration-300 group-hover:scale-110 group-hover:rotate-6`}>
+            <i className={`ph-fill ${icon}`}></i>
+        </div>
+        <h3 className="text-xl font-black uppercase tracking-wide mb-1">{title}</h3>
+        <p className="text-xs text-gray-400 font-medium">{description}</p>
+    </button>
+);
+
 // Main Component
 const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtility, onInstructionClick, onSwitchToolWithImage }) => {
     const { user, session, showToast, supabase, updateUserDiamonds } = useAuth();
     const { t } = useTranslation();
     const [numCharacters, setNumCharacters] = useState<number>(0);
     const [isConfirmOpen, setConfirmOpen] = useState(false);
+    
+    // UI State for Group Selection Slider
+    const [tempGroupSize, setTempGroupSize] = useState(3);
+    const [showGroupSlider, setShowGroupSlider] = useState(false);
     
     const [characters, setCharacters] = useState<CharacterState[]>([]);
 
@@ -95,29 +119,9 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
     
     const [isResultModalOpen, setIsResultModalOpen] = useState(false);
     const [isPromptLibraryOpen, setIsPromptLibraryOpen] = useState(false);
-    
-    // Video Tutorial State
-    const [tutorialUrl, setTutorialUrl] = useState('');
-    const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
 
     // Refs for cleanup
     const pollingInterval = useRef<ReturnType<typeof setInterval> | null>(null);
-
-    // Fetch Video Tutorial URL
-    useEffect(() => {
-        const fetchSettings = async () => {
-            try {
-                const res = await fetch('/.netlify/functions/admin-system-settings');
-                if (res.ok) {
-                    const settings = await res.json();
-                    if (settings.tutorial_video_group) {
-                        setTutorialUrl(settings.tutorial_video_group);
-                    }
-                }
-            } catch (e) { console.error(e); }
-        };
-        fetchSettings();
-    }, []);
 
     useEffect(() => {
         return () => {
@@ -127,9 +131,11 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
     }, [supabase]);
     
     useEffect(() => {
-        if (numCharacters <= 2) setAspectRatio('3:4');
-        else if (numCharacters <= 4) setAspectRatio('1:1');
-        else setAspectRatio('16:9');
+        // Smart default Aspect Ratios based on character count
+        if (numCharacters === 1) setAspectRatio('3:4'); // Portrait for solo
+        else if (numCharacters === 2) setAspectRatio('3:4'); // Portrait for couple often works, or 1:1
+        else if (numCharacters <= 4) setAspectRatio('1:1'); // Square for small group
+        else setAspectRatio('16:9'); // Landscape for large group
     }, [numCharacters]);
     
     // Reset resolution when switching to flash
@@ -160,6 +166,7 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
 
     const handleNumCharactersSelect = (num: number) => {
         setNumCharacters(num);
+        setShowGroupSlider(false); // Hide slider if it was open
         setCharacters(Array.from({ length: num }, () => ({
             poseImage: null,
             faceImage: null,
@@ -582,16 +589,18 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
     const resetGenerator = () => {
         setGeneratedImage(null);
         setProgressText('');
-        handleNumCharactersSelect(numCharacters); 
+        // Don't reset numCharacters automatically, allow user to make another with same config or go back
+        // If we want to go back to selection:
+        // setNumCharacters(0); 
     };
     
     const resultImageForModal = generatedImage ? {
         id: 'generated-group-result',
         image_url: generatedImage,
-        prompt: `Group Photo based on reference. Prompt: ${prompt}`,
+        prompt: `Studio Photo. Prompt: ${prompt}`,
         creator: user ? { display_name: user.display_name, photo_url: user.photo_url, level: user.level } : { display_name: t('common.creator'), photo_url: '', level: 1 },
         created_at: new Date().toISOString(),
-        model_used: 'Group Studio',
+        model_used: 'Studio',
         user_id: user?.id || ''
     } : null;
 
@@ -637,19 +646,60 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
 
     if (numCharacters === 0) {
         return (
-            <div className="text-center p-8 min-h-[50vh] flex flex-col items-center justify-center animate-fade-in">
-                <h2 className="themed-heading text-2xl font-bold themed-title-glow mb-4">{t('creator.aiTool.groupStudio.introTitle')}</h2>
-                <p className="text-skin-muted mb-6">{t('creator.aiTool.groupStudio.introDesc')}</p>
-                <div className="flex flex-wrap justify-center gap-4 mt-4">
-                    {[2, 3, 4, 5, 6].map(num => (
-                        <button 
-                            key={num} 
-                            onClick={() => handleNumCharactersSelect(num)} 
-                            className="w-28 h-28 bg-skin-fill-secondary border-2 border-skin-border rounded-lg text-5xl font-black text-skin-base transition-all duration-300 hover:scale-110 hover:border-skin-border-accent hover:text-skin-accent hover:shadow-accent"
-                        >
-                            {num}
-                        </button>
-                    ))}
+            <div className="flex flex-col items-center animate-fade-in py-8">
+                <h2 className="themed-heading text-2xl font-bold themed-title-glow mb-2 text-center">{t('creator.aiTool.groupStudio.introTitle')}</h2>
+                <p className="text-skin-muted mb-8 text-center text-sm">{t('creator.aiTool.groupStudio.introDesc')}</p>
+                
+                {/* 3 Main Mode Selection Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl w-full px-4">
+                    
+                    {/* Solo Mode */}
+                    <ModeCard 
+                        icon="ph-user"
+                        title="Đơn (Solo)"
+                        description="Ảnh chân dung, Avatar, Fashion"
+                        colorClass="text-cyan-400 border-cyan-500/30 hover:border-cyan-400 hover:shadow-cyan-500/20"
+                        onClick={() => handleNumCharactersSelect(1)}
+                    />
+                    
+                    {/* Couple Mode */}
+                    <ModeCard 
+                        icon="ph-heart"
+                        title="Đôi (Couple)"
+                        description="Ảnh đôi, Hẹn hò, Cưới"
+                        colorClass="text-pink-400 border-pink-500/30 hover:border-pink-400 hover:shadow-pink-500/20"
+                        onClick={() => handleNumCharactersSelect(2)}
+                    />
+                    
+                    {/* Group Mode (Slider Trigger) */}
+                    {!showGroupSlider ? (
+                        <ModeCard 
+                            icon="ph-users-three"
+                            title="Nhóm (Party)"
+                            description="Nhóm bạn, Gia đình, Fam (3+)"
+                            colorClass="text-yellow-400 border-yellow-500/30 hover:border-yellow-400 hover:shadow-yellow-500/20"
+                            onClick={() => setShowGroupSlider(true)}
+                        />
+                    ) : (
+                        <div className="bg-[#181820] border-2 border-yellow-500 rounded-2xl p-6 flex flex-col items-center justify-center animate-fade-in shadow-xl shadow-yellow-500/20 w-full h-full min-h-[200px]">
+                            <h4 className="text-yellow-400 font-bold mb-4 uppercase tracking-wider text-sm">Chọn số lượng</h4>
+                            <div className="flex items-center gap-4 mb-6 w-full">
+                                <span className="text-2xl font-black text-white w-8 text-center">{tempGroupSize}</span>
+                                <input 
+                                    type="range" 
+                                    min="3" 
+                                    max="6" 
+                                    value={tempGroupSize} 
+                                    onChange={(e) => setTempGroupSize(Number(e.target.value))} 
+                                    className="flex-grow accent-yellow-500 h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer" 
+                                />
+                            </div>
+                            <div className="flex gap-2 w-full">
+                                <button onClick={() => setShowGroupSlider(false)} className="flex-1 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-bold transition">Hủy</button>
+                                <button onClick={() => handleNumCharactersSelect(tempGroupSize)} className="flex-1 py-2 bg-yellow-500 hover:bg-yellow-400 text-black rounded-lg text-xs font-bold transition shadow-lg">Xác nhận</button>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
         );
@@ -664,50 +714,42 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                 onCropSelect={handleCropSelectFromPicker}
                 onProcessAction={handleProcessAction}
             />
-             <PromptLibraryModal isOpen={isPromptLibraryOpen} onClose={() => setIsPromptLibraryOpen(false)} onSelectPrompt={(p) => setPrompt(p)} category={numCharacters > 2 ? 'group-photo' : 'couple-photo'} />
-             <VideoModal isOpen={isVideoModalOpen} onClose={() => setIsVideoModalOpen(false)} videoUrl={tutorialUrl} />
+             {/* Category logic: 1->single, 2->couple, 3+->group */}
+             <PromptLibraryModal 
+                isOpen={isPromptLibraryOpen} 
+                onClose={() => setIsPromptLibraryOpen(false)} 
+                onSelectPrompt={(p) => setPrompt(p)} 
+                category={numCharacters === 1 ? 'single-photo' : numCharacters === 2 ? 'couple-photo' : 'group-photo'} 
+             />
              
             <ConfirmationModal isOpen={isConfirmOpen} onClose={() => setConfirmOpen(false)} onConfirm={handleConfirmGeneration} cost={totalCost} />
             
              <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 text-yellow-300 rounded-lg text-sm flex items-start gap-3 mb-6">
                 <i className="ph-fill ph-info text-2xl flex-shrink-0"></i>
                 <div>
-                     {/* Removed "Mẹo:" redundant prefix */}
-                    <span className="font-bold">{t('creator.aiTool.singlePhoto.bgRemoverTip')}</span>
+                    <span className="font-bold">{t('langName') === 'English' ? 'Tip:' : 'Mẹo:'}</span> {t('creator.aiTool.singlePhoto.bgRemoverTip')}
                     <button onClick={onSwitchToUtility} className="font-bold underline ml-2 hover:text-white">{t('creator.aiTool.singlePhoto.switchToBgRemover')}</button>
                 </div>
             </div>
-
-            {/* Video Tutorial Box */}
-            {tutorialUrl && (
-                <div className="p-4 bg-purple-500/10 border border-purple-500/30 text-purple-300 rounded-lg text-sm flex items-center justify-between gap-3 mb-6">
-                    <div className="flex items-center gap-3">
-                        <i className="ph-fill ph-video text-2xl flex-shrink-0"></i>
-                        <div>
-                            <span className="font-bold block">Hướng dẫn sử dụng</span>
-                            <span className="text-xs opacity-80">Xem video hướng dẫn chi tiết cách tạo ảnh nhóm.</span>
-                        </div>
-                    </div>
-                    <button 
-                        onClick={() => setIsVideoModalOpen(true)} 
-                        className="px-4 py-2 bg-purple-500 hover:bg-purple-400 text-white text-xs font-bold rounded-full flex items-center gap-2 transition-colors"
-                    >
-                        <i className="ph-fill ph-play-circle text-lg"></i> Xem Video
-                    </button>
-                </div>
-            )}
 
             <div className="flex flex-col lg:flex-row gap-6">
                  {/* Left Column: Character Inputs */}
                 <div className="w-full lg:w-2/3">
                     <div className="flex justify-between items-center mb-3">
                         <h3 className="themed-heading text-lg font-bold themed-title-glow">{t('creator.aiTool.groupStudio.characterInfoTitle')}</h3>
-                        <button onClick={() => setNumCharacters(0)} className="text-xs text-skin-muted hover:text-skin-base">{t('creator.aiTool.groupStudio.changeAmount')}</button>
+                        <button onClick={() => setNumCharacters(0)} className="text-xs text-skin-muted hover:text-skin-base border border-skin-border px-2 py-1 rounded-full bg-skin-fill hover:bg-white/5 transition flex items-center gap-1">
+                            <i className="ph-bold ph-arrow-left"></i> {t('creator.aiTool.groupStudio.changeAmount')}
+                        </button>
                     </div>
-                    <div className={`grid grid-cols-2 ${numCharacters > 2 ? 'md:grid-cols-3' : ''} gap-4`}>
+                    {/* Responsive Grid based on count */}
+                    <div className={`grid grid-cols-1 sm:grid-cols-2 ${numCharacters > 2 ? 'md:grid-cols-3' : ''} gap-4`}>
                         {characters.map((char, index) => (
-                            <div key={index} className="bg-skin-fill p-3 rounded-xl border border-skin-border space-y-3">
-                                <h4 className="text-sm font-bold text-center text-skin-base">{t('creator.aiTool.groupStudio.character')} {index + 1}</h4>
+                            <div key={index} className="bg-skin-fill p-3 rounded-xl border border-skin-border space-y-3 shadow-md">
+                                <h4 className="text-sm font-bold text-center text-skin-base flex items-center justify-center gap-2">
+                                    <span className="bg-skin-accent/10 text-skin-accent px-2 py-0.5 rounded text-xs uppercase">
+                                        {numCharacters === 1 ? 'Nhân vật chính' : `${t('creator.aiTool.groupStudio.character')} ${index + 1}`}
+                                    </span>
+                                </h4>
                                 <ImageUploader onUpload={(e) => handleImageUpload(e, 'pose', index)} image={char.poseImage} onRemove={() => handleRemoveImage('pose', index)} text={t('creator.aiTool.groupStudio.poseImageText')} onPickFromProcessed={() => handleOpenPicker(index, 'pose')} />
                                 <ImageUploader onUpload={(e) => handleImageUpload(e, 'face', index)} image={char.faceImage} onRemove={() => handleRemoveImage('face', index)} text={t('creator.aiTool.groupStudio.faceImageText')} onPickFromProcessed={() => handleOpenPicker(index, 'face')} />
                                 <div className="pt-2">

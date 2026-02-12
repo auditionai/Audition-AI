@@ -858,7 +858,7 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                                             </div>
                                         )}
                                         <p className="text-[10px] text-gray-500 text-center italic">
-                                            *Dùng Pro Lock để giữ nét mặt giống >95%
+                                            *Dùng Pro Lock để giữ nét mặt giống {'>'}95%
                                         </p>
                                     </div>
                                 </div>

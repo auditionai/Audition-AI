@@ -763,60 +763,163 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                             <i className="ph-bold ph-arrow-left"></i> Quay lại Menu
                         </button>
                     </div>
-                    {/* Responsive Grid based on count */}
-                    <div className={`grid grid-cols-1 sm:grid-cols-2 ${numCharacters > 2 ? 'md:grid-cols-3' : ''} gap-4`}>
-                        {characters.map((char, index) => (
-                            <div key={index} className="bg-skin-fill p-3 rounded-xl border border-skin-border space-y-3 shadow-md">
-                                <h4 className="text-sm font-bold text-center text-skin-base flex items-center justify-center gap-2">
-                                    <span className="bg-skin-accent/10 text-skin-accent px-2 py-0.5 rounded text-xs uppercase">
-                                        {numCharacters === 1 ? 'Nhân vật chính' : `${t('creator.aiTool.groupStudio.character')} ${index + 1}`}
-                                    </span>
-                                </h4>
-                                <ImageUploader onUpload={(e) => handleImageUpload(e, 'pose', index)} image={char.poseImage} onRemove={() => handleRemoveImage('pose', index)} text={t('creator.aiTool.groupStudio.poseImageText')} onPickFromProcessed={() => handleOpenPicker(index, 'pose')} />
-                                <ImageUploader onUpload={(e) => handleImageUpload(e, 'face', index)} image={char.faceImage} onRemove={() => handleRemoveImage('face', index)} text={t('creator.aiTool.groupStudio.faceImageText')} onPickFromProcessed={() => handleOpenPicker(index, 'face')} />
-                                <div className="pt-2">
-                                    <p className="text-xs font-semibold text-center text-skin-muted mb-2">{t('creator.aiTool.groupStudio.genderLabel')}</p>
-                                    <div className="grid grid-cols-2 gap-2">
+
+                    {/* REDESIGNED LAYOUT FOR SINGLE CHARACTER */}
+                    {numCharacters === 1 ? (
+                        <div className="bg-[#1E1B25] p-6 rounded-2xl border border-white/10 shadow-xl">
+                            <div className="flex items-center gap-3 mb-6 pb-4 border-b border-white/5">
+                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-blue-500/20">
+                                     <i className="ph-fill ph-user text-white text-xl"></i>
+                                </div>
+                                <div>
+                                    <h3 className="text-base font-bold text-white">Nhân Vật Chính</h3>
+                                    <p className="text-xs text-gray-400">Thiết lập dáng người và gương mặt</p>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                {/* POSE COLUMN */}
+                                <div className="space-y-4">
+                                    <div className="flex justify-between items-center">
+                                        <label className="text-xs font-bold text-blue-300 uppercase tracking-wider flex items-center gap-2">
+                                            <i className="ph-fill ph-coat-hanger"></i> Dáng & Trang Phục
+                                        </label>
+                                    </div>
+                                    
+                                    <div className="aspect-[3/4] w-full">
+                                         <ImageUploader 
+                                            onUpload={(e) => handleImageUpload(e, 'pose', 0)} 
+                                            image={characters[0].poseImage} 
+                                            onRemove={() => handleRemoveImage('pose', 0)} 
+                                            text={t('creator.aiTool.groupStudio.poseImageText')} 
+                                            onPickFromProcessed={() => handleOpenPicker(0, 'pose')}
+                                            className="h-full"
+                                        />
+                                    </div>
+
+                                    {/* Gender Segmented Control */}
+                                    <div className="bg-black/30 p-1 rounded-lg flex">
                                         <button 
-                                            onClick={() => handleGenderSelect(index, 'male')}
-                                            className={`py-2 text-xs font-bold rounded-md border-2 transition flex items-center justify-center gap-1 ${char.gender === 'male' ? 'border-blue-500 bg-blue-500/10 text-blue-300' : 'border-skin-border bg-skin-fill-secondary text-skin-muted hover:border-blue-500/50'}`}
+                                            onClick={() => handleGenderSelect(0, 'male')}
+                                            className={`flex-1 py-2 text-xs font-bold rounded-md flex items-center justify-center gap-2 transition-all ${characters[0].gender === 'male' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
                                         >
                                             <i className="ph-fill ph-gender-male"></i> {t('creator.aiTool.groupStudio.male')}
                                         </button>
                                         <button 
-                                            onClick={() => handleGenderSelect(index, 'female')}
-                                            className={`py-2 text-xs font-bold rounded-md border-2 transition flex items-center justify-center gap-1 ${char.gender === 'female' ? 'border-pink-500 bg-pink-500/10 text-pink-300' : 'border-skin-border bg-skin-fill-secondary text-skin-muted hover:border-pink-500/50'}`}
+                                            onClick={() => handleGenderSelect(0, 'female')}
+                                            className={`flex-1 py-2 text-xs font-bold rounded-md flex items-center justify-center gap-2 transition-all ${characters[0].gender === 'female' ? 'bg-pink-600 text-white shadow-md' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
                                         >
                                             <i className="ph-fill ph-gender-female"></i> {t('creator.aiTool.groupStudio.female')}
                                         </button>
                                     </div>
                                 </div>
-                                {/* Face Lock Buttons */}
-                                {char.processedFace ? (
-                                     <div className="w-full text-sm font-bold py-2 px-3 bg-green-500/20 text-green-300 rounded-lg text-center">
-                                        <i className="ph-fill ph-check-circle mr-1"></i> {t('creator.aiTool.singlePhoto.superFaceLockProcessed')}
+
+                                {/* FACE COLUMN */}
+                                <div className="space-y-4">
+                                    <div className="flex justify-between items-center">
+                                         <label className="text-xs font-bold text-pink-300 uppercase tracking-wider flex items-center gap-2">
+                                            <i className="ph-fill ph-face-mask"></i> Gương Mặt (Face ID)
+                                        </label>
                                     </div>
-                                ) : (
-                                    <div className="flex flex-col gap-2">
-                                        <button 
-                                            onClick={() => handleProcessFace(index, 'flash')}
-                                            disabled={processingFaceIndex === index || !char.faceImage}
-                                            className="w-full text-xs font-bold py-2 px-2 bg-blue-500/20 text-blue-300 border border-blue-500/50 rounded-lg hover:bg-blue-500/30 disabled:opacity-50 disabled:cursor-wait"
-                                        >
-                                            {processingFaceIndex === index ? t('creator.aiTool.singlePhoto.superFaceLockProcessing') : t('creator.aiTool.singlePhoto.superFaceLockActionFlash')}
-                                        </button>
-                                        <button 
-                                            onClick={() => handleProcessFace(index, 'pro')}
-                                            disabled={processingFaceIndex === index || !char.faceImage}
-                                            className="w-full text-xs font-bold py-2 px-2 bg-yellow-500/20 text-yellow-300 border border-yellow-500/50 rounded-lg hover:bg-yellow-500/30 disabled:opacity-50 disabled:cursor-wait shadow-lg shadow-yellow-500/10"
-                                        >
-                                            {processingFaceIndex === index ? t('creator.aiTool.singlePhoto.superFaceLockProcessing') : t('creator.aiTool.singlePhoto.superFaceLockActionPro')}
-                                        </button>
+
+                                    <div className="aspect-[3/4] w-full">
+                                        <ImageUploader 
+                                            onUpload={(e) => handleImageUpload(e, 'face', 0)} 
+                                            image={characters[0].faceImage} 
+                                            onRemove={() => handleRemoveImage('face', 0)} 
+                                            text={t('creator.aiTool.groupStudio.faceImageText')}
+                                            onPickFromProcessed={() => handleOpenPicker(0, 'face')}
+                                            className="h-full"
+                                        />
                                     </div>
-                                )}
+
+                                    {/* Face Lock Actions */}
+                                    <div className="space-y-2">
+                                        {characters[0].processedFace ? (
+                                             <div className="w-full py-3 px-4 bg-green-500/20 border border-green-500/50 text-green-400 rounded-lg text-xs font-bold flex items-center justify-center gap-2">
+                                                <i className="ph-fill ph-check-circle text-lg"></i> {t('creator.aiTool.singlePhoto.superFaceLockProcessed')}
+                                            </div>
+                                        ) : (
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <button 
+                                                    onClick={() => handleProcessFace(0, 'flash')}
+                                                    disabled={processingFaceIndex === 0 || !characters[0].faceImage}
+                                                    className="py-2 px-2 bg-blue-500/10 border border-blue-500/30 text-blue-300 rounded-lg text-[10px] font-bold hover:bg-blue-500/20 transition disabled:opacity-50"
+                                                >
+                                                    {processingFaceIndex === 0 ? t('creator.aiTool.singlePhoto.superFaceLockProcessing') : t('creator.aiTool.singlePhoto.superFaceLockActionFlash')}
+                                                </button>
+                                                <button 
+                                                    onClick={() => handleProcessFace(0, 'pro')}
+                                                    disabled={processingFaceIndex === 0 || !characters[0].faceImage}
+                                                    className="py-2 px-2 bg-gradient-to-r from-yellow-600/20 to-orange-600/20 border border-yellow-500/30 text-yellow-300 rounded-lg text-[10px] font-bold hover:brightness-110 transition disabled:opacity-50 shadow-sm"
+                                                >
+                                                    {processingFaceIndex === 0 ? t('creator.aiTool.singlePhoto.superFaceLockProcessing') : t('creator.aiTool.singlePhoto.superFaceLockActionPro')}
+                                                </button>
+                                            </div>
+                                        )}
+                                        <p className="text-[10px] text-gray-500 text-center italic">
+                                            *Dùng Pro Lock để giữ nét mặt giống >95%
+                                        </p>
+                                    </div>
+                                </div>
                             </div>
-                        ))}
-                    </div>
+                        </div>
+                    ) : (
+                        // DEFAULT GRID LAYOUT FOR GROUPS (2+ People)
+                        <div className={`grid grid-cols-1 sm:grid-cols-2 ${numCharacters > 2 ? 'md:grid-cols-3' : ''} gap-4`}>
+                            {characters.map((char, index) => (
+                                <div key={index} className="bg-skin-fill p-3 rounded-xl border border-skin-border space-y-3 shadow-md">
+                                    <h4 className="text-sm font-bold text-center text-skin-base flex items-center justify-center gap-2">
+                                        <span className="bg-skin-accent/10 text-skin-accent px-2 py-0.5 rounded text-xs uppercase">
+                                            {`${t('creator.aiTool.groupStudio.character')} ${index + 1}`}
+                                        </span>
+                                    </h4>
+                                    <ImageUploader onUpload={(e) => handleImageUpload(e, 'pose', index)} image={char.poseImage} onRemove={() => handleRemoveImage('pose', index)} text={t('creator.aiTool.groupStudio.poseImageText')} onPickFromProcessed={() => handleOpenPicker(index, 'pose')} />
+                                    <ImageUploader onUpload={(e) => handleImageUpload(e, 'face', index)} image={char.faceImage} onRemove={() => handleRemoveImage('face', index)} text={t('creator.aiTool.groupStudio.faceImageText')} onPickFromProcessed={() => handleOpenPicker(index, 'face')} />
+                                    <div className="pt-2">
+                                        <p className="text-xs font-semibold text-center text-skin-muted mb-2">{t('creator.aiTool.groupStudio.genderLabel')}</p>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <button 
+                                                onClick={() => handleGenderSelect(index, 'male')}
+                                                className={`py-2 text-xs font-bold rounded-md border-2 transition flex items-center justify-center gap-1 ${char.gender === 'male' ? 'border-blue-500 bg-blue-500/10 text-blue-300' : 'border-skin-border bg-skin-fill-secondary text-skin-muted hover:border-blue-500/50'}`}
+                                            >
+                                                <i className="ph-fill ph-gender-male"></i> {t('creator.aiTool.groupStudio.male')}
+                                            </button>
+                                            <button 
+                                                onClick={() => handleGenderSelect(index, 'female')}
+                                                className={`py-2 text-xs font-bold rounded-md border-2 transition flex items-center justify-center gap-1 ${char.gender === 'female' ? 'border-pink-500 bg-pink-500/10 text-pink-300' : 'border-skin-border bg-skin-fill-secondary text-skin-muted hover:border-pink-500/50'}`}
+                                            >
+                                                <i className="ph-fill ph-gender-female"></i> {t('creator.aiTool.groupStudio.female')}
+                                            </button>
+                                        </div>
+                                    </div>
+                                    {/* Face Lock Buttons */}
+                                    {char.processedFace ? (
+                                         <div className="w-full text-sm font-bold py-2 px-3 bg-green-500/20 text-green-300 rounded-lg text-center">
+                                            <i className="ph-fill ph-check-circle mr-1"></i> {t('creator.aiTool.singlePhoto.superFaceLockProcessed')}
+                                        </div>
+                                    ) : (
+                                        <div className="flex flex-col gap-2">
+                                            <button 
+                                                onClick={() => handleProcessFace(index, 'flash')}
+                                                disabled={processingFaceIndex === index || !char.faceImage}
+                                                className="w-full text-xs font-bold py-2 px-2 bg-blue-500/20 text-blue-300 border border-blue-500/50 rounded-lg hover:bg-blue-500/30 disabled:opacity-50 disabled:cursor-wait"
+                                            >
+                                                {processingFaceIndex === index ? t('creator.aiTool.singlePhoto.superFaceLockProcessing') : t('creator.aiTool.singlePhoto.superFaceLockActionFlash')}
+                                            </button>
+                                            <button 
+                                                onClick={() => handleProcessFace(index, 'pro')}
+                                                disabled={processingFaceIndex === index || !char.faceImage}
+                                                className="w-full text-xs font-bold py-2 px-2 bg-yellow-500/20 text-yellow-300 border border-yellow-500/50 rounded-lg hover:bg-yellow-500/30 disabled:opacity-50 disabled:cursor-wait shadow-lg shadow-yellow-500/10"
+                                            >
+                                                {processingFaceIndex === index ? t('creator.aiTool.singlePhoto.superFaceLockProcessing') : t('creator.aiTool.singlePhoto.superFaceLockActionPro')}
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
 
                 {/* Right Column: Settings */}

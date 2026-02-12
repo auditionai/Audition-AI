@@ -32,22 +32,23 @@ const MarqueeBanner: React.FC = () => {
     if (!promotion) return null;
 
     return (
-        <div className="w-full max-w-4xl mx-auto mb-6 px-4 animate-fade-in-down z-30 relative mt-2">
-            <div className="marquee-3d-wrapper h-10 flex items-center bg-black relative">
+        <div className="w-full max-w-2xl mx-auto mb-4 px-4 animate-fade-in-down z-30 relative mt-2 pointer-events-none">
+            <div className="marquee-modern-container h-9 flex items-center relative pr-4 pointer-events-auto">
                 
-                {/* Fixed Label */}
-                <div className="absolute left-0 top-0 bottom-0 bg-red-700 px-3 flex items-center justify-center z-10 shadow-[2px_0_10px_rgba(0,0,0,0.8)]">
-                    <i className="ph-fill ph-speaker-high text-white animate-pulse"></i>
+                {/* Icon Circle */}
+                <div className="absolute left-1 top-1 bottom-1 w-7 h-7 rounded-full marquee-modern-icon flex items-center justify-center z-20">
+                    <i className="ph-fill ph-bell-ringing text-white text-xs animate-swing"></i>
                 </div>
 
                 {/* Scrolling Content */}
-                <div className="marquee-container w-full flex items-center pl-12 h-full">
-                    <div className="marquee-content whitespace-nowrap font-bold text-xs flex items-center gap-12 text-red-100/90 font-mono tracking-widest">
-                        {[...Array(3)].map((_, i) => (
-                            <span key={i} className="flex items-center gap-3">
-                                <span className="text-yellow-400">★ {promotion.title} ★</span>
+                <div className="marquee-content-mask w-full flex items-center pl-10 h-full overflow-hidden">
+                    <div className="marquee-content whitespace-nowrap font-semibold text-xs flex items-center gap-8 text-gray-200">
+                        {[...Array(4)].map((_, i) => (
+                            <span key={i} className="flex items-center gap-2">
+                                <span className="text-red-400 font-bold uppercase">{promotion.title}</span>
+                                <span className="w-1 h-1 bg-gray-600 rounded-full"></span>
                                 <span>{promotion.description}</span>
-                                <span className="bg-red-600 text-white px-1.5 py-0.5 rounded text-[10px]">+{promotion.bonus_percentage}% KC</span>
+                                <span className="bg-red-500/20 text-red-300 border border-red-500/50 px-1.5 py-0.5 rounded-[4px] text-[9px] font-bold">+{promotion.bonus_percentage}% KC</span>
                             </span>
                         ))}
                     </div>
@@ -55,17 +56,23 @@ const MarqueeBanner: React.FC = () => {
             </div>
             
             <style>{`
-                .marquee-container {
-                    overflow: hidden;
-                    mask-image: linear-gradient(to right, transparent, black 20px, black 90%, transparent);
-                    -webkit-mask-image: linear-gradient(to right, transparent, black 20px, black 90%, transparent);
+                .marquee-content-mask {
+                    mask-image: linear-gradient(to right, transparent, black 10px, black 90%, transparent);
+                    -webkit-mask-image: linear-gradient(to right, transparent, black 10px, black 90%, transparent);
                 }
                 .marquee-content {
-                    animation: marquee 20s linear infinite;
+                    animation: marquee-slow 25s linear infinite;
                 }
-                @keyframes marquee {
+                @keyframes marquee-slow {
                     0% { transform: translateX(0); }
                     100% { transform: translateX(-50%); }
+                }
+                @keyframes swing {
+                    0%, 100% { transform: rotate(-15deg); }
+                    50% { transform: rotate(15deg); }
+                }
+                .animate-swing {
+                    animation: swing 2s infinite ease-in-out;
                 }
             `}</style>
         </div>

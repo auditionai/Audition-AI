@@ -10,14 +10,10 @@ import CreditPackageManager from './admin/CreditPackageManager';
 import CheckInRewardManager from './admin/CheckInRewardManager';
 import AnnouncementManager from './admin/AnnouncementManager';
 import ApiKeyManager from './admin/ApiKeyManager';
-import GameConfigManager from './admin/GameConfigManager'; 
-import LuckyWheelManager from './admin/LuckyWheelManager'; 
-import SystemMessageManager from './admin/SystemMessageManager'; 
-import PromotionManager from './admin/PromotionManager'; // NEW
+import PromotionManager from './admin/PromotionManager'; 
 import { resizeImage } from '../utils/imageUtils';
 import { useTranslation } from '../hooks/useTranslation';
 import UserAvatar from './common/UserAvatar';
-import UserBadge from './common/UserBadge';
 import RedeemGiftCode from './user/RedeemGiftCode'; 
 import TransactionHistory from './user/TransactionHistory';
 
@@ -124,7 +120,7 @@ const ReferralPanel: React.FC = () => {
 // Admin Panel
 const AdminPanel: React.FC = () => {
     const { t } = useTranslation();
-    type AdminTab = 'dashboard' | 'transactions' | 'users' | 'gift_codes' | 'packages' | 'promotions' | 'rewards' | 'announcements' | 'api_keys' | 'game_config' | 'lucky_wheel' | 'broadcast';
+    type AdminTab = 'dashboard' | 'transactions' | 'users' | 'gift_codes' | 'packages' | 'promotions' | 'rewards' | 'announcements' | 'api_keys';
     const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
 
     const renderContent = () => {
@@ -134,13 +130,10 @@ const AdminPanel: React.FC = () => {
             case 'users': return <UserManager />;
             case 'gift_codes': return <GiftCodeManager />;
             case 'packages': return <CreditPackageManager />;
-            case 'promotions': return <PromotionManager />; // NEW
+            case 'promotions': return <PromotionManager />;
             case 'rewards': return <CheckInRewardManager />;
             case 'announcements': return <AnnouncementManager />;
             case 'api_keys': return <ApiKeyManager />;
-            case 'game_config': return <GameConfigManager />;
-            case 'lucky_wheel': return <LuckyWheelManager />;
-            case 'broadcast': return <SystemMessageManager />;
             default: return <p className="text-center text-gray-500 py-8">Chức năng này đang được phát triển.</p>;
         }
     };
@@ -150,14 +143,10 @@ const AdminPanel: React.FC = () => {
             <h2 className="text-3xl font-bold mb-6 text-center bg-gradient-to-r from-red-500 to-orange-500 text-transparent bg-clip-text">{t('creator.settings.admin.title')}</h2>
             <div className="flex flex-wrap justify-center gap-2 border-b border-white/10 mb-6 pb-4">
                 <button onClick={() => setActiveTab('dashboard')} className={activeTab === 'dashboard' ? 'admin-tab-active' : 'admin-tab'}>{t('creator.settings.admin.tabs.dashboard')}</button>
-                <button onClick={() => setActiveTab('broadcast')} className={activeTab === 'broadcast' ? 'admin-tab-active' : 'admin-tab'}><i className="ph-fill ph-megaphone mr-1"></i> {t('creator.settings.admin.tabs.broadcast')}</button>
-                <button onClick={() => setActiveTab('game_config')} className={activeTab === 'game_config' ? 'admin-tab-active' : 'admin-tab'}>{t('creator.settings.admin.gameConfig.title')}</button>
-                <button onClick={() => setActiveTab('lucky_wheel')} className={activeTab === 'lucky_wheel' ? 'admin-tab-active' : 'admin-tab'}>{t('creator.settings.admin.tabs.luckyWheel')}</button>
                 <button onClick={() => setActiveTab('transactions')} className={activeTab === 'transactions' ? 'admin-tab-active' : 'admin-tab'}>{t('creator.settings.admin.tabs.transactions')}</button>
                 <button onClick={() => setActiveTab('users')} className={activeTab === 'users' ? 'admin-tab-active' : 'admin-tab'}>{t('creator.settings.admin.tabs.users')}</button>
                 <button onClick={() => setActiveTab('gift_codes')} className={activeTab === 'gift_codes' ? 'admin-tab-active' : 'admin-tab'}>{t('creator.settings.admin.tabs.giftCodes')}</button>
                 <button onClick={() => setActiveTab('packages')} className={activeTab === 'packages' ? 'admin-tab-active' : 'admin-tab'}>{t('creator.settings.admin.tabs.packages')}</button>
-                {/* NEW PROMOTION TAB */}
                 <button onClick={() => setActiveTab('promotions')} className={activeTab === 'promotions' ? 'admin-tab-active' : 'admin-tab'}><i className="ph-fill ph-percent mr-1"></i> Khuyến Mại</button>
                 <button onClick={() => setActiveTab('rewards')} className={activeTab === 'rewards' ? 'admin-tab-active' : 'admin-tab'}>{t('creator.settings.admin.tabs.rewards')}</button>
                 <button onClick={() => setActiveTab('announcements')} className={activeTab === 'announcements' ? 'admin-tab-active' : 'admin-tab'}>{t('creator.settings.admin.tabs.announcements')}</button>
@@ -172,11 +161,17 @@ const AdminPanel: React.FC = () => {
 const Settings: React.FC = () => {
     const { user, session, showToast, updateUserProfile, updateUserDiamonds } = useAuth();
     const { t } = useTranslation();
-    const [displayName, setDisplayName] = useState(user?.display_name || '');
+    const [displayName, setDisplayName] = useState('');
     const [isSaving, setIsSaving] = useState(false);
     const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
     
-    // Check for pending referral code on mount
+    // Sync state with user data whenever user object updates
+    useEffect(() => {
+        if (user && user.display_name) {
+            setDisplayName(user.display_name);
+        }
+    }, [user]);
+
     useEffect(() => {
         const checkReferral = async () => {
             const pendingCode = localStorage.getItem('pendingReferralCode');
@@ -262,15 +257,15 @@ const Settings: React.FC = () => {
         }
     };
     
+    // Added pb-40 to allow scrolling past the floating dock
     return (
-        <div className="container mx-auto px-4 py-8 animate-fade-in">
+        <div className="container mx-auto px-4 py-8 animate-fade-in pb-40">
             <div className="max-w-4xl mx-auto">
                 <div className="bg-[#12121A]/80 border border-white/10 rounded-2xl shadow-lg p-6 flex flex-col md:flex-row items-center gap-6 mb-8">
                     <div className="relative group flex-shrink-0">
                         <UserAvatar 
                             url={user.photo_url} 
                             alt={user.display_name} 
-                            frameId={user.equipped_frame_id}
                             level={user.level}
                             size="lg"
                             className="w-28 h-28" 
@@ -297,18 +292,16 @@ const Settings: React.FC = () => {
                     <div className="flex-grow w-full">
                         <form onSubmit={handleProfileUpdate} className="flex flex-col sm:flex-row gap-4 items-center">
                             <div className="flex-grow w-full">
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Tên hiển thị</label>
                                 <input
                                     type="text"
                                     value={displayName}
                                     onChange={(e) => setDisplayName(e.target.value)}
                                     className="auth-input"
+                                    placeholder={user.display_name}
                                 />
-                                <div className="mt-2 flex items-center gap-2">
-                                    <span className="text-xs text-gray-400">{t('creator.settings.personalization.currentTitle')}:</span>
-                                    <UserBadge titleId={user.equipped_title_id} level={user.level} />
-                                </div>
                             </div>
-                            <button type="submit" disabled={isSaving || displayName.trim() === user.display_name} className="themed-button-primary w-full sm:w-auto px-6 py-2 font-semibold">
+                            <button type="submit" disabled={isSaving || displayName.trim() === user.display_name} className="themed-button-primary w-full sm:w-auto px-6 py-2 font-semibold mt-auto mb-[1px]">
                                 {isSaving ? t('creator.settings.saving') : t('creator.settings.save')}
                             </button>
                         </form>

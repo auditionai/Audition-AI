@@ -45,30 +45,30 @@ const PromoCountdown: React.FC<{ endTime: string; title: string }> = ({ endTime,
 
     const TimeBox = ({ value, label }: { value: number, label: string }) => (
         <div className="flex flex-col items-center">
-            <div className="w-10 h-10 md:w-12 md:h-12 bg-black/40 border border-red-500/50 rounded-lg flex items-center justify-center backdrop-blur-sm shadow-inner">
-                <span className="text-lg font-black text-yellow-400 font-mono">
+            <div className="w-8 h-8 md:w-12 md:h-12 bg-black/40 border border-red-500/50 rounded-lg flex items-center justify-center backdrop-blur-sm shadow-inner">
+                <span className="text-sm md:text-lg font-black text-yellow-400 font-mono">
                     {value < 10 ? `0${value}` : value}
                 </span>
             </div>
-            <span className="text-[9px] text-red-300 mt-1 font-bold uppercase">{label}</span>
+            <span className="text-[8px] md:text-[9px] text-red-300 mt-1 font-bold uppercase">{label}</span>
         </div>
     );
 
     return (
-        <div className="max-w-xl mx-auto mb-6 animate-fade-in-up">
-            <div className="bg-gradient-to-r from-red-900/80 via-orange-900/80 to-red-900/80 border border-yellow-500/30 p-3 rounded-xl relative overflow-hidden shadow-lg flex items-center justify-between px-6">
+        <div className="max-w-xl mx-auto mb-4 animate-fade-in-up">
+            <div className="bg-gradient-to-r from-red-900/80 via-orange-900/80 to-red-900/80 border border-yellow-500/30 p-2 rounded-xl relative overflow-hidden shadow-lg flex items-center justify-between px-4">
                 <div className="flex items-center gap-2">
-                    <i className="ph-fill ph-alarm text-yellow-400 text-xl animate-bounce"></i>
+                    <i className="ph-fill ph-alarm text-yellow-400 text-lg animate-bounce"></i>
                     <div>
                         <h3 className="text-xs font-bold text-white uppercase tracking-wider">{title}</h3>
                         <p className="text-[10px] text-yellow-200">Kết thúc sau:</p>
                     </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
                     <TimeBox value={timeLeft.d} label="Ngày" />
-                    <span className="text-xl font-bold text-white pb-3">:</span>
+                    <span className="text-lg font-bold text-white pb-3">:</span>
                     <TimeBox value={timeLeft.h} label="Giờ" />
-                    <span className="text-xl font-bold text-white pb-3">:</span>
+                    <span className="text-lg font-bold text-white pb-3">:</span>
                     <TimeBox value={timeLeft.m} label="Phút" />
                 </div>
             </div>
@@ -76,8 +76,7 @@ const PromoCountdown: React.FC<{ endTime: string; title: string }> = ({ endTime,
     );
 };
 
-// ... (PricingCard component remains exactly the same) ...
-const PricingCard: React.FC<{ pkg: CreditPackage; onBuy: () => void; isProcessing: boolean }> = ({ pkg, onBuy, isProcessing }) => {
+const PricingCard: React.FC<{ pkg: CreditPackage; onBuy: () => void; isProcessing: boolean; compact?: boolean }> = ({ pkg, onBuy, isProcessing, compact }) => {
     const { t, language } = useTranslation();
     const baseTotal = pkg.credits_amount + pkg.bonus_credits;
     const promoBonus = pkg.promo_bonus_credits || 0;
@@ -121,48 +120,47 @@ const PricingCard: React.FC<{ pkg: CreditPackage; onBuy: () => void; isProcessin
     };
 
     return (
-        <div className={`group relative rounded-2xl p-1 transition-all duration-500 hover:-translate-y-2 interactive-3d h-full flex flex-col ${hasPromo ? 'scale-105 z-10' : ''}`}>
+        <div className={`group relative rounded-xl p-1 transition-all duration-300 hover:-translate-y-1 interactive-3d h-full flex flex-col ${hasPromo ? 'scale-105 z-10' : ''}`}>
             {hasPromo && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 bg-gradient-to-r from-red-600 to-yellow-500 text-white font-black text-[10px] px-3 py-0.5 rounded-full shadow-lg border border-yellow-300 animate-pulse whitespace-nowrap flex items-center gap-1">
+                <div className="absolute -top-2 left-1/2 -translate-x-1/2 z-20 bg-gradient-to-r from-red-600 to-yellow-500 text-white font-black text-[9px] px-2 py-0.5 rounded-full shadow-lg border border-yellow-300 animate-pulse whitespace-nowrap flex items-center gap-1">
                     <i className="ph-fill ph-fire"></i> +{pkg.promo_percent}% BONUS
                 </div>
             )}
-            <div className={`absolute inset-0 bg-gradient-to-br ${tierClass} rounded-2xl blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-500`}></div>
+            <div className={`absolute inset-0 bg-gradient-to-br ${tierClass} rounded-xl blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-500`}></div>
             
-            <div className={`relative h-full bg-skin-fill-secondary/80 backdrop-blur-xl border ${tierClass.split(' ')[2]} rounded-xl p-4 flex flex-col items-center text-center overflow-hidden shadow-lg ${glowColor}`}>
+            <div className={`relative h-full bg-[#151518]/90 backdrop-blur-xl border ${tierClass.split(' ')[2]} rounded-xl p-3 flex flex-col items-center text-center overflow-hidden shadow-lg ${glowColor}`}>
                 {pkg.tag && !hasPromo && (
                     <div className="absolute top-0 right-0">
-                        <div className="bg-gradient-to-bl from-pink-500 to-purple-600 text-white text-[9px] font-bold px-2 py-0.5 rounded-bl-lg rounded-tr-lg shadow-md uppercase tracking-wider">
+                        <div className="bg-gradient-to-bl from-pink-500 to-purple-600 text-white text-[8px] font-bold px-2 py-0.5 rounded-bl-lg rounded-tr-lg shadow-md uppercase tracking-wider">
                             {getTranslatedTag(pkg.tag)}
                         </div>
                     </div>
                 )}
 
-                <div className="mb-2 relative mt-2">
+                <div className="mb-1 relative mt-1">
                     <div className={`absolute inset-0 bg-current opacity-20 blur-xl rounded-full transform scale-150 ${accentColor}`}></div>
-                    <i className={`ph-fill ph-diamonds-four text-4xl ${accentColor} drop-shadow-[0_0_10px_rgba(255,255,255,0.3)] transform transition-transform duration-700 group-hover:rotate-[360deg]`}></i>
+                    <i className={`ph-fill ph-diamonds-four ${compact ? 'text-2xl' : 'text-3xl'} ${accentColor} drop-shadow-[0_0_10px_rgba(255,255,255,0.3)] transform transition-transform duration-700 group-hover:rotate-[360deg]`}></i>
                 </div>
 
-                <h3 className="text-sm font-bold text-white mb-1">{pkg.name}</h3>
+                <h3 className={`text-xs font-bold text-white mb-0.5 ${compact ? 'truncate w-full' : ''}`}>{pkg.name}</h3>
                 
                 <div className="flex flex-col items-center mb-1">
                     {hasPromo ? (
                         <>
-                            <span className="text-xs text-gray-500 line-through decoration-red-500">{baseTotal.toLocaleString()}</span>
-                            <span className={`text-2xl font-black text-yellow-400 drop-shadow-md`}>{totalCredits.toLocaleString()}</span>
+                            <span className="text-[10px] text-gray-500 line-through decoration-red-500">{baseTotal.toLocaleString()}</span>
+                            <span className={`${compact ? 'text-lg' : 'text-xl'} font-black text-yellow-400 drop-shadow-md`}>{totalCredits.toLocaleString()}</span>
                         </>
                     ) : (
-                        <span className={`text-2xl font-black ${accentColor}`}>{totalCredits.toLocaleString()}</span>
+                        <span className={`${compact ? 'text-lg' : 'text-xl'} font-black ${accentColor}`}>{totalCredits.toLocaleString()}</span>
                     )}
-                    <span className="text-[10px] text-skin-muted font-bold uppercase">{t('creator.buyCredits.card.diamonds')}</span>
                 </div>
 
-                <div className="mt-auto w-full pt-3 border-t border-white/5">
+                <div className="mt-auto w-full pt-2 border-t border-white/5">
                     <button
                         type="button"
                         onClick={onBuy}
                         disabled={isProcessing}
-                        className={`w-full py-2.5 rounded-lg font-bold text-xs transition-all duration-300 transform active:scale-95 flex items-center justify-center gap-2 shadow-lg
+                        className={`w-full py-2 rounded-lg font-bold text-xs transition-all duration-300 transform active:scale-95 flex items-center justify-center gap-2 shadow-lg
                             ${isProcessing 
                                 ? 'bg-gray-600 cursor-not-allowed text-gray-400' 
                                 : `${buttonStyle} hover:brightness-110 hover:shadow-xl`
@@ -262,32 +260,38 @@ const BuyCreditsPage: React.FC<BuyCreditsPageProps> = ({ isEmbedded = false }) =
 
     // MAIN CONTENT RENDERER
     const Content = () => (
-        <div className="container mx-auto px-4 relative z-10">
-            <div className="themed-main-title-container text-center max-w-4xl mx-auto mb-4 animate-fade-in-down">
-                    <h1 
-                    className="themed-main-title text-3xl md:text-4xl font-black mb-2 leading-tight"
-                    data-text={t('creator.buyCredits.title')}
-                >
-                    {t('creator.buyCredits.title')}
-                </h1>
-                <p className="themed-main-subtitle text-sm md:text-base max-w-2xl mx-auto text-gray-400">
-                    {t('creator.buyCredits.description')}
-                </p>
-            </div>
+        <div className={`container mx-auto px-4 relative z-10 ${isEmbedded ? 'pb-32' : 'pb-12'}`}>
+            {!isEmbedded && (
+                <div className="themed-main-title-container text-center max-w-4xl mx-auto mb-4 animate-fade-in-down">
+                        <h1 
+                        className="themed-main-title text-3xl md:text-4xl font-black mb-2 leading-tight"
+                        data-text={t('creator.buyCredits.title')}
+                    >
+                        {t('creator.buyCredits.title')}
+                    </h1>
+                    <p className="themed-main-subtitle text-sm md:text-base max-w-2xl mx-auto text-gray-400">
+                        {t('creator.buyCredits.description')}
+                    </p>
+                </div>
+            )}
+            
+            {isEmbedded && (
+                <h3 className="text-xl font-bold text-center text-white mb-4 mt-2">Nạp Kim Cương</h3>
+            )}
 
             {activePromo && (
                 <PromoCountdown endTime={activePromo.end_time} title={activePromo.title} />
             )}
 
             {/* Support Banner - Compact */}
-            <div className="max-w-3xl mx-auto mb-6 animate-fade-in-up">
-                <div className="bg-blue-900/20 border border-blue-500/20 text-blue-200 p-3 rounded-lg flex items-center justify-between gap-4 shadow-sm backdrop-blur-sm">
-                    <p className="text-xs">{t('creator.buyCredits.paymentSupport.note')}</p>
+            <div className="max-w-3xl mx-auto mb-4 animate-fade-in-up">
+                <div className="bg-blue-900/20 border border-blue-500/20 text-blue-200 p-2 rounded-lg flex items-center justify-between gap-3 shadow-sm backdrop-blur-sm">
+                    <p className="text-[10px] md:text-xs">{t('creator.buyCredits.paymentSupport.note')}</p>
                     <a 
                         href="https://www.facebook.com/iam.cody.real/" 
                         target="_blank" 
                         rel="noopener noreferrer"
-                        className="flex-shrink-0 px-3 py-1.5 text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white rounded transition-colors flex items-center gap-1 shadow-sm whitespace-nowrap"
+                        className="flex-shrink-0 px-2 py-1 text-[10px] font-bold bg-blue-600 hover:bg-blue-500 text-white rounded transition-colors flex items-center gap-1 shadow-sm whitespace-nowrap"
                     >
                         <i className="ph-fill ph-messenger-logo"></i> Hỗ trợ
                     </a>
@@ -299,13 +303,14 @@ const BuyCreditsPage: React.FC<BuyCreditsPageProps> = ({ isEmbedded = false }) =
                     <div className="w-10 h-10 border-4 border-t-skin-accent border-skin-border rounded-full animate-spin"></div>
                     </div>
             ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-4 max-w-5xl mx-auto pb-12 animate-fade-in-up">
+                <div className={`grid grid-cols-2 md:grid-cols-4 gap-3 mt-2 max-w-5xl mx-auto animate-fade-in-up ${isEmbedded ? 'pb-0' : ''}`}>
                     {packages.map((pkg) => (
                         <PricingCard 
                             key={pkg.id} 
                             pkg={pkg} 
                             onBuy={() => handleBuyClick(pkg)}
                             isProcessing={isProcessingPayment === pkg.id}
+                            compact={isEmbedded}
                         />
                     ))}
                 </div>

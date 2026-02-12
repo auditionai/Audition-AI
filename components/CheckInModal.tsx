@@ -113,37 +113,43 @@ const CheckInModal: React.FC<{ isOpen: boolean; onClose: () => void; }> = ({ isO
     return (
         <Modal isOpen={isOpen} onClose={onClose} title={t('modals.checkIn.title')}>
             <div className="text-skin-base max-h-[80vh] overflow-y-auto custom-scrollbar">
-                {/* Compact Streak Box */}
-                <div className="themed-checkin-modal__streak-box !mb-3 !p-3 flex justify-between items-center bg-skin-fill-secondary rounded-lg border border-skin-border">
-                    <div className="flex items-center gap-2">
-                         <div className="w-8 h-8 rounded-full bg-skin-accent/20 flex items-center justify-center text-skin-accent">
-                            <i className="ph-fill ph-fire text-xl"></i>
+                
+                {/* Streak Header */}
+                <div className="flex justify-between items-center bg-[#1E1B25] p-4 rounded-xl border border-white/10 mb-4 shadow-sm">
+                    <div className="flex items-center gap-3">
+                         <div className="w-10 h-10 rounded-full bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center text-white shadow-lg">
+                            <i className="ph-fill ph-fire text-xl animate-pulse"></i>
                          </div>
-                         <p className="text-sm text-skin-muted">{t('modals.checkIn.streak')}</p>
+                         <div>
+                             <p className="text-xs text-gray-400 font-bold uppercase">{t('modals.checkIn.streak')}</p>
+                             <p className="text-xl font-black text-white">{streak} {t('modals.checkIn.days')}</p>
+                         </div>
                     </div>
-                    <p className="themed-checkin-modal__streak-number !text-xl">{streak} {t('modals.checkIn.days')}</p>
                 </div>
 
-                <div className="themed-checkin-modal__calendar-bg !p-3">
-                    <div className="flex justify-between items-center mb-2">
+                {/* Calendar Grid - SOLID BG */}
+                <div className="checkin-calendar-solid">
+                    <div className="flex justify-between items-center mb-4">
                         <button onClick={() => {
                             setCurrentMonth(m => m === 0 ? 11 : m - 1);
                             if (currentMonth === 0) setCurrentYear(y => y - 1);
-                        }} className="p-1.5 rounded-full hover:bg-skin-fill-secondary text-skin-muted hover:text-white"><i className="ph-fill ph-caret-left"></i></button>
+                        }} className="p-2 rounded-full hover:bg-white/10 text-gray-400 hover:text-white"><i className="ph-fill ph-caret-left"></i></button>
                         
-                        <h3 className="font-bold text-sm uppercase tracking-wide">{t('modals.checkIn.month')} {currentMonth + 1}, {currentYear}</h3>
+                        <h3 className="font-bold text-sm uppercase tracking-wider text-white">
+                            {t('modals.checkIn.month')} {currentMonth + 1}, {currentYear}
+                        </h3>
                         
                         <button onClick={() => {
                             setCurrentMonth(m => m === 11 ? 0 : m + 1);
                             if (currentMonth === 11) setCurrentYear(y => y - 1);
-                        }} className="p-1.5 rounded-full hover:bg-skin-fill-secondary text-skin-muted hover:text-white"><i className="ph-fill ph-caret-right"></i></button>
+                        }} className="p-2 rounded-full hover:bg-white/10 text-gray-400 hover:text-white"><i className="ph-fill ph-caret-right"></i></button>
                     </div>
 
-                    <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-skin-muted mb-1">
+                    <div className="grid grid-cols-7 gap-2 text-center text-xs font-bold text-gray-500 mb-2">
                         {weekdays.map((day: string) => <div key={day}>{day}</div>)}
                     </div>
 
-                    <div className="grid grid-cols-7 gap-1">
+                    <div className="grid grid-cols-7 gap-2">
                         {dayBlanks.map((_, i) => <div key={`blank-${i}`} />)}
                         {dayCells.map(day => {
                             const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
@@ -151,50 +157,49 @@ const CheckInModal: React.FC<{ isOpen: boolean; onClose: () => void; }> = ({ isO
                             const isToday = dateStr === todayVnString;
                             const isFuture = new Date(dateStr) > today;
                             
-                            const dayClasses = `
-                                themed-checkin-modal__day
-                                !text-xs !rounded-md
-                                ${isCheckedIn ? 'themed-checkin-modal__day--checked-in' : ''}
-                                ${isToday ? 'themed-checkin-modal__day--today' : ''}
-                                ${isFuture ? 'themed-checkin-modal__day--future' : ''}
-                            `;
+                            let cellClass = "checkin-day-cell";
+                            if (isCheckedIn) cellClass += " active";
+                            if (isToday) cellClass += " today";
+                            if (isFuture) cellClass += " future";
                             
                             return (
-                                <div key={day} className={dayClasses.trim()}>
-                                    <span className={`themed-checkin-modal__day-number ${isCheckedIn ? '' : 'text-skin-muted'}`}>{day}</span>
-                                    {isCheckedIn && <i className="ph-fill ph-check-circle themed-checkin-modal__checkmark absolute bottom-0.5 right-0.5 text-[10px]"></i>}
+                                <div key={day} className={cellClass}>
+                                    <span>{day}</span>
+                                    {isCheckedIn && <i className="ph-fill ph-check-circle absolute -top-1 -right-1 text-white bg-green-600 rounded-full border border-[#151518] text-[10px]"></i>}
                                 </div>
                             );
                         })}
                     </div>
                 </div>
 
-                <div className="mt-3">
-                    <h4 className="font-semibold mb-2 text-xs uppercase text-skin-muted tracking-wider">{t('modals.checkIn.milestones')}</h4>
-                    <div className="grid grid-cols-3 gap-2">
+                <div className="mt-4">
+                    <h4 className="font-bold mb-3 text-xs uppercase text-gray-400 tracking-wider flex items-center gap-2">
+                        <i className="ph-fill ph-trophy"></i> {t('modals.checkIn.milestones')}
+                    </h4>
+                    <div className="grid grid-cols-3 gap-3">
                         {rewards.map(reward => {
                             const isEligible = streak >= reward.day;
                             return (
-                                <div key={reward.day} className="flex flex-col gap-1">
-                                    <div className={`themed-checkin-modal__reward-box !p-2 ${isEligible ? 'border-yellow-500/50 bg-yellow-500/10' : ''}`}>
-                                        <div className="flex justify-center">
-                                            <i className={`ph-fill ${reward.icon} text-xl mb-1 ${isEligible ? 'text-yellow-400 animate-bounce' : 'text-skin-muted'}`}></i>
-                                        </div>
-                                        <p className="day text-[10px]">{t('langName') === 'English' ? 'Day' : 'Ngày'} {reward.day}</p>
-                                        <p className="prize text-[10px] leading-tight">{reward.prize}</p>
+                                <div key={reward.day} className={`flex flex-col gap-2 p-3 rounded-xl border transition-all ${isEligible ? 'bg-yellow-500/10 border-yellow-500/30' : 'bg-[#1E1B25] border-white/5 opacity-80'}`}>
+                                    <div className="flex justify-center">
+                                        <i className={`ph-fill ${reward.icon} text-2xl mb-1 ${isEligible ? 'text-yellow-400 animate-bounce' : 'text-gray-600'}`}></i>
+                                    </div>
+                                    <div className="text-center">
+                                        <p className="text-[10px] font-bold text-gray-500 uppercase">{t('langName') === 'English' ? 'Day' : 'Mốc'} {reward.day}</p>
+                                        <p className={`text-xs font-bold ${isEligible ? 'text-white' : 'text-gray-400'}`}>{reward.prize}</p>
                                     </div>
                                     
                                     {isEligible ? (
                                         <button 
                                             onClick={() => handleClaimMilestone(reward.day)}
                                             disabled={claimingMilestone === reward.day}
-                                            className="w-full py-1 bg-gradient-to-r from-green-500 to-emerald-600 text-white text-[10px] font-bold rounded hover:opacity-90 transition shadow-md disabled:opacity-50"
+                                            className="w-full py-1.5 bg-yellow-500 hover:bg-yellow-400 text-black text-[10px] font-black rounded-lg shadow-sm disabled:opacity-50"
                                         >
-                                            {claimingMilestone === reward.day ? <i className="ph ph-spinner animate-spin"></i> : 'Nhận'}
+                                            {claimingMilestone === reward.day ? <i className="ph ph-spinner animate-spin"></i> : 'NHẬN'}
                                         </button>
                                     ) : (
-                                        <div className="w-full py-1 bg-white/5 text-gray-500 text-[10px] font-bold rounded text-center border border-white/5 cursor-not-allowed">
-                                            <i className="ph-fill ph-lock text-[10px]"></i>
+                                        <div className="w-full py-1.5 bg-black/20 text-gray-600 text-[10px] font-bold rounded-lg text-center cursor-not-allowed">
+                                            <i className="ph-fill ph-lock"></i>
                                         </div>
                                     )}
                                 </div>
@@ -203,13 +208,25 @@ const CheckInModal: React.FC<{ isOpen: boolean; onClose: () => void; }> = ({ isO
                     </div>
                 </div>
 
-                <div className="mt-4 sticky bottom-0 z-10">
+                <div className="mt-6 sticky bottom-0 z-10">
                     <button 
                         onClick={handleCheckIn}
                         disabled={hasCheckedInToday || isCheckingIn}
-                        className="w-full py-3 font-bold themed-button-primary disabled:cursor-not-allowed shadow-lg text-sm uppercase tracking-wide"
+                        className={`
+                            w-full py-4 font-bold rounded-xl shadow-lg text-sm uppercase tracking-wide flex items-center justify-center gap-2 transition-all
+                            ${hasCheckedInToday 
+                                ? 'bg-[#252529] text-gray-400 cursor-not-allowed border border-white/5' 
+                                : 'themed-button-primary hover:scale-[1.02]'
+                            }
+                        `}
                     >
-                        {isCheckingIn ? t('modals.checkIn.buttonProcessing') : hasCheckedInToday ? t('modals.checkIn.buttonCheckedIn') : t('modals.checkIn.button')}
+                        {isCheckingIn ? (
+                            <><i className="ph ph-spinner animate-spin text-lg"></i> {t('modals.checkIn.buttonProcessing')}</>
+                        ) : hasCheckedInToday ? (
+                            <><i className="ph-fill ph-check-circle text-lg text-green-500"></i> {t('modals.checkIn.buttonCheckedIn')}</>
+                        ) : (
+                            <><i className="ph-fill ph-hand-pointing text-lg"></i> {t('modals.checkIn.button')}</>
+                        )}
                     </button>
                 </div>
             </div>

@@ -15,7 +15,7 @@ import ComicStudio from '../comic/ComicStudio';
 interface GroupGeneratorToolProps {
     onSwitchToUtility: () => void;
     onInstructionClick: (key: any) => void;
-    onSwitchToolWithImage: (image: { url: string; file: File }, targetTool: 'bg-remover' | 'enhancer') => void;
+    onSwitchToolWithImage?: (image: { url: string; file: File }, targetTool: 'bg-remover' | 'enhancer') => void;
 }
 
 interface CharacterInput {

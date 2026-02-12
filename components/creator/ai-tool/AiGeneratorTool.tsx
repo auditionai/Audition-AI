@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useImageGenerator } from '../../../hooks/useImageGenerator';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -43,7 +42,6 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
     const [isProcessingFace, setIsProcessingFace] = useState(false);
 
     const [prompt, setPrompt] = useState('');
-    // Removed unused negativePrompt state
     
     // Config
     const [modelType, setModelType] = useState<'flash' | 'pro'>('flash');

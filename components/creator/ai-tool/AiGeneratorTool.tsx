@@ -292,8 +292,8 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                         className="h-full"
                     >
                         <div className="flex flex-col h-full">
-                            <div className="flex-grow w-full relative group">
-                                <ImageUploader onUpload={(e) => handleImageUpload(e, 'pose')} image={poseImage} onRemove={() => handleRemoveImage('pose')} text={t('creator.aiTool.singlePhoto.characterUploadText')} disabled={isImageInputDisabled} className="w-full h-full min-h-[300px]" />
+                            <div className="flex-grow w-full relative group min-h-[300px]">
+                                <ImageUploader onUpload={(e) => handleImageUpload(e, 'pose')} image={poseImage} onRemove={() => handleRemoveImage('pose')} text={t('creator.aiTool.singlePhoto.characterUploadText')} disabled={isImageInputDisabled} className="w-full h-full" />
                                 {/* Face Lock Toggle Floating Inside */}
                                 {poseImage && (
                                      <div className="absolute bottom-2 left-2 right-2 bg-black/60 backdrop-blur-md rounded-lg p-2 flex items-center justify-between border border-white/10 z-20">
@@ -309,84 +309,74 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                 </div>
 
                 {/* --- CENTER: FACE ID & REF & PROMPT (45%) --- */}
-                <div className="col-span-12 lg:col-span-5 flex flex-col gap-4">
-                     {/* TIP BANNER */}
-                     <div className="px-3 py-2 bg-yellow-500/5 border border-yellow-500/20 text-yellow-200 rounded-lg text-[10px] flex items-center gap-2 shadow-sm">
-                        <i className="ph-fill ph-lightbulb text-yellow-400"></i>
-                        <div className="flex-grow truncate">
-                             <span className="font-bold text-yellow-400 mr-1">{t('langName') === 'English' ? 'Tip:' : 'Mẹo:'}</span> 
-                             {t('creator.aiTool.singlePhoto.bgRemoverTip')}
-                        </div>
-                         <button onClick={onSwitchToUtility} className="text-white bg-white/10 hover:bg-white/20 px-2 py-0.5 rounded text-[10px] font-bold transition-colors whitespace-nowrap">
-                             {t('creator.aiTool.singlePhoto.switchToBgRemover')}
-                         </button>
-                    </div>
-
-                    {/* TOP ROW: FACE & REF (Compact Side-by-Side) */}
-                    <div className="grid grid-cols-2 gap-4">
-                         {/* FACE ID */}
+                <div className="col-span-12 lg:col-span-5 flex flex-col gap-4 h-full">
+                    {/* VISUAL ROW: FACE & REF (EQUAL GRID) */}
+                    <div className="grid grid-cols-2 gap-4 flex-shrink-0">
+                         {/* FACE ID CARD */}
                          <div className="bg-[#1e1b25] border border-pink-500/30 rounded-xl p-3 flex flex-col gap-2 relative shadow-lg">
                              <div className="flex justify-between items-center">
                                  <h4 className="text-[11px] font-bold text-pink-400 uppercase tracking-wide">Face ID (95%)</h4>
                                  <button onClick={() => openInstructionModal('face')} className="text-gray-500 hover:text-white"><i className="ph-fill ph-question text-xs"></i></button>
                              </div>
-                             <div className="flex gap-3">
-                                 <div className="w-16 h-16 flex-shrink-0">
-                                     <ImageUploader onUpload={(e) => handleImageUpload(e, 'face')} image={rawFaceImage ? { url: processedFaceImage ? `data:image/png;base64,${processedFaceImage}` : rawFaceImage.url } : null} onRemove={() => handleRemoveImage('face')} text="Face" disabled={isImageInputDisabled} className="w-full h-full rounded-lg" />
-                                 </div>
-                                 <div className="flex-grow flex flex-col justify-center gap-1">
-                                    {rawFaceImage && !processedFaceImage ? (
-                                        <button onClick={handleProcessFace} disabled={isProcessingFace} className="w-full text-[10px] font-bold py-1.5 px-2 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-wait flex items-center justify-center gap-1">
-                                            {isProcessingFace ? <i className="ph-fill ph-spinner animate-spin"></i> : <i className="ph-fill ph-scan"></i>}
-                                            {isProcessingFace ? '...' : 'Xử lý (-1💎)'}
-                                        </button>
-                                    ) : processedFaceImage ? (
-                                         <div className="w-full text-[10px] font-bold py-1.5 px-2 bg-green-500/20 text-green-300 border border-green-500/30 rounded text-center flex items-center justify-center gap-1">
-                                            <i className="ph-fill ph-check-circle"></i> Đã khóa
-                                        </div>
-                                    ) : (
-                                        <p className="text-[9px] text-gray-500 leading-tight">Tải ảnh mặt rõ nét để tăng độ giống.</p>
-                                    )}
-                                 </div>
+                             
+                             <div className="w-full aspect-square rounded-lg overflow-hidden bg-black/20">
+                                 <ImageUploader onUpload={(e) => handleImageUpload(e, 'face')} image={rawFaceImage ? { url: processedFaceImage ? `data:image/png;base64,${processedFaceImage}` : rawFaceImage.url } : null} onRemove={() => handleRemoveImage('face')} text="Face ID" disabled={isImageInputDisabled} className="w-full h-full" />
+                             </div>
+                             
+                             <div className="mt-1">
+                                {rawFaceImage && !processedFaceImage ? (
+                                    <button onClick={handleProcessFace} disabled={isProcessingFace} className="w-full text-[10px] font-bold py-2 px-2 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-wait flex items-center justify-center gap-1">
+                                        {isProcessingFace ? <i className="ph-fill ph-spinner animate-spin"></i> : <i className="ph-fill ph-scan"></i>}
+                                        {isProcessingFace ? '...' : 'Xử lý (-1💎)'}
+                                    </button>
+                                ) : processedFaceImage ? (
+                                     <div className="w-full text-[10px] font-bold py-2 px-2 bg-green-500/20 text-green-300 border border-green-500/30 rounded text-center flex items-center justify-center gap-1">
+                                        <i className="ph-fill ph-check-circle"></i> Đã khóa
+                                    </div>
+                                ) : (
+                                    <div className="h-8"></div> // Spacer to keep height consistent
+                                )}
                              </div>
                          </div>
 
-                         {/* REFERENCE */}
+                         {/* REFERENCE CARD */}
                          <div className="bg-[#1e1b25] border border-cyan-500/30 rounded-xl p-3 flex flex-col gap-2 relative shadow-lg">
                              <div className="flex justify-between items-center">
                                  <h4 className="text-[11px] font-bold text-cyan-400 uppercase tracking-wide">Ảnh Mẫu</h4>
                                  <button onClick={() => openInstructionModal('style')} className="text-gray-500 hover:text-white"><i className="ph-fill ph-question text-xs"></i></button>
                              </div>
-                             <div className="flex gap-3 h-16">
-                                 <div className="w-16 h-full flex-shrink-0">
-                                     <ImageUploader onUpload={(e) => handleImageUpload(e, 'style')} image={styleImage} onRemove={() => handleRemoveImage('style')} text="Mẫu" disabled={isImageInputDisabled} className="w-full h-full rounded-lg" />
-                                 </div>
-                                 <div className="flex-grow flex items-center">
-                                     <p className="text-[9px] text-gray-500 leading-tight">AI sẽ sao chép <b>Bố cục & Dáng</b> của ảnh này.</p>
-                                 </div>
+                             
+                             <div className="w-full aspect-square rounded-lg overflow-hidden bg-black/20">
+                                 <ImageUploader onUpload={(e) => handleImageUpload(e, 'style')} image={styleImage} onRemove={() => handleRemoveImage('style')} text="Reference" disabled={isImageInputDisabled} className="w-full h-full" />
+                             </div>
+
+                             <div className="mt-1 flex items-center justify-center h-8">
+                                <p className="text-[9px] text-gray-500 leading-tight text-center">AI sao chép <b>Bố cục & Dáng</b></p>
                              </div>
                          </div>
                     </div>
 
-                    {/* PROMPT (Auto Expand) */}
-                    <SettingsBlock title={t('creator.aiTool.singlePhoto.promptTitle')} instructionKey="prompt" onInstructionClick={() => openInstructionModal('prompt')} variant="purple" className="flex-grow">
-                        <div className="relative group h-full flex flex-col">
-                            <textarea 
-                                value={prompt} 
-                                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setPrompt(e.target.value)} 
-                                placeholder={t('creator.aiTool.singlePhoto.promptPlaceholder')} 
-                                className="w-full p-4 bg-black/40 rounded-xl border border-white/10 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition text-sm text-white flex-grow resize-none shadow-inner leading-relaxed min-h-[140px]" 
-                            />
-                            <button
-                                onClick={() => setIsPromptLibraryOpen(true)}
-                                className="absolute bottom-3 right-3 flex items-center gap-2 text-xs text-cyan-300 bg-cyan-900/30 hover:bg-cyan-500/20 border border-cyan-500/30 rounded-full px-3 py-1.5 font-bold transition shadow-lg backdrop-blur-md"
-                                title={t('modals.promptLibrary.buttonTooltip')}
-                            >
-                                <i className="ph-fill ph-book-bookmark"></i>
-                                {t('modals.promptLibrary.button')}
-                            </button>
-                        </div>
-                    </SettingsBlock>
+                    {/* PROMPT (COMPACT) */}
+                    <div className="flex-grow min-h-0">
+                        <SettingsBlock title={t('creator.aiTool.singlePhoto.promptTitle')} instructionKey="prompt" onInstructionClick={() => openInstructionModal('prompt')} variant="purple" className="h-full flex flex-col">
+                            <div className="relative group h-full flex flex-col">
+                                <textarea 
+                                    value={prompt} 
+                                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setPrompt(e.target.value)} 
+                                    placeholder={t('creator.aiTool.singlePhoto.promptPlaceholder')} 
+                                    className="w-full p-4 bg-black/40 rounded-xl border border-white/10 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition text-sm text-white flex-grow resize-none shadow-inner leading-relaxed min-h-[80px]" 
+                                />
+                                <button
+                                    onClick={() => setIsPromptLibraryOpen(true)}
+                                    className="absolute bottom-2 right-2 flex items-center gap-1 text-[10px] text-cyan-300 bg-cyan-900/30 hover:bg-cyan-500/20 border border-cyan-500/30 rounded-full px-2 py-1 font-bold transition shadow-lg backdrop-blur-md"
+                                    title={t('modals.promptLibrary.buttonTooltip')}
+                                >
+                                    <i className="ph-fill ph-book-bookmark"></i>
+                                    {t('modals.promptLibrary.button')}
+                                </button>
+                            </div>
+                        </SettingsBlock>
+                    </div>
                 </div>
 
                 {/* --- RIGHT: SETTINGS (30%) --- */}

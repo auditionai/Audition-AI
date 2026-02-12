@@ -47,7 +47,7 @@ const ModeCard: React.FC<{
 );
 
 const AITool: React.FC = () => {
-    const { showToast } = useAuth();
+    // Removed showToast as it is unused
     const { t } = useTranslation();
     const [activeTab, setActiveTab] = useState<AIToolTab>('studio'); // Default to Studio
     const [activeUtility, setActiveUtility] = useState<UtilityTab>('bg-remover');

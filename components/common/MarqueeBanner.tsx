@@ -32,26 +32,36 @@ const MarqueeBanner: React.FC = () => {
     if (!promotion) return null;
 
     return (
-        <div className="fixed top-[64px] md:top-[80px] left-0 right-0 z-30 bg-gradient-to-r from-red-600 via-orange-500 to-red-600 text-white h-8 flex items-center overflow-hidden shadow-md border-b border-yellow-400/30">
-            <div className="marquee-container w-full flex items-center">
-                <div className="marquee-content whitespace-nowrap font-bold text-xs md:text-sm flex items-center gap-8">
-                    {[...Array(5)].map((_, i) => (
-                        <span key={i} className="flex items-center gap-2">
-                            <i className="ph-fill ph-fire text-yellow-300 animate-pulse"></i>
-                            <span className="uppercase text-yellow-200 tracking-wide">[{promotion.title}]</span>
-                            <span className="text-white">{promotion.description}</span>
-                            <span className="bg-white text-red-600 px-1 rounded font-black">+{promotion.bonus_percentage}% KIM CƯƠNG</span>
-                        </span>
-                    ))}
+        <div className="w-full max-w-4xl mx-auto mb-6 px-4 animate-fade-in-down z-30 relative mt-2">
+            <div className="marquee-3d-wrapper h-10 flex items-center bg-black relative">
+                
+                {/* Fixed Label */}
+                <div className="absolute left-0 top-0 bottom-0 bg-red-700 px-3 flex items-center justify-center z-10 shadow-[2px_0_10px_rgba(0,0,0,0.8)]">
+                    <i className="ph-fill ph-speaker-high text-white animate-pulse"></i>
+                </div>
+
+                {/* Scrolling Content */}
+                <div className="marquee-container w-full flex items-center pl-12 h-full">
+                    <div className="marquee-content whitespace-nowrap font-bold text-xs flex items-center gap-12 text-red-100/90 font-mono tracking-widest">
+                        {[...Array(3)].map((_, i) => (
+                            <span key={i} className="flex items-center gap-3">
+                                <span className="text-yellow-400">★ {promotion.title} ★</span>
+                                <span>{promotion.description}</span>
+                                <span className="bg-red-600 text-white px-1.5 py-0.5 rounded text-[10px]">+{promotion.bonus_percentage}% KC</span>
+                            </span>
+                        ))}
+                    </div>
                 </div>
             </div>
             
             <style>{`
                 .marquee-container {
                     overflow: hidden;
+                    mask-image: linear-gradient(to right, transparent, black 20px, black 90%, transparent);
+                    -webkit-mask-image: linear-gradient(to right, transparent, black 20px, black 90%, transparent);
                 }
                 .marquee-content {
-                    animation: marquee 30s linear infinite;
+                    animation: marquee 20s linear infinite;
                 }
                 @keyframes marquee {
                     0% { transform: translateX(0); }

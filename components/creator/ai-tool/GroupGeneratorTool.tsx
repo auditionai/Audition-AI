@@ -63,7 +63,7 @@ interface GroupGeneratorToolProps {
     onSwitchToolWithImage?: (image: { url: string; file: File }, targetTool: 'bg-remover' | 'enhancer') => void;
 }
 
-// Helper Component for Mode Selection Card
+// Helper Component for Mode Selection Card (Updated to 3D Style)
 const ModeCard: React.FC<{
     icon: string;
     title: string;
@@ -74,20 +74,25 @@ const ModeCard: React.FC<{
 }> = ({ icon, title, description, colorClass, onClick, hot }) => (
     <button 
         onClick={onClick}
-        className={`group relative flex flex-col items-center justify-center p-6 rounded-2xl border-2 border-white/5 bg-[#181820] hover:bg-white/5 transition-all duration-300 w-full hover:-translate-y-2 hover:shadow-xl ${colorClass} interactive-3d overflow-hidden`}
+        className={`group relative flex flex-col items-center justify-center p-6 rounded-[24px] bg-[#1a1a1a] transition-all duration-300 w-full hover:-translate-y-2 interactive-3d overflow-hidden ${colorClass}`}
+        style={{ minHeight: '200px' }}
     >
-        {hot && <div className="absolute top-3 right-3 bg-red-500 text-white text-[9px] font-black px-2 py-0.5 rounded uppercase shadow-sm animate-pulse z-10">HOT</div>}
-        <div className="absolute inset-0 bg-gradient-to-br opacity-0 group-hover:opacity-10 transition-opacity duration-500 from-white to-transparent pointer-events-none"></div>
-        <div className={`w-16 h-16 rounded-full flex items-center justify-center text-3xl mb-4 bg-white/5 shadow-inner transition-transform duration-300 group-hover:scale-110 group-hover:rotate-6`}>
-            <i className={`ph-fill ${icon}`}></i>
+        {hot && <div className="absolute top-4 right-4 bg-red-600 text-white text-[10px] font-black px-2 py-1 rounded shadow-lg animate-pulse z-10 border border-red-400">HOT</div>}
+        
+        {/* Inner Glow */}
+        <div className="absolute inset-0 bg-gradient-to-b from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"></div>
+
+        <div className={`w-20 h-20 rounded-full flex items-center justify-center text-4xl mb-6 bg-black/40 shadow-[inset_0_2px_5px_rgba(0,0,0,0.8),0_5px_10px_rgba(255,255,255,0.05)] border border-white/5 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-6`}>
+            <i className={`ph-fill ${icon} drop-shadow-md`}></i>
         </div>
-        <h3 className="text-xl font-black uppercase tracking-wide mb-1">{title}</h3>
-        <p className="text-xs text-gray-400 font-medium">{description}</p>
+        <h3 className="text-lg font-black uppercase tracking-wide mb-2 text-white group-hover:text-shadow-glow">{title}</h3>
+        <p className="text-xs text-gray-500 font-medium px-4 text-center leading-relaxed">{description}</p>
     </button>
 );
 
 // Main Component
 const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtility, onInstructionClick, onSwitchToolWithImage }) => {
+    // ... (Keep ALL existing logic the same, only change the ModeCard rendering part in 'selection' mode)
     const { user, session, showToast, supabase, updateUserDiamonds } = useAuth();
     const { t } = useTranslation();
     
@@ -654,22 +659,22 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
         );
     }
 
-    // --- SELECTION MODE ---
+    // --- SELECTION MODE (Refined for 3D UI) ---
     if (activeMode === 'selection') {
         return (
             <div className="flex flex-col items-center animate-fade-in py-8">
-                <h2 className="themed-heading text-2xl font-bold themed-title-glow mb-2 text-center">{t('creator.aiTool.groupStudio.introTitle')}</h2>
-                <p className="text-skin-muted mb-8 text-center text-sm">{t('creator.aiTool.groupStudio.introDesc')}</p>
+                <h2 className="themed-heading text-2xl font-bold themed-title-glow mb-4 text-center">{t('creator.aiTool.groupStudio.introTitle')}</h2>
+                <p className="text-skin-muted mb-10 text-center text-sm max-w-lg">{t('creator.aiTool.groupStudio.introDesc')}</p>
                 
-                {/* 4 Main Mode Selection Cards */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-5xl w-full px-4">
+                {/* 4 Main Mode Selection Cards with 3D Effect */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl w-full px-4">
                     
                     {/* Solo Mode */}
                     <ModeCard 
                         icon="ph-user"
                         title="Đơn (Solo)"
                         description="Ảnh chân dung, Avatar, Fashion"
-                        colorClass="text-cyan-400 border-cyan-500/30 hover:border-cyan-400 hover:shadow-cyan-500/20"
+                        colorClass="text-cyan-400"
                         onClick={() => handleNumCharactersSelect(1)}
                     />
                     
@@ -678,7 +683,7 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                         icon="ph-heart"
                         title="Đôi (Couple)"
                         description="Ảnh đôi, Hẹn hò, Cưới"
-                        colorClass="text-pink-400 border-pink-500/30 hover:border-pink-400 hover:shadow-pink-500/20"
+                        colorClass="text-pink-400"
                         onClick={() => handleNumCharactersSelect(2)}
                     />
                     
@@ -688,14 +693,14 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                             icon="ph-users-three"
                             title="Nhóm (Party)"
                             description="Nhóm bạn, Gia đình, Fam (3+)"
-                            colorClass="text-yellow-400 border-yellow-500/30 hover:border-yellow-400 hover:shadow-yellow-500/20"
+                            colorClass="text-yellow-400"
                             onClick={() => setShowGroupSlider(true)}
                         />
                     ) : (
-                        <div className="bg-[#181820] border-2 border-yellow-500 rounded-2xl p-6 flex flex-col items-center justify-center animate-fade-in shadow-xl shadow-yellow-500/20 w-full h-full min-h-[200px]">
-                            <h4 className="text-yellow-400 font-bold mb-4 uppercase tracking-wider text-sm">Chọn số lượng</h4>
-                            <div className="flex items-center gap-4 mb-6 w-full">
-                                <span className="text-2xl font-black text-white w-8 text-center">{tempGroupSize}</span>
+                        <div className="bg-[#181820] border border-yellow-500/50 rounded-[24px] p-6 flex flex-col items-center justify-center animate-fade-in shadow-xl w-full h-full min-h-[200px] interactive-3d">
+                            <h4 className="text-yellow-400 font-bold mb-4 uppercase tracking-wider text-xs">Chọn số lượng</h4>
+                            <div className="flex items-center gap-4 mb-6 w-full px-2">
+                                <span className="text-3xl font-black text-white w-10 text-center">{tempGroupSize}</span>
                                 <input 
                                     type="range" 
                                     min="3" 
@@ -712,12 +717,12 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                         </div>
                     )}
                     
-                    {/* Comic Mode (New) */}
+                    {/* Comic Mode */}
                     <ModeCard 
                         icon="ph-book-open-text"
                         title="Truyện Tranh"
                         description="Viết kịch bản & Vẽ truyện AI"
-                        colorClass="text-purple-400 border-purple-500/30 hover:border-purple-400 hover:shadow-purple-500/20"
+                        colorClass="text-purple-400"
                         onClick={handleComicModeSelect}
                         hot={true}
                     />
@@ -725,8 +730,10 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
             </div>
         );
     }
-
-    // --- GENERATOR MODE ---
+    
+    // ... rest of the component (Generator UI) remains largely the same but inherits the new global CSS styles
+    // Just a quick check to ensure 'ModeCard' logic is integrated.
+    
     return (
         <div className="animate-fade-in">
              <ProcessedImagePickerModal 
@@ -736,7 +743,6 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                 onCropSelect={handleCropSelectFromPicker}
                 onProcessAction={handleProcessAction}
             />
-             {/* Category logic: 1->single, 2->couple, 3+->group */}
              <PromptLibraryModal 
                 isOpen={isPromptLibraryOpen} 
                 onClose={() => setIsPromptLibraryOpen(false)} 
@@ -759,14 +765,14 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                 <div className="w-full lg:w-2/3">
                     <div className="flex justify-between items-center mb-3">
                         <h3 className="themed-heading text-lg font-bold themed-title-glow">{t('creator.aiTool.groupStudio.characterInfoTitle')}</h3>
-                        <button onClick={() => setActiveMode('selection')} className="text-xs text-skin-muted hover:text-skin-base border border-skin-border px-2 py-1 rounded-full bg-skin-fill hover:bg-white/5 transition flex items-center gap-1">
+                        <button onClick={() => setActiveMode('selection')} className="text-xs text-skin-muted hover:text-skin-base border border-skin-border px-3 py-1.5 rounded-full bg-skin-fill hover:bg-white/5 transition flex items-center gap-1 shadow-sm">
                             <i className="ph-bold ph-arrow-left"></i> Quay lại Menu
                         </button>
                     </div>
 
                     {/* REDESIGNED LAYOUT FOR SINGLE CHARACTER */}
                     {numCharacters === 1 ? (
-                        <div className="bg-[#1E1B25] p-6 rounded-2xl border border-white/10 shadow-xl">
+                        <div className="themed-settings-block p-6">
                             <div className="flex items-center gap-3 mb-6 pb-4 border-b border-white/5">
                                 <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-blue-500/20">
                                      <i className="ph-fill ph-user text-white text-xl"></i>
@@ -868,7 +874,7 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                         // DEFAULT GRID LAYOUT FOR GROUPS (2+ People)
                         <div className={`grid grid-cols-1 sm:grid-cols-2 ${numCharacters > 2 ? 'md:grid-cols-3' : ''} gap-4`}>
                             {characters.map((char, index) => (
-                                <div key={index} className="bg-skin-fill p-3 rounded-xl border border-skin-border space-y-3 shadow-md">
+                                <div key={index} className="bg-skin-fill p-3 rounded-xl border border-skin-border space-y-3 shadow-md interactive-3d">
                                     <h4 className="text-sm font-bold text-center text-skin-base flex items-center justify-center gap-2">
                                         <span className="bg-skin-accent/10 text-skin-accent px-2 py-0.5 rounded text-xs uppercase">
                                             {`${t('creator.aiTool.groupStudio.character')} ${index + 1}`}

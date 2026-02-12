@@ -1,508 +1,243 @@
 
 /* ---
   AUDITION AI - CREATOR THEME STYLESHEET
-  Contains all theme-specific styles for the creator dashboard.
+  THEME: FORMULA RED 3D (Physical Depth)
 --- */
 
-/* ==========================================================================
-   THEME VARIABLES & BASE
-   ========================================================================== */
-
 :root {
-    /* Default (Fallback) */
-    --color-fill: #000000;
-    --color-fill-secondary: rgba(255, 255, 255, 0.05);
-    --color-fill-modal: rgba(20, 20, 25, 0.6);
-    --color-input-bg: rgba(255, 255, 255, 0.05);
+    --color-fill: #080808;
+    --color-fill-secondary: #121212;
     --color-text-base: #FFFFFF;
-    --color-text-muted: rgba(255, 255, 255, 0.65);
+    --color-text-muted: #9CA3AF;
     
+    /* Red Palette */
     --color-accent: 220 38 38; /* Red-600 */
-    --color-accent-secondary: 185 28 28; /* Red-700 */
+    --color-accent-glow: 255 50 50;
     
-    --color-accent-text: #FFFFFF;
-    --color-border: rgba(255, 255, 255, 0.12);
-    --color-border-accent: rgba(220, 38, 38, 0.4);
-    --shadow-accent: 0 8px 32px 0 rgba(220, 38, 38, 0.2);
-    --shadow-accent-lg: 0 15px 50px 0 rgba(220, 38, 38, 0.4);
+    /* 3D Variables */
+    --depth-shadow: 
+        10px 10px 20px #040404, 
+        -5px -5px 15px rgba(50, 50, 50, 0.1); /* Physical Shadow */
+    --depth-shadow-hover: 
+        15px 15px 30px #040404, 
+        -5px -5px 15px rgba(220, 38, 38, 0.15); /* Glowing Shadow */
+    --inner-glow: inset 0 0 20px rgba(0,0,0,0.8);
+    --border-gradient: linear-gradient(145deg, rgba(255,255,255,0.15), rgba(255,255,255,0.05) 40%, rgba(0,0,0,0.5));
+    --border-gradient-active: linear-gradient(145deg, rgba(220, 38, 38, 0.8), rgba(100, 0, 0, 0.8));
+    
+    --glass-bg: rgba(18, 18, 20, 0.7);
+    --glass-backdrop: blur(20px) saturate(120%);
+    --radius-lg: 32px;
+    --radius-md: 20px;
 }
-
-/* ==========================================================================
-   FORMULA RED - LIQUID GLASS THEME (GLOBAL OVERRIDES)
-   ========================================================================== */
 
 [data-theme='liquid-glass'] {
-    --color-fill: #050505; /* Ultra Deep Black */
-    --color-fill-secondary: rgba(255, 50, 50, 0.03); 
-    --color-fill-modal: rgba(10, 0, 0, 0.85); 
-    --color-input-bg: rgba(20, 0, 0, 0.4);
-    
-    /* Aggressive Red & Dark Crimson Gradient Base */
-    --color-accent: 239 68 68; /* Red-500 */
-    --color-accent-secondary: 153 27 27; /* Red-800 */
-    
-    --color-border: rgba(255, 255, 255, 0.1); 
-    --color-border-accent: rgba(239, 68, 68, 0.4);
-    
-    --shadow-accent: 0 4px 30px rgba(220, 38, 38, 0.15);
-    --shadow-accent-lg: 0 8px 40px rgba(220, 38, 38, 0.4);
-
-    --glass-radius: 28px;
-    --glass-border: 1px solid rgba(255, 255, 255, 0.08);
-    --glass-bg: rgba(15, 0, 0, 0.6); /* Red-tinted dark glass */
-    --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
-    --glass-backdrop: blur(30px) saturate(120%);
+    background-color: #050505;
+    background-image: 
+        radial-gradient(circle at 15% 50%, rgba(220, 38, 38, 0.08), transparent 25%), 
+        radial-gradient(circle at 85% 30%, rgba(220, 38, 38, 0.05), transparent 25%);
 }
 
-/* --- LIQUID SHELL LAYOUT (Formula Red Style) --- */
+/* --- 3D SCROLLBAR --- */
+.custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+    background: #0a0a0a;
+    border-radius: 10px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background: linear-gradient(to bottom, #333, #666);
+    border-radius: 10px;
+    border: 1px solid #000;
+}
 
+/* --- 3D CONTAINER (Liquid Content) --- */
 [data-theme='liquid-glass'] .liquid-content-container {
-    background: rgba(10, 10, 10, 0.4);
+    background: var(--glass-bg);
     backdrop-filter: var(--glass-backdrop);
-    -webkit-backdrop-filter: var(--glass-backdrop);
-    border: var(--glass-border);
-    border-top: 1px solid rgba(255, 50, 50, 0.1);
+    border-radius: var(--radius-lg);
+    
+    /* 3D Border Effect using Box Shadow */
     box-shadow: 
-        inset 0 0 50px rgba(0,0,0,0.8),
-        0 20px 50px rgba(0,0,0,0.8);
-    /* Carbon Fiber-ish Noise */
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.5' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.04'/%3E%3C/svg%3E");
+        var(--depth-shadow),
+        inset 1px 1px 0 rgba(255,255,255,0.1),
+        inset -1px -1px 0 rgba(0,0,0,0.5);
+        
+    border: 1px solid rgba(255,255,255,0.05);
+    padding: 32px;
 }
 
-/* The Unified Omni-Dock */
+/* --- 3D DOCK (Floating Menu) --- */
 [data-theme='liquid-glass'] .liquid-dock-container {
-    background: rgba(5, 0, 0, 0.85); /* Darker, richer background */
-    backdrop-filter: blur(25px);
-    -webkit-backdrop-filter: blur(25px);
-    border: 1px solid rgba(255, 50, 50, 0.2); /* Red tint border */
-    border-radius: 9999px;
-    padding: 6px 8px;
+    background: rgba(15, 15, 15, 0.9);
+    backdrop-filter: blur(30px);
+    border-radius: 999px;
+    padding: 8px 12px;
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 12px;
+    
+    /* Floating Effect */
     box-shadow: 
-        0 10px 40px rgba(0, 0, 0, 0.8),
-        0 0 20px rgba(220, 38, 38, 0.1); /* Subtle red glow */
+        0 20px 40px rgba(0,0,0,0.6),
+        0 0 0 1px rgba(255,255,255,0.1),
+        inset 0 1px 1px rgba(255,255,255,0.15);
 }
 
-/* Dock Items */
+/* --- 3D DOCK ITEMS (Buttons) --- */
 [data-theme='liquid-glass'] .liquid-dock-item {
     position: relative;
-    height: 48px;
-    min-width: 48px;
-    padding: 0 12px;
-    border-radius: 24px;
+    height: 56px;
+    width: 56px;
+    border-radius: 18px; /* Squircle */
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    transition: all 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
-    background: transparent;
-    border: 1px solid transparent;
-    color: rgba(255, 255, 255, 0.5);
+    color: #666;
+    background: linear-gradient(145deg, #1a1a1a, #111);
+    box-shadow: 
+        5px 5px 10px #080808, 
+        -5px -5px 10px #222; /* Soft embossing */
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    border: 1px solid rgba(0,0,0,0.5);
+}
+
+[data-theme='liquid-glass'] .liquid-dock-item i {
+    font-size: 24px;
+    transition: all 0.3s ease;
+    filter: drop-shadow(0 2px 2px rgba(0,0,0,0.5));
 }
 
 [data-theme='liquid-glass'] .liquid-dock-item:hover {
-    background: rgba(255, 255, 255, 0.05);
+    transform: translateY(-8px) scale(1.05);
     color: #fff;
-    transform: translateY(-2px);
+    background: linear-gradient(145deg, #252525, #1a1a1a);
+    box-shadow: 
+        0 15px 25px rgba(0,0,0,0.5),
+        0 0 10px rgba(255,255,255,0.1);
 }
 
 [data-theme='liquid-glass'] .liquid-dock-item.active {
-    background: linear-gradient(135deg, rgba(220, 38, 38, 0.8), rgba(153, 27, 27, 0.9)); /* Strong Red Gradient */
+    background: linear-gradient(145deg, #b91c1c, #991b1b); /* Red Gradient */
     color: #fff;
-    border: 1px solid rgba(255, 100, 100, 0.3);
-    box-shadow: 0 4px 15px rgba(220, 38, 38, 0.4); /* Red glow */
-    padding-left: 16px;
-    padding-right: 16px;
+    box-shadow: 
+        0 10px 20px rgba(220, 38, 38, 0.4),
+        inset 0 2px 5px rgba(255,255,255,0.2);
+    border-color: rgba(220, 38, 38, 0.5);
+    transform: translateY(-12px) scale(1.1);
 }
 
-/* Special Profile Section in Dock */
-[data-theme='liquid-glass'] .liquid-dock-profile {
-    background: rgba(20, 20, 20, 0.6);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    padding: 4px 12px 4px 4px;
-    border-radius: 9999px;
-    margin-left: 8px;
-    transition: all 0.3s ease;
-}
-[data-theme='liquid-glass'] .liquid-dock-profile:hover {
-    border-color: rgba(255, 50, 50, 0.4);
-    background: rgba(30, 10, 10, 0.8);
-}
-
-
-/* --- COMPONENT TRANSFORMATION OVERRIDES --- */
-
-/* 1. Containers */
-[data-theme='liquid-glass'] .themed-settings-block,
-[data-theme='liquid-glass'] .bg-skin-fill-secondary,
-[data-theme='liquid-glass'] .bg-black\/20,
-[data-theme='liquid-glass'] .bg-black\/30 {
-    background: var(--glass-bg) !important;
-    border-radius: var(--glass-radius) !important;
-    border: var(--glass-border) !important;
-    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
-}
-
-/* 2. Inputs */
-[data-theme='liquid-glass'] .auth-input,
-[data-theme='liquid-glass'] input[type="text"],
-[data-theme='liquid-glass'] input[type="number"],
-[data-theme='liquid-glass'] textarea,
-[data-theme='liquid-glass'] select {
-    background: rgba(0, 0, 0, 0.5) !important;
-    border: 1px solid rgba(255, 255, 255, 0.1) !important;
-    border-radius: 16px !important;
-    padding: 12px 16px !important;
-    color: #fff !important;
-    transition: all 0.3s ease;
-}
-
-[data-theme='liquid-glass'] .auth-input:focus,
-[data-theme='liquid-glass'] textarea:focus {
-    border-color: rgba(239, 68, 68, 0.6) !important; /* Red focus */
-    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2) !important;
-    background: rgba(20, 0, 0, 0.6) !important;
-}
-
-/* 3. Buttons */
-[data-theme='liquid-glass'] .themed-button-primary {
-    border-radius: 9999px !important;
-    background: linear-gradient(135deg, #ef4444, #b91c1c) !important; /* Red 500 to Red 700 */
-    border: 1px solid rgba(255, 100, 100, 0.3) !important;
-    box-shadow: 0 4px 20px rgba(220, 38, 38, 0.3) !important;
-    font-weight: 800 !important;
-    letter-spacing: 0.05em !important;
-    text-transform: uppercase !important;
-}
-
-[data-theme='liquid-glass'] .themed-button-primary:hover {
-    box-shadow: 0 6px 25px rgba(220, 38, 38, 0.5) !important;
-    transform: translateY(-2px);
-    filter: brightness(1.2);
-}
-
-[data-theme='liquid-glass'] .themed-button-secondary,
-[data-theme='liquid-glass'] button.bg-white\/10 {
-    border-radius: 9999px !important;
-    background: rgba(255, 255, 255, 0.05) !important;
-    border: 1px solid rgba(255, 255, 255, 0.1) !important;
-}
-[data-theme='liquid-glass'] .themed-button-secondary:hover {
-    background: rgba(255, 255, 255, 0.1) !important;
-    border-color: rgba(255, 255, 255, 0.3) !important;
-}
-
-/* 4. Toggles & Checkboxes */
-[data-theme='liquid-glass'] input[type="checkbox"]:checked + div {
-    background: linear-gradient(to right, #ef4444, #991b1b);
-    border-color: transparent;
-}
-
-/* 5. Scrollbar */
-.custom-scrollbar::-webkit-scrollbar-thumb {
-    background: rgba(220, 38, 38, 0.4);
-}
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: rgba(220, 38, 38, 0.8);
-}
-
-
-/* ==========================================================================
-   LEGACY STYLES (Retained for other themes)
-   ========================================================================== */
-
-/* Navigation Buttons */
-.themed-nav-button {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 1rem;
-    border-radius: 9999px;
-    font-size: 0.875rem;
-    font-weight: 600;
-    color: var(--color-text-muted);
-    transition: all 0.3s ease;
-    position: relative;
-    background-color: transparent;
-    border: 1px solid transparent;
-    cursor: pointer;
-}
-
-.themed-nav-button:hover {
-    color: var(--color-text-base);
-    background-color: rgba(255, 255, 255, 0.05);
-}
-
-.themed-nav-button.is-active {
-    background-color: rgba(var(--color-accent), 0.15);
-    color: rgb(var(--color-accent));
-    border-color: rgba(var(--color-accent), 0.3);
-    box-shadow: 0 0 10px rgba(var(--color-accent), 0.2);
-}
-
-/* Top Up Button */
-.themed-top-up-button {
-    display: flex;
-    align-items: center;
-    background: linear-gradient(to right, #1e1b25, #12121A);
-    border: 1px solid var(--color-border);
-    border-radius: 9999px;
-    padding: 4px 16px 4px 4px;
-    gap: 8px;
-    cursor: pointer;
-    transition: all 0.3s ease;
-}
-.themed-top-up-button:hover {
-    border-color: rgba(var(--color-accent), 0.5);
-    box-shadow: 0 0 15px rgba(var(--color-accent), 0.2);
-    transform: scale(1.02);
-}
-.themed-top-up-button__icon-wrapper {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    background-color: rgba(var(--color-accent), 0.1);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: rgb(var(--color-accent));
-}
-.themed-top-up-button__content-wrapper {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    line-height: 1;
-}
-.themed-top-up-button__amount {
-    font-weight: 800;
-    color: var(--color-text-base);
-}
-.themed-top-up-button__action {
-    font-size: 0.65rem;
-    color: rgb(var(--color-accent));
+/* Tooltip for Dock */
+[data-theme='liquid-glass'] .liquid-dock-label {
+    position: absolute;
+    bottom: -22px;
+    font-size: 9px;
     font-weight: 700;
-    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    opacity: 0;
+    transform: translateY(5px);
+    transition: all 0.3s ease;
+    color: #888;
+    white-space: nowrap;
+}
+[data-theme='liquid-glass'] .liquid-dock-item:hover .liquid-dock-label,
+[data-theme='liquid-glass'] .liquid-dock-item.active .liquid-dock-label {
+    opacity: 1;
+    transform: translateY(0);
+    color: #fff;
 }
 
-/* Main Title Container */
-.themed-main-title-container {
-    position: relative;
-}
-.themed-main-title {
-    background: linear-gradient(to right, rgb(var(--color-accent)), rgb(var(--color-accent-secondary)));
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-    position: relative;
-    z-index: 1;
-    filter: drop-shadow(0 0 20px rgba(var(--color-accent), 0.3));
-}
-.themed-main-subtitle {
-    color: var(--color-text-muted);
-}
 
-/* Standard Buttons (Legacy) */
-.themed-button-primary {
-    background: linear-gradient(135deg, rgb(var(--color-accent)), rgb(var(--color-accent-secondary)));
-    color: var(--color-accent-text);
-    border-radius: 0.5rem;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: var(--shadow-accent);
-    border: 1px solid rgba(255,255,255,0.1);
+/* --- 3D CARD COMPONENT (Used in Group Generator) --- */
+/* Replaces flat cards with chunky 3D buttons */
+.interactive-3d {
+    background: linear-gradient(145deg, #1a1a1a, #101010);
+    border-radius: var(--radius-md);
+    box-shadow: var(--depth-shadow);
+    border: 1px solid rgba(255,255,255,0.05);
+    transition: all 0.3s ease;
     position: relative;
     overflow: hidden;
 }
-.themed-button-primary:hover:not(:disabled) {
-    opacity: 1;
-    box-shadow: var(--shadow-accent-lg);
-    transform: translateY(-2px);
-    filter: brightness(1.1);
-}
-.themed-button-primary:active:not(:disabled) {
-    transform: translateY(0);
-}
-.themed-button-primary:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-    box-shadow: none;
-    filter: grayscale(0.5);
-}
 
-.themed-button-secondary {
-    background-color: rgba(255, 255, 255, 0.05);
-    color: var(--color-text-base);
-    border-radius: 0.5rem;
-    transition: all 0.3s ease;
-    border: 1px solid var(--color-border);
-}
-.themed-button-secondary:hover:not(:disabled) {
-    background-color: rgba(255, 255, 255, 0.1);
-    border-color: rgba(var(--color-accent), 0.5);
-    color: rgb(var(--color-accent));
-    box-shadow: 0 0 10px rgba(var(--color-accent), 0.1);
-}
-
-/* Settings Block (Legacy) */
-.themed-settings-block {
-    background-color: var(--color-fill-secondary);
-    border: 1px solid var(--color-border);
-    border-radius: 1rem;
-    padding: 1.25rem;
-    transition: border-color 0.3s ease, box-shadow 0.3s ease;
-}
-.themed-settings-block:hover {
-    border-color: var(--color-border-accent);
-    box-shadow: 0 0 20px rgba(var(--color-accent), 0.05);
-}
-
-/* Leaderboard & Podium (Legacy) */
-.leaderboard-item {
-    display: flex;
-    align-items: center;
-    padding: 0.75rem;
-    background-color: var(--color-fill-secondary);
-    border: 1px solid var(--color-border);
-    border-radius: 0.75rem;
-    margin-bottom: 0.5rem;
-    transition: transform 0.2s;
-}
-.leaderboard-item:hover {
-    transform: translateX(5px);
-    border-color: var(--color-border-accent);
-}
-.leaderboard-rank {
-    width: 2rem;
-    height: 2rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 900;
-    color: var(--color-text-muted);
-    font-style: italic;
-    margin-right: 0.75rem;
-}
-
-.podium-card {
-    background-color: var(--color-fill-secondary);
-    border-radius: 1rem;
-    padding: 1.5rem;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    position: relative;
-    border: 1px solid var(--color-border);
-}
-.podium-rank-1 {
-    border-color: #FBBF24;
-    box-shadow: 0 0 20px rgba(251, 191, 36, 0.2);
-    transform: scale(1.05);
-    z-index: 10;
-    height: 22rem;
-}
-.podium-rank-2 { border-color: #9CA3AF; height: 20rem; }
-.podium-rank-3 { border-color: #B45309; height: 19rem; }
-
-/* Interactive 3D Effect */
-.interactive-3d {
-    transition: transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1), box-shadow 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
-    will-change: transform;
-    perspective: 1000px;
-}
 .interactive-3d:hover {
-    transform: perspective(1000px) rotateX(2deg) rotateY(-2deg) scale(1.02);
-    box-shadow: 0 15px 30px rgba(0,0,0,0.4), var(--shadow-accent);
-    z-index: 10;
+    transform: translateY(-5px);
+    box-shadow: var(--depth-shadow-hover);
+    border-color: rgba(255,255,255,0.15);
 }
-.glowing-border {
+
+.interactive-3d::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+}
+
+
+/* --- MARQUEE 3D CONTAINER --- */
+.marquee-3d-wrapper {
+    background: #000;
+    border-radius: 12px;
+    border: 1px solid #333;
+    box-shadow: 
+        inset 0 0 10px #000,
+        0 5px 15px rgba(0,0,0,0.5);
+    overflow: hidden;
+    position: relative;
+}
+/* LED Grid Effect overlay */
+.marquee-3d-wrapper::after {
+    content: '';
     position: absolute;
     inset: 0;
-    border-radius: inherit;
-    padding: 2px;
-    background: linear-gradient(45deg, transparent, rgba(var(--color-accent), 0.6), transparent);
-    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-    -webkit-mask-composite: xor;
-    mask-composite: exclude;
+    background-image: radial-gradient(rgba(255,255,255,0.05) 1px, transparent 1px);
+    background-size: 4px 4px;
     pointer-events: none;
-    opacity: 0.5;
-    transition: opacity 0.3s ease;
-    background-size: 200% 200%;
-    animation: gradient-spin-bg 3s linear infinite;
-}
-.interactive-3d:hover .glowing-border {
-    opacity: 1;
-    background: linear-gradient(45deg, transparent, rgb(var(--color-accent)), transparent);
-    background-size: 200% 200%;
-}
-.themed-title-glow {
-    text-shadow: 0 0 10px rgba(var(--color-accent), 0.5);
-    color: var(--color-text-base);
-}
-.themed-guide-button {
-    margin: 1rem auto 0;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 1.5rem;
-    background-color: rgba(var(--color-accent), 0.1);
-    border: 1px solid rgba(var(--color-accent), 0.3);
-    border-radius: 9999px;
-    color: rgb(var(--color-accent));
-    font-size: 0.875rem;
-    font-weight: 700;
-    transition: all 0.3s ease;
-    cursor: pointer;
-}
-.themed-guide-button:hover {
-    background-color: rgba(var(--color-accent), 0.2);
-    box-shadow: 0 0 15px rgba(var(--color-accent), 0.4);
-    transform: translateY(-2px);
+    z-index: 2;
 }
 
-/* Legacy Theme Variables (For reference/fallback) */
-[data-theme='cyber-punk'] {
-    --color-fill: #12121A;
-    --color-fill-secondary: #1E1B25;
-    --color-fill-modal: #181820;
-    --color-accent: 236 72 153; 
-    --color-accent-secondary: 168 85 247;
-    --color-border-accent: rgba(236, 72, 153, 0.5);
-    --shadow-accent: 0 0 15px rgba(236, 72, 153, 0.4);
+/* --- FORM ELEMENTS (Inputs) --- */
+[data-theme='liquid-glass'] input, 
+[data-theme='liquid-glass'] textarea, 
+[data-theme='liquid-glass'] select {
+    background: #080808 !important;
+    border: 1px solid #222 !important;
+    border-radius: 12px !important;
+    box-shadow: inset 2px 2px 5px #000, inset -1px -1px 2px #1a1a1a !important;
+    color: #eee !important;
+    transition: all 0.2s ease;
 }
-[data-theme='solar-flare'] {
-    --color-fill: #1a120b;
-    --color-fill-secondary: #291d14;
-    --color-fill-modal: #231912;
-    --color-accent: 245 158 11;
-    --color-accent-secondary: 239 68 68;
-    --color-border-accent: rgba(245, 158, 11, 0.5);
-    --shadow-accent: 0 0 15px rgba(245, 158, 11, 0.4);
+[data-theme='liquid-glass'] input:focus, 
+[data-theme='liquid-glass'] textarea:focus {
+    border-color: #b91c1c !important;
+    box-shadow: inset 2px 2px 5px #000, 0 0 10px rgba(220, 38, 38, 0.2) !important;
 }
-[data-theme='dreamy-galaxy'] {
-    --color-fill: #0f172a;
-    --color-fill-secondary: #1e293b;
-    --color-fill-modal: #162032;
-    --color-accent: 139 92 246;
-    --color-accent-secondary: 59 130 246;
-    --color-border-accent: rgba(139, 92, 246, 0.5);
-    --shadow-accent: 0 0 15px rgba(139, 92, 246, 0.4);
+
+/* --- BUTTONS (Primary) --- */
+[data-theme='liquid-glass'] .themed-button-primary {
+    background: linear-gradient(180deg, #dc2626, #991b1b) !important;
+    border-top: 1px solid rgba(255, 100, 100, 0.4) !important;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.4) !important;
+    box-shadow: 0 4px 15px rgba(220, 38, 38, 0.4), inset 0 1px 0 rgba(255,255,255,0.1) !important;
+    border-radius: 12px !important;
+    color: white !important;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.5) !important;
+    transform: translateY(0);
+    transition: all 0.1s;
 }
-[data-theme='classic-dark'] {
-    --color-fill: #111827;
-    --color-fill-secondary: #1f2937;
-    --color-fill-modal: #182130;
-    --color-accent: 16 185 129;
-    --color-accent-secondary: 239 68 68;
-    --color-border-accent: rgba(16, 185 129, 0.5);
-    --shadow-accent: 0 0 15px rgba(16, 185 129, 0.4);
+[data-theme='liquid-glass'] .themed-button-primary:active {
+    transform: translateY(2px);
+    box-shadow: inset 0 2px 5px rgba(0,0,0,0.4) !important;
+    background: linear-gradient(180deg, #991b1b, #7f1d1d) !important;
 }
-[data-theme='neon-vibe'] {
-    --color-fill: #0e1b2e;
-    --color-fill-secondary: #162a45;
-    --color-fill-modal: #112138;
-    --color-accent: 6 182 212;
-    --color-accent-secondary: 59 130 246;
-    --color-border-accent: rgba(6, 182 212, 0.5);
-    --shadow-accent: 0 0 15px rgba(6, 182 212, 0.4);
+
+/* --- SETTINGS BLOCKS --- */
+[data-theme='liquid-glass'] .themed-settings-block {
+    background: linear-gradient(145deg, #131313, #0a0a0a) !important;
+    border: 1px solid rgba(255,255,255,0.05) !important;
+    box-shadow: 
+        5px 5px 15px rgba(0,0,0,0.5),
+        -1px -1px 5px rgba(255,255,255,0.03) !important;
 }

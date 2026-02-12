@@ -4,6 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { CreatorTab } from '../../pages/CreatorPage';
 import UserAvatar from '../common/UserAvatar';
 import { useTranslation } from '../../hooks/useTranslation';
+import MarqueeBanner from '../common/MarqueeBanner';
 
 interface LiquidShellProps {
     children: React.ReactNode;
@@ -25,108 +26,102 @@ const LiquidShell: React.FC<LiquidShellProps> = ({
 
     if (!user) return null;
 
-    // --- NAVIGATION ITEMS ---
+    // --- NAVIGATION DOCK ITEMS (4 Core Functions) ---
     const navItems = [
-        { id: 'tool', icon: 'ph-magic-wand', label: 'Studio' },
-        { id: 'my-creations', icon: 'ph-images', label: t('creator.header.nav.myCreations') },
-        { id: 'shop', icon: 'ph-storefront', label: t('creator.header.nav.shop') },
-        { id: 'leaderboard', icon: 'ph-crown-simple', label: t('creator.header.nav.leaderboard') },
+        { 
+            id: 'tool', 
+            icon: 'ph-magic-wand', 
+            label: 'Studio',
+            action: () => onNavigate('tool'),
+            active: activeTab === 'tool'
+        },
+        { 
+            id: 'my-creations', 
+            icon: 'ph-images', 
+            label: t('creator.header.nav.myCreations'),
+            action: () => onNavigate('my-creations'),
+            active: activeTab === 'my-creations'
+        },
+        { 
+            id: 'check-in', 
+            icon: 'ph-calendar-check', 
+            label: t('creator.header.nav.checkIn'),
+            action: onCheckInClick,
+            active: false, // Trigger only
+            extraClass: !hasCheckedInToday ? 'animate-bounce text-green-400' : ''
+        },
+        { 
+            id: 'top-up', 
+            icon: 'ph-diamonds-four', 
+            label: 'Nạp tiền',
+            action: onTopUpClick,
+            active: false, // Trigger only
+            extraClass: 'text-yellow-400'
+        },
     ];
 
     return (
-        <div className="relative min-h-screen w-full overflow-hidden text-white flex flex-col font-barlow bg-black">
+        <div className="relative min-h-screen w-full overflow-hidden text-white flex flex-col font-barlow bg-black selection:bg-red-500 selection:text-white">
             
             {/* --- MAIN GLASS STAGE (Content) --- */}
             <main className="flex-grow w-full h-screen overflow-hidden pt-4 pb-28 px-2 md:px-4 flex flex-col items-center">
-                <div className="w-full max-w-[1400px] h-full relative z-10 flex flex-col">
-                     {/* Inner Scrollable Container with Smoked Red Glass Effect */}
-                     <div className="liquid-content-container w-full h-full overflow-y-auto custom-scrollbar rounded-[20px] md:rounded-[32px] p-4 md:p-8">
+                
+                {/* 3D Floating Marquee */}
+                <MarqueeBanner />
+
+                <div className="w-full max-w-[1200px] h-full relative z-10 flex flex-col">
+                     {/* Inner Scrollable Container with 3D Border */}
+                     <div className="liquid-content-container w-full h-full overflow-y-auto custom-scrollbar">
                          {children}
                      </div>
                 </div>
             </main>
 
-            {/* --- BOTTOM OMNI-DOCK (Unified Command Center) --- */}
-            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[95%] max-w-[800px] pointer-events-none">
-                <div className="liquid-dock-container pointer-events-auto flex justify-between items-center px-2 py-1.5 md:py-2 md:px-3">
+            {/* --- BOTTOM OMNI-DOCK (3D Floating Bar) --- */}
+            <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
+                <div className="liquid-dock-container pointer-events-auto">
                     
-                    {/* LEFT: Logo */}
-                    <div className="flex items-center gap-2 mr-2">
-                        <div 
-                            className="w-10 h-10 md:w-12 md:h-12 flex items-center justify-center bg-black/40 rounded-full border border-red-500/30 cursor-pointer hover:bg-red-900/20 transition-colors group"
-                            onClick={() => onNavigate('tool')}
-                        >
-                            <div className="text-red-500 drop-shadow-[0_0_8px_rgba(220,38,38,0.8)] transition-transform group-hover:scale-110">
-                                 <i className="ph-fill ph-drop-half-bottom text-2xl"></i>
-                            </div>
-                        </div>
+                    {/* LEFT: Logo/Profile (Mini) */}
+                    <div 
+                        className="w-12 h-12 rounded-2xl bg-black/50 border border-white/10 flex items-center justify-center cursor-pointer hover:border-red-500 transition-colors mr-2 relative group overflow-hidden"
+                        onClick={() => onNavigate('profile')}
+                    >
+                         <UserAvatar 
+                            url={user.photo_url} 
+                            alt={user.display_name} 
+                            frameId={user.equipped_frame_id} 
+                            level={user.level} 
+                            size="sm"
+                            className="scale-90"
+                        />
                     </div>
 
-                    {/* CENTER: Navigation Pills */}
-                    <div className="flex items-center gap-1 md:gap-2">
-                        {navItems.map((item) => {
-                            const isActive = activeTab === item.id;
-                            return (
-                                <button
-                                    key={item.id}
-                                    onClick={() => onNavigate(item.id)}
-                                    className={`liquid-dock-item group ${isActive ? 'active' : ''}`}
-                                    title={item.label}
-                                >
-                                    <i className={`ph-fill ${item.icon} text-xl md:text-2xl transition-all duration-300 ${isActive ? 'text-white scale-110 drop-shadow-md' : 'text-gray-400 group-hover:text-white'}`}></i>
-                                </button>
-                            );
-                        })}
+                    {/* CENTER: Navigation Pills (3D Buttons) */}
+                    <div className="flex items-center gap-3">
+                        {navItems.map((item) => (
+                            <button
+                                key={item.id}
+                                onClick={item.action}
+                                className={`liquid-dock-item group ${item.active ? 'active' : ''}`}
+                            >
+                                <i className={`ph-fill ${item.icon} ${item.extraClass || ''}`}></i>
+                                <span className="liquid-dock-label">{item.label}</span>
+                                
+                                {/* Notification Dot for Check-in */}
+                                {item.id === 'check-in' && !hasCheckedInToday && (
+                                    <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full animate-ping"></span>
+                                )}
+                            </button>
+                        ))}
                     </div>
 
-                    {/* RIGHT: User Status & Resources */}
-                    <div className="flex items-center gap-3 ml-2">
-                        
-                         {/* Check In Button (Restored functionality) */}
+                    {/* RIGHT: Logout (Small) */}
+                    <div className="ml-2 pl-2 border-l border-white/10">
                          <button 
-                            onClick={onCheckInClick}
-                            className={`w-8 h-8 md:w-10 md:h-10 flex items-center justify-center rounded-full transition-colors ${!hasCheckedInToday ? 'bg-green-500/20 text-green-400 animate-pulse border border-green-500/50' : 'text-gray-500 hover:text-white'}`}
-                            title={t('creator.header.nav.checkIn')}
-                         >
-                            <i className="ph-fill ph-calendar-check text-lg"></i>
-                         </button>
-
-                         {/* Resources */}
-                         <div className="hidden sm:flex flex-col items-end gap-0.5 mr-2">
-                             <div className="text-[10px] font-bold text-red-400 tracking-wider">BALANCE</div>
-                             <div 
-                                onClick={onTopUpClick}
-                                className="flex items-center gap-1 cursor-pointer hover:scale-105 transition"
-                             >
-                                 <span className="font-black text-white text-sm">{user.diamonds.toLocaleString()}</span>
-                                 <i className="ph-fill ph-diamonds-four text-red-500"></i>
-                             </div>
-                         </div>
-
-                        {/* Profile Pill */}
-                        <div 
-                            className="liquid-dock-profile flex items-center gap-2 cursor-pointer group pr-3" 
-                            onClick={() => onNavigate('profile')}
+                            onClick={logout} 
+                            className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-red-500/20 text-gray-500 hover:text-red-500 transition-colors"
+                            title="Đăng xuất"
                         >
-                            <UserAvatar 
-                                url={user.photo_url} 
-                                alt={user.display_name} 
-                                frameId={user.equipped_frame_id} 
-                                level={user.level} 
-                                size="sm"
-                                className="border border-white/20"
-                            />
-                            <div className="flex flex-col md:hidden">
-                                 <span className="text-[10px] font-bold text-red-400">{user.diamonds}💎</span>
-                            </div>
-                            <div className="hidden md:flex flex-col">
-                                <span className="text-xs font-bold text-white leading-none">{user.display_name}</span>
-                                <span className="text-[9px] text-gray-400">LV.{user.level}</span>
-                            </div>
-                        </div>
-
-                         {/* Logout */}
-                         <button onClick={logout} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 text-gray-400">
                              <i className="ph-fill ph-sign-out text-lg"></i>
                          </button>
                     </div>

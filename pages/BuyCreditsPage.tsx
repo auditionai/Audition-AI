@@ -178,9 +178,10 @@ const PricingCard: React.FC<{ pkg: CreditPackage; onBuy: () => void; isProcessin
 // Update Props to accept optional embedded flag
 interface BuyCreditsPageProps {
     isEmbedded?: boolean;
+    isInModal?: boolean; // NEW: Flag to control layout inside modal
 }
 
-const BuyCreditsPage: React.FC<BuyCreditsPageProps> = ({ isEmbedded = false }) => {
+const BuyCreditsPage: React.FC<BuyCreditsPageProps> = ({ isEmbedded = false, isInModal = false }) => {
     const { session, navigate, showToast } = useAuth();
     const { t } = useTranslation();
     const { theme } = useTheme();
@@ -260,8 +261,8 @@ const BuyCreditsPage: React.FC<BuyCreditsPageProps> = ({ isEmbedded = false }) =
 
     // MAIN CONTENT RENDERER
     const Content = () => (
-        <div className={`container mx-auto px-4 relative z-10 ${isEmbedded ? 'pb-32' : 'pb-12'}`}>
-            {!isEmbedded && (
+        <div className={`container mx-auto px-4 relative z-10 ${isInModal ? 'pb-4' : (isEmbedded ? 'pb-32' : 'pb-12')}`}>
+            {!isEmbedded && !isInModal && (
                 <div className="themed-main-title-container text-center max-w-4xl mx-auto mb-4 animate-fade-in-down">
                         <h1 
                         className="themed-main-title text-3xl md:text-4xl font-black mb-2 leading-tight"
@@ -275,7 +276,7 @@ const BuyCreditsPage: React.FC<BuyCreditsPageProps> = ({ isEmbedded = false }) =
                 </div>
             )}
             
-            {isEmbedded && (
+            {isEmbedded && !isInModal && (
                 <h3 className="text-xl font-bold text-center text-white mb-4 mt-2">Nạp Kim Cương</h3>
             )}
 
@@ -310,7 +311,7 @@ const BuyCreditsPage: React.FC<BuyCreditsPageProps> = ({ isEmbedded = false }) =
                             pkg={pkg} 
                             onBuy={() => handleBuyClick(pkg)}
                             isProcessing={isProcessingPayment === pkg.id}
-                            compact={isEmbedded}
+                            compact={isEmbedded || isInModal}
                         />
                     ))}
                 </div>
@@ -318,8 +319,8 @@ const BuyCreditsPage: React.FC<BuyCreditsPageProps> = ({ isEmbedded = false }) =
         </div>
     );
 
-    // If embedded, just return content without layout shell
-    if (isEmbedded) {
+    // If embedded or in modal, just return content without layout shell
+    if (isEmbedded || isInModal) {
         return <Content />;
     }
 

@@ -10,13 +10,15 @@ interface LiquidShellProps {
     activeTab: CreatorTab | 'shop' | 'profile' | 'leaderboard' | 'buy-credits';
     onNavigate: (tab: any) => void;
     onCheckInClick: () => void;
+    onTopUpClick: () => void;
 }
 
 const LiquidShell: React.FC<LiquidShellProps> = ({ 
     children, 
     activeTab, 
     onNavigate,
-    onCheckInClick
+    onCheckInClick,
+    onTopUpClick
 }) => {
     const { user, hasCheckedInToday } = useAuth();
     const { t } = useTranslation();
@@ -85,9 +87,9 @@ const LiquidShell: React.FC<LiquidShellProps> = ({
 
                     <div className="w-px h-8 bg-white/10 mx-2"></div>
 
-                    {/* 4. TOP UP (Triggers embedded view) */}
+                    {/* 4. TOP UP (Triggers Modal) */}
                     <button
-                        onClick={() => onNavigate('buy-credits')} 
+                        onClick={onTopUpClick} 
                         className={`liquid-dock-item group !min-w-[80px] ${activeTab === 'buy-credits' ? 'active' : ''}`}
                         title="Nạp Kim Cương"
                     >

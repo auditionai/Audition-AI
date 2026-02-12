@@ -14,6 +14,7 @@ import InfoModal from '../components/creator/InfoModal';
 import CheckInModal from '../components/CheckInModal';
 import AnnouncementModal from '../components/AnnouncementModal';
 import ThemeEffects from '../components/themes/ThemeEffects';
+import Modal from '../components/common/Modal'; // Import Modal
 
 // Import New Liquid Shell & Pages
 import LiquidShell from '../components/creator/LiquidShell';
@@ -37,6 +38,7 @@ const CreatorPage: React.FC<CreatorPageProps> = ({ activeTab }) => {
 
     const [infoModalKey, setInfoModalKey] = useState<'terms' | 'policy' | 'contact' | null>(null);
     const [isCheckInModalOpen, setCheckInModalOpen] = useState(false);
+    const [isBuyCreditsModalOpen, setIsBuyCreditsModalOpen] = useState(false); // NEW: Modal state
 
     if (!user) {
         navigate('home');
@@ -46,6 +48,10 @@ const CreatorPage: React.FC<CreatorPageProps> = ({ activeTab }) => {
     const handleCheckIn = async () => {
         setCheckInModalOpen(true);
     };
+    
+    const handleTopUp = () => {
+        setIsBuyCreditsModalOpen(true);
+    }
 
     const renderActiveTab = () => {
         switch (activeTab) {
@@ -57,7 +63,7 @@ const CreatorPage: React.FC<CreatorPageProps> = ({ activeTab }) => {
             case 'profile': return <UserProfilePage />;
             case 'messages': return <MessagesPage />;
             case 'admin-gallery': return <AdminGalleryPage />;
-            case 'buy-credits': return <BuyCreditsPage isEmbedded={true} />; // Render embedded version
+            case 'buy-credits': return <BuyCreditsPage isEmbedded={true} />; // Keep this for direct URL access
             default: return <AITool />;
         }
     };
@@ -72,6 +78,7 @@ const CreatorPage: React.FC<CreatorPageProps> = ({ activeTab }) => {
                     activeTab={activeTab as any} 
                     onNavigate={navigate}
                     onCheckInClick={handleCheckIn}
+                    onTopUpClick={handleTopUp}
                 >
                     {renderActiveTab()}
                 </LiquidShell>
@@ -91,6 +98,13 @@ const CreatorPage: React.FC<CreatorPageProps> = ({ activeTab }) => {
                     onClose={markAnnouncementAsRead}
                     announcement={announcement}
                 />
+                <Modal 
+                    isOpen={isBuyCreditsModalOpen} 
+                    onClose={() => setIsBuyCreditsModalOpen(false)} 
+                    title="Nạp Kim Cương"
+                >
+                    <BuyCreditsPage isEmbedded={true} isInModal={true} />
+                </Modal>
             </div>
         );
     }
@@ -100,7 +114,7 @@ const CreatorPage: React.FC<CreatorPageProps> = ({ activeTab }) => {
         <div data-theme={theme} className="flex flex-col min-h-screen bg-skin-fill text-skin-base pb-16 md:pb-0">
              <ThemeEffects />
              <CreatorHeader
-                onTopUpClick={() => navigate('buy-credits')} 
+                onTopUpClick={handleTopUp} 
                 activeTab={activeTab}
                 onNavigate={navigate}
                 onCheckInClick={handleCheckIn}
@@ -132,6 +146,13 @@ const CreatorPage: React.FC<CreatorPageProps> = ({ activeTab }) => {
                 onClose={markAnnouncementAsRead}
                 announcement={announcement}
             />
+             <Modal 
+                isOpen={isBuyCreditsModalOpen} 
+                onClose={() => setIsBuyCreditsModalOpen(false)} 
+                title="Nạp Kim Cương"
+            >
+                <BuyCreditsPage isEmbedded={true} isInModal={true} />
+            </Modal>
         </div>
     );
 };

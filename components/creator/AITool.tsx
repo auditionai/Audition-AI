@@ -5,14 +5,14 @@ import GroupGeneratorTool from './ai-tool/GroupGeneratorTool';
 import BgRemoverTool from './ai-tool/BgRemoverTool';
 import ImageEnhancerTool from './ai-tool/ImageEnhancerTool';
 import InstructionModal from '../common/InstructionModal';
-import SignatureTool from './tools/SignatureTool';
+// import SignatureTool from './tools/SignatureTool'; // REMOVED
 // import ComicStudio from './comic/ComicStudio'; // REMOVED: Moved to GroupGeneratorTool
 import { useAuth } from '../../contexts/AuthContext';
 import UtilInstructionModal from '../ai-tool/InstructionModal'; 
 import { useTranslation } from '../../hooks/useTranslation';
 
 type AIToolTab = 'studio' | 'utilities'; 
-type UtilityTab = 'bg-remover' | 'signature' | 'enhancer';
+type UtilityTab = 'bg-remover' | 'enhancer'; // Removed 'signature'
 
 // Helper Component for Mode Selection Card (Matches Studio Style)
 const ModeCard: React.FC<{
@@ -97,7 +97,7 @@ const AITool: React.FC = () => {
         switch (activeUtility) {
             case 'bg-remover': return t('creator.aiTool.utils.bgRemover');
             case 'enhancer': return t('creator.aiTool.utils.enhancer');
-            case 'signature': return t('creator.aiTool.utils.signature');
+            // case 'signature': return t('creator.aiTool.utils.signature'); // REMOVED
             default: return 'Tiện ích';
         }
     };
@@ -187,7 +187,7 @@ const AITool: React.FC = () => {
                                     <h2 className="themed-heading text-2xl font-bold themed-title-glow mb-4 text-center">Công Cụ Tiện Ích</h2>
                                     <p className="text-skin-muted mb-10 text-center text-sm max-w-lg">Chọn công cụ AI để xử lý hình ảnh của bạn.</p>
                                     
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl w-full px-4">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl w-full px-4 justify-center">
                                         <ModeCard 
                                             icon="ph-scissors"
                                             title={t('creator.aiTool.utils.bgRemover')}
@@ -202,13 +202,7 @@ const AITool: React.FC = () => {
                                             colorClass="text-yellow-400"
                                             onClick={() => { setActiveUtility('enhancer'); setIsUtilitySelection(false); }}
                                         />
-                                        <ModeCard 
-                                            icon="ph-pencil-simple-line"
-                                            title={t('creator.aiTool.utils.signature')}
-                                            description="Chèn chữ ký, tên đẹp với hiệu ứng Neon, 3D."
-                                            colorClass="text-pink-400"
-                                            onClick={() => { setActiveUtility('signature'); setIsUtilitySelection(false); }}
-                                        />
+                                        {/* Signature Tool Removed */}
                                     </div>
                                 </div>
                             ) : (
@@ -227,11 +221,10 @@ const AITool: React.FC = () => {
                                             <h3 className="text-xl font-bold text-white">{getUtilityTitle()}</h3>
                                         </div>
                                         
-                                        {/* Quick Switcher (Optional, kept for convenience) */}
+                                        {/* Quick Switcher */}
                                         <div className="hidden md:flex gap-2">
                                              <button onClick={() => setActiveUtility('bg-remover')} className={`px-3 py-1 text-xs rounded-full ${activeUtility === 'bg-remover' ? 'bg-blue-500/20 text-blue-300 border border-blue-500/50' : 'text-gray-500 hover:text-gray-300'}`}>Tách Nền</button>
                                              <button onClick={() => setActiveUtility('enhancer')} className={`px-3 py-1 text-xs rounded-full ${activeUtility === 'enhancer' ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/50' : 'text-gray-500 hover:text-gray-300'}`}>Làm Nét</button>
-                                             <button onClick={() => setActiveUtility('signature')} className={`px-3 py-1 text-xs rounded-full ${activeUtility === 'signature' ? 'bg-pink-500/20 text-pink-300 border border-pink-500/50' : 'text-gray-500 hover:text-gray-300'}`}>Chữ Ký</button>
                                         </div>
                                     </div>
                                     
@@ -247,13 +240,6 @@ const AITool: React.FC = () => {
                                         <ImageEnhancerTool 
                                             onSendToBgRemover={handleSendToBgRemover}
                                         />
-                                    )}
-                                    {activeUtility === 'signature' && (
-                                        <SignatureTool 
-                                            initialImage={imageForUtility}
-                                            onClearInitialImage={() => setImageForUtility(null)}
-                                            onInstructionClick={() => openUtilHelp('signature')}
-                                            />
                                     )}
                                 </div>
                             )}

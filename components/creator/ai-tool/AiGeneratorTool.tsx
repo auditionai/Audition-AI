@@ -17,7 +17,6 @@ import { resizeImage, base64ToFile } from '../../../utils/imageUtils';
 import { useTranslation } from '../../../hooks/useTranslation';
 import PromptLibraryModal from './PromptLibraryModal';
 import ProcessedImagePickerModal from './ProcessedImagePickerModal';
-import VideoModal from '../../common/VideoModal';
 
 interface AiGeneratorToolProps {
     initialCharacterImage?: { url: string; file: File } | null;
@@ -68,10 +67,6 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
     const [isPickerOpen, setIsPickerOpen] = useState(false);
     const [pickerTarget, setPickerTarget] = useState<'pose' | 'face' | null>(null);
 
-    // Video Tutorial State
-    const [tutorialUrl, setTutorialUrl] = useState('');
-    const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
-
     // Feature States
     const [poseImage, setPoseImage] = useState<{ url: string; file: File } | null>(null);
     const [rawFaceImage, setRawFaceImage] = useState<{ url: string; file: File } | null>(null);
@@ -112,22 +107,6 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
             setProcessedFaceImage(null);
         }
     }, [initialCharacterImage, initialFaceImage]);
-
-    // Fetch Video Tutorial URL
-    useEffect(() => {
-        const fetchSettings = async () => {
-            try {
-                const res = await fetch('/.netlify/functions/admin-system-settings');
-                if (res.ok) {
-                    const settings = await res.json();
-                    if (settings.tutorial_video_single) {
-                        setTutorialUrl(settings.tutorial_video_single);
-                    }
-                }
-            } catch (e) { console.error(e); }
-        };
-        fetchSettings();
-    }, []);
     
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -426,12 +405,6 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                         <button onClick={resetGenerator} className="themed-button-secondary px-6 py-3 font-semibold">
                             <i className="ph-fill ph-arrow-counter-clockwise mr-2"></i>{t('creator.aiTool.common.createAnother')}
                         </button>
-                        <button 
-                            onClick={() => onSendToSignatureTool(generatedImage)} 
-                            className="themed-button-secondary px-6 py-3 font-semibold border-cyan-500/50 bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20"
-                        >
-                            <i className="ph-fill ph-pencil-simple-line mr-2"></i>{t('creator.aiTool.singlePhoto.sendToSignature')}
-                        </button>
                         <button onClick={() => setIsResultModalOpen(true)} className="themed-button-primary px-6 py-3 font-bold">
                             <i className="ph-fill ph-download-simple mr-2"></i>{t('creator.aiTool.common.downloadAndCopy')}
                         </button>
@@ -455,7 +428,6 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
             <ModelSelectionModal isOpen={isModelModalOpen} onClose={() => setModelModalOpen(false)} selectedModelId={selectedModel.id} onSelectModel={(id: string) => setSelectedModel(DETAILED_AI_MODELS.find((m: AIModel) => m.id === id) || selectedModel)} characterImage={!!poseImage} />
             <InstructionModal isOpen={isInstructionModalOpen} onClose={() => setInstructionModalOpen(false)} instructionKey={instructionKey} />
             <PromptLibraryModal isOpen={isPromptLibraryOpen} onClose={() => setIsPromptLibraryOpen(false)} onSelectPrompt={(p) => setPrompt(p)} category="single-photo" />
-            <VideoModal isOpen={isVideoModalOpen} onClose={() => setIsVideoModalOpen(false)} videoUrl={tutorialUrl} />
 
             {/* Upgrade Banner */}
             <div className="bg-gradient-to-r from-amber-500/10 via-yellow-500/10 to-amber-500/10 border border-yellow-400/40 rounded-xl p-5 mb-8 flex flex-col md:flex-row items-center justify-between gap-4 shadow-[0_0_15px_rgba(245,158,11,0.15)] relative overflow-hidden group">
@@ -482,35 +454,13 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
 
             <div className="flex flex-col lg:flex-row gap-6">
                 <div className="w-full lg:w-2/3 flex flex-col gap-6">
-                     {/* Tip Box */}
                      <div className="p-4 bg-blue-500/10 border border-blue-500/30 text-blue-300 rounded-lg text-sm flex items-start gap-3">
                         <i className="ph-fill ph-info text-2xl flex-shrink-0"></i>
                         <div>
-                             {/* Removed the redundant "Mẹo:" text since translation includes it */}
-                            <span className="font-bold">{t('creator.aiTool.singlePhoto.bgRemoverTip')}</span>
+                            <span className="font-bold">{t('langName') === 'English' ? 'Tip:' : 'Mẹo:'}</span> {t('creator.aiTool.singlePhoto.bgRemoverTip')}
                             <button onClick={onSwitchToUtility} className="font-bold underline ml-2 hover:text-white">{t('creator.aiTool.singlePhoto.switchToBgRemover')}</button>
                         </div>
                     </div>
-
-                    {/* Video Tutorial Box */}
-                    {tutorialUrl && (
-                         <div className="p-4 bg-purple-500/10 border border-purple-500/30 text-purple-300 rounded-lg text-sm flex items-center justify-between gap-3">
-                            <div className="flex items-center gap-3">
-                                <i className="ph-fill ph-video text-2xl flex-shrink-0"></i>
-                                <div>
-                                    <span className="font-bold block">Hướng dẫn sử dụng</span>
-                                    <span className="text-xs opacity-80">Xem video hướng dẫn chi tiết cách tạo ảnh đơn.</span>
-                                </div>
-                            </div>
-                            <button 
-                                onClick={() => setIsVideoModalOpen(true)} 
-                                className="px-4 py-2 bg-purple-500 hover:bg-purple-400 text-white text-xs font-bold rounded-full flex items-center gap-2 transition-colors"
-                            >
-                                <i className="ph-fill ph-play-circle text-lg"></i> Xem Video
-                            </button>
-                        </div>
-                    )}
-
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <SettingsBlock title={t('creator.aiTool.singlePhoto.characterTitle')} instructionKey="character" onInstructionClick={() => openInstructionModal('character')}>
                             <ImageUploader onUpload={(e) => handleImageUpload(e, 'pose')} image={poseImage} onRemove={() => handleRemoveImage('pose')} text={t('creator.aiTool.singlePhoto.characterUploadText')} disabled={isImageInputDisabled} onPickFromProcessed={() => handleOpenPicker('pose')} />
@@ -605,7 +555,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                             </div>
                             
                             {/* Resolution & Google Search - Only for Pro */}
-                            {selectedModel.apiModel === 'gemini-3-pro-image-preview' && (
+                            {isProModel && (
                                 <div className="p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg space-y-3">
                                      <div>
                                         <label className="text-xs font-bold text-yellow-400 mb-2 block flex justify-between">

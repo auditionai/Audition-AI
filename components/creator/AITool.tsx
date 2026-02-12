@@ -53,28 +53,6 @@ const AITool: React.FC = () => {
         showToast(`Đã chuyển sang công cụ ${targetTool === 'bg-remover' ? 'Tách Nền' : 'Làm Nét'}`, 'success');
     };
 
-    const handleSendToSignatureTool = async (imageUrl: string) => {
-        try {
-            const response = await fetch(`/.netlify/functions/download-image?url=${encodeURIComponent(imageUrl)}`);
-            if (!response.ok) throw new Error('Không thể tải ảnh đã tạo.');
-            
-            const blob = await response.blob();
-            const reader = new FileReader();
-            
-            reader.onloadend = () => {
-                const base64data = reader.result as string;
-                setImageForUtility(base64data);
-                setActiveTab('utilities');
-                setActiveUtility('signature');
-                showToast('Đã chuyển ảnh sang công cụ Chèn Chữ Ký!', 'success');
-            };
-            
-            reader.readAsDataURL(blob);
-        } catch (error: any) {
-            showToast(error.message, 'error');
-        }
-    };
-
     const handleSendToBgRemover = (image: { url: string; file: File }) => {
         setImageForBgRemover(image);
         setActiveTab('utilities');

@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { useTheme, Theme } from '../../contexts/ThemeContext';
 
@@ -7,6 +8,7 @@ interface LogoProps {
 
 // Configuration object to define unique logo styles for each theme
 const logoConfig: Record<Theme, { icon: string; fontClass: string; accentColorVar: string; }> = {
+  'liquid-glass': { icon: 'ph-drop-half-bottom', fontClass: 'font-barlow font-bold', accentColorVar: '--color-accent' },
   'cyber-punk': { icon: 'ph-crown-simple', fontClass: 'font-orbitron', accentColorVar: '--color-accent' },
   'solar-flare': { icon: 'ph-sun', fontClass: 'font-poppins font-black', accentColorVar: '--color-accent' },
   'dreamy-galaxy': { icon: 'ph-planet', fontClass: 'font-playfair-display italic font-bold tracking-normal', accentColorVar: '--color-accent' },
@@ -16,8 +18,8 @@ const logoConfig: Record<Theme, { icon: string; fontClass: string; accentColorVa
 
 const Logo: React.FC<LogoProps> = ({ onClick }) => {
   const { theme } = useTheme();
-  // Fallback to cyber-punk if theme is somehow invalid
-  const currentConfig = logoConfig[theme] || logoConfig['cyber-punk']; 
+  // Fallback to liquid-glass if theme is somehow invalid
+  const currentConfig = logoConfig[theme] || logoConfig['liquid-glass']; 
   const accentColor = `rgb(var(${currentConfig.accentColorVar}))`;
 
   return (

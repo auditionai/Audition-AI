@@ -12,6 +12,16 @@ export const vi = {
     downloading: 'Đang tải...',
     loading: 'Đang tải...',
   },
+  // ... (Previous translations unchanged)
+  themes: {
+    'liquid-glass': 'Liquid Glass (iOS 26)',
+    'cyber-punk': 'Vũ Điệu Neon',
+    'solar-flare': 'Kẹo Bông Gòn',
+    'classic-dark': 'Giáng Sinh',
+    'dreamy-galaxy': 'Dải Ngân Hà',
+    'neon-vibe': 'Cung Điện Pha Lê',
+  },
+  // ... (Rest of translations unchanged)
   landing: {
     header: {
       features: 'Tính năng',
@@ -285,7 +295,6 @@ export const vi = {
       title: 'Audition AI Studio',
       description: 'Nền tảng sáng tạo ảnh 3D AI theo phong cách Audition độc đáo.',
       quickGuide: 'Xem hướng dẫn nhanh',
-      watchVideo: 'Xem video hướng dẫn',
       upgradeBanner: {
         title: 'Nâng Cấp: Nano Banana Pro (Gemini 3) đã ra mắt!',
         desc: 'Mô hình mặc định hiện tại là Nano Banana (Tiêu chuẩn). Để sử dụng mô hình AI mới Nano Banana Pro (Gemini 3) cho ảnh 4K siêu nét (10-20 Kim cương), vui lòng ấn nút "Đổi ngay".',
@@ -300,7 +309,6 @@ export const vi = {
         bgRemover: 'Tách Nền',
         signature: 'Chèn Chữ Ký',
         enhancer: 'Làm Nét Ảnh',
-        editor: 'Cắt & Ghép',
       },
       common: {
         help: 'Hướng dẫn',
@@ -326,7 +334,7 @@ export const vi = {
         processing: 'Đang xử lý...',
       },
       singlePhoto: {
-        bgRemoverTip: 'Để có chất lượng tốt nhất, vui lòng sử dụng ảnh nhân vật đã được tách nền.',
+        bgRemoverTip: 'Mẹo: Để có chất lượng tốt nhất, vui lòng sử dụng ảnh nhân vật đã được tách nền.',
         switchToBgRemover: 'Đến công cụ tách nền',
         characterTitle: 'Ảnh Nhân Vật',
         characterUploadText: 'Dáng & Trang Phục',
@@ -459,41 +467,6 @@ export const vi = {
           monochrome: 'ĐƠN SẮC',
         }
       },
-      editor: {
-        title: 'Cắt & Ghép Ảnh',
-        uploadTitle: '1. Tải Ảnh',
-        mode: 'Chế độ:',
-        crop: 'Cắt Ảnh',
-        merge: 'Ghép Ảnh',
-        uploadButton: 'Chọn Ảnh',
-        uploadDesc: 'Hỗ trợ JPG, PNG',
-        resultTitle: '2. Kết quả',
-        resultDesc: 'Lưu trữ tạm thời',
-        placeholder: 'Kết quả hiển thị tại đây',
-        cropActions: {
-            apply: 'Cắt Ngay',
-            reset: 'Đặt lại',
-            aspectFree: 'Tự do',
-        },
-        mergeActions: {
-            horizontal: 'Ghép Ngang',
-            vertical: 'Ghép Dọc',
-            grid: 'Ghép Lưới',
-            clear: 'Xóa tất cả',
-        },
-        emptyMerge: 'Chưa có ảnh nào được chọn.',
-        tips: {
-            crop: 'Kéo khung để chọn vùng cắt.',
-            merge: 'Thêm nhiều ảnh để ghép lại với nhau.',
-        },
-        viewResult: 'Xem ảnh',
-        actions: {
-            toBg: 'Tách nền',
-            toEnhance: 'Làm nét',
-            download: 'Tải về',
-            delete: 'Xóa'
-        }
-      }
     },
     xpBar: {
       progress: 'Tiến độ cấp',
@@ -586,8 +559,7 @@ export const vi = {
           broadcast: 'Phát Sóng',
           name_effects: 'Hiệu ứng Tên',
           chat: 'Chat',
-          db_tools: 'Công cụ DB',
-          system: 'Cài đặt chung'
+          db_tools: 'Công cụ DB'
         },
         dashboard: {
           title: 'Bảng Điều Khiển Dữ Liệu',
@@ -790,14 +762,6 @@ export const vi = {
           confirmGlobal: 'Gửi thông báo ra kênh Chat Chung?',
           errorMsg: 'Vui lòng nhập nội dung tin nhắn.',
         },
-        system: {
-            title: 'Cài Đặt Hệ Thống',
-            videoUrl: 'Link Video Hướng Dẫn (Youtube/Drive)',
-            placeholderVideo: 'https://www.youtube.com/watch?v=VIDEO_ID',
-            save: 'Lưu Cài Đặt',
-            success: 'Đã lưu cài đặt thành công!',
-            error: 'Lỗi lưu cài đặt.',
-        }
       },
     },
   },
@@ -890,13 +854,6 @@ export const vi = {
       vuaTroChoi: 'Vua Trò Chơi',
       rgbGod: 'RGB God',
     }
-  },
-  themes: {
-    'cyber-punk': 'Vũ Điệu Neon',
-    'solar-flare': 'Kẹo Bông Gòn',
-    'classic-dark': 'Giáng Sinh',
-    'dreamy-galaxy': 'Dải Ngân Hà',
-    'neon-vibe': 'Cung Điện Pha Lê',
   },
   modals: {
     announcement: {
@@ -1026,8 +983,7 @@ export const vi = {
         empty_desc: 'Hãy sử dụng công cụ Tách Nền hoặc Siêu Khóa Mặt trước.',
         tabs: {
             bgRemoved: 'Ảnh Tách Nền',
-            enhanced: 'Ảnh Làm Nét',
-            edited: 'Ảnh Đã Chỉnh Sửa'
+            enhanced: 'Ảnh Làm Nét'
         },
         actions: {
             use: 'Sử dụng ảnh',

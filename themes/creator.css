@@ -15,20 +15,9 @@
     --color-accent-glow: 255 50 50;
     
     /* Enhanced 3D Variables */
-    --depth-shadow: 
-        0 20px 50px rgba(0, 0, 0, 0.9), 
-        0 0 0 1px rgba(255, 255, 255, 0.08),
-        inset 0 1px 1px rgba(255, 255, 255, 0.15); /* Stronger physical presence */
-        
-    --depth-shadow-hover: 
-        0 30px 60px rgba(0, 0, 0, 1), 
-        0 0 0 1px rgba(220, 38, 38, 0.5), /* Red highlight on hover */
-        inset 0 1px 1px rgba(255, 255, 255, 0.2);
-        
-    --glass-bg: rgba(15, 15, 18, 0.85);
-    --glass-backdrop: blur(50px) saturate(180%);
-    --radius-lg: 40px;
-    --radius-md: 24px;
+    --glass-border: 1px solid rgba(255, 255, 255, 0.15);
+    --glass-shine: linear-gradient(145deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.05) 40%, rgba(255,255,255,0) 100%);
+    --radius-lg: 32px;
 }
 
 [data-theme='liquid-glass'] {
@@ -39,203 +28,160 @@
         radial-gradient(circle at 90% 80%, rgba(220, 38, 38, 0.03), transparent 25%);
 }
 
-/* --- 3D SCROLLBAR --- */
-.custom-scrollbar::-webkit-scrollbar {
-    width: 6px;
-}
-.custom-scrollbar::-webkit-scrollbar-track {
-    background: #0a0a0a;
-    border-radius: 10px;
-    margin: 4px;
-}
-.custom-scrollbar::-webkit-scrollbar-thumb {
-    background: linear-gradient(180deg, #333, #555);
-    border-radius: 10px;
-    border: 2px solid #0a0a0a;
-    box-shadow: inset 1px 1px 2px rgba(255,255,255,0.2);
+/* --- 3D LOGO STYLES --- */
+.logo-3d-text {
+    font-family: 'Montserrat', sans-serif;
+    font-weight: 900;
+    text-transform: uppercase;
+    color: #fff;
+    letter-spacing: 2px;
+    position: relative;
+    /* Deep 3D Shadow Layering */
+    text-shadow: 
+        1px 1px 0px #b91c1c,
+        2px 2px 0px #991b1b,
+        3px 3px 0px #7f1d1d,
+        4px 4px 0px #450a0a,
+        5px 5px 10px rgba(0,0,0,0.8),
+        0 0 20px rgba(220, 38, 38, 0.6); /* Glow */
+    transform: perspective(500px) rotateX(10deg);
+    transform-style: preserve-3d;
+    transition: transform 0.3s ease;
 }
 
-/* --- 3D CONTAINER (Liquid Content) --- */
-/* Increased depth and "thickness" */
+.logo-3d-container:hover .logo-3d-text {
+    transform: perspective(500px) rotateX(0deg) scale(1.05);
+    text-shadow: 
+        1px 1px 0px #dc2626,
+        2px 2px 0px #b91c1c,
+        3px 3px 0px #991b1b,
+        4px 4px 0px #7f1d1d,
+        6px 6px 15px rgba(0,0,0,0.9),
+        0 0 30px rgba(220, 38, 38, 0.8);
+}
+
+/* --- 3D CONTAINER (Liquid Content - Tráng Gương) --- */
 [data-theme='liquid-glass'] .liquid-content-container {
-    background: var(--glass-bg);
-    backdrop-filter: var(--glass-backdrop);
+    background: rgba(10, 10, 12, 0.6); /* Darker, more transparent base */
+    backdrop-filter: blur(20px) saturate(120%);
     border-radius: var(--radius-lg);
     
-    /* Multi-layered shadow for thickness illusion */
+    /* THE "THICK GLASS" BORDER EFFECT */
     box-shadow: 
-        0 0 0 1px rgba(0, 0, 0, 1), /* Inner black edge */
-        0 0 0 2px rgba(255, 255, 255, 0.08), /* Outer highlight edge */
-        0 40px 80px rgba(0, 0, 0, 0.8), /* Deep drop shadow */
-        inset 0 1px 0 rgba(255, 255, 255, 0.1), /* Top highlight */
-        inset 0 0 40px rgba(0,0,0,0.5); /* Inner depth */
+        /* 1. Inner white highlight (top-left) */
+        inset 1px 1px 0px rgba(255, 255, 255, 0.3),
+        /* 2. Inner dark shadow (bottom-right) for depth */
+        inset -1px -1px 0px rgba(0, 0, 0, 0.5),
+        /* 3. Outer dark rim */
+        0 0 0 1px rgba(0, 0, 0, 1),
+        /* 4. Outer glow/reflection rim */
+        0 0 0 3px rgba(255, 255, 255, 0.05),
+        /* 5. Deep Drop Shadow */
+        0 30px 60px rgba(0, 0, 0, 0.9);
         
-    border: none; /* Replaced by box-shadow for smoother layering */
-    padding: 32px;
     position: relative;
     z-index: 10;
+    overflow: hidden;
+}
+
+/* Glossy Sheen Overlay */
+[data-theme='liquid-glass'] .liquid-content-container::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; height: 40%;
+    background: linear-gradient(180deg, rgba(255,255,255,0.03) 0%, transparent 100%);
+    pointer-events: none;
+    z-index: 0;
 }
 
 /* --- 3D DOCK (Floating Menu) --- */
 [data-theme='liquid-glass'] .liquid-dock-container {
-    background: rgba(20, 20, 25, 0.95);
+    background: rgba(15, 15, 18, 0.85);
     backdrop-filter: blur(40px);
-    border-radius: 99px; /* Fully rounded pill */
-    padding: 10px 14px;
+    border-radius: 24px; /* Slightly less rounded than pill for a tech look */
+    padding: 12px 20px;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 12px;
     
-    /* Super Floating Effect */
+    /* Floating Block Effect */
     box-shadow: 
-        0 30px 60px rgba(0,0,0,0.8),
-        0 0 0 1px rgba(255,255,255,0.12),
+        0 20px 50px rgba(0,0,0,0.9),
+        0 0 0 1px rgba(255,255,255,0.1),
         inset 0 1px 1px rgba(255,255,255,0.2);
-    transform: translateZ(0); /* Hardware accel */
+    border: 1px solid rgba(0,0,0,0.5);
 }
 
 /* --- 3D DOCK ITEMS (Buttons) --- */
 [data-theme='liquid-glass'] .liquid-dock-item {
     position: relative;
-    height: 52px;
-    min-width: 52px; /* Ensure circular items stay circular */
-    border-radius: 20px; /* Squircle */
+    height: 56px; /* Taller */
+    min-width: 70px; /* Wider for better text */
+    padding: 0 12px;
+    border-radius: 16px;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    color: #888;
-    background: linear-gradient(180deg, #252525, #151515);
+    color: #999;
+    background: linear-gradient(180deg, #2a2a2a, #1a1a1a);
+    gap: 4px;
     
-    /* Physical Button Look */
+    /* Physical Button Depth */
     box-shadow: 
-        0 5px 10px rgba(0,0,0,0.5),
-        inset 0 1px 0 rgba(255,255,255,0.1),
+        0 4px 8px rgba(0,0,0,0.6),
+        inset 0 1px 0 rgba(255,255,255,0.15),
         inset 0 -1px 0 rgba(0,0,0,0.5);
         
-    border: 1px solid rgba(0,0,0,0.8);
-    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+    border: 1px solid rgba(0,0,0,0.6);
+    transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
     cursor: pointer;
     overflow: hidden;
 }
 
 [data-theme='liquid-glass'] .liquid-dock-item i {
-    font-size: 22px;
+    font-size: 20px;
     filter: drop-shadow(0 2px 2px rgba(0,0,0,0.8));
     transition: all 0.3s ease;
+    margin-top: 2px;
+}
+
+[data-theme='liquid-glass'] .liquid-dock-label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
 }
 
 [data-theme='liquid-glass'] .liquid-dock-item:hover {
-    transform: translateY(-6px) scale(1.05);
+    transform: translateY(-4px);
     color: #fff;
-    background: linear-gradient(180deg, #303030, #202020);
+    background: linear-gradient(180deg, #353535, #252525);
     box-shadow: 
-        0 15px 25px rgba(0,0,0,0.6),
-        inset 0 1px 0 rgba(255,255,255,0.2),
-        0 0 0 1px rgba(255,255,255,0.1);
-    z-index: 10;
+        0 10px 20px rgba(0,0,0,0.7),
+        inset 0 1px 0 rgba(255,255,255,0.25);
 }
 
-/* Active State - "Pressed" or "Lit" */
+/* Active State */
 [data-theme='liquid-glass'] .liquid-dock-item.active {
-    background: linear-gradient(180deg, #dc2626, #991b1b); /* Strong Red */
+    background: linear-gradient(180deg, #dc2626, #991b1b); /* Deep Red */
     color: #fff;
     box-shadow: 
-        0 10px 20px rgba(220, 38, 38, 0.4),
+        0 8px 16px rgba(220, 38, 38, 0.3),
         inset 0 2px 5px rgba(255,255,255,0.3),
         inset 0 -2px 5px rgba(0,0,0,0.3);
     border: 1px solid #7f1d1d;
-    transform: translateY(-8px) scale(1.1);
+    transform: translateY(-4px);
 }
 
-/* --- 3D CARD COMPONENT (Interactive) --- */
-.interactive-3d {
-    background: linear-gradient(160deg, #1e1e24, #121215);
-    border-radius: var(--radius-md);
-    
-    /* Deep 3D Shadow */
-    box-shadow: 
-        0 10px 30px rgba(0,0,0,0.5),
-        0 0 0 1px rgba(255,255,255,0.05),
-        inset 0 1px 0 rgba(255,255,255,0.1);
-        
-    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); /* Bouncy transition */
-    position: relative;
+/* --- SCROLLBAR --- */
+.custom-scrollbar::-webkit-scrollbar { width: 6px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: #0a0a0a; }
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #444;
+    border-radius: 10px;
 }
 
-.interactive-3d:hover {
-    transform: translateY(-8px) scale(1.02);
-    box-shadow: 
-        0 25px 50px rgba(0,0,0,0.6),
-        0 0 0 1px rgba(255,255,255,0.15),
-        inset 0 1px 0 rgba(255,255,255,0.2);
-    background: linear-gradient(160deg, #25252c, #16161a);
-    z-index: 5;
-}
-
-/* --- MARQUEE 3D CONTAINER --- */
-.marquee-3d-wrapper {
-    background: #000;
-    border-radius: 12px;
-    border: 1px solid #222;
-    box-shadow: 
-        inset 0 0 15px #000,
-        0 10px 20px rgba(0,0,0,0.5),
-        0 0 0 1px rgba(255,255,255,0.05); /* Outer rim */
-    overflow: hidden;
-    position: relative;
-    transform: perspective(500px) rotateX(2deg); /* Subtle tilt */
-}
-
-/* --- FORM ELEMENTS (Inputs) --- */
-[data-theme='liquid-glass'] input, 
-[data-theme='liquid-glass'] textarea, 
-[data-theme='liquid-glass'] select {
-    background: #080808 !important;
-    border: 1px solid #333 !important;
-    border-radius: 16px !important;
-    /* Deep inset shadow for input fields */
-    box-shadow: inset 3px 3px 6px #000, inset -1px -1px 2px #1a1a1a !important;
-    color: #eee !important;
-    transition: all 0.3s ease;
-}
-[data-theme='liquid-glass'] input:focus, 
-[data-theme='liquid-glass'] textarea:focus {
-    border-color: #ef4444 !important; /* Red border */
-    box-shadow: 
-        inset 3px 3px 6px #000, 
-        0 0 0 2px rgba(239, 68, 68, 0.2) !important;
-}
-
-/* --- BUTTONS (Primary) --- */
-[data-theme='liquid-glass'] .themed-button-primary {
-    background: linear-gradient(180deg, #ef4444, #b91c1c) !important;
-    border: 1px solid rgba(0,0,0,0.2) !important;
-    border-top: 1px solid rgba(255, 150, 150, 0.4) !important;
-    box-shadow: 
-        0 8px 20px rgba(220, 38, 38, 0.4), 
-        inset 0 1px 0 rgba(255,255,255,0.2),
-        0 4px 0 #7f1d1d !important; /* Physical button depth */
-    border-radius: 16px !important;
-    color: white !important;
-    text-shadow: 0 1px 2px rgba(0,0,0,0.5) !important;
-    transform: translateY(0);
-    transition: all 0.1s;
-}
-[data-theme='liquid-glass'] .themed-button-primary:active {
-    transform: translateY(4px); /* Press down */
-    box-shadow: 
-        0 2px 5px rgba(220, 38, 38, 0.4), 
-        inset 0 2px 5px rgba(0,0,0,0.3),
-        0 0 0 #7f1d1d !important; /* Remove depth on press */
-}
-
-/* --- SETTINGS BLOCKS --- */
-[data-theme='liquid-glass'] .themed-settings-block {
-    background: linear-gradient(160deg, #131313, #080808) !important;
-    border: 1px solid rgba(255,255,255,0.05) !important;
-    border-radius: 24px !important;
-    box-shadow: 
-        10px 10px 20px rgba(0,0,0,0.6),
-        -2px -2px 5px rgba(255,255,255,0.03) !important;
-}
+/* --- COMMON UTILS --- */
+.text-shadow-glow { text-shadow: 0 0 10px currentColor; }

@@ -12,6 +12,7 @@ import ThemeEffects from '../components/themes/ThemeEffects';
 import { useTranslation } from '../hooks/useTranslation';
 
 // --- Countdown Component ---
+// ... (PromoCountdown code remains same) ...
 const PromoCountdown: React.FC<{ endTime: string; title: string }> = ({ endTime, title }) => {
     const [timeLeft, setTimeLeft] = useState<{ d: number, h: number, m: number, s: number } | null>(null);
 
@@ -30,15 +31,10 @@ const PromoCountdown: React.FC<{ endTime: string; title: string }> = ({ endTime,
             return null;
         };
 
-        // Initial calc
         setTimeLeft(calculateTimeLeft());
-
         const timer = setInterval(() => {
             const tl = calculateTimeLeft();
-            if (!tl) {
-                clearInterval(timer);
-                // Optional: reload page or trigger parent update when promo ends
-            }
+            if (!tl) clearInterval(timer);
             setTimeLeft(tl);
         }, 1000);
 
@@ -49,68 +45,54 @@ const PromoCountdown: React.FC<{ endTime: string; title: string }> = ({ endTime,
 
     const TimeBox = ({ value, label }: { value: number, label: string }) => (
         <div className="flex flex-col items-center">
-            <div className="w-12 h-12 md:w-14 md:h-14 bg-black/40 border border-red-500/50 rounded-lg flex items-center justify-center backdrop-blur-sm shadow-[0_0_15px_rgba(220,38,38,0.3)]">
-                <span className="text-xl md:text-2xl font-black text-yellow-400 font-mono">
+            <div className="w-10 h-10 md:w-12 md:h-12 bg-black/40 border border-red-500/50 rounded-lg flex items-center justify-center backdrop-blur-sm shadow-inner">
+                <span className="text-lg font-black text-yellow-400 font-mono">
                     {value < 10 ? `0${value}` : value}
                 </span>
             </div>
-            <span className="text-[10px] md:text-xs text-red-300 mt-1 font-bold uppercase">{label}</span>
+            <span className="text-[9px] text-red-300 mt-1 font-bold uppercase">{label}</span>
         </div>
     );
 
     return (
-        <div className="max-w-2xl mx-auto mb-8 animate-fade-in-up">
-            <div className="bg-gradient-to-r from-red-900/80 via-orange-900/80 to-red-900/80 border-y-2 border-yellow-500/50 p-4 md:p-6 rounded-xl relative overflow-hidden shadow-2xl group">
-                {/* Background Shine */}
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-yellow-500/10 to-transparent -translate-x-full group-hover:animate-[shimmer_2s_infinite]"></div>
-                
-                <div className="relative z-10 flex flex-col items-center">
-                    <div className="flex items-center gap-2 mb-3">
-                        <i className="ph-fill ph-alarm text-yellow-400 text-xl animate-bounce"></i>
-                        <h3 className="text-sm md:text-base font-bold text-white uppercase tracking-wider text-center">
-                            {title} <span className="text-yellow-400">KẾT THÚC SAU</span>
-                        </h3>
-                        <i className="ph-fill ph-alarm text-yellow-400 text-xl animate-bounce"></i>
+        <div className="max-w-xl mx-auto mb-6 animate-fade-in-up">
+            <div className="bg-gradient-to-r from-red-900/80 via-orange-900/80 to-red-900/80 border border-yellow-500/30 p-3 rounded-xl relative overflow-hidden shadow-lg flex items-center justify-between px-6">
+                <div className="flex items-center gap-2">
+                    <i className="ph-fill ph-alarm text-yellow-400 text-xl animate-bounce"></i>
+                    <div>
+                        <h3 className="text-xs font-bold text-white uppercase tracking-wider">{title}</h3>
+                        <p className="text-[10px] text-yellow-200">Kết thúc sau:</p>
                     </div>
-                    
-                    <div className="flex items-center gap-2 md:gap-4">
-                        <TimeBox value={timeLeft.d} label="Ngày" />
-                        <span className="text-2xl font-bold text-white pb-4">:</span>
-                        <TimeBox value={timeLeft.h} label="Giờ" />
-                        <span className="text-2xl font-bold text-white pb-4">:</span>
-                        <TimeBox value={timeLeft.m} label="Phút" />
-                        <span className="text-2xl font-bold text-white pb-4">:</span>
-                        <TimeBox value={timeLeft.s} label="Giây" />
-                    </div>
+                </div>
+                <div className="flex items-center gap-2">
+                    <TimeBox value={timeLeft.d} label="Ngày" />
+                    <span className="text-xl font-bold text-white pb-3">:</span>
+                    <TimeBox value={timeLeft.h} label="Giờ" />
+                    <span className="text-xl font-bold text-white pb-3">:</span>
+                    <TimeBox value={timeLeft.m} label="Phút" />
                 </div>
             </div>
         </div>
     );
 };
 
-// --- Enhanced 3D Pricing Card Component ---
+// ... (PricingCard component remains exactly the same) ...
 const PricingCard: React.FC<{ pkg: CreditPackage; onBuy: () => void; isProcessing: boolean }> = ({ pkg, onBuy, isProcessing }) => {
     const { t, language } = useTranslation();
-    
-    // Calculate totals including promo
     const baseTotal = pkg.credits_amount + pkg.bonus_credits;
     const promoBonus = pkg.promo_bonus_credits || 0;
     const totalCredits = baseTotal + promoBonus;
     const hasPromo = promoBonus > 0;
     
-    // Determine visual tier based on price for gradient styling (Background Card)
     let tierClass = 'from-blue-500/20 to-purple-500/20 border-blue-500/30';
     let accentColor = 'text-blue-400';
     let glowColor = 'shadow-blue-500/20';
-    
-    // Button Style Logic - Explicitly defined for high contrast
     let buttonStyle = "bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-blue-500/40";
 
     if (pkg.price_vnd >= 50000) {
         tierClass = 'from-purple-500/20 to-pink-500/20 border-purple-500/30';
         accentColor = 'text-purple-400';
         glowColor = 'shadow-purple-500/20';
-        // Fix: Solid vibrant pink/purple for the 50k tier
         buttonStyle = "bg-gradient-to-r from-fuchsia-600 to-pink-600 text-white shadow-pink-500/40";
     }
     if (pkg.price_vnd >= 100000) {
@@ -126,13 +108,11 @@ const PricingCard: React.FC<{ pkg: CreditPackage; onBuy: () => void; isProcessin
         buttonStyle = "bg-gradient-to-r from-rose-600 to-red-600 text-white shadow-red-500/40";
     }
     
-    // Override styles if PROMO active to make it look super hot
     if (hasPromo) {
         tierClass = 'from-red-600/30 to-orange-500/30 border-red-500/50';
         glowColor = 'shadow-red-500/40';
     }
 
-    // Helper to translate tags safely
     const getTranslatedTag = (tag: string | null | undefined) => {
         if (!tag) return null;
         const key = `creator.buyCredits.tags.${tag}`;
@@ -141,88 +121,55 @@ const PricingCard: React.FC<{ pkg: CreditPackage; onBuy: () => void; isProcessin
     };
 
     return (
-        <div 
-            className={`group relative rounded-2xl p-1 transition-all duration-500 hover:-translate-y-2 interactive-3d h-full flex flex-col ${hasPromo ? 'scale-105 z-10' : ''}`}
-        >
-            {/* Promo Badge */}
+        <div className={`group relative rounded-2xl p-1 transition-all duration-500 hover:-translate-y-2 interactive-3d h-full flex flex-col ${hasPromo ? 'scale-105 z-10' : ''}`}>
             {hasPromo && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 bg-gradient-to-r from-red-600 to-yellow-500 text-white font-black text-xs px-4 py-1 rounded-full shadow-lg border border-yellow-300 animate-pulse whitespace-nowrap flex items-center gap-1">
-                    <i className="ph-fill ph-fire"></i> KHUYẾN MẠI +{pkg.promo_percent}%
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 bg-gradient-to-r from-red-600 to-yellow-500 text-white font-black text-[10px] px-3 py-0.5 rounded-full shadow-lg border border-yellow-300 animate-pulse whitespace-nowrap flex items-center gap-1">
+                    <i className="ph-fill ph-fire"></i> +{pkg.promo_percent}% BONUS
                 </div>
             )}
-
-            {/* Glow Effect */}
             <div className={`absolute inset-0 bg-gradient-to-br ${tierClass} rounded-2xl blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-500`}></div>
             
-            <div className={`relative h-full bg-skin-fill-secondary/80 backdrop-blur-xl border ${tierClass.split(' ')[2]} rounded-xl p-6 flex flex-col items-center text-center overflow-hidden shadow-lg ${glowColor}`}>
-                
-                {/* Shine Effect */}
-                <div className="absolute inset-0 bg-gradient-to-br from-white/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
-
-                {/* Best Seller / Tag */}
+            <div className={`relative h-full bg-skin-fill-secondary/80 backdrop-blur-xl border ${tierClass.split(' ')[2]} rounded-xl p-4 flex flex-col items-center text-center overflow-hidden shadow-lg ${glowColor}`}>
                 {pkg.tag && !hasPromo && (
                     <div className="absolute top-0 right-0">
-                        <div className="bg-gradient-to-bl from-pink-500 to-purple-600 text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl rounded-tr-xl shadow-md uppercase tracking-wider">
+                        <div className="bg-gradient-to-bl from-pink-500 to-purple-600 text-white text-[9px] font-bold px-2 py-0.5 rounded-bl-lg rounded-tr-lg shadow-md uppercase tracking-wider">
                             {getTranslatedTag(pkg.tag)}
                         </div>
                     </div>
                 )}
 
-                {/* Icon */}
-                <div className="mb-4 relative mt-2">
+                <div className="mb-2 relative mt-2">
                     <div className={`absolute inset-0 bg-current opacity-20 blur-xl rounded-full transform scale-150 ${accentColor}`}></div>
-                    <i className={`ph-fill ph-diamonds-four text-5xl ${accentColor} drop-shadow-[0_0_10px_rgba(255,255,255,0.3)] transform transition-transform duration-700 group-hover:rotate-[360deg]`}></i>
+                    <i className={`ph-fill ph-diamonds-four text-4xl ${accentColor} drop-shadow-[0_0_10px_rgba(255,255,255,0.3)] transform transition-transform duration-700 group-hover:rotate-[360deg]`}></i>
                 </div>
 
-                {/* Content */}
-                <h3 className="text-lg font-bold text-white mb-1">AU AI {pkg.credits_amount}</h3>
+                <h3 className="text-sm font-bold text-white mb-1">{pkg.name}</h3>
                 
                 <div className="flex flex-col items-center mb-1">
                     {hasPromo ? (
                         <>
-                            <span className="text-sm text-gray-500 line-through decoration-red-500 decoration-2">{baseTotal.toLocaleString()} KC</span>
-                            <span className={`text-3xl font-black text-yellow-400 drop-shadow-md`}>{totalCredits.toLocaleString()}</span>
+                            <span className="text-xs text-gray-500 line-through decoration-red-500">{baseTotal.toLocaleString()}</span>
+                            <span className={`text-2xl font-black text-yellow-400 drop-shadow-md`}>{totalCredits.toLocaleString()}</span>
                         </>
                     ) : (
-                        <span className={`text-3xl font-black ${accentColor}`}>{totalCredits.toLocaleString()}</span>
+                        <span className={`text-2xl font-black ${accentColor}`}>{totalCredits.toLocaleString()}</span>
                     )}
-                    <span className="text-xs text-skin-muted font-bold">{t('creator.buyCredits.card.diamonds')}</span>
+                    <span className="text-[10px] text-skin-muted font-bold uppercase">{t('creator.buyCredits.card.diamonds')}</span>
                 </div>
 
-                {pkg.bonus_credits > 0 && !hasPromo && (
-                    <div className="bg-white/5 px-2 py-0.5 rounded text-[10px] font-bold text-green-400 mb-4 border border-white/5">
-                        +{pkg.bonus_credits.toLocaleString()} {t('creator.buyCredits.card.bonus')}
-                    </div>
-                )}
-                
-                {hasPromo && (
-                    <div className="bg-red-500/20 px-2 py-0.5 rounded text-[10px] font-bold text-red-400 mb-4 border border-red-500/30">
-                        Tặng thêm {promoBonus.toLocaleString()} KC
-                    </div>
-                )}
-
-                <div className="mt-auto w-full pt-4 border-t border-white/5">
+                <div className="mt-auto w-full pt-3 border-t border-white/5">
                     <button
                         type="button"
                         onClick={onBuy}
                         disabled={isProcessing}
-                        className={`w-full py-3 rounded-lg font-bold text-sm transition-all duration-300 transform active:scale-95 flex items-center justify-center gap-2 shadow-lg
+                        className={`w-full py-2.5 rounded-lg font-bold text-xs transition-all duration-300 transform active:scale-95 flex items-center justify-center gap-2 shadow-lg
                             ${isProcessing 
                                 ? 'bg-gray-600 cursor-not-allowed text-gray-400' 
                                 : `${buttonStyle} hover:brightness-110 hover:shadow-xl`
                             }
                         `}
                     >
-                        {isProcessing ? (
-                            <>
-                                <i className="ph ph-spinner animate-spin"></i>
-                                {t('creator.buyCredits.processing')}
-                            </>
-                        ) : (
-                            <>
-                                {pkg.price_vnd.toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US')} ₫
-                            </>
-                        )}
+                        {isProcessing ? <i className="ph ph-spinner animate-spin"></i> : pkg.price_vnd.toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US') + ' ₫'}
                     </button>
                 </div>
             </div>
@@ -230,7 +177,12 @@ const PricingCard: React.FC<{ pkg: CreditPackage; onBuy: () => void; isProcessin
     );
 }
 
-const BuyCreditsPage: React.FC = () => {
+// Update Props to accept optional embedded flag
+interface BuyCreditsPageProps {
+    isEmbedded?: boolean;
+}
+
+const BuyCreditsPage: React.FC<BuyCreditsPageProps> = ({ isEmbedded = false }) => {
     const { session, navigate, showToast } = useAuth();
     const { t } = useTranslation();
     const { theme } = useTheme();
@@ -241,22 +193,15 @@ const BuyCreditsPage: React.FC = () => {
     const [infoModalKey, setInfoModalKey] = useState<'terms' | 'policy' | 'contact' | null>(null);
     const [isCheckInModalOpen, setCheckInModalOpen] = useState(false);
 
-    // Tilt Effect
-    const containerRef = useRef<HTMLDivElement>(null);
-
     useEffect(() => {
         const fetchData = async () => {
             try {
-                // 1. Fetch Active Promo
                 const promoRes = await fetch(`/.netlify/functions/get-active-promotion?t=${Date.now()}`);
                 if (promoRes.ok) {
                     const promoData = await promoRes.json();
-                    if (promoData && promoData.id) {
-                        setActivePromo(promoData);
-                    }
+                    if (promoData && promoData.id) setActivePromo(promoData);
                 }
 
-                // 2. Fetch Packages
                 const pkgRes = await fetch(`/.netlify/functions/credit-packages?t=${Date.now()}`);
                 if (!pkgRes.ok) throw new Error(t('creator.buyCredits.error.load'));
                 const pkgData = await pkgRes.json();
@@ -297,9 +242,9 @@ const BuyCreditsPage: React.FC = () => {
         }
     };
     
+    // Payment callback handler
     useEffect(() => {
         const paymentResultJSON = sessionStorage.getItem('payment_redirect_result');
-        
         if (paymentResultJSON) {
             sessionStorage.removeItem('payment_redirect_result');
             try {
@@ -310,123 +255,82 @@ const BuyCreditsPage: React.FC = () => {
                     showToast(t('creator.buyCredits.cancelled', { orderCode }), 'error');
                 }
             } catch (e) {
-                console.error("Failed to parse payment redirect result:", e);
                 showToast(t('creator.buyCredits.error.parse'), 'error');
             }
         }
     }, [showToast, t]);
 
-    const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-        if (!containerRef.current) return;
-        const { left, top, width, height } = containerRef.current.getBoundingClientRect();
-        const x = (e.clientX - left) / width - 0.5;
-        const y = (e.clientY - top) / height - 0.5;
-        
-        containerRef.current.style.setProperty('--mouse-x', `${x}`);
-        containerRef.current.style.setProperty('--mouse-y', `${y}`);
-    };
+    // MAIN CONTENT RENDERER
+    const Content = () => (
+        <div className="container mx-auto px-4 relative z-10">
+            <div className="themed-main-title-container text-center max-w-4xl mx-auto mb-4 animate-fade-in-down">
+                    <h1 
+                    className="themed-main-title text-3xl md:text-4xl font-black mb-2 leading-tight"
+                    data-text={t('creator.buyCredits.title')}
+                >
+                    {t('creator.buyCredits.title')}
+                </h1>
+                <p className="themed-main-subtitle text-sm md:text-base max-w-2xl mx-auto text-gray-400">
+                    {t('creator.buyCredits.description')}
+                </p>
+            </div>
 
+            {activePromo && (
+                <PromoCountdown endTime={activePromo.end_time} title={activePromo.title} />
+            )}
+
+            {/* Support Banner - Compact */}
+            <div className="max-w-3xl mx-auto mb-6 animate-fade-in-up">
+                <div className="bg-blue-900/20 border border-blue-500/20 text-blue-200 p-3 rounded-lg flex items-center justify-between gap-4 shadow-sm backdrop-blur-sm">
+                    <p className="text-xs">{t('creator.buyCredits.paymentSupport.note')}</p>
+                    <a 
+                        href="https://www.facebook.com/iam.cody.real/" 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="flex-shrink-0 px-3 py-1.5 text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white rounded transition-colors flex items-center gap-1 shadow-sm whitespace-nowrap"
+                    >
+                        <i className="ph-fill ph-messenger-logo"></i> Hỗ trợ
+                    </a>
+                </div>
+            </div>
+
+            {isLoading ? (
+                    <div className="flex justify-center items-center py-20">
+                    <div className="w-10 h-10 border-4 border-t-skin-accent border-skin-border rounded-full animate-spin"></div>
+                    </div>
+            ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-4 max-w-5xl mx-auto pb-12 animate-fade-in-up">
+                    {packages.map((pkg) => (
+                        <PricingCard 
+                            key={pkg.id} 
+                            pkg={pkg} 
+                            onBuy={() => handleBuyClick(pkg)}
+                            isProcessing={isProcessingPayment === pkg.id}
+                        />
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+
+    // If embedded, just return content without layout shell
+    if (isEmbedded) {
+        return <Content />;
+    }
+
+    // Default Full Page Layout
     return (
         <div data-theme={theme} className="flex flex-col min-h-screen bg-skin-fill text-skin-base pb-16 md:pb-0">
             <ThemeEffects />
             <CreatorHeader onTopUpClick={() => {}} activeTab={'tool'} onNavigate={navigate} onCheckInClick={() => setCheckInModalOpen(true)} />
-            
-            {/* Marquee spacer handled by global component, here we add extra padding if needed */}
-            <main className="flex-grow pt-32 md:pt-36 relative overflow-hidden" onMouseMove={handleMouseMove} ref={containerRef}>
-                
-                {/* Background Decor */}
+            <main className="flex-grow pt-32 md:pt-36 relative overflow-hidden">
                 <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-4xl h-96 bg-skin-accent/10 blur-[100px] rounded-full pointer-events-none -z-10"></div>
-
-                <div className="container mx-auto px-4 relative z-10">
-                    <div className="themed-main-title-container text-center max-w-4xl mx-auto mb-4 animate-fade-in-down">
-                         <h1 
-                            className="themed-main-title text-4xl md:text-5xl font-black mb-4 leading-tight"
-                            data-text={t('creator.buyCredits.title')}
-                        >
-                            {t('creator.buyCredits.title')}
-                        </h1>
-                        <p className="themed-main-subtitle text-lg md:text-xl max-w-3xl mx-auto">
-                           {t('creator.buyCredits.description')}
-                        </p>
-                    </div>
-
-                    {/* ACTIVE PROMOTION COUNTDOWN */}
-                    {activePromo && (
-                        <PromoCountdown endTime={activePromo.end_time} title={activePromo.title} />
-                    )}
-
-                    {/* Support Banner */}
-                    <div className="max-w-4xl mx-auto mb-8 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
-                        <div className="bg-blue-500/10 border border-blue-500/30 text-blue-200 p-4 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-lg backdrop-blur-sm">
-                            <div className="flex items-start gap-3">
-                                <div className="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center flex-shrink-0">
-                                    <i className="ph-fill ph-chat-circle-dots text-xl text-blue-400"></i>
-                                </div>
-                                <p className="text-sm leading-relaxed">{t('creator.buyCredits.paymentSupport.note')}</p>
-                            </div>
-                            <a 
-                                href="https://www.facebook.com/iam.cody.real/" 
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                className="flex-shrink-0 px-5 py-2.5 text-sm font-bold bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors flex items-center gap-2 shadow-md"
-                            >
-                                <i className="ph-fill ph-facebook-logo text-lg"></i>
-                                {t('creator.buyCredits.paymentSupport.button')}
-                            </a>
-                        </div>
-                    </div>
-
-                    {/* Info Pills */}
-                    <div className="max-w-4xl mx-auto mb-12 flex flex-wrap justify-center gap-4 animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
-                        <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-xs font-semibold text-skin-muted">
-                            <i className="ph-fill ph-prohibit text-red-400"></i>
-                            {t('creator.buyCredits.info.noRefund')}
-                        </div>
-                        <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-xs font-semibold text-skin-muted">
-                            <i className="ph-fill ph-calendar-check text-green-400"></i>
-                            {t('creator.buyCredits.info.expiry')}
-                        </div>
-                        <button 
-                            onClick={() => setInfoModalKey('terms')}
-                            className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-xs font-semibold text-skin-muted hover:text-white hover:bg-white/10 transition cursor-pointer"
-                        >
-                            <i className="ph-fill ph-book-open text-blue-400"></i>
-                            {t('creator.buyCredits.info.policy')}
-                        </button>
-                    </div>
-
-                    {/* Loading State */}
-                    {isLoading ? (
-                         <div className="flex justify-center items-center py-20">
-                            <div className="w-12 h-12 border-4 border-t-skin-accent border-skin-border rounded-full animate-spin"></div>
-                         </div>
-                    ) : (
-                        
-                        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-6 mt-8 max-w-6xl mx-auto pb-12 animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
-                            {/* Pricing Grid */}
-                            {packages.map((pkg) => (
-                                <PricingCard 
-                                    key={pkg.id} 
-                                    pkg={pkg} 
-                                    onBuy={() => handleBuyClick(pkg)}
-                                    isProcessing={isProcessingPayment === pkg.id}
-                                />
-                            ))}
-                        </div>
-                    )}
-                </div>
+                <Content />
             </main>
             <CreatorFooter onInfoLinkClick={setInfoModalKey} />
-            <BottomNavBar
-                activeTab="buy-credits"
-                onTabChange={navigate}
-                onCheckInClick={() => setCheckInModalOpen(true)}
-            />
+            <BottomNavBar activeTab="buy-credits" onTabChange={navigate} onCheckInClick={() => setCheckInModalOpen(true)} />
             <InfoModal isOpen={!!infoModalKey} onClose={() => setInfoModalKey(null)} contentKey={infoModalKey} />
-            <CheckInModal 
-                isOpen={isCheckInModalOpen}
-                onClose={() => setCheckInModalOpen(false)}
-            />
+            <CheckInModal isOpen={isCheckInModalOpen} onClose={() => setCheckInModalOpen(false)} />
         </div>
     );
 };

@@ -11,21 +11,21 @@ import MyCreationsPage from './MyCreationsPage';
 import Settings from '../components/Settings';
 import BottomNavBar from '../components/common/BottomNavBar';
 import InfoModal from '../components/creator/InfoModal';
-// import TopUpModal from '../components/creator/TopUpModal'; // REMOVED: Using BuyCreditsPage
 import CheckInModal from '../components/CheckInModal';
 import AnnouncementModal from '../components/AnnouncementModal';
 import ThemeEffects from '../components/themes/ThemeEffects';
 
-// Import New Liquid Shell
+// Import New Liquid Shell & Pages
 import LiquidShell from '../components/creator/LiquidShell';
 import Leaderboard from '../components/Leaderboard';
 import ShopPage from './ShopPage';
 import MessagesPage from './MessagesPage'; 
 import UserProfilePage from './UserProfilePage';
 import AdminGalleryPage from './AdminGalleryPage';
+import BuyCreditsPage from './BuyCreditsPage'; // Import BuyCreditsPage
 
 // Define the possible tabs for type safety
-export type CreatorTab = 'tool' | 'my-creations' | 'settings' | 'shop' | 'leaderboard' | 'profile' | 'messages' | 'admin-gallery';
+export type CreatorTab = 'tool' | 'my-creations' | 'settings' | 'shop' | 'leaderboard' | 'profile' | 'messages' | 'admin-gallery' | 'buy-credits';
 
 interface CreatorPageProps {
   activeTab: CreatorTab; 
@@ -35,8 +35,6 @@ const CreatorPage: React.FC<CreatorPageProps> = ({ activeTab }) => {
     const { user, navigate, announcement, showAnnouncementModal, markAnnouncementAsRead } = useAuth();
     const { theme } = useTheme();
 
-    // State for modals
-    // const [isTopUpModalOpen, setIsTopUpModalOpen] = useState(false); // REMOVED
     const [infoModalKey, setInfoModalKey] = useState<'terms' | 'policy' | 'contact' | null>(null);
     const [isCheckInModalOpen, setCheckInModalOpen] = useState(false);
 
@@ -44,8 +42,6 @@ const CreatorPage: React.FC<CreatorPageProps> = ({ activeTab }) => {
         navigate('home');
         return null; 
     }
-    
-    // REMOVED: handleTopUpClick because we navigate directly to 'buy-credits'
 
     const handleCheckIn = async () => {
         setCheckInModalOpen(true);
@@ -61,6 +57,7 @@ const CreatorPage: React.FC<CreatorPageProps> = ({ activeTab }) => {
             case 'profile': return <UserProfilePage />;
             case 'messages': return <MessagesPage />;
             case 'admin-gallery': return <AdminGalleryPage />;
+            case 'buy-credits': return <BuyCreditsPage isEmbedded={true} />; // Render embedded version
             default: return <AITool />;
         }
     };
@@ -71,9 +68,6 @@ const CreatorPage: React.FC<CreatorPageProps> = ({ activeTab }) => {
             <div data-theme={theme} className="bg-black min-h-screen relative font-barlow selection:bg-cyan-500 selection:text-white">
                 <ThemeEffects />
                 
-                {/* 
-                   LiquidShell now wraps the content directly.
-                */}
                 <LiquidShell 
                     activeTab={activeTab as any} 
                     onNavigate={navigate}
@@ -106,7 +100,7 @@ const CreatorPage: React.FC<CreatorPageProps> = ({ activeTab }) => {
         <div data-theme={theme} className="flex flex-col min-h-screen bg-skin-fill text-skin-base pb-16 md:pb-0">
              <ThemeEffects />
              <CreatorHeader
-                onTopUpClick={() => navigate('buy-credits')} // Redirect to full page
+                onTopUpClick={() => navigate('buy-credits')} 
                 activeTab={activeTab}
                 onNavigate={navigate}
                 onCheckInClick={handleCheckIn}

@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useTranslation } from '../../../hooks/useTranslation';
 import { resizeImage } from '../../../utils/imageUtils';
@@ -9,7 +9,6 @@ import ImageModal from '../../common/ImageModal';
 import ConfirmationModal from '../../ConfirmationModal';
 import PromptLibraryModal from './PromptLibraryModal';
 import ToggleSwitch from '../../ai-tool/ToggleSwitch';
-import { GalleryImage } from '../../../types';
 
 interface GroupGeneratorToolProps {
     onSwitchToUtility: () => void;
@@ -24,7 +23,7 @@ interface CharacterInput {
     gender: 'male' | 'female';
 }
 
-const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtility, onInstructionClick, onSwitchToolWithImage }) => {
+const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onInstructionClick }) => {
     const { user, session, showToast, updateUserDiamonds, supabase } = useAuth();
     const { t } = useTranslation();
 
@@ -39,7 +38,7 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
     // Config State
     const [model, setModel] = useState<'flash' | 'pro'>('flash');
     const [aspectRatio, setAspectRatio] = useState('3:4'); // Vertical default for group
-    const [style, setStyle] = useState('Cinematic');
+    const [style] = useState('Cinematic');
     const [imageSize, setImageSize] = useState<'1K' | '2K' | '4K'>('1K');
     const [removeWatermark, setRemoveWatermark] = useState(false);
 
@@ -92,7 +91,7 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
 
     const handleGenerateClick = () => {
         // Validation
-        const missingPose = characters.some((c, i) => !c.poseImage);
+        const missingPose = characters.some((c) => !c.poseImage);
         if (missingPose) return showToast('Vui lòng tải ảnh nhân vật (Pose) cho tất cả các slot.', 'error');
         
         if (!referenceImage && !prompt.trim()) return showToast('Vui lòng cung cấp Ảnh Tham Chiếu hoặc nhập Prompt mô tả cảnh.', 'error');

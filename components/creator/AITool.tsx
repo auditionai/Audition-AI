@@ -178,7 +178,6 @@ const AITool: React.FC = () => {
                         <GroupGeneratorTool 
                             onSwitchToUtility={() => handleSwitchToUtility('bg-remover')} 
                             onInstructionClick={(key) => openUtilHelp(key || 'group-studio')} 
-                            onSwitchToolWithImage={handleSwitchToolWithImage}
                         />
                     )}
 

@@ -1,7 +1,6 @@
 
 import React from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { useTheme } from '../../contexts/ThemeContext';
 import { CreatorTab } from '../../pages/CreatorPage';
 import UserAvatar from '../common/UserAvatar';
 import Logo from '../common/Logo';
@@ -30,16 +29,16 @@ const LiquidShell: React.FC<LiquidShellProps> = ({
 
     // Mapping tabs to icons for the floating dock
     const dockItems = [
-        { id: 'tool', icon: 'ph-magic-wand', label: 'Studio', color: 'text-cyan-400' },
-        { id: 'my-creations', icon: 'ph-images', label: 'Tác phẩm', color: 'text-purple-400' },
-        { id: 'shop', icon: 'ph-storefront', label: 'Cửa hàng', color: 'text-yellow-400' },
-        { id: 'leaderboard', icon: 'ph-crown-simple', label: 'Xếp hạng', color: 'text-green-400' },
-        { id: 'profile', icon: 'ph-user-circle', label: 'Cá nhân', color: 'text-pink-400' },
+        { id: 'tool', icon: 'ph-magic-wand', label: t('creator.header.nav.studio') || 'Studio', color: 'text-cyan-400' },
+        { id: 'my-creations', icon: 'ph-images', label: t('creator.header.nav.myCreations'), color: 'text-purple-400' },
+        { id: 'shop', icon: 'ph-storefront', label: t('creator.header.nav.shop'), color: 'text-yellow-400' },
+        { id: 'leaderboard', icon: 'ph-crown-simple', label: t('creator.header.nav.leaderboard'), color: 'text-green-400' },
+        { id: 'profile', icon: 'ph-user-circle', label: t('creator.header.nav.profile'), color: 'text-pink-400' },
     ];
 
     // Additional items for Admins
     if (user.is_admin) {
-        dockItems.push({ id: 'settings', icon: 'ph-gear', label: 'Quản lý', color: 'text-gray-400' });
+        dockItems.push({ id: 'settings', icon: 'ph-gear', label: t('creator.header.userMenu.settings'), color: 'text-gray-400' });
     }
 
     return (

@@ -25,7 +25,7 @@ import UserProfilePage from './UserProfilePage'; // Profile is usually full page
 import AdminGalleryPage from './AdminGalleryPage';
 
 // Define the possible tabs for type safety
-export type CreatorTab = 'tool' | 'my-creations' | 'settings';
+export type CreatorTab = 'tool' | 'my-creations' | 'settings' | 'shop' | 'leaderboard' | 'profile' | 'messages' | 'admin-gallery';
 
 interface CreatorPageProps {
   activeTab: CreatorTab; 
@@ -58,11 +58,11 @@ const CreatorPage: React.FC<CreatorPageProps> = ({ activeTab }) => {
             case 'my-creations': return <MyCreationsPage />;
             case 'settings': return <Settings />;
             case 'tool': return <AITool />;
-            // Map legacy/other routes that might be passed via URL but aren't strictly CreatorTabs
-            // These usually have their own pages, but if we want them inside the Liquid Shell, we render them here.
-            // Note: Pages like ShopPage, UserProfilePage currently handle their own Headers. 
-            // In Liquid Mode, we need them to be "content only".
-            // For this implementation, we will stick to the main 3 tabs + basic support.
+            case 'shop': return <ShopPage />;
+            case 'leaderboard': return <Leaderboard />;
+            case 'profile': return <UserProfilePage />;
+            case 'messages': return <MessagesPage />;
+            case 'admin-gallery': return <AdminGalleryPage />;
             default: return <AITool />;
         }
     };

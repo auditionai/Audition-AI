@@ -108,6 +108,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         4. [CONSTRAINT]: NOT a photograph. NOT live action. 
         `;
 
+        // If Character Image is provided, we use the "Outpainting/Expansion" logic
         if (characterImageUrl) {
             fullPrompt = `
             ${styleEnforcement}
@@ -133,16 +134,23 @@ const handler: Handler = async (event: HandlerEvent) => {
             fullPrompt += `\n\n**FACE ID:**\n- Use the exact facial structure from 'Face Reference'. Blend it seamlessly into the 3D style.`;
         }
 
-        // --- UPDATED REFERENCE LOGIC ---
-        // If a "Reference Image" (previously Style Image) is provided, treat it as a structural guide.
+        // --- UPDATED REFERENCE LOGIC (STRONGER CONTROL) ---
+        // If a "Reference Image" is provided, we now treat it as a Structural Blueprint.
         if (styleImageUrl) {
             fullPrompt += `
             \n\n*** REFERENCE IMAGE COMMAND: [COMPOSITION_MASTER] ***
-            - The image labeled [COMPOSITION_MASTER] is the TARGET LAYOUT.
-            - COPY the exact **Composition, Camera Angle, Lighting Direction, and Background Structure** from this image.
-            - COPY the **Pose and Stance** of the character in [COMPOSITION_MASTER] if possible.
-            - HOWEVER, REPLACE the character with the one defined in [INPUT_CANVAS] (or create a new one based on prompt if no input canvas).
-            - APPLY the color palette and atmosphere of [COMPOSITION_MASTER] to the final result.
+            **CRITICAL PRIORITY: STRUCTURAL CLONING**
+            You MUST use the image labeled [COMPOSITION_MASTER] as the absolute blueprint for the image structure.
+            
+            1. [POSE MATCHING]: Replicate the exact body pose, limb angles, head tilt, and gesture from [COMPOSITION_MASTER].
+            2. [CAMERA ANGLE]: Copy the exact camera perspective (high angle, low angle, close-up, wide shot) from [COMPOSITION_MASTER].
+            3. [ATMOSPHERE & VIBE]: Analyze the lighting mood (e.g., romantic sunset, neon cyberpunk, melancholic rain) of [COMPOSITION_MASTER] and apply it to the result.
+            4. [DEPTH OF FIELD]: Mimic the background blur and focal point of [COMPOSITION_MASTER].
+            
+            **SYNTHESIS RULE:**
+            - Structure/Pose/Vibe comes from [COMPOSITION_MASTER].
+            - Subject Identity/Outfit comes from [INPUT_CANVAS] (or Prompt if canvas missing).
+            - Scene/Background Details come from User Prompt (blended with [COMPOSITION_MASTER]'s lighting).
             `;
         }
 

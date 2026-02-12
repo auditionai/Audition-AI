@@ -23,16 +23,19 @@ const LiquidShell: React.FC<LiquidShellProps> = ({
 
     if (!user) return null;
 
-    // NAVIGATION: Studio -> Creations -> CheckIn -> TopUp -> Balance -> Avatar
+    // NAVIGATION: Home -> Studio -> Creations -> CheckIn -> TopUp -> Balance -> Avatar
     return (
         <div className="relative min-h-screen w-full overflow-hidden text-white flex flex-col font-barlow bg-black selection:bg-red-500 selection:text-white">
             
             {/* --- MAIN GLASS STAGE (Content) --- */}
             <main className="flex-grow w-full h-screen overflow-hidden pt-4 pb-36 px-2 md:px-4 flex flex-col items-center">
                 <div className="w-full max-w-[1280px] h-full relative z-10 flex flex-col">
-                     {/* Thick Glass Container */}
-                     <div className="liquid-content-container w-full h-full overflow-y-auto custom-scrollbar">
-                         {children}
+                     {/* Thick Glass Container (Fixed Frame) */}
+                     <div className="liquid-content-container w-full h-full relative flex flex-col">
+                         {/* Inner Scrollable Area - Separated from container styles to avoid overflow conflict */}
+                         <div className="w-full h-full overflow-y-auto custom-scrollbar p-1 rounded-[32px]">
+                            {children}
+                         </div>
                      </div>
                 </div>
             </main>
@@ -41,6 +44,15 @@ const LiquidShell: React.FC<LiquidShellProps> = ({
             <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 pointer-events-none w-auto max-w-[98vw]">
                 <div className="liquid-dock-container pointer-events-auto">
                     
+                    {/* 0. HOME */}
+                    <button
+                        onClick={() => onNavigate('tool')}
+                        className="liquid-dock-item group"
+                    >
+                        <i className="ph-fill ph-house"></i>
+                        <span className="liquid-dock-label">Trang chủ</span>
+                    </button>
+
                     {/* 1. STUDIO */}
                     <button
                         onClick={() => onNavigate('tool')}
@@ -79,7 +91,6 @@ const LiquidShell: React.FC<LiquidShellProps> = ({
                         className={`liquid-dock-item group !min-w-[80px] ${activeTab === 'buy-credits' ? 'active' : ''}`}
                         title="Nạp Kim Cương"
                     >
-                         {/* Golden gradient background applied via style or class if needed, keeping standard look for consistency but adding icon color */}
                         <i className="ph-fill ph-plus-circle text-yellow-400 text-2xl group-hover:rotate-90 transition-transform"></i>
                         <span className="liquid-dock-label text-yellow-200">NẠP</span>
                     </button>

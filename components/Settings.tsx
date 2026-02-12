@@ -161,7 +161,9 @@ const AdminPanel: React.FC = () => {
 const Settings: React.FC = () => {
     const { user, session, showToast, updateUserProfile, updateUserDiamonds } = useAuth();
     const { t } = useTranslation();
-    const [displayName, setDisplayName] = useState('');
+    
+    // Initial State: Use user.display_name if available, otherwise empty
+    const [displayName, setDisplayName] = useState(user?.display_name || '');
     const [isSaving, setIsSaving] = useState(false);
     const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
     

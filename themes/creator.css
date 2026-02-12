@@ -1,12 +1,12 @@
 
 /* ---
   AUDITION AI - CREATOR THEME STYLESHEET
-  THEME: FORMULA RED 3D (Physical Depth)
+  THEME: FORMULA RED 3D (Physical Depth & High Contrast)
 --- */
 
 :root {
-    --color-fill: #080808;
-    --color-fill-secondary: #121212;
+    --color-fill: #050505;
+    --color-fill-secondary: #0F0F11;
     --color-text-base: #FFFFFF;
     --color-text-muted: #9CA3AF;
     
@@ -14,28 +14,29 @@
     --color-accent: 220 38 38; /* Red-600 */
     --color-accent-glow: 255 50 50;
     
-    /* 3D Variables */
+    /* Enhanced 3D Variables */
     --depth-shadow: 
-        10px 10px 20px #040404, 
-        -5px -5px 15px rgba(50, 50, 50, 0.1); /* Physical Shadow */
+        0 20px 50px rgba(0, 0, 0, 0.9), 
+        0 0 0 1px rgba(255, 255, 255, 0.08),
+        inset 0 1px 1px rgba(255, 255, 255, 0.15); /* Stronger physical presence */
+        
     --depth-shadow-hover: 
-        15px 15px 30px #040404, 
-        -5px -5px 15px rgba(220, 38, 38, 0.15); /* Glowing Shadow */
-    --inner-glow: inset 0 0 20px rgba(0,0,0,0.8);
-    --border-gradient: linear-gradient(145deg, rgba(255,255,255,0.15), rgba(255,255,255,0.05) 40%, rgba(0,0,0,0.5));
-    --border-gradient-active: linear-gradient(145deg, rgba(220, 38, 38, 0.8), rgba(100, 0, 0, 0.8));
-    
-    --glass-bg: rgba(18, 18, 20, 0.7);
-    --glass-backdrop: blur(20px) saturate(120%);
-    --radius-lg: 32px;
-    --radius-md: 20px;
+        0 30px 60px rgba(0, 0, 0, 1), 
+        0 0 0 1px rgba(220, 38, 38, 0.5), /* Red highlight on hover */
+        inset 0 1px 1px rgba(255, 255, 255, 0.2);
+        
+    --glass-bg: rgba(15, 15, 18, 0.85);
+    --glass-backdrop: blur(50px) saturate(180%);
+    --radius-lg: 40px;
+    --radius-md: 24px;
 }
 
 [data-theme='liquid-glass'] {
-    background-color: #050505;
+    background-color: #020202;
     background-image: 
-        radial-gradient(circle at 15% 50%, rgba(220, 38, 38, 0.08), transparent 25%), 
-        radial-gradient(circle at 85% 30%, rgba(220, 38, 38, 0.05), transparent 25%);
+        radial-gradient(circle at 50% 0%, #1a0505, transparent 40%),
+        radial-gradient(circle at 10% 80%, rgba(220, 38, 38, 0.03), transparent 25%), 
+        radial-gradient(circle at 90% 80%, rgba(220, 38, 38, 0.03), transparent 25%);
 }
 
 /* --- 3D SCROLLBAR --- */
@@ -45,157 +46,145 @@
 .custom-scrollbar::-webkit-scrollbar-track {
     background: #0a0a0a;
     border-radius: 10px;
+    margin: 4px;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: linear-gradient(to bottom, #333, #666);
+    background: linear-gradient(180deg, #333, #555);
     border-radius: 10px;
-    border: 1px solid #000;
+    border: 2px solid #0a0a0a;
+    box-shadow: inset 1px 1px 2px rgba(255,255,255,0.2);
 }
 
 /* --- 3D CONTAINER (Liquid Content) --- */
+/* Increased depth and "thickness" */
 [data-theme='liquid-glass'] .liquid-content-container {
     background: var(--glass-bg);
     backdrop-filter: var(--glass-backdrop);
     border-radius: var(--radius-lg);
     
-    /* 3D Border Effect using Box Shadow */
+    /* Multi-layered shadow for thickness illusion */
     box-shadow: 
-        var(--depth-shadow),
-        inset 1px 1px 0 rgba(255,255,255,0.1),
-        inset -1px -1px 0 rgba(0,0,0,0.5);
+        0 0 0 1px rgba(0, 0, 0, 1), /* Inner black edge */
+        0 0 0 2px rgba(255, 255, 255, 0.08), /* Outer highlight edge */
+        0 40px 80px rgba(0, 0, 0, 0.8), /* Deep drop shadow */
+        inset 0 1px 0 rgba(255, 255, 255, 0.1), /* Top highlight */
+        inset 0 0 40px rgba(0,0,0,0.5); /* Inner depth */
         
-    border: 1px solid rgba(255,255,255,0.05);
+    border: none; /* Replaced by box-shadow for smoother layering */
     padding: 32px;
+    position: relative;
+    z-index: 10;
 }
 
 /* --- 3D DOCK (Floating Menu) --- */
 [data-theme='liquid-glass'] .liquid-dock-container {
-    background: rgba(15, 15, 15, 0.9);
-    backdrop-filter: blur(30px);
-    border-radius: 999px;
-    padding: 8px 12px;
+    background: rgba(20, 20, 25, 0.95);
+    backdrop-filter: blur(40px);
+    border-radius: 99px; /* Fully rounded pill */
+    padding: 10px 14px;
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 8px;
     
-    /* Floating Effect */
+    /* Super Floating Effect */
     box-shadow: 
-        0 20px 40px rgba(0,0,0,0.6),
-        0 0 0 1px rgba(255,255,255,0.1),
-        inset 0 1px 1px rgba(255,255,255,0.15);
+        0 30px 60px rgba(0,0,0,0.8),
+        0 0 0 1px rgba(255,255,255,0.12),
+        inset 0 1px 1px rgba(255,255,255,0.2);
+    transform: translateZ(0); /* Hardware accel */
 }
 
 /* --- 3D DOCK ITEMS (Buttons) --- */
 [data-theme='liquid-glass'] .liquid-dock-item {
     position: relative;
-    height: 56px;
-    width: 56px;
-    border-radius: 18px; /* Squircle */
+    height: 52px;
+    min-width: 52px; /* Ensure circular items stay circular */
+    border-radius: 20px; /* Squircle */
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    color: #666;
-    background: linear-gradient(145deg, #1a1a1a, #111);
-    box-shadow: 
-        5px 5px 10px #080808, 
-        -5px -5px 10px #222; /* Soft embossing */
-    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-    border: 1px solid rgba(0,0,0,0.5);
-}
-
-[data-theme='liquid-glass'] .liquid-dock-item i {
-    font-size: 24px;
-    transition: all 0.3s ease;
-    filter: drop-shadow(0 2px 2px rgba(0,0,0,0.5));
-}
-
-[data-theme='liquid-glass'] .liquid-dock-item:hover {
-    transform: translateY(-8px) scale(1.05);
-    color: #fff;
-    background: linear-gradient(145deg, #252525, #1a1a1a);
-    box-shadow: 
-        0 15px 25px rgba(0,0,0,0.5),
-        0 0 10px rgba(255,255,255,0.1);
-}
-
-[data-theme='liquid-glass'] .liquid-dock-item.active {
-    background: linear-gradient(145deg, #b91c1c, #991b1b); /* Red Gradient */
-    color: #fff;
-    box-shadow: 
-        0 10px 20px rgba(220, 38, 38, 0.4),
-        inset 0 2px 5px rgba(255,255,255,0.2);
-    border-color: rgba(220, 38, 38, 0.5);
-    transform: translateY(-12px) scale(1.1);
-}
-
-/* Tooltip for Dock */
-[data-theme='liquid-glass'] .liquid-dock-label {
-    position: absolute;
-    bottom: -22px;
-    font-size: 9px;
-    font-weight: 700;
-    text-transform: uppercase;
-    opacity: 0;
-    transform: translateY(5px);
-    transition: all 0.3s ease;
     color: #888;
-    white-space: nowrap;
-}
-[data-theme='liquid-glass'] .liquid-dock-item:hover .liquid-dock-label,
-[data-theme='liquid-glass'] .liquid-dock-item.active .liquid-dock-label {
-    opacity: 1;
-    transform: translateY(0);
-    color: #fff;
-}
-
-
-/* --- 3D CARD COMPONENT (Used in Group Generator) --- */
-/* Replaces flat cards with chunky 3D buttons */
-.interactive-3d {
-    background: linear-gradient(145deg, #1a1a1a, #101010);
-    border-radius: var(--radius-md);
-    box-shadow: var(--depth-shadow);
-    border: 1px solid rgba(255,255,255,0.05);
-    transition: all 0.3s ease;
-    position: relative;
+    background: linear-gradient(180deg, #252525, #151515);
+    
+    /* Physical Button Look */
+    box-shadow: 
+        0 5px 10px rgba(0,0,0,0.5),
+        inset 0 1px 0 rgba(255,255,255,0.1),
+        inset 0 -1px 0 rgba(0,0,0,0.5);
+        
+    border: 1px solid rgba(0,0,0,0.8);
+    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+    cursor: pointer;
     overflow: hidden;
 }
 
+[data-theme='liquid-glass'] .liquid-dock-item i {
+    font-size: 22px;
+    filter: drop-shadow(0 2px 2px rgba(0,0,0,0.8));
+    transition: all 0.3s ease;
+}
+
+[data-theme='liquid-glass'] .liquid-dock-item:hover {
+    transform: translateY(-6px) scale(1.05);
+    color: #fff;
+    background: linear-gradient(180deg, #303030, #202020);
+    box-shadow: 
+        0 15px 25px rgba(0,0,0,0.6),
+        inset 0 1px 0 rgba(255,255,255,0.2),
+        0 0 0 1px rgba(255,255,255,0.1);
+    z-index: 10;
+}
+
+/* Active State - "Pressed" or "Lit" */
+[data-theme='liquid-glass'] .liquid-dock-item.active {
+    background: linear-gradient(180deg, #dc2626, #991b1b); /* Strong Red */
+    color: #fff;
+    box-shadow: 
+        0 10px 20px rgba(220, 38, 38, 0.4),
+        inset 0 2px 5px rgba(255,255,255,0.3),
+        inset 0 -2px 5px rgba(0,0,0,0.3);
+    border: 1px solid #7f1d1d;
+    transform: translateY(-8px) scale(1.1);
+}
+
+/* --- 3D CARD COMPONENT (Interactive) --- */
+.interactive-3d {
+    background: linear-gradient(160deg, #1e1e24, #121215);
+    border-radius: var(--radius-md);
+    
+    /* Deep 3D Shadow */
+    box-shadow: 
+        0 10px 30px rgba(0,0,0,0.5),
+        0 0 0 1px rgba(255,255,255,0.05),
+        inset 0 1px 0 rgba(255,255,255,0.1);
+        
+    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); /* Bouncy transition */
+    position: relative;
+}
+
 .interactive-3d:hover {
-    transform: translateY(-5px);
-    box-shadow: var(--depth-shadow-hover);
-    border-color: rgba(255,255,255,0.15);
+    transform: translateY(-8px) scale(1.02);
+    box-shadow: 
+        0 25px 50px rgba(0,0,0,0.6),
+        0 0 0 1px rgba(255,255,255,0.15),
+        inset 0 1px 0 rgba(255,255,255,0.2);
+    background: linear-gradient(160deg, #25252c, #16161a);
+    z-index: 5;
 }
-
-.interactive-3d::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; right: 0; height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
-}
-
 
 /* --- MARQUEE 3D CONTAINER --- */
 .marquee-3d-wrapper {
     background: #000;
     border-radius: 12px;
-    border: 1px solid #333;
+    border: 1px solid #222;
     box-shadow: 
-        inset 0 0 10px #000,
-        0 5px 15px rgba(0,0,0,0.5);
+        inset 0 0 15px #000,
+        0 10px 20px rgba(0,0,0,0.5),
+        0 0 0 1px rgba(255,255,255,0.05); /* Outer rim */
     overflow: hidden;
     position: relative;
-}
-/* LED Grid Effect overlay */
-.marquee-3d-wrapper::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background-image: radial-gradient(rgba(255,255,255,0.05) 1px, transparent 1px);
-    background-size: 4px 4px;
-    pointer-events: none;
-    z-index: 2;
+    transform: perspective(500px) rotateX(2deg); /* Subtle tilt */
 }
 
 /* --- FORM ELEMENTS (Inputs) --- */
@@ -203,41 +192,50 @@
 [data-theme='liquid-glass'] textarea, 
 [data-theme='liquid-glass'] select {
     background: #080808 !important;
-    border: 1px solid #222 !important;
-    border-radius: 12px !important;
-    box-shadow: inset 2px 2px 5px #000, inset -1px -1px 2px #1a1a1a !important;
+    border: 1px solid #333 !important;
+    border-radius: 16px !important;
+    /* Deep inset shadow for input fields */
+    box-shadow: inset 3px 3px 6px #000, inset -1px -1px 2px #1a1a1a !important;
     color: #eee !important;
-    transition: all 0.2s ease;
+    transition: all 0.3s ease;
 }
 [data-theme='liquid-glass'] input:focus, 
 [data-theme='liquid-glass'] textarea:focus {
-    border-color: #b91c1c !important;
-    box-shadow: inset 2px 2px 5px #000, 0 0 10px rgba(220, 38, 38, 0.2) !important;
+    border-color: #ef4444 !important; /* Red border */
+    box-shadow: 
+        inset 3px 3px 6px #000, 
+        0 0 0 2px rgba(239, 68, 68, 0.2) !important;
 }
 
 /* --- BUTTONS (Primary) --- */
 [data-theme='liquid-glass'] .themed-button-primary {
-    background: linear-gradient(180deg, #dc2626, #991b1b) !important;
-    border-top: 1px solid rgba(255, 100, 100, 0.4) !important;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.4) !important;
-    box-shadow: 0 4px 15px rgba(220, 38, 38, 0.4), inset 0 1px 0 rgba(255,255,255,0.1) !important;
-    border-radius: 12px !important;
+    background: linear-gradient(180deg, #ef4444, #b91c1c) !important;
+    border: 1px solid rgba(0,0,0,0.2) !important;
+    border-top: 1px solid rgba(255, 150, 150, 0.4) !important;
+    box-shadow: 
+        0 8px 20px rgba(220, 38, 38, 0.4), 
+        inset 0 1px 0 rgba(255,255,255,0.2),
+        0 4px 0 #7f1d1d !important; /* Physical button depth */
+    border-radius: 16px !important;
     color: white !important;
     text-shadow: 0 1px 2px rgba(0,0,0,0.5) !important;
     transform: translateY(0);
     transition: all 0.1s;
 }
 [data-theme='liquid-glass'] .themed-button-primary:active {
-    transform: translateY(2px);
-    box-shadow: inset 0 2px 5px rgba(0,0,0,0.4) !important;
-    background: linear-gradient(180deg, #991b1b, #7f1d1d) !important;
+    transform: translateY(4px); /* Press down */
+    box-shadow: 
+        0 2px 5px rgba(220, 38, 38, 0.4), 
+        inset 0 2px 5px rgba(0,0,0,0.3),
+        0 0 0 #7f1d1d !important; /* Remove depth on press */
 }
 
 /* --- SETTINGS BLOCKS --- */
 [data-theme='liquid-glass'] .themed-settings-block {
-    background: linear-gradient(145deg, #131313, #0a0a0a) !important;
+    background: linear-gradient(160deg, #131313, #080808) !important;
     border: 1px solid rgba(255,255,255,0.05) !important;
+    border-radius: 24px !important;
     box-shadow: 
-        5px 5px 15px rgba(0,0,0,0.5),
-        -1px -1px 5px rgba(255,255,255,0.03) !important;
+        10px 10px 20px rgba(0,0,0,0.6),
+        -2px -2px 5px rgba(255,255,255,0.03) !important;
 }

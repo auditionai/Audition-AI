@@ -27,13 +27,13 @@ const SettingsBlock: React.FC<SettingsBlockProps> = ({
 }) => {
     const { t } = useTranslation();
 
-    // Compact styles
+    // Transparent container, rely on child elements for background
     const variantStyles = {
-        default: 'border-white/10 bg-[#1e1b25]',
-        pink: 'border-pink-500/30 bg-[#1e1b25] shadow-[0_0_10px_rgba(236,72,153,0.05)]',
-        blue: 'border-cyan-500/30 bg-[#1e1b25] shadow-[0_0_10px_rgba(6,182,212,0.05)]',
-        yellow: 'border-yellow-500/30 bg-[#1e1b25] shadow-[0_0_10px_rgba(234,179,8,0.05)]',
-        purple: 'border-purple-500/30 bg-[#1e1b25] shadow-[0_0_10px_rgba(168,85,247,0.05)]'
+        default: 'border-white/10',
+        pink: 'border-pink-500/30',
+        blue: 'border-cyan-500/30',
+        yellow: 'border-yellow-500/30',
+        purple: 'border-purple-500/30'
     };
 
     const titleColors = {

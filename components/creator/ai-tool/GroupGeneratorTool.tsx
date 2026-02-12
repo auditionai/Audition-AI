@@ -56,7 +56,7 @@ const GroupStudioForm: React.FC<{
     // Config State
     const [model, setModel] = useState<'flash' | 'pro'>('flash');
     const [aspectRatio, setAspectRatio] = useState('3:4');
-    const [style] = useState('Cinematic');
+    const [style, setStyle] = useState('Cinematic');
     const [imageSize, setImageSize] = useState<'1K' | '2K' | '4K'>('1K');
     const [removeWatermark, setRemoveWatermark] = useState(false);
 
@@ -401,7 +401,7 @@ const ModeCard: React.FC<{
 const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ 
     onSwitchToUtility, 
     onInstructionClick,
-    onSwitchToolWithImage 
+    // onSwitchToolWithImage  <-- REMOVED unused variable
 }) => {
     const [mode, setMode] = useState<StudioMode>('menu');
 

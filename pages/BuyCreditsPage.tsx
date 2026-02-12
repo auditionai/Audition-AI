@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import CreatorHeader from '../components/creator/CreatorHeader';
 import CreatorFooter from '../components/creator/CreatorFooter';
 import { useAuth } from '../contexts/AuthContext';

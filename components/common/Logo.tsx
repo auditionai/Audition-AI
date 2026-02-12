@@ -1,6 +1,5 @@
 
 import React from 'react';
-import { useTheme } from '../../contexts/ThemeContext';
 
 interface LogoProps {
   onClick?: () => void;

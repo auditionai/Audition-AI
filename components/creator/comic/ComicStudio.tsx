@@ -8,7 +8,6 @@ import { COMIC_PREMISES } from '../../../constants/comicPremises';
 import { useTranslation } from '../../../hooks/useTranslation';
 import ImageUploader from '../../ai-tool/ImageUploader';
 import Modal from '../../common/Modal';
-import VideoModal from '../../common/VideoModal';
 
 // --- CONSTANTS ---
 
@@ -511,7 +510,7 @@ const ProfessionalScriptEditor: React.FC<{
 
 // --- MAIN COMPONENT ---
 
-const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructionClick }) => {
+const ComicStudio: React.FC<{ onInstructionClick: () => void; onBack: () => void }> = ({ onInstructionClick, onBack }) => {
     const { user, session, showToast, updateUserDiamonds, supabase } = useAuth();
     const { t } = useTranslation();
     
@@ -546,26 +545,6 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
     const [expansionQueue, setExpansionQueue] = useState<number[]>([]);
     const [isBatchRendering, setIsBatchRendering] = useState(false);
     const [viewingImage, setViewingImage] = useState<string | null>(null);
-
-    // Video Tutorial State
-    const [tutorialUrl, setTutorialUrl] = useState('');
-    const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
-
-    // Fetch Video Tutorial URL
-    useEffect(() => {
-        const fetchSettings = async () => {
-            try {
-                const res = await fetch('/.netlify/functions/admin-system-settings');
-                if (res.ok) {
-                    const settings = await res.json();
-                    if (settings.tutorial_video_comic) {
-                        setTutorialUrl(settings.tutorial_video_comic);
-                    }
-                }
-            } catch (e) { console.error(e); }
-        };
-        fetchSettings();
-    }, []);
 
     const handleAddCharacter = () => {
         const newChar: ComicCharacter = { id: crypto.randomUUID(), name: `Nhân vật ${characters.length + 1}`, description: '', is_analyzing: false };
@@ -849,8 +828,17 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
     return (
         <div className="flex flex-col gap-6 max-w-6xl mx-auto animate-fade-in">
             <PremiseSelectionModal isOpen={isPremiseModalOpen} onClose={() => setIsPremiseModalOpen(false)} onSelect={handleApplyPremise} genre={genre} />
-            <VideoModal isOpen={isVideoModalOpen} onClose={() => setIsVideoModalOpen(false)} videoUrl={tutorialUrl} />
             
+            {/* Header with Back Button */}
+            <div className="flex items-center justify-between mb-4">
+                <button 
+                    onClick={onBack}
+                    className="text-xs text-skin-muted hover:text-skin-base border border-skin-border px-3 py-2 rounded-full bg-skin-fill hover:bg-white/5 transition flex items-center gap-2"
+                >
+                    <i className="ph-bold ph-arrow-left"></i> Quay lại Menu
+                </button>
+            </div>
+
             {/* Lightbox (Fixed CSS) */}
             {viewingImage && (
                 <div className="fixed inset-0 z-[9999] bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm" onClick={() => setViewingImage(null)}>
@@ -871,24 +859,6 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
             {/* --- STEP 1: SETUP --- */}
             {currentStep === 1 && (
                 <>
-                    {tutorialUrl && (
-                        <div className="p-4 bg-purple-500/10 border border-purple-500/30 text-purple-300 rounded-lg text-sm flex items-center justify-between gap-3 mb-4">
-                            <div className="flex items-center gap-3">
-                                <i className="ph-fill ph-video text-2xl flex-shrink-0"></i>
-                                <div>
-                                    <span className="font-bold block">Hướng dẫn sử dụng</span>
-                                    <span className="text-xs opacity-80">Xem video hướng dẫn chi tiết cách tạo truyện tranh.</span>
-                                </div>
-                            </div>
-                            <button 
-                                onClick={() => setIsVideoModalOpen(true)} 
-                                className="px-4 py-2 bg-purple-500 hover:bg-purple-400 text-white text-xs font-bold rounded-full flex items-center gap-2 transition-colors"
-                            >
-                                <i className="ph-fill ph-play-circle text-lg"></i> Xem Video
-                            </button>
-                        </div>
-                    )}
-
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-2">
                         <div className="bg-[#12121A]/80 border border-emerald-500/20 p-4 rounded-xl flex items-center gap-4 shadow-lg shadow-emerald-500/5 relative overflow-hidden group interactive-3d">
                             <div className="w-12 h-12 rounded-full bg-emerald-500/20 flex items-center justify-center flex-shrink-0 border border-emerald-500/30 shadow-inner">
@@ -984,7 +954,7 @@ const ComicStudio: React.FC<{ onInstructionClick: () => void }> = ({ onInstructi
                                 <div className="flex justify-between items-center mb-4">
                                     <h3 className="text-xl font-bold text-white flex items-center gap-2"><i className="ph-fill ph-users-three text-pink-500"></i> Nhân Vật ({characters.length}/{MAX_CHARACTERS})</h3>
                                     <div className="flex items-center gap-2">
-                                        <button onClick={onInstructionClick} className="flex items-center gap-1 text-xs text-skin-accent hover:opacity-80 transition-all px-2 py-1 rounded-md bg-skin-accent/10 border border-skin-border-accent hover:bg-skin-accent/20 shadow-accent hover:shadow-accent-lg"><i className="ph-fill ph-book-open"></i> Hướng dẫn</button>
+                                        <button onClick={() => onInstructionClick()} className="flex items-center gap-1 text-xs text-skin-accent hover:opacity-80 transition-all px-2 py-1 rounded-md bg-skin-accent/10 border border-skin-border-accent hover:bg-skin-accent/20 shadow-accent hover:shadow-accent-lg"><i className="ph-fill ph-book-open"></i> Hướng dẫn</button>
                                         <button onClick={handleAddCharacter} disabled={characters.length >= MAX_CHARACTERS} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm font-bold transition flex items-center gap-2 disabled:opacity-50"><i className="ph-bold ph-plus"></i> Thêm</button>
                                     </div>
                                 </div>

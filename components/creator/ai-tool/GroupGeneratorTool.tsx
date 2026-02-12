@@ -11,6 +11,7 @@ import SettingsBlock from '../../ai-tool/SettingsBlock';
 import { useTranslation } from '../../../hooks/useTranslation';
 import PromptLibraryModal from './PromptLibraryModal';
 import ToggleSwitch from '../../ai-tool/ToggleSwitch';
+import ComicStudio from '../comic/ComicStudio';
 
 
 // Mock data for styles
@@ -57,7 +58,7 @@ interface ProcessedImageData {
 
 interface GroupGeneratorToolProps {
     onSwitchToUtility: () => void;
-    onInstructionClick: () => void;
+    onInstructionClick: (key?: any) => void;
     // Callback to switch tool and load image
     onSwitchToolWithImage?: (image: { url: string; file: File }, targetTool: 'bg-remover' | 'enhancer') => void;
 }
@@ -69,11 +70,13 @@ const ModeCard: React.FC<{
     description: string;
     colorClass: string;
     onClick: () => void;
-}> = ({ icon, title, description, colorClass, onClick }) => (
+    hot?: boolean;
+}> = ({ icon, title, description, colorClass, onClick, hot }) => (
     <button 
         onClick={onClick}
         className={`group relative flex flex-col items-center justify-center p-6 rounded-2xl border-2 border-white/5 bg-[#181820] hover:bg-white/5 transition-all duration-300 w-full hover:-translate-y-2 hover:shadow-xl ${colorClass} interactive-3d overflow-hidden`}
     >
+        {hot && <div className="absolute top-3 right-3 bg-red-500 text-white text-[9px] font-black px-2 py-0.5 rounded uppercase shadow-sm animate-pulse z-10">HOT</div>}
         <div className="absolute inset-0 bg-gradient-to-br opacity-0 group-hover:opacity-10 transition-opacity duration-500 from-white to-transparent pointer-events-none"></div>
         <div className={`w-16 h-16 rounded-full flex items-center justify-center text-3xl mb-4 bg-white/5 shadow-inner transition-transform duration-300 group-hover:scale-110 group-hover:rotate-6`}>
             <i className={`ph-fill ${icon}`}></i>
@@ -87,6 +90,10 @@ const ModeCard: React.FC<{
 const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtility, onInstructionClick, onSwitchToolWithImage }) => {
     const { user, session, showToast, supabase, updateUserDiamonds } = useAuth();
     const { t } = useTranslation();
+    
+    // Mode State: 'selection' | 'generator' | 'comic'
+    const [activeMode, setActiveMode] = useState<'selection' | 'generator' | 'comic'>('selection');
+
     const [numCharacters, setNumCharacters] = useState<number>(0);
     const [isConfirmOpen, setConfirmOpen] = useState(false);
     
@@ -166,14 +173,19 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
 
     const handleNumCharactersSelect = (num: number) => {
         setNumCharacters(num);
-        setShowGroupSlider(false); // Hide slider if it was open
+        setShowGroupSlider(false); 
         setCharacters(Array.from({ length: num }, () => ({
             poseImage: null,
             faceImage: null,
             processedFace: null,
             gender: null
         })));
+        setActiveMode('generator');
     };
+    
+    const handleComicModeSelect = () => {
+        setActiveMode('comic');
+    }
 
     const handleGenderSelect = (index: number, gender: 'male' | 'female') => {
         setCharacters(prev => prev.map((char, i) => {
@@ -183,7 +195,8 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
             return char;
         }));
     };
-
+    
+    // ... (Keep existing image upload and processing handlers unchanged) ...
     const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'pose' | 'face' | 'reference', index?: number) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -225,19 +238,16 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
         setIsPickerOpen(true);
     };
     
-    // 1. Handle "Use Image" (Direct Fill)
     const handleImageSelectFromPicker = async (imageData: ProcessedImageData) => {
         if (!pickerTarget) return;
         
         let dataUrl = imageData.processedUrl;
         let file: File;
 
-        // Construct proper file object.
         if (imageData.imageBase64) {
              dataUrl = `data:${imageData.mimeType};base64,${imageData.imageBase64}`;
              file = base64ToFile(imageData.imageBase64, imageData.fileName, imageData.mimeType);
         } else {
-             // Fetch blob if missing base64 (common for Enhanced images)
              try {
                  const res = await fetch(imageData.processedUrl);
                  const blob = await res.blob();
@@ -264,7 +274,6 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
         showToast(t('modals.processedImage.success.full'), 'success');
     };
 
-    // 2. Handle "Use Cropped" (From Picker's cropper)
     const handleCropSelectFromPicker = (croppedImage: { url: string; file: File }) => {
         if (!pickerTarget) return;
          setCharacters(prev => prev.map((char, i) => {
@@ -281,12 +290,10 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
         showToast(t('modals.processedImage.success.cropped'), 'success');
     };
 
-    // 3. Handle Cross-Tool Actions (Send to Bg/Enhancer)
     const handleProcessAction = async (image: ProcessedImageData, action: 'bg-remover' | 'enhancer') => {
         if (!onSwitchToolWithImage) return;
 
         try {
-            // Must convert to file to pass to other tools
             let file: File;
             let url: string;
 
@@ -484,13 +491,10 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                         setProgressText('Đang chuẩn bị dữ liệu...');
                         
                         // 1. Prepare Master Canvas (Client-side Preprocessing)
-                        // This replaces the server-side Jimp processing to avoid timeouts
                         let masterCanvasBase64 = '';
                         if (referenceImage) {
-                            // Letterbox the user's reference image to match the target aspect ratio
                             masterCanvasBase64 = await preprocessImageToAspectRatio(referenceImage.url, aspectRatio);
                         } else {
-                            // Create a blank white canvas with the target aspect ratio
                             masterCanvasBase64 = createBlankCanvas(aspectRatio);
                         }
 
@@ -589,9 +593,6 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
     const resetGenerator = () => {
         setGeneratedImage(null);
         setProgressText('');
-        // Don't reset numCharacters automatically, allow user to make another with same config or go back
-        // If we want to go back to selection:
-        // setNumCharacters(0); 
     };
     
     const resultImageForModal = generatedImage ? {
@@ -643,15 +644,25 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
         );
     }
 
+    // --- COMIC STUDIO MODE ---
+    if (activeMode === 'comic') {
+        return (
+            <ComicStudio 
+                onInstructionClick={() => onInstructionClick('comic-studio')} 
+                onBack={() => setActiveMode('selection')}
+            />
+        );
+    }
 
-    if (numCharacters === 0) {
+    // --- SELECTION MODE ---
+    if (activeMode === 'selection') {
         return (
             <div className="flex flex-col items-center animate-fade-in py-8">
                 <h2 className="themed-heading text-2xl font-bold themed-title-glow mb-2 text-center">{t('creator.aiTool.groupStudio.introTitle')}</h2>
                 <p className="text-skin-muted mb-8 text-center text-sm">{t('creator.aiTool.groupStudio.introDesc')}</p>
                 
-                {/* 3 Main Mode Selection Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl w-full px-4">
+                {/* 4 Main Mode Selection Cards */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-5xl w-full px-4">
                     
                     {/* Solo Mode */}
                     <ModeCard 
@@ -700,11 +711,22 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                             </div>
                         </div>
                     )}
+                    
+                    {/* Comic Mode (New) */}
+                    <ModeCard 
+                        icon="ph-book-open-text"
+                        title="Truyện Tranh"
+                        description="Viết kịch bản & Vẽ truyện AI"
+                        colorClass="text-purple-400 border-purple-500/30 hover:border-purple-400 hover:shadow-purple-500/20"
+                        onClick={handleComicModeSelect}
+                        hot={true}
+                    />
                 </div>
             </div>
         );
     }
 
+    // --- GENERATOR MODE ---
     return (
         <div className="animate-fade-in">
              <ProcessedImagePickerModal 
@@ -737,8 +759,8 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
                 <div className="w-full lg:w-2/3">
                     <div className="flex justify-between items-center mb-3">
                         <h3 className="themed-heading text-lg font-bold themed-title-glow">{t('creator.aiTool.groupStudio.characterInfoTitle')}</h3>
-                        <button onClick={() => setNumCharacters(0)} className="text-xs text-skin-muted hover:text-skin-base border border-skin-border px-2 py-1 rounded-full bg-skin-fill hover:bg-white/5 transition flex items-center gap-1">
-                            <i className="ph-bold ph-arrow-left"></i> {t('creator.aiTool.groupStudio.changeAmount')}
+                        <button onClick={() => setActiveMode('selection')} className="text-xs text-skin-muted hover:text-skin-base border border-skin-border px-2 py-1 rounded-full bg-skin-fill hover:bg-white/5 transition flex items-center gap-1">
+                            <i className="ph-bold ph-arrow-left"></i> Quay lại Menu
                         </button>
                     </div>
                     {/* Responsive Grid based on count */}

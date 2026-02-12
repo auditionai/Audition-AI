@@ -11,7 +11,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import UtilInstructionModal from '../ai-tool/InstructionModal'; 
 import { useTranslation } from '../../hooks/useTranslation';
 
-type AIToolTab = 'studio' | 'comic-studio' | 'utilities'; // Changed 'generator' & 'group-studio' to 'studio'
+type AIToolTab = 'studio' | 'utilities'; // Removed 'comic-studio'
 type UtilityTab = 'bg-remover' | 'signature' | 'enhancer';
 
 const AITool: React.FC = () => {
@@ -91,11 +91,11 @@ const AITool: React.FC = () => {
             
             <div className="max-w-7xl mx-auto">
                 {/* Main Tabs */}
-                <div className="grid grid-cols-3 gap-2 mb-6 md:flex md:justify-center md:gap-0 md:border-b md:border-white/10 md:mb-8">
+                <div className="grid grid-cols-2 gap-2 mb-6 md:flex md:justify-center md:gap-0 md:border-b md:border-white/10 md:mb-8">
                      <button
                         onClick={() => setActiveTab('studio')}
                         className={`
-                            px-4 py-3 font-bold text-xs md:text-base rounded-xl md:rounded-none md:rounded-t-lg transition-all
+                            px-8 py-3 font-bold text-xs md:text-base rounded-xl md:rounded-none md:rounded-t-lg transition-all
                             flex flex-col md:flex-row items-center justify-center gap-2 border-2 md:border-0 md:border-b-2
                             ${activeTab === 'studio' 
                                 ? 'bg-skin-accent text-white border-transparent md:bg-transparent md:text-skin-accent md:border-skin-accent shadow-lg md:shadow-none' 
@@ -107,24 +107,9 @@ const AITool: React.FC = () => {
                         STUDIO SÁNG TẠO
                     </button>
                     <button
-                        onClick={() => setActiveTab('comic-studio')}
-                        className={`
-                            px-4 py-3 font-bold text-xs md:text-base rounded-xl md:rounded-none md:rounded-t-lg transition-all
-                            flex flex-col md:flex-row items-center justify-center gap-2 border-2 md:border-0 md:border-b-2 relative
-                            ${activeTab === 'comic-studio' 
-                                ? 'bg-skin-accent text-white border-transparent md:bg-transparent md:text-skin-accent md:border-skin-accent shadow-lg md:shadow-none' 
-                                : 'bg-skin-fill-secondary text-skin-muted border-skin-border hover:text-skin-base hover:bg-white/5'
-                            }
-                        `}
-                    >
-                        <i className="ph-fill ph-book-open-text text-xl md:text-lg"></i>
-                        TRUYỆN TRANH
-                        <span className="absolute -top-2 -right-2 md:-top-3 md:-right-3 bg-gradient-to-r from-red-500 to-orange-600 text-white text-[9px] px-2 py-0.5 rounded-full font-black shadow-sm border border-white/20 animate-pulse z-10">HOT</span>
-                    </button>
-                    <button
                         onClick={() => setActiveTab('utilities')}
                         className={`
-                            px-4 py-3 font-bold text-xs md:text-base rounded-xl md:rounded-none md:rounded-t-lg transition-all
+                            px-8 py-3 font-bold text-xs md:text-base rounded-xl md:rounded-none md:rounded-t-lg transition-all
                             flex flex-col md:flex-row items-center justify-center gap-2 border-2 md:border-0 md:border-b-2
                             ${activeTab === 'utilities' 
                                 ? 'bg-skin-accent text-white border-transparent md:bg-transparent md:text-skin-accent md:border-skin-accent shadow-lg md:shadow-none' 
@@ -138,58 +123,52 @@ const AITool: React.FC = () => {
                 </div>
 
                 {/* Content */}
-                {activeTab === 'comic-studio' ? (
-                    <ComicStudio 
-                        onInstructionClick={() => openUtilHelp('comic-studio')}
-                    />
-                ) : (
-                    <div className="p-4 bg-skin-fill-secondary rounded-2xl border border-skin-border shadow-lg">
-                        {activeTab === 'studio' && (
-                            <GroupGeneratorTool 
-                                onSwitchToUtility={() => handleSwitchToUtility('bg-remover')} 
-                                onInstructionClick={() => openUtilHelp('group-studio')}
-                                onSwitchToolWithImage={handleSwitchToolWithImage}
-                            />
-                        )}
-                        {activeTab === 'utilities' && (
-                            <div>
-                                {/* Utility Sub-tabs */}
-                                <div className="flex justify-center border-b border-white/10 mb-6">
-                                    <button onClick={() => setActiveUtility('bg-remover')} className={`px-4 py-2 text-sm font-semibold transition-colors ${activeUtility === 'bg-remover' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400 hover:text-white'}`}>
-                                        <i className="ph-fill ph-scissors mr-2"></i>{t('creator.aiTool.utils.bgRemover')}
-                                    </button>
-                                    <button onClick={() => setActiveUtility('enhancer')} className={`px-4 py-2 text-sm font-semibold transition-colors ${activeUtility === 'enhancer' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400 hover:text-white'}`}>
-                                        <i className="ph-fill ph-sparkle mr-2"></i>{t('creator.aiTool.utils.enhancer')}
-                                    </button>
-                                    <button onClick={() => setActiveUtility('signature')} className={`px-4 py-2 text-sm font-semibold transition-colors ${activeUtility === 'signature' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400 hover:text-white'}`}>
-                                        <i className="ph-fill ph-pencil-simple-line mr-2"></i>{t('creator.aiTool.utils.signature')}
-                                    </button>
-                                </div>
-                                
-                                {activeUtility === 'bg-remover' && (
-                                    <BgRemoverTool 
-                                        onMoveToGenerator={() => {}} // Legacy
-                                        onMoveFaceToGenerator={() => {}} // Legacy
-                                        onInstructionClick={() => openUtilHelp('bg-remover')}
-                                        initialImage={imageForBgRemover}
-                                    />
-                                )}
-                                {activeUtility === 'enhancer' && (
-                                    <ImageEnhancerTool 
-                                        onSendToBgRemover={handleSendToBgRemover}
-                                    />
-                                )}
-                                {activeUtility === 'signature' && (
-                                    <SignatureTool 
-                                        initialImage={imageForUtility}
-                                        onClearInitialImage={() => setImageForUtility(null)}
-                                        onInstructionClick={() => openUtilHelp('signature')}
-                                    />
-                                )}
+                <div className="p-4 bg-skin-fill-secondary rounded-2xl border border-skin-border shadow-lg">
+                    {activeTab === 'studio' && (
+                        <GroupGeneratorTool 
+                            onSwitchToUtility={() => handleSwitchToUtility('bg-remover')} 
+                            onInstructionClick={(key) => openUtilHelp(key || 'group-studio')} // Pass key if provided, else default
+                            onSwitchToolWithImage={handleSwitchToolWithImage}
+                        />
+                    )}
+                    {activeTab === 'utilities' && (
+                        <div>
+                            {/* Utility Sub-tabs */}
+                            <div className="flex justify-center border-b border-white/10 mb-6">
+                                <button onClick={() => setActiveUtility('bg-remover')} className={`px-4 py-2 text-sm font-semibold transition-colors ${activeUtility === 'bg-remover' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400 hover:text-white'}`}>
+                                    <i className="ph-fill ph-scissors mr-2"></i>{t('creator.aiTool.utils.bgRemover')}
+                                </button>
+                                <button onClick={() => setActiveUtility('enhancer')} className={`px-4 py-2 text-sm font-semibold transition-colors ${activeUtility === 'enhancer' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400 hover:text-white'}`}>
+                                    <i className="ph-fill ph-sparkle mr-2"></i>{t('creator.aiTool.utils.enhancer')}
+                                </button>
+                                <button onClick={() => setActiveUtility('signature')} className={`px-4 py-2 text-sm font-semibold transition-colors ${activeUtility === 'signature' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400 hover:text-white'}`}>
+                                    <i className="ph-fill ph-pencil-simple-line mr-2"></i>{t('creator.aiTool.utils.signature')}
+                                </button>
                             </div>
-                        )}
-                    </div>
-                )}
+                            
+                            {activeUtility === 'bg-remover' && (
+                                <BgRemoverTool 
+                                    onMoveToGenerator={() => {}} // Legacy
+                                    onMoveFaceToGenerator={() => {}} // Legacy
+                                    onInstructionClick={() => openUtilHelp('bg-remover')}
+                                    initialImage={imageForBgRemover}
+                                />
+                            )}
+                            {activeUtility === 'enhancer' && (
+                                <ImageEnhancerTool 
+                                    onSendToBgRemover={handleSendToBgRemover}
+                                />
+                            )}
+                            {activeUtility === 'signature' && (
+                                <SignatureTool 
+                                    initialImage={imageForUtility}
+                                    onClearInitialImage={() => setImageForUtility(null)}
+                                    onInstructionClick={() => openUtilHelp('signature')}
+                                    />
+                            )}
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     );

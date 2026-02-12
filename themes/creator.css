@@ -17,122 +17,124 @@
     --color-text-base: #FFFFFF;
     --color-text-muted: rgba(255, 255, 255, 0.65);
     
-    --color-accent: 56 189 248; /* Sky-400 */
-    --color-accent-secondary: 192 132 252; /* Purple-400 */
+    --color-accent: 220 38 38; /* Red-600 */
+    --color-accent-secondary: 185 28 28; /* Red-700 */
     
     --color-accent-text: #FFFFFF;
     --color-border: rgba(255, 255, 255, 0.12);
-    --color-border-accent: rgba(56, 189, 248, 0.4);
-    --shadow-accent: 0 8px 32px 0 rgba(56, 189, 248, 0.2);
-    --shadow-accent-lg: 0 15px 50px 0 rgba(56, 189, 248, 0.4);
+    --color-border-accent: rgba(220, 38, 38, 0.4);
+    --shadow-accent: 0 8px 32px 0 rgba(220, 38, 38, 0.2);
+    --shadow-accent-lg: 0 15px 50px 0 rgba(220, 38, 38, 0.4);
 }
 
 /* ==========================================================================
-   IOS 26 LIQUID GLASS THEME (GLOBAL OVERRIDES)
-   This section forcefully restyles existing components to match the new look
-   without rewriting every single component.
+   FORMULA RED - LIQUID GLASS THEME (GLOBAL OVERRIDES)
    ========================================================================== */
 
 [data-theme='liquid-glass'] {
-    --color-fill: #000000; 
-    --color-fill-secondary: rgba(255, 255, 255, 0.03); 
-    --color-fill-modal: rgba(30, 30, 35, 0.6); 
-    --color-input-bg: rgba(0, 0, 0, 0.2);
+    --color-fill: #050505; /* Ultra Deep Black */
+    --color-fill-secondary: rgba(255, 50, 50, 0.03); 
+    --color-fill-modal: rgba(10, 0, 0, 0.85); 
+    --color-input-bg: rgba(20, 0, 0, 0.4);
     
-    --color-accent: 6 182 212; 
-    --color-accent-secondary: 168 85 247;
+    /* Aggressive Red & Dark Crimson Gradient Base */
+    --color-accent: 239 68 68; /* Red-500 */
+    --color-accent-secondary: 153 27 27; /* Red-800 */
     
-    --color-border: rgba(255, 255, 255, 0.08); 
-    --color-border-accent: rgba(255, 255, 255, 0.2);
+    --color-border: rgba(255, 255, 255, 0.1); 
+    --color-border-accent: rgba(239, 68, 68, 0.4);
     
-    --shadow-accent: 0 4px 30px rgba(0, 0, 0, 0.2);
-    --shadow-accent-lg: 0 8px 40px rgba(6, 182, 212, 0.2);
+    --shadow-accent: 0 4px 30px rgba(220, 38, 38, 0.15);
+    --shadow-accent-lg: 0 8px 40px rgba(220, 38, 38, 0.4);
 
-    --glass-radius: 24px;
+    --glass-radius: 28px;
     --glass-border: 1px solid rgba(255, 255, 255, 0.08);
-    --glass-bg: rgba(20, 20, 20, 0.4);
-    --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
-    --glass-backdrop: blur(24px) saturate(180%);
+    --glass-bg: rgba(15, 0, 0, 0.6); /* Red-tinted dark glass */
+    --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+    --glass-backdrop: blur(30px) saturate(120%);
 }
 
-/* --- LIQUID SHELL LAYOUT --- */
+/* --- LIQUID SHELL LAYOUT (Formula Red Style) --- */
 
 [data-theme='liquid-glass'] .liquid-content-container {
-    background: rgba(255, 255, 255, 0.02);
+    background: rgba(10, 10, 10, 0.4);
     backdrop-filter: var(--glass-backdrop);
     -webkit-backdrop-filter: var(--glass-backdrop);
     border: var(--glass-border);
+    border-top: 1px solid rgba(255, 50, 50, 0.1);
     box-shadow: 
-        inset 0 0 0 1px rgba(255, 255, 255, 0.05),
-        0 20px 50px rgba(0,0,0,0.5);
-    /* Subtle noise texture */
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.02'/%3E%3C/svg%3E");
+        inset 0 0 50px rgba(0,0,0,0.8),
+        0 20px 50px rgba(0,0,0,0.8);
+    /* Carbon Fiber-ish Noise */
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.5' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.04'/%3E%3C/svg%3E");
 }
 
+/* The Unified Omni-Dock */
 [data-theme='liquid-glass'] .liquid-dock-container {
-    background: rgba(15, 15, 15, 0.6);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 9999px; /* Pill shape */
-    padding: 8px 16px;
+    background: rgba(5, 0, 0, 0.85); /* Darker, richer background */
+    backdrop-filter: blur(25px);
+    -webkit-backdrop-filter: blur(25px);
+    border: 1px solid rgba(255, 50, 50, 0.2); /* Red tint border */
+    border-radius: 9999px;
+    padding: 6px 8px;
     display: flex;
-    gap: 8px;
-    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.5);
+    align-items: center;
+    gap: 4px;
+    box-shadow: 
+        0 10px 40px rgba(0, 0, 0, 0.8),
+        0 0 20px rgba(220, 38, 38, 0.1); /* Subtle red glow */
 }
 
+/* Dock Items */
 [data-theme='liquid-glass'] .liquid-dock-item {
     position: relative;
-    width: 56px;
-    height: 56px;
-    border-radius: 50%; /* Circle icons */
+    height: 48px;
+    min-width: 48px;
+    padding: 0 12px;
+    border-radius: 24px;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    gap: 8px;
+    transition: all 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
     background: transparent;
     border: 1px solid transparent;
+    color: rgba(255, 255, 255, 0.5);
 }
 
 [data-theme='liquid-glass'] .liquid-dock-item:hover {
-    background: rgba(255, 255, 255, 0.1);
-    transform: translateY(-8px) scale(1.1);
-    border-color: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.05);
+    color: #fff;
+    transform: translateY(-2px);
 }
 
 [data-theme='liquid-glass'] .liquid-dock-item.active {
-    background: linear-gradient(135deg, rgba(6, 182, 212, 0.2), rgba(168, 85, 247, 0.2));
-    border-color: rgba(255, 255, 255, 0.3);
-    box-shadow: 0 0 15px rgba(6, 182, 212, 0.3);
+    background: linear-gradient(135deg, rgba(220, 38, 38, 0.8), rgba(153, 27, 27, 0.9)); /* Strong Red Gradient */
+    color: #fff;
+    border: 1px solid rgba(255, 100, 100, 0.3);
+    box-shadow: 0 4px 15px rgba(220, 38, 38, 0.4); /* Red glow */
+    padding-left: 16px;
+    padding-right: 16px;
 }
 
-[data-theme='liquid-glass'] .liquid-dock-tooltip {
-    position: absolute;
-    top: -40px;
-    left: 50%;
-    transform: translateX(-50%) scale(0.8);
-    background: rgba(0,0,0,0.8);
-    color: white;
-    padding: 4px 10px;
-    border-radius: 8px;
-    font-size: 11px;
-    font-weight: bold;
-    opacity: 0;
-    transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    pointer-events: none;
-    white-space: nowrap;
-    border: 1px solid rgba(255,255,255,0.1);
+/* Special Profile Section in Dock */
+[data-theme='liquid-glass'] .liquid-dock-profile {
+    background: rgba(20, 20, 20, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 4px 12px 4px 4px;
+    border-radius: 9999px;
+    margin-left: 8px;
+    transition: all 0.3s ease;
+}
+[data-theme='liquid-glass'] .liquid-dock-profile:hover {
+    border-color: rgba(255, 50, 50, 0.4);
+    background: rgba(30, 10, 10, 0.8);
 }
 
-[data-theme='liquid-glass'] .liquid-dock-item:hover .liquid-dock-tooltip {
-    opacity: 1;
-    transform: translateX(-50%) scale(1);
-    top: -50px;
-}
 
 /* --- COMPONENT TRANSFORMATION OVERRIDES --- */
 
-/* 1. Containers & Panels (Settings Blocks, Cards) */
+/* 1. Containers */
 [data-theme='liquid-glass'] .themed-settings-block,
 [data-theme='liquid-glass'] .bg-skin-fill-secondary,
 [data-theme='liquid-glass'] .bg-black\/20,
@@ -143,93 +145,67 @@
     box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
 }
 
-/* 2. Inputs & Textareas */
+/* 2. Inputs */
 [data-theme='liquid-glass'] .auth-input,
 [data-theme='liquid-glass'] input[type="text"],
 [data-theme='liquid-glass'] input[type="number"],
 [data-theme='liquid-glass'] textarea,
 [data-theme='liquid-glass'] select {
-    background: rgba(0, 0, 0, 0.3) !important;
+    background: rgba(0, 0, 0, 0.5) !important;
     border: 1px solid rgba(255, 255, 255, 0.1) !important;
-    border-radius: 16px !important; /* Rounder inputs */
+    border-radius: 16px !important;
     padding: 12px 16px !important;
     color: #fff !important;
     transition: all 0.3s ease;
-    box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
 }
 
 [data-theme='liquid-glass'] .auth-input:focus,
 [data-theme='liquid-glass'] textarea:focus {
-    border-color: rgba(6, 182, 212, 0.5) !important;
-    box-shadow: 0 0 0 4px rgba(6, 182, 212, 0.1), inset 0 2px 4px rgba(0,0,0,0.2) !important;
-    background: rgba(0, 0, 0, 0.5) !important;
+    border-color: rgba(239, 68, 68, 0.6) !important; /* Red focus */
+    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2) !important;
+    background: rgba(20, 0, 0, 0.6) !important;
 }
 
 /* 3. Buttons */
 [data-theme='liquid-glass'] .themed-button-primary {
-    border-radius: 9999px !important; /* Capsule shape */
-    background: linear-gradient(135deg, #06b6d4, #3b82f6) !important; /* Fresh Cyan-Blue */
-    border: 1px solid rgba(255,255,255,0.2) !important;
-    box-shadow: 0 4px 15px rgba(6, 182, 212, 0.4) !important;
+    border-radius: 9999px !important;
+    background: linear-gradient(135deg, #ef4444, #b91c1c) !important; /* Red 500 to Red 700 */
+    border: 1px solid rgba(255, 100, 100, 0.3) !important;
+    box-shadow: 0 4px 20px rgba(220, 38, 38, 0.3) !important;
     font-weight: 800 !important;
     letter-spacing: 0.05em !important;
     text-transform: uppercase !important;
-    padding-left: 2rem !important;
-    padding-right: 2rem !important;
 }
 
 [data-theme='liquid-glass'] .themed-button-primary:hover {
-    box-shadow: 0 8px 25px rgba(6, 182, 212, 0.6) !important;
+    box-shadow: 0 6px 25px rgba(220, 38, 38, 0.5) !important;
     transform: translateY(-2px);
-    filter: brightness(1.1);
+    filter: brightness(1.2);
 }
 
 [data-theme='liquid-glass'] .themed-button-secondary,
 [data-theme='liquid-glass'] button.bg-white\/10 {
     border-radius: 9999px !important;
-    background: rgba(255, 255, 255, 0.08) !important;
+    background: rgba(255, 255, 255, 0.05) !important;
     border: 1px solid rgba(255, 255, 255, 0.1) !important;
-    backdrop-filter: blur(10px);
 }
-
 [data-theme='liquid-glass'] .themed-button-secondary:hover {
-    background: rgba(255, 255, 255, 0.15) !important;
+    background: rgba(255, 255, 255, 0.1) !important;
     border-color: rgba(255, 255, 255, 0.3) !important;
 }
 
-/* 4. Modals */
-[data-theme='liquid-glass'] .bg-skin-fill-modal {
-    background: rgba(25, 25, 30, 0.85) !important;
-    backdrop-filter: blur(40px) saturate(200%) !important;
-    -webkit-backdrop-filter: blur(40px) saturate(200%) !important;
-    border: 1px solid rgba(255, 255, 255, 0.15) !important;
-    border-radius: 32px !important;
-    box-shadow: 0 40px 80px rgba(0,0,0,0.6) !important;
-}
-
-/* 5. Headers & Titles */
-[data-theme='liquid-glass'] .themed-title-glow,
-[data-theme='liquid-glass'] h1, 
-[data-theme='liquid-glass'] h2,
-[data-theme='liquid-glass'] h3 {
-    text-shadow: 0 0 20px rgba(255, 255, 255, 0.1);
-}
-
-/* 6. Fix for Group Generator Cards (ModeCard) */
-[data-theme='liquid-glass'] .grid button.bg-\[\#181820\] {
-    background: var(--glass-bg) !important;
-    border-radius: 24px !important;
-    border: var(--glass-border) !important;
-}
-
-/* 7. Toggle Switches */
-[data-theme='liquid-glass'] input[type="checkbox"] + div {
-    background: rgba(0,0,0,0.5);
-    border: 1px solid rgba(255,255,255,0.1);
-}
+/* 4. Toggles & Checkboxes */
 [data-theme='liquid-glass'] input[type="checkbox"]:checked + div {
-    background: linear-gradient(to right, #06b6d4, #3b82f6);
+    background: linear-gradient(to right, #ef4444, #991b1b);
     border-color: transparent;
+}
+
+/* 5. Scrollbar */
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(220, 38, 38, 0.4);
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(220, 38, 38, 0.8);
 }
 
 

@@ -4,7 +4,6 @@ import { useAuth } from '../../contexts/AuthContext';
 import { CreatorTab } from '../../pages/CreatorPage';
 import UserAvatar from '../common/UserAvatar';
 import { useTranslation } from '../../hooks/useTranslation';
-import MarqueeBanner from '../common/MarqueeBanner';
 
 interface LiquidShellProps {
     children: React.ReactNode;
@@ -26,7 +25,7 @@ const LiquidShell: React.FC<LiquidShellProps> = ({
 
     if (!user) return null;
 
-    // --- NAVIGATION DOCK ITEMS (4 Core Functions) ---
+    // --- NAVIGATION DOCK ITEMS ---
     const navItems = [
         { 
             id: 'tool', 
@@ -47,27 +46,19 @@ const LiquidShell: React.FC<LiquidShellProps> = ({
             icon: 'ph-calendar-check', 
             label: t('creator.header.nav.checkIn'),
             action: onCheckInClick,
-            active: false, // Trigger only
+            active: false, 
             extraClass: !hasCheckedInToday ? 'animate-bounce text-green-400' : ''
-        },
-        { 
-            id: 'top-up', 
-            icon: 'ph-diamonds-four', 
-            label: 'Nạp tiền',
-            action: onTopUpClick,
-            active: false, // Trigger only
-            extraClass: 'text-yellow-400'
-        },
+        }
     ];
 
     return (
         <div className="relative min-h-screen w-full overflow-hidden text-white flex flex-col font-barlow bg-black selection:bg-red-500 selection:text-white">
             
             {/* --- MAIN GLASS STAGE (Content) --- */}
-            <main className="flex-grow w-full h-screen overflow-hidden pt-4 pb-28 px-2 md:px-4 flex flex-col items-center">
+            {/* Added extra padding-bottom (pb-32) so content isn't hidden behind the Dock */}
+            <main className="flex-grow w-full h-screen overflow-hidden pt-2 pb-32 px-2 md:px-4 flex flex-col items-center">
                 
-                {/* 3D Floating Marquee */}
-                <MarqueeBanner />
+                {/* Marquee removed here to prevent duplication with App.tsx */}
 
                 <div className="w-full max-w-[1200px] h-full relative z-10 flex flex-col">
                      {/* Inner Scrollable Container with 3D Border */}
@@ -78,13 +69,14 @@ const LiquidShell: React.FC<LiquidShellProps> = ({
             </main>
 
             {/* --- BOTTOM OMNI-DOCK (3D Floating Bar) --- */}
-            <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
-                <div className="liquid-dock-container pointer-events-auto">
+            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 pointer-events-none w-auto max-w-[95vw]">
+                <div className="liquid-dock-container pointer-events-auto shadow-2xl">
                     
-                    {/* LEFT: Logo/Profile (Mini) */}
+                    {/* LEFT: User Profile (Settings) */}
                     <div 
-                        className="w-12 h-12 rounded-2xl bg-black/50 border border-white/10 flex items-center justify-center cursor-pointer hover:border-red-500 transition-colors mr-2 relative group overflow-hidden"
-                        onClick={() => onNavigate('profile')}
+                        className="flex items-center gap-2 pr-3 border-r border-white/10 mr-1 cursor-pointer group"
+                        onClick={() => onNavigate('settings')}
+                        title="Cài đặt tài khoản"
                     >
                          <UserAvatar 
                             url={user.photo_url} 
@@ -92,12 +84,15 @@ const LiquidShell: React.FC<LiquidShellProps> = ({
                             frameId={user.equipped_frame_id} 
                             level={user.level} 
                             size="sm"
-                            className="scale-90"
+                            className="scale-90 group-hover:scale-100 transition-transform"
                         />
+                        <div className="hidden sm:flex flex-col">
+                            <span className="text-[10px] font-bold text-gray-300 group-hover:text-white max-w-[80px] truncate">{user.display_name}</span>
+                        </div>
                     </div>
 
-                    {/* CENTER: Navigation Pills (3D Buttons) */}
-                    <div className="flex items-center gap-3">
+                    {/* CENTER: Navigation Pills */}
+                    <div className="flex items-center gap-2">
                         {navItems.map((item) => (
                             <button
                                 key={item.id}
@@ -115,14 +110,20 @@ const LiquidShell: React.FC<LiquidShellProps> = ({
                         ))}
                     </div>
 
-                    {/* RIGHT: Logout (Small) */}
-                    <div className="ml-2 pl-2 border-l border-white/10">
+                    {/* RIGHT: Balance & Top Up */}
+                    <div className="ml-1 pl-3 border-l border-white/10 flex items-center gap-2">
+                        <div className="flex flex-col items-end mr-1">
+                             <span className="text-[9px] text-gray-400 font-bold tracking-wider">BALANCE</span>
+                             <span className="text-sm font-black text-white leading-none">{user.diamonds} <i className="ph-fill ph-diamonds-four text-red-500 text-[10px]"></i></span>
+                        </div>
+
                          <button 
-                            onClick={logout} 
-                            className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-red-500/20 text-gray-500 hover:text-red-500 transition-colors"
-                            title="Đăng xuất"
+                            onClick={() => onNavigate('buy-credits')} 
+                            className="liquid-dock-item !w-auto !h-10 !px-4 !bg-gradient-to-r from-yellow-600 to-red-600 hover:from-yellow-500 hover:to-red-500 !border-yellow-500/30 text-white shadow-lg shadow-red-900/20 group"
+                            title="Nạp Kim Cương"
                         >
-                             <i className="ph-fill ph-sign-out text-lg"></i>
+                             <i className="ph-fill ph-plus-circle text-lg group-hover:rotate-90 transition-transform"></i>
+                             <span className="text-xs font-bold hidden sm:inline">NẠP</span>
                          </button>
                     </div>
 

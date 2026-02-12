@@ -25,9 +25,6 @@ const AITool: React.FC = () => {
     const [utilHelpKey, setUtilHelpKey] = useState<'bg-remover' | 'signature' | 'group-studio' | 'comic-studio' | null>(null);
 
     // State to pass images between tools
-    // const [poseImage, setPoseImage] = useState<{ url: string; file: File } | null>(null); // Removed single tool state
-    // const [rawFaceImage, setRawFaceImage] = useState<{ url: string; file: File } | null>(null); // Removed single tool state
-    
     const [imageForUtility, setImageForUtility] = useState<string | null>(null);
     const [imageForBgRemover, setImageForBgRemover] = useState<{ url: string; file: File } | null>(null);
 
@@ -60,7 +57,7 @@ const AITool: React.FC = () => {
     };
 
     return (
-        <div className="container mx-auto px-4 py-8">
+        <div className="container mx-auto px-4 py-4">
             <InstructionModal 
                 isOpen={isInstructionModalOpen} 
                 onClose={() => setInstructionModalOpen(false)} 
@@ -70,78 +67,80 @@ const AITool: React.FC = () => {
                 onClose={() => setUtilHelpOpen(false)}
                 instructionKey={utilHelpKey}
             />
-            <div className="themed-main-title-container text-center max-w-4xl mx-auto mb-8 md:mb-12">
-                <h1 
-                    className="themed-main-title text-3xl md:text-5xl lg:text-6xl font-black mb-2 md:mb-4 leading-tight"
-                    data-text={t('creator.aiTool.title')}
-                >
-                    {t('creator.aiTool.title')}
-                </h1>
-                <p className="themed-main-subtitle text-sm md:text-xl max-w-2xl mx-auto">
-                    {t('creator.aiTool.description')}
-                </p>
-                <button
-                    onClick={() => setInstructionModalOpen(true)}
-                    className="themed-guide-button mt-4"
-                >
-                    <i className="ph-fill ph-book-open"></i>
-                    <span>{t('creator.aiTool.quickGuide')}</span>
-                </button>
+            
+            {/* Compact Header */}
+            <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-6 pb-4 border-b border-white/5">
+                <div className="text-center md:text-left">
+                    <h1 
+                        className="themed-main-title text-2xl md:text-3xl font-black leading-tight tracking-tight uppercase"
+                        data-text={t('creator.aiTool.title')}
+                    >
+                        {t('creator.aiTool.title')}
+                    </h1>
+                    <p className="text-xs md:text-sm text-gray-400 mt-1 max-w-lg">
+                        {t('creator.aiTool.description')}
+                    </p>
+                </div>
+                
+                <div className="flex items-center gap-3">
+                     <div className="bg-[#1a1a1a] p-1 rounded-lg flex border border-white/10 shadow-inner">
+                        <button
+                            onClick={() => setActiveTab('studio')}
+                            className={`
+                                px-4 py-1.5 rounded-md font-bold text-xs transition-all flex items-center gap-2
+                                ${activeTab === 'studio' 
+                                    ? 'bg-red-600 text-white shadow-md' 
+                                    : 'text-gray-400 hover:text-white hover:bg-white/5'
+                                }
+                            `}
+                        >
+                            <i className="ph-fill ph-magic-wand"></i> STUDIO
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('utilities')}
+                            className={`
+                                px-4 py-1.5 rounded-md font-bold text-xs transition-all flex items-center gap-2
+                                ${activeTab === 'utilities' 
+                                    ? 'bg-red-600 text-white shadow-md' 
+                                    : 'text-gray-400 hover:text-white hover:bg-white/5'
+                                }
+                            `}
+                        >
+                            <i className="ph-fill ph-wrench"></i> TIỆN ÍCH
+                        </button>
+                    </div>
+
+                    <button
+                        onClick={() => setInstructionModalOpen(true)}
+                        className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-gray-400 hover:text-white transition-colors border border-white/10"
+                        title={t('creator.aiTool.quickGuide')}
+                    >
+                        <i className="ph-fill ph-question text-lg"></i>
+                    </button>
+                </div>
             </div>
             
             <div className="max-w-7xl mx-auto">
-                {/* Main Tabs */}
-                <div className="grid grid-cols-2 gap-2 mb-6 md:flex md:justify-center md:gap-0 md:border-b md:border-white/10 md:mb-8">
-                     <button
-                        onClick={() => setActiveTab('studio')}
-                        className={`
-                            px-8 py-3 font-bold text-xs md:text-base rounded-xl md:rounded-none md:rounded-t-lg transition-all
-                            flex flex-col md:flex-row items-center justify-center gap-2 border-2 md:border-0 md:border-b-2
-                            ${activeTab === 'studio' 
-                                ? 'bg-skin-accent text-white border-transparent md:bg-transparent md:text-skin-accent md:border-skin-accent shadow-lg md:shadow-none' 
-                                : 'bg-skin-fill-secondary text-skin-muted border-skin-border hover:text-skin-base hover:bg-white/5'
-                            }
-                        `}
-                    >
-                        <i className="ph-fill ph-magic-wand text-xl md:text-lg"></i>
-                        STUDIO SÁNG TẠO
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('utilities')}
-                        className={`
-                            px-8 py-3 font-bold text-xs md:text-base rounded-xl md:rounded-none md:rounded-t-lg transition-all
-                            flex flex-col md:flex-row items-center justify-center gap-2 border-2 md:border-0 md:border-b-2
-                            ${activeTab === 'utilities' 
-                                ? 'bg-skin-accent text-white border-transparent md:bg-transparent md:text-skin-accent md:border-skin-accent shadow-lg md:shadow-none' 
-                                : 'bg-skin-fill-secondary text-skin-muted border-skin-border hover:text-skin-base hover:bg-white/5'
-                            }
-                        `}
-                    >
-                        <i className="ph-fill ph-wrench text-xl md:text-lg"></i>
-                        TIỆN ÍCH
-                    </button>
-                </div>
-
                 {/* Content */}
-                <div className="p-4 bg-skin-fill-secondary rounded-2xl border border-skin-border shadow-lg">
+                <div className="p-1">
                     {activeTab === 'studio' && (
                         <GroupGeneratorTool 
                             onSwitchToUtility={() => handleSwitchToUtility('bg-remover')} 
-                            onInstructionClick={(key) => openUtilHelp(key || 'group-studio')} // Pass key if provided, else default
+                            onInstructionClick={(key) => openUtilHelp(key || 'group-studio')} 
                             onSwitchToolWithImage={handleSwitchToolWithImage}
                         />
                     )}
                     {activeTab === 'utilities' && (
-                        <div>
+                        <div className="bg-skin-fill-secondary rounded-2xl border border-skin-border shadow-lg p-4">
                             {/* Utility Sub-tabs */}
                             <div className="flex justify-center border-b border-white/10 mb-6">
-                                <button onClick={() => setActiveUtility('bg-remover')} className={`px-4 py-2 text-sm font-semibold transition-colors ${activeUtility === 'bg-remover' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400 hover:text-white'}`}>
+                                <button onClick={() => setActiveUtility('bg-remover')} className={`px-4 py-2 text-sm font-semibold transition-colors border-b-2 ${activeUtility === 'bg-remover' ? 'text-red-400 border-red-400' : 'text-gray-400 border-transparent hover:text-white'}`}>
                                     <i className="ph-fill ph-scissors mr-2"></i>{t('creator.aiTool.utils.bgRemover')}
                                 </button>
-                                <button onClick={() => setActiveUtility('enhancer')} className={`px-4 py-2 text-sm font-semibold transition-colors ${activeUtility === 'enhancer' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400 hover:text-white'}`}>
+                                <button onClick={() => setActiveUtility('enhancer')} className={`px-4 py-2 text-sm font-semibold transition-colors border-b-2 ${activeUtility === 'enhancer' ? 'text-red-400 border-red-400' : 'text-gray-400 border-transparent hover:text-white'}`}>
                                     <i className="ph-fill ph-sparkle mr-2"></i>{t('creator.aiTool.utils.enhancer')}
                                 </button>
-                                <button onClick={() => setActiveUtility('signature')} className={`px-4 py-2 text-sm font-semibold transition-colors ${activeUtility === 'signature' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400 hover:text-white'}`}>
+                                <button onClick={() => setActiveUtility('signature')} className={`px-4 py-2 text-sm font-semibold transition-colors border-b-2 ${activeUtility === 'signature' ? 'text-red-400 border-red-400' : 'text-gray-400 border-transparent hover:text-white'}`}>
                                     <i className="ph-fill ph-pencil-simple-line mr-2"></i>{t('creator.aiTool.utils.signature')}
                                 </button>
                             </div>

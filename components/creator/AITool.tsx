@@ -6,7 +6,7 @@ import BgRemoverTool from './ai-tool/BgRemoverTool';
 import ImageEnhancerTool from './ai-tool/ImageEnhancerTool';
 import InstructionModal from '../common/InstructionModal';
 import SignatureTool from './tools/SignatureTool';
-import ComicStudio from './comic/ComicStudio';
+// import ComicStudio from './comic/ComicStudio'; // REMOVED: Moved to GroupGeneratorTool
 import { useAuth } from '../../contexts/AuthContext';
 import UtilInstructionModal from '../ai-tool/InstructionModal'; 
 import { useTranslation } from '../../hooks/useTranslation';

@@ -299,7 +299,7 @@ const Settings: React.FC = () => {
                                     type="text"
                                     value={displayName}
                                     onChange={(e) => setDisplayName(e.target.value)}
-                                    className="auth-input"
+                                    className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition-all outline-none font-bold"
                                     placeholder={user.display_name}
                                 />
                             </div>

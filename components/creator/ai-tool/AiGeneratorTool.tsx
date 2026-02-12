@@ -21,7 +21,6 @@ import ProcessedImagePickerModal from './ProcessedImagePickerModal';
 interface AiGeneratorToolProps {
     initialCharacterImage?: { url: string; file: File } | null;
     initialFaceImage?: { url: string; file: File } | null;
-    onSendToSignatureTool: (imageUrl: string) => void;
     onSwitchToUtility: () => void;
     // Callback to switch tool and load image
     onSwitchToolWithImage?: (image: { url: string; file: File }, targetTool: 'bg-remover' | 'enhancer') => void;
@@ -50,7 +49,7 @@ const ASPECT_RATIOS = [
     { label: '21:9', value: '21:9', icon: 'ph-arrows-out-line-horizontal' },
 ];
 
-const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage, initialFaceImage, onSendToSignatureTool, onSwitchToUtility, onSwitchToolWithImage }) => {
+const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage, initialFaceImage, onSwitchToUtility, onSwitchToolWithImage }) => {
     const { user, session, showToast, updateUserDiamonds } = useAuth();
     const { t } = useTranslation();
     const { isGenerating, progress, generatedImage, error, generateImage, resetGenerator, cancelGeneration } = useImageGenerator();

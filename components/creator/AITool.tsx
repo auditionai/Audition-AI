@@ -55,7 +55,6 @@ const AITool: React.FC = () => {
     const [utilHelpKey, setUtilHelpKey] = useState<'bg-remover' | 'signature' | 'group-studio' | 'comic-studio' | null>(null);
 
     // State to pass images between tools
-    const [imageForUtility, setImageForUtility] = useState<string | null>(null);
     const [imageForBgRemover, setImageForBgRemover] = useState<{ url: string; file: File } | null>(null);
 
     const openUtilHelp = (key: 'bg-remover' | 'signature' | 'group-studio' | 'comic-studio') => {

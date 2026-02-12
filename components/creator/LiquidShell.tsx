@@ -30,8 +30,9 @@ const LiquidShell: React.FC<LiquidShellProps> = ({
         <div className="relative min-h-screen w-full overflow-hidden text-white flex flex-col font-barlow selection:bg-red-500 selection:text-white" style={{ background: 'var(--color-fill)' }}>
             
             {/* --- MAIN GLASS STAGE (Content) --- */}
-            <main className="flex-grow w-full h-screen overflow-hidden pt-4 pb-36 px-2 md:px-4 flex flex-col items-center">
-                <div className="w-full max-w-[1280px] h-full relative z-10 flex flex-col">
+            <main className="flex-grow w-full h-screen overflow-hidden pt-4 pb-36 px-2 md:px-6 flex flex-col items-center">
+                {/* Increased max-width to 1800px to use side space */}
+                <div className="w-full max-w-[1800px] h-full relative z-10 flex flex-col">
                      {/* Thick Glass Container (Fixed Frame) with shadow for depth */}
                      <div className="liquid-content-container w-full h-full relative flex flex-col shadow-2xl">
                          {/* Inner Scrollable Area */}

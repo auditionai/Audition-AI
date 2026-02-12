@@ -133,6 +133,19 @@ const handler: Handler = async (event: HandlerEvent) => {
             fullPrompt += `\n\n**FACE ID:**\n- Use the exact facial structure from 'Face Reference'. Blend it seamlessly into the 3D style.`;
         }
 
+        // --- UPDATED REFERENCE LOGIC ---
+        // If a "Reference Image" (previously Style Image) is provided, treat it as a structural guide.
+        if (styleImageUrl) {
+            fullPrompt += `
+            \n\n*** REFERENCE IMAGE COMMAND: [COMPOSITION_MASTER] ***
+            - The image labeled [COMPOSITION_MASTER] is the TARGET LAYOUT.
+            - COPY the exact **Composition, Camera Angle, Lighting Direction, and Background Structure** from this image.
+            - COPY the **Pose and Stance** of the character in [COMPOSITION_MASTER] if possible.
+            - HOWEVER, REPLACE the character with the one defined in [INPUT_CANVAS] (or create a new one based on prompt if no input canvas).
+            - APPLY the color palette and atmosphere of [COMPOSITION_MASTER] to the final result.
+            `;
+        }
+
         // REFINED NEGATIVE PROMPT
         const hardNegative = "photograph, real life, real person, live action, movie frame, grainy, noise, jpeg artifacts, low quality, distorted, ugly, blurry, gray borders, letterbox, watermark, text, signature, rough skin texture, photo-realistic skin";
         fullPrompt += ` --no ${hardNegative}, ${negativePrompt || ''}`;
@@ -152,7 +165,8 @@ const handler: Handler = async (event: HandlerEvent) => {
             parts.push({ inlineData: { data: charData.data, mimeType: charData.mimeType } });
         }
         if (styleData) {
-            parts.push({ text: "[STYLE_REFERENCE]" });
+            // Renamed text tag to match new prompt logic
+            parts.push({ text: "[COMPOSITION_MASTER]" });
             parts.push({ inlineData: { data: styleData.data, mimeType: styleData.mimeType } });
         }
         if (faceData) {

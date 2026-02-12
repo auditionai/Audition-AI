@@ -20,8 +20,8 @@ import ThemeEffects from '../components/themes/ThemeEffects';
 import LiquidShell from '../components/creator/LiquidShell';
 import Leaderboard from '../components/Leaderboard';
 import ShopPage from './ShopPage';
-import MessagesPage from './MessagesPage'; // Note: MessagesPage usually has its own layout, might need adjustments
-import UserProfilePage from './UserProfilePage'; // Profile is usually full page too
+import MessagesPage from './MessagesPage'; 
+import UserProfilePage from './UserProfilePage';
 import AdminGalleryPage from './AdminGalleryPage';
 
 // Define the possible tabs for type safety
@@ -46,7 +46,7 @@ const CreatorPage: React.FC<CreatorPageProps> = ({ activeTab }) => {
     }
     
     const handleTopUpClick = () => {
-        navigate('buy-credits');
+        setIsTopUpModalOpen(true);
     };
 
     const handleCheckIn = async () => {
@@ -72,10 +72,16 @@ const CreatorPage: React.FC<CreatorPageProps> = ({ activeTab }) => {
         return (
             <div data-theme={theme} className="bg-black min-h-screen relative font-barlow selection:bg-cyan-500 selection:text-white">
                 <ThemeEffects />
+                
+                {/* 
+                   LiquidShell now wraps the content directly.
+                   We filter activeTab prop type to match what LiquidShell expects for Dock highlighting,
+                   but renderActiveTab still handles all route cases (like settings/messages) for display.
+                */}
                 <LiquidShell 
-                    activeTab={activeTab} 
+                    activeTab={activeTab as any} 
                     onNavigate={navigate}
-                    onTopUpClick={() => setIsTopUpModalOpen(true)}
+                    onTopUpClick={handleTopUpClick}
                     onCheckInClick={handleCheckIn}
                 >
                     {renderActiveTab()}
@@ -114,7 +120,7 @@ const CreatorPage: React.FC<CreatorPageProps> = ({ activeTab }) => {
         <div data-theme={theme} className="flex flex-col min-h-screen bg-skin-fill text-skin-base pb-16 md:pb-0">
              <ThemeEffects />
              <CreatorHeader
-                onTopUpClick={handleTopUpClick}
+                onTopUpClick={() => navigate('buy-credits')} // Redirect to full page in classic mode
                 activeTab={activeTab}
                 onNavigate={navigate}
                 onCheckInClick={handleCheckIn}

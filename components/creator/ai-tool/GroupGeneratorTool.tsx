@@ -490,8 +490,7 @@ const ModeCard: React.FC<{
 
 const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ 
     onSwitchToUtility, 
-    onInstructionClick,
-    onSwitchToolWithImage
+    onInstructionClick
 }) => {
     const [mode, setMode] = useState<StudioMode>('menu');
 

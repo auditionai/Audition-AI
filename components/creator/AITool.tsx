@@ -73,23 +73,6 @@ const AITool: React.FC = () => {
         setIsUtilitySelection(false); // Direct entry
     };
 
-    // Updated handler for new unified studio
-    const handleSwitchToolWithImage = (image: { url: string; file: File }, targetTool: 'bg-remover' | 'enhancer') => {
-        setActiveTab('utilities');
-        setIsUtilitySelection(false); // Skip selection screen
-        
-        if (targetTool === 'bg-remover') {
-            setActiveUtility('bg-remover');
-            setImageForBgRemover(image);
-        } else if (targetTool === 'enhancer') {
-            setActiveUtility('enhancer');
-            // Assuming ImageEnhancerTool handles initial image internally via props if we extended it, 
-            // but currently it uses file input. For now, we just switch context.
-            // (If needed, pass image prop to EnhancerTool similar to BgRemover)
-        }
-        showToast(`Đã chuyển sang công cụ ${targetTool === 'bg-remover' ? 'Tách Nền' : 'Làm Nét'}`, 'success');
-    };
-
     const handleSendToBgRemover = (image: { url: string; file: File }) => {
         setImageForBgRemover(image);
         setActiveTab('utilities');

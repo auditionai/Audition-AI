@@ -280,10 +280,10 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
             <InstructionModal isOpen={isInstructionModalOpen} onClose={() => setInstructionModalOpen(false)} instructionKey={instructionKey} />
             <PromptLibraryModal isOpen={isPromptLibraryOpen} onClose={() => setIsPromptLibraryOpen(false)} onSelectPrompt={(p) => setPrompt(p)} category="single-photo" />
 
-            <div className="grid grid-cols-12 gap-5 pb-24 h-full">
+            <div className="grid grid-cols-12 gap-3 pb-24 h-full"> {/* Reduced Grid Gap */}
                 
-                {/* --- LEFT: CHARACTER (25%) --- */}
-                <div className="col-span-12 lg:col-span-3 flex flex-col gap-4">
+                {/* --- LEFT: CHARACTER (3/12) --- */}
+                <div className="col-span-12 lg:col-span-3 flex flex-col gap-3">
                     <SettingsBlock 
                         title={t('creator.aiTool.singlePhoto.characterTitle')} 
                         instructionKey="character" 
@@ -292,12 +292,12 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                         className="h-full"
                     >
                         <div className="flex flex-col h-full">
-                            <div className="flex-grow w-full relative group min-h-[300px]">
+                            <div className="flex-grow w-full relative group min-h-[350px] lg:min-h-0">
                                 <ImageUploader onUpload={(e) => handleImageUpload(e, 'pose')} image={poseImage} onRemove={() => handleRemoveImage('pose')} text={t('creator.aiTool.singlePhoto.characterUploadText')} disabled={isImageInputDisabled} className="w-full h-full" />
                                 {/* Face Lock Toggle Floating Inside */}
                                 {poseImage && (
                                      <div className="absolute bottom-2 left-2 right-2 bg-black/60 backdrop-blur-md rounded-lg p-2 flex items-center justify-between border border-white/10 z-20">
-                                        <label className="text-[10px] font-bold text-pink-300 flex items-center gap-1">
+                                        <label className="text-xs font-bold text-pink-300 flex items-center gap-1">
                                             <i className="ph-fill ph-face-mask"></i> Khóa mặt (70%)
                                         </label>
                                         <ToggleSwitch label="" checked={useBasicFaceLock} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUseBasicFaceLock(e.target.checked)} />
@@ -308,50 +308,52 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                     </SettingsBlock>
                 </div>
 
-                {/* --- CENTER: FACE ID & REF & PROMPT (45%) --- */}
-                <div className="col-span-12 lg:col-span-5 flex flex-col gap-4 h-full">
+                {/* --- CENTER: FACE ID & REF & PROMPT (5/12) --- */}
+                <div className="col-span-12 lg:col-span-5 flex flex-col gap-3 h-full">
                     {/* VISUAL ROW: FACE & REF (EQUAL GRID) */}
-                    <div className="grid grid-cols-2 gap-4 flex-shrink-0">
+                    <div className="grid grid-cols-2 gap-3 flex-shrink-0">
                          {/* FACE ID CARD */}
-                         <div className="bg-[#1e1b25] border border-pink-500/30 rounded-xl p-3 flex flex-col gap-2 relative shadow-lg">
+                         <div className="bg-[#1e1b25] border border-pink-500/30 rounded-xl p-3 flex flex-col gap-2 relative shadow-lg h-full">
                              <div className="flex justify-between items-center">
-                                 <h4 className="text-[11px] font-bold text-pink-400 uppercase tracking-wide">Face ID (95%)</h4>
-                                 <button onClick={() => openInstructionModal('face')} className="text-gray-500 hover:text-white"><i className="ph-fill ph-question text-xs"></i></button>
+                                 <h4 className="text-xs font-bold text-pink-400 uppercase tracking-wide">Face ID (95%)</h4>
+                                 <button onClick={() => openInstructionModal('face')} className="text-gray-500 hover:text-white"><i className="ph-fill ph-question text-sm"></i></button>
                              </div>
                              
                              <div className="w-full aspect-square rounded-lg overflow-hidden bg-black/20">
                                  <ImageUploader onUpload={(e) => handleImageUpload(e, 'face')} image={rawFaceImage ? { url: processedFaceImage ? `data:image/png;base64,${processedFaceImage}` : rawFaceImage.url } : null} onRemove={() => handleRemoveImage('face')} text="Face ID" disabled={isImageInputDisabled} className="w-full h-full" />
                              </div>
                              
-                             <div className="mt-1">
+                             <div className="mt-auto pt-1">
                                 {rawFaceImage && !processedFaceImage ? (
-                                    <button onClick={handleProcessFace} disabled={isProcessingFace} className="w-full text-[10px] font-bold py-2 px-2 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-wait flex items-center justify-center gap-1">
+                                    <button onClick={handleProcessFace} disabled={isProcessingFace} className="w-full text-xs font-bold py-2 px-2 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-wait flex items-center justify-center gap-1">
                                         {isProcessingFace ? <i className="ph-fill ph-spinner animate-spin"></i> : <i className="ph-fill ph-scan"></i>}
                                         {isProcessingFace ? '...' : 'Xử lý (-1💎)'}
                                     </button>
                                 ) : processedFaceImage ? (
-                                     <div className="w-full text-[10px] font-bold py-2 px-2 bg-green-500/20 text-green-300 border border-green-500/30 rounded text-center flex items-center justify-center gap-1">
+                                     <div className="w-full text-xs font-bold py-2 px-2 bg-green-500/20 text-green-300 border border-green-500/30 rounded text-center flex items-center justify-center gap-1">
                                         <i className="ph-fill ph-check-circle"></i> Đã khóa
                                     </div>
                                 ) : (
-                                    <div className="h-8"></div> // Spacer to keep height consistent
+                                    <div className="h-8 flex items-center justify-center">
+                                        <span className="text-[10px] text-gray-500">Tải ảnh mặt rõ nét</span>
+                                    </div>
                                 )}
                              </div>
                          </div>
 
                          {/* REFERENCE CARD */}
-                         <div className="bg-[#1e1b25] border border-cyan-500/30 rounded-xl p-3 flex flex-col gap-2 relative shadow-lg">
+                         <div className="bg-[#1e1b25] border border-cyan-500/30 rounded-xl p-3 flex flex-col gap-2 relative shadow-lg h-full">
                              <div className="flex justify-between items-center">
-                                 <h4 className="text-[11px] font-bold text-cyan-400 uppercase tracking-wide">Ảnh Mẫu</h4>
-                                 <button onClick={() => openInstructionModal('style')} className="text-gray-500 hover:text-white"><i className="ph-fill ph-question text-xs"></i></button>
+                                 <h4 className="text-xs font-bold text-cyan-400 uppercase tracking-wide">Ảnh Mẫu</h4>
+                                 <button onClick={() => openInstructionModal('style')} className="text-gray-500 hover:text-white"><i className="ph-fill ph-question text-sm"></i></button>
                              </div>
                              
                              <div className="w-full aspect-square rounded-lg overflow-hidden bg-black/20">
                                  <ImageUploader onUpload={(e) => handleImageUpload(e, 'style')} image={styleImage} onRemove={() => handleRemoveImage('style')} text="Reference" disabled={isImageInputDisabled} className="w-full h-full" />
                              </div>
 
-                             <div className="mt-1 flex items-center justify-center h-8">
-                                <p className="text-[9px] text-gray-500 leading-tight text-center">AI sao chép <b>Bố cục & Dáng</b></p>
+                             <div className="mt-auto pt-1 flex items-center justify-center h-8">
+                                <p className="text-[10px] text-gray-500 leading-tight text-center">AI sao chép <b>Bố cục & Dáng</b></p>
                              </div>
                          </div>
                     </div>
@@ -364,11 +366,11 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                                     value={prompt} 
                                     onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setPrompt(e.target.value)} 
                                     placeholder={t('creator.aiTool.singlePhoto.promptPlaceholder')} 
-                                    className="w-full p-4 bg-black/40 rounded-xl border border-white/10 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition text-sm text-white flex-grow resize-none shadow-inner leading-relaxed min-h-[80px]" 
+                                    className="w-full p-4 bg-black/40 rounded-xl border border-white/10 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition text-sm text-white flex-grow resize-none shadow-inner leading-relaxed min-h-[100px]" 
                                 />
                                 <button
                                     onClick={() => setIsPromptLibraryOpen(true)}
-                                    className="absolute bottom-2 right-2 flex items-center gap-1 text-[10px] text-cyan-300 bg-cyan-900/30 hover:bg-cyan-500/20 border border-cyan-500/30 rounded-full px-2 py-1 font-bold transition shadow-lg backdrop-blur-md"
+                                    className="absolute bottom-3 right-3 flex items-center gap-1 text-xs text-cyan-300 bg-cyan-900/30 hover:bg-cyan-500/20 border border-cyan-500/30 rounded-full px-3 py-1.5 font-bold transition shadow-lg backdrop-blur-md"
                                     title={t('modals.promptLibrary.buttonTooltip')}
                                 >
                                     <i className="ph-fill ph-book-bookmark"></i>
@@ -379,29 +381,29 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                     </div>
                 </div>
 
-                {/* --- RIGHT: SETTINGS (30%) --- */}
-                <div className="col-span-12 lg:col-span-4 flex flex-col gap-4">
+                {/* --- RIGHT: SETTINGS (4/12) --- */}
+                <div className="col-span-12 lg:col-span-4 flex flex-col gap-3">
                     <SettingsBlock title={t('creator.aiTool.singlePhoto.advancedSettingsTitle')} instructionKey="advanced" onInstructionClick={() => openInstructionModal('advanced')} variant="yellow">
                         <div className="space-y-4">
                             
                             {/* AI MODEL SELECTOR */}
                             <div>
-                                <label className="text-[10px] font-bold text-gray-400 mb-1.5 block uppercase tracking-wide">
+                                <label className="text-xs font-bold text-gray-400 mb-1.5 block uppercase tracking-wide">
                                     <i className="ph-fill ph-robot mr-1"></i> {t('creator.aiTool.singlePhoto.modelLabel')}
                                 </label>
                                 <div className="grid grid-cols-2 gap-2 p-1 bg-black/40 rounded-xl border border-white/10">
                                     <button 
                                         onClick={() => setModelType('flash')}
-                                        className={`py-2 rounded-lg text-[10px] font-bold transition-all flex flex-col items-center gap-1 ${modelType === 'flash' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-gray-500 hover:text-white hover:bg-white/5'}`}
+                                        className={`py-2.5 rounded-lg text-xs font-bold transition-all flex flex-col items-center gap-1 ${modelType === 'flash' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-gray-500 hover:text-white hover:bg-white/5'}`}
                                     >
-                                        <i className="ph-fill ph-lightning text-sm"></i>
+                                        <i className="ph-fill ph-lightning text-base"></i>
                                         Flash (1💎)
                                     </button>
                                     <button 
                                         onClick={() => setModelType('pro')}
-                                        className={`py-2 rounded-lg text-[10px] font-bold transition-all flex flex-col items-center gap-1 ${modelType === 'pro' ? 'bg-gradient-to-br from-yellow-500 to-orange-600 text-white shadow-lg shadow-orange-500/20' : 'text-gray-500 hover:text-white hover:bg-white/5'}`}
+                                        className={`py-2.5 rounded-lg text-xs font-bold transition-all flex flex-col items-center gap-1 ${modelType === 'pro' ? 'bg-gradient-to-br from-yellow-500 to-orange-600 text-white shadow-lg shadow-orange-500/20' : 'text-gray-500 hover:text-white hover:bg-white/5'}`}
                                     >
-                                        <i className="ph-fill ph-crown text-sm"></i>
+                                        <i className="ph-fill ph-crown text-base"></i>
                                         Pro (Gemini 3)
                                     </button>
                                 </div>
@@ -411,13 +413,13 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                             {modelType === 'pro' && (
                                 <div className="bg-yellow-500/5 border border-yellow-500/20 rounded-xl p-3 space-y-3 animate-fade-in-down">
                                     <div>
-                                        <label className="text-[9px] font-bold text-yellow-500 uppercase mb-1.5 block">Chất lượng (Pro)</label>
+                                        <label className="text-[10px] font-bold text-yellow-500 uppercase mb-1.5 block">Chất lượng (Pro)</label>
                                         <div className="grid grid-cols-3 gap-2">
                                             {(['1K', '2K', '4K'] as const).map(res => (
                                                 <button 
                                                     key={res} 
                                                     onClick={() => setImageResolution(res)}
-                                                    className={`py-1 text-[10px] font-bold rounded border transition-all ${imageResolution === res ? 'bg-yellow-500 text-black border-yellow-500' : 'bg-transparent text-gray-400 border-white/10 hover:border-white/30'}`}
+                                                    className={`py-1.5 text-xs font-bold rounded border transition-all ${imageResolution === res ? 'bg-yellow-500 text-black border-yellow-500' : 'bg-transparent text-gray-400 border-white/10 hover:border-white/30'}`}
                                                 >
                                                     {res}
                                                 </button>
@@ -426,8 +428,8 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                                     </div>
                                     <div className="flex items-center justify-between border-t border-yellow-500/10 pt-2">
                                         <div className="flex items-center gap-2">
-                                            <div className="p-1 bg-blue-500/20 rounded text-blue-400"><i className="ph-bold ph-google-logo text-xs"></i></div>
-                                            <span className="text-[10px] font-bold text-gray-300">Grounding</span>
+                                            <div className="p-1 bg-blue-500/20 rounded text-blue-400"><i className="ph-bold ph-google-logo text-sm"></i></div>
+                                            <span className="text-xs font-bold text-gray-300">Grounding</span>
                                         </div>
                                         <ToggleSwitch label="" checked={enableGoogleSearch} onChange={(e) => setEnableGoogleSearch(e.target.checked)} />
                                     </div>
@@ -436,10 +438,10 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                             
                             {/* STYLE SELECTOR */}
                             <div className="relative" ref={styleDropdownRef}>
-                                <label className="text-[10px] font-bold text-gray-400 mb-1.5 block uppercase tracking-wide">{t('creator.aiTool.singlePhoto.styleLabel')}</label>
+                                <label className="text-xs font-bold text-gray-400 mb-1.5 block uppercase tracking-wide">{t('creator.aiTool.singlePhoto.styleLabel')}</label>
                                 <button 
                                     onClick={() => setIsStyleDropdownOpen(!isStyleDropdownOpen)} 
-                                    className="w-full bg-black/40 border border-white/10 hover:border-white/30 rounded-xl px-3 py-2 flex items-center justify-between text-xs text-white font-medium transition-all"
+                                    className="w-full bg-black/40 border border-white/10 hover:border-white/30 rounded-xl px-3 py-2.5 flex items-center justify-between text-sm text-white font-medium transition-all"
                                 >
                                     <span className="flex items-center gap-2">
                                         <i className="ph-fill ph-palette text-pink-400"></i>
@@ -453,7 +455,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                                             <button 
                                                 key={p.id} 
                                                 onClick={() => { setSelectedStyle(p.id); setIsStyleDropdownOpen(false); }} 
-                                                className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-colors flex items-center justify-between ${selectedStyle === p.id ? 'bg-pink-500/20 text-pink-300 font-bold' : 'text-gray-300 hover:bg-white/10'}`}
+                                                className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors flex items-center justify-between ${selectedStyle === p.id ? 'bg-pink-500/20 text-pink-300 font-bold' : 'text-gray-300 hover:bg-white/10'}`}
                                             >
                                                 <span>{t(p.name)}</span>
                                                 {selectedStyle === p.id && <i className="ph-fill ph-check"></i>}
@@ -465,14 +467,14 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
 
                              {/* ASPECT RATIO */}
                              <div>
-                                <label className="text-[10px] font-bold text-gray-400 mb-1.5 block uppercase tracking-wide">{t('creator.aiTool.singlePhoto.aspectRatioLabel')}</label>
+                                <label className="text-xs font-bold text-gray-400 mb-1.5 block uppercase tracking-wide">{t('creator.aiTool.singlePhoto.aspectRatioLabel')}</label>
                                 <div className="grid grid-cols-5 gap-2">
                                     {(['3:4', '1:1', '4:3', '9:16', '16:9'] as const).map(ar => {
                                         const dims: { [key: string]: string } = { '3:4': 'w-2 h-3', '1:1': 'w-2.5 h-2.5', '4:3': 'w-3 h-2', '9:16': 'w-1.5 h-3', '16:9': 'w-3 h-1.5' };
                                         return (
                                             <button key={ar} onClick={() => setAspectRatio(ar)} className={`p-1.5 rounded-lg flex flex-col items-center justify-center gap-1 border transition-all ${aspectRatio === ar ? 'border-pink-500 bg-pink-500/10 text-white shadow-lg shadow-pink-500/10' : 'border-white/10 bg-white/5 text-gray-500 hover:bg-white/10 hover:text-gray-300'}`}>
                                                 <div className={`${dims[ar]} border border-current rounded-[1px]`}/>
-                                                <span className="text-[9px] font-bold">{ar}</span>
+                                                <span className="text-[10px] font-bold">{ar}</span>
                                             </button>
                                         );
                                     })}
@@ -480,23 +482,23 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                             </div>
                             
                             {/* OTHER TOGGLES */}
-                            <div className="space-y-2 bg-white/5 p-3 rounded-xl border border-white/5">
+                            <div className="space-y-3 bg-white/5 p-4 rounded-xl border border-white/5">
                                  <div>
                                     <div className="flex justify-between items-center mb-1">
-                                        <label className="text-[10px] font-bold text-gray-300 uppercase">Negative Prompt</label>
+                                        <label className="text-xs font-bold text-gray-300 uppercase">Negative Prompt</label>
                                     </div>
-                                    <input type="text" value={negativePrompt} onChange={(e) => setNegativePrompt(e.target.value)} placeholder="VD: ugly, bad anatomy..." className="w-full bg-black/30 rounded-lg border border-white/10 px-2 py-1.5 text-[10px] text-white focus:border-white/30 outline-none" />
+                                    <input type="text" value={negativePrompt} onChange={(e) => setNegativePrompt(e.target.value)} placeholder="VD: ugly, bad anatomy..." className="w-full bg-black/30 rounded-lg border border-white/10 px-3 py-2 text-xs text-white focus:border-white/30 outline-none" />
                                 </div>
 
                                 <div className="h-px bg-white/10"></div>
                                 
                                 <div className="flex items-center justify-between">
-                                    <span className="text-[10px] font-bold text-gray-300 flex items-center gap-2"><i className="ph-fill ph-magic-wand text-pink-400"></i> Upscaler (Làm nét)</span>
+                                    <span className="text-xs font-bold text-gray-300 flex items-center gap-2"><i className="ph-fill ph-magic-wand text-pink-400"></i> Upscaler (Làm nét)</span>
                                     <ToggleSwitch label="" checked={useUpscaler} onChange={(e) => setUseUpscaler(e.target.checked)} />
                                 </div>
                                 
                                 <div className="flex items-center justify-between">
-                                    <span className="text-[10px] font-bold text-gray-300 flex items-center gap-2"><i className="ph-fill ph-eraser text-red-400"></i> Xóa Watermark</span>
+                                    <span className="text-xs font-bold text-gray-300 flex items-center gap-2"><i className="ph-fill ph-eraser text-red-400"></i> Xóa Watermark</span>
                                     <ToggleSwitch label="" checked={removeWatermark} onChange={(e) => setRemoveWatermark(e.target.checked)} />
                                 </div>
                             </div>
@@ -507,18 +509,18 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
                     <div className="mt-auto bg-[#1e1b25] p-5 rounded-2xl border border-white/10 shadow-2xl sticky bottom-4 z-10">
                         <div className="flex justify-between items-end mb-4">
                              <div>
-                                <p className="text-[10px] text-gray-400 font-bold uppercase">Tổng Chi phí</p>
-                                <p className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-purple-400">{generationCost} 💎</p>
+                                <p className="text-xs text-gray-400 font-bold uppercase">Tổng Chi phí</p>
+                                <p className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-purple-400">{generationCost} 💎</p>
                              </div>
                              <div className="text-right">
-                                <p className="text-[10px] text-gray-400 font-bold uppercase">Số dư</p>
+                                <p className="text-xs text-gray-400 font-bold uppercase">Số dư</p>
                                 <p className="text-lg font-bold text-white">{user?.diamonds.toLocaleString()} 💎</p>
                              </div>
                         </div>
                         <button 
                             onClick={handleGenerateClick} 
                             disabled={isGenerating || !prompt.trim()} 
-                            className="themed-button-primary w-full py-4 text-lg font-black rounded-xl shadow-xl hover:shadow-pink-500/40 transition-all transform hover:-translate-y-1 flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                            className="themed-button-primary w-full py-4 text-xl font-black rounded-xl shadow-xl hover:shadow-pink-500/40 transition-all transform hover:-translate-y-1 flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
                         >
                             {isGenerating ? <i className="ph-fill ph-spinner animate-spin"></i> : <i className="ph-fill ph-sparkle"></i>}
                             {t('creator.aiTool.singlePhoto.generateButton')}

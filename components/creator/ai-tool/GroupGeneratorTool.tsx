@@ -43,9 +43,12 @@ const GroupStudioForm: React.FC<{
     const [model, setModel] = useState<'flash' | 'pro'>('flash');
     const [aspectRatio, setAspectRatio] = useState('3:4');
     const [style] = useState('Cinematic');
-    const [imageSize, setImageSize] = useState<'1K' | '2K' | '4K'>('1K');
+    
+    // Fixed settings for now as per UI request
+    const imageSize: '1K' | '2K' | '4K' = '1K';
+    const enableGoogleSearch = false;
+
     const [removeWatermark, setRemoveWatermark] = useState(false);
-    const [enableGoogleSearch, setEnableGoogleSearch] = useState(false);
 
     const [isGenerating, setIsGenerating] = useState(false);
     const [progressMessage, setProgressMessage] = useState('');
@@ -55,8 +58,10 @@ const GroupStudioForm: React.FC<{
     const [isResultModalOpen, setIsResultModalOpen] = useState(false);
 
     const handleCharacterChange = (id: string, field: keyof CharacterInput, value: any) => setCharacters(prev => prev.map(c => c.id === id ? { ...c, [field]: value } : c));
-    const handleAddCharacter = () => { if (characters.length >= 6) return showToast('Tối đa 6 nhân vật.', 'error'); setCharacters(prev => [...prev, { id: crypto.randomUUID(), poseImage: null, faceImage: null, gender: 'female' }]); };
-    const handleRemoveCharacter = (id: string) => { if (characters.length <= 1) return; setCharacters(prev => prev.filter(c => c.id !== id)); };
+    
+    // Unused functions removed to fix build error
+    // const handleAddCharacter = ...
+    // const handleRemoveCharacter = ...
 
     const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, callback: (img: { url: string; file: File }) => void) => {
         const file = e.target.files?.[0];

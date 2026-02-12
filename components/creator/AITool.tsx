@@ -7,7 +7,6 @@ import ImageEnhancerTool from './ai-tool/ImageEnhancerTool';
 import InstructionModal from '../common/InstructionModal';
 // import SignatureTool from './tools/SignatureTool'; // REMOVED
 // import ComicStudio from './comic/ComicStudio'; // REMOVED: Moved to GroupGeneratorTool
-import { useAuth } from '../../contexts/AuthContext';
 import UtilInstructionModal from '../ai-tool/InstructionModal'; 
 import { useTranslation } from '../../hooks/useTranslation';
 
@@ -47,7 +46,7 @@ const ModeCard: React.FC<{
 );
 
 const AITool: React.FC = () => {
-    // Removed showToast as it is unused
+    // Removed showToast and useAuth as they are unused
     const { t } = useTranslation();
     const [activeTab, setActiveTab] = useState<AIToolTab>('studio'); // Default to Studio
     const [activeUtility, setActiveUtility] = useState<UtilityTab>('bg-remover');

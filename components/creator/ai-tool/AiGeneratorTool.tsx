@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useImageGenerator } from '../../../hooks/useImageGenerator';
 import { useAuth } from '../../../contexts/AuthContext';
-import { DETAILED_AI_MODELS, STYLE_PRESETS_NEW } from '../../../constants/aiToolData';
+import { STYLE_PRESETS_NEW } from '../../../constants/aiToolData';
 import { AIModel, StylePreset } from '../../../types';
 
 import SettingsBlock from './SettingsBlock';
@@ -54,7 +54,7 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
     
     const [selectedStyle, setSelectedStyle] = useState('none');
     const [aspectRatio, setAspectRatio] = useState('3:4');
-    const [seed, setSeed] = useState<number | ''>('');
+    // const [seed, setSeed] = useState<number | ''>(''); // Removed unused seed state
     const [useUpscaler, setUseUpscaler] = useState(false);
     const [useBasicFaceLock, setUseBasicFaceLock] = useState(true);
     const [removeWatermark, setRemoveWatermark] = useState(false);
@@ -188,7 +188,8 @@ const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage
             styleImage?.file ?? null,
             finalFaceImage,
             aspectRatio, negativePrompt,
-            seed || undefined, useUpscaler,
+            undefined, // seed removed
+            useUpscaler,
             imageResolution,
             enableGoogleSearch,
             removeWatermark

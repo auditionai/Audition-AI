@@ -24,7 +24,7 @@ interface AiGeneratorToolProps {
     onSwitchToUtility: () => void;
 }
 
-const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage, initialFaceImage, onSwitchToUtility }) => {
+const AiGeneratorTool: React.FC<AiGeneratorToolProps> = ({ initialCharacterImage, initialFaceImage }) => {
     const { user, session, showToast, updateUserDiamonds } = useAuth();
     const { t } = useTranslation();
     const { isGenerating, progress, generatedImage, error, generateImage, resetGenerator, cancelGeneration } = useImageGenerator();

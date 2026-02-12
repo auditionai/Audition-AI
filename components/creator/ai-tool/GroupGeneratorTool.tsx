@@ -56,7 +56,7 @@ const GroupStudioForm: React.FC<{
     // Config State
     const [model, setModel] = useState<'flash' | 'pro'>('flash');
     const [aspectRatio, setAspectRatio] = useState('3:4');
-    const [style, setStyle] = useState('Cinematic');
+    const [style] = useState('Cinematic'); // FIXED: Removed unused setStyle
     const [imageSize, setImageSize] = useState<'1K' | '2K' | '4K'>('1K');
     const [removeWatermark, setRemoveWatermark] = useState(false);
 

@@ -17,7 +17,7 @@ interface ImageModalProps {
 }
 
 const ImageModal: React.FC<ImageModalProps> = ({ isOpen, onClose, image, showInfoPanel = true, onShare }) => {
-  const { showToast, user } = useAuth();
+  const { showToast } = useAuth();
   const { t } = useTranslation();
   const [isCopied, setIsCopied] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);

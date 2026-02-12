@@ -8,10 +8,6 @@ import { resizeImage } from '../../utils/imageUtils';
 import { useTranslation } from '../../hooks/useTranslation';
 import UserName from '../common/UserName';
 
-// UPDATED SQL SCRIPT
-const SQL_FIX_SCRIPT = `-- SQL MAINTENANCE SCRIPT`;
-const SQL_CREATE_PROMOTIONS = `-- PROMOTIONS TABLE SCRIPT`;
-
 const GameConfigManager: React.FC = () => {
     const { session, showToast } = useAuth();
     const { t } = useTranslation();

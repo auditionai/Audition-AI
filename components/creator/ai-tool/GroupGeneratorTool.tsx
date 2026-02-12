@@ -26,12 +26,11 @@ interface CharacterInput {
     gender: 'male' | 'female';
 }
 
-// --- INTERNAL COMPONENT: GROUP STUDIO FORM (Logic cũ của bạn) ---
+// --- INTERNAL COMPONENT: GROUP STUDIO FORM (Redesigned) ---
 const GroupStudioForm: React.FC<{ 
     initialCount: number; 
     onBack: () => void;
     onInstructionClick: (key: any) => void;
-    // Pass other props if needed
 }> = ({ initialCount, onBack, onInstructionClick }) => {
     const { user, session, showToast, updateUserDiamonds, supabase } = useAuth();
     const { t } = useTranslation();
@@ -56,9 +55,10 @@ const GroupStudioForm: React.FC<{
     // Config State
     const [model, setModel] = useState<'flash' | 'pro'>('flash');
     const [aspectRatio, setAspectRatio] = useState('3:4');
-    const [style] = useState('Cinematic'); // FIXED: Removed unused setStyle
+    const [style] = useState('Cinematic');
     const [imageSize, setImageSize] = useState<'1K' | '2K' | '4K'>('1K');
     const [removeWatermark, setRemoveWatermark] = useState(false);
+    const [enableGoogleSearch, setEnableGoogleSearch] = useState(false);
 
     // Process State
     const [isGenerating, setIsGenerating] = useState(false);
@@ -140,7 +140,8 @@ const GroupStudioForm: React.FC<{
                 aspectRatio,
                 model,
                 imageSize,
-                removeWatermark
+                removeWatermark,
+                useSearch: enableGoogleSearch
             };
 
             const res = await fetch('/.netlify/functions/generate-group-image', {
@@ -210,40 +211,58 @@ const GroupStudioForm: React.FC<{
         user_id: user?.id || ''
     } : null;
 
+    // --- RENDER RESULT ---
     if (generatedImage) {
         return (
             <>
                 <ImageModal isOpen={isResultModalOpen} onClose={() => setIsResultModalOpen(false)} image={resultImageForModal} showInfoPanel={false} />
-                <div className="flex flex-col items-center justify-center w-full h-full py-6 animate-fade-in">
-                    <h3 className="themed-heading text-2xl font-bold mb-4 bg-gradient-to-r from-green-400 to-cyan-400 text-transparent bg-clip-text drop-shadow-sm">{t('creator.aiTool.common.success')}</h3>
-                    <div className="relative max-h-[60vh] h-full w-auto max-w-full rounded-xl overflow-hidden border-2 border-pink-500/30 shadow-[0_0_30px_rgba(236,72,153,0.15)] cursor-zoom-in group bg-black/40" onClick={() => setIsResultModalOpen(true)}>
-                        <img src={generatedImage} alt="Generated result" className="max-h-[60vh] w-auto object-contain mx-auto" />
+                <div className="flex flex-col items-center justify-center w-full min-h-[70vh] py-6 animate-fade-in">
+                    <h3 className="themed-heading text-3xl font-bold mb-6 bg-gradient-to-r from-green-400 to-cyan-400 text-transparent bg-clip-text drop-shadow-md">{t('creator.aiTool.common.success')}</h3>
+                    <div 
+                        className="max-w-md w-full mx-auto bg-black/40 rounded-2xl overflow-hidden border-2 border-pink-500/50 cursor-pointer group relative shadow-[0_0_50px_rgba(236,72,153,0.15)]"
+                        style={{ aspectRatio: aspectRatio.replace(':', '/') }}
+                        onClick={() => setIsResultModalOpen(true)}
+                    >
+                        <img src={generatedImage} alt="Generated result" className="w-full h-full object-contain" />
+                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-sm">
+                            <i className="ph-fill ph-magnifying-glass-plus text-5xl text-white drop-shadow-lg"></i>
+                        </div>
                     </div>
-                    <div className="flex flex-wrap gap-3 mt-6 justify-center w-full px-4">
-                        <button onClick={() => { setGeneratedImage(null); setIsGenerating(false); }} className="themed-button-secondary px-6 py-3 font-semibold text-sm flex items-center gap-2"><i className="ph-fill ph-arrow-counter-clockwise"></i> {t('creator.aiTool.common.createAnother')}</button>
-                        <button onClick={() => setIsResultModalOpen(true)} className="themed-button-primary px-8 py-3 font-bold text-sm flex items-center gap-2"><i className="ph-fill ph-download-simple"></i> {t('creator.aiTool.common.downloadAndCopy')}</button>
+                    <div className="flex flex-wrap gap-4 mt-8 justify-center">
+                        <button onClick={() => { setGeneratedImage(null); setIsGenerating(false); }} className="themed-button-secondary px-8 py-3 font-bold text-base rounded-full shadow-lg">
+                            <i className="ph-fill ph-arrow-counter-clockwise mr-2"></i> {t('creator.aiTool.common.createAnother')}
+                        </button>
+                        <button onClick={() => setIsResultModalOpen(true)} className="themed-button-primary px-8 py-3 font-bold text-base rounded-full shadow-lg">
+                            <i className="ph-fill ph-download-simple mr-2"></i> {t('creator.aiTool.common.downloadAndCopy')}
+                        </button>
                     </div>
                 </div>
             </>
         );
     }
 
+    // --- RENDER PROGRESS ---
     if (isGenerating) {
         return (
-            <div className="flex flex-col items-center justify-center h-[60vh] text-center px-4">
-                <div className="relative w-24 h-24 mb-6">
-                    <div className="absolute inset-0 border-4 border-pink-500/30 rounded-full animate-ping"></div>
-                    <div className="absolute inset-0 border-4 border-t-pink-500 rounded-full animate-spin"></div>
-                    <i className="ph-fill ph-users-three text-4xl text-pink-400 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"></i>
+            <div className="bg-black/30 p-8 rounded-2xl flex flex-col items-center justify-center min-h-[70vh] border border-white/10 shadow-2xl">
+                <div className="relative w-32 h-32 mb-8">
+                    <div className="absolute inset-0 border-8 border-pink-500/20 rounded-full animate-ping"></div>
+                    <div className="absolute inset-0 border-8 border-t-pink-500 rounded-full animate-spin"></div>
+                    <i className="ph-fill ph-users-three text-5xl text-pink-400 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"></i>
                 </div>
-                <h3 className="text-xl font-bold text-white mb-2">{t('creator.aiTool.groupStudio.processing')}</h3>
-                <p className="text-sm text-pink-300 animate-pulse">{progressMessage || t('creator.aiTool.common.waiting')}</p>
+                <h3 className="text-2xl font-bold text-white mb-3">{t('creator.aiTool.groupStudio.processing')}</h3>
+                <p className="text-sm text-pink-300 animate-pulse bg-pink-500/10 px-4 py-2 rounded-full border border-pink-500/20">{progressMessage || t('creator.aiTool.common.waiting')}</p>
             </div>
         );
     }
 
+    // --- RENDER FORM ---
     return (
-        <div className="animate-fade-in">
+        <div className="animate-fade-in h-full">
+            <ConfirmationModal isOpen={isConfirmOpen} onClose={() => setIsConfirmOpen(false)} onConfirm={confirmGenerate} cost={calculateCost()} />
+            <PromptLibraryModal isOpen={isPromptLibraryOpen} onClose={() => setIsPromptLibraryOpen(false)} onSelectPrompt={(p) => setPrompt(p)} category="group-photo" />
+
+            {/* Header */}
              <div className="flex items-center gap-3 mb-4">
                 <button onClick={onBack} className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors">
                     <i className="ph-bold ph-arrow-left text-white"></i>
@@ -253,110 +272,181 @@ const GroupStudioForm: React.FC<{
                 </h3>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pb-20">
-                <ConfirmationModal isOpen={isConfirmOpen} onClose={() => setIsConfirmOpen(false)} onConfirm={confirmGenerate} cost={calculateCost()} />
-                <PromptLibraryModal isOpen={isPromptLibraryOpen} onClose={() => setIsPromptLibraryOpen(false)} onSelectPrompt={(p) => setPrompt(p)} category="group-photo" />
-
-                <div className="lg:col-span-2 space-y-6">
-                    <SettingsBlock title={t('creator.aiTool.groupStudio.characterInfoTitle')} instructionKey="group-studio" onInstructionClick={() => onInstructionClick('group-studio')}>
-                        <div className="space-y-4">
-                            <div className="flex items-center justify-between bg-black/20 p-3 rounded-lg border border-white/5">
-                                <span className="text-sm font-bold text-gray-300">Số lượng nhân vật: {characters.length}</span>
-                                <div className="flex gap-2">
-                                    <button onClick={() => handleRemoveCharacter(characters[characters.length - 1].id)} disabled={characters.length <= 1} className="w-8 h-8 rounded bg-white/10 hover:bg-white/20 flex items-center justify-center disabled:opacity-50"><i className="ph-bold ph-minus"></i></button>
-                                    <button onClick={handleAddCharacter} disabled={characters.length >= 5} className="w-8 h-8 rounded bg-white/10 hover:bg-white/20 flex items-center justify-center disabled:opacity-50"><i className="ph-bold ph-plus"></i></button>
-                                </div>
+            <div className="grid grid-cols-12 gap-3 pb-24 h-full">
+                
+                {/* --- LEFT: CHARACTERS (5/12) --- */}
+                <div className="col-span-12 lg:col-span-5 flex flex-col gap-3">
+                     <SettingsBlock 
+                        title={`${t('creator.aiTool.groupStudio.character')} (${characters.length})`}
+                        instructionKey="group-studio" 
+                        onInstructionClick={() => onInstructionClick('group-studio')}
+                        variant="pink"
+                        className="h-full"
+                        extraHeaderContent={
+                            <div className="flex gap-2 ml-auto">
+                                <button onClick={() => handleRemoveCharacter(characters[characters.length - 1].id)} disabled={characters.length <= 1} className="w-6 h-6 rounded bg-white/10 hover:bg-white/20 flex items-center justify-center disabled:opacity-50 transition"><i className="ph-bold ph-minus text-xs"></i></button>
+                                <button onClick={handleAddCharacter} disabled={characters.length >= 5} className="w-6 h-6 rounded bg-white/10 hover:bg-white/20 flex items-center justify-center disabled:opacity-50 transition"><i className="ph-bold ph-plus text-xs"></i></button>
                             </div>
+                        }
+                    >
+                         <div className="grid grid-cols-1 gap-3 overflow-y-auto custom-scrollbar pr-1 max-h-[600px] lg:max-h-none h-full content-start">
+                            {characters.map((char, index) => (
+                                <div key={char.id} className="bg-[#1e1b25] p-2 rounded-xl border border-white/10 relative group hover:border-pink-500/30 transition-colors shadow-sm">
+                                    <div className="absolute -top-2 -left-2 w-5 h-5 bg-pink-600 rounded-full flex items-center justify-center text-[10px] font-bold shadow-md z-10">{index + 1}</div>
+                                    <div className="grid grid-cols-12 gap-2">
+                                        
+                                        {/* Pose Image */}
+                                        <div className="col-span-5">
+                                            <p className="text-[9px] text-gray-400 mb-1 font-bold uppercase text-center">{t('creator.aiTool.groupStudio.poseImageText')}</p>
+                                            <div className="aspect-[3/4] w-full">
+                                                <ImageUploader onUpload={(e) => handleImageUpload(e, (img) => handleCharacterChange(char.id, 'poseImage', img))} image={char.poseImage} onRemove={() => handleCharacterChange(char.id, 'poseImage', null)} text="Dáng" className="w-full h-full" />
+                                            </div>
+                                        </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {characters.map((char, index) => (
-                                    <div key={char.id} className="bg-[#1e1b25] p-3 rounded-xl border border-white/10 relative group">
-                                        <div className="absolute -top-2 -left-2 w-6 h-6 bg-pink-600 rounded-full flex items-center justify-center text-xs font-bold shadow-md z-10">{index + 1}</div>
-                                        <div className="flex gap-2">
-                                            <div className="w-1/2">
-                                                <p className="text-[10px] text-gray-400 mb-1 font-bold uppercase">{t('creator.aiTool.groupStudio.poseImageText')}</p>
-                                                <div className="aspect-[3/4] w-full">
-                                                    <ImageUploader onUpload={(e) => handleImageUpload(e, (img) => handleCharacterChange(char.id, 'poseImage', img))} image={char.poseImage} onRemove={() => handleCharacterChange(char.id, 'poseImage', null)} text="Dáng / Trang phục" className="w-full h-full" />
+                                        {/* Face & Gender */}
+                                        <div className="col-span-7 flex flex-col gap-2">
+                                            <div>
+                                                <p className="text-[9px] text-gray-400 mb-1 font-bold uppercase text-center">{t('creator.aiTool.groupStudio.faceImageText')}</p>
+                                                <div className="aspect-square w-full">
+                                                    <ImageUploader onUpload={(e) => handleImageUpload(e, (img) => handleCharacterChange(char.id, 'faceImage', img))} image={char.faceImage} onRemove={() => handleCharacterChange(char.id, 'faceImage', null)} text="Mặt" className="w-full h-full" />
                                                 </div>
                                             </div>
-                                            <div className="w-1/2 flex flex-col gap-2">
-                                                <div>
-                                                    <p className="text-[10px] text-gray-400 mb-1 font-bold uppercase">{t('creator.aiTool.groupStudio.faceImageText')}</p>
-                                                    <div className="aspect-square w-full">
-                                                        <ImageUploader onUpload={(e) => handleImageUpload(e, (img) => handleCharacterChange(char.id, 'faceImage', img))} image={char.faceImage} onRemove={() => handleCharacterChange(char.id, 'faceImage', null)} text="Khuôn mặt" className="w-full h-full" />
-                                                    </div>
-                                                </div>
-                                                <div className="mt-auto">
-                                                    <p className="text-[10px] text-gray-400 mb-1 font-bold uppercase">{t('creator.aiTool.groupStudio.genderLabel')}</p>
-                                                    <div className="flex bg-black/40 rounded p-1">
-                                                        <button onClick={() => handleCharacterChange(char.id, 'gender', 'male')} className={`flex-1 text-xs py-1 rounded ${char.gender === 'male' ? 'bg-blue-600 text-white' : 'text-gray-500'}`}>{t('creator.aiTool.groupStudio.male')}</button>
-                                                        <button onClick={() => handleCharacterChange(char.id, 'gender', 'female')} className={`flex-1 text-xs py-1 rounded ${char.gender === 'female' ? 'bg-pink-600 text-white' : 'text-gray-500'}`}>{t('creator.aiTool.groupStudio.female')}</button>
-                                                    </div>
+                                            <div className="mt-auto">
+                                                <div className="flex bg-black/40 rounded p-0.5 border border-white/5">
+                                                    <button onClick={() => handleCharacterChange(char.id, 'gender', 'male')} className={`flex-1 text-[10px] py-1.5 rounded font-bold transition-all ${char.gender === 'male' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-400'}`}>{t('creator.aiTool.groupStudio.male')}</button>
+                                                    <button onClick={() => handleCharacterChange(char.id, 'gender', 'female')} className={`flex-1 text-[10px] py-1.5 rounded font-bold transition-all ${char.gender === 'female' ? 'bg-pink-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-400'}`}>{t('creator.aiTool.groupStudio.female')}</button>
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
-                                ))}
-                            </div>
-                        </div>
-                    </SettingsBlock>
-
-                    <SettingsBlock title={t('creator.aiTool.groupStudio.refImageTitle')}>
-                        <p className="text-xs text-gray-400 mb-2">{t('creator.aiTool.groupStudio.refImageDesc')}</p>
-                        <div className="h-40 w-full">
-                            <ImageUploader onUpload={(e) => handleImageUpload(e, (img) => setReferenceImage(img))} image={referenceImage} onRemove={() => setReferenceImage(null)} text={t('creator.aiTool.groupStudio.refImageUploadText')} className="w-full h-full" />
+                                </div>
+                            ))}
                         </div>
                     </SettingsBlock>
                 </div>
 
-                <div className="flex flex-col gap-6">
-                    <SettingsBlock title={t('creator.aiTool.groupStudio.promptTitle')}>
-                        <div className="relative">
-                            <textarea className="auth-input min-h-[120px] text-sm" placeholder={t('creator.aiTool.groupStudio.promptPlaceholder')} value={prompt} onChange={(e) => setPrompt(e.target.value)} />
-                            <button onClick={() => setIsPromptLibraryOpen(true)} className="absolute bottom-2 right-2 text-xs bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 px-2 py-1 rounded hover:bg-cyan-500/20"><i className="ph-fill ph-book-bookmark"></i> Mẫu</button>
+                {/* --- CENTER: REF & PROMPT (3/12) --- */}
+                <div className="col-span-12 lg:col-span-3 flex flex-col gap-3">
+                     <SettingsBlock title="Tham Chiếu" variant="blue" className="h-auto">
+                        <div className="aspect-square w-full">
+                            <ImageUploader onUpload={(e) => handleImageUpload(e, (img) => setReferenceImage(img))} image={referenceImage} onRemove={() => setReferenceImage(null)} text={t('creator.aiTool.groupStudio.refImageUploadText')} className="w-full h-full" />
                         </div>
+                         <p className="text-[10px] text-gray-400 text-center leading-tight mt-1">{t('creator.aiTool.groupStudio.refImageDesc')}</p>
                     </SettingsBlock>
 
-                    <SettingsBlock title={t('creator.aiTool.singlePhoto.advancedSettingsTitle')}>
+                    <SettingsBlock title={t('creator.aiTool.groupStudio.promptTitle')} variant="purple" className="flex-grow flex flex-col">
+                        <div className="relative h-full">
+                            <textarea 
+                                value={prompt} 
+                                onChange={(e) => setPrompt(e.target.value)} 
+                                placeholder={t('creator.aiTool.groupStudio.promptPlaceholder')} 
+                                className="w-full p-3 bg-black/40 rounded-xl border border-white/10 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition text-sm text-white h-full resize-none shadow-inner leading-relaxed min-h-[100px]" 
+                            />
+                            <button
+                                onClick={() => setIsPromptLibraryOpen(true)}
+                                className="absolute bottom-2 right-2 flex items-center gap-1 text-[10px] text-cyan-300 bg-cyan-900/30 hover:bg-cyan-500/20 border border-cyan-500/30 rounded-full px-2 py-1 font-bold transition shadow-lg backdrop-blur-md"
+                                title={t('modals.promptLibrary.buttonTooltip')}
+                            >
+                                <i className="ph-fill ph-book-bookmark"></i>
+                                {t('modals.promptLibrary.button')}
+                            </button>
+                        </div>
+                    </SettingsBlock>
+                </div>
+
+                {/* --- RIGHT: SETTINGS (4/12) --- */}
+                <div className="col-span-12 lg:col-span-4 flex flex-col gap-3">
+                    <SettingsBlock title={t('creator.aiTool.singlePhoto.advancedSettingsTitle')} variant="yellow">
                         <div className="space-y-4">
+                             {/* AI MODEL SELECTOR */}
                             <div>
-                                <label className="text-xs font-bold text-gray-400 mb-1 block">Model AI</label>
-                                <div className="flex bg-black/40 p-1 rounded-lg">
-                                    <button onClick={() => setModel('flash')} className={`flex-1 py-2 text-xs font-bold rounded-md transition ${model === 'flash' ? 'bg-blue-600 text-white shadow' : 'text-gray-500 hover:text-gray-300'}`}>Flash (1💎)</button>
-                                    <button onClick={() => setModel('pro')} className={`flex-1 py-2 text-xs font-bold rounded-md transition ${model === 'pro' ? 'bg-yellow-500 text-black shadow' : 'text-gray-500 hover:text-gray-300'}`}>Pro (10💎)</button>
+                                <label className="text-xs font-bold text-gray-400 mb-1.5 block uppercase tracking-wide">
+                                    <i className="ph-fill ph-robot mr-1"></i> {t('creator.aiTool.singlePhoto.modelLabel')}
+                                </label>
+                                <div className="grid grid-cols-2 gap-2 p-1 bg-black/40 rounded-xl border border-white/10">
+                                    <button 
+                                        onClick={() => setModel('flash')}
+                                        className={`py-2.5 rounded-lg text-xs font-bold transition-all flex flex-col items-center gap-1 ${model === 'flash' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-gray-500 hover:text-white hover:bg-white/5'}`}
+                                    >
+                                        <i className="ph-fill ph-lightning text-base"></i>
+                                        Flash (1💎)
+                                    </button>
+                                    <button 
+                                        onClick={() => setModel('pro')}
+                                        className={`py-2.5 rounded-lg text-xs font-bold transition-all flex flex-col items-center gap-1 ${model === 'pro' ? 'bg-gradient-to-br from-yellow-500 to-orange-600 text-white shadow-lg shadow-orange-500/20' : 'text-gray-500 hover:text-white hover:bg-white/5'}`}
+                                    >
+                                        <i className="ph-fill ph-crown text-base"></i>
+                                        Pro (10💎)
+                                    </button>
                                 </div>
                             </div>
-                            <div>
-                                <label className="text-xs font-bold text-gray-400 mb-1 block">Tỷ lệ khung hình</label>
+
+                             {/* ASPECT RATIO */}
+                             <div>
+                                <label className="text-xs font-bold text-gray-400 mb-1.5 block uppercase tracking-wide">{t('creator.aiTool.singlePhoto.aspectRatioLabel')}</label>
                                 <div className="grid grid-cols-4 gap-2">
-                                    {['3:4', '1:1', '16:9', '9:16'].map(r => (
-                                        <button key={r} onClick={() => setAspectRatio(r)} className={`py-1 text-xs border rounded transition ${aspectRatio === r ? 'border-pink-500 text-pink-400 bg-pink-500/10' : 'border-gray-700 text-gray-500'}`}>{r}</button>
+                                    {(['3:4', '1:1', '16:9', '9:16'] as const).map(ar => (
+                                        <button key={ar} onClick={() => setAspectRatio(ar)} className={`py-1.5 rounded-lg text-xs font-bold border transition-all ${aspectRatio === ar ? 'border-pink-500 bg-pink-500/10 text-white shadow-lg shadow-pink-500/10' : 'border-white/10 bg-white/5 text-gray-500 hover:bg-white/10 hover:text-gray-300'}`}>
+                                            {ar}
+                                        </button>
                                     ))}
                                 </div>
                             </div>
+
+                            {/* PRO OPTIONS */}
                             {model === 'pro' && (
-                                <div>
-                                    <label className="text-xs font-bold text-gray-400 mb-1 block">Chất lượng ảnh</label>
-                                    <div className="grid grid-cols-3 gap-2">
-                                        {['1K', '2K', '4K'].map(s => (
-                                            <button key={s} onClick={() => setImageSize(s as any)} className={`py-1 text-xs border rounded transition ${imageSize === s ? 'border-yellow-500 text-yellow-400 bg-yellow-500/10' : 'border-gray-700 text-gray-500'}`}>{s}</button>
-                                        ))}
+                                <div className="bg-yellow-500/5 border border-yellow-500/20 rounded-xl p-3 space-y-3 animate-fade-in-down">
+                                    <div>
+                                        <label className="text-[10px] font-bold text-yellow-500 uppercase mb-1.5 block">Chất lượng (Pro)</label>
+                                        <div className="grid grid-cols-3 gap-2">
+                                            {(['1K', '2K', '4K'] as const).map(res => (
+                                                <button 
+                                                    key={res} 
+                                                    onClick={() => setImageSize(res)}
+                                                    className={`py-1.5 text-xs font-bold rounded border transition-all ${imageSize === res ? 'bg-yellow-500 text-black border-yellow-500' : 'bg-transparent text-gray-400 border-white/10 hover:border-white/30'}`}
+                                                >
+                                                    {res}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                     <div className="flex items-center justify-between border-t border-yellow-500/10 pt-2">
+                                        <div className="flex items-center gap-2">
+                                            <div className="p-1 bg-blue-500/20 rounded text-blue-400"><i className="ph-bold ph-google-logo text-sm"></i></div>
+                                            <span className="text-xs font-bold text-gray-300">Grounding</span>
+                                        </div>
+                                        <ToggleSwitch label="" checked={enableGoogleSearch} onChange={(e) => setEnableGoogleSearch(e.target.checked)} />
                                     </div>
                                 </div>
                             )}
-                            <div className="pt-2 border-t border-white/5">
-                                <ToggleSwitch label="Xóa Watermark (+1 💎)" checked={removeWatermark} onChange={(e) => setRemoveWatermark(e.target.checked)} />
+
+                             {/* OTHER TOGGLES */}
+                            <div className="space-y-3 bg-white/5 p-4 rounded-xl border border-white/5">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-xs font-bold text-gray-300 flex items-center gap-2"><i className="ph-fill ph-eraser text-red-400"></i> Xóa Watermark (+1💎)</span>
+                                    <ToggleSwitch label="" checked={removeWatermark} onChange={(e) => setRemoveWatermark(e.target.checked)} />
+                                </div>
                             </div>
                         </div>
                     </SettingsBlock>
-
-                    <div className="mt-auto bg-[#1e1b25] p-4 rounded-xl border border-white/10 shadow-lg">
-                        <div className="flex justify-between items-center mb-4 text-sm">
-                            <span className="text-gray-400">Chi phí dự tính:</span>
-                            <span className="text-xl font-black text-pink-400">{calculateCost()} 💎</span>
+                    
+                     {/* GENERATE BUTTON */}
+                    <div className="mt-auto bg-[#1e1b25] p-5 rounded-2xl border border-white/10 shadow-2xl sticky bottom-4 z-10">
+                        <div className="flex justify-between items-end mb-4">
+                             <div>
+                                <p className="text-xs text-gray-400 font-bold uppercase">Tổng Chi phí</p>
+                                <p className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-purple-400">{calculateCost()} 💎</p>
+                             </div>
+                             <div className="text-right">
+                                <p className="text-xs text-gray-400 font-bold uppercase">Số dư</p>
+                                <p className="text-lg font-bold text-white">{user?.diamonds.toLocaleString()} 💎</p>
+                             </div>
                         </div>
-                        <button onClick={handleGenerateClick} className="w-full py-4 bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 text-white font-bold rounded-xl shadow-lg transform transition hover:-translate-y-1 flex items-center justify-center gap-2">
-                            <i className="ph-fill ph-magic-wand text-xl"></i>
+                        <button 
+                            onClick={handleGenerateClick} 
+                            className="themed-button-primary w-full py-4 text-xl font-black rounded-xl shadow-xl hover:shadow-pink-500/40 transition-all transform hover:-translate-y-1 flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                        >
+                            {isGenerating ? <i className="ph-fill ph-spinner animate-spin"></i> : <i className="ph-fill ph-users-three"></i>}
                             {t('creator.aiTool.groupStudio.generateButton')}
                         </button>
                     </div>
@@ -401,7 +491,7 @@ const ModeCard: React.FC<{
 const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ 
     onSwitchToUtility, 
     onInstructionClick,
-    // onSwitchToolWithImage  <-- REMOVED unused variable
+    onSwitchToolWithImage
 }) => {
     const [mode, setMode] = useState<StudioMode>('menu');
 

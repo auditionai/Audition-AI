@@ -11,7 +11,7 @@ import MyCreationsPage from './MyCreationsPage';
 import Settings from '../components/Settings';
 import BottomNavBar from '../components/common/BottomNavBar';
 import InfoModal from '../components/creator/InfoModal';
-import TopUpModal from '../components/creator/TopUpModal';
+// import TopUpModal from '../components/creator/TopUpModal'; // REMOVED: Using BuyCreditsPage
 import CheckInModal from '../components/CheckInModal';
 import AnnouncementModal from '../components/AnnouncementModal';
 import ThemeEffects from '../components/themes/ThemeEffects';
@@ -32,11 +32,11 @@ interface CreatorPageProps {
 }
 
 const CreatorPage: React.FC<CreatorPageProps> = ({ activeTab }) => {
-    const { user, navigate, showToast, updateUserDiamonds, announcement, showAnnouncementModal, markAnnouncementAsRead } = useAuth();
+    const { user, navigate, announcement, showAnnouncementModal, markAnnouncementAsRead } = useAuth();
     const { theme } = useTheme();
 
     // State for modals
-    const [isTopUpModalOpen, setIsTopUpModalOpen] = useState(false);
+    // const [isTopUpModalOpen, setIsTopUpModalOpen] = useState(false); // REMOVED
     const [infoModalKey, setInfoModalKey] = useState<'terms' | 'policy' | 'contact' | null>(null);
     const [isCheckInModalOpen, setCheckInModalOpen] = useState(false);
 
@@ -45,9 +45,7 @@ const CreatorPage: React.FC<CreatorPageProps> = ({ activeTab }) => {
         return null; 
     }
     
-    const handleTopUpClick = () => {
-        setIsTopUpModalOpen(true);
-    };
+    // REMOVED: handleTopUpClick because we navigate directly to 'buy-credits'
 
     const handleCheckIn = async () => {
         setCheckInModalOpen(true);
@@ -75,28 +73,16 @@ const CreatorPage: React.FC<CreatorPageProps> = ({ activeTab }) => {
                 
                 {/* 
                    LiquidShell now wraps the content directly.
-                   We filter activeTab prop type to match what LiquidShell expects for Dock highlighting,
-                   but renderActiveTab still handles all route cases (like settings/messages) for display.
                 */}
                 <LiquidShell 
                     activeTab={activeTab as any} 
                     onNavigate={navigate}
-                    onTopUpClick={handleTopUpClick}
                     onCheckInClick={handleCheckIn}
                 >
                     {renderActiveTab()}
                 </LiquidShell>
 
                 {/* Global Modals */}
-                <TopUpModal
-                    isOpen={isTopUpModalOpen}
-                    onClose={() => setIsTopUpModalOpen(false)}
-                    onTopUpSuccess={(amount) => {
-                        if (user) updateUserDiamonds(user.diamonds + amount);
-                        setIsTopUpModalOpen(false);
-                        showToast(`Nạp thành công ${amount} kim cương!`, 'success');
-                    }}
-                />
                 <InfoModal
                     isOpen={!!infoModalKey}
                     onClose={() => setInfoModalKey(null)}
@@ -120,7 +106,7 @@ const CreatorPage: React.FC<CreatorPageProps> = ({ activeTab }) => {
         <div data-theme={theme} className="flex flex-col min-h-screen bg-skin-fill text-skin-base pb-16 md:pb-0">
              <ThemeEffects />
              <CreatorHeader
-                onTopUpClick={() => navigate('buy-credits')} // Redirect to full page in classic mode
+                onTopUpClick={() => navigate('buy-credits')} // Redirect to full page
                 activeTab={activeTab}
                 onNavigate={navigate}
                 onCheckInClick={handleCheckIn}
@@ -138,17 +124,6 @@ const CreatorPage: React.FC<CreatorPageProps> = ({ activeTab }) => {
             />
 
             {/* Global Modals for Creator Page */}
-            <TopUpModal
-                isOpen={isTopUpModalOpen}
-                onClose={() => setIsTopUpModalOpen(false)}
-                 onTopUpSuccess={(amount) => {
-                    if (user) {
-                      updateUserDiamonds(user.diamonds + amount);
-                    }
-                    setIsTopUpModalOpen(false);
-                    showToast(`Nạp thành công ${amount} kim cương!`, 'success');
-                }}
-            />
              <InfoModal
                 isOpen={!!infoModalKey}
                 onClose={() => setInfoModalKey(null)}

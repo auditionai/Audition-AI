@@ -9,7 +9,6 @@ interface LiquidShellProps {
     children: React.ReactNode;
     activeTab: CreatorTab | 'shop' | 'profile' | 'leaderboard';
     onNavigate: (tab: any) => void;
-    onTopUpClick: () => void;
     onCheckInClick: () => void;
 }
 
@@ -17,10 +16,9 @@ const LiquidShell: React.FC<LiquidShellProps> = ({
     children, 
     activeTab, 
     onNavigate,
-    onTopUpClick,
     onCheckInClick
 }) => {
-    const { user, logout, hasCheckedInToday } = useAuth();
+    const { user, hasCheckedInToday } = useAuth();
     const { t } = useTranslation();
 
     if (!user) return null;

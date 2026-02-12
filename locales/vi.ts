@@ -392,6 +392,7 @@ export const vi = {
         progress: 'Đang xử lý nhân vật {{current}}/{{total}}...',
         progressCompositing: 'Đang tổng hợp ảnh cuối cùng...',
         progressCreatingBg: 'Đang tạo bối cảnh từ prompt...',
+        processing: 'Đang xử lý...',
         errorRefOrPrompt: 'Vui lòng tải lên "Ảnh Tham Chiếu" hoặc nhập "Mô tả".',
         errorPoseImage: 'Vui lòng cung cấp "Ảnh Nhân vật" cho Nhân vật {{index}}.',
         errorGender: 'Vui lòng chọn giới tính cho Nhân vật {{index}}.',
@@ -660,10 +661,8 @@ export const vi = {
             add: 'Thêm',
           },
           confirmDelete: 'Bạn có chắc muốn xóa mốc thưởng này?',
-          success: {
-            create: 'Tạo mốc thưởng thành công!',
-            delete: 'Xóa mốc thưởng thành công.',
-          },
+          success: 'Tạo mốc thưởng thành công!',
+          delete: 'Xóa mốc thưởng thành công.',
           error: {
             load: 'Không thể tải phần thưởng điểm danh.',
           },

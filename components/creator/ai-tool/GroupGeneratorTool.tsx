@@ -87,10 +87,20 @@ const GroupStudioForm: React.FC<{
         try {
             const payloadCharacters = await Promise.all(characters.map(async c => ({ gender: c.gender, poseImage: c.poseImage?.url, faceImage: c.faceImage?.url })));
             const payload = { jobId: crypto.randomUUID(), characters: payloadCharacters, referenceImage: referenceImage?.url, prompt, style, aspectRatio, model, imageSize, removeWatermark, useSearch: enableGoogleSearch };
+            
+            // 1. Create Job (Spawner)
             const res = await fetch('/.netlify/functions/generate-group-image', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` }, body: JSON.stringify(payload) });
             if (!res.ok) throw new Error((await res.json()).error || 'Server Error');
             const data = await res.json();
             if (data.newDiamondCount !== undefined) updateUserDiamonds(data.newDiamondCount);
+
+            // 2. Trigger Worker (Fire and Forget)
+            fetch('/.netlify/functions/generate-group-image-background', {
+                method: 'POST',
+                body: JSON.stringify({ jobId: payload.jobId })
+            }).catch(e => console.warn("Worker trigger warning:", e));
+
+            // 3. Start Polling
             pollJob(payload.jobId);
         } catch (e: any) { showToast(e.message, 'error'); setIsGenerating(false); }
     };
@@ -107,7 +117,7 @@ const GroupStudioForm: React.FC<{
     };
 
     if (generatedImage) return (<><ImageModal isOpen={isResultModalOpen} onClose={() => setIsResultModalOpen(false)} image={{ id: 'generated-result', image_url: generatedImage, prompt: prompt, creator: user ? { display_name: user.display_name, photo_url: user.photo_url, level: user.level } : { display_name: 'Creator', photo_url: '', level: 1 }, created_at: new Date().toISOString(), model_used: 'Group Studio', user_id: user?.id || '' }} showInfoPanel={false} /><div className="flex flex-col items-center justify-center w-full min-h-[60vh] py-6 animate-fade-in"><h3 className="themed-heading text-2xl font-bold mb-4 bg-gradient-to-r from-green-400 to-cyan-400 text-transparent bg-clip-text drop-shadow-md">{t('creator.aiTool.common.success')}</h3><div className="max-w-md w-full mx-auto bg-black/40 rounded-xl overflow-hidden border-2 border-pink-500/50 cursor-pointer group relative shadow-[0_0_50px_rgba(236,72,153,0.15)]" style={{ aspectRatio: aspectRatio.replace(':', '/') }} onClick={() => setIsResultModalOpen(true)}><img src={generatedImage} alt="Result" className="w-full h-full object-contain" /><div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><i className="ph-fill ph-magnifying-glass-plus text-4xl text-white"></i></div></div><div className="flex gap-3 mt-6"><button onClick={() => { setGeneratedImage(null); setIsGenerating(false); }} className="themed-button-secondary px-6 py-2 font-bold text-sm rounded-full"><i className="ph-fill ph-arrow-counter-clockwise mr-2"></i> {t('creator.aiTool.common.createAnother')}</button><button onClick={() => setIsResultModalOpen(true)} className="themed-button-primary px-6 py-2 font-bold text-sm rounded-full"><i className="ph-fill ph-download-simple mr-2"></i> {t('creator.aiTool.common.downloadAndCopy')}</button></div></div></>);
-    if (isGenerating) return (<div className="bg-black/30 p-8 rounded-2xl flex flex-col items-center justify-center min-h-[60vh] border border-white/10 shadow-2xl"><div className="relative w-20 h-20 mb-6"><div className="absolute inset-0 border-8 border-pink-500/20 rounded-full animate-ping"></div><div className="absolute inset-0 border-8 border-t-pink-500 rounded-full animate-spin"></div><i className="ph-fill ph-users-three text-3xl text-pink-400 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"></i></div><h3 className="text-xl font-bold text-white mb-2">{t('creator.aiTool.groupStudio.processing')}</h3><p className="text-xs text-pink-300 animate-pulse bg-pink-500/10 px-4 py-1.5 rounded-full border border-pink-500/20">{progressMessage || t('creator.aiTool.common.waiting')}</p></div>);
+    if (isGenerating) return (<div className="bg-black/30 p-8 rounded-2xl flex flex-col items-center justify-center min-h-[60vh] border border-white/10 shadow-2xl"><div className="relative w-20 h-20 mb-6"><div className="absolute inset-0 border-8 border-pink-500/20 rounded-full animate-ping"></div><div className="absolute inset-0 border-8 border-t-pink-500 rounded-full animate-spin"></div><i className="ph-fill ph-users-three text-3xl text-pink-400 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"></i></div><h3 className="text-xl font-bold text-white mb-2">{t('creator.aiTool.groupStudio.processing') || 'Đang xử lý...'}</h3><p className="text-xs text-pink-300 animate-pulse bg-pink-500/10 px-4 py-1.5 rounded-full border border-pink-500/20">{progressMessage || t('creator.aiTool.common.waiting')}</p></div>);
 
     return (
         <div className="animate-fade-in h-full pb-20">
@@ -226,7 +236,7 @@ const ModeCard: React.FC<{ icon: string; title: string; description: string; onC
     </button>
 );
 
-const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtility, onInstructionClick }) => {
+const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtility, onInstructionClick, onSwitchToolWithImage }) => {
     const [mode, setMode] = useState<StudioMode>('menu');
     if (mode === 'solo') return (<div className="animate-fade-in"><div className="flex items-center gap-2 mb-3"><button onClick={() => setMode('menu')} className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"><i className="ph-bold ph-arrow-left text-white"></i></button><h3 className="text-base font-bold text-white">Tạo Ảnh Đơn (Solo)</h3></div><AiGeneratorTool onSendToSignatureTool={() => {}} onSwitchToUtility={onSwitchToUtility} /></div>);
     if (mode === 'comic') return (<ComicStudio onInstructionClick={() => onInstructionClick('comic-studio')} onBack={() => setMode('menu')} />);

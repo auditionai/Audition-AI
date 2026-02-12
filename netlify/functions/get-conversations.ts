@@ -88,13 +88,19 @@ const handler: Handler = async (event: HandlerEvent) => {
                     display_name: 'HỆ THỐNG',
                     photo_url: 'https://api.dicebear.com/7.x/bottts/svg?seed=System',
                     equipped_frame_id: 'default', // Or specific system frame
-                    equipped_name_effect_id: 'name-glitch' // Cool effect for system
+                    equipped_title_id: 'admin',
+                    equipped_name_effect_id: 'name-glitch', // Cool effect for system
+                    xp: 999999
                 };
             } else if (!partnerUser) {
                 partnerUser = {
                     id: partnerId,
                     display_name: 'Người dùng ẩn danh',
-                    photo_url: 'https://api.dicebear.com/7.x/bottts/svg?seed=Unknown'
+                    photo_url: 'https://api.dicebear.com/7.x/bottts/svg?seed=Unknown',
+                    equipped_frame_id: null,
+                    equipped_title_id: null,
+                    equipped_name_effect_id: null,
+                    xp: 0
                 };
             }
 

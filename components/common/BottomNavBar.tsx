@@ -1,6 +1,5 @@
 import React from 'react';
 import { CreatorTab } from '../../pages/CreatorPage';
-import { useTranslation } from '../../hooks/useTranslation';
 
 interface BottomNavBarProps {
   activeTab: CreatorTab | 'buy-credits' | 'profile' | 'messages' | 'shop' | 'leaderboard';
@@ -16,8 +15,6 @@ const NavButton = ({ icon, label, isActive, onClick }: { icon: string, label: st
 );
 
 const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeTab, onTabChange }) => {
-  const { t } = useTranslation();
-
   return (
     <div className="fixed bottom-0 left-0 w-full h-16 bg-[#12121A]/90 backdrop-blur-lg border-t border-white/10 z-50 md:hidden pb-safe">
         <div className="flex justify-around items-center h-full px-1">

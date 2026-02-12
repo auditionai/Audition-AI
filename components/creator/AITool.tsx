@@ -11,16 +11,46 @@ import { useAuth } from '../../contexts/AuthContext';
 import UtilInstructionModal from '../ai-tool/InstructionModal'; 
 import { useTranslation } from '../../hooks/useTranslation';
 
-type AIToolTab = 'studio' | 'utilities'; // Removed 'comic-studio'
+type AIToolTab = 'studio' | 'utilities'; 
 type UtilityTab = 'bg-remover' | 'signature' | 'enhancer';
+
+// Helper Component for Mode Selection Card (Matches Studio Style)
+const ModeCard: React.FC<{
+    icon: string;
+    title: string;
+    description: string;
+    colorClass: string;
+    onClick: () => void;
+    hot?: boolean;
+}> = ({ icon, title, description, colorClass, onClick, hot }) => (
+    <button 
+        onClick={onClick}
+        className={`group relative flex flex-col items-center justify-center p-6 rounded-[24px] bg-[#1a1a1a] transition-all duration-300 w-full hover:-translate-y-2 interactive-3d overflow-hidden ${colorClass}`}
+        style={{ minHeight: '200px' }}
+    >
+        {hot && <div className="absolute top-4 right-4 bg-red-600 text-white text-[10px] font-black px-2 py-1 rounded shadow-lg animate-pulse z-10 border border-red-400">HOT</div>}
+        
+        {/* Inner Glow */}
+        <div className="absolute inset-0 bg-gradient-to-b from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"></div>
+
+        <div className={`w-20 h-20 rounded-full flex items-center justify-center text-4xl mb-6 bg-black/40 shadow-[inset_0_2px_5px_rgba(0,0,0,0.8),0_5px_10px_rgba(255,255,255,0.05)] border border-white/5 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-6`}>
+            <i className={`ph-fill ${icon} drop-shadow-md`}></i>
+        </div>
+        <h3 className="text-lg font-black uppercase tracking-wide mb-2 text-white group-hover:text-shadow-glow">{title}</h3>
+        <p className="text-xs text-gray-500 font-medium px-4 text-center leading-relaxed">{description}</p>
+    </button>
+);
 
 const AITool: React.FC = () => {
     const { showToast } = useAuth();
     const { t } = useTranslation();
     const [activeTab, setActiveTab] = useState<AIToolTab>('studio'); // Default to Studio
     const [activeUtility, setActiveUtility] = useState<UtilityTab>('bg-remover');
-    const [isInstructionModalOpen, setInstructionModalOpen] = useState(false);
     
+    // New state to toggle between Selection Grid and Tool View
+    const [isUtilitySelection, setIsUtilitySelection] = useState(true);
+
+    const [isInstructionModalOpen, setInstructionModalOpen] = useState(false);
     const [isUtilHelpOpen, setUtilHelpOpen] = useState(false);
     const [utilHelpKey, setUtilHelpKey] = useState<'bg-remover' | 'signature' | 'group-studio' | 'comic-studio' | null>(null);
 
@@ -36,16 +66,22 @@ const AITool: React.FC = () => {
     const handleSwitchToUtility = (utility: UtilityTab) => {
         setActiveTab('utilities');
         setActiveUtility(utility);
+        setIsUtilitySelection(false); // Direct entry
     };
 
     // Updated handler for new unified studio
     const handleSwitchToolWithImage = (image: { url: string; file: File }, targetTool: 'bg-remover' | 'enhancer') => {
         setActiveTab('utilities');
+        setIsUtilitySelection(false); // Skip selection screen
+        
         if (targetTool === 'bg-remover') {
             setActiveUtility('bg-remover');
             setImageForBgRemover(image);
         } else if (targetTool === 'enhancer') {
             setActiveUtility('enhancer');
+            // Assuming ImageEnhancerTool handles initial image internally via props if we extended it, 
+            // but currently it uses file input. For now, we just switch context.
+            // (If needed, pass image prop to EnhancerTool similar to BgRemover)
         }
         showToast(`Đã chuyển sang công cụ ${targetTool === 'bg-remover' ? 'Tách Nền' : 'Làm Nét'}`, 'success');
     };
@@ -54,6 +90,16 @@ const AITool: React.FC = () => {
         setImageForBgRemover(image);
         setActiveTab('utilities');
         setActiveUtility('bg-remover');
+        setIsUtilitySelection(false); // Skip selection
+    };
+
+    const getUtilityTitle = () => {
+        switch (activeUtility) {
+            case 'bg-remover': return t('creator.aiTool.utils.bgRemover');
+            case 'enhancer': return t('creator.aiTool.utils.enhancer');
+            case 'signature': return t('creator.aiTool.utils.signature');
+            default: return 'Tiện ích';
+        }
     };
 
     return (
@@ -85,7 +131,7 @@ const AITool: React.FC = () => {
                 <div className="flex items-center gap-3">
                      <div className="bg-[#1a1a1a] p-1 rounded-lg flex border border-white/10 shadow-inner">
                         <button
-                            onClick={() => setActiveTab('studio')}
+                            onClick={() => { setActiveTab('studio'); setIsUtilitySelection(true); }}
                             className={`
                                 px-4 py-1.5 rounded-md font-bold text-xs transition-all flex items-center gap-2
                                 ${activeTab === 'studio' 
@@ -97,7 +143,7 @@ const AITool: React.FC = () => {
                             <i className="ph-fill ph-magic-wand"></i> STUDIO
                         </button>
                         <button
-                            onClick={() => setActiveTab('utilities')}
+                            onClick={() => { setActiveTab('utilities'); setIsUtilitySelection(true); }}
                             className={`
                                 px-4 py-1.5 rounded-md font-bold text-xs transition-all flex items-center gap-2
                                 ${activeTab === 'utilities' 
@@ -123,6 +169,7 @@ const AITool: React.FC = () => {
             <div className="max-w-7xl mx-auto">
                 {/* Content */}
                 <div className="p-1">
+                    {/* --- STUDIO TAB --- */}
                     {activeTab === 'studio' && (
                         <GroupGeneratorTool 
                             onSwitchToUtility={() => handleSwitchToUtility('bg-remover')} 
@@ -130,42 +177,87 @@ const AITool: React.FC = () => {
                             onSwitchToolWithImage={handleSwitchToolWithImage}
                         />
                     )}
+
+                    {/* --- UTILITIES TAB --- */}
                     {activeTab === 'utilities' && (
-                        <div className="bg-skin-fill-secondary rounded-2xl border border-skin-border shadow-lg p-4">
-                            {/* Utility Sub-tabs */}
-                            <div className="flex justify-center border-b border-white/10 mb-6">
-                                <button onClick={() => setActiveUtility('bg-remover')} className={`px-4 py-2 text-sm font-semibold transition-colors border-b-2 ${activeUtility === 'bg-remover' ? 'text-red-400 border-red-400' : 'text-gray-400 border-transparent hover:text-white'}`}>
-                                    <i className="ph-fill ph-scissors mr-2"></i>{t('creator.aiTool.utils.bgRemover')}
-                                </button>
-                                <button onClick={() => setActiveUtility('enhancer')} className={`px-4 py-2 text-sm font-semibold transition-colors border-b-2 ${activeUtility === 'enhancer' ? 'text-red-400 border-red-400' : 'text-gray-400 border-transparent hover:text-white'}`}>
-                                    <i className="ph-fill ph-sparkle mr-2"></i>{t('creator.aiTool.utils.enhancer')}
-                                </button>
-                                <button onClick={() => setActiveUtility('signature')} className={`px-4 py-2 text-sm font-semibold transition-colors border-b-2 ${activeUtility === 'signature' ? 'text-red-400 border-red-400' : 'text-gray-400 border-transparent hover:text-white'}`}>
-                                    <i className="ph-fill ph-pencil-simple-line mr-2"></i>{t('creator.aiTool.utils.signature')}
-                                </button>
-                            </div>
-                            
-                            {activeUtility === 'bg-remover' && (
-                                <BgRemoverTool 
-                                    onMoveToGenerator={() => {}} // Legacy
-                                    onMoveFaceToGenerator={() => {}} // Legacy
-                                    onInstructionClick={() => openUtilHelp('bg-remover')}
-                                    initialImage={imageForBgRemover}
-                                />
+                        <>
+                            {/* UTILITY SELECTION SCREEN */}
+                            {isUtilitySelection ? (
+                                <div className="flex flex-col items-center animate-fade-in py-8">
+                                    <h2 className="themed-heading text-2xl font-bold themed-title-glow mb-4 text-center">Công Cụ Tiện Ích</h2>
+                                    <p className="text-skin-muted mb-10 text-center text-sm max-w-lg">Chọn công cụ AI để xử lý hình ảnh của bạn.</p>
+                                    
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl w-full px-4">
+                                        <ModeCard 
+                                            icon="ph-scissors"
+                                            title={t('creator.aiTool.utils.bgRemover')}
+                                            description="Tách nền ảnh nhân vật trong 3 giây. Hỗ trợ Flash & Pro."
+                                            colorClass="text-blue-400"
+                                            onClick={() => { setActiveUtility('bg-remover'); setIsUtilitySelection(false); }}
+                                        />
+                                        <ModeCard 
+                                            icon="ph-sparkle"
+                                            title={t('creator.aiTool.utils.enhancer')}
+                                            description="Làm nét ảnh mờ, tăng độ phân giải 2K/4K."
+                                            colorClass="text-yellow-400"
+                                            onClick={() => { setActiveUtility('enhancer'); setIsUtilitySelection(false); }}
+                                        />
+                                        <ModeCard 
+                                            icon="ph-pencil-simple-line"
+                                            title={t('creator.aiTool.utils.signature')}
+                                            description="Chèn chữ ký, tên đẹp với hiệu ứng Neon, 3D."
+                                            colorClass="text-pink-400"
+                                            onClick={() => { setActiveUtility('signature'); setIsUtilitySelection(false); }}
+                                        />
+                                    </div>
+                                </div>
+                            ) : (
+                                /* SPECIFIC TOOL INTERFACE */
+                                <div className="bg-skin-fill-secondary rounded-2xl border border-skin-border shadow-lg p-4 animate-fade-in">
+                                    
+                                    {/* Tool Header with Back Button */}
+                                    <div className="flex items-center justify-between border-b border-white/10 pb-4 mb-6">
+                                        <div className="flex items-center gap-3">
+                                            <button 
+                                                onClick={() => setIsUtilitySelection(true)}
+                                                className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-skin-muted hover:text-white transition"
+                                            >
+                                                <i className="ph-bold ph-arrow-left"></i>
+                                            </button>
+                                            <h3 className="text-xl font-bold text-white">{getUtilityTitle()}</h3>
+                                        </div>
+                                        
+                                        {/* Quick Switcher (Optional, kept for convenience) */}
+                                        <div className="hidden md:flex gap-2">
+                                             <button onClick={() => setActiveUtility('bg-remover')} className={`px-3 py-1 text-xs rounded-full ${activeUtility === 'bg-remover' ? 'bg-blue-500/20 text-blue-300 border border-blue-500/50' : 'text-gray-500 hover:text-gray-300'}`}>Tách Nền</button>
+                                             <button onClick={() => setActiveUtility('enhancer')} className={`px-3 py-1 text-xs rounded-full ${activeUtility === 'enhancer' ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/50' : 'text-gray-500 hover:text-gray-300'}`}>Làm Nét</button>
+                                             <button onClick={() => setActiveUtility('signature')} className={`px-3 py-1 text-xs rounded-full ${activeUtility === 'signature' ? 'bg-pink-500/20 text-pink-300 border border-pink-500/50' : 'text-gray-500 hover:text-gray-300'}`}>Chữ Ký</button>
+                                        </div>
+                                    </div>
+                                    
+                                    {activeUtility === 'bg-remover' && (
+                                        <BgRemoverTool 
+                                            onMoveToGenerator={() => {}} // Legacy
+                                            onMoveFaceToGenerator={() => {}} // Legacy
+                                            onInstructionClick={() => openUtilHelp('bg-remover')}
+                                            initialImage={imageForBgRemover}
+                                        />
+                                    )}
+                                    {activeUtility === 'enhancer' && (
+                                        <ImageEnhancerTool 
+                                            onSendToBgRemover={handleSendToBgRemover}
+                                        />
+                                    )}
+                                    {activeUtility === 'signature' && (
+                                        <SignatureTool 
+                                            initialImage={imageForUtility}
+                                            onClearInitialImage={() => setImageForUtility(null)}
+                                            onInstructionClick={() => openUtilHelp('signature')}
+                                            />
+                                    )}
+                                </div>
                             )}
-                            {activeUtility === 'enhancer' && (
-                                <ImageEnhancerTool 
-                                    onSendToBgRemover={handleSendToBgRemover}
-                                />
-                            )}
-                            {activeUtility === 'signature' && (
-                                <SignatureTool 
-                                    initialImage={imageForUtility}
-                                    onClearInitialImage={() => setImageForUtility(null)}
-                                    onInstructionClick={() => openUtilHelp('signature')}
-                                    />
-                            )}
-                        </div>
+                        </>
                     )}
                 </div>
             </div>

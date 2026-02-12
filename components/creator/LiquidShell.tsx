@@ -3,9 +3,7 @@ import React from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { CreatorTab } from '../../pages/CreatorPage';
 import UserAvatar from '../common/UserAvatar';
-import Logo from '../common/Logo';
 import { useTranslation } from '../../hooks/useTranslation';
-import ThemeSwitcher from '../common/ThemeSwitcher';
 
 interface LiquidShellProps {
     children: React.ReactNode;
@@ -29,17 +27,14 @@ const LiquidShell: React.FC<LiquidShellProps> = ({
 
     // --- NAVIGATION ITEMS ---
     const navItems = [
-        { id: 'tool', icon: 'ph-magic-wand', label: 'Studio', color: 'text-white' },
-        { id: 'my-creations', icon: 'ph-images', label: t('creator.header.nav.myCreations'), color: 'text-white' },
-        { id: 'shop', icon: 'ph-storefront', label: t('creator.header.nav.shop'), color: 'text-white' },
-        { id: 'leaderboard', icon: 'ph-crown-simple', label: t('creator.header.nav.leaderboard'), color: 'text-white' },
+        { id: 'tool', icon: 'ph-magic-wand', label: 'Studio' },
+        { id: 'my-creations', icon: 'ph-images', label: t('creator.header.nav.myCreations') },
+        { id: 'shop', icon: 'ph-storefront', label: t('creator.header.nav.shop') },
+        { id: 'leaderboard', icon: 'ph-crown-simple', label: t('creator.header.nav.leaderboard') },
     ];
 
     return (
         <div className="relative min-h-screen w-full overflow-hidden text-white flex flex-col font-barlow bg-black">
-            
-            {/* --- TOP STAGE (Maximizing Screen Space) --- */}
-            {/* Removed top header completely. The stage starts from near top. */}
             
             {/* --- MAIN GLASS STAGE (Content) --- */}
             <main className="flex-grow w-full h-screen overflow-hidden pt-4 pb-28 px-2 md:px-4 flex flex-col items-center">
@@ -52,11 +47,10 @@ const LiquidShell: React.FC<LiquidShellProps> = ({
             </main>
 
             {/* --- BOTTOM OMNI-DOCK (Unified Command Center) --- */}
-            {/* Contains: Logo (Left), Nav (Center), User/Resources (Right) */}
             <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[95%] max-w-[800px] pointer-events-none">
                 <div className="liquid-dock-container pointer-events-auto flex justify-between items-center px-2 py-1.5 md:py-2 md:px-3">
                     
-                    {/* LEFT: Logo & System */}
+                    {/* LEFT: Logo */}
                     <div className="flex items-center gap-2 mr-2">
                         <div 
                             className="w-10 h-10 md:w-12 md:h-12 flex items-center justify-center bg-black/40 rounded-full border border-red-500/30 cursor-pointer hover:bg-red-900/20 transition-colors group"
@@ -87,6 +81,16 @@ const LiquidShell: React.FC<LiquidShellProps> = ({
 
                     {/* RIGHT: User Status & Resources */}
                     <div className="flex items-center gap-3 ml-2">
+                        
+                         {/* Check In Button (Restored functionality) */}
+                         <button 
+                            onClick={onCheckInClick}
+                            className={`w-8 h-8 md:w-10 md:h-10 flex items-center justify-center rounded-full transition-colors ${!hasCheckedInToday ? 'bg-green-500/20 text-green-400 animate-pulse border border-green-500/50' : 'text-gray-500 hover:text-white'}`}
+                            title={t('creator.header.nav.checkIn')}
+                         >
+                            <i className="ph-fill ph-calendar-check text-lg"></i>
+                         </button>
+
                          {/* Resources */}
                          <div className="hidden sm:flex flex-col items-end gap-0.5 mr-2">
                              <div className="text-[10px] font-bold text-red-400 tracking-wider">BALANCE</div>
@@ -108,7 +112,7 @@ const LiquidShell: React.FC<LiquidShellProps> = ({
                                 url={user.photo_url} 
                                 alt={user.display_name} 
                                 frameId={user.equipped_frame_id} 
-                                level={user.level}
+                                level={user.level} 
                                 size="sm"
                                 className="border border-white/20"
                             />
@@ -121,7 +125,7 @@ const LiquidShell: React.FC<LiquidShellProps> = ({
                             </div>
                         </div>
 
-                         {/* Mobile Menu Trigger (Settings/Logout) - Small dot menu */}
+                         {/* Logout */}
                          <button onClick={logout} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 text-gray-400">
                              <i className="ph-fill ph-sign-out text-lg"></i>
                          </button>

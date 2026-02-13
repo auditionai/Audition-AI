@@ -33,7 +33,6 @@ const DEFAULT_PACKAGES: CreditPackage[] = [
 export const getSystemApiKey = async (): Promise<string | null> => {
     if (supabase) {
         try {
-            // Updated to use 'system_settings' table
             const { data, error } = await supabase
                 .from('system_settings')
                 .select('value')
@@ -41,11 +40,11 @@ export const getSystemApiKey = async (): Promise<string | null> => {
                 .single();
             
             if (!error && data) {
-                // Handle if value is JSON object or string
+                // Handle various JSON structures or simple string
                 return typeof data.value === 'object' ? data.value.key : data.value;
             }
         } catch (e) {
-            console.warn("Could not fetch API Key from DB, checking environment...");
+            console.warn("Could not fetch API Key from DB");
         }
     }
     const metaEnv = (import.meta as any).env || {};
@@ -55,15 +54,13 @@ export const getSystemApiKey = async (): Promise<string | null> => {
 export const saveSystemApiKey = async (apiKey: string): Promise<boolean> => {
     if (supabase) {
         try {
-            // Updated to use 'system_settings' table
             const { error } = await supabase
                 .from('system_settings')
                 .upsert({ key: 'gemini_api_key', value: apiKey }, { onConflict: 'key' });
-            
             if (error) throw error;
             return true;
         } catch (e) {
-            console.error("Error saving API Key to DB", e);
+            console.error("Error saving API Key", e);
             return false;
         }
     }
@@ -79,55 +76,42 @@ export const getUserProfile = async (): Promise<UserProfile> => {
         
         if (user) {
             try {
-                // Updated to use 'users' table based on screenshot
+                // EXACT COLUMN MAPPING based on your 'users' table screenshot
                 const { data: profile, error } = await supabase
                     .from('users')
-                    .select('*')
+                    .select('id, display_name, email, photo_url, diamonds, is_admin, consecutive_check_ins, last_check_in')
                     .eq('id', user.id)
                     .single();
 
                 if (!error && profile) {
-                    // Map existing DB columns to UserProfile
                     return {
                         id: user.id,
-                        username: profile.display_name || profile.full_name || profile.username || user.email?.split('@')[0] || 'Dancer',
-                        email: user.email || '',
-                        avatar: profile.avatar_url || user.user_metadata.avatar_url || MOCK_USER.avatar,
-                        // Mapping 'diamonds' or 'credits' to balance
-                        balance: profile.diamonds !== undefined ? profile.diamonds : (profile.credits || 0),
-                        role: profile.role || 'user',
-                        isVip: profile.is_vip || false,
-                        streak: profile.daily_streak || profile.streak || 0,
-                        lastCheckin: profile.last_check_in_at || profile.last_checkin || null,
-                        checkinHistory: [], // Usually stored in separate table 'daily_check_ins' now
-                        usedGiftcodes: []   // Stored in 'redeemed_gift_codes'
+                        username: profile.display_name || user.email?.split('@')[0] || 'Dancer',
+                        email: profile.email || user.email || '',
+                        avatar: profile.photo_url || user.user_metadata.avatar_url || MOCK_USER.avatar,
+                        balance: profile.diamonds || 0, // Mapped from 'diamonds'
+                        role: profile.is_admin ? 'admin' : 'user', // Mapped from 'is_admin' boolean
+                        isVip: false, // You can add 'is_vip' column later if needed
+                        streak: profile.consecutive_check_ins || 0, // Mapped from 'consecutive_check_ins'
+                        lastCheckin: profile.last_check_in, // Mapped from 'last_check_in'
+                        checkinHistory: [], 
+                        usedGiftcodes: []
                     };
                 } else {
-                    // Profile missing -> Create it in 'users' table
-                    console.log("Profile missing in 'users', creating new...");
+                    // Profile missing -> Create new
+                    console.log("Creating new user profile...");
                     const newProfile = {
                         id: user.id,
                         email: user.email,
                         display_name: user.user_metadata.full_name || user.email?.split('@')[0],
-                        avatar_url: user.user_metadata.avatar_url,
-                        diamonds: 10, // Default start
-                        role: 'user',
-                        daily_streak: 0,
+                        photo_url: user.user_metadata.avatar_url,
+                        diamonds: 10,
+                        is_admin: false,
+                        consecutive_check_ins: 0,
                         created_at: new Date().toISOString()
                     };
                     
-                    const { error: insertError } = await supabase.from('users').insert(newProfile);
-                    
-                    if (insertError) {
-                        console.error("Error creating user profile:", insertError);
-                        // Fallback object to prevent crash
-                        return {
-                            ...MOCK_USER,
-                            id: user.id,
-                            username: user.email?.split('@')[0] || 'User',
-                            email: user.email || ''
-                        };
-                    }
+                    await supabase.from('users').insert(newProfile).catch(e => console.error("Insert failed", e));
 
                     return { 
                         ...MOCK_USER, 
@@ -138,12 +122,12 @@ export const getUserProfile = async (): Promise<UserProfile> => {
                     } as UserProfile;
                 }
             } catch (e) {
-                console.error("Critical User Fetch Error:", e);
+                console.error("User Fetch Error:", e);
             }
         }
     }
 
-    // 2. Fallback
+    // 2. Fallback Local
     let localUser = getStorage('dmp_user');
     if (!localUser) {
         localUser = MOCK_USER;
@@ -157,24 +141,23 @@ export const updateUserBalance = async (amount: number, reason: string, type: 't
     const newBalance = (user.balance || 0) + amount;
 
     if (supabase && user.id !== MOCK_USER.id) {
-        // Sync to 'users' table (update diamonds)
+        // Update 'diamonds' column
         await supabase.from('users').update({ diamonds: newBalance }).eq('id', user.id);
         
-        // Log transaction to 'diamond_transactions_log'
+        // Log transaction (ensure 'diamond_transactions_log' exists or create it)
         await supabase.from('diamond_transactions_log').insert({
             user_id: user.id,
             amount,
             reason,
-            type, // ensure your DB has this column or remove if not
+            type: type || 'usage',
             created_at: new Date().toISOString()
-        });
+        }).catch(e => console.warn("Log insert failed (check table existence)", e));
         
         return { ...user, balance: newBalance };
     }
 
     user.balance = newBalance;
     setStorage('dmp_user', user);
-    
     return user;
 };
 
@@ -182,18 +165,17 @@ export const updateUserBalance = async (amount: number, reason: string, type: 't
 
 export const getPackages = async (): Promise<CreditPackage[]> => {
     if (supabase) {
-        // Updated to use 'credit_packages' table
-        const { data, error } = await supabase.from('credit_packages').select('*').eq('is_active', true);
+        // Using 'credit_packages' table
+        const { data, error } = await supabase.from('credit_packages').select('*');
         if (!error && data && data.length > 0) {
-            // Map DB columns to CreditPackage
             return data.map((p: any) => ({
                 id: p.id,
-                name: p.name,
-                coin: p.diamonds || p.coin, // Map diamonds column to coin
-                price: p.price,
+                name: p.name || 'Gói Vcoin',
+                coin: p.diamonds || p.coin || 0, // Map diamonds
+                price: p.price || 0,
                 currency: p.currency || 'VND',
                 bonusText: p.bonus_text || '',
-                isPopular: p.is_popular,
+                isPopular: p.is_popular || false,
                 colorTheme: p.color_theme || 'border-audi-cyan',
                 transferContent: p.transfer_syntax || `NAP ${p.price}`
             }));
@@ -204,7 +186,6 @@ export const getPackages = async (): Promise<CreditPackage[]> => {
 
 export const savePackage = async (pkg: CreditPackage): Promise<void> => {
     if (supabase) {
-        // Map back to DB columns
         await supabase.from('credit_packages').upsert({
             id: pkg.id,
             name: pkg.name,
@@ -229,7 +210,6 @@ export const deletePackage = async (id: string): Promise<void> => {
 
 export const getGiftcodes = async (): Promise<Giftcode[]> => {
     if (supabase) {
-        // Updated to use 'gift_codes' table
         const { data } = await supabase.from('gift_codes').select('*');
         if (data) {
             return data.map((d: any) => ({
@@ -273,7 +253,6 @@ export const redeemGiftcode = async (codeStr: string): Promise<{success: boolean
     const user = await getUserProfile();
 
     if (supabase && user.id !== MOCK_USER.id) {
-        // 1. Check Code
         const { data: codeData, error } = await supabase
             .from('gift_codes')
             .select('*')
@@ -283,14 +262,13 @@ export const redeemGiftcode = async (codeStr: string): Promise<{success: boolean
 
         if (error || !codeData) return { success: false, message: 'Mã không hợp lệ' };
         
-        // Map DB columns
-        const usageLimit = codeData.usage_limit || codeData.total_limit;
-        const timesUsed = codeData.times_used || codeData.used_count;
-        const reward = codeData.reward_amount || codeData.reward;
+        const usageLimit = codeData.usage_limit || codeData.total_limit || 0;
+        const timesUsed = codeData.times_used || codeData.used_count || 0;
+        const reward = codeData.reward_amount || codeData.reward || 0;
 
         if (timesUsed >= usageLimit) return { success: false, message: 'Mã đã hết lượt dùng' };
 
-        // 2. Check if user already redeemed in 'redeemed_gift_codes' table
+        // Check if redeemed
         const { data: redeemed } = await supabase
             .from('redeemed_gift_codes')
             .select('*')
@@ -300,15 +278,10 @@ export const redeemGiftcode = async (codeStr: string): Promise<{success: boolean
             
         if (redeemed) return { success: false, message: 'Bạn đã dùng mã này rồi' };
 
-        // 3. Process Redemption
         await updateUserBalance(reward, `Giftcode: ${normalizedCode}`, 'giftcode');
         
-        // Update code stats
-        await supabase.from('gift_codes').update({ 
-            times_used: timesUsed + 1 
-        }).eq('id', codeData.id);
-        
-        // Record redemption
+        // Update DB
+        await supabase.from('gift_codes').update({ times_used: timesUsed + 1 }).eq('id', codeData.id);
         await supabase.from('redeemed_gift_codes').insert({
             user_id: user.id,
             gift_code_id: codeData.id,
@@ -318,7 +291,6 @@ export const redeemGiftcode = async (codeStr: string): Promise<{success: boolean
         
         return { success: true, message: 'Thành công', reward: reward };
     }
-
     return { success: false, message: 'Vui lòng đăng nhập' };
 };
 
@@ -326,7 +298,6 @@ export const redeemGiftcode = async (codeStr: string): Promise<{success: boolean
 
 export const getPromotionConfig = async (): Promise<PromotionConfig> => {
     if (supabase) {
-        // Use 'system_settings'
         const { data } = await supabase.from('system_settings').select('value').eq('key', 'promotion_config').single();
         if (data) return data.value;
     }
@@ -352,7 +323,6 @@ export const getCheckinStatus = async () => {
     const user = await getUserProfile();
     const today = new Date().toDateString();
     
-    // Fallback if 'lastCheckin' is not standard format
     let lastCheckinDate = null;
     if (user.lastCheckin) {
         lastCheckinDate = new Date(user.lastCheckin).toDateString();
@@ -361,33 +331,29 @@ export const getCheckinStatus = async () => {
     return {
         streak: user.streak,
         isCheckedInToday: lastCheckinDate === today,
-        history: user.checkinHistory || [] // This might need a separate query to 'daily_check_ins' table
+        history: user.checkinHistory || [] 
     };
 };
 
 export const performCheckin = async (): Promise<{ success: boolean; reward: number; newStreak: number }> => {
     const user = await getUserProfile();
     let newStreak = user.streak + 1;
-    // Reset streak if missed a day (simplified logic)
-    // In real app, check date diff
-    
     const reward = 5; 
     
     if (supabase && user.id !== MOCK_USER.id) {
         const todayISO = new Date().toISOString();
         
-        // Update user streak
+        // Update using correct columns
         await supabase.from('users').update({ 
-            daily_streak: newStreak, 
-            last_check_in_at: todayISO
+            consecutive_check_ins: newStreak, 
+            last_check_in: todayISO
         }).eq('id', user.id);
 
-        // Record in 'daily_check_ins' table
         await supabase.from('daily_check_ins').insert({
             user_id: user.id,
             check_in_date: todayISO,
             reward_amount: reward
-        });
+        }).catch(e => console.warn("Log checkin failed", e));
     }
     
     await updateUserBalance(reward, `Checkin Day ${newStreak}`, 'reward');
@@ -434,6 +400,7 @@ export const createPaymentLink = async (packageId: string): Promise<Transaction>
 
 export const updateAdminUserProfile = async (updatedUser: UserProfile): Promise<UserProfile> => {
     if(supabase) {
+        // Correct columns for update
         await supabase.from('users').update({
             diamonds: updatedUser.balance,
             display_name: updatedUser.username
@@ -448,13 +415,13 @@ export const adminApproveTransaction = async (txId: string): Promise<boolean> =>
         if (tx && tx.status === 'pending') {
             await supabase.from('transactions').update({ status: 'paid' }).eq('id', txId);
             
-            // Add coins to user (using the 'users' table column 'diamonds')
             const { data: user } = await supabase.from('users').select('diamonds').eq('id', tx.user_id).single();
             if(user) {
-                await supabase.from('users').update({ diamonds: (user.diamonds || 0) + tx.coins }).eq('id', tx.user_id);
+                const currentBalance = user.diamonds || 0;
+                // Update 'diamonds'
+                await supabase.from('users').update({ diamonds: currentBalance + tx.coins }).eq('id', tx.user_id);
                 
-                // Log
-                 await supabase.from('diamond_transactions_log').insert({
+                await supabase.from('diamond_transactions_log').insert({
                     user_id: tx.user_id,
                     amount: tx.coins,
                     reason: `Deposit: ${tx.code}`,
@@ -481,19 +448,19 @@ export const mockPayOSSuccess = async (txId: string) => {
 };
 
 export const getAdminStats = async () => {
-    // Hybrid Fetch
-    let users = [], txs = [], logs = [];
+    let users = [], txs = [];
     
     if (supabase) {
-        const { data: u } = await supabase.from('users').select('*');
+        // Fetch users using exact columns
+        const { data: u } = await supabase.from('users').select('id, display_name, email, photo_url, diamonds, is_admin');
         if(u) {
             users = u.map((p: any) => ({
                 id: p.id,
-                username: p.display_name || p.username,
+                username: p.display_name || 'User',
                 email: p.email,
-                avatar: p.avatar_url,
-                balance: p.diamonds,
-                role: p.role
+                avatar: p.photo_url || MOCK_USER.avatar,
+                balance: p.diamonds || 0,
+                role: p.is_admin ? 'admin' : 'user'
             }));
         }
         
@@ -515,7 +482,7 @@ export const getAdminStats = async () => {
         },
         revenue: 0,
         transactions: txs,
-        logs: logs,
+        logs: [],
         usersList: users,
         packages: await getPackages(),
         promotion: await getPromotionConfig(),

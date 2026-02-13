@@ -124,17 +124,6 @@ const GroupStudioForm: React.FC<{
         }, 3000);
     };
 
-    // Calculate grid columns based on character count to match screenshot layout
-    const getGridClass = () => {
-        const count = characters.length;
-        if (count === 1) return 'grid-cols-1 max-w-sm mx-auto';
-        if (count === 2) return 'grid-cols-2';
-        if (count === 3) return 'grid-cols-3';
-        if (count === 4) return 'grid-cols-2'; // 2x2
-        if (count >= 5) return 'grid-cols-3'; // 3 top, rest bottom
-        return 'grid-cols-3';
-    };
-
     if (generatedImage) return (<><ImageModal isOpen={isResultModalOpen} onClose={() => setIsResultModalOpen(false)} image={{ id: 'generated-result', image_url: generatedImage, prompt: prompt, creator: user ? { display_name: user.display_name, photo_url: user.photo_url, level: user.level } : { display_name: 'Creator', photo_url: '', level: 1 }, created_at: new Date().toISOString(), model_used: 'Group Studio', user_id: user?.id || '' }} showInfoPanel={false} /><div className="flex flex-col items-center justify-center w-full min-h-[60vh] py-6 animate-fade-in"><h3 className="themed-heading text-2xl font-bold mb-4 bg-gradient-to-r from-green-400 to-cyan-400 text-transparent bg-clip-text drop-shadow-md">{t('creator.aiTool.common.success')}</h3><div className="max-w-md w-full mx-auto bg-black/40 rounded-xl overflow-hidden border-2 border-pink-500/50 cursor-pointer group relative shadow-[0_0_50px_rgba(236,72,153,0.15)]" style={{ aspectRatio: aspectRatio.replace(':', '/') }} onClick={() => setIsResultModalOpen(true)}><img src={generatedImage} alt="Result" className="w-full h-full object-contain" /><div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><i className="ph-fill ph-magnifying-glass-plus text-4xl text-white"></i></div></div><div className="flex gap-3 mt-6"><button onClick={() => { setGeneratedImage(null); setIsGenerating(false); }} className="themed-button-secondary px-6 py-2 font-bold text-sm rounded-full"><i className="ph-fill ph-arrow-counter-clockwise mr-2"></i> {t('creator.aiTool.common.createAnother')}</button><button onClick={() => setIsResultModalOpen(true)} className="themed-button-primary px-6 py-2 font-bold text-sm rounded-full"><i className="ph-fill ph-download-simple mr-2"></i> {t('creator.aiTool.common.downloadAndCopy')}</button></div></div></>);
     if (isGenerating) return (<div className="bg-black/30 p-8 rounded-2xl flex flex-col items-center justify-center min-h-[60vh] border border-white/10 shadow-2xl"><div className="relative w-20 h-20 mb-6"><div className="absolute inset-0 border-8 border-pink-500/20 rounded-full animate-ping"></div><div className="absolute inset-0 border-8 border-t-pink-500 rounded-full animate-spin"></div><i className="ph-fill ph-users-three text-3xl text-pink-400 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"></i></div><h3 className="text-xl font-bold text-white mb-2">{t('creator.aiTool.groupStudio.processing') || 'Đang xử lý...'}</h3><p className="text-xs text-pink-300 animate-pulse bg-pink-500/10 px-4 py-1.5 rounded-full border border-pink-500/20">{progressMessage || t('creator.aiTool.common.waiting')}</p></div>);
 
@@ -150,7 +139,7 @@ const GroupStudioForm: React.FC<{
 
             <div className="flex flex-col lg:flex-row gap-6">
                 
-                {/* --- LEFT: CHARACTER LIST (2/3 or 3/4) --- */}
+                {/* --- LEFT: CHARACTER LIST --- */}
                 <div className="w-full lg:w-3/4 flex flex-col gap-4">
                      <SettingsBlock 
                         title={`1. Cung cấp thông tin nhân vật (${characters.length})`}
@@ -161,13 +150,19 @@ const GroupStudioForm: React.FC<{
                             <span className="text-[10px] text-gray-400 font-normal ml-2 cursor-pointer hover:text-white" onClick={onBack}>(Thay đổi số lượng)</span>
                         }
                     >
-                         {/* CHARACTER GRID - ADAPTIVE */}
-                         <div className={`grid gap-4 ${getGridClass()}`}>
+                         {/* 
+                            GRID FIX: Use STATIC grid columns to ensure consistency.
+                            grid-cols-2 for mobile
+                            grid-cols-3 for tablet/desktop
+                            xl:grid-cols-4 for extra large screens
+                            This matches standard sizing found in Single Photo mode.
+                         */}
+                         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
                             {characters.map((char, index) => (
                                 <div key={char.id} className="bg-[#1e1b25] p-3 rounded-xl border border-white/10 relative group hover:border-pink-500/50 transition-colors shadow-lg flex flex-col h-full">
                                     <h4 className="text-center text-xs font-bold text-white mb-2 uppercase">Nhân vật {index + 1}</h4>
                                     
-                                    {/* Main Pose Image */}
+                                    {/* Main Pose Image - Fixed aspect ratio 3:4 */}
                                     <div className="aspect-[3/4] w-full mb-2 bg-black/20 rounded-lg overflow-hidden border-2 border-dashed border-white/10 hover:border-pink-500/50 transition">
                                         <ImageUploader onUpload={(e) => handleImageUpload(e, (img) => handleCharacterChange(char.id, 'poseImage', img))} image={char.poseImage} onRemove={() => handleCharacterChange(char.id, 'poseImage', null)} text="Ảnh Nhân vật (Dáng & Outfit)" className="w-full h-full" />
                                     </div>
@@ -186,12 +181,6 @@ const GroupStudioForm: React.FC<{
                                             <button onClick={() => handleCharacterChange(char.id, 'gender', 'male')} className={`py-1.5 rounded text-[10px] font-bold border transition-colors ${char.gender === 'male' ? 'bg-white text-black border-white' : 'bg-transparent text-gray-400 border-white/20'}`}><i className="ph-fill ph-gender-male"></i> Nam</button>
                                             <button onClick={() => handleCharacterChange(char.id, 'gender', 'female')} className={`py-1.5 rounded text-[10px] font-bold border transition-colors ${char.gender === 'female' ? 'bg-white text-black border-white' : 'bg-transparent text-gray-400 border-white/20'}`}><i className="ph-fill ph-gender-female"></i> Nữ</button>
                                         </div>
-
-                                        {/* Process Buttons (Mock for UI) */}
-                                        <div className="grid grid-cols-1 gap-1 pt-1 border-t border-white/5">
-                                            <button className="w-full py-1 bg-blue-900/30 text-blue-300 text-[9px] font-bold rounded border border-blue-500/30 hover:bg-blue-500/20">Xử lý Flash (1 💎)</button>
-                                            <button className="w-full py-1 bg-yellow-900/30 text-yellow-300 text-[9px] font-bold rounded border border-yellow-500/30 hover:bg-yellow-500/20">Xử lý Pro (10 💎)</button>
-                                        </div>
                                     </div>
                                 </div>
                             ))}
@@ -199,7 +188,7 @@ const GroupStudioForm: React.FC<{
                     </SettingsBlock>
                 </div>
 
-                {/* --- RIGHT: SIDEBAR SETTINGS (1/3 or 1/4) --- */}
+                {/* --- RIGHT: SIDEBAR SETTINGS --- */}
                 <div className="w-full lg:w-1/4 flex flex-col gap-4">
                     <div className="bg-[#1e1b25] border border-white/10 rounded-xl p-4 shadow-lg flex-grow flex flex-col gap-4">
                         <h3 className="text-sm font-bold text-white uppercase tracking-wide border-b border-white/10 pb-2">Cài đặt nhóm</h3>

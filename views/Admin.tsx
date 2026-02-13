@@ -82,7 +82,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       });
 
       const startGemini = Date.now();
-      const geminiOk = await checkConnection();
+      // Try with current API key if loaded, else default
+      const geminiOk = await checkConnection(apiKey || undefined);
       const geminiLatency = Date.now() - startGemini;
       const sbCheck = await checkSupabaseConnection();
 
@@ -509,7 +510,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                       <h2 className="text-2xl font-bold text-white">Quản Lý Giftcode</h2>
                       <button 
                         onClick={() => setEditingGiftcode({
-                            id: `gc_${Date.now()}`, code: '', reward: 10, totalLimit: 100, usedCount: 0, maxPerUser: 1, isActive: true
+                            // Use temp ID for UI, service will ignore it and insert
+                            id: `temp_${Date.now()}`, code: '', reward: 10, totalLimit: 100, usedCount: 0, maxPerUser: 1, isActive: true
                         })}
                         className="px-4 py-2 bg-audi-lime text-black rounded-lg font-bold flex items-center gap-2 hover:bg-lime-400"
                       >
@@ -561,7 +563,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   {editingGiftcode && (
                       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
                           <div className="bg-[#12121a] w-full max-w-lg p-6 rounded-2xl border border-white/20 shadow-2xl">
-                              <h3 className="text-xl font-bold text-white mb-4">{editingGiftcode.code ? 'Sửa Giftcode' : 'Tạo Giftcode Mới'}</h3>
+                              <h3 className="text-xl font-bold text-white mb-4">{editingGiftcode.id.startsWith('temp_') ? 'Tạo Giftcode Mới' : 'Sửa Giftcode'}</h3>
                               <div className="grid grid-cols-2 gap-4">
                                   <div className="col-span-2">
                                       <label className="text-xs font-bold text-slate-400 uppercase">Mã Code (Chữ hoa)</label>
@@ -626,7 +628,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                       <h2 className="text-2xl font-bold text-white">Quản Lý Gói Nạp</h2>
                       <button 
                         onClick={() => setEditingPackage({
-                            id: `pkg_${Date.now()}`, name: '', coin: 0, price: 0, currency: 'VND', bonusText: '', colorTheme: 'border-white', transferContent: ''
+                            id: `temp_${Date.now()}`, name: '', coin: 0, price: 0, currency: 'VND', bonusText: '', colorTheme: 'border-white', transferContent: ''
                         })}
                         className="px-4 py-2 bg-audi-pink text-white rounded-lg font-bold flex items-center gap-2 hover:bg-pink-600"
                       >
@@ -656,7 +658,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   {editingPackage && (
                       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
                           <div className="bg-[#12121a] w-full max-w-lg p-6 rounded-2xl border border-white/20 shadow-2xl max-h-[90vh] overflow-y-auto">
-                              <h3 className="text-xl font-bold text-white mb-4">{editingPackage.name ? 'Sửa Gói Nạp' : 'Thêm Gói Mới'}</h3>
+                              <h3 className="text-xl font-bold text-white mb-4">{editingPackage.id.startsWith('temp_') ? 'Thêm Gói Mới' : 'Sửa Gói Nạp'}</h3>
                               <div className="grid grid-cols-2 gap-4">
                                   <div className="col-span-2">
                                       <label className="text-xs font-bold text-slate-400 uppercase">Tên Gói</label>
@@ -859,7 +861,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                   </button>
                               </div>
                               <p className="text-xs text-slate-500 mt-2">
-                                  Key sẽ được lưu vào Database (Bảng system_config). Nếu Database mất kết nối, hệ thống sẽ sử dụng Env Var.
+                                  Key sẽ được lưu vào Database (Bảng api_keys).
                               </p>
                           </div>
                       </div>

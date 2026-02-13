@@ -6,6 +6,12 @@ import { supabase } from './supabaseClient';
 const getStorage = (key: string) => JSON.parse(localStorage.getItem(key) || 'null');
 const setStorage = (key: string, data: any) => localStorage.setItem(key, JSON.stringify(data));
 
+// --- HELPER: CHECK UUID ---
+const isValidUUID = (id: string) => {
+    const regex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    return regex.test(id);
+};
+
 // --- MOCK DATA (Fallback) ---
 const MOCK_USER: UserProfile = {
   id: 'u_local_001',
@@ -30,18 +36,23 @@ const DEFAULT_PACKAGES: CreditPackage[] = [
 export const getSystemApiKey = async (): Promise<string | null> => {
     if (supabase) {
         try {
-            // 1. Try fetching from dedicated 'api_keys' table first
+            // 1. Try fetching from dedicated 'api_keys' table
+            // Note: We remove the .eq('status', 'active') filter temporarily to debug if keys exist at all
+            // Ideally, you should have at least one row with status='active'
             const { data, error } = await supabase
                 .from('api_keys')
                 .select('key_value')
-                .eq('status', 'active')
+                .eq('status', 'active') 
                 .order('created_at', { ascending: false })
                 .limit(1)
                 .single();
             
-            if (!error && data) {
+            if (data && data.key_value) {
+                console.log("[System] API Key loaded from DB (api_keys)");
                 return data.key_value;
             }
+
+            if (error) console.warn("[System] Failed to fetch from api_keys:", error.message);
 
             // 2. Fallback to 'system_settings' (legacy)
             const { data: setting } = await supabase
@@ -51,10 +62,11 @@ export const getSystemApiKey = async (): Promise<string | null> => {
                 .single();
             
             if (setting) {
+                console.log("[System] API Key loaded from DB (system_settings)");
                 return typeof setting.value === 'object' ? setting.value.key : setting.value;
             }
         } catch (e) {
-            console.warn("Could not fetch API Key from DB");
+            console.warn("Could not fetch API Key from DB", e);
         }
     }
     const metaEnv = (import.meta as any).env || {};
@@ -65,10 +77,11 @@ export const saveSystemApiKey = async (apiKey: string): Promise<boolean> => {
     if (supabase) {
         try {
             // Insert into api_keys table
+            // We use 'insert' to create a new active key history
             const { error } = await supabase
                 .from('api_keys')
                 .insert({
-                    name: 'Admin Added Key',
+                    name: 'Admin Added Key ' + new Date().toLocaleDateString(),
                     key_value: apiKey,
                     status: 'active',
                     usage_count: 0
@@ -79,7 +92,10 @@ export const saveSystemApiKey = async (apiKey: string): Promise<boolean> => {
                 .from('system_settings')
                 .upsert({ key: 'gemini_api_key', value: apiKey }, { onConflict: 'key' });
 
-            if (error) throw error;
+            if (error) {
+                console.error("Save API Key Error:", error);
+                throw error;
+            }
             return true;
         } catch (e) {
             console.error("Error saving API Key", e);
@@ -202,9 +218,9 @@ export const getPackages = async (): Promise<CreditPackage[]> => {
                 coin: p.credits_amount || 0, // Map 'credits_amount'
                 price: p.price_vnd || 0, // Map 'price_vnd'
                 currency: 'VND',
-                bonusText: p.bonus_credits > 0 ? `+${p.bonus_credits} Bonus` : '',
+                bonusText: p.tag || '', // Store bonus text in tag or handle separated logic
                 isPopular: p.is_featured || false, // Map 'is_featured'
-                colorTheme: p.tag === 'HOT' ? 'border-audi-pink' : 'border-slate-600', // Simple logic for theme based on tag
+                colorTheme: p.is_featured ? 'border-audi-pink' : 'border-slate-600', 
                 transferContent: `NAP ${p.price_vnd}` // Auto gen syntax
             }));
         }
@@ -214,22 +230,29 @@ export const getPackages = async (): Promise<CreditPackage[]> => {
 
 export const savePackage = async (pkg: CreditPackage): Promise<void> => {
     if (supabase) {
-        await supabase.from('credit_packages').upsert({
-            id: pkg.id,
+        const payload = {
             name: pkg.name,
             credits_amount: pkg.coin,
             price_vnd: pkg.price,
-            tag: pkg.bonusText, // Storing bonus text in 'tag' or separate column if you prefer
+            tag: pkg.bonusText, 
             is_featured: pkg.isPopular,
             is_active: true,
             display_order: 0,
-            bonus_credits: 0 // You might want to parse bonus from pkg.coin if separated
-        });
+            bonus_credits: 0 
+        };
+
+        if (isValidUUID(pkg.id)) {
+            // Update existing
+            await supabase.from('credit_packages').update(payload).eq('id', pkg.id);
+        } else {
+            // Insert new (let DB generate UUID)
+            await supabase.from('credit_packages').insert(payload);
+        }
     }
 };
 
 export const deletePackage = async (id: string): Promise<void> => {
-    if (supabase) {
+    if (supabase && isValidUUID(id)) {
         await supabase.from('credit_packages').delete().eq('id', id);
     }
 };
@@ -238,7 +261,7 @@ export const deletePackage = async (id: string): Promise<void> => {
 
 export const getGiftcodes = async (): Promise<Giftcode[]> => {
     if (supabase) {
-        const { data } = await supabase.from('gift_codes').select('*');
+        const { data } = await supabase.from('gift_codes').select('*').order('created_at', { ascending: false });
         if (data) {
             return data.map((d: any) => ({
                 id: d.id,
@@ -257,19 +280,26 @@ export const getGiftcodes = async (): Promise<Giftcode[]> => {
 
 export const saveGiftcode = async (giftcode: Giftcode): Promise<void> => {
     if (supabase) {
-        await supabase.from('gift_codes').upsert({
-             id: giftcode.id,
+        const payload = {
              code: giftcode.code,
              diamond_reward: giftcode.reward,
              usage_limit: giftcode.totalLimit,
              usage_count: giftcode.usedCount,
              is_active: giftcode.isActive
-        });
+        };
+
+        if (isValidUUID(giftcode.id)) {
+            // Update existing
+            await supabase.from('gift_codes').update(payload).eq('id', giftcode.id);
+        } else {
+            // Insert new (ID will be auto-generated by DB)
+            await supabase.from('gift_codes').insert(payload);
+        }
     }
 };
 
 export const deleteGiftcode = async (id: string): Promise<void> => {
-    if (supabase) {
+    if (supabase && isValidUUID(id)) {
         await supabase.from('gift_codes').delete().eq('id', id);
     }
 };
@@ -337,7 +367,7 @@ export const getPromotionConfig = async (): Promise<PromotionConfig> => {
         if (data) {
             return {
                 isActive: data.is_active,
-                marqueeText: data.title + " - " + data.description,
+                marqueeText: data.description || "Chào mừng!",
                 bonusPercent: data.bonus_percent || 0,
                 startTime: data.start_time,
                 endTime: data.end_time
@@ -355,17 +385,30 @@ export const getPromotionConfig = async (): Promise<PromotionConfig> => {
 
 export const savePromotionConfig = async (config: PromotionConfig): Promise<void> => {
     if (supabase) {
-        // Insert/Update 'promotions' table
-        await supabase.from('promotions').upsert({
+        const payload = {
             title: "Khuyến mãi đặc biệt",
             description: config.marqueeText,
             bonus_percent: config.bonusPercent,
             start_time: config.startTime,
             end_time: config.endTime,
             is_active: config.isActive
-        });
+        };
+
+        // Check if there is ANY active promotion record we should update, or insert new
+        const { data: existing } = await supabase
+            .from('promotions')
+            .select('id')
+            .eq('is_active', true)
+            .limit(1)
+            .single();
+
+        if (existing) {
+            await supabase.from('promotions').update(payload).eq('id', existing.id);
+        } else {
+            await supabase.from('promotions').insert(payload);
+        }
         
-        // Fallback sync to system_settings
+        // Fallback sync to system_settings for marquee legacy
         await supabase.from('system_settings').upsert({ key: 'promotion_config', value: config });
     }
     setStorage('dmp_promotion', config);

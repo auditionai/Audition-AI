@@ -161,17 +161,31 @@ const GroupStudioForm: React.FC<{
                 // Prioritize processed face image (base64) if available, otherwise use raw url
                 faceImage: c.processedFaceImage ? `data:image/png;base64,${c.processedFaceImage}` : c.faceImage?.url 
             })));
-            console.log(`[GroupStudio] Prepared ${payloadCharacters.length} characters.`);
-
+            
+            // --- DEBUG LOGGING ---
+            console.group("--- [GroupStudio] Pre-flight Data Check ---");
+            console.log(`Prompt: ${prompt}`);
+            console.log(`Model: ${model}, AspectRatio: ${aspectRatio}`);
+            payloadCharacters.forEach((c, i) => {
+                 console.log(`Character ${i+1}:`, {
+                     gender: c.gender,
+                     poseImageSize: c.poseImage?.length || 0,
+                     faceImageSize: c.faceImage?.length || 0
+                 });
+                 if (!c.poseImage) console.error(`⚠️ Character ${i+1} MISSING POSE IMAGE!`);
+            });
+            
             // 2. Prepare Reference Image (Auto generate blank if missing)
             let finalReferenceUrl = referenceImage?.url;
             if (!finalReferenceUrl) {
                 console.log('[GroupStudio] No reference image provided. Generating blank canvas...');
-                finalReferenceUrl = createBlankCanvas(aspectRatio);
-                console.log('[GroupStudio] Blank canvas generated.');
+                // Uses a protected function to generate a 95% JPEG solid color canvas
+                finalReferenceUrl = await createBlankCanvas(aspectRatio);
+                console.log('[GroupStudio] Blank canvas generated. Size:', finalReferenceUrl.length);
             } else {
-                console.log('[GroupStudio] Using user provided reference image.');
+                console.log('[GroupStudio] Using user provided reference image. Size:', finalReferenceUrl.length);
             }
+            console.groupEnd();
 
             const payload = { 
                 jobId: crypto.randomUUID(), 
@@ -186,12 +200,6 @@ const GroupStudioForm: React.FC<{
                 useSearch: enableGoogleSearch 
             };
             
-            console.log('[GroupStudio] Sending Payload to Spawner (excluding large image data)...', { 
-                ...payload, 
-                characters: payload.characters.map(c => ({...c, poseImage: 'DATA_HIDDEN', faceImage: 'DATA_HIDDEN'})),
-                referenceImage: 'DATA_HIDDEN'
-            });
-
             // 3. Create Job (Spawner)
             const res = await fetch('/.netlify/functions/generate-group-image', { 
                 method: 'POST', 
@@ -240,8 +248,6 @@ const GroupStudioForm: React.FC<{
                 return; 
             }
             
-            console.log(`[GroupStudio] Poll Status for ${jobId}:`, data.image_url);
-
             if (data.image_url && data.image_url.startsWith('FAILED:')) { 
                 clearInterval(interval); 
                 setIsGenerating(false); 
@@ -252,7 +258,6 @@ const GroupStudioForm: React.FC<{
             try { 
                 const promptData = JSON.parse(data.prompt); 
                 if (promptData.progress) {
-                    console.log('[GroupStudio] Progress:', promptData.progress);
                     setProgressMessage(promptData.progress); 
                 }
             } catch(e) {}

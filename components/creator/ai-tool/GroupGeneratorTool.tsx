@@ -21,6 +21,8 @@ interface CharacterInput {
     id: string;
     poseImage: { url: string; file: File } | null;
     faceImage: { url: string; file: File } | null;
+    processedFaceImage?: string | null; // Stores base64 of processed face
+    isProcessing?: boolean;
     gender: 'male' | 'female';
 }
 
@@ -38,7 +40,9 @@ const GroupStudioForm: React.FC<{
             initialChars.push({ 
                 id: crypto.randomUUID(), 
                 poseImage: null, 
-                faceImage: null, 
+                faceImage: null,
+                processedFaceImage: null,
+                isProcessing: false,
                 gender: i % 2 === 0 ? 'female' : 'male' 
             });
         }
@@ -65,12 +69,60 @@ const GroupStudioForm: React.FC<{
     const [isPromptLibraryOpen, setIsPromptLibraryOpen] = useState(false);
     const [isResultModalOpen, setIsResultModalOpen] = useState(false);
 
-    const handleCharacterChange = (id: string, field: keyof CharacterInput, value: any) => setCharacters(prev => prev.map(c => c.id === id ? { ...c, [field]: value } : c));
+    const handleCharacterChange = (id: string, field: keyof CharacterInput, value: any) => {
+        setCharacters(prev => prev.map(c => {
+            if (c.id === id) {
+                // If changing face image, reset processed state
+                if (field === 'faceImage') {
+                    return { ...c, [field]: value, processedFaceImage: null };
+                }
+                return { ...c, [field]: value };
+            }
+            return c;
+        }));
+    };
     
     const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, callback: (img: { url: string; file: File }) => void) => {
         const file = e.target.files?.[0];
         if (file) resizeImage(file, 1024).then(({ file: resizedFile, dataUrl }) => callback({ url: dataUrl, file: resizedFile }));
         e.target.value = '';
+    };
+
+    const handleProcessFace = async (index: number) => {
+        const char = characters[index];
+        if (!char.faceImage || !session) return;
+        if (user && user.diamonds < 1) return showToast(t('creator.aiTool.common.errorCredits', { cost: 1, balance: user.diamonds }), 'error');
+
+        // Set processing state
+        setCharacters(prev => prev.map((c, i) => i === index ? { ...c, isProcessing: true } : c));
+
+        try {
+            const reader = new FileReader();
+            reader.readAsDataURL(char.faceImage.file);
+            reader.onloadend = async () => {
+                const base64Image = reader.result;
+                const response = await fetch('/.netlify/functions/process-face', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+                    // Use flash model for face processing (cost 1)
+                    body: JSON.stringify({ image: base64Image, model: 'gemini-2.5-flash-image' }),
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.error || 'Lỗi xử lý');
+                
+                setCharacters(prev => prev.map((c, i) => i === index ? { 
+                    ...c, 
+                    processedFaceImage: result.processedImageBase64, 
+                    isProcessing: false 
+                } : c));
+                
+                updateUserDiamonds(result.newDiamondCount);
+                showToast('Đã khóa gương mặt thành công!', 'success');
+            };
+        } catch (e: any) {
+            showToast(e.message, 'error');
+            setCharacters(prev => prev.map((c, i) => i === index ? { ...c, isProcessing: false } : c));
+        }
     };
 
     const calculateCost = () => {
@@ -93,7 +145,12 @@ const GroupStudioForm: React.FC<{
     const confirmGenerate = async () => {
         setIsConfirmOpen(false); setIsGenerating(true); setGeneratedImage(null); setProgressMessage(t('creator.aiTool.groupStudio.progressCreatingBg'));
         try {
-            const payloadCharacters = await Promise.all(characters.map(async c => ({ gender: c.gender, poseImage: c.poseImage?.url, faceImage: c.faceImage?.url })));
+            const payloadCharacters = await Promise.all(characters.map(async c => ({ 
+                gender: c.gender, 
+                poseImage: c.poseImage?.url, 
+                // Prioritize processed face image (base64) if available, otherwise use raw url
+                faceImage: c.processedFaceImage ? `data:image/png;base64,${c.processedFaceImage}` : c.faceImage?.url 
+            })));
             const payload = { jobId: crypto.randomUUID(), characters: payloadCharacters, referenceImage: referenceImage?.url, prompt, style, aspectRatio, model, imageSize, removeWatermark, useSearch: enableGoogleSearch };
             
             // 1. Create Job (Spawner)
@@ -150,13 +207,7 @@ const GroupStudioForm: React.FC<{
                             <span className="text-[10px] text-gray-400 font-normal ml-2 cursor-pointer hover:text-white" onClick={onBack}>(Thay đổi số lượng)</span>
                         }
                     >
-                         {/* 
-                            GRID FIX: Use STATIC grid columns to ensure consistency.
-                            grid-cols-2 for mobile
-                            grid-cols-3 for tablet/desktop
-                            xl:grid-cols-4 for extra large screens
-                            This matches standard sizing found in Single Photo mode.
-                         */}
+                         {/* CHARACTER GRID - ADAPTIVE */}
                          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
                             {characters.map((char, index) => (
                                 <div key={char.id} className="bg-[#1e1b25] p-3 rounded-xl border border-white/10 relative group hover:border-pink-500/50 transition-colors shadow-lg flex flex-col h-full">
@@ -170,11 +221,37 @@ const GroupStudioForm: React.FC<{
                                     {/* Face Image & Actions */}
                                     <div className="bg-black/20 rounded-lg p-2 border border-white/5 space-y-2">
                                         <div className="aspect-square w-full mx-auto border border-dashed border-white/10 rounded overflow-hidden">
-                                            <ImageUploader onUpload={(e) => handleImageUpload(e, (img) => handleCharacterChange(char.id, 'faceImage', img))} image={char.faceImage} onRemove={() => handleCharacterChange(char.id, 'faceImage', null)} text="Ảnh Gương mặt (Face ID)" className="w-full h-full" />
+                                            <ImageUploader 
+                                                onUpload={(e) => handleImageUpload(e, (img) => handleCharacterChange(char.id, 'faceImage', img))} 
+                                                // Show processed image if available
+                                                image={char.faceImage ? { url: char.processedFaceImage ? `data:image/png;base64,${char.processedFaceImage}` : char.faceImage.url } : null} 
+                                                onRemove={() => handleCharacterChange(char.id, 'faceImage', null)} 
+                                                text="Ảnh Gương mặt (Face ID)" 
+                                                className="w-full h-full" 
+                                            />
                                         </div>
                                         
+                                        {/* Face Processing Button */}
+                                        {char.faceImage && !char.processedFaceImage && (
+                                            <button 
+                                                onClick={() => handleProcessFace(index)}
+                                                disabled={char.isProcessing}
+                                                className="w-full py-1 bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border border-yellow-500/30 text-yellow-300 text-[10px] font-bold rounded hover:bg-yellow-500/30 transition-colors flex items-center justify-center gap-1"
+                                            >
+                                                {char.isProcessing ? <i className="ph ph-spinner animate-spin"></i> : <i className="ph-fill ph-scan"></i>}
+                                                {char.isProcessing ? 'Đang xử lý...' : 'Xử lý & Khóa mặt (1 💎)'}
+                                            </button>
+                                        )}
+                                        
+                                        {/* Processed Badge */}
+                                        {char.processedFaceImage && (
+                                             <div className="w-full py-1 bg-green-500/20 border border-green-500/30 text-green-400 text-[10px] font-bold rounded text-center flex items-center justify-center gap-1">
+                                                <i className="ph-fill ph-check-circle"></i> Đã khóa (Face ID)
+                                            </div>
+                                        )}
+                                        
                                         {/* Gender Buttons */}
-                                        <div className="flex justify-between items-center text-[10px] text-gray-400">
+                                        <div className="flex justify-between items-center text-[10px] text-gray-400 pt-1 border-t border-white/5">
                                             <span>Giới tính (Bắt buộc)</span>
                                         </div>
                                         <div className="grid grid-cols-2 gap-2">

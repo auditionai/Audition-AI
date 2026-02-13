@@ -75,14 +75,14 @@ export const getUserProfile = async (): Promise<UserProfile> => {
         
         if (user) {
             try {
-                // SỬA: Dùng select('*') để an toàn nhất, tránh lỗi 400 nếu thiếu cột
+                // SỬA: Dùng select('*') để an toàn nhất
                 const { data: profile, error } = await supabase
                     .from('users')
                     .select('*')
                     .eq('id', user.id)
                     .single();
 
-                if (!error && profile) {
+                if (profile) {
                     return {
                         id: user.id,
                         username: profile.display_name || user.email?.split('@')[0] || 'Dancer',
@@ -96,32 +96,32 @@ export const getUserProfile = async (): Promise<UserProfile> => {
                         checkinHistory: [], 
                         usedGiftcodes: []
                     };
-                } else {
-                    // Profile missing -> Create new
-                    // SỬA: Sửa lại logic insert để tránh lỗi TypeError
-                    console.log("Profile not found in 'users', creating new...");
-                    
-                    const newProfile = {
-                        id: user.id,
-                        email: user.email,
-                        display_name: user.user_metadata.full_name || user.email?.split('@')[0],
-                        photo_url: user.user_metadata.avatar_url,
-                        diamonds: 10,
-                        is_admin: false,
-                        consecutive_check_ins: 0,
-                        created_at: new Date().toISOString()
-                    };
-                    
-                    // Thực hiện insert không dùng .catch() kiểu cũ
-                    const { error: insertError } = await supabase.from('users').insert(newProfile);
-                    
-                    if (insertError) {
-                        console.error("FAILED to create user profile in DB:", insertError);
-                        // Nếu lỗi do RLS (Policy), vẫn trả về object tạm để user dùng được app
-                    } else {
-                        console.log("User profile created successfully!");
-                    }
+                } 
+                
+                // Nếu lỗi không phải do thiếu dữ liệu (PGRST116) mà do quyền (42501), log cảnh báo
+                if (error && error.code === '42501') {
+                    console.warn("LỖI QUYỀN TRUY CẬP (RLS): Vui lòng chạy lại SQL Script trong Supabase!");
+                }
 
+                // Profile missing -> Create new
+                console.log("Profile missing, attempting to create...");
+                
+                const newProfile = {
+                    id: user.id,
+                    email: user.email,
+                    display_name: user.user_metadata.full_name || user.email?.split('@')[0],
+                    photo_url: user.user_metadata.avatar_url,
+                    diamonds: 10,
+                    is_admin: false,
+                    consecutive_check_ins: 0,
+                    created_at: new Date().toISOString()
+                };
+                
+                const { error: insertError } = await supabase.from('users').insert(newProfile);
+                
+                // Success OR Duplicate Key (User already exists due to trigger/race condition)
+                // Code 23505 = Unique Violation (nghĩa là user đã có trong DB, coi như thành công)
+                if (!insertError || insertError.code === '23505') {
                     return { 
                         ...MOCK_USER, 
                         id: user.id,
@@ -130,7 +130,10 @@ export const getUserProfile = async (): Promise<UserProfile> => {
                         avatar: newProfile.photo_url || MOCK_USER.avatar,
                         balance: newProfile.diamonds
                     } as UserProfile;
+                } else {
+                    console.error("FAILED to create user profile:", insertError);
                 }
+
             } catch (e) {
                 console.error("Critical User Fetch Error:", e);
             }

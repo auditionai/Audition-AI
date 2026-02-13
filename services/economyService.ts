@@ -40,7 +40,6 @@ export const getSystemApiKey = async (): Promise<string | null> => {
                 .single();
             
             if (!error && data) {
-                // Handle various JSON structures or simple string
                 return typeof data.value === 'object' ? data.value.key : data.value;
             }
         } catch (e) {
@@ -76,10 +75,10 @@ export const getUserProfile = async (): Promise<UserProfile> => {
         
         if (user) {
             try {
-                // EXACT COLUMN MAPPING based on your 'users' table screenshot
+                // SỬA: Dùng select('*') để an toàn nhất, tránh lỗi 400 nếu thiếu cột
                 const { data: profile, error } = await supabase
                     .from('users')
-                    .select('id, display_name, email, photo_url, diamonds, is_admin, consecutive_check_ins, last_check_in')
+                    .select('*')
                     .eq('id', user.id)
                     .single();
 
@@ -89,17 +88,19 @@ export const getUserProfile = async (): Promise<UserProfile> => {
                         username: profile.display_name || user.email?.split('@')[0] || 'Dancer',
                         email: profile.email || user.email || '',
                         avatar: profile.photo_url || user.user_metadata.avatar_url || MOCK_USER.avatar,
-                        balance: profile.diamonds || 0, // Mapped from 'diamonds'
-                        role: profile.is_admin ? 'admin' : 'user', // Mapped from 'is_admin' boolean
-                        isVip: false, // You can add 'is_vip' column later if needed
-                        streak: profile.consecutive_check_ins || 0, // Mapped from 'consecutive_check_ins'
-                        lastCheckin: profile.last_check_in, // Mapped from 'last_check_in'
+                        balance: profile.diamonds || 0,
+                        role: profile.is_admin ? 'admin' : 'user',
+                        isVip: false,
+                        streak: profile.consecutive_check_ins || 0,
+                        lastCheckin: profile.last_check_in,
                         checkinHistory: [], 
                         usedGiftcodes: []
                     };
                 } else {
                     // Profile missing -> Create new
-                    console.log("Creating new user profile...");
+                    // SỬA: Sửa lại logic insert để tránh lỗi TypeError
+                    console.log("Profile not found in 'users', creating new...");
+                    
                     const newProfile = {
                         id: user.id,
                         email: user.email,
@@ -111,18 +112,27 @@ export const getUserProfile = async (): Promise<UserProfile> => {
                         created_at: new Date().toISOString()
                     };
                     
-                    await supabase.from('users').insert(newProfile).catch(e => console.error("Insert failed", e));
+                    // Thực hiện insert không dùng .catch() kiểu cũ
+                    const { error: insertError } = await supabase.from('users').insert(newProfile);
+                    
+                    if (insertError) {
+                        console.error("FAILED to create user profile in DB:", insertError);
+                        // Nếu lỗi do RLS (Policy), vẫn trả về object tạm để user dùng được app
+                    } else {
+                        console.log("User profile created successfully!");
+                    }
 
                     return { 
                         ...MOCK_USER, 
                         id: user.id,
                         username: newProfile.display_name,
                         email: newProfile.email || '',
+                        avatar: newProfile.photo_url || MOCK_USER.avatar,
                         balance: newProfile.diamonds
                     } as UserProfile;
                 }
             } catch (e) {
-                console.error("User Fetch Error:", e);
+                console.error("Critical User Fetch Error:", e);
             }
         }
     }
@@ -140,20 +150,21 @@ export const updateUserBalance = async (amount: number, reason: string, type: 't
     const user = await getUserProfile();
     const newBalance = (user.balance || 0) + amount;
 
-    if (supabase && user.id !== MOCK_USER.id) {
+    if (supabase && user.id.length > 20) { // Check if valid UUID-like ID
         // Update 'diamonds' column
-        await supabase.from('users').update({ diamonds: newBalance }).eq('id', user.id);
+        const { error } = await supabase.from('users').update({ diamonds: newBalance }).eq('id', user.id);
         
-        // Log transaction (ensure 'diamond_transactions_log' exists or create it)
-        await supabase.from('diamond_transactions_log').insert({
-            user_id: user.id,
-            amount,
-            reason,
-            type: type || 'usage',
-            created_at: new Date().toISOString()
-        }).catch(e => console.warn("Log insert failed (check table existence)", e));
-        
-        return { ...user, balance: newBalance };
+        if (!error) {
+             // Log transaction
+            await supabase.from('diamond_transactions_log').insert({
+                user_id: user.id,
+                amount,
+                reason,
+                type: type || 'usage',
+                created_at: new Date().toISOString()
+            });
+            return { ...user, balance: newBalance };
+        }
     }
 
     user.balance = newBalance;
@@ -165,13 +176,12 @@ export const updateUserBalance = async (amount: number, reason: string, type: 't
 
 export const getPackages = async (): Promise<CreditPackage[]> => {
     if (supabase) {
-        // Using 'credit_packages' table
         const { data, error } = await supabase.from('credit_packages').select('*');
         if (!error && data && data.length > 0) {
             return data.map((p: any) => ({
                 id: p.id,
                 name: p.name || 'Gói Vcoin',
-                coin: p.diamonds || p.coin || 0, // Map diamonds
+                coin: p.diamonds || p.coin || 0, 
                 price: p.price || 0,
                 currency: p.currency || 'VND',
                 bonusText: p.bonus_text || '',
@@ -252,7 +262,7 @@ export const redeemGiftcode = async (codeStr: string): Promise<{success: boolean
     const normalizedCode = codeStr.trim().toUpperCase();
     const user = await getUserProfile();
 
-    if (supabase && user.id !== MOCK_USER.id) {
+    if (supabase && user.id.length > 20) {
         const { data: codeData, error } = await supabase
             .from('gift_codes')
             .select('*')
@@ -340,7 +350,7 @@ export const performCheckin = async (): Promise<{ success: boolean; reward: numb
     let newStreak = user.streak + 1;
     const reward = 5; 
     
-    if (supabase && user.id !== MOCK_USER.id) {
+    if (supabase && user.id.length > 20) {
         const todayISO = new Date().toISOString();
         
         // Update using correct columns
@@ -380,7 +390,7 @@ export const createPaymentLink = async (packageId: string): Promise<Transaction>
         code: `${pkg.transferContent?.split(' ')[0] || 'NAP'} ${Math.floor(10000 + Math.random() * 90000)}`
     };
 
-    if (supabase && user.id !== MOCK_USER.id) {
+    if (supabase && user.id.length > 20) {
         await supabase.from('transactions').insert({
             id: newTx.id,
             user_id: user.id,

@@ -1,0 +1,137 @@
+
+export type Language = 'vi' | 'en';
+export type Theme = 'light' | 'dark';
+export type ViewId = 'home' | 'tools' | 'gallery' | 'admin' | 'guide' | 'about' | 'tool_workspace' | 'support' | 'settings' | 'topup';
+
+export interface LocalizedString {
+  vi: string;
+  en: string;
+}
+
+export type FeatureType = 'generation' | 'editing';
+
+export interface Feature {
+  id: string;
+  name: LocalizedString;
+  description: LocalizedString;
+  engine: string;
+  preview_image: string;
+  toolType: FeatureType;
+  defaultPrompt?: string;
+  category?: 'generation' | 'editing' | 'style' | 'professional' | 'art';
+  supportsStyleReference?: boolean;
+  isPremium?: boolean;
+  tag?: string;
+}
+
+export interface MenuItem {
+  id: ViewId;
+  label: LocalizedString;
+  icon: string;
+}
+
+export interface AppConfig {
+  app: {
+    name: string;
+    version: string;
+    copyright: string;
+  };
+  ui: {
+    menu: MenuItem[];
+    default_language: Language;
+  };
+  main_features: Feature[];
+  branding: {
+    theme_color: string;
+    tagline: LocalizedString;
+  };
+}
+
+export interface GeneratedImage {
+  id: string;
+  url: string; // Base64 data or Public URL
+  prompt: string;
+  timestamp: number;
+  toolId: string;
+  toolName: string;
+  engine: string;
+  isShared?: boolean; // New: Status for Showcase
+  userName?: string;  // New: Author name
+}
+
+// --- NEW ECONOMY & USER TYPES ---
+
+export interface UserProfile {
+  id: string;
+  username: string;
+  email: string;
+  avatar: string;
+  balance: number;
+  role: 'user' | 'admin';
+  isVip: boolean;
+  streak: number;
+  lastCheckin: string | null; // ISO Date string
+  checkinHistory: string[]; // Array of 'YYYY-MM-DD' strings
+  password?: string; // Mock password field for admin editing
+  usedGiftcodes?: string[]; // Track used codes
+}
+
+export interface CreditPackage {
+  id: string;
+  name: string;
+  coin: number;
+  price: number;
+  currency: string;
+  bonusText: string;
+  isPopular?: boolean;
+  colorTheme: string;
+  transferContent?: string; // Custom transfer syntax
+}
+
+export interface Giftcode {
+    id: string;
+    code: string;
+    reward: number; // Amount of Vcoin
+    totalLimit: number; // Total usages allowed (e.g., 100 people)
+    usedCount: number;
+    maxPerUser: number; // Usually 1
+    expiresAt?: string; // ISO Date
+    isActive: boolean;
+}
+
+export type TransactionStatus = 'pending' | 'paid' | 'cancelled' | 'failed';
+
+export interface Transaction {
+  id: string;
+  userId: string;
+  packageId: string;
+  amount: number;
+  coins: number;
+  status: TransactionStatus;
+  createdAt: string;
+  paymentMethod: 'payos' | 'manual';
+  code: string; // Order Code
+}
+
+export interface DiamondLog {
+  id: string;
+  userId: string;
+  amount: number; // Positive for topup/reward, negative for usage
+  reason: string;
+  type: 'topup' | 'usage' | 'reward' | 'refund' | 'admin_adjustment' | 'giftcode';
+  createdAt: string;
+}
+
+export interface CheckinConfig {
+  day: number;
+  reward: number;
+  isMilestone?: boolean;
+}
+
+export interface PromotionConfig {
+    isActive: boolean;
+    marqueeText: string;
+    bonusPercent: number; // e.g., 20 for 20% bonus
+    startTime: string; // ISO Date String
+    endTime: string; // ISO Date String
+}

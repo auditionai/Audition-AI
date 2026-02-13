@@ -56,7 +56,6 @@ const GroupStudioForm: React.FC<{
     const [style] = useState('Cinematic');
     
     // Fixed settings for now as per UI request
-    // Use state to avoid TS error on comparison overlap
     const [imageSize] = useState<'1K' | '2K' | '4K'>('1K');
     const enableGoogleSearch = false;
 
@@ -223,7 +222,7 @@ const GroupStudioForm: React.FC<{
                                         <div className="aspect-square w-full mx-auto border border-dashed border-white/10 rounded overflow-hidden">
                                             <ImageUploader 
                                                 onUpload={(e) => handleImageUpload(e, (img) => handleCharacterChange(char.id, 'faceImage', img))} 
-                                                // Show processed image if available
+                                                // Correctly pass only url to image prop, removing 'file' property to fix type error
                                                 image={char.faceImage ? { url: char.processedFaceImage ? `data:image/png;base64,${char.processedFaceImage}` : char.faceImage.url } : null} 
                                                 onRemove={() => handleCharacterChange(char.id, 'faceImage', null)} 
                                                 text="Ảnh Gương mặt (Face ID)" 

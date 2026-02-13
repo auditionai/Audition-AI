@@ -38,12 +38,11 @@ const base64ToBlob = (base64: string): Blob => {
 // --- MAIN SERVICE FUNCTIONS ---
 
 export const saveImageToStorage = async (image: GeneratedImage): Promise<void> => {
-  // Get current user to attach author name
   const user = await getUserProfile();
   const imageWithUser = { ...image, userName: user.username, isShared: false };
 
   // 1. SUPABASE (CLOUD)
-  if (supabase) {
+  if (supabase && user.id.length > 20) {
     try {
       const blob = base64ToBlob(image.url);
       const fileName = `${image.id}.png`;
@@ -60,20 +59,17 @@ export const saveImageToStorage = async (image: GeneratedImage): Promise<void> =
         .from(BUCKET_NAME)
         .getPublicUrl(fileName);
 
-      // Save Metadata
-      // Note: Assumes generated_images table exists as per screenshot
+      // Save Metadata using corrected column names
       const { error: dbError } = await supabase
         .from(TABLE_NAME)
         .insert({
           id: image.id,
-          url: publicUrl,
+          user_id: user.id, // Linked to 'users' table
+          image_url: publicUrl, // Column: image_url
           prompt: image.prompt,
-          timestamp: new Date(image.timestamp).toISOString(),
-          tool_name: image.toolName,
-          tool_id: image.toolId,
-          engine: image.engine,
-          user_name: user.username, // This comes from UserProfile.username which is mapped from users.display_name
-          is_shared: false
+          model_used: image.engine, // Column: model_used
+          created_at: new Date(image.timestamp).toISOString(),
+          is_public: false // Column: is_public
         });
 
       if (dbError) throw dbError;
@@ -101,7 +97,7 @@ export const shareImageToShowcase = async (id: string, isShared: boolean): Promi
         try {
             const { error } = await supabase
                 .from(TABLE_NAME)
-                .update({ is_shared: isShared })
+                .update({ is_public: isShared }) // Column: is_public
                 .eq('id', id);
             
             if (!error) return true;
@@ -136,24 +132,25 @@ export const getShowcaseImages = async (): Promise<GeneratedImage[]> => {
     // 1. SUPABASE
     if (supabase) {
         try {
+            // Join with 'users' table to get display_name
             const { data, error } = await supabase
                 .from(TABLE_NAME)
-                .select('*')
-                .eq('is_shared', true)
-                .order('timestamp', { ascending: false })
+                .select('*, users(display_name)')
+                .eq('is_public', true) // Column: is_public
+                .order('created_at', { ascending: false })
                 .limit(20);
 
             if (!error && data) {
                 return data.map((row: any) => ({
                     id: row.id,
-                    url: row.url,
+                    url: row.image_url, // Column: image_url
                     prompt: row.prompt,
-                    timestamp: new Date(row.timestamp).getTime(),
-                    toolId: row.tool_id,
-                    toolName: row.tool_name,
-                    engine: row.engine,
-                    isShared: row.is_shared,
-                    userName: row.user_name
+                    timestamp: new Date(row.created_at).getTime(),
+                    toolId: 'gen_tool', // Generic for showcase
+                    toolName: row.model_used || 'AI Tool', // Column: model_used
+                    engine: row.model_used,
+                    isShared: row.is_public,
+                    userName: row.users?.display_name || 'Artist'
                 }));
             }
         } catch (e) {
@@ -170,7 +167,6 @@ export const getShowcaseImages = async (): Promise<GeneratedImage[]> => {
 
         request.onsuccess = () => {
             const results = request.result as GeneratedImage[];
-            // Filter shared only
             const shared = results.filter(img => img.isShared);
             resolve(shared.sort((a, b) => b.timestamp - a.timestamp).slice(0, 20));
         };
@@ -182,24 +178,28 @@ export const getAllImagesFromStorage = async (): Promise<GeneratedImage[]> => {
   // 1. SUPABASE
   if (supabase) {
     try {
-      const { data, error } = await supabase
-        .from(TABLE_NAME)
-        .select('*')
-        .order('timestamp', { ascending: false });
+        const { data: { user } } = await supabase.auth.getUser();
+        if(user) {
+            const { data, error } = await supabase
+                .from(TABLE_NAME)
+                .select('*')
+                .eq('user_id', user.id) // Filter by current user
+                .order('created_at', { ascending: false });
 
-      if (!error && data) {
-        return data.map((row: any) => ({
-          id: row.id,
-          url: row.url,
-          prompt: row.prompt,
-          timestamp: new Date(row.timestamp).getTime(),
-          toolId: row.tool_id,
-          toolName: row.tool_name,
-          engine: row.engine,
-          isShared: row.is_shared,
-          userName: row.user_name
-        }));
-      }
+            if (!error && data) {
+                return data.map((row: any) => ({
+                id: row.id,
+                url: row.image_url, // Column: image_url
+                prompt: row.prompt,
+                timestamp: new Date(row.created_at).getTime(),
+                toolId: 'gen_tool',
+                toolName: row.model_used || 'AI Gen',
+                engine: row.model_used,
+                isShared: row.is_public,
+                userName: 'Me'
+                }));
+            }
+        }
     } catch (error) {
       console.error("Supabase Load Error (Fallback to Local):", error);
     }
@@ -224,7 +224,6 @@ export const deleteImageFromStorage = async (id: string): Promise<void> => {
   if (supabase) {
     try {
         await supabase.from(TABLE_NAME).delete().eq('id', id);
-        // Also try to delete file from storage if possible
         await supabase.storage.from(BUCKET_NAME).remove([`${id}.png`]);
     } catch (e) { console.warn("Delete cloud error", e); }
   }

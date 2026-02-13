@@ -23,9 +23,6 @@ const MOCK_USER: UserProfile = {
 
 const DEFAULT_PACKAGES: CreditPackage[] = [
   { id: 'pkg_1', name: "Gói Khởi Động", coin: 10, price: 10000, currency: 'VND', bonusText: "+0%", colorTheme: "border-slate-600", transferContent: "NAP 10K" },
-  { id: 'pkg_2', name: "Gói Sáng Tạo", coin: 50, price: 50000, currency: 'VND', bonusText: "+10%", isPopular: true, colorTheme: "border-audi-cyan", transferContent: "NAP 50K" },
-  { id: 'pkg_3', name: "Gói Chuyên Nghiệp", coin: 100, price: 100000, currency: 'VND', bonusText: "+20%", colorTheme: "border-audi-purple", transferContent: "NAP 100K" },
-  { id: 'pkg_4', name: "Gói Trùm Cuối", coin: 500, price: 500000, currency: 'VND', bonusText: "+50%", colorTheme: "border-audi-pink", transferContent: "NAP 500K" },
 ];
 
 // --- SYSTEM CONFIG (API KEY) SERVICES ---
@@ -33,14 +30,28 @@ const DEFAULT_PACKAGES: CreditPackage[] = [
 export const getSystemApiKey = async (): Promise<string | null> => {
     if (supabase) {
         try {
+            // 1. Try fetching from dedicated 'api_keys' table first
             const { data, error } = await supabase
+                .from('api_keys')
+                .select('key_value')
+                .eq('status', 'active')
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .single();
+            
+            if (!error && data) {
+                return data.key_value;
+            }
+
+            // 2. Fallback to 'system_settings' (legacy)
+            const { data: setting } = await supabase
                 .from('system_settings')
                 .select('value')
                 .eq('key', 'gemini_api_key')
                 .single();
             
-            if (!error && data) {
-                return typeof data.value === 'object' ? data.value.key : data.value;
+            if (setting) {
+                return typeof setting.value === 'object' ? setting.value.key : setting.value;
             }
         } catch (e) {
             console.warn("Could not fetch API Key from DB");
@@ -53,9 +64,21 @@ export const getSystemApiKey = async (): Promise<string | null> => {
 export const saveSystemApiKey = async (apiKey: string): Promise<boolean> => {
     if (supabase) {
         try {
+            // Insert into api_keys table
             const { error } = await supabase
+                .from('api_keys')
+                .insert({
+                    name: 'Admin Added Key',
+                    key_value: apiKey,
+                    status: 'active',
+                    usage_count: 0
+                });
+            
+            // Also update system_settings for backward compatibility
+            await supabase
                 .from('system_settings')
                 .upsert({ key: 'gemini_api_key', value: apiKey }, { onConflict: 'key' });
+
             if (error) throw error;
             return true;
         } catch (e) {
@@ -69,13 +92,11 @@ export const saveSystemApiKey = async (apiKey: string): Promise<boolean> => {
 // --- USER SERVICES ---
 
 export const getUserProfile = async (): Promise<UserProfile> => {
-    // 1. Try Supabase Auth
     if (supabase) {
         const { data: { user } } = await supabase.auth.getUser();
         
         if (user) {
             try {
-                // SỬA: Dùng select('*') để an toàn nhất
                 const { data: profile, error } = await supabase
                     .from('users')
                     .select('*')
@@ -98,14 +119,7 @@ export const getUserProfile = async (): Promise<UserProfile> => {
                     };
                 } 
                 
-                // Nếu lỗi không phải do thiếu dữ liệu (PGRST116) mà do quyền (42501), log cảnh báo
-                if (error && error.code === '42501') {
-                    console.warn("LỖI QUYỀN TRUY CẬP (RLS): Vui lòng chạy lại SQL Script trong Supabase!");
-                }
-
-                // Profile missing -> Create new
-                console.log("Profile missing, attempting to create...");
-                
+                // Profile missing -> Create new with conflict handling
                 const newProfile = {
                     id: user.id,
                     email: user.email,
@@ -119,9 +133,7 @@ export const getUserProfile = async (): Promise<UserProfile> => {
                 
                 const { error: insertError } = await supabase.from('users').insert(newProfile);
                 
-                // Success OR Duplicate Key (User already exists due to trigger/race condition)
-                // Code 23505 = Unique Violation (nghĩa là user đã có trong DB, coi như thành công)
-                if (!insertError || insertError.code === '23505') {
+                if (!insertError || insertError.code === '23505') { // 23505 = Unique Violation
                     return { 
                         ...MOCK_USER, 
                         id: user.id,
@@ -130,8 +142,6 @@ export const getUserProfile = async (): Promise<UserProfile> => {
                         avatar: newProfile.photo_url || MOCK_USER.avatar,
                         balance: newProfile.diamonds
                     } as UserProfile;
-                } else {
-                    console.error("FAILED to create user profile:", insertError);
                 }
 
             } catch (e) {
@@ -140,7 +150,6 @@ export const getUserProfile = async (): Promise<UserProfile> => {
         }
     }
 
-    // 2. Fallback Local
     let localUser = getStorage('dmp_user');
     if (!localUser) {
         localUser = MOCK_USER;
@@ -153,17 +162,17 @@ export const updateUserBalance = async (amount: number, reason: string, type: 't
     const user = await getUserProfile();
     const newBalance = (user.balance || 0) + amount;
 
-    if (supabase && user.id.length > 20) { // Check if valid UUID-like ID
-        // Update 'diamonds' column
+    if (supabase && user.id.length > 20) { 
+        // Update 'diamonds' column in 'users'
         const { error } = await supabase.from('users').update({ diamonds: newBalance }).eq('id', user.id);
         
         if (!error) {
-             // Log transaction
+             // Log transaction in 'diamond_transactions_log'
             await supabase.from('diamond_transactions_log').insert({
                 user_id: user.id,
                 amount,
-                reason,
-                type: type || 'usage',
+                description: reason, // Map to 'description' column
+                transaction_type: type || 'usage', // Map to 'transaction_type'
                 created_at: new Date().toISOString()
             });
             return { ...user, balance: newBalance };
@@ -179,18 +188,24 @@ export const updateUserBalance = async (amount: number, reason: string, type: 't
 
 export const getPackages = async (): Promise<CreditPackage[]> => {
     if (supabase) {
-        const { data, error } = await supabase.from('credit_packages').select('*');
+        // Fetch from 'credit_packages'
+        const { data, error } = await supabase
+            .from('credit_packages')
+            .select('*')
+            .eq('is_active', true)
+            .order('display_order', { ascending: true });
+
         if (!error && data && data.length > 0) {
             return data.map((p: any) => ({
                 id: p.id,
                 name: p.name || 'Gói Vcoin',
-                coin: p.diamonds || p.coin || 0, 
-                price: p.price || 0,
-                currency: p.currency || 'VND',
-                bonusText: p.bonus_text || '',
-                isPopular: p.is_popular || false,
-                colorTheme: p.color_theme || 'border-audi-cyan',
-                transferContent: p.transfer_syntax || `NAP ${p.price}`
+                coin: p.credits_amount || 0, // Map 'credits_amount'
+                price: p.price_vnd || 0, // Map 'price_vnd'
+                currency: 'VND',
+                bonusText: p.bonus_credits > 0 ? `+${p.bonus_credits} Bonus` : '',
+                isPopular: p.is_featured || false, // Map 'is_featured'
+                colorTheme: p.tag === 'HOT' ? 'border-audi-pink' : 'border-slate-600', // Simple logic for theme based on tag
+                transferContent: `NAP ${p.price_vnd}` // Auto gen syntax
             }));
         }
     }
@@ -202,13 +217,13 @@ export const savePackage = async (pkg: CreditPackage): Promise<void> => {
         await supabase.from('credit_packages').upsert({
             id: pkg.id,
             name: pkg.name,
-            diamonds: pkg.coin,
-            price: pkg.price,
-            currency: pkg.currency,
-            bonus_text: pkg.bonusText,
-            is_popular: pkg.isPopular,
-            color_theme: pkg.colorTheme,
-            transfer_syntax: pkg.transferContent
+            credits_amount: pkg.coin,
+            price_vnd: pkg.price,
+            tag: pkg.bonusText, // Storing bonus text in 'tag' or separate column if you prefer
+            is_featured: pkg.isPopular,
+            is_active: true,
+            display_order: 0,
+            bonus_credits: 0 // You might want to parse bonus from pkg.coin if separated
         });
     }
 };
@@ -228,12 +243,12 @@ export const getGiftcodes = async (): Promise<Giftcode[]> => {
             return data.map((d: any) => ({
                 id: d.id,
                 code: d.code,
-                reward: d.reward_amount || d.reward,
-                totalLimit: d.usage_limit || d.total_limit,
-                usedCount: d.times_used || d.used_count,
-                maxPerUser: d.limit_per_user || d.max_per_user || 1,
+                reward: d.diamond_reward, // Map 'diamond_reward'
+                totalLimit: d.usage_limit, // Map 'usage_limit'
+                usedCount: d.usage_count, // Map 'usage_count'
+                maxPerUser: 1, // Default, logic not in schema
                 isActive: d.is_active,
-                expiresAt: d.expires_at
+                expiresAt: d.created_at // Or another field if added
             }));
         }
     }
@@ -245,12 +260,10 @@ export const saveGiftcode = async (giftcode: Giftcode): Promise<void> => {
         await supabase.from('gift_codes').upsert({
              id: giftcode.id,
              code: giftcode.code,
-             reward_amount: giftcode.reward,
+             diamond_reward: giftcode.reward,
              usage_limit: giftcode.totalLimit,
-             times_used: giftcode.usedCount,
-             limit_per_user: giftcode.maxPerUser,
-             is_active: giftcode.isActive,
-             expires_at: giftcode.expiresAt
+             usage_count: giftcode.usedCount,
+             is_active: giftcode.isActive
         });
     }
 };
@@ -266,6 +279,7 @@ export const redeemGiftcode = async (codeStr: string): Promise<{success: boolean
     const user = await getUserProfile();
 
     if (supabase && user.id.length > 20) {
+        // 1. Get Code
         const { data: codeData, error } = await supabase
             .from('gift_codes')
             .select('*')
@@ -275,13 +289,10 @@ export const redeemGiftcode = async (codeStr: string): Promise<{success: boolean
 
         if (error || !codeData) return { success: false, message: 'Mã không hợp lệ' };
         
-        const usageLimit = codeData.usage_limit || codeData.total_limit || 0;
-        const timesUsed = codeData.times_used || codeData.used_count || 0;
-        const reward = codeData.reward_amount || codeData.reward || 0;
+        // 2. Check Limits
+        if (codeData.usage_count >= codeData.usage_limit) return { success: false, message: 'Mã đã hết lượt dùng' };
 
-        if (timesUsed >= usageLimit) return { success: false, message: 'Mã đã hết lượt dùng' };
-
-        // Check if redeemed
+        // 3. Check Redeemed History in 'redeemed_gift_codes'
         const { data: redeemed } = await supabase
             .from('redeemed_gift_codes')
             .select('*')
@@ -291,15 +302,18 @@ export const redeemGiftcode = async (codeStr: string): Promise<{success: boolean
             
         if (redeemed) return { success: false, message: 'Bạn đã dùng mã này rồi' };
 
+        // 4. Update Balance
+        const reward = codeData.diamond_reward;
         await updateUserBalance(reward, `Giftcode: ${normalizedCode}`, 'giftcode');
         
-        // Update DB
-        await supabase.from('gift_codes').update({ times_used: timesUsed + 1 }).eq('id', codeData.id);
+        // 5. Update Code Usage
+        await supabase.from('gift_codes').update({ usage_count: codeData.usage_count + 1 }).eq('id', codeData.id);
+        
+        // 6. Record Redemption
         await supabase.from('redeemed_gift_codes').insert({
             user_id: user.id,
             gift_code_id: codeData.id,
-            redeemed_at: new Date().toISOString(),
-            reward_amount: reward
+            redeemed_at: new Date().toISOString()
         });
         
         return { success: true, message: 'Thành công', reward: reward };
@@ -311,8 +325,24 @@ export const redeemGiftcode = async (codeStr: string): Promise<{success: boolean
 
 export const getPromotionConfig = async (): Promise<PromotionConfig> => {
     if (supabase) {
-        const { data } = await supabase.from('system_settings').select('value').eq('key', 'promotion_config').single();
-        if (data) return data.value;
+        // Fetch active promotion from 'promotions' table
+        const { data } = await supabase
+            .from('promotions')
+            .select('*')
+            .eq('is_active', true)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single();
+
+        if (data) {
+            return {
+                isActive: data.is_active,
+                marqueeText: data.title + " - " + data.description,
+                bonusPercent: data.bonus_percent || 0,
+                startTime: data.start_time,
+                endTime: data.end_time
+            };
+        }
     }
     return getStorage('dmp_promotion') || {
         isActive: true,
@@ -325,6 +355,17 @@ export const getPromotionConfig = async (): Promise<PromotionConfig> => {
 
 export const savePromotionConfig = async (config: PromotionConfig): Promise<void> => {
     if (supabase) {
+        // Insert/Update 'promotions' table
+        await supabase.from('promotions').upsert({
+            title: "Khuyến mãi đặc biệt",
+            description: config.marqueeText,
+            bonus_percent: config.bonusPercent,
+            start_time: config.startTime,
+            end_time: config.endTime,
+            is_active: config.isActive
+        });
+        
+        // Fallback sync to system_settings
         await supabase.from('system_settings').upsert({ key: 'promotion_config', value: config });
     }
     setStorage('dmp_promotion', config);
@@ -351,22 +392,40 @@ export const getCheckinStatus = async () => {
 export const performCheckin = async (): Promise<{ success: boolean; reward: number; newStreak: number }> => {
     const user = await getUserProfile();
     let newStreak = user.streak + 1;
-    const reward = 5; 
+    let reward = 5; 
     
     if (supabase && user.id.length > 20) {
         const todayISO = new Date().toISOString();
+        const dateOnly = todayISO.split('T')[0]; // Format for 'date' column type
         
-        // Update using correct columns
+        // Check 'check_in_rewards' table for milestone rewards
+        const { data: rewardRule } = await supabase
+            .from('check_in_rewards')
+            .select('diamond_reward')
+            .eq('consecutive_days', newStreak)
+            .single();
+            
+        if (rewardRule) {
+            reward = rewardRule.diamond_reward;
+        }
+
+        // Update 'users'
         await supabase.from('users').update({ 
             consecutive_check_ins: newStreak, 
             last_check_in: todayISO
         }).eq('id', user.id);
 
+        // Insert 'daily_check_ins'
         await supabase.from('daily_check_ins').insert({
             user_id: user.id,
-            check_in_date: todayISO,
-            reward_amount: reward
+            check_in_date: dateOnly
         }).catch(e => console.warn("Log checkin failed", e));
+        
+        // Track 'daily_active_users' (Composite Key upsert)
+        await supabase.from('daily_active_users').upsert({
+            user_id: user.id,
+            activity_date: dateOnly
+        }).catch(e => console.warn("Log DAU failed", e));
     }
     
     await updateUserBalance(reward, `Checkin Day ${newStreak}`, 'reward');
@@ -381,6 +440,8 @@ export const createPaymentLink = async (packageId: string): Promise<Transaction>
     const pkg = pkgs.find(p => p.id === packageId);
     if (!pkg) throw new Error("Package not found");
 
+    const orderCode = Math.floor(Date.now() / 1000); // Use timestamp as order code (int8)
+
     const newTx: Transaction = {
         id: crypto.randomUUID(),
         userId: user.id,
@@ -390,7 +451,7 @@ export const createPaymentLink = async (packageId: string): Promise<Transaction>
         status: 'pending',
         createdAt: new Date().toISOString(),
         paymentMethod: 'payos',
-        code: `${pkg.transferContent?.split(' ')[0] || 'NAP'} ${Math.floor(10000 + Math.random() * 90000)}`
+        code: `NAP${orderCode}`
     };
 
     if (supabase && user.id.length > 20) {
@@ -398,10 +459,10 @@ export const createPaymentLink = async (packageId: string): Promise<Transaction>
             id: newTx.id,
             user_id: user.id,
             package_id: pkg.id,
-            amount: pkg.price,
-            coins: pkg.coin,
+            amount_vnd: pkg.price, // Map 'amount_vnd'
+            diamonds_received: pkg.coin, // Map 'diamonds_received'
             status: 'pending',
-            code: newTx.code,
+            order_code: orderCode, // Map 'order_code'
             created_at: newTx.createdAt
         });
     }
@@ -413,7 +474,6 @@ export const createPaymentLink = async (packageId: string): Promise<Transaction>
 
 export const updateAdminUserProfile = async (updatedUser: UserProfile): Promise<UserProfile> => {
     if(supabase) {
-        // Correct columns for update (Now includes photo_url)
         await supabase.from('users').update({
             diamonds: updatedUser.balance,
             display_name: updatedUser.username,
@@ -432,14 +492,15 @@ export const adminApproveTransaction = async (txId: string): Promise<boolean> =>
             const { data: user } = await supabase.from('users').select('diamonds').eq('id', tx.user_id).single();
             if(user) {
                 const currentBalance = user.diamonds || 0;
-                // Update 'diamonds'
-                await supabase.from('users').update({ diamonds: currentBalance + tx.coins }).eq('id', tx.user_id);
+                const coins = tx.diamonds_received || 0;
+                
+                await supabase.from('users').update({ diamonds: currentBalance + coins }).eq('id', tx.user_id);
                 
                 await supabase.from('diamond_transactions_log').insert({
                     user_id: tx.user_id,
-                    amount: tx.coins,
-                    reason: `Deposit: ${tx.code}`,
-                    type: 'topup',
+                    amount: coins,
+                    description: `Deposit: ${tx.order_code}`,
+                    transaction_type: 'topup',
                     created_at: new Date().toISOString()
                 });
             }
@@ -465,7 +526,6 @@ export const getAdminStats = async () => {
     let users = [], txs = [];
     
     if (supabase) {
-        // Fetch users using exact columns
         const { data: u } = await supabase.from('users').select('id, display_name, email, photo_url, diamonds, is_admin');
         if(u) {
             users = u.map((p: any) => ({
@@ -479,7 +539,17 @@ export const getAdminStats = async () => {
         }
         
         const { data: t } = await supabase.from('transactions').select('*');
-        if(t) txs = t.map((row:any) => ({...row, userId: row.user_id, packageId: row.package_id, createdAt: row.created_at}));
+        if(t) txs = t.map((row:any) => ({
+            id: row.id,
+            userId: row.user_id,
+            packageId: row.package_id,
+            amount: row.amount_vnd,
+            coins: row.diamonds_received,
+            code: `NAP${row.order_code}`,
+            status: row.status,
+            createdAt: row.created_at,
+            paymentMethod: 'payos'
+        }));
     }
 
     return {

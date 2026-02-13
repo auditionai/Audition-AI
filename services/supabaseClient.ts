@@ -16,12 +16,15 @@ if (supabaseUrl && supabaseAnonKey) {
             autoRefreshToken: true,
         }
     });
-    console.log("Supabase connected successfully.");
+    // Log connected Project ID (Safe log)
+    const projectId = supabaseUrl.split('//')[1]?.split('.')[0] || 'Unknown';
+    console.log(`[System] Supabase Initialized. Project ID: ${projectId}`);
   } catch (e) {
     console.warn("Lỗi khởi tạo Supabase, chuyển sang chế độ Local Storage", e);
   }
 } else {
   console.warn("Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY. App running in offline mode.");
+  console.log("Env Check:", { hasUrl: !!supabaseUrl, hasKey: !!supabaseAnonKey });
 }
 
 export const supabase = client;

@@ -101,22 +101,44 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
 
   const handleGoogleLogin = async () => {
       if (!supabase) {
-          onEnter(); // Fallback for offline mode
+          alert("Không thể kết nối đến máy chủ xác thực. Vui lòng kiểm tra cấu hình mạng hoặc biến môi trường.");
+          onEnter(); 
           return;
       }
+      
       setIsLoggingIn(true);
-      const { error } = await supabase.auth.signInWithOAuth({
-          provider: 'google',
-          options: {
-              redirectTo: window.location.origin
+      
+      try {
+          // Debugging info for deployment issues
+          console.log("[Auth] Starting Google OAuth...");
+          console.log("[Auth] Redirect URL:", window.location.origin);
+
+          const { error } = await supabase.auth.signInWithOAuth({
+              provider: 'google',
+              options: {
+                  redirectTo: window.location.origin,
+                  queryParams: {
+                      access_type: 'offline',
+                      prompt: 'consent'
+                  }
+              }
+          });
+
+          if (error) {
+              console.error("[Auth] Error:", error);
+              // Handle common misconfiguration errors
+              if (error.message.includes('redirect_uri_mismatch') || error.status === 400) {
+                  alert(`Lỗi Cấu Hình: Vui lòng thêm "${window.location.origin}" vào danh sách "Redirect URLs" trong Supabase Dashboard > Authentication > URL Configuration.`);
+              } else {
+                  alert("Lỗi đăng nhập: " + error.message);
+              }
+              setIsLoggingIn(false);
           }
-      });
-      if (error) {
-          console.error("Google Auth Error:", error);
+      } catch (e: any) {
+          console.error("[Auth] Exception:", e);
+          alert("Đã xảy ra lỗi không mong muốn: " + (e.message || e));
           setIsLoggingIn(false);
-          alert("Lỗi đăng nhập Google: " + error.message);
       }
-      // If success, Supabase will redirect, App.tsx will handle the session
   };
 
   const toggleFaq = (index: number) => {

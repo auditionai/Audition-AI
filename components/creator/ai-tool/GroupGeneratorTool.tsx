@@ -34,7 +34,14 @@ const GroupStudioForm: React.FC<{
 
     const [characters, setCharacters] = useState<CharacterInput[]>(() => {
         const initialChars: CharacterInput[] = [];
-        for (let i = 0; i < initialCount; i++) initialChars.push({ id: crypto.randomUUID(), poseImage: null, faceImage: null, gender: i % 2 === 0 ? 'female' : 'male' });
+        for (let i = 0; i < initialCount; i++) {
+            initialChars.push({ 
+                id: crypto.randomUUID(), 
+                poseImage: null, 
+                faceImage: null, 
+                gender: i % 2 === 0 ? 'female' : 'male' 
+            });
+        }
         return initialChars;
     });
 
@@ -45,7 +52,7 @@ const GroupStudioForm: React.FC<{
     const [style] = useState('Cinematic');
     
     // Fixed settings for now as per UI request
-    // Use state to avoid TS "no overlap" error in cost calculation due to const narrowing
+    // Use state to avoid TS error on comparison overlap
     const [imageSize] = useState<'1K' | '2K' | '4K'>('1K');
     const enableGoogleSearch = false;
 
@@ -60,10 +67,6 @@ const GroupStudioForm: React.FC<{
 
     const handleCharacterChange = (id: string, field: keyof CharacterInput, value: any) => setCharacters(prev => prev.map(c => c.id === id ? { ...c, [field]: value } : c));
     
-    // Unused functions removed to fix build error
-    // const handleAddCharacter = ...
-    // const handleRemoveCharacter = ...
-
     const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, callback: (img: { url: string; file: File }) => void) => {
         const file = e.target.files?.[0];
         if (file) resizeImage(file, 1024).then(({ file: resizedFile, dataUrl }) => callback({ url: dataUrl, file: resizedFile }));
@@ -278,81 +281,50 @@ const GroupStudioForm: React.FC<{
     );
 };
 
+type StudioMode = 'menu' | 'solo' | 'couple' | 'group' | 'party' | 'comic';
+
+const ModeCard: React.FC<{ icon: string; title: string; description: string; onClick: () => void; color: string; hot?: boolean; }> = ({ icon, title, description, onClick, color, hot }) => (
+    <button onClick={onClick} className={`relative flex flex-col items-center justify-center p-6 rounded-[24px] bg-[#151518]/90 border border-white/10 hover:border-${color}-500/50 transition-all duration-300 group hover:-translate-y-2 hover:shadow-xl overflow-hidden min-h-[220px]`}>
+        {hot && <div className="absolute top-3 right-3 bg-red-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow animate-pulse z-10">HOT</div>}
+        <div className={`absolute inset-0 bg-gradient-to-b from-${color}-500/5 to-transparent opacity-50 group-hover:opacity-100 transition-opacity`}></div>
+        <div className={`w-16 h-16 rounded-full flex items-center justify-center text-3xl mb-4 bg-black/40 shadow-inner border border-white/5 group-hover:scale-110 transition-transform relative z-10`}><i className={`ph-fill ${icon} text-${color}-400`}></i></div>
+        <h3 className="text-lg font-black uppercase tracking-wide mb-2 text-white relative z-10">{title}</h3>
+        <p className="text-[10px] text-gray-400 font-medium text-center relative z-10">{description}</p>
+    </button>
+);
+
 const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtility, onInstructionClick }) => {
-    const [mode, setMode] = useState<'solo' | 'group' | 'comic' | null>(null);
-
-    if (mode === 'comic') {
-        return <ComicStudio onInstructionClick={() => onInstructionClick('comic-studio')} onBack={() => setMode(null)} />;
-    }
-
-    if (mode === 'group') {
-        return <GroupStudioForm initialCount={2} onBack={() => setMode(null)} onInstructionClick={onInstructionClick} />;
-    }
-
-    if (mode === 'solo') {
-         return (
-            <div className="animate-fade-in">
-                <div className="flex items-center gap-2 mb-3">
-                    <button onClick={() => setMode(null)} className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors">
-                        <i className="ph-bold ph-arrow-left text-white"></i>
-                    </button>
-                    <h3 className="text-base font-bold text-white">Tạo Ảnh Đơn</h3>
-                </div>
-                <AiGeneratorTool 
-                    onSendToSignatureTool={() => {}} 
-                    onSwitchToUtility={onSwitchToUtility} 
-                    initialCharacterImage={null}
-                    initialFaceImage={null}
-                />
-            </div>
-        );
-    }
-
+    const [mode, setMode] = useState<StudioMode>('menu');
+    
+    if (mode === 'solo') return (<div className="animate-fade-in"><div className="flex items-center gap-2 mb-3"><button onClick={() => setMode('menu')} className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"><i className="ph-bold ph-arrow-left text-white"></i></button><h3 className="text-base font-bold text-white">Tạo Ảnh Đơn (Solo)</h3></div><AiGeneratorTool onSendToSignatureTool={() => {}} onSwitchToUtility={onSwitchToUtility} /></div>);
+    if (mode === 'comic') return (<ComicStudio onInstructionClick={() => onInstructionClick('comic-studio')} onBack={() => setMode('menu')} />);
+    if (mode === 'couple') return <GroupStudioForm initialCount={2} onBack={() => setMode('menu')} onInstructionClick={onInstructionClick} />;
+    if (mode === 'group') return <GroupStudioForm initialCount={3} onBack={() => setMode('menu')} onInstructionClick={onInstructionClick} />;
+    if (mode === 'party') return <GroupStudioForm initialCount={4} onBack={() => setMode('menu')} onInstructionClick={onInstructionClick} />; // 4, 5, 6 etc handled by Add button
+    
     return (
-        <div className="flex flex-col items-center justify-center h-full animate-fade-in py-10">
-            <h2 className="themed-heading text-3xl font-black mb-8 text-center uppercase tracking-wide drop-shadow-lg">Studio Sáng Tạo</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-6xl w-full px-4">
-                
-                {/* MODE 1: SOLO */}
-                <button 
-                    onClick={() => setMode('solo')}
-                    className="group relative flex flex-col items-center p-8 bg-[#1E1B25] border border-white/10 rounded-3xl hover:bg-white/5 transition-all duration-300 hover:-translate-y-2 hover:shadow-[0_0_30px_rgba(59,130,246,0.3)] overflow-hidden min-h-[250px]"
-                >
-                     <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-cyan-600/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                    <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center mb-6 shadow-lg group-hover:scale-110 transition-transform duration-300">
-                        <i className="ph-fill ph-user text-4xl text-white"></i>
+        <div className="flex flex-col items-center animate-fade-in py-6 w-full max-w-7xl mx-auto">
+            <h2 className="themed-heading text-2xl font-bold themed-title-glow mb-2 text-center text-white">Bạn muốn tạo ảnh cho mấy người?</h2>
+            <p className="text-gray-400 mb-8 text-center text-xs">Chọn số lượng nhân vật để bắt đầu Studio.</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 w-full px-4">
+                <ModeCard icon="ph-user" title="ĐƠN (SOLO)" description="Ảnh chân dung, Avatar, Fashion" color="blue" onClick={() => setMode('solo')} />
+                <ModeCard icon="ph-heart" title="ĐÔI (COUPLE)" description="Ảnh đôi, Hẹn hò, Cưới" color="pink" onClick={() => setMode('couple')} />
+                <ModeCard icon="ph-users-three" title="NHÓM (3 NGƯỜI)" description="Nhóm bạn thân, Team 3" color="yellow" onClick={() => setMode('group')} />
+                <ModeCard icon="ph-users-four" title="PARTY (4+ NGƯỜI)" description="Gia đình, Hội nhóm đông" color="purple" onClick={() => setMode('party')} />
+            </div>
+            
+            <div className="mt-8 w-full px-4">
+                 <button onClick={() => setMode('comic')} className="w-full bg-[#151518]/90 border border-purple-500/30 hover:border-purple-500 hover:bg-purple-500/10 p-6 rounded-[24px] flex items-center justify-between group transition-all duration-300 relative overflow-hidden">
+                    <div className="flex items-center gap-4 relative z-10">
+                        <div className="w-16 h-16 rounded-full bg-purple-500/20 flex items-center justify-center text-3xl border border-purple-500/30 text-purple-400 group-hover:scale-110 transition-transform"><i className="ph-fill ph-book-open-text"></i></div>
+                        <div className="text-left">
+                            <h3 className="text-lg font-black uppercase text-white mb-1">TRUYỆN TRANH AI <span className="bg-red-600 text-white text-[9px] px-1.5 py-0.5 rounded ml-2 animate-pulse">HOT</span></h3>
+                            <p className="text-xs text-gray-400">Viết kịch bản & Vẽ truyện chuyên nghiệp</p>
+                        </div>
                     </div>
-                    <h3 className="text-xl font-bold text-white mb-2 group-hover:text-cyan-400 transition-colors">Ảnh Đơn (Solo)</h3>
-                    <p className="text-sm text-gray-400 text-center">Tạo ảnh chân dung, thời trang, cosplay nhân vật đơn lẻ.</p>
-                </button>
-
-                {/* MODE 2: GROUP */}
-                <button 
-                    onClick={() => setMode('group')}
-                    className="group relative flex flex-col items-center p-8 bg-[#1E1B25] border border-white/10 rounded-3xl hover:bg-white/5 transition-all duration-300 hover:-translate-y-2 hover:shadow-[0_0_30px_rgba(236,72,153,0.3)] overflow-hidden min-h-[250px]"
-                >
-                    <div className="absolute inset-0 bg-gradient-to-br from-pink-500/10 to-purple-600/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                    <div className="w-24 h-24 rounded-full bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center mb-6 shadow-lg group-hover:scale-110 transition-transform duration-300">
-                        <i className="ph-fill ph-users-three text-4xl text-white"></i>
-                    </div>
-                    <h3 className="text-xl font-bold text-white mb-2 group-hover:text-pink-400 transition-colors">Ảnh Nhóm / Couple</h3>
-                    <p className="text-sm text-gray-400 text-center">Tạo ảnh 2 người trở lên. Ghép đôi, chụp kỷ yếu, ảnh gia đình.</p>
-                </button>
-
-                {/* MODE 3: COMIC */}
-                <button 
-                    onClick={() => setMode('comic')}
-                    className="group relative flex flex-col items-center p-8 bg-[#1E1B25] border border-white/10 rounded-3xl hover:bg-white/5 transition-all duration-300 hover:-translate-y-2 hover:shadow-[0_0_30px_rgba(34,211,238,0.3)] overflow-hidden min-h-[250px]"
-                >
-                    <div className="absolute inset-0 bg-gradient-to-br from-cyan-400/10 to-blue-600/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                    <div className="absolute top-4 right-4 bg-red-500 text-white text-[10px] font-bold px-2 py-1 rounded shadow animate-pulse">NEW</div>
-                    <div className="w-24 h-24 rounded-full bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center mb-6 shadow-lg group-hover:scale-110 transition-transform duration-300">
-                        <i className="ph-fill ph-book-open-text text-4xl text-white"></i>
-                    </div>
-                    <h3 className="text-xl font-bold text-white mb-2 group-hover:text-cyan-400 transition-colors">Comic Studio</h3>
-                    <p className="text-sm text-gray-400 text-center">Sáng tác truyện tranh AI. Tự động viết kịch bản và vẽ tranh.</p>
-                </button>
-
+                    <i className="ph-bold ph-caret-right text-2xl text-gray-500 group-hover:text-white transition-colors relative z-10"></i>
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                 </button>
             </div>
         </div>
     );

@@ -61,6 +61,7 @@ export const saveImageToStorage = async (image: GeneratedImage): Promise<void> =
         .getPublicUrl(fileName);
 
       // Save Metadata
+      // Note: Assumes generated_images table exists as per screenshot
       const { error: dbError } = await supabase
         .from(TABLE_NAME)
         .insert({
@@ -71,7 +72,7 @@ export const saveImageToStorage = async (image: GeneratedImage): Promise<void> =
           tool_name: image.toolName,
           tool_id: image.toolId,
           engine: image.engine,
-          user_name: user.username,
+          user_name: user.username, // This comes from UserProfile.username which is mapped from users.display_name
           is_shared: false
         });
 
@@ -223,6 +224,7 @@ export const deleteImageFromStorage = async (id: string): Promise<void> => {
   if (supabase) {
     try {
         await supabase.from(TABLE_NAME).delete().eq('id', id);
+        // Also try to delete file from storage if possible
         await supabase.storage.from(BUCKET_NAME).remove([`${id}.png`]);
     } catch (e) { console.warn("Delete cloud error", e); }
   }

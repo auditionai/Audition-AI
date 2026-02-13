@@ -1,8 +1,19 @@
 
 import type { Handler, HandlerEvent } from "@netlify/functions";
 import { supabaseAdmin } from './utils/supabaseClient';
+import { Buffer } from 'buffer';
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 
 const handler: Handler = async (event: HandlerEvent) => {
+    const s3Client = new S3Client({
+        region: "auto",
+        endpoint: process.env.R2_ENDPOINT!,
+        credentials: {
+            accessKeyId: process.env.R2_ACCESS_KEY_ID!,
+            secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
+        },
+    });
+
     if (event.httpMethod !== 'POST') {
         return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
     }
@@ -24,13 +35,13 @@ const handler: Handler = async (event: HandlerEvent) => {
         }
         
         const payload = JSON.parse(rawPayload);
-        const { jobId, characters, referenceImage, model, imageSize = '1K', useSearch = false, removeWatermark = false } = payload;
+        const { jobId, characters, referenceImage, model, imageSize = '1K', useSearch = false, removeWatermark = false, prompt, style, aspectRatio } = payload;
         
         if (!jobId || !characters || !Array.isArray(characters) || characters.length === 0) {
             return { statusCode: 400, body: JSON.stringify({ error: 'Job ID and character data are required.' }) };
         }
 
-        // Cost Calculation (UPDATED):
+        // Cost Calculation
         let baseCost = 1;
         if (model === 'pro') {
             if (imageSize === '4K') baseCost = 20;
@@ -39,7 +50,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         }
 
         let totalCost = baseCost + characters.length;
-        if (removeWatermark) totalCost += 1; // +1 for removing watermark
+        if (removeWatermark) totalCost += 1;
 
         const { data: userData, error: userError } = await supabaseAdmin.from('users').select('diamonds, xp').eq('id', user.id).single();
         if (userError || !userData) {
@@ -49,14 +60,61 @@ const handler: Handler = async (event: HandlerEvent) => {
             return { statusCode: 402, body: JSON.stringify({ error: `Không đủ kim cương. Cần ${totalCost}, bạn có ${userData.diamonds}.` }) };
         }
 
+        // --- UPLOAD INPUTS TO R2 ---
+        const uploadInput = async (base64Data: string | null): Promise<string | null> => {
+            if (!base64Data) return null;
+            if (base64Data.startsWith('http')) return base64Data; 
+            try {
+                const cleanBase64 = base64Data.includes(',') ? base64Data.split(',')[1] : base64Data;
+                const header = base64Data.includes(',') ? base64Data.split(',')[0] : '';
+                const mimeType = header.match(/:(.*?);/)?.[1] || 'image/jpeg';
+                const ext = mimeType.split('/')[1] || 'jpg';
+                
+                const buffer = Buffer.from(cleanBase64, 'base64');
+                const key = `temp/${user.id}/${jobId}_${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`;
+                
+                await (s3Client as any).send(new PutObjectCommand({
+                    Bucket: process.env.R2_BUCKET_NAME!,
+                    Key: key,
+                    Body: buffer,
+                    ContentType: mimeType
+                }));
+                return `${process.env.R2_PUBLIC_URL}/${key}`;
+            } catch (e) {
+                console.error("Input upload failed", e);
+                return null;
+            }
+        };
+
+        // Upload Inputs
+        const uploadedRefImage = await uploadInput(referenceImage);
+        const uploadedCharacters = await Promise.all(characters.map(async (c: any) => {
+            const [poseUrl, faceUrl] = await Promise.all([
+                uploadInput(c.poseImage),
+                uploadInput(c.faceImage)
+            ]);
+            return { ...c, poseImage: poseUrl, faceImage: faceUrl };
+        }));
+
         const newDiamondCount = userData.diamonds - totalCost;
 
-        // WORKAROUND: Store progress and payload in the 'prompt' column
+        // Optimized Payload with URLs
+        const optimizedPayload = { 
+            jobId,
+            characters: uploadedCharacters, 
+            referenceImage: uploadedRefImage, 
+            prompt, style, aspectRatio, model, 
+            imageSize, useSearch, removeWatermark,
+            totalCost 
+        };
+
+        // Create initial job data struct
         const initialJobData = {
-            payload: { ...payload, imageSize, useSearch, removeWatermark }, 
+            payload: optimizedPayload,
             progress: 'Đang khởi tạo tác vụ...'
         };
 
+        // Store prompt as Stringified JSON to be safe with all Supabase column types
         const { error: insertError } = await supabaseAdmin.from('generated_images').insert({
             id: jobId,
             user_id: user.id,
@@ -67,7 +125,7 @@ const handler: Handler = async (event: HandlerEvent) => {
         });
         
         if (insertError) {
-            if (insertError.code !== '23505') { 
+            if (insertError.code !== '23505') { // Ignore unique constraint error if retrying
                 throw new Error(`Failed to create job record: ${insertError.message}`);
             }
         }
@@ -85,7 +143,6 @@ const handler: Handler = async (event: HandlerEvent) => {
             }),
         ]);
 
-        // Return Success Immediately (Client will trigger worker)
         return {
             statusCode: 200,
             body: JSON.stringify({ message: 'Job record created successfully.', newDiamondCount })

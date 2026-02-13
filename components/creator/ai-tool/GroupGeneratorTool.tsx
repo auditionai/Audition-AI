@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useTranslation } from '../../../hooks/useTranslation';
-import { resizeImage } from '../../../utils/imageUtils';
+import { resizeImage, createBlankCanvas } from '../../../utils/imageUtils';
 import SettingsBlock from './SettingsBlock';
 import ImageUploader from '../../ai-tool/ImageUploader';
 import ImageModal from '../../common/ImageModal';
@@ -56,6 +56,7 @@ const GroupStudioForm: React.FC<{
     const [style] = useState('Cinematic');
     
     // Fixed settings for now as per UI request
+    // Use state to avoid TS error on comparison overlap
     const [imageSize] = useState<'1K' | '2K' | '4K'>('1K');
     const enableGoogleSearch = false;
 
@@ -135,48 +136,134 @@ const GroupStudioForm: React.FC<{
     };
 
     const handleGenerateClick = () => {
+        console.log('[GroupStudio] Validating inputs...');
         if (characters.some((c) => !c.poseImage)) return showToast('Vui lòng tải ảnh nhân vật (Pose) cho tất cả các slot.', 'error');
         if (!referenceImage && !prompt.trim()) return showToast('Vui lòng cung cấp Ảnh Tham Chiếu hoặc nhập Prompt.', 'error');
         if (user && user.diamonds < calculateCost()) return showToast(t('creator.aiTool.common.errorCredits', { cost: calculateCost(), balance: user.diamonds }), 'error');
+        
+        console.log('[GroupStudio] Validation passed. Opening confirmation.');
         setIsConfirmOpen(true);
     };
 
     const confirmGenerate = async () => {
-        setIsConfirmOpen(false); setIsGenerating(true); setGeneratedImage(null); setProgressMessage(t('creator.aiTool.groupStudio.progressCreatingBg'));
+        console.log('[GroupStudio] Starting Generation Process...');
+        setIsConfirmOpen(false); 
+        setIsGenerating(true); 
+        setGeneratedImage(null); 
+        setProgressMessage(t('creator.aiTool.groupStudio.progressCreatingBg'));
+        
         try {
+            // 1. Prepare Characters
+            console.log('[GroupStudio] Preparing character payloads...');
             const payloadCharacters = await Promise.all(characters.map(async c => ({ 
                 gender: c.gender, 
                 poseImage: c.poseImage?.url, 
                 // Prioritize processed face image (base64) if available, otherwise use raw url
                 faceImage: c.processedFaceImage ? `data:image/png;base64,${c.processedFaceImage}` : c.faceImage?.url 
             })));
-            const payload = { jobId: crypto.randomUUID(), characters: payloadCharacters, referenceImage: referenceImage?.url, prompt, style, aspectRatio, model, imageSize, removeWatermark, useSearch: enableGoogleSearch };
+            console.log(`[GroupStudio] Prepared ${payloadCharacters.length} characters.`);
+
+            // 2. Prepare Reference Image (Auto generate blank if missing)
+            let finalReferenceUrl = referenceImage?.url;
+            if (!finalReferenceUrl) {
+                console.log('[GroupStudio] No reference image provided. Generating blank canvas...');
+                finalReferenceUrl = createBlankCanvas(aspectRatio);
+                console.log('[GroupStudio] Blank canvas generated.');
+            } else {
+                console.log('[GroupStudio] Using user provided reference image.');
+            }
+
+            const payload = { 
+                jobId: crypto.randomUUID(), 
+                characters: payloadCharacters, 
+                referenceImage: finalReferenceUrl, 
+                prompt, 
+                style, 
+                aspectRatio, 
+                model, 
+                imageSize, 
+                removeWatermark, 
+                useSearch: enableGoogleSearch 
+            };
             
-            // 1. Create Job (Spawner)
-            const res = await fetch('/.netlify/functions/generate-group-image', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` }, body: JSON.stringify(payload) });
-            if (!res.ok) throw new Error((await res.json()).error || 'Server Error');
+            console.log('[GroupStudio] Sending Payload to Spawner (excluding large image data)...', { 
+                ...payload, 
+                characters: payload.characters.map(c => ({...c, poseImage: 'DATA_HIDDEN', faceImage: 'DATA_HIDDEN'})),
+                referenceImage: 'DATA_HIDDEN'
+            });
+
+            // 3. Create Job (Spawner)
+            const res = await fetch('/.netlify/functions/generate-group-image', { 
+                method: 'POST', 
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` }, 
+                body: JSON.stringify(payload) 
+            });
+            
+            if (!res.ok) {
+                const errData = await res.json();
+                console.error('[GroupStudio] Spawner Error:', errData);
+                throw new Error(errData.error || 'Server Error');
+            }
+            
             const data = await res.json();
+            console.log('[GroupStudio] Job Created:', data);
+            
             if (data.newDiamondCount !== undefined) updateUserDiamonds(data.newDiamondCount);
 
-            // 2. Trigger Worker (Fire and Forget)
+            // 4. Trigger Worker (Fire and Forget)
+            console.log('[GroupStudio] Triggering Background Worker...');
             fetch('/.netlify/functions/generate-group-image-background', {
                 method: 'POST',
                 body: JSON.stringify({ jobId: payload.jobId })
-            }).catch(e => console.warn("Worker trigger warning:", e));
+            }).then(() => console.log('[GroupStudio] Worker triggered.'))
+              .catch(e => console.warn("[GroupStudio] Worker trigger warning:", e));
 
-            // 3. Start Polling
+            // 5. Start Polling
+            console.log('[GroupStudio] Starting Poll for Job:', payload.jobId);
             pollJob(payload.jobId);
-        } catch (e: any) { showToast(e.message, 'error'); setIsGenerating(false); }
+        } catch (e: any) { 
+            console.error('[GroupStudio] Critical Error:', e);
+            showToast(e.message, 'error'); 
+            setIsGenerating(false); 
+        }
     };
 
     const pollJob = (jobId: string) => {
         if (!supabase) return;
         const interval = setInterval(async () => {
             const { data, error } = await supabase.from('generated_images').select('image_url, prompt').eq('id', jobId).single();
-            if (error || !data) { clearInterval(interval); setIsGenerating(false); return; }
-            if (data.image_url && data.image_url.startsWith('FAILED:')) { clearInterval(interval); setIsGenerating(false); showToast(data.image_url.replace('FAILED: ', ''), 'error'); return; }
-            try { const promptData = JSON.parse(data.prompt); if (promptData.progress) setProgressMessage(promptData.progress); } catch(e) {}
-            if (data.image_url && data.image_url !== 'PENDING') { clearInterval(interval); setGeneratedImage(data.image_url); setIsGenerating(false); showToast(t('creator.aiTool.common.success'), 'success'); }
+            
+            if (error || !data) { 
+                console.error('[GroupStudio] Poll Error or No Data:', error);
+                clearInterval(interval); 
+                setIsGenerating(false); 
+                return; 
+            }
+            
+            console.log(`[GroupStudio] Poll Status for ${jobId}:`, data.image_url);
+
+            if (data.image_url && data.image_url.startsWith('FAILED:')) { 
+                clearInterval(interval); 
+                setIsGenerating(false); 
+                showToast(data.image_url.replace('FAILED: ', ''), 'error'); 
+                return; 
+            }
+            
+            try { 
+                const promptData = JSON.parse(data.prompt); 
+                if (promptData.progress) {
+                    console.log('[GroupStudio] Progress:', promptData.progress);
+                    setProgressMessage(promptData.progress); 
+                }
+            } catch(e) {}
+            
+            if (data.image_url && data.image_url !== 'PENDING') { 
+                console.log('[GroupStudio] SUCCESS! URL:', data.image_url);
+                clearInterval(interval); 
+                setGeneratedImage(data.image_url); 
+                setIsGenerating(false); 
+                showToast(t('creator.aiTool.common.success'), 'success'); 
+            }
         }, 3000);
     };
 

@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useTranslation } from '../../../hooks/useTranslation';
@@ -278,7 +279,7 @@ const GroupStudioForm: React.FC<{
 };
 
 const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtility, onInstructionClick }) => {
-    const [mode, setMode] = useState<'group' | 'comic' | null>(null);
+    const [mode, setMode] = useState<'solo' | 'group' | 'comic' | null>(null);
 
     if (mode === 'comic') {
         return <ComicStudio onInstructionClick={() => onInstructionClick('comic-studio')} onBack={() => setMode(null)} />;
@@ -288,36 +289,68 @@ const GroupGeneratorTool: React.FC<GroupGeneratorToolProps> = ({ onSwitchToUtili
         return <GroupStudioForm initialCount={2} onBack={() => setMode(null)} onInstructionClick={onInstructionClick} />;
     }
 
+    if (mode === 'solo') {
+         return (
+            <div className="animate-fade-in">
+                <div className="flex items-center gap-2 mb-3">
+                    <button onClick={() => setMode(null)} className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors">
+                        <i className="ph-bold ph-arrow-left text-white"></i>
+                    </button>
+                    <h3 className="text-base font-bold text-white">Tạo Ảnh Đơn</h3>
+                </div>
+                <AiGeneratorTool 
+                    onSendToSignatureTool={() => {}} 
+                    onSwitchToUtility={onSwitchToUtility} 
+                    initialCharacterImage={null}
+                    initialFaceImage={null}
+                />
+            </div>
+        );
+    }
+
     return (
         <div className="flex flex-col items-center justify-center h-full animate-fade-in py-10">
             <h2 className="themed-heading text-3xl font-black mb-8 text-center uppercase tracking-wide drop-shadow-lg">Studio Sáng Tạo</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl w-full px-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-6xl w-full px-4">
                 
-                {/* MODE 1: GROUP PHOTO */}
+                {/* MODE 1: SOLO */}
+                <button 
+                    onClick={() => setMode('solo')}
+                    className="group relative flex flex-col items-center p-8 bg-[#1E1B25] border border-white/10 rounded-3xl hover:bg-white/5 transition-all duration-300 hover:-translate-y-2 hover:shadow-[0_0_30px_rgba(59,130,246,0.3)] overflow-hidden min-h-[250px]"
+                >
+                     <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-cyan-600/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                    <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center mb-6 shadow-lg group-hover:scale-110 transition-transform duration-300">
+                        <i className="ph-fill ph-user text-4xl text-white"></i>
+                    </div>
+                    <h3 className="text-xl font-bold text-white mb-2 group-hover:text-cyan-400 transition-colors">Ảnh Đơn (Solo)</h3>
+                    <p className="text-sm text-gray-400 text-center">Tạo ảnh chân dung, thời trang, cosplay nhân vật đơn lẻ.</p>
+                </button>
+
+                {/* MODE 2: GROUP */}
                 <button 
                     onClick={() => setMode('group')}
-                    className="group relative flex flex-col items-center p-8 bg-[#1E1B25] border border-white/10 rounded-3xl hover:bg-white/5 transition-all duration-300 hover:-translate-y-2 hover:shadow-[0_0_30px_rgba(236,72,153,0.3)] overflow-hidden"
+                    className="group relative flex flex-col items-center p-8 bg-[#1E1B25] border border-white/10 rounded-3xl hover:bg-white/5 transition-all duration-300 hover:-translate-y-2 hover:shadow-[0_0_30px_rgba(236,72,153,0.3)] overflow-hidden min-h-[250px]"
                 >
                     <div className="absolute inset-0 bg-gradient-to-br from-pink-500/10 to-purple-600/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                     <div className="w-24 h-24 rounded-full bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center mb-6 shadow-lg group-hover:scale-110 transition-transform duration-300">
                         <i className="ph-fill ph-users-three text-4xl text-white"></i>
                     </div>
-                    <h3 className="text-2xl font-bold text-white mb-2 group-hover:text-pink-400 transition-colors">Ảnh Nhóm / Couple</h3>
+                    <h3 className="text-xl font-bold text-white mb-2 group-hover:text-pink-400 transition-colors">Ảnh Nhóm / Couple</h3>
                     <p className="text-sm text-gray-400 text-center">Tạo ảnh 2 người trở lên. Ghép đôi, chụp kỷ yếu, ảnh gia đình.</p>
                 </button>
 
-                {/* MODE 2: COMIC STUDIO */}
+                {/* MODE 3: COMIC */}
                 <button 
                     onClick={() => setMode('comic')}
-                    className="group relative flex flex-col items-center p-8 bg-[#1E1B25] border border-white/10 rounded-3xl hover:bg-white/5 transition-all duration-300 hover:-translate-y-2 hover:shadow-[0_0_30px_rgba(34,211,238,0.3)] overflow-hidden"
+                    className="group relative flex flex-col items-center p-8 bg-[#1E1B25] border border-white/10 rounded-3xl hover:bg-white/5 transition-all duration-300 hover:-translate-y-2 hover:shadow-[0_0_30px_rgba(34,211,238,0.3)] overflow-hidden min-h-[250px]"
                 >
                     <div className="absolute inset-0 bg-gradient-to-br from-cyan-400/10 to-blue-600/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                     <div className="absolute top-4 right-4 bg-red-500 text-white text-[10px] font-bold px-2 py-1 rounded shadow animate-pulse">NEW</div>
                     <div className="w-24 h-24 rounded-full bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center mb-6 shadow-lg group-hover:scale-110 transition-transform duration-300">
                         <i className="ph-fill ph-book-open-text text-4xl text-white"></i>
                     </div>
-                    <h3 className="text-2xl font-bold text-white mb-2 group-hover:text-cyan-400 transition-colors">Comic Studio</h3>
-                    <p className="text-sm text-gray-400 text-center">Sáng tác truyện tranh AI. Tự động viết kịch bản và vẽ tranh theo ô.</p>
+                    <h3 className="text-xl font-bold text-white mb-2 group-hover:text-cyan-400 transition-colors">Comic Studio</h3>
+                    <p className="text-sm text-gray-400 text-center">Sáng tác truyện tranh AI. Tự động viết kịch bản và vẽ tranh.</p>
                 </button>
 
             </div>

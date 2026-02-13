@@ -57,11 +57,24 @@ function App() {
   }, []);
 
   const checkAdminRole = async (userId: string) => {
-      // Basic check, in production ideally handled by JWT claims or proper RBAC
       if (!supabase) return;
-      const { data } = await supabase.from('profiles').select('role').eq('id', userId).single();
-      if (data && data.role === 'admin') {
-          setUserRole('admin');
+      
+      // FIX: Check 'users' table and 'is_admin' column
+      try {
+          const { data, error } = await supabase
+            .from('users')
+            .select('is_admin')
+            .eq('id', userId)
+            .single();
+
+          if (!error && data && data.is_admin === true) {
+              console.log("Admin privileges granted.");
+              setUserRole('admin');
+          } else {
+              setUserRole('user');
+          }
+      } catch (e) {
+          console.error("Error checking admin role:", e);
       }
   };
 
@@ -76,6 +89,7 @@ function App() {
       }
       setIsAuthenticated(false);
       setCurrentView('home');
+      setUserRole('user'); // Reset role
   };
 
   const handleNavigate = (view: ViewId) => {

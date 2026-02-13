@@ -1,8 +1,8 @@
 
-import React, { useState } from 'react';
-import { Language, ViewId } from '../types';
+import React, { useState, useEffect } from 'react';
+import { Language, ViewId, UserProfile } from '../types';
 import { Icons } from '../components/Icons';
-import { redeemGiftcode } from '../services/economyService';
+import { redeemGiftcode, getUserProfile, updateAdminUserProfile } from '../services/economyService';
 
 interface SettingsProps {
   lang: Language;
@@ -13,16 +13,52 @@ interface SettingsProps {
 
 export const Settings: React.FC<SettingsProps> = ({ lang, onLogout, onNavigate, isAdmin }) => {
   const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'giftcode'>('profile');
-  const [userInfo, setUserInfo] = useState({
-      name: 'Audition Dancer',
-      avatar: 'https://picsum.photos/100/100',
-      email: 'dancer@audition.ai'
-  });
+  
+  // Initialize with empty/loading state rather than hardcoded demo data
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Editable Form State
+  const [formName, setFormName] = useState('');
+  const [formAvatar, setFormAvatar] = useState('');
 
   const [giftcode, setGiftcode] = useState('');
 
-  const handleSaveProfile = () => {
-      alert(lang === 'vi' ? 'Đã cập nhật thông tin thành công!' : 'Profile updated successfully!');
+  useEffect(() => {
+      const loadUser = async () => {
+          setIsLoading(true);
+          const profile = await getUserProfile();
+          setUserProfile(profile);
+          setFormName(profile.username);
+          setFormAvatar(profile.avatar);
+          setIsLoading(false);
+      };
+      loadUser();
+  }, []);
+
+  const handleSaveProfile = async () => {
+      if (!userProfile) return;
+
+      const updatedProfile = { 
+          ...userProfile, 
+          username: formName, 
+          avatar: formAvatar 
+      };
+
+      try {
+          // Reuse the generic update function from service
+          await updateAdminUserProfile(updatedProfile);
+          
+          // Update local state
+          setUserProfile(updatedProfile);
+          alert(lang === 'vi' ? 'Đã cập nhật thông tin thành công!' : 'Profile updated successfully!');
+          
+          // Force reload to reflect changes in Header/Layout immediately if needed, 
+          // though Layout has its own poller, a page reload ensures total sync.
+          // window.location.reload(); 
+      } catch (e) {
+          alert('Error updating profile');
+      }
   };
 
   const handleRedeemCode = async () => {
@@ -36,20 +72,25 @@ export const Settings: React.FC<SettingsProps> = ({ lang, onLogout, onNavigate, 
       }
   };
 
+  if (isLoading || !userProfile) {
+      return <div className="flex items-center justify-center h-64"><Icons.Loader className="animate-spin text-white w-8 h-8"/></div>;
+  }
+
   return (
     <div className="max-w-4xl mx-auto pb-24 animate-fade-in">
         
         {/* Header */}
         <div className="flex items-center gap-4 mb-8">
             <div className="w-16 h-16 rounded-full bg-gradient-to-br from-audi-pink to-audi-purple p-1 shadow-[0_0_20px_rgba(255,0,153,0.3)]">
-                <img src={userInfo.avatar} alt="Avatar" className="w-full h-full rounded-full object-cover border-2 border-black" />
+                <img src={userProfile.avatar} alt="Avatar" className="w-full h-full rounded-full object-cover border-2 border-black" onError={(e) => (e.currentTarget.src = 'https://picsum.photos/100/100')} />
             </div>
             <div>
-                <h1 className="text-2xl font-bold text-white font-game">{userInfo.name}</h1>
-                <p className="text-slate-400 text-sm">{userInfo.email}</p>
+                <h1 className="text-2xl font-bold text-white font-game">{userProfile.username}</h1>
+                <p className="text-slate-400 text-sm">{userProfile.email}</p>
                 <div className="flex items-center gap-2 mt-1">
-                     <span className="px-2 py-0.5 rounded bg-audi-yellow/20 text-audi-yellow text-[10px] font-bold border border-audi-yellow/50">VIP MEMBER</span>
+                     {userProfile.isVip && <span className="px-2 py-0.5 rounded bg-audi-yellow/20 text-audi-yellow text-[10px] font-bold border border-audi-yellow/50">VIP MEMBER</span>}
                      <span className="px-2 py-0.5 rounded bg-green-500/20 text-green-500 text-[10px] font-bold border border-green-500/50">ONLINE</span>
+                     {isAdmin && <span className="px-2 py-0.5 rounded bg-red-500/20 text-red-500 text-[10px] font-bold border border-red-500/50">ADMIN</span>}
                 </div>
             </div>
             <button 
@@ -106,8 +147,8 @@ export const Settings: React.FC<SettingsProps> = ({ lang, onLogout, onNavigate, 
                                 <label className="block text-xs font-bold text-slate-400 uppercase mb-2">{lang === 'vi' ? 'Tên hiển thị' : 'Display Name'}</label>
                                 <input 
                                     type="text" 
-                                    value={userInfo.name}
-                                    onChange={(e) => setUserInfo({...userInfo, name: e.target.value})}
+                                    value={formName}
+                                    onChange={(e) => setFormName(e.target.value)}
                                     className="w-full bg-black/30 border border-white/10 rounded-xl p-3 text-white focus:border-audi-pink outline-none" 
                                 />
                             </div>
@@ -116,7 +157,7 @@ export const Settings: React.FC<SettingsProps> = ({ lang, onLogout, onNavigate, 
                                 <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Email</label>
                                 <input 
                                     type="email" 
-                                    value={userInfo.email}
+                                    value={userProfile.email}
                                     disabled
                                     className="w-full bg-black/10 border border-white/5 rounded-xl p-3 text-slate-500 cursor-not-allowed" 
                                 />
@@ -127,12 +168,12 @@ export const Settings: React.FC<SettingsProps> = ({ lang, onLogout, onNavigate, 
                                 <div className="flex gap-2">
                                     <input 
                                         type="text" 
-                                        value={userInfo.avatar}
-                                        onChange={(e) => setUserInfo({...userInfo, avatar: e.target.value})}
+                                        value={formAvatar}
+                                        onChange={(e) => setFormAvatar(e.target.value)}
                                         className="flex-1 bg-black/30 border border-white/10 rounded-xl p-3 text-white focus:border-audi-pink outline-none text-sm font-mono" 
                                     />
                                     <div className="w-12 h-12 rounded-xl bg-black/30 border border-white/10 overflow-hidden shrink-0">
-                                        <img src={userInfo.avatar} alt="" className="w-full h-full object-cover" />
+                                        <img src={formAvatar} alt="" className="w-full h-full object-cover" onError={(e) => (e.currentTarget.src = 'https://picsum.photos/100/100')} />
                                     </div>
                                 </div>
                             </div>

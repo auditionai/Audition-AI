@@ -413,10 +413,11 @@ export const createPaymentLink = async (packageId: string): Promise<Transaction>
 
 export const updateAdminUserProfile = async (updatedUser: UserProfile): Promise<UserProfile> => {
     if(supabase) {
-        // Correct columns for update
+        // Correct columns for update (Now includes photo_url)
         await supabase.from('users').update({
             diamonds: updatedUser.balance,
-            display_name: updatedUser.username
+            display_name: updatedUser.username,
+            photo_url: updatedUser.avatar
         }).eq('id', updatedUser.id);
     }
     return updatedUser;

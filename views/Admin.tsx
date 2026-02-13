@@ -55,6 +55,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
             const key = await getSystemApiKey();
             if (key) {
                 setApiKey(key);
+                setKeyStatus('checking'); // Set to checking visibly
                 // 3. Run Checks with the loaded key
                 await runSystemChecks(key);
             } else {
@@ -79,17 +80,14 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   };
 
   const runSystemChecks = async (specificKey?: string) => {
-      setHealth({
-          gemini: { status: 'checking', latency: 0 },
-          supabase: { status: 'checking', latency: 0 },
-          storage: { status: 'checking' }
-      });
-
+      // Don't reset health state here to avoid flickering if already loaded
+      
       const startGemini = Date.now();
       // Use specific key if provided (init load), otherwise use state
-      const keyToUse = specificKey !== undefined ? specificKey : apiKey;
+      // If state is empty string, we try undefined to trigger Env Var check inside service
+      const keyToUse = specificKey !== undefined ? specificKey : (apiKey || undefined);
       
-      const geminiOk = await checkConnection(keyToUse || undefined);
+      const geminiOk = await checkConnection(keyToUse);
       const geminiLatency = Date.now() - startGemini;
       const sbCheck = await checkSupabaseConnection();
 
@@ -99,7 +97,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           storage: { status: sbCheck.storage ? 'connected' : 'disconnected' }
       });
       
-      if (keyToUse) {
+      // Update Key Status explicitly based on connection result
+      if (keyToUse || geminiOk) {
           setKeyStatus(geminiOk ? 'valid' : 'invalid');
       }
   };

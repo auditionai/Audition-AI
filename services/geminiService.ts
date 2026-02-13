@@ -6,7 +6,7 @@ import { getSystemApiKey } from "./economyService";
 const getDynamicApiKey = async (): Promise<string> => {
     // 1. Check Database (Supabase 'system_config')
     const dbKey = await getSystemApiKey();
-    if (dbKey && dbKey.trim().length > 0) return dbKey;
+    if (dbKey && dbKey.trim().length > 0) return dbKey.trim();
     
     // 2. Fallback to Environment Variable
     return process.env.API_KEY || "";
@@ -192,15 +192,16 @@ export const suggestPrompt = async (currentInput: string, lang: string, featureN
 export const checkConnection = async (testKey?: string): Promise<boolean> => {
   try {
     let ai;
-    if (testKey) {
-        ai = new GoogleGenAI({ apiKey: testKey });
-    } else {
-        ai = await getAiClient();
-    }
+    // Ensure key is trimmed to avoid whitespace issues
+    const key = testKey ? testKey.trim() : (await getDynamicApiKey()).trim();
+    
+    if (!key) return false;
+
+    ai = new GoogleGenAI({ apiKey: key });
     
     await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: 'ping',
+      contents: { parts: [{ text: 'ping' }] }, // Use explicit structure
       config: { maxOutputTokens: 1 }
     });
     return true;

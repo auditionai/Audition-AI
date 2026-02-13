@@ -36,17 +36,16 @@ const DEFAULT_PACKAGES: CreditPackage[] = [
 export const getSystemApiKey = async (): Promise<string | null> => {
     if (supabase) {
         try {
-            // 1. Try fetching from 'api_keys' table (Corrected Schema)
-            // We use maybeSingle() or limit(1) to avoid errors if 0 or multiple rows exist
+            // 1. Try fetching from 'api_keys' table
+            // WE REMOVED .eq('status', 'active') to ensure we get the key even if status is misconfigured
             const { data, error } = await supabase
                 .from('api_keys')
                 .select('key_value')
-                .eq('status', 'active') // Ensure we only get active keys
                 .order('created_at', { ascending: false })
                 .limit(1);
             
-            if (!error && data && data.length > 0) {
-                return data[0].key_value;
+            if (!error && data && data.length > 0 && data[0].key_value) {
+                return data[0].key_value.trim();
             }
 
             // 2. Fallback to 'system_settings' (Legacy support)
@@ -57,7 +56,8 @@ export const getSystemApiKey = async (): Promise<string | null> => {
                 .maybeSingle();
             
             if (setting) {
-                return typeof setting.value === 'object' ? setting.value.key : setting.value;
+                const val = typeof setting.value === 'object' ? setting.value.key : setting.value;
+                return val ? val.trim() : null;
             }
         } catch (e) {
             console.warn("Could not fetch API Key from DB", e);
@@ -71,12 +71,13 @@ export const getSystemApiKey = async (): Promise<string | null> => {
 export const saveSystemApiKey = async (apiKey: string): Promise<boolean> => {
     if (supabase) {
         try {
+            const cleanKey = apiKey.trim();
             // Insert into api_keys table
             const { error } = await supabase
                 .from('api_keys')
                 .insert({
                     name: 'Admin Key ' + new Date().toISOString(),
-                    key_value: apiKey,
+                    key_value: cleanKey,
                     status: 'active',
                     usage_count: 0
                 });
@@ -84,7 +85,7 @@ export const saveSystemApiKey = async (apiKey: string): Promise<boolean> => {
             // Also update system_settings for backward compatibility
             await supabase
                 .from('system_settings')
-                .upsert({ key: 'gemini_api_key', value: apiKey }, { onConflict: 'key' });
+                .upsert({ key: 'gemini_api_key', value: cleanKey }, { onConflict: 'key' });
 
             if (error) {
                 console.error("Save API Key Error:", error);

@@ -44,37 +44,41 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [editingPackage, setEditingPackage] = useState<CreditPackage | null>(null);
   const [editingGiftcode, setEditingGiftcode] = useState<Giftcode | null>(null);
 
-  // Load Data
+  // Load Data Sequence
   useEffect(() => {
     if (isAdmin) {
-        refreshData();
-        runSystemChecks();
-        loadApiKey();
+        const init = async () => {
+            // 1. Load Data
+            await refreshData();
+            
+            // 2. Load Key
+            const key = await getSystemApiKey();
+            if (key) {
+                setApiKey(key);
+                // 3. Run Checks with the loaded key
+                await runSystemChecks(key);
+            } else {
+                await runSystemChecks(undefined);
+            }
+        };
+        init();
     }
   }, [isAdmin]);
 
   const refreshData = async () => {
       const s = await getAdminStats();
-      setStats(s);
-      setPackages(s.packages);
-      setPromotion(s.promotion);
-      setGiftcodes(s.giftcodes);
-      setTransactions(s.transactions.reverse()); // Latest first
-      const imgs = await getAllImagesFromStorage();
-      setAllImages(imgs);
-  };
-
-  const loadApiKey = async () => {
-      const key = await getSystemApiKey();
-      if (key) {
-          setApiKey(key);
-          setKeyStatus('checking');
-          const isValid = await checkConnection(key);
-          setKeyStatus(isValid ? 'valid' : 'invalid');
+      if (s) {
+          setStats(s);
+          setPackages(s.packages || []);
+          setPromotion(s.promotion);
+          setGiftcodes(s.giftcodes || []);
+          setTransactions((s.transactions || []).reverse()); 
+          const imgs = await getAllImagesFromStorage();
+          setAllImages(imgs);
       }
   };
 
-  const runSystemChecks = async () => {
+  const runSystemChecks = async (specificKey?: string) => {
       setHealth({
           gemini: { status: 'checking', latency: 0 },
           supabase: { status: 'checking', latency: 0 },
@@ -82,8 +86,10 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       });
 
       const startGemini = Date.now();
-      // Try with current API key if loaded, else default
-      const geminiOk = await checkConnection(apiKey || undefined);
+      // Use specific key if provided (init load), otherwise use state
+      const keyToUse = specificKey !== undefined ? specificKey : apiKey;
+      
+      const geminiOk = await checkConnection(keyToUse || undefined);
       const geminiLatency = Date.now() - startGemini;
       const sbCheck = await checkSupabaseConnection();
 
@@ -92,6 +98,10 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           supabase: { status: sbCheck.db ? 'connected' : 'disconnected', latency: sbCheck.latency },
           storage: { status: sbCheck.storage ? 'connected' : 'disconnected' }
       });
+      
+      if (keyToUse) {
+          setKeyStatus(geminiOk ? 'valid' : 'invalid');
+      }
   };
 
   // --- ACTIONS ---
@@ -106,15 +116,15 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           const success = await saveSystemApiKey(apiKey);
           if (success) {
               setKeyStatus('valid');
-              alert('API Key Saved to Database & Active!');
-              runSystemChecks();
+              alert('Đã lưu API Key vào Database thành công!');
+              runSystemChecks(apiKey);
           } else {
               setKeyStatus('unknown');
-              alert('Failed to save to Database. Check database connection.');
+              alert('Lỗi khi lưu vào Database. Vui lòng kiểm tra kết nối.');
           }
       } else {
           setKeyStatus('invalid');
-          alert('Invalid API Key. Please check and try again.');
+          alert('API Key không hoạt động. Vui lòng kiểm tra lại.');
       }
   };
 
@@ -343,6 +353,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               </div>
           )}
 
+          {/* ... (Keep other views as is: transactions, users, giftcodes, packages, promotion) ... */}
+          {/* ... Re-using existing content from previous Admin.tsx logic for brevity unless changes needed ... */}
+          
           {/* ================= VIEW: TRANSACTIONS ================= */}
           {activeView === 'transactions' && (
               <div className="space-y-6 animate-slide-in-right">
@@ -790,7 +803,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               <div className="space-y-6 animate-slide-in-right">
                   <div className="flex justify-between items-center">
                       <h2 className="text-2xl font-bold text-white">Chẩn Đoán Hệ Thống</h2>
-                      <button onClick={runSystemChecks} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm font-bold text-white flex items-center gap-2">
+                      <button onClick={() => runSystemChecks(apiKey)} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm font-bold text-white flex items-center gap-2">
                           <Icons.Rocket className="w-4 h-4" /> Quét Ngay
                       </button>
                   </div>

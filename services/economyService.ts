@@ -37,18 +37,15 @@ export const getSystemApiKey = async (): Promise<string | null> => {
     if (supabase) {
         try {
             // 1. Try fetching from dedicated 'api_keys' table
-            // Note: We remove the .eq('status', 'active') filter temporarily to debug if keys exist at all
-            // Ideally, you should have at least one row with status='active'
+            // Only select necessary column to avoid large data transfer
             const { data, error } = await supabase
                 .from('api_keys')
                 .select('key_value')
-                .eq('status', 'active') 
-                .order('created_at', { ascending: false })
+                .order('created_at', { ascending: false }) // Get the latest key regardless of status logic initially
                 .limit(1)
                 .single();
             
             if (data && data.key_value) {
-                console.log("[System] API Key loaded from DB (api_keys)");
                 return data.key_value;
             }
 
@@ -62,7 +59,6 @@ export const getSystemApiKey = async (): Promise<string | null> => {
                 .single();
             
             if (setting) {
-                console.log("[System] API Key loaded from DB (system_settings)");
                 return typeof setting.value === 'object' ? setting.value.key : setting.value;
             }
         } catch (e) {
@@ -77,11 +73,10 @@ export const saveSystemApiKey = async (apiKey: string): Promise<boolean> => {
     if (supabase) {
         try {
             // Insert into api_keys table
-            // We use 'insert' to create a new active key history
             const { error } = await supabase
                 .from('api_keys')
                 .insert({
-                    name: 'Admin Added Key ' + new Date().toLocaleDateString(),
+                    name: 'Admin Key ' + new Date().toISOString(),
                     key_value: apiKey,
                     status: 'active',
                     usage_count: 0

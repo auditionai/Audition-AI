@@ -1,5 +1,6 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { GeneratedImage, Language } from '../types';
 import { getAllImagesFromStorage, deleteImageFromStorage, shareImageToShowcase } from '../services/storageService';
 import { Icons } from '../components/Icons';
@@ -150,8 +151,8 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
       )}
 
       {/* Lightbox / Details Modal */}
-      {selectedImage && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-fade-in">
+      {selectedImage && createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-fade-in">
            <div className="relative w-full max-w-4xl max-h-[90vh] flex flex-col md:flex-row bg-slate-900 rounded-3xl overflow-hidden border border-white/10 shadow-2xl">
               
               <button 
@@ -221,7 +222,8 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                  </div>
               </div>
            </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

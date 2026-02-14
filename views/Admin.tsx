@@ -500,6 +500,29 @@ CREATE POLICY "Enable all access for transactions" ON public.transactions FOR AL
       });
   }
 
+  const handleFixShowcasePermissions = () => {
+      setConfirmDialog({
+          show: true,
+          title: '🔧 Sửa lỗi Showcase (Ảnh không hiện)',
+          msg: 'Lỗi này xảy ra do Database chưa cấp quyền "Công Khai" cho các ảnh được chia sẻ (is_public = true). Hãy chạy lệnh SQL dưới đây trong Supabase Editor:',
+          sqlHelp: `-- 1. Cho phép mọi người (anon) xem ảnh đã public
+create policy "Allow public viewing of shared images"
+on public.generated_images
+for select
+to anon
+using (is_public = true);
+
+-- 2. (Tùy chọn) Cho phép lấy tên tác giả
+create policy "Allow public reading of basic user info"
+on public.users
+for select
+to anon
+using (true);`,
+          isAlertOnly: true,
+          onConfirm: () => {}
+      });
+  };
+
   // --- ACCESS DENIED ---
   if (!isAdmin) {
       return (
@@ -1330,6 +1353,29 @@ CREATE POLICY "Enable all access for transactions" ON public.transactions FOR AL
                               <span className="text-sm text-slate-400">Loại: {health.storage.type}</span>
                               <StatusBadge status={health.storage.status} />
                           </div>
+                      </div>
+                  </div>
+
+                  {/* SQL Helper Tools */}
+                  <div className="bg-[#12121a] p-6 rounded-2xl border border-white/10">
+                      <h3 className="font-bold text-lg text-white mb-4 flex items-center gap-2">
+                          <Icons.Wand className="w-5 h-5 text-audi-yellow" />
+                          Công Cụ Sửa Lỗi Nhanh (Database Fixer)
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="p-4 bg-white/5 rounded-xl border border-white/10">
+                              <h4 className="font-bold text-white mb-2">Sửa Lỗi Showcase (Ảnh không hiện)</h4>
+                              <p className="text-xs text-slate-400 mb-4">
+                                  Dùng khi khách vào trang chủ không thấy ảnh mặc dù đã share. Do Supabase chặn quyền xem public.
+                              </p>
+                              <button 
+                                onClick={handleFixShowcasePermissions}
+                                className="w-full py-2 bg-audi-purple/20 border border-audi-purple text-audi-purple hover:bg-audi-purple hover:text-white rounded-lg font-bold transition-all text-sm"
+                              >
+                                  Lấy Mã SQL Sửa Lỗi
+                              </button>
+                          </div>
+                          {/* Future tools can go here */}
                       </div>
                   </div>
 

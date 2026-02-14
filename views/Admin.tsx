@@ -207,7 +207,11 @@ CREATE POLICY "Enable all access for credit packages" ON public.credit_packages 
           const result = await deletePackage(id);
           if (result.success) {
               refreshData();
-              showToast('Đã xóa gói nạp');
+              if (result.action === 'hidden') {
+                  showToast('Gói đã chuyển sang trạng thái ẨN (do có giao dịch lịch sử)', 'info');
+              } else {
+                  showToast('Đã xóa gói nạp vĩnh viễn');
+              }
           } else {
               showToast('Lỗi khi xóa: ' + result.error, 'error');
           }

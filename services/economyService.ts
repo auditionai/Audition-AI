@@ -272,12 +272,29 @@ export const savePackage = async (pkg: CreditPackage): Promise<{success: boolean
     return { success: false, error: 'Chưa kết nối Database.' };
 };
 
-export const deletePackage = async (id: string): Promise<{success: boolean, error?: string}> => {
+export const deletePackage = async (id: string): Promise<{success: boolean, error?: string, action?: 'deleted' | 'hidden'}> => {
     if (supabase && isValidUUID(id)) {
         try {
+            // 1. Try Hard Delete First
             const { error } = await supabase.from('credit_packages').delete().eq('id', id);
-            if (error) throw error;
-            return { success: true };
+            
+            if (error) {
+                // Check for Foreign Key Constraint (Postgres code 23503)
+                // If it fails because it's referenced in transactions, we SOFT DELETE (hide) it instead
+                if (error.code === '23503') {
+                    const { error: updateError } = await supabase
+                        .from('credit_packages')
+                        .update({ is_active: false })
+                        .eq('id', id);
+                    
+                    if (updateError) throw updateError;
+                    
+                    // Return specific action status so UI knows it wasn't fully deleted
+                    return { success: true, action: 'hidden' };
+                }
+                throw error;
+            }
+            return { success: true, action: 'deleted' };
         } catch (e: any) {
             return { success: false, error: e.message };
         }

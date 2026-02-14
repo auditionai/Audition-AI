@@ -1,7 +1,7 @@
 
 import { GoogleGenAI } from "@google/genai";
 import { getSystemApiKey } from "./economyService";
-import { createSolidFence } from "../utils/imageProcessor";
+import { createSolidFence, optimizePayload } from "../utils/imageProcessor";
 
 // Helper to get the best available API Key ASYNC
 const getDynamicApiKey = async (): Promise<string> => {
@@ -34,9 +34,58 @@ interface CharacterData {
     id: number;
     gender: 'male' | 'female';
     image: string | null; // Base64 of identity/outfit reference
+    description?: string;
 }
 
-// --- NEW: ANALYSIS PHASE FUNCTION ---
+// --- STEP 1: SPRITE ISOLATION GENERATOR ---
+// Generates a single 3D character sprite on a Green Screen to prevent Concept Bleeding
+const generateSprite = async (char: CharacterData, stylePrompt: string): Promise<string | null> => {
+    try {
+        const ai = await getAiClient();
+        const model = 'gemini-2.5-flash'; // Fast model for sprites
+        
+        const parts: any[] = [];
+        
+        // Input Image (Face/Body)
+        if (char.image) {
+            parts.push({ inlineData: { mimeType: 'image/jpeg', data: char.image } });
+        }
+
+        // EXACT AUDITION AI PROMPT FOR ISOLATION
+        // Applied strict constraints from technical documentation
+        const prompt = `** TASK: ** Generate a single 3D Character Sprite.
+        ** STRICT CONSTRAINT: **
+        1. [GENDER]: **${char.gender.toUpperCase()}**. DO NOT SWAP GENDER. (Khóa cứng giới tính)
+        2. [ISOLATION]: Ignore any other context. Focus ONLY on this single character. (Bỏ qua mọi thứ khác)
+        3. [BACKGROUND]: Solid Green (#00FF00). (Vẽ trên nền xanh lá cây - giống quay phim Hollywood)
+        
+        [STYLE]: ${stylePrompt || "3D Game Character, Blind Box Style, Unreal Engine 5"}.
+        [ACTION]: Full body shot, standing or posing neutrally.`;
+
+        parts.push({ text: prompt });
+
+        const response = await ai.models.generateContent({
+            model: model,
+            contents: { parts: parts },
+            config: {
+                imageConfig: {
+                    aspectRatio: "3:4", // Tall aspect for character sprites
+                    imageSize: "1K"
+                }
+            }
+        });
+
+        const spriteBase64 = extractImage(response);
+        if (spriteBase64) {
+            return spriteBase64.split(',')[1]; // Return raw base64 data
+        }
+        return null;
+    } catch (error) {
+        console.error(`Sprite Gen Error for Char ${char.id}:`, error);
+        return null;
+    }
+};
+
 export const analyzeCharacterVisuals = async (base64Image: string, gender: string): Promise<string> => {
     try {
         const ai = await getAiClient();
@@ -64,13 +113,15 @@ export const analyzeCharacterVisuals = async (base64Image: string, gender: strin
 };
 
 /**
- * generateImage - ADVANCED PIPELINE (Gray Canvas / Solid Fence)
+ * generateImage - ADVANCED PIPELINE (Audition AI Protocol)
+ * - Single Mode: Direct Generation with Solid Fence.
+ * - Multi Mode: Sprite Isolation -> Context Assembly.
  */
 export const generateImage = async (
     prompt: string, 
     aspectRatio: string = "1:1", 
-    styleRefBase64?: string, // POSE BLUEPRINT (Will be Ghosted)
-    characterDataList: CharacterData[] = [], // LIST OF CHARACTERS (Will be Fenced)
+    styleRefBase64?: string, // POSE BLUEPRINT
+    characterDataList: CharacterData[] = [], // LIST OF CHARACTERS
     resolution: string = '2K',
     useSearch: boolean = false,
     onProgress?: (msg: string) => void // Callback for UI updates
@@ -79,36 +130,115 @@ export const generateImage = async (
   try {
     const ai = await getAiClient();
     const model = 'gemini-3-pro-image-preview'; 
-    
-    // ==========================================
-    // PHASE 1: PREPARE VISUAL TOKENS (The "Solid Fence" Logic)
-    // ==========================================
-    const processedCharList = [];
+    const isMultiChar = characterDataList.length > 1;
 
+    // ==========================================
+    // PATH 1: MULTI-CHARACTER PIPELINE (ISOLATION -> ASSEMBLY)
+    // ==========================================
+    if (isMultiChar) {
+        if (onProgress) onProgress(`Phase 1: Isolating ${characterDataList.length} Sprites (Parallel)...`);
+        
+        // --- STEP 1: PARALLEL SPRITE GENERATION ---
+        // Generate "Green Screen Sprite" for each character first.
+        const spritePromises = characterDataList.map(async (char) => {
+            const spriteData = await generateSprite(char, prompt);
+            return { id: char.id, sprite: spriteData, gender: char.gender };
+        });
+
+        const sprites = await Promise.all(spritePromises);
+        
+        const validSprites = sprites.filter(s => s.sprite !== null);
+        if (validSprites.length === 0) throw new Error("Failed to generate character sprites.");
+
+        if (onProgress) onProgress("Phase 2: Context Assembly (Compositing)...");
+
+        // --- STEP 2: CONTEXT ASSEMBLY ---
+        // Feed Sprites + Background Reference to Pro Model.
+        
+        let processedPoseRef = null;
+        if (styleRefBase64) {
+            const ghostData = await createSolidFence(styleRefBase64, aspectRatio, true);
+            processedPoseRef = ghostData.split(',')[1];
+        }
+
+        const parts: any[] = [];
+        let imageIndexCounter = 0;
+
+        // A. Input: Master Canvas (Pose Ref)
+        let masterCanvasIndex = -1;
+        if (processedPoseRef) {
+            parts.push({ inlineData: { data: processedPoseRef, mimeType: 'image/jpeg' } });
+            imageIndexCounter++;
+            masterCanvasIndex = imageIndexCounter;
+        }
+
+        // B. Input: Generated Sprites
+        const spriteMap: Record<number, number> = {};
+        for (const s of validSprites) {
+            if (s.sprite) {
+                parts.push({ inlineData: { data: s.sprite, mimeType: 'image/jpeg' } });
+                imageIndexCounter++;
+                spriteMap[s.id] = imageIndexCounter;
+            }
+        }
+
+        // C. Prompt: SUPREME SYSTEM COMMAND (EXACT FROM DOCS)
+        let assemblyPrompt = `** SUPREME SYSTEM COMMAND: COMPOSITION **
+        
+        I have provided pre-generated character sprites labeled ${validSprites.map(s => `[SPRITE_${s.id}]`).join(', ')}.
+        
+        [INPUT MAPPING]:
+        ${masterCanvasIndex > 0 ? `- [MASTER_CANVAS] (Image ${masterCanvasIndex}): Scene/Pose Reference.` : ''}
+        ${validSprites.map(s => `- [SPRITE_${s.id}] (Image ${spriteMap[s.id]}): Character ${s.id} on GREEN SCREEN.`).join('\n')}
+        
+        [MISSION]:
+        You MUST place these specific sprites into the scene.
+        
+        **RULE:** DO NOT regenerate their features (Face/Clothes/Gender). USE THE SPRITES PROVIDED.
+        Blend them into the lighting of the scene.
+        
+        [SCENE DESCRIPTION]: ${prompt}`;
+
+        parts.push({ text: assemblyPrompt });
+
+        const config: any = {
+            imageConfig: { aspectRatio: aspectRatio, imageSize: resolution }
+        };
+
+        const response = await ai.models.generateContent({
+            model: model,
+            contents: { parts: parts },
+            config: config
+        });
+
+        return extractImage(response);
+    }
+
+    // ==========================================
+    // PATH 2: SINGLE CHARACTER PIPELINE (DIRECT - SOLID FENCE)
+    // ==========================================
+    
     // 1. Prepare Pose Ref (The Ghost)
     let processedPoseRef = null;
     if (styleRefBase64) {
         if (onProgress) onProgress("Processing Pose Blueprint (Ghosting)...");
-        // isPoseRef = true -> Applies Bleach/Ghost effect
         const ghostData = await createSolidFence(styleRefBase64, aspectRatio, true);
         processedPoseRef = ghostData.split(',')[1];
     }
 
     // 2. Prepare Characters (The Solid Fence)
+    const processedCharList = [];
     for (const char of characterDataList) {
         if (char.image) {
             if (onProgress) onProgress(`Building Solid Fence for Player ${char.id}...`);
             
-            // isPoseRef = false -> Applies Gray Canvas + Solid Border
             const fencedData = await createSolidFence(char.image, "1:1", false);
             const fencedBase64 = fencedData.split(',')[1];
-
-            // Analyze strictly for text reinforcement
             const description = await analyzeCharacterVisuals(fencedBase64, char.gender);
             
             processedCharList.push({
                 ...char,
-                image: fencedBase64, // This is now the Gray-Canvas version
+                image: fencedBase64, 
                 description: description
             });
         } else {
@@ -121,9 +251,6 @@ export const generateImage = async (
 
     if (onProgress) onProgress("Synthesizing Final Scene...");
 
-    // ==========================================
-    // PHASE 2: CONSTRUCT SYNTHESIS PROMPT
-    // ==========================================
     const parts: any[] = [];
     let imageIndexCounter = 0;
 
@@ -157,7 +284,7 @@ export const generateImage = async (
 
     const indexToWord = (idx: number) => `Image ${idx}`;
 
-    // C. The Master System Prompt (EXACT AUDITION AI PROTOCOL)
+    // C. The Master System Prompt (Single Character Logic)
     const charCount = processedCharList.length;
     let fullPrompt = `*** SYSTEM COMMAND: OUTPAINTING & EXPANSION ***
     
@@ -167,42 +294,31 @@ export const generateImage = async (
     
     3. [GENERATION TASK]:
        - USER SCENE: "${prompt}".
-       - Render exactly ${charCount} characters into this scene.
+       - Render exactly ${charCount} character into this scene.
     
     4. [SUBJECT PRESERVATION]: 
-       - For each character provided with a solid border, keep the character's Pose, Outfit, and Identity EXACTLY as shown inside the border.
-       - Do not modify pixels inside the black border unless necessary for lighting.
+       - For the character provided with a solid border, keep the character's Pose, Outfit, and Identity EXACTLY as shown inside the border.
        - Treat the bordered area as a "Texture Stamp".`;
 
-    // --- RULE FOR POSE ---
     if (poseRefIndex > 0) {
         fullPrompt += `\n\n5. [POSE BLUEPRINT - IMAGE ${indexToWord(poseRefIndex)}]:
         - This image is a GHOST/BLEACHED guide.
-        - Use it ONLY for skeleton/bone positioning.
-        - IGNORE its colors/textures.`;
+        - Use it ONLY for skeleton/bone positioning.`;
     }
-
-    // --- CHARACTER MAPPING ---
-    fullPrompt += `\n\n[MAPPING PROTOCOL]:`;
 
     processedCharList.forEach((char) => {
         const imageIdx = charIndexMap[char.id];
         
         fullPrompt += `\n\n--- PLAYER ${char.id} (${char.gender.toUpperCase()}) ---`;
-        if (poseRefIndex > 0) fullPrompt += `\n- POSE: Matches figure ${char.id} in Pose Blueprint.`;
-        
         if (imageIdx) {
             fullPrompt += `\n- SOURCE: ${indexToWord(imageIdx)} (Inside Solid Fence).`;
             fullPrompt += `\n- CONSTRAINT: COPY Outfit from Source -> PASTE onto Scene.`;
-            fullPrompt += `\n- CLARIFICATION: ${char.description}. (If visual is unclear, follow this text).`;
+            fullPrompt += `\n- CLARIFICATION: ${char.description}.`;
         }
     });
 
     parts.push({ text: fullPrompt });
 
-    // ==========================================
-    // PHASE 3: EXECUTE
-    // ==========================================
     const config: any = {
         imageConfig: {
           aspectRatio: aspectRatio, 
@@ -223,7 +339,7 @@ export const generateImage = async (
     return extractImage(response);
 
   } catch (error) {
-    console.error("Gemini 3.0 Multi-Char Pipeline Error:", error);
+    console.error("Gemini 3.0 Pipeline Error:", error);
     throw error;
   }
 };

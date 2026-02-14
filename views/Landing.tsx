@@ -1,7 +1,9 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Icons } from '../components/Icons';
 import { signInWithGoogle } from '../services/supabaseClient';
+import { getPackages, getActivePromotion } from '../services/economyService';
+import { CreditPackage, PromotionCampaign } from '../types';
 
 interface LandingProps {
   onEnter: () => void;
@@ -9,10 +11,17 @@ interface LandingProps {
 
 export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
   const [showLogin, setShowLogin] = useState(false);
-  const [authMode, setAuthMode] = useState<'login' | 'register'>('login'); // New state for toggling modes
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [beat, setBeat] = useState(false);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+
+  // Data from Admin Settings
+  const [packages, setPackages] = useState<CreditPackage[]>([]);
+  const [activePromo, setActivePromo] = useState<PromotionCampaign | null>(null);
+  
+  // Timer for Flash Sale
+  const [timeLeft, setTimeLeft] = useState({ d: 0, h: 0, m: 0, s: 0 });
 
   // Real-time Stats State
   const [stats, setStats] = useState({
@@ -20,6 +29,42 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
     images: 1648,
     visits: 10559
   });
+
+  // Load Admin Configs
+  useEffect(() => {
+      const fetchData = async () => {
+          // Get packages (Removed slice limit to show all packages like 10, 20, 50, 100...)
+          const pkgs = await getPackages();
+          const promo = await getActivePromotion();
+          setPackages(pkgs); 
+          setActivePromo(promo);
+      };
+      fetchData();
+  }, []);
+
+  // Update Countdown Timer based on Campaign End Time
+  useEffect(() => {
+    if (!activePromo) return;
+
+    const interval = setInterval(() => {
+        const now = new Date().getTime();
+        const end = new Date(activePromo.endTime).getTime();
+        const diff = end - now;
+
+        if (diff <= 0) {
+            setTimeLeft({ d: 0, h: 0, m: 0, s: 0 });
+            return;
+        }
+
+        const d = Math.floor(diff / (1000 * 60 * 60 * 24));
+        const h = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        const s = Math.floor((diff % (1000 * 60)) / 1000);
+        setTimeLeft({ d, h, m, s });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [activePromo]);
 
   // Rhythm Simulator
   useEffect(() => {
@@ -33,11 +78,11 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
   useEffect(() => {
     const interval = setInterval(() => {
       setStats(prev => ({
-        users: prev.users + (Math.random() > 0.7 ? 1 : 0), // Slow increment
-        images: prev.images + Math.floor(Math.random() * 2) + 1, // Medium increment
-        visits: prev.visits + Math.floor(Math.random() * 5) + 1  // Fast increment
+        users: prev.users + (Math.random() > 0.7 ? 1 : 0), 
+        images: prev.images + Math.floor(Math.random() * 2) + 1,
+        visits: prev.visits + Math.floor(Math.random() * 5) + 1
       }));
-    }, 1000); // Update every second
+    }, 1000); 
 
     return () => clearInterval(interval);
   }, []);
@@ -51,7 +96,7 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
   };
 
   const handleStart = () => {
-    setAuthMode('login'); // Reset to login when opening
+    setAuthMode('login'); 
     setShowLogin(true);
   };
 
@@ -66,9 +111,28 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
     setOpenFaq(openFaq === index ? null : index);
   };
 
-  // Format numbers with dots
   const formatNumber = (num: number) => {
     return new Intl.NumberFormat('de-DE').format(num);
+  };
+
+  // Smart Description for Banner
+  const smartDescription = useMemo(() => {
+      if (!activePromo) return "";
+      const { name, bonusPercent } = activePromo;
+      const isHugeSale = bonusPercent >= 50;
+      
+      if (isHugeSale) {
+          return `🔥 Cơ hội vàng từ sự kiện "${name}"! Hệ thống đang tặng thêm +${bonusPercent}% Vcoin cho mọi giao dịch. Đây là thời điểm tốt nhất để tích lũy tài nguyên và sáng tạo không giới hạn.`;
+      }
+      return `✨ Chào mừng sự kiện "${name}". Tận hưởng ưu đãi nạp +${bonusPercent}% Vcoin ngay hôm nay. Nạp càng nhiều, ưu đãi càng lớn. Sẵn sàng bùng nổ cùng các tính năng AI mới nhất!`;
+  }, [activePromo]);
+
+  // Marquee Content Logic
+  const getMarqueeText = () => {
+      if (activePromo) {
+          return `🔥 Sự kiện ${activePromo.name}: Khuyến mãi +${activePromo.bonusPercent}% Vcoin cho mọi giao dịch! 💎 Cơ hội nạp 1 nhận 2 đang diễn ra!`;
+      }
+      return "🎉 Sự kiện Khai Trương: Miễn phí 50 lượt tạo ảnh cho thành viên mới! 💎 Nạp Vcoin lần đầu x2 giá trị";
   };
 
   // Expanded Showcase Data
@@ -91,12 +155,9 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
       
       {/* --- BACKGROUND LAYER --- */}
       <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
-          {/* Enhanced 3D Floor Container */}
           <div className="dance-floor-container opacity-40 md:opacity-100">
              <div className="dance-floor opacity-50"></div>
           </div>
-          
-          {/* Dynamic Laser Beams (Mobile Optimized) */}
           <div className={`absolute top-0 left-1/4 w-0.5 md:w-1 h-[150vh] bg-audi-pink blur-md origin-top animate-[spin_4s_ease-in-out_infinite] opacity-30`} style={{ transform: `rotate(${mousePos.x}deg)` }}></div>
           <div className={`absolute top-0 right-1/4 w-0.5 md:w-1 h-[150vh] bg-audi-cyan blur-md origin-top animate-[spin_5s_ease-in-out_infinite_reverse] opacity-30`} style={{ transform: `rotate(${-mousePos.x}deg)` }}></div>
       </div>
@@ -104,16 +165,13 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
       {/* --- PROMOTION TICKER (HEADER) --- */}
       <div className="fixed top-0 left-0 right-0 h-8 bg-gradient-to-r from-audi-purple via-audi-pink to-audi-cyan z-[60] flex items-center overflow-hidden border-b border-white/20 shadow-[0_0_15px_#FF0099]">
           <div className="animate-[marquee_20s_linear_infinite] whitespace-nowrap flex gap-10 items-center font-game text-xs md:text-sm font-bold text-black uppercase tracking-widest">
-              <span>🎉 Sự kiện Khai Trương: Miễn phí 50 lượt tạo ảnh cho thành viên mới!</span>
-              <span>💎 Nạp Vcoin lần đầu x2 giá trị</span>
-              <span>🔥 Tính năng mới: Ghép mặt đôi Couple cực chuẩn</span>
-              <span>🚀 Gemini 3.0 Engine đã cập nhật - Xử lý siêu tốc</span>
-              <span>🎉 Sự kiện Khai Trương: Miễn phí 50 lượt tạo ảnh cho thành viên mới!</span>
-              <span>💎 Nạp Vcoin lần đầu x2 giá trị</span>
+              {[1,2,3,4,5].map(i => (
+                  <span key={i}>{getMarqueeText()}</span>
+              ))}
           </div>
       </div>
 
-      {/* --- TOP HUD (Mobile Optimized) --- */}
+      {/* --- TOP HUD --- */}
       <div className="fixed top-8 left-0 right-0 z-50 px-4 md:px-6 py-4 flex justify-between items-center pointer-events-none">
           <div className="pointer-events-auto flex items-center gap-2 md:gap-3 bg-black/60 backdrop-blur-md px-3 py-1.5 md:px-4 md:py-2 rounded-full border border-white/10 shadow-lg">
                <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-gradient-to-tr from-audi-pink to-audi-purple flex items-center justify-center animate-spin-slow shadow-[0_0_15px_#FF0099]">
@@ -134,10 +192,8 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
           </button>
       </div>
 
-      {/* --- HERO SECTION (Mobile Optimized) --- */}
+      {/* --- HERO SECTION --- */}
       <div className="relative min-h-screen flex flex-col items-center justify-center pt-20 md:pt-24 pb-20 px-4 z-10">
-          
-          {/* Combo Meter - Repositioned for Mobile */}
           <div className={`absolute top-[12%] right-2 md:top-[25%] md:right-[15%] transform rotate-12 transition-all duration-100 origin-center z-0 opacity-80 md:opacity-100 ${beat ? 'scale-110 md:scale-125 rotate-6' : 'scale-90 md:scale-100 rotate-12'}`}>
               <div className="relative scale-75 md:scale-100">
                   <span className="font-game text-5xl md:text-8xl font-black italic text-transparent bg-clip-text bg-gradient-to-b from-[#ccff00] to-[#55aa00] drop-shadow-[0_0_15px_rgba(204,255,0,0.8)] z-10 block animate-neon-flash">PERFECT</span>
@@ -147,35 +203,26 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
               </div>
           </div>
 
-          {/* Main Title - Mobile Responsive Typography */}
           <div 
             className="text-center relative mb-12 md:mb-16 z-20 w-full"
             style={{ 
-                // Only apply strong 3D effect on desktop to avoid layout shift on mobile
                 transform: window.innerWidth > 768 ? `perspective(1000px) rotateX(${mousePos.y * 0.5}deg) rotateY(${mousePos.x * 0.5}deg)` : 'none' 
             }}
           >
               <div className={`transition-transform duration-75 ${beat ? 'scale-[1.01]' : 'scale-100'}`}>
-                {/* Main Heading Group */}
                 <h1 className="leading-[1.1] flex flex-col items-center">
-                    {/* Top Line */}
                     <span className="block font-game text-3xl md:text-6xl font-bold tracking-wider text-audi-cyan mb-2 drop-shadow-[0_0_10px_rgba(33,212,253,0.8)]">
                         THÀNH PHỐ
                     </span>
-                    
-                    {/* Middle Line - Responsive sizing */}
                     <span className="block font-sans text-5xl sm:text-7xl md:text-9xl font-black tracking-tighter text-outline-heavy uppercase transform -rotate-2 leading-none py-2">
                         VŨ HỘI AI
                     </span>
-                    
-                    {/* Bottom Line */}
                     <span className="block font-game text-sm md:text-3xl font-bold text-white mt-4 tracking-[0.3em] md:tracking-[0.5em] bg-black/30 backdrop-blur-sm inline-block px-4 py-2 rounded border border-white/10">
                         PHOTO STUDIO
                     </span>
                 </h1>
               </div>
               
-              {/* Feature Tags - Grid on mobile, Flex on desktop */}
               <div className="mt-8 grid grid-cols-2 md:flex md:flex-wrap justify-center gap-2 md:gap-3 max-w-sm md:max-w-none mx-auto">
                   {['TẠO ẢNH 4K', 'GHÉP MẶT', 'TÁCH NỀN', 'ANIME STYLE'].map((tag, i) => (
                       <span key={i} className="px-3 py-2 border border-audi-cyan/50 rounded-lg text-[10px] md:text-xs font-bold tracking-[0.1em] text-audi-cyan uppercase bg-black/60 backdrop-blur-sm hover:bg-audi-cyan hover:text-black transition-colors cursor-default shadow-[0_0_10px_rgba(33,212,253,0.2)] text-center">
@@ -185,46 +232,34 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
               </div>
           </div>
 
-          {/* Start Button - Full width on mobile */}
           <div className="relative group cursor-pointer z-30 w-full max-w-md md:w-auto" onClick={handleStart}>
               <div className="absolute -inset-1 bg-gradient-to-r from-audi-pink via-audi-purple to-audi-cyan rounded-2xl blur opacity-70 group-hover:opacity-100 group-hover:blur-xl transition-all duration-200 animate-pulse"></div>
               <button className="relative w-full px-8 md:px-16 py-6 md:py-8 bg-[#090014] rounded-xl border-2 border-white/20 overflow-hidden flex items-center justify-center md:justify-start gap-4 md:gap-6 group-hover:translate-y-[-2px] transition-transform">
-                  
-                  {/* Animated Background inside button */}
                   <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-20"></div>
                   <div className="absolute inset-0 bg-gradient-to-r from-audi-pink/10 to-audi-cyan/10 group-hover:opacity-100 transition-opacity"></div>
-                  
                   <div className="w-12 h-12 md:w-16 md:h-16 rounded-full bg-audi-lime flex items-center justify-center shadow-[0_0_20px_#ccff00] group-hover:scale-110 transition-transform shrink-0">
                       <Icons.Play className="w-6 h-6 md:w-8 md:h-8 text-black fill-current ml-1" />
                   </div>
-                  
                   <div className="text-left">
                       <span className="block text-xs md:text-sm font-bold text-audi-cyan uppercase tracking-[0.2em] mb-1">AUDITION STUDIO</span>
                       <span className="block text-2xl md:text-4xl font-game font-black text-white italic whitespace-nowrap">VÀO STUDIO</span>
                   </div>
-                  
-                  {/* Shine Effect */}
                   <div className="absolute top-0 -left-full w-1/2 h-full bg-gradient-to-r from-transparent via-white/20 to-transparent skew-x-[-20deg] animate-[shimmer_2s_infinite]"></div>
               </button>
           </div>
       </div>
 
-      {/* --- NEW 3D REAL-TIME STATS BANNER --- */}
+      {/* --- STATS --- */}
       <div className="relative z-20 max-w-6xl mx-auto px-4 -mt-10 md:-mt-20 mb-20 perspective-1000">
          <div className="relative grid grid-cols-1 md:grid-cols-3 gap-6">
-            
-            {/* Stat Card 1: Users */}
             <div className="group relative bg-[#13131f] border-b-4 border-audi-pink rounded-2xl p-6 shadow-[0_10px_30px_rgba(0,0,0,0.5)] transform hover:scale-105 transition-all duration-300 overflow-hidden">
                 <div className="absolute inset-0 bg-gradient-to-b from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
                 <div className="absolute -right-4 -top-4 w-24 h-24 bg-audi-pink/20 blur-[40px] rounded-full group-hover:bg-audi-pink/40 transition-colors"></div>
-                
                 <div className="relative z-10 flex flex-col items-center">
                     <div className="w-12 h-12 mb-3 rounded-full bg-black border border-audi-pink/50 flex items-center justify-center shadow-[0_0_15px_#FF0099]">
                         <Icons.User className="w-6 h-6 text-audi-pink animate-pulse" />
                     </div>
-                    <div className="font-game text-5xl font-bold text-white mb-1 drop-shadow-[0_0_10px_rgba(255,0,153,0.5)]">
-                        {formatNumber(stats.users)}+
-                    </div>
+                    <div className="font-game text-5xl font-bold text-white mb-1 drop-shadow-[0_0_10px_rgba(255,0,153,0.5)]">{formatNumber(stats.users)}+</div>
                     <div className="text-xs font-bold text-slate-400 uppercase tracking-[0.2em]">Tổng Người Dùng</div>
                     <div className="mt-3 flex items-center gap-2">
                         <span className="w-2 h-2 rounded-full bg-green-500 animate-ping"></span>
@@ -232,19 +267,15 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
                     </div>
                 </div>
             </div>
-
-            {/* Stat Card 2: Images Created */}
+            {/* ... other stats cards ... */}
             <div className="group relative bg-[#13131f] border-b-4 border-audi-cyan rounded-2xl p-6 shadow-[0_10px_30px_rgba(0,0,0,0.5)] transform hover:scale-105 transition-all duration-300 overflow-hidden">
                 <div className="absolute inset-0 bg-gradient-to-b from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
                 <div className="absolute -right-4 -top-4 w-24 h-24 bg-audi-cyan/20 blur-[40px] rounded-full group-hover:bg-audi-cyan/40 transition-colors"></div>
-                
                 <div className="relative z-10 flex flex-col items-center">
                     <div className="w-12 h-12 mb-3 rounded-full bg-black border border-audi-cyan/50 flex items-center justify-center shadow-[0_0_15px_#21D4FD]">
                         <Icons.Image className="w-6 h-6 text-audi-cyan animate-pulse" />
                     </div>
-                    <div className="font-game text-5xl font-bold text-white mb-1 drop-shadow-[0_0_10px_rgba(33,212,253,0.5)]">
-                        {formatNumber(stats.images)}+
-                    </div>
+                    <div className="font-game text-5xl font-bold text-white mb-1 drop-shadow-[0_0_10px_rgba(33,212,253,0.5)]">{formatNumber(stats.images)}+</div>
                     <div className="text-xs font-bold text-slate-400 uppercase tracking-[0.2em]">Tổng Ảnh Đã Tạo</div>
                     <div className="mt-3 flex items-center gap-2">
                          <span className="w-2 h-2 rounded-full bg-green-500 animate-ping"></span>
@@ -252,19 +283,14 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
                     </div>
                 </div>
             </div>
-
-            {/* Stat Card 3: Visits */}
             <div className="group relative bg-[#13131f] border-b-4 border-audi-purple rounded-2xl p-6 shadow-[0_10px_30px_rgba(0,0,0,0.5)] transform hover:scale-105 transition-all duration-300 overflow-hidden">
                 <div className="absolute inset-0 bg-gradient-to-b from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
                 <div className="absolute -right-4 -top-4 w-24 h-24 bg-audi-purple/20 blur-[40px] rounded-full group-hover:bg-audi-purple/40 transition-colors"></div>
-                
                 <div className="relative z-10 flex flex-col items-center">
                     <div className="w-12 h-12 mb-3 rounded-full bg-black border border-audi-purple/50 flex items-center justify-center shadow-[0_0_15px_#B721FF]">
                         <Icons.Eye className="w-6 h-6 text-audi-purple animate-pulse" />
                     </div>
-                    <div className="font-game text-5xl font-bold text-white mb-1 drop-shadow-[0_0_10px_rgba(183,33,255,0.5)]">
-                        {formatNumber(stats.visits)}+
-                    </div>
+                    <div className="font-game text-5xl font-bold text-white mb-1 drop-shadow-[0_0_10px_rgba(183,33,255,0.5)]">{formatNumber(stats.visits)}+</div>
                     <div className="text-xs font-bold text-slate-400 uppercase tracking-[0.2em]">Lượt Truy Cập</div>
                     <div className="mt-3 flex items-center gap-2">
                          <span className="w-2 h-2 rounded-full bg-green-500 animate-ping"></span>
@@ -272,11 +298,10 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
                     </div>
                 </div>
             </div>
-
          </div>
       </div>
 
-      {/* --- OUTSTANDING FEATURES (Updated) --- */}
+      {/* --- OUTSTANDING FEATURES --- */}
       <div className="py-16 md:py-20 relative z-20 px-4">
           <div className="max-w-7xl mx-auto md:px-6">
               <div className="text-center mb-10 md:mb-16">
@@ -306,7 +331,7 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
           </div>
       </div>
 
-      {/* --- 4 SIMPLE STEPS (New Section) --- */}
+      {/* --- 4 SIMPLE STEPS --- */}
       <div className="py-16 md:py-24 relative z-20 px-4 bg-white/[0.02]">
          <div className="max-w-7xl mx-auto md:px-6">
             <div className="text-center mb-10 md:mb-16">
@@ -315,7 +340,6 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
                  </h2>
                  <p className="text-slate-400 text-sm md:text-base">Chỉ vài cú nhấp chuột, bạn đã có ngay một tác phẩm nghệ thuật</p>
             </div>
-            
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                 {[
                     { step: 1, icon: Icons.Upload, title: 'Tải Ảnh Gốc', desc: 'Chọn ảnh chân dung rõ mặt, chất lượng cao để AI nhận diện tốt nhất' },
@@ -324,28 +348,22 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
                     { step: 4, icon: Icons.Download, title: 'Nhận Ảnh & Tỏa Sáng', desc: 'Nhấn tạo ảnh, chờ giây lát và nhận tác phẩm nghệ thuật' },
                 ].map((item, i) => (
                     <div key={i} className="relative glass-panel p-8 rounded-[2rem] text-center group hover:bg-white/5 transition-colors">
-                         {/* Step Badge */}
                          <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-audi-pink text-white font-bold flex items-center justify-center shadow-[0_0_15px_#FF0099] text-sm z-10 border-4 border-[#090014]">
                              {item.step}
                          </div>
-                         
                          <div className="w-20 h-20 rounded-[2rem] bg-white/5 mx-auto mb-6 flex items-center justify-center group-hover:scale-110 transition-transform">
                              <item.icon className="w-8 h-8 text-audi-pink" />
                          </div>
                          <h3 className="font-game text-xl font-bold text-white mb-3">{item.title}</h3>
                          <p className="text-slate-400 text-sm leading-relaxed">{item.desc}</p>
-
-                         {/* Connector Line for Desktop */}
-                         {i < 3 && (
-                             <div className="hidden md:block absolute top-1/2 -right-3 w-6 h-0.5 bg-white/10 z-0"></div>
-                         )}
+                         {i < 3 && <div className="hidden md:block absolute top-1/2 -right-3 w-6 h-0.5 bg-white/10 z-0"></div>}
                     </div>
                 ))}
             </div>
          </div>
       </div>
 
-      {/* --- AI SHOWCASE (Marquee Effect) --- */}
+      {/* --- AI SHOWCASE --- */}
       <div className="py-16 md:py-24 relative z-20 bg-gradient-to-b from-[#090014] to-[#120024] overflow-hidden">
           <div className="max-w-7xl mx-auto px-6 mb-8 md:mb-12">
               <div className="flex flex-col md:flex-row items-end justify-between gap-4">
@@ -358,70 +376,127 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
                   </div>
               </div>
           </div>
-
-          {/* Marquee Container */}
           <div className="w-full overflow-hidden relative group">
-              {/* Gradient Masks for smooth edges */}
               <div className="absolute top-0 left-0 bottom-0 w-12 md:w-32 bg-gradient-to-r from-[#090014] to-transparent z-10 pointer-events-none"></div>
               <div className="absolute top-0 right-0 bottom-0 w-12 md:w-32 bg-gradient-to-l from-[#090014] to-transparent z-10 pointer-events-none"></div>
-
-              {/* Scrolling Track (Duplicated Content for Infinite Loop) */}
               <div className="flex w-max animate-marquee pause-on-hover gap-6 px-6">
-                   {/* Render Set 1 */}
-                   {showcaseItems.map((item, i) => (
-                       <ShowcaseCard key={`s1-${i}`} item={item} />
-                   ))}
-                   {/* Render Set 2 */}
-                   {showcaseItems.map((item, i) => (
-                       <ShowcaseCard key={`s2-${i}`} item={item} />
-                   ))}
+                   {showcaseItems.map((item, i) => <ShowcaseCard key={`s1-${i}`} item={item} />)}
+                   {showcaseItems.map((item, i) => <ShowcaseCard key={`s2-${i}`} item={item} />)}
               </div>
           </div>
       </div>
 
-      {/* --- VCOIN SHOP (Mobile Optimized) --- */}
+      {/* --- VCOIN SHOP (UPDATED TO MATCH TOPUP) --- */}
       <div className="py-16 md:py-24 px-4 relative z-20">
-          <div className="max-w-6xl mx-auto neon-box rounded-[2rem] md:rounded-[3rem] bg-black/60 backdrop-blur-xl p-6 md:p-16 relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-64 h-64 bg-audi-purple blur-[100px] opacity-30 animate-pulse"></div>
-              <div className="absolute bottom-0 left-0 w-64 h-64 bg-audi-cyan blur-[100px] opacity-30 animate-pulse" style={{ animationDelay: '2s' }}></div>
-
+          <div className="max-w-6xl mx-auto">
+              
               <div className="text-center mb-10 md:mb-16 relative z-10">
                   <h2 className="font-game text-3xl md:text-5xl font-bold text-white mb-4">VCOIN SHOP</h2>
                   <p className="text-slate-300 text-sm md:text-base">Nạp lượt tạo ảnh - Mở khóa tính năng VIP</p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8 relative z-10">
-                  {[
-                      { name: "Starter", coin: 10, price: "10k", color: "from-slate-800 to-black", border: "border-slate-600" },
-                      { name: "VIP Pro", coin: 50, price: "50k", color: "from-audi-purple/50 to-black", border: "border-audi-purple", glow: true },
-                      { name: "Legend", coin: 200, price: "200k", color: "from-audi-pink/50 to-black", border: "border-audi-pink" }
-                  ].map((pkg, i) => (
-                      <div key={i} onClick={handleStart} className={`relative p-[2px] rounded-3xl cursor-pointer group hover:-translate-y-2 transition-transform duration-300 ${pkg.glow ? 'animate-float' : ''}`}>
-                          <div className={`absolute inset-0 rounded-3xl bg-gradient-to-r ${pkg.glow ? 'from-audi-cyan via-audi-pink to-audi-purple' : 'from-white/10 to-white/5'} opacity-50 group-hover:opacity-100 transition-opacity`}></div>
+              {/* --- ACTIVE PROMOTION BANNER (CONDITIONAL) --- */}
+              {activePromo && (
+                  <div className="relative rounded-[2.5rem] overflow-hidden mb-12 border-2 border-audi-pink/50 shadow-[0_0_50px_rgba(255,0,153,0.3)] group mx-auto max-w-5xl">
+                        <div className="absolute inset-0 bg-gradient-to-r from-[#2a0b36] via-[#4a0e44] to-[#0c0c14] z-0"></div>
+                        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-30 z-0"></div>
+                        <div className="absolute top-[-50%] left-[-20%] w-[500px] h-[500px] bg-audi-pink/20 rounded-full blur-[100px] animate-pulse"></div>
+                        <div className="absolute bottom-[-50%] right-[-20%] w-[500px] h-[500px] bg-audi-cyan/20 rounded-full blur-[100px] animate-pulse delay-1000"></div>
+
+                        <div className="relative z-10 p-8 md:p-12 flex flex-col md:flex-row items-center justify-between gap-8">
+                            {/* Left Content */}
+                            <div className="flex-1 text-center md:text-left space-y-4">
+                                <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-black/40 border border-audi-yellow/50 backdrop-blur-md shadow-[0_0_15px_rgba(251,218,97,0.4)] animate-bounce-slow">
+                                    <Icons.Zap className="w-4 h-4 text-audi-yellow fill-current" />
+                                    <span className="text-xs font-bold text-audi-yellow uppercase tracking-widest">{activePromo.name}</span>
+                                </div>
+                                
+                                <h1 className="text-4xl md:text-6xl font-game font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-slate-400 drop-shadow-[0_4px_0_rgba(0,0,0,0.5)] leading-tight">
+                                    BONUS <span className="text-audi-pink">+{activePromo.bonusPercent}%</span> <span className="text-audi-cyan">VCOIN</span>
+                                </h1>
+                                <p className="text-slate-300 text-sm md:text-base max-w-lg leading-relaxed border-l-4 border-audi-purple pl-4 italic">
+                                    "{smartDescription}"
+                                </p>
+                            </div>
+
+                            {/* Right Timer */}
+                            <div className="flex gap-2 md:gap-4 p-4 md:p-6 bg-black/20 rounded-3xl border border-white/10 backdrop-blur-sm shadow-xl transform group-hover:scale-105 transition-transform duration-500">
+                                {['d', 'h', 'm', 's'].map((unit) => (
+                                    <div key={unit} className="flex flex-col items-center gap-2">
+                                        <div className="w-12 h-14 md:w-16 md:h-20 bg-[#12121a] rounded-xl border-t border-white/20 border-b-4 border-black flex items-center justify-center relative overflow-hidden shadow-inner">
+                                            <div className="absolute top-1/2 w-full h-px bg-black/50"></div>
+                                            <span className="font-mono text-2xl md:text-4xl font-bold text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.5)]">
+                                                {String(timeLeft[unit as keyof typeof timeLeft]).padStart(2, '0')}
+                                            </span>
+                                        </div>
+                                        <span className="text-[9px] md:text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                                            {unit === 'd' ? 'DAYS' : unit === 'h' ? 'HOURS' : unit === 'm' ? 'MINS' : 'SECS'}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                  </div>
+              )}
+
+              {/* --- PACKAGE GRID (SYNCED WITH TOPUP DESIGN) --- */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 relative z-10">
+                  {packages.map((pkg) => {
+                      const activeBonusPercent = activePromo ? activePromo.bonusPercent : pkg.bonusPercent;
+                      const hasBonus = activeBonusPercent > 0;
+                      const finalCoins = Math.floor(pkg.coin + (pkg.coin * activeBonusPercent / 100));
+
+                      return (
+                      <div key={pkg.id} onClick={handleStart} className={`group relative bg-[#12121a] rounded-[2rem] p-6 border transition-all duration-300 hover:-translate-y-2 hover:shadow-[0_10px_40px_rgba(0,0,0,0.5)] flex flex-col cursor-pointer ${pkg.isPopular ? 'border-audi-pink shadow-[0_0_20px_rgba(255,0,153,0.1)]' : 'border-white/10 hover:border-white/30'}`}>
                           
-                          <div className="relative h-full bg-black rounded-[22px] p-6 md:p-8 flex flex-row md:flex-col items-center justify-between md:justify-center border border-white/5 overflow-hidden gap-4">
-                              <div className="flex items-center gap-4 md:flex-col md:gap-0">
-                                  <div className="w-12 h-12 md:w-20 md:h-20 md:mb-6 relative shrink-0">
-                                      <div className={`absolute inset-0 bg-gradient-to-br ${pkg.glow ? 'from-audi-cyan to-audi-purple' : 'from-slate-700 to-slate-800'} rounded-full blur-lg opacity-50 group-hover:opacity-100 transition-opacity`}></div>
-                                      <div className="relative w-full h-full rounded-full border-2 border-white/20 flex items-center justify-center bg-black/50 backdrop-blur">
-                                          <Icons.Gem className={`w-5 h-5 md:w-8 md:h-8 ${pkg.glow ? 'text-audi-lime' : 'text-white'}`} />
-                                      </div>
-                                  </div>
-                                  <div className="text-left md:text-center">
-                                      <h3 className="font-game text-xl md:text-2xl font-bold text-white mb-1 md:mb-2">{pkg.name}</h3>
-                                      <div className="text-2xl md:text-4xl font-black text-audi-yellow">{pkg.coin} <span className="text-xs md:text-sm text-white/50">Lượt</span></div>
-                                  </div>
+                          {/* Badges */}
+                          {pkg.isPopular && (
+                              <div className="absolute top-0 right-0 bg-gradient-to-bl from-audi-pink to-audi-purple text-white text-[10px] font-bold px-4 py-1.5 rounded-tr-[1.8rem] rounded-bl-xl shadow-lg z-10 flex items-center gap-1">
+                                  <Icons.Flame className="w-3 h-3 fill-white" /> HOT
                               </div>
-                              
-                              <div className="flex flex-col items-end md:items-center w-auto md:w-full">
-                                   <div className="text-lg font-bold text-white/70 mb-2 md:mb-8">{pkg.price}</div>
-                                   <button className={`px-4 py-2 md:w-full md:py-3 rounded-xl font-bold uppercase tracking-wider text-xs md:text-sm transition-all whitespace-nowrap ${pkg.glow ? 'bg-audi-pink text-white shadow-[0_0_20px_#FF0099] hover:bg-audi-pink/80' : 'bg-white/10 text-white hover:bg-white/20'}`}>
-                                      Mua
-                                  </button>
+                          )}
+                          {hasBonus && (
+                              <div className="absolute top-0 left-0 bg-audi-lime text-black text-[10px] font-bold px-4 py-1.5 rounded-tl-[1.8rem] rounded-br-xl shadow-lg z-10">
+                                  BONUS +{activeBonusPercent}%
+                              </div>
+                          )}
+                          
+                          {/* Icon & Coin */}
+                          <div className="flex flex-col items-center justify-center py-6 border-b border-white/5 border-dashed relative">
+                              <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-4 transition-transform group-hover:scale-110 duration-500 bg-gradient-to-b ${pkg.isPopular ? 'from-audi-pink/20 to-transparent' : 'from-audi-cyan/20 to-transparent'}`}>
+                                  <Icons.Gem className={`w-10 h-10 ${pkg.isPopular ? 'text-audi-pink' : 'text-audi-cyan'} drop-shadow-[0_0_10px_currentColor]`} />
+                              </div>
+                              <div className="text-center">
+                                  <div className="text-4xl font-game font-black text-white mb-1 group-hover:text-audi-yellow transition-colors">{finalCoins}</div>
+                                  <div className="text-xs font-bold text-slate-500 uppercase tracking-widest">VCOIN</div>
+                                  {hasBonus && <div className="text-[10px] text-slate-400 line-through mt-1">{pkg.coin}</div>}
                               </div>
                           </div>
+                          
+                          {/* Details */}
+                          <div className="flex-1 py-6 space-y-3">
+                              <div className="flex justify-between items-center text-sm">
+                                  <span className="text-slate-400">Giá trị thực</span>
+                                  <span className="text-white font-bold">1 Vcoin = 1.000đ</span>
+                              </div>
+                              <div className="flex justify-between items-center text-sm">
+                                  <span className="text-slate-400">Bonus Event</span>
+                                  <span className="text-audi-lime font-bold">+{Math.floor(pkg.coin * activeBonusPercent / 100)} VC</span>
+                              </div>
+                              <div className="w-full h-px bg-white/5 my-2"></div>
+                              <div className="flex justify-between items-center">
+                                  <span className="text-slate-400 font-bold uppercase text-xs">Thành tiền</span>
+                                  <span className="text-xl font-bold text-white">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(pkg.price)}</span>
+                              </div>
+                          </div>
+                          
+                          {/* Button */}
+                          <button className={`w-full py-4 rounded-xl font-bold text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all relative overflow-hidden ${pkg.isPopular ? 'bg-gradient-to-r from-audi-pink to-audi-purple text-white shadow-[0_5px_20px_rgba(255,0,153,0.3)] hover:shadow-[0_5px_30px_rgba(255,0,153,0.5)]' : 'bg-white text-black hover:bg-slate-200'}`}>
+                              <span className="relative z-10">MUA NGAY</span>
+                              <Icons.ChevronRight className="w-4 h-4 relative z-10 group-hover:translate-x-1 transition-transform" />
+                          </button>
                       </div>
-                  ))}
+                  )})}
               </div>
           </div>
       </div>
@@ -432,7 +507,6 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
               <h2 className="font-game text-3xl md:text-5xl font-bold text-center text-white mb-8 md:mb-12">
                   CÂU HỎI <span className="text-audi-purple">THƯỜNG GẶP</span>
               </h2>
-              
               <div className="space-y-4">
                   {[
                       { q: "Audition AI Studio là gì?", a: "Là nền tảng tạo ảnh nghệ thuật sử dụng trí tuệ nhân tạo, cho phép bạn tạo ra các bức ảnh đẹp như game Audition, anime hoặc ảnh thực tế chỉ bằng mô tả văn bản." },
@@ -461,12 +535,9 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
 
       {/* --- REDESIGNED FOOTER --- */}
       <footer className="relative z-20 bg-[#020005] border-t border-white/10 pt-16 pb-8">
-           {/* Decorative Top Line */}
            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-audi-pink to-transparent opacity-50"></div>
-           
            <div className="max-w-7xl mx-auto px-6">
                <div className="grid grid-cols-1 md:grid-cols-3 gap-12 mb-12">
-                   {/* Brand Column */}
                    <div className="text-center md:text-left space-y-4">
                        <h3 className="font-game text-3xl font-bold text-white tracking-widest flex items-center justify-center md:justify-start gap-2">
                            <Icons.Sparkles className="w-6 h-6 text-audi-pink" />
@@ -476,8 +547,6 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
                            Nền tảng sáng tạo hình ảnh không giới hạn, kết nối cộng đồng đam mê nghệ thuật và công nghệ.
                        </p>
                    </div>
-
-                   {/* Links Column */}
                    <div className="flex flex-col items-center md:items-start space-y-4">
                        <h4 className="font-bold text-audi-cyan uppercase tracking-wider text-sm mb-2">Thông Tin</h4>
                        <a href="#" className="text-slate-400 hover:text-white transition-colors text-sm">Điều khoản sử dụng</a>
@@ -485,8 +554,6 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
                        <a href="#" className="text-slate-400 hover:text-white transition-colors text-sm">Chính sách hoàn tiền</a>
                        <a href="#" className="text-slate-400 hover:text-white transition-colors text-sm">Hướng dẫn thanh toán</a>
                    </div>
-
-                   {/* Contact Column */}
                    <div className="flex flex-col items-center md:items-end space-y-4">
                        <h4 className="font-bold text-audi-lime uppercase tracking-wider text-sm mb-2">Liên Hệ & Hỗ Trợ</h4>
                        <span className="text-slate-400 text-sm">Email: support@auditionai.io.vn</span>
@@ -496,8 +563,6 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
                        </button>
                    </div>
                </div>
-
-               {/* Bottom Bar */}
                <div className="border-t border-white/5 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
                    <p className="text-xs text-slate-600">
                        © 2026 AUDITION AI Photo Studio. All rights reserved.
@@ -510,7 +575,7 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
            </div>
       </footer>
 
-      {/* --- LOGIN MODAL (Simulated) --- */}
+      {/* --- LOGIN MODAL --- */}
       {showLogin && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
               <div className="w-full max-w-md bg-[#090014] border-2 border-audi-pink rounded-3xl p-8 relative shadow-[0_0_50px_rgba(255,0,153,0.3)]">

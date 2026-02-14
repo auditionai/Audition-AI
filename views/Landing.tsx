@@ -482,7 +482,7 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
                    <div className="flex flex-col items-center md:items-end space-y-4">
                        <h4 className="font-bold text-audi-lime uppercase tracking-wider text-sm mb-2">Liên Hệ & Hỗ Trợ</h4>
                        <span className="text-slate-400 text-sm">Email: support@auditionai.io.vn</span>
-                       <span className="text-slate-400 text-sm">Hotline: 0824280497</span>
+                       <span className="text-slate-400 text-sm">Hotline: 0824.280.497</span>
                        <button className="px-6 py-2 border border-white/20 rounded-full text-xs font-bold uppercase hover:bg-white hover:text-black transition-all">
                            Gửi phản hồi
                        </button>
@@ -492,7 +492,7 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
                {/* Bottom Bar */}
                <div className="border-t border-white/5 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
                    <p className="text-xs text-slate-600">
-                       © 2026 DMP AI Photo Studio. All rights reserved.
+                       © 2026 AUDITION AI Photo Studio. All rights reserved.
                    </p>
                    <div className="flex items-center gap-2">
                        <span className="text-xs text-slate-500 font-game uppercase tracking-widest">Designed by</span>

@@ -257,8 +257,12 @@ export const deletePackage = async (id: string): Promise<void> => {
 export const getGiftcodes = async (): Promise<Giftcode[]> => {
     if (supabase) {
         // Fetch all giftcodes, ordered by creation
-        const { data } = await supabase.from('gift_codes').select('*').order('created_at', { ascending: false });
+        const { data, error } = await supabase.from('gift_codes').select('*').order('created_at', { ascending: false });
         
+        if (error) {
+            console.error("Fetch giftcodes error:", error);
+        }
+
         if (data) {
             return data.map((d: any) => ({
                 id: d.id,
@@ -275,7 +279,7 @@ export const getGiftcodes = async (): Promise<Giftcode[]> => {
     return getStorage('dmp_giftcodes') || [];
 };
 
-export const saveGiftcode = async (giftcode: Giftcode): Promise<void> => {
+export const saveGiftcode = async (giftcode: Giftcode): Promise<boolean> => {
     if (supabase) {
         const payload = {
              code: giftcode.code,
@@ -285,14 +289,23 @@ export const saveGiftcode = async (giftcode: Giftcode): Promise<void> => {
              is_active: giftcode.isActive
         };
 
-        if (isValidUUID(giftcode.id)) {
-            // Update existing
-            await supabase.from('gift_codes').update(payload).eq('id', giftcode.id);
-        } else {
-            // Insert new
-            await supabase.from('gift_codes').insert(payload);
+        try {
+            if (isValidUUID(giftcode.id)) {
+                // Update existing
+                const { error } = await supabase.from('gift_codes').update(payload).eq('id', giftcode.id);
+                if (error) throw error;
+            } else {
+                // Insert new
+                const { error } = await supabase.from('gift_codes').insert(payload);
+                if (error) throw error;
+            }
+            return true;
+        } catch (e) {
+            console.error("Save giftcode error:", e);
+            return false;
         }
     }
+    return false;
 };
 
 export const deleteGiftcode = async (id: string): Promise<void> => {

@@ -154,10 +154,14 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
   const handleSaveGiftcode = async () => {
       if (editingGiftcode) {
-          await saveGiftcode(editingGiftcode);
-          setEditingGiftcode(null);
-          refreshData();
-          alert('Lưu Giftcode thành công!');
+          const success = await saveGiftcode(editingGiftcode);
+          if (success) {
+              setEditingGiftcode(null);
+              refreshData();
+              alert('Lưu Giftcode thành công!');
+          } else {
+              alert('Lỗi khi lưu Giftcode! Vui lòng kiểm tra kết nối hoặc mã trùng lặp.');
+          }
       }
   };
 
@@ -364,7 +368,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           Pending: {transactions.filter(t => t.status === 'pending').length}
                       </div>
                   </div>
-
+                  {/* ... Transaction Table ... */}
                   <div className="bg-[#12121a] border border-white/10 rounded-2xl overflow-hidden">
                       <table className="w-full text-left text-sm text-slate-400">
                           <thead className="bg-black/30 text-xs font-bold text-slate-300 uppercase">
@@ -437,6 +441,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                <div className="space-y-6 animate-slide-in-right">
                   <div className="flex justify-between items-center">
                       <h2 className="text-2xl font-bold text-white">Quản Lý Người Dùng</h2>
+                      {/* ... Search ... */}
                       <div className="relative">
                           <input 
                               type="text" 
@@ -448,7 +453,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           <Icons.Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" />
                       </div>
                   </div>
-
+                  {/* ... User Table ... */}
                   <div className="bg-[#12121a] border border-white/10 rounded-2xl overflow-hidden">
                       <table className="w-full text-left text-sm text-slate-400">
                           <thead className="bg-black/30 text-xs font-bold text-slate-300 uppercase">
@@ -520,15 +525,24 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               <div className="space-y-6 animate-slide-in-right">
                   <div className="flex justify-between items-center">
                       <h2 className="text-2xl font-bold text-white">Quản Lý Giftcode</h2>
-                      <button 
-                        onClick={() => setEditingGiftcode({
-                            // Use temp ID for UI, service will ignore it and insert
-                            id: `temp_${Date.now()}`, code: '', reward: 10, totalLimit: 100, usedCount: 0, maxPerUser: 1, isActive: true
-                        })}
-                        className="px-4 py-2 bg-audi-lime text-black rounded-lg font-bold flex items-center gap-2 hover:bg-lime-400"
-                      >
-                          <Icons.Plus className="w-4 h-4" /> Tạo Code
-                      </button>
+                      <div className="flex gap-2">
+                          <button 
+                            onClick={refreshData} 
+                            className="px-3 py-2 bg-white/10 text-white rounded-lg font-bold hover:bg-white/20"
+                            title="Làm mới danh sách"
+                          >
+                             <Icons.Clock className="w-4 h-4" />
+                          </button>
+                          <button 
+                            onClick={() => setEditingGiftcode({
+                                // Use temp ID for UI, service will ignore it and insert
+                                id: `temp_${Date.now()}`, code: '', reward: 10, totalLimit: 100, usedCount: 0, maxPerUser: 1, isActive: true
+                            })}
+                            className="px-4 py-2 bg-audi-lime text-black rounded-lg font-bold flex items-center gap-2 hover:bg-lime-400"
+                          >
+                              <Icons.Plus className="w-4 h-4" /> Tạo Code
+                          </button>
+                      </div>
                   </div>
 
                   <div className="bg-[#12121a] border border-white/10 rounded-2xl overflow-hidden">
@@ -544,14 +558,19 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                               </tr>
                           </thead>
                           <tbody className="divide-y divide-white/5">
-                              {giftcodes.map(gc => (
+                              {giftcodes.length === 0 ? (
+                                  <tr><td colSpan={6} className="text-center py-8">Chưa có mã Giftcode nào.</td></tr>
+                              ) : giftcodes.map(gc => (
                                   <tr key={gc.id} className="hover:bg-white/5">
                                       <td className="px-6 py-4 font-mono font-bold text-white">{gc.code}</td>
                                       <td className="px-6 py-4 text-audi-yellow font-bold">{gc.reward} Vcoin</td>
                                       <td className="px-6 py-4 text-white">
                                           {gc.usedCount} / <span className="text-slate-500">{gc.totalLimit}</span>
                                       </td>
-                                      <td className="px-6 py-4">{gc.maxPerUser} lần/người</td>
+                                      <td className="px-6 py-4 text-slate-500">
+                                         {/* Note: maxPerUser is not persisted in DB currently, showing default 1 */}
+                                         1 lần/người
+                                      </td>
                                       <td className="px-6 py-4">
                                           {gc.isActive ? (
                                               <span className="text-green-500 text-xs font-bold border border-green-500/20 px-2 py-1 rounded">Active</span>
@@ -604,16 +623,19 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                         className="w-full bg-black/40 border border-white/10 rounded-lg p-3 text-white mt-1" 
                                       />
                                   </div>
+                                  {/* Max Per User is currently not supported by DB Schema provided, hiding input to avoid confusion */}
+                                  {/* 
                                   <div>
                                       <label className="text-xs font-bold text-slate-400 uppercase">Giới hạn mỗi user</label>
                                       <input 
                                         type="number" 
                                         value={editingGiftcode.maxPerUser} 
-                                        onChange={e => setEditingGiftcode({...editingGiftcode, maxPerUser: Number(e.target.value)})}
-                                        className="w-full bg-black/40 border border-white/10 rounded-lg p-3 text-white mt-1" 
+                                        disabled
+                                        className="w-full bg-black/40 border border-white/10 rounded-lg p-3 text-slate-500 mt-1 cursor-not-allowed" 
                                       />
-                                  </div>
-                                  <div className="flex items-center gap-2 mt-6">
+                                  </div> 
+                                  */}
+                                  <div className="flex items-center gap-2 mt-6 col-span-2">
                                       <input 
                                         type="checkbox" 
                                         checked={editingGiftcode.isActive} 
@@ -632,8 +654,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   )}
               </div>
           )}
-
-          {/* ================= VIEW: PACKAGES ================= */}
+          
+          {/* ... (Keep Packages, Promotion, System views) ... */}
+           {/* ================= VIEW: PACKAGES ================= */}
           {activeView === 'packages' && (
               <div className="space-y-6 animate-slide-in-right">
                   <div className="flex justify-between items-center">
@@ -647,6 +670,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           <Icons.Plus className="w-4 h-4" /> Thêm Gói Mới
                       </button>
                   </div>
+                  {/* ... Package List ... */}
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                       {packages.map(pkg => (
                           <div key={pkg.id} className={`bg-[#12121a] p-4 rounded-2xl border-2 ${pkg.colorTheme} relative group`}>
@@ -707,7 +731,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               </div>
           )}
 
-          {/* ================= VIEW: PROMOTION ================= */}
+          {/* ... Promotion ... */}
           {activeView === 'promotion' && (
               <div className="space-y-6 animate-slide-in-right">
                   <h2 className="text-2xl font-bold text-white">Chương Trình Khuyến Mại</h2>
@@ -797,7 +821,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               </div>
           )}
 
-           {/* ================= VIEW: SYSTEM ================= */}
+           {/* ... System ... */}
            {activeView === 'system' && (
               <div className="space-y-6 animate-slide-in-right">
                   <div className="flex justify-between items-center">

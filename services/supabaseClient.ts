@@ -50,3 +50,17 @@ export const checkSupabaseConnection = async (): Promise<{ db: boolean; storage:
         return { db: false, storage: false, latency: 0 };
     }
 };
+
+export const signInWithGoogle = async () => {
+    if (!supabase) return { error: { message: "Chức năng yêu cầu kết nối Database." } };
+    return await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+            redirectTo: window.location.origin,
+            queryParams: {
+                access_type: 'offline',
+                prompt: 'consent',
+            },
+        },
+    });
+};

@@ -4,18 +4,20 @@ import { getSystemApiKey } from "./economyService";
 
 // Helper to get the best available API Key ASYNC
 const getDynamicApiKey = async (): Promise<string> => {
-    // 1. Check Database (Supabase 'system_config')
+    // Strictly use the centralized logic from economyService which prioritizes Database
     const dbKey = await getSystemApiKey();
-    if (dbKey && dbKey.trim().length > 0) return dbKey.trim();
+    if (dbKey && dbKey.trim().length > 0) {
+        return dbKey.trim();
+    }
     
-    // 2. Fallback to Environment Variable
+    // Fallback if DB returns nothing (Env var handling is now inside getSystemApiKey or here as last resort)
     return process.env.API_KEY || "";
 };
 
 // Helper to create a fresh client instance ASYNC
 const getAiClient = async () => {
     const key = await getDynamicApiKey();
-    if (!key) throw new Error("API Key missing. Please configure in Admin > System.");
+    if (!key) throw new Error("Hệ thống chưa có API Key. Vui lòng cấu hình trong Admin > Hệ thống.");
     return new GoogleGenAI({ apiKey: key });
 };
 

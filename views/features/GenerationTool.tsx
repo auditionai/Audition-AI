@@ -22,6 +22,7 @@ interface CharacterInput {
   bodyImage: string | null;
   faceImage: string | null; 
   gender: 'female' | 'male';
+  isFaceLocked: boolean; // New: Toggle for Face Swap
 }
 
 export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang }) => {
@@ -31,7 +32,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
   const [progressLogs, setProgressLogs] = useState<string[]>([]);
 
   const [activeMode, setActiveMode] = useState<GenMode>('single');
-  const [characters, setCharacters] = useState<CharacterInput[]>([{ id: 1, bodyImage: null, faceImage: null, gender: 'female' }]);
+  const [characters, setCharacters] = useState<CharacterInput[]>([{ id: 1, bodyImage: null, faceImage: null, gender: 'female', isFaceLocked: true }]);
   
   const [refImage, setRefImage] = useState<string | null>(null);
   const [prompt, setPrompt] = useState('');
@@ -70,7 +71,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
           const newChars = [];
           for (let i = 1; i <= count; i++) {
               const existing = prev.find(p => p.id === i);
-              newChars.push(existing || { id: i, bodyImage: null, faceImage: null, gender: i % 2 === 0 ? 'male' : 'female' });
+              newChars.push(existing || { id: i, bodyImage: null, faceImage: null, gender: i % 2 === 0 ? 'male' : 'female', isFaceLocked: true });
           }
           return newChars;
       });
@@ -101,7 +102,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
               setCharacters(prev => prev.map(c => {
                   if (c.id === currentType.charId) {
                       if (currentType.type === 'body') return { ...c, bodyImage: result };
-                      if (currentType.type === 'face') return { ...c, faceImage: result };
+                      if (currentType.type === 'face') return { ...c, faceImage: result, isFaceLocked: true }; // Auto lock on new upload
                   }
                   return c;
               }));
@@ -113,6 +114,10 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
 
   const toggleGender = (charId: number, gender: 'male' | 'female') => {
       setCharacters(prev => prev.map(c => c.id === charId ? { ...c, gender } : c));
+  }
+
+  const toggleFaceLock = (charId: number) => {
+      setCharacters(prev => prev.map(c => c.id === charId ? { ...c, isFaceLocked: !c.isFaceLocked } : c));
   }
 
   const calculateCost = () => {
@@ -175,7 +180,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
               id: char.id,
               gender: char.gender,
               image: char.bodyImage, 
-              faceImage: char.faceImage,
+              faceImage: char.isFaceLocked ? char.faceImage : null, // Respect Lock State
               shoesImage: null // Removed per user request
           });
       }
@@ -343,7 +348,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                                 </div>
                             </div>
                             
-                            {/* UPDATED: EQUAL SIZE BOXES */}
+                            {/* UPDATED: EQUAL SIZE BOXES + LOCK TOGGLE */}
                             <div className="space-y-3">
                                 {/* BODY SLOT (Main Image) */}
                                 <div onClick={() => handleUploadClick(char.id, 'body')} className="w-full h-40 bg-black/40 rounded-xl border-2 border-dashed border-slate-700 hover:border-audi-pink cursor-pointer relative overflow-hidden group/item transition-all flex flex-col items-center justify-center">
@@ -357,10 +362,21 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                                     )}
                                 </div>
 
-                                {/* FACE SLOT (Equal Size) */}
+                                {/* FACE SLOT (Equal Size) + LOCK BUTTON */}
                                 <div onClick={() => handleUploadClick(char.id, 'face')} className="w-full h-40 bg-black/40 rounded-xl border-2 border-dashed border-slate-700 hover:border-audi-cyan cursor-pointer relative overflow-hidden group/item transition-all flex flex-col items-center justify-center">
                                     {char.faceImage ? (
-                                        <img src={char.faceImage} className="w-full h-full object-cover" alt="Face" />
+                                        <>
+                                            <img src={char.faceImage} className={`w-full h-full object-cover transition-all ${char.isFaceLocked ? '' : 'grayscale opacity-50'}`} alt="Face" />
+                                            
+                                            {/* LOCK TOGGLE OVERLAY */}
+                                            <div 
+                                                onClick={(e) => { e.stopPropagation(); toggleFaceLock(char.id); }}
+                                                className={`absolute bottom-2 right-2 px-2 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-1.5 shadow-xl transition-all cursor-pointer z-10 border ${char.isFaceLocked ? 'bg-audi-cyan text-black border-white' : 'bg-red-500/90 text-white border-red-400'}`}
+                                            >
+                                                {char.isFaceLocked ? <Icons.Lock className="w-3 h-3" /> : <Icons.Unlock className="w-3 h-3" />}
+                                                {char.isFaceLocked ? (lang === 'vi' ? 'Đã Khóa' : 'Locked') : (lang === 'vi' ? 'Không dùng' : 'Unlocked')}
+                                            </div>
+                                        </>
                                     ) : (
                                         <div className="flex flex-col items-center text-slate-500 group-hover/item:text-audi-cyan transition-colors">
                                             <Icons.Eye className="w-8 h-8 mb-1" />

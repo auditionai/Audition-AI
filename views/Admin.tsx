@@ -4,7 +4,7 @@ import { Language, Transaction, UserProfile, GeneratedImage, CreditPackage, Prom
 import { Icons } from '../components/Icons';
 import { checkConnection } from '../services/geminiService';
 import { checkSupabaseConnection } from '../services/supabaseClient';
-import { getAdminStats, savePackage, deletePackage, updateAdminUserProfile, savePromotion, deletePromotion, getGiftcodes, saveGiftcode, deleteGiftcode, adminApproveTransaction, adminRejectTransaction, getSystemApiKey, saveSystemApiKey, updatePackageOrder, deleteTransaction } from '../services/economyService';
+import { getAdminStats, savePackage, deletePackage, updateAdminUserProfile, savePromotion, deletePromotion, getGiftcodes, saveGiftcode, deleteGiftcode, adminApproveTransaction, adminRejectTransaction, getSystemApiKey, saveSystemApiKey, updatePackageOrder, deleteTransaction, getApiKeysList, deleteApiKey } from '../services/economyService';
 import { getAllImagesFromStorage, deleteImageFromStorage } from '../services/storageService';
 
 interface AdminProps {
@@ -42,8 +42,12 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [giftcodes, setGiftcodes] = useState<Giftcode[]>([]);
   const [promotions, setPromotions] = useState<PromotionCampaign[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  
+  // API Key States
   const [apiKey, setApiKey] = useState('');
+  const [showKey, setShowKey] = useState(false);
   const [keyStatus, setKeyStatus] = useState<'valid' | 'invalid' | 'unknown' | 'checking'>('unknown');
+  const [dbKeys, setDbKeys] = useState<any[]>([]); // List of keys from DB
   
   // Search States
   const [userSearchEmail, setUserSearchEmail] = useState('');
@@ -123,6 +127,10 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           const imgs = await getAllImagesFromStorage();
           setAllImages(imgs);
       }
+      
+      // Fetch DB Keys list
+      const keys = await getApiKeysList();
+      setDbKeys(keys);
   };
 
   const runSystemChecks = async (specificKey?: string) => {
@@ -157,6 +165,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           if (success) {
               setKeyStatus('valid');
               showToast('Đã lưu API Key vào Database thành công!');
+              await refreshData(); // Refresh list
               runSystemChecks(apiKey);
           } else {
               setKeyStatus('unknown');
@@ -167,6 +176,24 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           showToast('API Key không hoạt động. Vui lòng kiểm tra lại.', 'error');
       }
   };
+
+  const handleTestKey = async (key: string) => {
+      showToast('Đang kiểm tra key...', 'info');
+      const isValid = await checkConnection(key);
+      if (isValid) {
+          showToast('Kết nối thành công! Key hoạt động tốt.', 'success');
+      } else {
+          showToast('Key không hoạt động hoặc hết hạn ngạch.', 'error');
+      }
+  }
+
+  const handleDeleteApiKey = async (id: string) => {
+      showConfirm('Xóa API Key này khỏi database?', async () => {
+          await deleteApiKey(id);
+          refreshData();
+          showToast('Đã xóa API Key');
+      });
+  }
 
   const handleSaveUser = async () => {
       if (editingUser) {
@@ -589,6 +616,7 @@ CREATE POLICY "Enable access" ON public.promotions FOR ALL USING (true) WITH CHE
               </div>
           )}
 
+          {/* ... (Keep other views transactions, users, packages, promotion, giftcodes unchanged) ... */}
           {/* ================= VIEW: TRANSACTIONS ================= */}
           {activeView === 'transactions' && (
               <div className="space-y-6 animate-slide-in-right">
@@ -657,7 +685,6 @@ CREATE POLICY "Enable access" ON public.promotions FOR ALL USING (true) WITH CHE
               </div>
           )}
 
-          {/* ================= VIEW: USERS ================= */}
           {activeView === 'users' && (
               <div className="space-y-6 animate-slide-in-right">
                   <div className="flex justify-between items-center">
@@ -762,8 +789,6 @@ CREATE POLICY "Enable access" ON public.promotions FOR ALL USING (true) WITH CHE
               </div>
           )}
 
-          {/* ... (Other views remain unchanged) ... */}
-          {/* ================= VIEW: PACKAGES ================= */}
           {activeView === 'packages' && (
               <div className="space-y-6 animate-slide-in-right">
                   <div className="flex justify-between items-center">
@@ -870,7 +895,6 @@ CREATE POLICY "Enable access" ON public.promotions FOR ALL USING (true) WITH CHE
               </div>
           )}
 
-          {/* ================= VIEW: PROMOTION CAMPAIGNS ================= */}
           {activeView === 'promotion' && (
               <div className="space-y-6 animate-slide-in-right">
                   <div className="flex justify-between items-center">
@@ -1031,7 +1055,6 @@ CREATE POLICY "Enable access" ON public.promotions FOR ALL USING (true) WITH CHE
               </div>
           )}
 
-          {/* ================= VIEW: GIFTCODES ================= */}
           {activeView === 'giftcodes' && (
               <div className="space-y-6 animate-slide-in-right">
                   <div className="flex justify-between items-center">
@@ -1193,7 +1216,7 @@ CREATE POLICY "Enable access" ON public.promotions FOR ALL USING (true) WITH CHE
                   <div className="bg-[#12121a] p-6 rounded-2xl border border-white/10">
                       <h3 className="font-bold text-lg text-white mb-4 flex items-center gap-2">
                           <Icons.Lock className="w-5 h-5 text-audi-pink" />
-                          Cấu hình Gemini API Key
+                          Cấu hình Gemini API Key (System Active)
                       </h3>
                       <div className="space-y-4">
                           <div>
@@ -1212,25 +1235,88 @@ CREATE POLICY "Enable access" ON public.promotions FOR ALL USING (true) WITH CHE
                                       </span>
                                   </div>
                               </div>
-                              <div className="flex gap-2">
+                              <div className="flex gap-2 relative">
                                   <input 
-                                      type="password" 
+                                      type={showKey ? "text" : "password"}
                                       value={apiKey}
                                       onChange={(e) => {
                                           setApiKey(e.target.value);
                                           setKeyStatus('unknown');
                                       }}
                                       placeholder="AIzaSy..."
-                                      className="flex-1 bg-black/40 border border-white/10 rounded-lg p-3 text-white font-mono text-sm"
+                                      className="flex-1 bg-black/40 border border-white/10 rounded-lg p-3 text-white font-mono text-sm pr-12"
                                   />
+                                  <button 
+                                    onClick={() => setShowKey(!showKey)} 
+                                    className="absolute right-36 top-3 text-slate-500 hover:text-white"
+                                    title="Hiện/Ẩn Key"
+                                  >
+                                      {showKey ? <Icons.Eye className="w-5 h-5" /> : <Icons.Lock className="w-5 h-5" />}
+                                  </button>
                                   <button onClick={handleSaveApiKey} disabled={keyStatus === 'checking'} className="px-6 py-3 bg-audi-pink text-white font-bold rounded-lg hover:bg-pink-600 disabled:opacity-50">
                                       {keyStatus === 'checking' ? <Icons.Loader className="animate-spin w-5 h-5"/> : 'Lưu Key'}
                                   </button>
                               </div>
                               <p className="text-xs text-slate-500 mt-2">
-                                  Key sẽ được lưu vào Database (Bảng api_keys).
+                                  Key sẽ được lưu vào Database (Bảng api_keys) và sử dụng cho toàn hệ thống.
                               </p>
                           </div>
+                      </div>
+                  </div>
+
+                  {/* List of Keys in DB */}
+                  <div className="bg-[#12121a] p-6 rounded-2xl border border-white/10">
+                      <h3 className="font-bold text-lg text-white mb-4 flex items-center gap-2">
+                          <Icons.Database className="w-5 h-5 text-audi-cyan" />
+                          Danh sách API Key trong Database
+                      </h3>
+                      <div className="overflow-x-auto">
+                          <table className="w-full text-left text-sm text-slate-400">
+                              <thead className="bg-black/30 text-xs font-bold text-slate-300 uppercase">
+                                  <tr>
+                                      <th className="px-4 py-3">Tên / ID</th>
+                                      <th className="px-4 py-3">Key Value</th>
+                                      <th className="px-4 py-3">Trạng thái</th>
+                                      <th className="px-4 py-3">Ngày tạo</th>
+                                      <th className="px-4 py-3 text-right">Thao tác</th>
+                                  </tr>
+                              </thead>
+                              <tbody className="divide-y divide-white/5">
+                                  {dbKeys.length === 0 ? (
+                                      <tr><td colSpan={5} className="text-center py-6 text-slate-500">Chưa tìm thấy key nào trong database.</td></tr>
+                                  ) : dbKeys.map((k) => (
+                                      <tr key={k.id} className="hover:bg-white/5">
+                                          <td className="px-4 py-3 font-bold text-white">
+                                              {k.name || 'Unnamed Key'}
+                                              <div className="text-[10px] text-slate-600 font-mono">{k.id.substring(0,8)}...</div>
+                                          </td>
+                                          <td className="px-4 py-3 font-mono text-xs">
+                                              {k.key_value ? `${k.key_value.substring(0, 8)}...${k.key_value.substring(k.key_value.length - 6)}` : 'N/A'}
+                                          </td>
+                                          <td className="px-4 py-3">
+                                              <span className={`text-[10px] font-bold px-2 py-1 rounded border ${k.status === 'active' ? 'bg-green-500/20 text-green-500 border-green-500/50' : 'bg-slate-500/20 text-slate-500 border-slate-500/50'}`}>
+                                                  {k.status?.toUpperCase() || 'UNKNOWN'}
+                                              </span>
+                                          </td>
+                                          <td className="px-4 py-3 text-xs">{new Date(k.created_at).toLocaleString()}</td>
+                                          <td className="px-4 py-3 text-right flex justify-end gap-2">
+                                              <button 
+                                                onClick={() => handleTestKey(k.key_value)} 
+                                                className="px-3 py-1 bg-audi-purple/20 text-audi-purple hover:bg-audi-purple hover:text-white rounded border border-audi-purple/50 text-xs font-bold transition-colors"
+                                              >
+                                                  Test Nhanh
+                                              </button>
+                                              <button 
+                                                onClick={() => handleDeleteApiKey(k.id)}
+                                                className="p-1.5 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white rounded transition-colors"
+                                              >
+                                                  <Icons.Trash className="w-4 h-4" />
+                                              </button>
+                                          </td>
+                                      </tr>
+                                  ))}
+                              </tbody>
+                          </table>
                       </div>
                   </div>
               </div>

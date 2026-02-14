@@ -38,10 +38,10 @@ export const getSystemApiKey = async (): Promise<string | null> => {
     if (supabase) {
         try {
             // 1. Try fetching from 'api_keys' table
-            // WE REMOVED .eq('status', 'active') to ensure we get the key even if status is misconfigured
             const { data, error } = await supabase
                 .from('api_keys')
                 .select('key_value')
+                .eq('status', 'active') // Only get active keys for system use
                 .order('created_at', { ascending: false })
                 .limit(1);
             
@@ -69,34 +69,72 @@ export const getSystemApiKey = async (): Promise<string | null> => {
     return metaEnv.VITE_GEMINI_API_KEY || process.env.API_KEY || null;
 };
 
+export const getApiKeysList = async (): Promise<any[]> => {
+    if (supabase) {
+        const { data, error } = await supabase
+            .from('api_keys')
+            .select('*')
+            .order('created_at', { ascending: false });
+        
+        if (!error && data) {
+            return data;
+        }
+    }
+    return [];
+};
+
 export const saveSystemApiKey = async (apiKey: string): Promise<boolean> => {
     if (supabase) {
         try {
             const cleanKey = apiKey.trim();
-            // Insert into api_keys table
-            const { error } = await supabase
+            
+            // Deactivate all other keys first (Optional strategy: Single Active Key)
+            await supabase
                 .from('api_keys')
-                .insert({
-                    name: 'Admin Key ' + new Date().toISOString(),
-                    key_value: cleanKey,
-                    status: 'active',
-                    usage_count: 0
-                });
+                .update({ status: 'inactive' })
+                .neq('key_value', cleanKey); // Update all others
+
+            // Insert or Update the new/existing key
+            const { data: existing } = await supabase
+                .from('api_keys')
+                .select('id')
+                .eq('key_value', cleanKey)
+                .single();
+
+            if (existing) {
+                await supabase
+                    .from('api_keys')
+                    .update({ status: 'active', updated_at: new Date().toISOString() })
+                    .eq('id', existing.id);
+            } else {
+                await supabase
+                    .from('api_keys')
+                    .insert({
+                        name: 'Admin Key ' + new Date().toLocaleDateString(),
+                        key_value: cleanKey,
+                        status: 'active',
+                        usage_count: 0
+                    });
+            }
             
             // Also update system_settings for backward compatibility
             await supabase
                 .from('system_settings')
                 .upsert({ key: 'gemini_api_key', value: cleanKey }, { onConflict: 'key' });
 
-            if (error) {
-                console.error("Save API Key Error:", error);
-                throw error;
-            }
             return true;
         } catch (e) {
             console.error("Error saving API Key", e);
             return false;
         }
+    }
+    return false;
+};
+
+export const deleteApiKey = async (id: string): Promise<boolean> => {
+    if (supabase) {
+        const { error } = await supabase.from('api_keys').delete().eq('id', id);
+        return !error;
     }
     return false;
 };

@@ -33,6 +33,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
 
   const [activeMode, setActiveMode] = useState<GenMode>('single');
   const [characters, setCharacters] = useState<CharacterInput[]>([{ id: 1, bodyImage: null, faceImage: null, gender: 'female', isFaceLocked: true }]);
+  const [activeCharTab, setActiveCharTab] = useState<number>(1); // Mobile Tab State
   
   const [refImage, setRefImage] = useState<string | null>(null);
   const [prompt, setPrompt] = useState('');
@@ -62,6 +63,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
 
   const handleModeChange = (mode: GenMode) => {
       setActiveMode(mode);
+      setActiveCharTab(1); // Reset to first tab
       let count = 1;
       if (mode === 'couple') count = 2;
       if (mode === 'group3') count = 3;
@@ -313,20 +315,21 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
     <div className="flex flex-col items-center w-full max-w-5xl mx-auto pb-48 animate-fade-in relative">
         <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/*" />
 
-        <div className="w-full flex justify-center mb-8">
-            <div className="bg-[#12121a] p-1.5 rounded-2xl border border-white/10 flex gap-1 shadow-lg">
+        {/* Mode Selector */}
+        <div className="w-full flex justify-center mb-6">
+            <div className="bg-[#12121a] p-1.5 rounded-2xl border border-white/10 flex gap-1 shadow-lg overflow-x-auto no-scrollbar max-w-full">
                 {[
-                    { id: 'single', label: { vi: 'Ảnh Đơn', en: 'Single' }, icon: Icons.User },
-                    { id: 'couple', label: { vi: 'Ảnh Đôi', en: 'Couple' }, icon: Icons.Heart },
+                    { id: 'single', label: { vi: 'Đơn', en: 'Single' }, icon: Icons.User },
+                    { id: 'couple', label: { vi: 'Đôi', en: 'Couple' }, icon: Icons.Heart },
                     { id: 'group3', label: { vi: 'Nhóm 3', en: 'Group 3' }, icon: Icons.User },
-                    { id: 'group4', label: { vi: 'Nhóm 4+', en: 'Group 4' }, icon: Icons.User },
+                    { id: 'group4', label: { vi: 'Nhóm 4', en: 'Group 4' }, icon: Icons.User },
                 ].map(mode => (
                     <button
                         key={mode.id}
                         onClick={() => handleModeChange(mode.id as GenMode)}
-                        className={`px-5 py-2.5 rounded-xl flex items-center gap-2 text-sm font-bold transition-all ${activeMode === mode.id ? 'bg-white text-black shadow-md' : 'text-slate-500 hover:text-white hover:bg-white/5'}`}
+                        className={`px-4 py-2.5 rounded-xl flex items-center gap-2 text-xs md:text-sm font-bold transition-all whitespace-nowrap ${activeMode === mode.id ? 'bg-white text-black shadow-md' : 'text-slate-500 hover:text-white hover:bg-white/5'}`}
                     >
-                        {mode.id === 'group4' ? <div className="flex -space-x-1"><Icons.User className="w-3 h-3"/><Icons.User className="w-3 h-3"/></div> : <mode.icon className="w-4 h-4" />}
+                        {mode.id === 'group4' ? <div className="flex -space-x-1"><Icons.User className="w-3 h-3"/><Icons.User className="w-3 h-3"/></div> : <mode.icon className="w-3 h-3 md:w-4 md:h-4" />}
                         {mode.label[lang === 'vi' ? 'vi' : 'en']}
                     </button>
                 ))}
@@ -336,10 +339,37 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
         <div className="w-full grid grid-cols-1 lg:grid-cols-3 gap-6">
             
             {/* LEFT: CHARACTER INPUT SECTION */}
-            <div className="lg:col-span-2 space-y-6">
+            <div className="lg:col-span-2 space-y-4">
+                
+                {/* Mobile Tab Navigation */}
+                {characters.length > 1 && (
+                    <div className="flex md:hidden overflow-x-auto gap-2 pb-2 no-scrollbar">
+                        {characters.map((char) => (
+                            <button
+                                key={char.id}
+                                onClick={() => setActiveCharTab(char.id)}
+                                className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all border ${
+                                    activeCharTab === char.id 
+                                    ? 'bg-audi-pink text-white border-audi-pink shadow-lg' 
+                                    : 'bg-[#12121a] text-slate-400 border-white/10 hover:border-white/30'
+                                }`}
+                            >
+                                {lang === 'vi' ? `Nhân vật ${char.id}` : `Char ${char.id}`}
+                                {char.bodyImage && <span className="ml-1 text-green-400">✓</span>}
+                            </button>
+                        ))}
+                    </div>
+                )}
+
                 <div className="flex flex-wrap justify-center gap-4 w-full">
                     {characters.map((char) => (
-                        <div key={char.id} className="w-[220px] bg-[#12121a] border border-white/10 rounded-2xl p-4 hover:border-white/20 transition-colors relative group shrink-0 shadow-lg">
+                        <div 
+                            key={char.id} 
+                            // Mobile Logic: Only show the active tab. Desktop Logic: Show all (md:block).
+                            className={`w-full md:w-[220px] bg-[#12121a] border border-white/10 rounded-2xl p-4 hover:border-white/20 transition-colors relative group shrink-0 shadow-lg ${
+                                char.id === activeCharTab ? 'block' : 'hidden md:block'
+                            }`}
+                        >
                             <div className="flex justify-between items-center mb-3">
                                 <span className="text-xs font-bold text-white bg-white/10 px-2 py-1 rounded">NV {char.id}</span>
                                 <div className="flex bg-black/40 rounded-lg p-0.5 border border-white/10">

@@ -22,14 +22,14 @@ export const urlToBase64 = async (url: string): Promise<string | null> => {
 };
 
 /**
- * TECHNQUE: GRAY-CANVAS SOLID FENCE (From Audition AI Logic)
+ * TECHNQUE: ADAPTIVE SOLID FENCE
  * 
- * Instead of just cropping, we place the image in a "Safe Box".
- * 1. Background: Neutral Gray (#808080) - The universal "Mask/Void" color for AI.
- * 2. Border: Solid 4px Border - The "Fence" that tells AI "Do not modify pixels inside".
- * 3. Purpose: Forces AI to treat this image as a "Texture Source" rather than a flexible scene.
+ * Upgrade 2.0: Now respects the Aspect Ratio of the Source Image.
+ * If input is Portrait, we create a Portrait Fence.
+ * This prevents the character from being shrunk too small in a Square canvas,
+ * ensuring shoes and face details are preserved.
  */
-export const createSolidFence = async (base64Str: string, aspectRatio: string = "1:1", isPoseRef: boolean = false): Promise<string> => {
+export const createSolidFence = async (base64Str: string, targetAspectRatio: string = "1:1", isPoseRef: boolean = false): Promise<string> => {
     return new Promise((resolve) => {
       const img = new Image();
       img.crossOrigin = "Anonymous"; 
@@ -38,35 +38,64 @@ export const createSolidFence = async (base64Str: string, aspectRatio: string = 
         const ctx = canvas.getContext('2d');
         if (!ctx) return resolve(base64Str);
   
-        // Standardize size for AI Input (Square usually best for Token parsing, or match aspect)
-        const BASE_SIZE = 1024; 
+        // Base dimension unit
+        const BASE_DIM = 1024; 
         
-        // If it's a pose ref, we might want to match aspect ratio exactly.
-        // If it's a character ref (Solid Fence), we want a focus card.
-        canvas.width = BASE_SIZE;
-        canvas.height = BASE_SIZE;
+        let canvasW = BASE_DIM;
+        let canvasH = BASE_DIM;
+
+        // LOGIC: DETERMINE CANVAS SHAPE BASED ON INPUT
+        // If it's a character reference (not pose), we want to maximize the pixel area of the character.
+        if (!isPoseRef) {
+            const ratio = img.width / img.height;
+            
+            if (ratio < 0.8) {
+                // Portrait Image (Tall) -> Use Portrait Canvas (e.g., 1024 x 1536)
+                // We cap height at 1536 to stay within reasonable token limits while giving space
+                canvasW = 1024;
+                canvasH = 1536; 
+            } else if (ratio > 1.2) {
+                // Landscape Image (Wide)
+                canvasW = 1536;
+                canvasH = 1024;
+            } else {
+                // Square-ish
+                canvasW = 1024;
+                canvasH = 1024;
+            }
+        } else {
+            // For Pose Reference, we try to match the output target aspect ratio if possible,
+            // or keep it square if generic.
+            if (targetAspectRatio === '9:16') { canvasW = 768; canvasH = 1344; }
+            else if (targetAspectRatio === '16:9') { canvasW = 1344; canvasH = 768; }
+            else if (targetAspectRatio === '3:4') { canvasW = 768; canvasH = 1024; }
+            else { canvasW = 1024; canvasH = 1024; }
+        }
+        
+        canvas.width = canvasW;
+        canvas.height = canvasH;
   
         // 1. FILL THE VOID (Neutral Gray #808080)
-        // This is crucial. It tells the AI "There is no context here, look ONLY at the subject".
         ctx.fillStyle = '#808080'; 
         ctx.fillRect(0, 0, canvas.width, canvas.height);
   
-        // Calculate fit dimensions (contain)
-        const scale = Math.min((BASE_SIZE - 40) / img.width, (BASE_SIZE - 40) / img.height);
+        // 2. CALCULATE FIT (CONTAIN)
+        // We want the image to fit fully inside without cropping pixels
+        const scale = Math.min((canvasW - 40) / img.width, (canvasH - 40) / img.height);
         const drawW = Math.round(img.width * scale);
         const drawH = Math.round(img.height * scale);
-        const x = Math.round((BASE_SIZE - drawW) / 2);
-        const y = Math.round((BASE_SIZE - drawH) / 2);
+        const x = Math.round((canvasW - drawW) / 2);
+        const y = Math.round((canvasH - drawH) / 2);
         
-        // Draw the image normally (keep colors true)
+        // 3. DRAW IMAGE
         ctx.drawImage(img, x, y, drawW, drawH);
         
-        // DRAW THE FENCE (Solid Border) - ONLY FOR CHARACTER INPUTS
-        // Use exactly 4px Black border as per spec.
+        // 4. DRAW THE FENCE (Solid Border)
+        // This tells the AI: "Look strictly inside this box"
         if (!isPoseRef) {
             ctx.strokeStyle = '#000000'; // Black border
             ctx.lineWidth = 4; // EXACTLY 4px
-            ctx.strokeRect(x, y, drawW, drawH); // The "Cage"
+            ctx.strokeRect(x, y, drawW, drawH); 
         }
   
         resolve(canvas.toDataURL('image/jpeg', 0.95));

@@ -215,7 +215,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       
       if (sourceForStructure) {
           const optimizedStructure = await optimizePayload(sourceForStructure);
-          const fencedImage = await createSolidFence(optimizedStructure, aspectRatio);
+          const fencedImage = await createSolidFence(optimizedStructure, aspectRatio, true);
           structureRefData = fencedImage.split(',')[1];
       }
       
@@ -228,7 +228,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
           let charImageData = null;
           // Use faceImage as the primary source for Identity AND Outfit
           if (char.faceImage) {
-              const opt = await optimizePayload(char.faceImage, 512);
+              const opt = await optimizePayload(char.faceImage, 1024); // Keep high res for scanning
               charImageData = opt.split(',')[1];
           }
           
@@ -432,8 +432,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
             </div>
         </div>
 
-        {/* ... Rest of input UI (Character, Prompt, Config) is identical but wrapped ... */}
-        {/* Skipping repetitive code for brevity, assumes standard structure */}
         <div className="w-full space-y-6">
             
             {/* --- SECTION 1: CHARACTER UPLOAD --- */}
@@ -465,7 +463,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                                     >
                                         {char.bodyImage ? (
                                             <>
-                                                <img src={char.bodyImage} className="w-full h-full object-cover" alt="Body" />
+                                                <img src={char.bodyImage} className="w-full h-full object-contain bg-black" alt="Body" />
                                                 <div className="absolute top-1 right-1 p-1 bg-black/60 rounded-full cursor-pointer hover:bg-red-500 transition-colors z-10" 
                                                      onClick={(e) => { e.stopPropagation(); setCharacters(prev => prev.map(c => c.id === char.id ? {...c, bodyImage: null} : c)); }}>
                                                     <Icons.X className="w-2.5 h-2.5 text-white" />
@@ -480,7 +478,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                                     </div>
                                 </div>
 
-                                {/* Face Upload Slot */}
+                                {/* Face Upload Slot - NOW USING OBJECT-CONTAIN TO SHOW FULL SHOES */}
                                 <div className="space-y-1">
                                     <div className="flex items-center gap-1.5 mb-1 px-1">
                                         <Icons.Eye className="w-3 h-3 text-audi-cyan" />
@@ -500,7 +498,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
 
                                         {char.faceImage ? (
                                             <>
-                                                <img src={char.faceImage} className="w-full h-full object-cover" alt="Face" />
+                                                {/* FIXED: changed to object-contain so users see full image including shoes */}
+                                                <img src={char.faceImage} className="w-full h-full object-contain bg-black" alt="Face" />
+                                                
                                                 <div className="absolute top-1 right-1 p-1 bg-black/60 rounded-full cursor-pointer hover:bg-red-500 transition-colors z-10" 
                                                      onClick={(e) => { e.stopPropagation(); setCharacters(prev => prev.map(c => c.id === char.id ? {...c, faceImage: null, isFaceLocked: false} : c)); }}>
                                                     <Icons.X className="w-2.5 h-2.5 text-white" />
@@ -579,7 +579,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                 </div>
                 
                 <div className="flex flex-col md:flex-row gap-4">
-                    {/* RESTORED: Reference Image Upload */}
+                    {/* Reference Image Upload */}
                     <div className="w-full md:w-1/3 space-y-2">
                         <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block pl-1">
                             {lang === 'vi' ? 'Ảnh Mẫu (Pose/Bố cục)' : 'Reference Image'}
@@ -590,7 +590,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                         >
                              {refImage ? (
                                 <>
-                                    <img src={refImage} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" alt="Reference" />
+                                    <img src={refImage} className="w-full h-full object-contain opacity-90 group-hover:opacity-100 transition-opacity bg-black" alt="Reference" />
                                     <div className="absolute top-1 right-1 p-1 bg-black/60 rounded-full cursor-pointer hover:bg-red-500 transition-colors z-10" 
                                          onClick={(e) => { e.stopPropagation(); setRefImage(null); }}>
                                         <Icons.X className="w-3 h-3 text-white" />

@@ -1,3 +1,4 @@
+
 import { GeneratedImage } from '../types';
 import { supabase } from './supabaseClient';
 import { getUserProfile } from './economyService';
@@ -43,7 +44,6 @@ export const saveImageToStorage = async (image: GeneratedImage): Promise<void> =
   // 1. SUPABASE (CLOUD)
   if (supabase && user.id.length > 20) {
     try {
-      console.log("[Storage] Attempting to upload to Supabase...");
       const blob = base64ToBlob(image.url);
       const fileName = `${image.id}.png`;
       
@@ -52,10 +52,7 @@ export const saveImageToStorage = async (image: GeneratedImage): Promise<void> =
         .from(BUCKET_NAME)
         .upload(fileName, blob, { upsert: true });
 
-      if (uploadError) {
-          console.error("[Storage] Upload Failed:", uploadError.message);
-          throw uploadError;
-      }
+      if (uploadError) throw uploadError;
 
       // Get URL
       const { data: { publicUrl } } = supabase.storage
@@ -75,22 +72,14 @@ export const saveImageToStorage = async (image: GeneratedImage): Promise<void> =
           is_public: false // Column: is_public
         });
 
-      if (dbError) {
-          console.error("[Storage] DB Insert Failed:", dbError.message);
-          throw dbError;
-      }
-      
-      console.log("[Storage] Saved successfully to Cloud.");
+      if (dbError) throw dbError;
       return; 
-    } catch (error: any) {
-      console.warn("Supabase Error (Fallback to Local). Details:", error.message || error);
-      // Alert user if in Dev mode
-      if (process.env.NODE_ENV === 'development') alert("Cloud Save Failed: " + (error.message || "Unknown error"));
+    } catch (error) {
+      console.error("Supabase Error (Fallback to Local):", error);
     }
   }
 
   // 2. INDEXED DB (LOCAL)
-  console.log("[Storage] Saving to Local IndexedDB...");
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const transaction = db.transaction([STORE_NAME], 'readwrite');
@@ -198,17 +187,16 @@ export const getAllImagesFromStorage = async (): Promise<GeneratedImage[]> => {
                 .order('created_at', { ascending: false });
 
             if (!error && data) {
-                // Return cloud data if successful
                 return data.map((row: any) => ({
-                    id: row.id,
-                    url: row.image_url, // Column: image_url
-                    prompt: row.prompt,
-                    timestamp: new Date(row.created_at).getTime(),
-                    toolId: 'gen_tool',
-                    toolName: row.model_used || 'AI Gen',
-                    engine: row.model_used,
-                    isShared: row.is_public,
-                    userName: 'Me'
+                id: row.id,
+                url: row.image_url, // Column: image_url
+                prompt: row.prompt,
+                timestamp: new Date(row.created_at).getTime(),
+                toolId: 'gen_tool',
+                toolName: row.model_used || 'AI Gen',
+                engine: row.model_used,
+                isShared: row.is_public,
+                userName: 'Me'
                 }));
             }
         }
@@ -217,8 +205,7 @@ export const getAllImagesFromStorage = async (): Promise<GeneratedImage[]> => {
     }
   }
 
-  // 2. INDEXED DB - Fallback if Supabase fails or is empty (optional logic)
-  // Currently we just return IndexedDB if code reaches here
+  // 2. INDEXED DB
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const transaction = db.transaction([STORE_NAME], 'readonly');

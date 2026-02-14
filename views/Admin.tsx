@@ -153,54 +153,18 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
   // --- ACTIONS ---
 
-  const handleFixStorage = () => {
-      setConfirmDialog({
-          show: true,
-          title: '🛠️ Khắc Phục Lỗi Lưu Ảnh & Storage',
-          msg: 'Nếu ảnh không được lưu hoặc thư viện trống trơn, bạn cần tạo bảng "generated_images" và Bucket "images" kèm theo các quyền truy cập (RLS Policies). Hãy copy toàn bộ mã SQL dưới đây và chạy trong "SQL Editor" của Supabase:',
-          sqlHelp: `-- 1. Create Bucket 'images'
-insert into storage.buckets (id, name, public) values ('images', 'images', true) on conflict do nothing;
-
--- 2. Storage Policies (Cho phép upload ảnh)
-create policy "Public Access" on storage.objects for select using ( bucket_id = 'images' );
-create policy "Auth Upload" on storage.objects for insert to authenticated with check ( bucket_id = 'images' );
-create policy "Auth Delete" on storage.objects for delete to authenticated using ( bucket_id = 'images' );
-
--- 3. Create Table 'generated_images' (Lưu metadata ảnh)
-create table if not exists public.generated_images (
-  id uuid primary key,
-  user_id uuid references auth.users not null,
-  image_url text not null,
-  prompt text,
-  model_used text,
-  is_public boolean default false,
-  created_at timestamptz default now()
-);
-
--- 4. Table Policies (Bảo mật dữ liệu)
-alter table public.generated_images enable row level security;
-create policy "Users can insert their own images" on public.generated_images for insert to authenticated with check (auth.uid() = user_id);
-create policy "Users can select their own images" on public.generated_images for select to authenticated using (auth.uid() = user_id);
-create policy "Users can delete their own images" on public.generated_images for delete to authenticated using (auth.uid() = user_id);
-create policy "Public images are visible to everyone" on public.generated_images for select using (is_public = true);`,
-          isAlertOnly: true,
-          onConfirm: () => {}
-      });
-  };
-
-  // ... (Other handlers unchanged: handleSaveApiKey, handleTestKey, handleDeleteApiKey, handleSaveUser, handleSavePackage, handleDeletePackage, handleMovePackage, handleSaveGiftcode, handleDeleteGiftcode, handleSavePromotion, handleDeletePromotion, handleDeleteContent, handleApproveTransaction, handleRejectTransaction, handleDeleteTransaction)
-  // For brevity, keeping existing references but ensuring 'handleFixStorage' is used in UI.
-  
-  const handleSaveApiKey = async () => { /* ... existing ... */ 
+  const handleSaveApiKey = async () => {
       if (!apiKey.trim()) return;
+      
       setKeyStatus('checking');
       const isValid = await checkConnection(apiKey);
+      
       if (isValid) {
           const result = await saveSystemApiKey(apiKey);
           if (result.success) {
               setKeyStatus('valid');
               showToast('Đã lưu API Key vào Database thành công!');
-              await refreshData(); 
+              await refreshData(); // Refresh list
               runSystemChecks(apiKey);
           } else {
               setKeyStatus('unknown');
@@ -226,28 +190,35 @@ CREATE POLICY "Enable delete for authenticated users only" ON public.api_keys FO
           showToast('API Key không hoạt động. Vui lòng kiểm tra lại.', 'error');
       }
   };
-  const handleTestKey = async (key: string) => { /* ... existing ... */ 
+
+  const handleTestKey = async (key: string) => {
       showToast('Đang kiểm tra key...', 'info');
       const isValid = await checkConnection(key);
-      if (isValid) showToast('Kết nối thành công! Key hoạt động tốt.', 'success');
-      else showToast('Key không hoạt động hoặc hết hạn ngạch.', 'error');
+      if (isValid) {
+          showToast('Kết nối thành công! Key hoạt động tốt.', 'success');
+      } else {
+          showToast('Key không hoạt động hoặc hết hạn ngạch.', 'error');
+      }
   }
-  const handleDeleteApiKey = async (id: string) => { /* ... existing ... */
+
+  const handleDeleteApiKey = async (id: string) => {
       showConfirm('Xóa API Key này khỏi database?', async () => {
           await deleteApiKey(id);
           refreshData();
           showToast('Đã xóa API Key');
       });
   }
-  const handleSaveUser = async () => { /* ... existing ... */
+
+  const handleSaveUser = async () => {
       if (editingUser) {
           await updateAdminUserProfile(editingUser);
           setEditingUser(null);
-          await refreshData();
+          await refreshData(); // Await to ensure UI updates
           showToast('Cập nhật người dùng thành công!');
       }
   };
-  const handleSavePackage = async () => { /* ... existing ... */
+
+  const handleSavePackage = async () => {
       if (editingPackage) {
           const result = await savePackage(editingPackage);
           if (result.success) {
@@ -255,6 +226,7 @@ CREATE POLICY "Enable delete for authenticated users only" ON public.api_keys FO
               refreshData();
               showToast('Cập nhật gói nạp thành công!');
           } else {
+              // 1. Check for RLS Errors
               if (result.error?.includes('RLS') || result.error?.includes('permission') || result.error?.includes('policy')) {
                   setConfirmDialog({
                       show: true,
@@ -265,7 +237,9 @@ CREATE POLICY "Enable all access for credit packages" ON public.credit_packages 
                       isAlertOnly: true,
                       onConfirm: () => {}
                   });
-              } else if (result.error?.includes('transfer_syntax') || result.error?.includes('column')) {
+              } 
+              // 2. Check for Missing Column Errors (transfer_syntax)
+              else if (result.error?.includes('transfer_syntax') || result.error?.includes('column')) {
                   setConfirmDialog({
                       show: true,
                       title: '⚠️ Cần Cập Nhật Database (Thiếu Cột)',
@@ -276,32 +250,51 @@ ADD COLUMN IF NOT EXISTS bonus_credits int8 DEFAULT 0;`,
                       isAlertOnly: true,
                       onConfirm: () => {}
                   });
-              } else {
+              }
+              else {
                   showToast(`Lỗi: ${result.error}`, 'error');
               }
           }
       }
   };
-  const handleDeletePackage = async (id: string) => { /* ... existing ... */
+
+  const handleDeletePackage = async (id: string) => {
       showConfirm('Bạn có chắc chắn muốn xóa gói nạp này?', async () => {
           const result = await deletePackage(id);
           if (result.success) {
               refreshData();
-              if (result.action === 'hidden') showToast('Gói đã chuyển sang trạng thái ẨN (do có giao dịch lịch sử)', 'info');
-              else showToast('Đã xóa gói nạp vĩnh viễn');
-          } else showToast('Lỗi khi xóa: ' + result.error, 'error');
+              if (result.action === 'hidden') {
+                  showToast('Gói đã chuyển sang trạng thái ẨN (do có giao dịch lịch sử)', 'info');
+              } else {
+                  showToast('Đã xóa gói nạp vĩnh viễn');
+              }
+          } else {
+              showToast('Lỗi khi xóa: ' + result.error, 'error');
+          }
       });
   };
-  const handleMovePackage = async (index: number, direction: number) => { /* ... existing ... */
+
+  const handleMovePackage = async (index: number, direction: number) => {
       const newPackages = [...packages];
       const newIndex = index + direction;
+
       if (newIndex < 0 || newIndex >= newPackages.length) return;
+
+      // Swap elements
       [newPackages[index], newPackages[newIndex]] = [newPackages[newIndex], newPackages[index]];
+      
+      // Update local state immediately for UI response
       setPackages(newPackages);
+
+      // Call service to update order in DB
       const result = await updatePackageOrder(newPackages);
-      if (!result.success) showToast('Lỗi khi lưu thứ tự: ' + result.error, 'error');
+      if (!result.success) {
+          showToast('Lỗi khi lưu thứ tự: ' + result.error, 'error');
+          // Revert if needed, but for now we let it stay locally
+      }
   };
-  const handleSaveGiftcode = async () => { /* ... existing ... */
+
+  const handleSaveGiftcode = async () => {
       if (editingGiftcode) {
           const result = await saveGiftcode(editingGiftcode);
           if (result.success) {
@@ -319,18 +312,22 @@ CREATE POLICY "Enable all access for gift codes" ON public.gift_codes FOR ALL US
                       isAlertOnly: true,
                       onConfirm: () => {}
                   });
-              } else showToast(`Lỗi: ${result.error}`, 'error');
+              } else {
+                  showToast(`Lỗi: ${result.error}`, 'error');
+              }
           }
       }
   };
-  const handleDeleteGiftcode = async (id: string) => { /* ... existing ... */
+
+  const handleDeleteGiftcode = async (id: string) => {
       showConfirm('Xóa mã này vĩnh viễn?', async () => {
           await deleteGiftcode(id);
           refreshData();
           showToast('Đã xóa Giftcode');
       });
   };
-  const handleSavePromotion = async () => { /* ... existing ... */
+
+  const handleSavePromotion = async () => {
       if (editingPromotion) {
           const result = await savePromotion(editingPromotion);
           if (result.success) {
@@ -338,6 +335,7 @@ CREATE POLICY "Enable all access for gift codes" ON public.gift_codes FOR ALL US
               refreshData();
               showToast('Lưu chiến dịch thành công!');
           } else {
+              // DETECT MISSING COLUMN ERROR AND SHOW SQL HELP
               if (result.error?.includes('column') || result.error?.includes('bonus_percent') || result.error?.includes('title')) {
                   setConfirmDialog({
                       show: true,
@@ -357,45 +355,53 @@ CREATE POLICY "Enable access" ON public.promotions FOR ALL USING (true) WITH CHE
                       isAlertOnly: true,
                       onConfirm: () => {}
                   });
-              } else showToast(`Lỗi: ${result.error}`, 'error');
+              } else {
+                  showToast(`Lỗi: ${result.error}`, 'error');
+              }
           }
       }
   };
-  const handleDeletePromotion = async (id: string) => { /* ... existing ... */
+
+  const handleDeletePromotion = async (id: string) => {
       showConfirm('Xóa chiến dịch này vĩnh viễn?', async () => {
           await deletePromotion(id);
           refreshData();
           showToast('Đã xóa chiến dịch');
       });
   };
-  const handleDeleteContent = async (id: string) => { /* ... existing ... */
+
+  const handleDeleteContent = async (id: string) => {
       showConfirm('Xóa vĩnh viễn hình ảnh này?', async () => {
           await deleteImageFromStorage(id);
           setAllImages(prev => prev.filter(img => img.id !== id));
           showToast('Đã xóa ảnh');
       });
   }
-  const handleApproveTransaction = async (txId: string) => { /* ... existing ... */
+
+  const handleApproveTransaction = async (txId: string) => {
       showConfirm('Xác nhận duyệt giao dịch này và cộng Vcoin cho user?', async () => {
           await adminApproveTransaction(txId);
           refreshData();
           showToast('Đã duyệt thành công!');
       });
   }
-  const handleRejectTransaction = async (txId: string) => { /* ... existing ... */
+
+  const handleRejectTransaction = async (txId: string) => {
       showConfirm('Từ chối giao dịch này?', async () => {
           await adminRejectTransaction(txId);
           refreshData();
           showToast('Đã từ chối giao dịch', 'info');
       });
   }
-  const handleDeleteTransaction = async (txId: string) => { /* ... existing ... */
+
+  const handleDeleteTransaction = async (txId: string) => {
       showConfirm('Xóa lịch sử giao dịch này khỏi hệ thống?', async () => {
           const res = await deleteTransaction(txId);
           if (res.success) {
               await refreshData();
               showToast('Đã xóa giao dịch vĩnh viễn', 'info');
           } else {
+              // Handle known errors (RLS or not found)
               if (res.error?.includes('policy') || res.error?.includes('phân quyền')) {
                    setConfirmDialog({
                       show: true,
@@ -405,7 +411,9 @@ CREATE POLICY "Enable access" ON public.promotions FOR ALL USING (true) WITH CHE
                       isAlertOnly: true,
                       onConfirm: () => {}
                    });
-              } else showToast('Lỗi xóa: ' + res.error, 'error');
+              } else {
+                   showToast('Lỗi xóa: ' + res.error, 'error');
+              }
           }
       });
   }
@@ -494,7 +502,7 @@ CREATE POLICY "Enable access" ON public.promotions FOR ALL USING (true) WITH CHE
           </div>
       )}
       
-      {/* ... Top Command Bar ... */}
+      {/* --- TOP COMMAND BAR --- */}
       <div className="bg-[#12121a] border-b border-white/10 sticky top-[72px] z-40 shadow-lg">
           <div className="max-w-7xl mx-auto px-4 py-3 flex flex-col md:flex-row justify-between items-center gap-4">
               <div className="flex items-center gap-4">
@@ -544,7 +552,7 @@ CREATE POLICY "Enable access" ON public.promotions FOR ALL USING (true) WITH CHE
 
       <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
           
-          {/* ... (Overview, Transactions, Users, Packages, Promotion, Giftcodes Views unchanged) ... */}
+          {/* ================= VIEW: OVERVIEW ================= */}
           {activeView === 'overview' && (
               <div className="space-y-6 animate-slide-in-right">
                   {/* Grid 3x2 Dashboard */}
@@ -631,8 +639,9 @@ CREATE POLICY "Enable access" ON public.promotions FOR ALL USING (true) WITH CHE
                   </div>
               </div>
           )}
-          
-          {/* ... Other tabs ... */}
+
+          {/* ... (Keep other views transactions, users, packages, promotion, giftcodes unchanged) ... */}
+          {/* ================= VIEW: TRANSACTIONS ================= */}
           {activeView === 'transactions' && (
               <div className="space-y-6 animate-slide-in-right">
                   <div className="flex justify-between items-center">
@@ -699,8 +708,7 @@ CREATE POLICY "Enable access" ON public.promotions FOR ALL USING (true) WITH CHE
                   </div>
               </div>
           )}
-          
-          {/* Users View */}
+
           {activeView === 'users' && (
               <div className="space-y-6 animate-slide-in-right">
                   <div className="flex justify-between items-center">
@@ -805,7 +813,6 @@ CREATE POLICY "Enable access" ON public.promotions FOR ALL USING (true) WITH CHE
               </div>
           )}
 
-          {/* ... Packages, Giftcodes, Promotion views ... */}
           {activeView === 'packages' && (
               <div className="space-y-6 animate-slide-in-right">
                   <div className="flex justify-between items-center">
@@ -950,11 +957,12 @@ CREATE POLICY "Enable access" ON public.promotions FOR ALL USING (true) WITH CHE
                               {promotions.length === 0 ? (
                                   <tr><td colSpan={5} className="text-center py-8">Chưa có chiến dịch nào.</td></tr>
                               ) : promotions.map(p => {
-                                  // ... (Logic for status badge unchanged)
                                   const now = new Date().getTime();
                                   const start = new Date(p.startTime).getTime();
                                   const end = new Date(p.endTime).getTime();
+                                  
                                   let statusBadge = <span className="text-slate-500 text-xs font-bold border border-slate-500/20 px-2 py-1 rounded">Stopped</span>;
+                                  
                                   if (p.isActive) {
                                       if (now < start) statusBadge = <span className="text-yellow-500 text-xs font-bold border border-yellow-500/20 px-2 py-1 rounded flex items-center gap-1"><Icons.Clock className="w-3 h-3" /> Scheduled</span>;
                                       else if (now > end) statusBadge = <span className="text-slate-500 text-xs font-bold border border-slate-500/20 px-2 py-1 rounded">Expired</span>;
@@ -1196,14 +1204,9 @@ CREATE POLICY "Enable access" ON public.promotions FOR ALL USING (true) WITH CHE
               <div className="space-y-6 animate-slide-in-right">
                   <div className="flex justify-between items-center">
                       <h2 className="text-2xl font-bold text-white">Chẩn Đoán Hệ Thống</h2>
-                      <div className="flex gap-2">
-                          <button onClick={handleFixStorage} className="px-4 py-2 bg-audi-pink/20 hover:bg-audi-pink text-audi-pink hover:text-white rounded-lg text-sm font-bold flex items-center gap-2 border border-audi-pink/50 transition-colors">
-                              <Icons.Database className="w-4 h-4" /> Sửa Lỗi Lưu Ảnh (Storage)
-                          </button>
-                          <button onClick={() => runSystemChecks(apiKey)} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm font-bold text-white flex items-center gap-2">
-                              <Icons.Rocket className="w-4 h-4" /> Quét Ngay
-                          </button>
-                      </div>
+                      <button onClick={() => runSystemChecks(apiKey)} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm font-bold text-white flex items-center gap-2">
+                          <Icons.Rocket className="w-4 h-4" /> Quét Ngay
+                      </button>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

@@ -357,14 +357,15 @@ CREATE POLICY "Enable access" ON public.promotions FOR ALL USING (true) WITH CHE
       showConfirm('Xóa lịch sử giao dịch này khỏi hệ thống?', async () => {
           const res = await deleteTransaction(txId);
           if (res.success) {
-              refreshData();
+              await refreshData();
               showToast('Đã xóa giao dịch vĩnh viễn', 'info');
           } else {
-              if (res.error?.includes('policy')) {
+              // Handle known errors (RLS or not found)
+              if (res.error?.includes('policy') || res.error?.includes('phân quyền')) {
                    setConfirmDialog({
                       show: true,
                       title: '⚠️ Cần Cấp Quyền Xóa Giao Dịch',
-                      msg: 'Database chưa cho phép xóa giao dịch. Chạy lệnh sau:',
+                      msg: 'Database chưa cho phép xóa giao dịch. Chạy lệnh sau trong Supabase:',
                       sqlHelp: `CREATE POLICY "Enable delete for admin" ON public.transactions FOR DELETE USING (true);`,
                       isAlertOnly: true,
                       onConfirm: () => {}
@@ -719,10 +720,10 @@ CREATE POLICY "Enable access" ON public.promotions FOR ALL USING (true) WITH CHE
                       </table>
                   </div>
                   
-                  {/* EDIT USER MODAL - Fixed Structure */}
+                  {/* EDIT USER MODAL - MOVED TO TOP WITH items-start and pt-28 */}
                   {editingUser && (
-                      <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
-                          <div className="bg-[#12121a] w-full max-w-md p-6 rounded-2xl border border-white/20 shadow-2xl relative">
+                      <div className="fixed inset-0 z-[2000] flex items-start justify-center pt-28 bg-black/80 backdrop-blur-sm p-4 animate-fade-in overflow-y-auto">
+                          <div className="bg-[#12121a] w-full max-w-md p-6 rounded-2xl border border-white/20 shadow-2xl relative mb-10">
                               <h3 className="text-xl font-bold text-white mb-4">Sửa Người Dùng</h3>
                               <div className="space-y-4 mb-6">
                                   <div>
@@ -761,6 +762,7 @@ CREATE POLICY "Enable access" ON public.promotions FOR ALL USING (true) WITH CHE
               </div>
           )}
 
+          {/* ... (Other views remain unchanged) ... */}
           {/* ================= VIEW: PACKAGES ================= */}
           {activeView === 'packages' && (
               <div className="space-y-6 animate-slide-in-right">

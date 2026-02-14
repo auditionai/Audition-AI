@@ -704,8 +704,16 @@ export const adminRejectTransaction = async (txId: string): Promise<boolean> => 
 export const deleteTransaction = async (txId: string): Promise<{success: boolean, error?: string}> => {
     if (supabase) {
         try {
-            const { error } = await supabase.from('transactions').delete().eq('id', txId);
+            // Using select() is critical to verify if RLS actually allowed deletion
+            const { data, error } = await supabase.from('transactions').delete().eq('id', txId).select();
+            
             if (error) throw error;
+            
+            // If data is null or empty array, it means no row was deleted (likely due to RLS)
+            if (!data || data.length === 0) {
+                 return { success: false, error: "Không thể xóa. Vui lòng kiểm tra quyền hạn (RLS Policy) hoặc ID không tồn tại." };
+            }
+
             return { success: true };
         } catch (e: any) {
              return { success: false, error: e.message };

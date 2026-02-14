@@ -546,7 +546,7 @@ CREATE POLICY "Enable all access for transactions" ON public.transactions FOR AL
 
       {/* --- CONFIRM / ALERT DIALOG --- */}
       {confirmDialog.show && (
-          <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-fade-in">
+          <div className="fixed inset-0 z-[10000] flex items-start justify-center pt-32 bg-black/90 backdrop-blur-md p-4 animate-fade-in overflow-y-auto">
               <div className="bg-[#12121a] border border-white/20 p-6 rounded-2xl max-w-lg w-full shadow-[0_0_50px_rgba(0,0,0,0.8)] transform scale-100 transition-all">
                   <div className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center mb-4 text-audi-yellow mx-auto">
                       <Icons.Bell className="w-6 h-6 animate-swing" />

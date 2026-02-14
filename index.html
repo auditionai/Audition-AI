@@ -14,11 +14,12 @@
         
         console.error('CRITICAL ERROR:', message);
         var root = document.getElementById('root');
-        if(root && root.innerHTML.trim() === '') {
+        // Only show fatal errors if root is empty (app failed to mount)
+        if(root && (root.innerHTML.trim() === '' || root.innerHTML.includes('STARTING SYSTEM'))) {
             var errorDiv = document.createElement('div');
             errorDiv.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:#05050A;color:#FF0099;z-index:99999;padding:20px;font-family:monospace;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;';
             errorDiv.innerHTML = '<h1 style="font-size:2em;margin-bottom:10px">SYSTEM FAILURE</h1>' +
-              '<p style="color:#fff">App failed to launch.</p>' +
+              '<p style="color:#fff">App failed to launch due to dependency conflict.</p>' +
               '<p style="color:#666;font-size:0.8em;margin-top:20px">' + message + '</p>';
             document.body.appendChild(errorDiv);
         }

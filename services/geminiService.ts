@@ -14,16 +14,16 @@ const getDynamicApiKey = async (): Promise<string> => {
 // We do not import { GoogleGenAI } at the top level to avoid app crash on load.
 const loadGeminiSDK = async () => {
     try {
-        // Try standard ESM CDN with latest tag
+        // Use a PINNED version to avoid 404s on @latest redirects
         // @ts-ignore
-        const module = await import("https://esm.sh/@google/genai");
+        const module = await import("https://esm.sh/@google/genai@0.1.2");
         return module.GoogleGenAI;
     } catch (e) {
         console.warn("Primary CDN failed, trying fallback...", e);
         try {
-            // Fallback to unpkg
+            // Fallback to generic URL if version specific fails
             // @ts-ignore
-            const module = await import("https://esm.sh/@google/genai@latest");
+            const module = await import("https://esm.sh/@google/genai");
             return module.GoogleGenAI;
         } catch (e2) {
             console.error("CRITICAL: Failed to load Google GenAI SDK.", e2);

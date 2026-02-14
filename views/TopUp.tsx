@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Language, Transaction, CreditPackage, PromotionCampaign, ViewId } from '../types';
 import { Icons } from '../components/Icons';
 import { getPackages, createPaymentLink, getActivePromotion } from '../services/economyService';
@@ -16,8 +16,8 @@ export const TopUp: React.FC<TopUpProps> = ({ lang, onNavigate }) => {
   const [activeCampaign, setActiveCampaign] = useState<PromotionCampaign | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Timer for Flash Sale
-  const [timeLeft, setTimeLeft] = useState({ h: 0, m: 0, s: 0 });
+  // Timer for Flash Sale (Added Days 'd')
+  const [timeLeft, setTimeLeft] = useState({ d: 0, h: 0, m: 0, s: 0 });
 
   useEffect(() => {
     // Load Packages & Active Campaign
@@ -40,14 +40,15 @@ export const TopUp: React.FC<TopUpProps> = ({ lang, onNavigate }) => {
         const diff = end - now;
 
         if (diff <= 0) {
-            setTimeLeft({ h: 0, m: 0, s: 0 });
+            setTimeLeft({ d: 0, h: 0, m: 0, s: 0 });
             return;
         }
 
+        const d = Math.floor(diff / (1000 * 60 * 60 * 24));
         const h = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
         const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
         const s = Math.floor((diff % (1000 * 60)) / 1000);
-        setTimeLeft({ h, m, s });
+        setTimeLeft({ d, h, m, s });
     }, 1000);
 
     return () => clearInterval(interval);
@@ -56,18 +57,36 @@ export const TopUp: React.FC<TopUpProps> = ({ lang, onNavigate }) => {
   // Load History
   useEffect(() => {
       if (activeTab === 'history') {
-          // Simple local retrieval for demo, ideally fetch from DB via economyService
           const txs = JSON.parse(localStorage.getItem('dmp_transactions') || '[]');
           setHistory(txs.reverse());
       }
   }, [activeTab]);
 
+  // --- SMART COPYWRITING GENERATOR ---
+  // Generates an engaging description based on campaign data instead of raw title
+  const smartDescription = useMemo(() => {
+      if (!activeCampaign) return "";
+      
+      const { name, bonusPercent } = activeCampaign;
+      const isHugeSale = bonusPercent >= 50;
+      
+      if (lang === 'vi') {
+          if (isHugeSale) {
+              return `🔥 Cơ hội vàng từ sự kiện "${name}"! Hệ thống đang tặng thêm +${bonusPercent}% Vcoin cho mọi giao dịch. Đây là thời điểm tốt nhất để tích lũy tài nguyên và sáng tạo không giới hạn. Đừng bỏ lỡ deal hời nhất tháng này!`;
+          }
+          return `✨ Chào mừng sự kiện "${name}". Tận hưởng ưu đãi nạp +${bonusPercent}% Vcoin ngay hôm nay. Nạp càng nhiều, ưu đãi càng lớn. Sẵn sàng bùng nổ cùng các tính năng AI mới nhất!`;
+      } else {
+          if (isHugeSale) {
+              return `🔥 Massive offer from "${name}" event! Get an extra +${bonusPercent}% Vcoin on every top-up. This is the perfect time to stock up and create without limits. Don't miss the best deal of the month!`;
+          }
+          return `✨ Welcome to "${name}". Enjoy a +${bonusPercent}% Vcoin bonus today. The more you top up, the bigger the reward. Get ready to unleash your creativity with our latest AI tools!`;
+      }
+  }, [activeCampaign, lang]);
+
   const handleBuyPackage = async (pkg: CreditPackage) => {
       setLoading(true);
       try {
-          // Create Pending Transaction
           const tx = await createPaymentLink(pkg.id);
-          // Redirect to PayOS Mock Gateway
           onNavigate('payment_gateway', { transaction: tx });
       } catch (e) {
           console.error(e);
@@ -163,26 +182,29 @@ export const TopUp: React.FC<TopUpProps> = ({ lang, onNavigate }) => {
                                     <span className="text-xs font-bold text-audi-yellow uppercase tracking-widest">{activeCampaign.name}</span>
                                 </div>
                                 
-                                <h1 className="text-5xl md:text-7xl font-game font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-slate-400 drop-shadow-[0_4px_0_rgba(0,0,0,0.5)]">
+                                <h1 className="text-5xl md:text-7xl font-game font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-slate-400 drop-shadow-[0_4px_0_rgba(0,0,0,0.5)] leading-tight">
                                     BONUS <span className="text-audi-pink">+{activeCampaign.bonusPercent}%</span> <span className="text-audi-cyan">VCOIN</span>
                                 </h1>
                                 
-                                <p className="text-slate-300 text-sm md:text-base max-w-lg leading-relaxed border-l-4 border-audi-purple pl-4">
-                                    {activeCampaign.marqueeText || (lang === 'vi' ? 'Khuyến mãi đặc biệt trong thời gian có hạn.' : 'Special promotion for a limited time.')}
+                                {/* Smart AI Description */}
+                                <p className="text-slate-300 text-sm md:text-base max-w-lg leading-relaxed border-l-4 border-audi-purple pl-4 italic">
+                                    "{smartDescription}"
                                 </p>
                             </div>
 
-                            {/* Right Timer */}
-                            <div className="flex gap-4 p-6 bg-black/20 rounded-3xl border border-white/10 backdrop-blur-sm shadow-xl transform group-hover:scale-105 transition-transform duration-500">
-                                {['h', 'm', 's'].map((unit) => (
+                            {/* Right Timer (Including Days) */}
+                            <div className="flex gap-2 md:gap-4 p-4 md:p-6 bg-black/20 rounded-3xl border border-white/10 backdrop-blur-sm shadow-xl transform group-hover:scale-105 transition-transform duration-500">
+                                {['d', 'h', 'm', 's'].map((unit) => (
                                     <div key={unit} className="flex flex-col items-center gap-2">
-                                        <div className="w-16 h-20 md:w-20 md:h-24 bg-[#12121a] rounded-xl border-t border-white/20 border-b-4 border-black flex items-center justify-center relative overflow-hidden shadow-inner">
+                                        <div className="w-14 h-16 md:w-20 md:h-24 bg-[#12121a] rounded-xl border-t border-white/20 border-b-4 border-black flex items-center justify-center relative overflow-hidden shadow-inner">
                                             <div className="absolute top-1/2 w-full h-px bg-black/50"></div>
-                                            <span className="font-mono text-4xl md:text-5xl font-bold text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.5)]">
+                                            <span className="font-mono text-3xl md:text-5xl font-bold text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.5)]">
                                                 {String(timeLeft[unit as keyof typeof timeLeft]).padStart(2, '0')}
                                             </span>
                                         </div>
-                                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{unit === 'h' ? 'HOURS' : unit === 'm' ? 'MINUTES' : 'SECONDS'}</span>
+                                        <span className="text-[9px] md:text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                                            {unit === 'd' ? 'DAYS' : unit === 'h' ? 'HOURS' : unit === 'm' ? 'MINS' : 'SECS'}
+                                        </span>
                                     </div>
                                 ))}
                             </div>

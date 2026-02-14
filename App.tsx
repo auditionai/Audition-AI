@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Layout } from './components/Layout';
 import { Home } from './views/Home';
@@ -17,6 +18,7 @@ import { logVisit } from './services/economyService';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAppReady, setIsAppReady] = useState(false); // New state to control render
   const [userRole, setUserRole] = useState<'user' | 'admin'>('user');
   const [lang, setLang] = useState<Language>(APP_CONFIG.ui.default_language);
   const [theme, setTheme] = useState<Theme>('light');
@@ -27,42 +29,57 @@ function App() {
   const [showCheckin, setShowCheckin] = useState(false);
 
   useEffect(() => {
-    // Initial theme setup
+    // 1. IMMEDIATE UI SETUP
     if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
       setTheme('dark');
       document.documentElement.classList.add('dark');
     }
+    
+    // Mark App as ready to render immediately to prevent white/black screen
+    setIsAppReady(true);
 
-    // Log Visit (Tracks every reload)
-    logVisit();
+    // 2. DEFERRED BACKGROUND TASKS (Network Calls)
+    // We use setTimeout to push these tasks to the end of the event loop,
+    // allowing the UI to paint first.
+    const initNetworkServices = async () => {
+        try {
+            console.log("[App] Starting background services...");
+            
+            // Log Visit
+            logVisit().catch(e => console.warn("Visit log failed", e));
 
-    // Check for existing session on load
-    if (supabase) {
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            if (session) {
-                setIsAuthenticated(true);
-                checkAdminRole(session.user.id);
+            // Check Auth
+            if (supabase) {
+                const { data: { session } } = await supabase.auth.getSession();
+                if (session) {
+                    setIsAuthenticated(true);
+                    checkAdminRole(session.user.id);
+                }
+
+                // Listen for auth changes
+                supabase.auth.onAuthStateChange((_event, session) => {
+                    if (session) {
+                        setIsAuthenticated(true);
+                        checkAdminRole(session.user.id);
+                    } else {
+                        setIsAuthenticated(false);
+                    }
+                });
             }
-        });
+        } catch (error) {
+            console.warn("[App] Background service error:", error);
+            // Even if network fails, we stay in unauthenticated mode (Landing Page)
+            // instead of crashing.
+        }
+    };
 
-        // Listen for auth changes (login/logout/oauth redirect)
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-            if (session) {
-                setIsAuthenticated(true);
-                checkAdminRole(session.user.id);
-            } else {
-                setIsAuthenticated(false);
-            }
-        });
+    setTimeout(initNetworkServices, 100);
 
-        return () => subscription.unsubscribe();
-    }
   }, []);
 
   const checkAdminRole = async (userId: string) => {
       if (!supabase) return;
       
-      // FIX: Check 'users' table and 'is_admin' column
       try {
           const { data, error } = await supabase
             .from('users')
@@ -71,18 +88,18 @@ function App() {
             .single();
 
           if (!error && data && data.is_admin === true) {
-              console.log("Admin privileges granted.");
+              console.log("[Auth] Admin privileges granted.");
               setUserRole('admin');
           } else {
               setUserRole('user');
           }
       } catch (e) {
-          console.error("Error checking admin role:", e);
+          console.error("[Auth] Error checking admin role:", e);
       }
   };
 
   const handleLogin = () => {
-    // This is primarily for the "Mock" login flow if Supabase fails or is offline
+    // Fallback login flow
     setIsAuthenticated(true);
   };
 
@@ -92,7 +109,7 @@ function App() {
       }
       setIsAuthenticated(false);
       setCurrentView('home');
-      setUserRole('user'); // Reset role
+      setUserRole('user');
   };
 
   const handleNavigate = (view: ViewId) => {
@@ -140,6 +157,16 @@ function App() {
         return <Home lang={lang} onSelectFeature={handleSelectFeature} onNavigate={handleNavigate} onOpenCheckin={() => setShowCheckin(true)} />;
     }
   };
+
+  // 3. RENDER UI IMMEDIATELY
+  // While 'isAppReady' is technically true almost instantly, 
+  // 'isAuthenticated' determines WHICH screen to show.
+  // Default is Landing (Unauthenticated).
+  
+  if (!isAppReady) {
+      // Very brief fallback, usually invisible due to React 18 batching
+      return null; 
+  }
 
   if (!isAuthenticated) {
     return <Landing onEnter={handleLogin} />;

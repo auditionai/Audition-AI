@@ -30,17 +30,17 @@ const extractImage = (response: any): string | null => {
 }
 
 /**
- * generateImage - Enhanced for "3D Game Character" Training
+ * generateImage - Enhanced for "3D Game Character" Training with Smart Reference
  * 
  * @param prompt User prompt
  * @param aspectRatio Aspect ratio
- * @param styleRefBase64 This is now treated as "STRUCTURAL/POSE REFERENCE" (e.g., the template image)
+ * @param styleRefBase64 This is the "REFERENCE IMAGE" (Ảnh mẫu)
  * @param faceRefBase64 This is the "IDENTITY/FACE REFERENCE" (User upload)
  */
 export const generateImage = async (
     prompt: string, 
     aspectRatio: string = "1:1", 
-    styleRefBase64?: string, // TEMPLATE IMAGE (Structure/Pose)
+    styleRefBase64?: string, // REFERENCE IMAGE (The Blueprint)
     faceRefBase64?: string  // USER UPLOAD (Face/Identity)
 ): Promise<string | null> => {
   
@@ -93,13 +93,15 @@ export const generateImage = async (
     
     User Request: "${prompt}".`;
 
-    // 4. INJECT "SOLID FENCE" LOGIC (Structure)
+    // 4. INJECT "SMART BLUEPRINT" LOGIC (Reference Image)
+    // "Teach" AI to think flexibly about the reference
     if (structureRefIndex > 0) {
-        fullPrompt += `\n\n[STRUCTURAL CONDITIONING - STAGE 1]:
-        Look at the ${indexToWord(structureRefIndex)} image. This is the "MASTER POSE".
-        - You MUST copy the exact pose, camera angle, and composition of this image.
-        - Ignore the face in this image. Only use the body structure and background environment.
-        - Use the area inside the black border (if visible) as the solid composition guide.`;
+        fullPrompt += `\n\n[VISUAL BLUEPRINT INSTRUCTION - STAGE 1]:
+        Look at the ${indexToWord(structureRefIndex)} image. This is your "VISUAL BLUEPRINT".
+        - ANALYZE: Understand the vibe, the camera angle, the pose of the character, and the background composition.
+        - ADAPT: Do not blindly copy pixel-for-pixel. Instead, "re-stage" this photo using the 3D character described in the prompt.
+        - FLEXIBILITY: If the user prompt describes a different outfit or gender, CHANGE IT, but keep the *soul* (pose/composition) of this reference image.
+        - Structure: Use the black border area (if present) as the framing guide.`;
     }
 
     // 5. INJECT "FACE ID" LOGIC (Identity)

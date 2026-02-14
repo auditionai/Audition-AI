@@ -32,6 +32,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
   // --- CONFIGURATION STATE ---
   const [activeMode, setActiveMode] = useState<GenMode>('single');
   const [characters, setCharacters] = useState<CharacterInput[]>([{ id: 1, bodyImage: null, faceImage: null, gender: 'female', isFaceLocked: false }]);
+  
+  // Reference Image (The missing feature restored)
   const [refImage, setRefImage] = useState<string | null>(null);
   
   // Prompt & Text
@@ -54,14 +56,14 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
 
   // Helper Refs
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const activeUploadType = useRef<{ charId: number, type: 'body' | 'face' } | { type: 'ref' } | null>(null);
+  const activeUploadType = useRef<{ charId?: number, type: 'body' | 'face' | 'ref' } | null>(null);
 
   // --- STEPS CONFIGURATION ---
   const processingSteps = [
       { label: { vi: 'Khởi tạo Worker & Tài nguyên', en: 'Initializing Workers & Resources' } },
       { label: { vi: 'Xác thực & Trừ Vcoin', en: 'Verifying & Deducting Vcoin' } },
-      { label: { vi: 'Phân tích Pose từ ảnh mẫu (Solid Fence)', en: 'Extracting Pose from Template' } },
-      { label: { vi: 'Quét FaceID & Trích xuất đặc điểm', en: 'Scanning FaceID & Features' } }, // Highlight this
+      { label: { vi: 'Phân tích Pose & Bố cục từ Ảnh Mẫu', en: 'Analyzing Pose & Composition from Reference' } },
+      { label: { vi: 'Quét FaceID & Trích xuất đặc điểm', en: 'Scanning FaceID & Features' } }, 
       { label: { vi: 'Kết nối Gemini 3.0 Vision (3D Artist Mode)', en: 'Connecting Gemini 3.0 Vision' } },
       { label: { vi: 'Đang render 3D (Blind Box Style)...', en: 'Rendering 3D Character...' } },
       { label: { vi: 'Hoàn tất & Xử lý hậu kỳ', en: 'Finalizing & Post-processing' } }
@@ -113,7 +115,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
           const result = reader.result as string;
           const currentType = activeUploadType.current;
 
-          if ('charId' in currentType!) {
+          if (currentType?.type === 'ref') {
+             setRefImage(result);
+          } else if (currentType?.charId) {
               setCharacters(prev => prev.map(c => {
                   if (c.id === currentType.charId) {
                       return currentType.type === 'body' 
@@ -122,8 +126,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                   }
                   return c;
               }));
-          } else {
-              setRefImage(result);
           }
       };
       reader.readAsDataURL(file);
@@ -198,16 +200,15 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       setCurrentStep(2);
       
       // Step 2: PREPARE PAYLOADS
-      // LOGIC FIX: 
-      // - Structural Reference = Feature Preview Image (The "Sample") OR User's Body Upload (if any)
-      // - Face Reference = User's Face Upload
       
       let structureRefData: string | undefined = undefined;
       let faceRefData: string | undefined = undefined;
 
-      // 1. Prepare Structure (Pose)
-      // Priority: User Body Upload > Reference Image Upload > Feature Preview Image
-      let sourceForStructure = characters[0].bodyImage || refImage || feature.preview_image;
+      // 1. Prepare Structure (Pose) - THE FIX
+      // Logic: Reference Image (Explicit) > Feature Preview Image (Implicit)
+      // We do NOT use bodyImage for structure anymore, bodyImage is for outfit reference mostly.
+      
+      let sourceForStructure = refImage || feature.preview_image;
       
       // If it's a URL (preview_image), convert to Base64
       if (sourceForStructure.startsWith('http')) {
@@ -248,7 +249,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       setCurrentStep(5);
 
       // Step 5: Generating
-      // Pass structureRefData as arg 3 (Pose), faceRefData as arg 4 (Identity)
+      // Pass structureRefData as arg 3 (Pose/Reference), faceRefData as arg 4 (Identity)
       const result = await generateImage(finalPrompt, aspectRatio, structureRefData, faceRefData);
 
       if (result) {
@@ -463,11 +464,11 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                             </div>
                             
                             <div className="flex flex-col gap-3 mt-7">
-                                {/* Body Upload Slot */}
+                                {/* Body Upload Slot (Legacy / Optional) */}
                                 <div className="space-y-1">
                                     <div className="flex items-center gap-1.5 mb-1 px-1">
                                         <Icons.User className="w-3 h-3 text-audi-pink" />
-                                        <span className="text-[9px] font-bold text-slate-400 uppercase">{lang === 'vi' ? 'Ảnh Dáng (Tùy chọn)' : 'Body (Optional)'}</span>
+                                        <span className="text-[9px] font-bold text-slate-400 uppercase">{lang === 'vi' ? 'Body (Optional)' : 'Body (Optional)'}</span>
                                     </div>
                                     <div 
                                         onClick={() => handleUploadClick(char.id, 'body')}
@@ -490,7 +491,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                                     </div>
                                 </div>
 
-                                {/* Face Upload Slot with Lock Button */}
+                                {/* Face Upload Slot */}
                                 <div className="space-y-1">
                                     <div className="flex items-center gap-1.5 mb-1 px-1">
                                         <Icons.Eye className="w-3 h-3 text-audi-cyan" />
@@ -500,7 +501,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                                         onClick={() => handleUploadClick(char.id, 'face')}
                                         className={`w-full aspect-square bg-black/40 rounded-xl border-2 border-dashed cursor-pointer relative overflow-hidden group/item transition-colors ${char.isFaceLocked ? 'border-audi-cyan shadow-[0_0_10px_rgba(33,212,253,0.3)]' : 'border-slate-700 hover:border-audi-cyan'}`}
                                     >
-                                        {/* SCAN EFFECT LAYER */}
+                                        {/* SCAN EFFECT */}
                                         {isScanningFace && char.faceImage && (
                                             <div className="absolute inset-0 z-30 pointer-events-none">
                                                 <div className="absolute inset-0 bg-audi-cyan/20 animate-pulse"></div>
@@ -571,12 +572,12 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                 </div>
             </div>
 
-            {/* --- SECTION 2: PROMPT --- */}
+            {/* --- SECTION 2: PROMPT & REFERENCE --- */}
             <div className="space-y-3">
                 <div className="flex items-center justify-between px-2">
                     <h3 className="font-bold text-white flex items-center gap-2">
                         <div className="w-6 h-6 rounded-full bg-audi-purple flex items-center justify-center text-xs">2</div>
-                        {lang === 'vi' ? 'Mô tả nhân vật' : 'Description'}
+                        {lang === 'vi' ? 'Mô tả & Ảnh Mẫu' : 'Prompt & Reference'}
                     </h3>
                     <button 
                         onClick={handleSuggestPrompt}
@@ -587,13 +588,51 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                         {lang === 'vi' ? 'Magic Prompt' : 'Magic Prompt'}
                     </button>
                 </div>
-                <div className="relative group">
-                    <textarea 
-                        value={prompt}
-                        onChange={(e) => setPrompt(e.target.value)}
-                        placeholder={lang === 'vi' ? "Mô tả trang phục, bối cảnh (Ví dụ: Váy dạ hội đỏ, sân khấu neon...)" : "Describe outfit, background..."}
-                        className="w-full h-32 bg-[#12121a] border border-white/10 rounded-2xl p-4 text-sm text-white placeholder-slate-600 focus:border-audi-purple outline-none resize-none transition-all focus:shadow-[0_0_20px_rgba(183,33,255,0.1)]"
-                    />
+                
+                <div className="flex flex-col md:flex-row gap-4">
+                    {/* RESTORED: Reference Image Upload */}
+                    <div className="w-full md:w-1/3 space-y-2">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block pl-1">
+                            {lang === 'vi' ? 'Ảnh Mẫu (Pose/Bố cục)' : 'Reference Image'}
+                        </label>
+                        <div 
+                            onClick={handleRefUploadClick}
+                            className="w-full aspect-[3/4] md:h-32 md:aspect-auto bg-[#12121a] border-2 border-dashed border-slate-700 hover:border-audi-purple rounded-2xl cursor-pointer relative overflow-hidden group transition-all"
+                        >
+                             {refImage ? (
+                                <>
+                                    <img src={refImage} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" alt="Reference" />
+                                    <div className="absolute top-1 right-1 p-1 bg-black/60 rounded-full cursor-pointer hover:bg-red-500 transition-colors z-10" 
+                                         onClick={(e) => { e.stopPropagation(); setRefImage(null); }}>
+                                        <Icons.X className="w-3 h-3 text-white" />
+                                    </div>
+                                    <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[9px] font-bold text-center py-1">
+                                        REFERENCE ACTIVE
+                                    </div>
+                                </>
+                             ) : (
+                                <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500 group-hover:text-audi-purple">
+                                    <Icons.Image className="w-6 h-6 mb-1" />
+                                    <span className="text-[9px] uppercase font-bold text-center leading-tight px-4">
+                                        {lang === 'vi' ? 'Tải ảnh mẫu để AI học theo' : 'Upload Reference'}
+                                    </span>
+                                </div>
+                             )}
+                        </div>
+                    </div>
+
+                    {/* Prompt Text Area */}
+                    <div className="w-full md:w-2/3 relative group">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block pl-1 mb-2">
+                            {lang === 'vi' ? 'Mô tả chi tiết' : 'Detailed Prompt'}
+                        </label>
+                        <textarea 
+                            value={prompt}
+                            onChange={(e) => setPrompt(e.target.value)}
+                            placeholder={lang === 'vi' ? "Mô tả trang phục, bối cảnh (Ví dụ: Váy dạ hội đỏ, sân khấu neon...)" : "Describe outfit, background..."}
+                            className="w-full h-32 bg-[#12121a] border border-white/10 rounded-2xl p-4 text-sm text-white placeholder-slate-600 focus:border-audi-purple outline-none resize-none transition-all focus:shadow-[0_0_20px_rgba(183,33,255,0.1)]"
+                        />
+                    </div>
                 </div>
             </div>
 

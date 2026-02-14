@@ -6,6 +6,7 @@ import { generateImage, suggestPrompt } from '../../services/geminiService';
 import { saveImageToStorage } from '../../services/storageService';
 import { createSolidFence, optimizePayload, urlToBase64 } from '../../utils/imageProcessor';
 import { getUserProfile, updateUserBalance } from '../../services/economyService';
+import { useNotification } from '../../components/NotificationSystem';
 
 interface GenerationToolProps {
   feature: Feature;
@@ -25,6 +26,9 @@ interface CharacterInput {
 }
 
 export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang }) => {
+  // Notification Hook
+  const { notify } = useNotification();
+
   // --- STAGE MANAGEMENT ---
   const [stage, setStage] = useState<Stage>('input');
   
@@ -168,7 +172,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
 
   const handleGenerate = async () => {
     if (!prompt.trim()) {
-         alert(lang === 'vi' ? 'Vui lòng nhập mô tả' : 'Please enter a prompt');
+         notify(lang === 'vi' ? 'Vui lòng nhập mô tả' : 'Please enter a prompt', 'warning');
          return;
     }
 
@@ -176,7 +180,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
     const user = await getUserProfile();
 
     if ((user.balance || 0) < cost) {
-        alert(lang === 'vi' ? 'Số dư không đủ!' : 'Insufficient balance!');
+        notify(lang === 'vi' ? 'Số dư không đủ! Vui lòng nạp thêm.' : 'Insufficient balance!', 'error');
         return;
     }
     
@@ -270,13 +274,14 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
         
         setResultImage(result);
         setStage('result');
+        notify(lang === 'vi' ? 'Tạo ảnh thành công!' : 'Generation successful!', 'success');
       } else {
           throw new Error("No result returned");
       }
     } catch (error) {
       console.error(error);
       await updateUserBalance(cost, `Refund: ${feature.name['en']} Failed`, 'refund');
-      alert(lang === 'vi' ? 'Tạo ảnh thất bại. Đã hoàn lại Vcoin.' : 'Generation failed. Vcoin refunded.');
+      notify(lang === 'vi' ? 'Tạo ảnh thất bại. Đã hoàn lại Vcoin.' : 'Generation failed. Vcoin refunded.', 'error');
       setStage('input'); 
     }
   };
@@ -290,9 +295,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
     finally { setIsSuggesting(false); }
   };
 
-  // ... (Keep existing Ratios, Styles, Render Logic unchanged) ...
-  // Re-using the same UI render code as before
-  
   // --- DATA LISTS ---
   const styles = [
       { id: '3d', name: '3D Game', icon: Icons.MessageCircle }, 
@@ -430,6 +432,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
             </div>
         </div>
 
+        {/* ... Rest of input UI (Character, Prompt, Config) is identical but wrapped ... */}
+        {/* Skipping repetitive code for brevity, assumes standard structure */}
         <div className="w-full space-y-6">
             
             {/* --- SECTION 1: CHARACTER UPLOAD --- */}
@@ -449,7 +453,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                             </div>
                             
                             <div className="flex flex-col gap-3 mt-7">
-                                {/* Body Upload Slot (Legacy / Optional) */}
+                                {/* Body Upload Slot */}
                                 <div className="space-y-1">
                                     <div className="flex items-center gap-1.5 mb-1 px-1">
                                         <Icons.User className="w-3 h-3 text-audi-pink" />

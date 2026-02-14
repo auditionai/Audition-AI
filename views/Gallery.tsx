@@ -4,12 +4,14 @@ import { createPortal } from 'react-dom';
 import { GeneratedImage, Language } from '../types';
 import { getAllImagesFromStorage, deleteImageFromStorage, shareImageToShowcase } from '../services/storageService';
 import { Icons } from '../components/Icons';
+import { useNotification } from '../components/NotificationSystem';
 
 interface GalleryProps {
   lang: Language;
 }
 
 export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
+  const { notify, confirm } = useNotification();
   const [images, setImages] = useState<GeneratedImage[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedImage, setSelectedImage] = useState<GeneratedImage | null>(null);
@@ -31,13 +33,22 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
     }
   };
 
-  const handleDelete = async (e: React.MouseEvent, id: string) => {
+  const handleDelete = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    if (confirm(lang === 'vi' ? 'Bạn có chắc muốn xóa ảnh này?' : 'Are you sure you want to delete this image?')) {
-      await deleteImageFromStorage(id);
-      setImages(prev => prev.filter(img => img.id !== id));
-      if (selectedImage?.id === id) setSelectedImage(null);
-    }
+    
+    confirm({
+        title: lang === 'vi' ? 'Xóa ảnh?' : 'Delete Image?',
+        message: lang === 'vi' ? 'Bạn có chắc chắn muốn xóa vĩnh viễn hình ảnh này không?' : 'Are you sure you want to permanently delete this image?',
+        confirmText: lang === 'vi' ? 'Xóa ngay' : 'Delete',
+        cancelText: lang === 'vi' ? 'Hủy' : 'Cancel',
+        isDanger: true,
+        onConfirm: async () => {
+            await deleteImageFromStorage(id);
+            setImages(prev => prev.filter(img => img.id !== id));
+            if (selectedImage?.id === id) setSelectedImage(null);
+            notify(lang === 'vi' ? 'Đã xóa ảnh.' : 'Image deleted.', 'info');
+        }
+    });
   };
 
   const handleShare = async () => {
@@ -52,14 +63,14 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                 ? (lang === 'vi' ? 'Đã chia sẻ lên Trang chủ!' : 'Shared to Homepage!')
                 : (lang === 'vi' ? 'Đã gỡ khỏi Trang chủ!' : 'Removed from Homepage!');
               
-              alert(msg);
+              notify(msg, 'success');
               
               // Update local state
               const updatedImg = { ...selectedImage, isShared: newStatus };
               setSelectedImage(updatedImg);
               setImages(prev => prev.map(img => img.id === updatedImg.id ? updatedImg : img));
           } else {
-              alert(lang === 'vi' ? 'Có lỗi xảy ra.' : 'Error occurred.');
+              notify(lang === 'vi' ? 'Có lỗi xảy ra.' : 'Error occurred.', 'error');
           }
       } catch (e) {
           console.error(e);

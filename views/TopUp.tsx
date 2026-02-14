@@ -1,9 +1,9 @@
 
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { Language, Transaction, CreditPackage, PromotionCampaign, ViewId, HistoryItem } from '../types';
 import { Icons } from '../components/Icons';
 import { getPackages, createPaymentLink, getActivePromotion, getUnifiedHistory } from '../services/economyService';
+import { useNotification } from '../components/NotificationSystem';
 
 interface TopUpProps {
   lang: Language;
@@ -11,6 +11,7 @@ interface TopUpProps {
 }
 
 export const TopUp: React.FC<TopUpProps> = ({ lang, onNavigate }) => {
+  const { notify } = useNotification();
   const [activeTab, setActiveTab] = useState<'packages' | 'history'>('packages');
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [packages, setPackages] = useState<CreditPackage[]>([]);
@@ -101,7 +102,7 @@ export const TopUp: React.FC<TopUpProps> = ({ lang, onNavigate }) => {
           }
       } catch (e) {
           console.error(e);
-          alert(lang === 'vi' ? 'Có lỗi khi tạo giao dịch' : 'Error creating transaction');
+          notify(lang === 'vi' ? 'Có lỗi khi tạo giao dịch' : 'Error creating transaction', 'error');
       } finally {
           setLoading(false);
       }

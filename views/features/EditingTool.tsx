@@ -1,9 +1,11 @@
+
 import React, { useState, useRef } from 'react';
 import { Feature, Language, GeneratedImage } from '../../types';
 import { Icons } from '../../components/Icons';
 import { editImageWithInstructions } from '../../services/geminiService';
 import { saveImageToStorage } from '../../services/storageService';
 import { getUserProfile, updateUserBalance } from '../../services/economyService';
+import { useNotification } from '../../components/NotificationSystem';
 
 interface EditingToolProps {
   feature: Feature;
@@ -11,6 +13,7 @@ interface EditingToolProps {
 }
 
 export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
+  const { notify } = useNotification();
   const [prompt, setPrompt] = useState('');
   const [loading, setLoading] = useState(false);
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
@@ -29,7 +32,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
 
   const handleExecute = async () => {
      if (!uploadedImage) {
-         alert(lang === 'vi' ? 'Vui lòng tải ảnh lên' : 'Please upload an image');
+         notify(lang === 'vi' ? 'Vui lòng tải ảnh lên' : 'Please upload an image', 'warning');
          return;
      }
 
@@ -37,7 +40,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
      const user = await getUserProfile();
      
      if ((user.balance || 0) < cost) {
-         alert(lang === 'vi' ? 'Số dư không đủ (Cần 1 Vcoin)' : 'Insufficient balance (Need 1 Vcoin)');
+         notify(lang === 'vi' ? 'Số dư không đủ (Cần 1 Vcoin)' : 'Insufficient balance (Need 1 Vcoin)', 'error');
          return;
      }
 
@@ -69,6 +72,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
                 engine: feature.engine
             };
             await saveImageToStorage(newImage);
+            notify(lang === 'vi' ? 'Chỉnh sửa thành công!' : 'Editing successful!', 'success');
          } else {
              throw new Error("Editing failed");
          }
@@ -76,7 +80,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
          console.error(error);
          // Refund on fail
          await updateUserBalance(cost, `Refund: ${feature.name['en']} Failed`, 'refund');
-         alert(lang === 'vi' ? 'Chỉnh sửa thất bại' : 'Editing failed');
+         notify(lang === 'vi' ? 'Chỉnh sửa thất bại' : 'Editing failed', 'error');
      } finally {
          setLoading(false);
      }

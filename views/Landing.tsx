@@ -5,12 +5,14 @@ import { Icons } from '../components/Icons';
 import { getShowcaseImages } from '../services/storageService';
 import { supabase } from '../services/supabaseClient';
 import { GeneratedImage } from '../types';
+import { useNotification } from '../components/NotificationSystem';
 
 interface LandingProps {
   onEnter: () => void;
 }
 
 export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
+  const { notify } = useNotification();
   const [showLogin, setShowLogin] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login'); 
   const [beat, setBeat] = useState(false);
@@ -86,7 +88,7 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
 
   const handleAuthAction = async () => {
       if (!email || !password) {
-          alert("Vui lòng nhập đầy đủ Email và Mật khẩu");
+          notify("Vui lòng nhập đầy đủ Email và Mật khẩu", 'warning');
           return;
       }
       
@@ -117,7 +119,7 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
                   });
                   if (error) throw error;
                   
-                  alert("Đăng ký thành công! Vui lòng kiểm tra email để xác thực hoặc đăng nhập ngay.");
+                  notify("Đăng ký thành công! Vui lòng kiểm tra email để xác thực hoặc đăng nhập ngay.", 'success');
                   setAuthMode('login'); // Switch to login
               }
           } else {
@@ -125,7 +127,7 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
               onEnter();
           }
       } catch (e: any) {
-          alert(`Lỗi: ${e.message}`);
+          notify(`Lỗi: ${e.message}`, 'error');
       } finally {
           setIsLoggingIn(false);
       }
@@ -133,7 +135,7 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
 
   const handleGoogleLogin = async () => {
       if (!supabase) {
-          alert("Chế độ Offline: Đăng nhập giả lập thành công.");
+          notify("Chế độ Offline: Đăng nhập giả lập thành công.", 'success');
           onEnter(); 
           return;
       }
@@ -151,14 +153,14 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
 
           if (error) {
               if (error.message.includes('redirect_uri_mismatch')) {
-                  alert(`Lỗi Cấu Hình: Vui lòng thêm "${window.location.origin}" vào Redirect URLs trên Supabase.`);
+                  notify(`Lỗi Cấu Hình: Vui lòng thêm "${window.location.origin}" vào Redirect URLs trên Supabase.`, 'error');
               } else {
-                  alert("Lỗi đăng nhập: " + error.message);
+                  notify("Lỗi đăng nhập: " + error.message, 'error');
               }
               setIsLoggingIn(false);
           }
       } catch (e: any) {
-          alert("Lỗi: " + e.message);
+          notify("Lỗi: " + e.message, 'error');
           setIsLoggingIn(false);
       }
   };

@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Language, ViewId, UserProfile } from '../types';
 import { Icons } from '../components/Icons';
 import { redeemGiftcode, getUserProfile, updateAdminUserProfile } from '../services/economyService';
+import { useNotification } from '../components/NotificationSystem';
 
 interface SettingsProps {
   lang: Language;
@@ -12,6 +13,7 @@ interface SettingsProps {
 }
 
 export const Settings: React.FC<SettingsProps> = ({ lang, onLogout, onNavigate, isAdmin }) => {
+  const { notify } = useNotification();
   const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'giftcode'>('profile');
   
   // Initialize with empty/loading state rather than hardcoded demo data
@@ -51,13 +53,9 @@ export const Settings: React.FC<SettingsProps> = ({ lang, onLogout, onNavigate, 
           
           // Update local state
           setUserProfile(updatedProfile);
-          alert(lang === 'vi' ? 'Đã cập nhật thông tin thành công!' : 'Profile updated successfully!');
-          
-          // Force reload to reflect changes in Header/Layout immediately if needed, 
-          // though Layout has its own poller, a page reload ensures total sync.
-          // window.location.reload(); 
+          notify(lang === 'vi' ? 'Đã cập nhật thông tin thành công!' : 'Profile updated successfully!', 'success');
       } catch (e) {
-          alert('Error updating profile');
+          notify('Error updating profile', 'error');
       }
   };
 
@@ -65,10 +63,10 @@ export const Settings: React.FC<SettingsProps> = ({ lang, onLogout, onNavigate, 
       if (!giftcode) return;
       const result = await redeemGiftcode(giftcode);
       if (result.success) {
-          alert(`Thành công! Bạn nhận được ${result.reward} Vcoin.`);
+          notify(`Thành công! Bạn nhận được ${result.reward} Vcoin.`, 'success');
           setGiftcode('');
       } else {
-          alert(`Lỗi: ${result.message}`);
+          notify(`Lỗi: ${result.message}`, 'error');
       }
   };
 

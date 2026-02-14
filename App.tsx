@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect } from 'react';
 import { Layout } from './components/Layout';
 import { Home } from './views/Home';
@@ -12,13 +11,14 @@ import { Support } from './views/Support';
 import { Gallery } from './views/Gallery';
 import { Landing } from './views/Landing';
 import { TopUp } from './views/TopUp';
-import { PayOSGateway } from './views/PayOSGateway'; // New Import
+import { PayOSGateway } from './views/PayOSGateway'; 
 import { Language, Theme, ViewId, Feature } from './types';
 import { APP_CONFIG } from './constants';
 import { supabase } from './services/supabaseClient';
 import { logVisit } from './services/economyService';
+import { NotificationProvider, useNotification } from './components/NotificationSystem';
 
-function App() {
+function AppContent() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userRole, setUserRole] = useState<'user' | 'admin'>('user');
   const [lang, setLang] = useState<Language>(APP_CONFIG.ui.default_language);
@@ -31,6 +31,9 @@ function App() {
 
   // Lifted state for Daily Checkin Modal
   const [showCheckin, setShowCheckin] = useState(false);
+
+  // Custom Notification Hook
+  const { notify } = useNotification();
 
   useEffect(() => {
     // Initial theme setup
@@ -69,23 +72,26 @@ function App() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const status = params.get('status');
-    // const code = params.get('orderCode'); 
     
     if (status) {
         // Clear params to avoid loop/dirty URL
         window.history.replaceState({}, '', window.location.pathname);
         
         if (status === 'PAID') {
-             // We can optionally verify orderCode against DB here, but simplest is just to notify user 
-             // and redirect to TopUp History where they can see the 'pending' turning to 'success' via webhook.
-             alert(lang === 'vi' ? 'Thanh toán thành công! Vcoin sẽ được cộng trong giây lát.' : 'Payment successful! Vcoin will be added shortly.');
+             notify(
+                 lang === 'vi' ? 'Thanh toán thành công! Vcoin sẽ được cộng trong giây lát.' : 'Payment successful! Vcoin will be added shortly.',
+                 'success'
+             );
              setCurrentView('topup');
         } else if (status === 'CANCELLED') {
-             alert(lang === 'vi' ? 'Đã hủy thanh toán.' : 'Payment cancelled.');
+             notify(
+                 lang === 'vi' ? 'Đã hủy thanh toán.' : 'Payment cancelled.',
+                 'error'
+             );
              setCurrentView('topup');
         }
     }
-  }, [lang]); // Depend on lang to show localized alert
+  }, [lang, notify]); 
 
   const checkAdminRole = async (userId: string) => {
       if (!supabase) return;
@@ -169,7 +175,7 @@ function App() {
             <PayOSGateway 
                 transaction={pendingTransaction} 
                 onSuccess={() => {
-                    alert('Giao dịch đã được ghi nhận! Vui lòng chờ Admin duyệt.');
+                    notify('Giao dịch đã được ghi nhận! Vui lòng chờ Admin duyệt.', 'info');
                     handleNavigate('topup');
                 }}
                 onCancel={() => handleNavigate('topup')}
@@ -183,9 +189,6 @@ function App() {
   if (!isAuthenticated) {
     return <Landing onEnter={handleLogin} />;
   }
-
-  // Hide Layout Shell for Fullscreen Pages (like Gateway)
-  const isFullscreen = currentView === 'payment_gateway';
 
   return (
     <Layout
@@ -203,4 +206,11 @@ function App() {
   );
 }
 
-export default App;
+// Wrap App with Global Providers
+export default function App() {
+    return (
+        <NotificationProvider>
+            <AppContent />
+        </NotificationProvider>
+    );
+}

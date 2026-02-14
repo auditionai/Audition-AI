@@ -1,5 +1,4 @@
 
-
 import { GoogleGenAI } from "@google/genai";
 import { getSystemApiKey } from "./economyService";
 
@@ -30,18 +29,18 @@ const extractImage = (response: any): string | null => {
 }
 
 /**
- * generateImage - Enhanced for "3D Game Character" Training with Smart Reference
+ * generateImage - STRICT MODE
  * 
- * @param prompt User prompt
+ * @param prompt User prompt (Absolute Command)
  * @param aspectRatio Aspect ratio
- * @param styleRefBase64 This is the "REFERENCE IMAGE" (Ảnh mẫu)
- * @param faceRefBase64 This is the "IDENTITY/FACE REFERENCE" (User upload)
+ * @param styleRefBase64 This is the "TEMPLATE/POSE" (Ảnh mẫu - ONLY POSE)
+ * @param faceRefBase64 This is the "IDENTITY/SOURCE" (Ảnh tải lên - FACE + OUTFIT)
  */
 export const generateImage = async (
     prompt: string, 
     aspectRatio: string = "1:1", 
-    styleRefBase64?: string, // REFERENCE IMAGE (The Blueprint)
-    faceRefBase64?: string  // USER UPLOAD (Face/Identity)
+    styleRefBase64?: string, // TEMPLATE (Pose Only)
+    faceRefBase64?: string  // USER UPLOAD (Identity + Outfit source)
 ): Promise<string | null> => {
   
   try {
@@ -54,7 +53,6 @@ export const generateImage = async (
     let identityRefIndex = -1;
     
     // 1. ADD STRUCTURAL REFERENCE (The Template/Sample Image)
-    // This dictates Pose, Composition, Lighting angle.
     if (styleRefBase64) {
       parts.push({
         inlineData: {
@@ -67,7 +65,6 @@ export const generateImage = async (
     }
 
     // 2. ADD IDENTITY REFERENCE (The User's Uploaded Photo)
-    // This dictates Face features, and potentially clothing style if user wants.
     if (faceRefBase64) {
         parts.push({
             inlineData: {
@@ -81,40 +78,43 @@ export const generateImage = async (
 
     const indexToWord = (idx: number) => idx === 1 ? 'first' : 'second';
 
-    // 3. CONSTRUCT "EXPERT 3D ARTIST" PROMPT
-    let fullPrompt = `You are a Senior 3D Character Artist for a high-end game studio. 
-    Your task is to create a "3D Game Character Render" (Not a real photo).
+    // 3. CONSTRUCT "ABSOLUTE COMMAND" PROMPT
+    // We treat the AI as a strict renderer, not a creative artist.
+    let fullPrompt = `ROLE: You are a strict 3D Rendering Engine. You must follow instructions precisely without creative deviation.
     
-    Target Style: Semi-realistic 3D, similar to 'Audition' or 'Blind Box' figures. 
-    - Skin: Smooth, plastic/silicone texture, subsurface scattering.
-    - Lighting: Studio softbox, rim lighting, volumetric fog.
-    - Engine: Unreal Engine 5, Octane Render.
-    - DO NOT generate: Real human skin texture, pores, imperfections, noise, grain.
+    TASK: Generate a 3D Game Character (Audition/Blind Box style).
+    render_engine: Unreal Engine 5, Octane Render.
+    skin_texture: Smooth, semi-realistic, doll-like.
+    lighting: Studio softbox.
     
-    User Request: "${prompt}".`;
+    USER COMMAND: "${prompt}".`;
 
-    // 4. INJECT "SMART BLUEPRINT" LOGIC (Reference Image)
-    // "Teach" AI to think flexibly about the reference
+    // 4. INJECT "STRICT POSE" LOGIC (Sample Image)
     if (structureRefIndex > 0) {
-        fullPrompt += `\n\n[VISUAL BLUEPRINT INSTRUCTION - STAGE 1]:
-        Look at the ${indexToWord(structureRefIndex)} image. This is your "VISUAL BLUEPRINT".
-        - ANALYZE: Understand the vibe, the camera angle, the pose of the character, and the background composition.
-        - ADAPT: Do not blindly copy pixel-for-pixel. Instead, "re-stage" this photo using the 3D character described in the prompt.
-        - FLEXIBILITY: If the user prompt describes a different outfit or gender, CHANGE IT, but keep the *soul* (pose/composition) of this reference image.
-        - Structure: Use the black border area (if present) as the framing guide.`;
+        fullPrompt += `\n\n[IMAGE ${indexToWord(structureRefIndex)} IS THE POSE REFERENCE]:
+        - COMMAND: Use ONLY the pose, skeleton, camera angle, and background composition from this image.
+        - FORBIDDEN: DO NOT COPY the clothing, outfit, colors, or hair from this image.
+        - FORBIDDEN: DO NOT use the face from this image.
+        - TREAT AS: A gray mannequin/wireframe for structure only.`;
     }
 
-    // 5. INJECT "FACE ID" LOGIC (Identity)
+    // 5. INJECT "STRICT IDENTITY" LOGIC (User Upload)
     if (identityRefIndex > 0) {
-        fullPrompt += `\n\n[IDENTITY INJECTION - STAGE 2]:
-        Look at the ${indexToWord(identityRefIndex)} image. This is the "FACE SOURCE".
-        - Extract facial features (eyes, nose shape, mouth) from this image.
-        - "Sprite Injection": Transplant these facial features onto the character in the Structural image.
-        - CRITICAL: Adapt the face to the "3D Game Character" style. Do not paste a photorealistic face on a 3D body. Stylize the face to match the target aesthetic (bigger eyes, smoother skin).`;
+        fullPrompt += `\n\n[IMAGE ${indexToWord(identityRefIndex)} IS THE CHARACTER SOURCE]:
+        - IDENTITY COMMAND: You MUST copy the face, eyes, and facial features exactly from this image. 
+        - EXPRESSION COMMAND: Keep the facial expression exactly as it is in this image unless the prompt explicitly says "smile" or "angry". Do not invent expressions.
+        - OUTFIT COMMAND: Unless the User Command explicitly describes a new dress/outfit, you MUST COPY the clothing/outfit from THIS image.
+        - LOGIC: Apply the Face and Outfit from Image ${indexToWord(identityRefIndex)} onto the Pose of Image ${indexToWord(structureRefIndex)}.`;
     } else {
-        // If no face uploaded, ensure the style is still 3D
+        // If no user upload, assume generic 3D style
         fullPrompt += `\n\nEnsure the character face is stylized, beautiful, 3D aesthetic.`;
     }
+
+    // 6. FINAL OVERRIDE CHECKS
+    fullPrompt += `\n\n[FINAL CHECKS]:
+    1. Did you copy the clothes from the Pose Reference (Image ${indexToWord(structureRefIndex)})? IF YES -> STOP. REVERT. Use the Character Source clothes or the Prompt description.
+    2. Is the face generic? IF YES -> STOP. FIX. Make it look exactly like Image ${indexToWord(identityRefIndex)}.
+    3. Output must be 3D Render style, NOT photorealistic.`;
 
     parts.push({ text: fullPrompt });
 

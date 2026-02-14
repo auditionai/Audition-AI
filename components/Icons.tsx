@@ -19,7 +19,7 @@ import {
   ChevronRight,
   ChevronLeft,
   Heart,
-  QrCode,
+  QrCode, 
   Phone,
   Mail,
   MessageCircle,
@@ -54,7 +54,8 @@ import {
   Plus,
   Trash,
   Search,
-  Clock
+  Clock,
+  Copy
 } from 'lucide-react';
 
 export const Icons = {
@@ -112,5 +113,6 @@ export const Icons = {
   Plus,
   Trash,
   Search,
-  Clock
+  Clock,
+  Copy
 };

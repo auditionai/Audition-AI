@@ -2,7 +2,7 @@
 
 export type Language = 'vi' | 'en';
 export type Theme = 'light' | 'dark';
-export type ViewId = 'home' | 'tools' | 'gallery' | 'admin' | 'guide' | 'about' | 'tool_workspace' | 'support' | 'settings' | 'topup';
+export type ViewId = 'home' | 'tools' | 'gallery' | 'admin' | 'guide' | 'about' | 'tool_workspace' | 'support' | 'settings' | 'topup' | 'payment_gateway';
 
 export interface LocalizedString {
   vi: string;

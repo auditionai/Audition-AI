@@ -1,33 +1,23 @@
 
 import React, { useState, useEffect } from 'react';
-import { createPortal } from 'react-dom';
-import { Language, Transaction, CreditPackage, PromotionCampaign } from '../types';
+import { Language, Transaction, CreditPackage, PromotionCampaign, ViewId } from '../types';
 import { Icons } from '../components/Icons';
-import { getPackages, createPaymentLink, mockPayOSSuccess, getActivePromotion } from '../services/economyService';
+import { getPackages, createPaymentLink, getActivePromotion } from '../services/economyService';
 
 interface TopUpProps {
   lang: Language;
+  onNavigate: (view: ViewId, data?: any) => void;
 }
 
-export const TopUp: React.FC<TopUpProps> = ({ lang }) => {
+export const TopUp: React.FC<TopUpProps> = ({ lang, onNavigate }) => {
   const [activeTab, setActiveTab] = useState<'packages' | 'history'>('packages');
-  const [selectedPkg, setSelectedPkg] = useState<string | null>(null);
-  const [transaction, setTransaction] = useState<Transaction | null>(null);
-  const [loading, setLoading] = useState(false);
   const [history, setHistory] = useState<Transaction[]>([]);
   const [packages, setPackages] = useState<CreditPackage[]>([]);
   const [activeCampaign, setActiveCampaign] = useState<PromotionCampaign | null>(null);
+  const [loading, setLoading] = useState(false);
 
   // Timer for Flash Sale
   const [timeLeft, setTimeLeft] = useState({ h: 0, m: 0, s: 0 });
-
-  // Bank Info for Real QR Generation (VietQR)
-  const BANK_INFO = {
-      bankId: 'MB', // MB Bank, TCB, VCB...
-      accountNo: '0824280497', 
-      accountName: 'DONG MINH PHU',
-      template: 'compact' 
-  };
 
   useEffect(() => {
     // Load Packages & Active Campaign
@@ -51,7 +41,6 @@ export const TopUp: React.FC<TopUpProps> = ({ lang }) => {
 
         if (diff <= 0) {
             setTimeLeft({ h: 0, m: 0, s: 0 });
-            // Optionally refresh campaign status here
             return;
         }
 
@@ -67,87 +56,83 @@ export const TopUp: React.FC<TopUpProps> = ({ lang }) => {
   // Load History
   useEffect(() => {
       if (activeTab === 'history') {
+          // Simple local retrieval for demo, ideally fetch from DB via economyService
           const txs = JSON.parse(localStorage.getItem('dmp_transactions') || '[]');
           setHistory(txs.reverse());
       }
   }, [activeTab]);
 
-  const handlePayment = async () => {
-      if (!selectedPkg) return;
+  const handleBuyPackage = async (pkg: CreditPackage) => {
       setLoading(true);
       try {
-          const tx = await createPaymentLink(selectedPkg);
-          setTransaction(tx);
-          
-          // Simulation: Auto-check status after 15s (In real app, use WebSocket or Polling)
-          setTimeout(async () => {
-              const success = await mockPayOSSuccess(tx.id);
-              if (success) {
-                  // Alert logic or Toast here
-              }
-          }, 15000); 
+          // Create Pending Transaction
+          const tx = await createPaymentLink(pkg.id);
+          // Redirect to PayOS Mock Gateway
+          onNavigate('payment_gateway', { transaction: tx });
       } catch (e) {
           console.error(e);
+          alert(lang === 'vi' ? 'Có lỗi khi tạo giao dịch' : 'Error creating transaction');
       } finally {
           setLoading(false);
       }
   };
 
-  const copyToClipboard = (text: string) => {
-      navigator.clipboard.writeText(text);
-      alert(lang === 'vi' ? 'Đã sao chép!' : 'Copied!');
-  };
-
   return (
-    <div className="pb-24 animate-fade-in max-w-5xl mx-auto">
+    <div className="pb-32 animate-fade-in max-w-6xl mx-auto">
         
-        {/* Tabs */}
-        <div className="flex justify-center mb-8">
-            <div className="bg-[#12121a] p-1.5 rounded-2xl border border-white/10 flex gap-1 shadow-lg">
+        {/* --- HEADER TABS --- */}
+        <div className="flex justify-center mb-10 sticky top-[72px] z-30">
+            <div className="bg-[#0c0c14]/90 backdrop-blur-md p-1.5 rounded-full border border-white/20 flex gap-1 shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
                 <button 
                     onClick={() => setActiveTab('packages')}
-                    className={`px-6 py-2 rounded-xl text-sm font-bold transition-all ${activeTab === 'packages' ? 'bg-white text-black' : 'text-slate-500 hover:text-white'}`}
+                    className={`px-8 py-3 rounded-full text-sm font-bold uppercase tracking-wider transition-all flex items-center gap-2 ${activeTab === 'packages' ? 'bg-gradient-to-r from-audi-pink to-audi-purple text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
                 >
+                    <Icons.Zap className="w-4 h-4" />
                     {lang === 'vi' ? 'Nạp Vcoin' : 'Top Up'}
                 </button>
                 <button 
                      onClick={() => setActiveTab('history')}
-                     className={`px-6 py-2 rounded-xl text-sm font-bold transition-all ${activeTab === 'history' ? 'bg-white text-black' : 'text-slate-500 hover:text-white'}`}
+                     className={`px-8 py-3 rounded-full text-sm font-bold uppercase tracking-wider transition-all flex items-center gap-2 ${activeTab === 'history' ? 'bg-white text-black shadow-lg' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
                 >
-                    {lang === 'vi' ? 'Lịch sử giao dịch' : 'History'}
+                    <Icons.Clock className="w-4 h-4" />
+                    {lang === 'vi' ? 'Lịch sử' : 'History'}
                 </button>
             </div>
         </div>
 
         {activeTab === 'history' ? (
-            <div className="glass-panel p-6 rounded-3xl min-h-[400px]">
-                <h2 className="text-xl font-bold text-white mb-6">Transaction Logs</h2>
+            <div className="glass-panel p-8 rounded-[2rem] min-h-[500px] border border-white/10 relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-audi-cyan via-white to-audi-cyan opacity-50"></div>
+                <h2 className="text-2xl font-game font-bold text-white mb-8 flex items-center gap-3">
+                    <Icons.Clock className="w-6 h-6 text-audi-cyan" />
+                    {lang === 'vi' ? 'Lịch Sử Giao Dịch' : 'Transaction Logs'}
+                </h2>
                 <div className="overflow-x-auto">
                     <table className="w-full text-left text-sm text-slate-400">
-                        <thead className="text-xs uppercase bg-white/5 text-slate-300">
+                        <thead className="text-xs uppercase bg-white/5 text-slate-300 font-bold tracking-wider">
                             <tr>
-                                <th className="px-4 py-3">Time</th>
-                                <th className="px-4 py-3">Code</th>
-                                <th className="px-4 py-3">Amount</th>
-                                <th className="px-4 py-3">Coins</th>
-                                <th className="px-4 py-3">Status</th>
+                                <th className="px-6 py-4 rounded-l-xl">Thời gian</th>
+                                <th className="px-6 py-4">Mã đơn</th>
+                                <th className="px-6 py-4">Giá trị</th>
+                                <th className="px-6 py-4">Vcoin</th>
+                                <th className="px-6 py-4 rounded-r-xl">Trạng thái</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-white/5">
                             {history.length === 0 ? (
-                                <tr><td colSpan={5} className="text-center py-8">No transactions found</td></tr>
+                                <tr><td colSpan={5} className="text-center py-12 text-slate-500 italic">Chưa có giao dịch nào</td></tr>
                             ) : history.map(tx => (
-                                <tr key={tx.id} className="hover:bg-white/5">
-                                    <td className="px-4 py-3">{new Date(tx.createdAt).toLocaleString()}</td>
-                                    <td className="px-4 py-3 font-mono text-white">{tx.code}</td>
-                                    <td className="px-4 py-3 text-white">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(tx.amount)}</td>
-                                    <td className="px-4 py-3 text-audi-yellow font-bold">+{tx.coins}</td>
-                                    <td className="px-4 py-3">
-                                        <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${
-                                            tx.status === 'paid' ? 'bg-green-500/20 text-green-500' : 
-                                            tx.status === 'pending' ? 'bg-yellow-500/20 text-yellow-500' : 'bg-red-500/20 text-red-500'
+                                <tr key={tx.id} className="hover:bg-white/5 transition-colors group">
+                                    <td className="px-6 py-4 font-mono">{new Date(tx.createdAt).toLocaleString()}</td>
+                                    <td className="px-6 py-4 font-mono text-white group-hover:text-audi-cyan">{tx.code}</td>
+                                    <td className="px-6 py-4 text-white font-bold">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(tx.amount)}</td>
+                                    <td className="px-6 py-4 text-audi-yellow font-bold text-base">+{tx.coins}</td>
+                                    <td className="px-6 py-4">
+                                        <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${
+                                            tx.status === 'paid' ? 'bg-green-500/10 border-green-500 text-green-500' : 
+                                            tx.status === 'pending' ? 'bg-yellow-500/10 border-yellow-500 text-yellow-500' : 'bg-red-500/10 border-red-500 text-red-500'
                                         }`}>
-                                            {tx.status}
+                                            {tx.status === 'paid' ? 'THÀNH CÔNG' : tx.status === 'pending' ? 'CHỜ DUYỆT' : 'HỦY/LỖI'}
                                         </span>
                                     </td>
                                 </tr>
@@ -158,208 +143,133 @@ export const TopUp: React.FC<TopUpProps> = ({ lang }) => {
             </div>
         ) : (
             <>
-                {/* Header Banner (Active only if Active Campaign found) */}
-                {activeCampaign && (
-                    <div className="relative rounded-3xl overflow-hidden mb-8 border border-audi-pink/30 shadow-[0_0_30px_rgba(255,0,153,0.2)]">
-                        <div className="absolute inset-0 bg-gradient-to-r from-audi-purple/80 to-audi-pink/80 z-0"></div>
-                        <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] z-0"></div>
+                {/* --- HERO BANNER (EVENT) --- */}
+                {activeCampaign ? (
+                    <div className="relative rounded-[2.5rem] overflow-hidden mb-12 border-2 border-audi-pink/50 shadow-[0_0_50px_rgba(255,0,153,0.3)] group">
+                        {/* Dynamic Background */}
+                        <div className="absolute inset-0 bg-gradient-to-r from-[#2a0b36] via-[#4a0e44] to-[#0c0c14] z-0"></div>
+                        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-30 z-0"></div>
                         
-                        <div className="relative z-10 p-6 md:p-10 flex flex-col md:flex-row items-center justify-between gap-6">
-                            <div>
-                                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-black/30 border border-white/20 mb-2">
-                                    <Icons.Zap className="w-4 h-4 text-audi-yellow animate-pulse" />
-                                    <span className="text-xs font-bold text-audi-yellow uppercase tracking-wider">{activeCampaign.name}</span>
+                        {/* Floating Shapes */}
+                        <div className="absolute top-[-50%] left-[-20%] w-[500px] h-[500px] bg-audi-pink/20 rounded-full blur-[100px] animate-pulse"></div>
+                        <div className="absolute bottom-[-50%] right-[-20%] w-[500px] h-[500px] bg-audi-cyan/20 rounded-full blur-[100px] animate-pulse delay-1000"></div>
+
+                        <div className="relative z-10 p-8 md:p-12 flex flex-col md:flex-row items-center justify-between gap-8">
+                            
+                            {/* Left Content */}
+                            <div className="flex-1 text-center md:text-left space-y-4">
+                                <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-black/40 border border-audi-yellow/50 backdrop-blur-md shadow-[0_0_15px_rgba(251,218,97,0.4)] animate-bounce-slow">
+                                    <Icons.Zap className="w-4 h-4 text-audi-yellow fill-current" />
+                                    <span className="text-xs font-bold text-audi-yellow uppercase tracking-widest">{activeCampaign.name}</span>
                                 </div>
-                                <h1 className="text-3xl md:text-5xl font-game font-bold text-white mb-2">
-                                    BONUS +{activeCampaign.bonusPercent}% <span className="text-audi-cyan">VCOIN</span>
+                                
+                                <h1 className="text-5xl md:text-7xl font-game font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-slate-400 drop-shadow-[0_4px_0_rgba(0,0,0,0.5)]">
+                                    BONUS <span className="text-audi-pink">+{activeCampaign.bonusPercent}%</span> <span className="text-audi-cyan">VCOIN</span>
                                 </h1>
-                                <p className="text-white/80 text-sm max-w-md">
+                                
+                                <p className="text-slate-300 text-sm md:text-base max-w-lg leading-relaxed border-l-4 border-audi-purple pl-4">
                                     {activeCampaign.marqueeText || (lang === 'vi' ? 'Khuyến mãi đặc biệt trong thời gian có hạn.' : 'Special promotion for a limited time.')}
                                 </p>
                             </div>
-                            {/* Timer */}
-                            <div className="flex gap-4">
+
+                            {/* Right Timer */}
+                            <div className="flex gap-4 p-6 bg-black/20 rounded-3xl border border-white/10 backdrop-blur-sm shadow-xl transform group-hover:scale-105 transition-transform duration-500">
                                 {['h', 'm', 's'].map((unit) => (
-                                    <div key={unit} className="flex flex-col items-center">
-                                        <div className="w-12 h-12 md:w-16 md:h-16 bg-black/40 backdrop-blur-md border border-white/20 rounded-xl flex items-center justify-center">
-                                            <span className="font-mono text-2xl md:text-3xl font-bold text-white">
+                                    <div key={unit} className="flex flex-col items-center gap-2">
+                                        <div className="w-16 h-20 md:w-20 md:h-24 bg-[#12121a] rounded-xl border-t border-white/20 border-b-4 border-black flex items-center justify-center relative overflow-hidden shadow-inner">
+                                            <div className="absolute top-1/2 w-full h-px bg-black/50"></div>
+                                            <span className="font-mono text-4xl md:text-5xl font-bold text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.5)]">
                                                 {String(timeLeft[unit as keyof typeof timeLeft]).padStart(2, '0')}
                                             </span>
                                         </div>
-                                        <span className="text-[10px] font-bold text-white/50 uppercase mt-1">{unit}</span>
+                                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{unit === 'h' ? 'HOURS' : unit === 'm' ? 'MINUTES' : 'SECONDS'}</span>
                                     </div>
                                 ))}
                             </div>
                         </div>
                     </div>
+                ) : (
+                    <div className="text-center mb-12 py-8 bg-gradient-to-r from-audi-purple/10 to-audi-cyan/10 rounded-3xl border border-white/10">
+                        <h2 className="text-3xl font-game font-bold text-white mb-2">STORE VCOIN</h2>
+                        <p className="text-slate-400">Nạp Vcoin để trải nghiệm các tính năng AI cao cấp</p>
+                    </div>
                 )}
 
-                {/* Packages Grid */}
-                <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
-                    <Icons.ShoppingBag className="w-5 h-5 text-audi-cyan" />
-                    {lang === 'vi' ? 'Chọn gói nạp' : 'Select Package'}
-                </h2>
+                {/* --- PACKAGES GRID --- */}
+                <div className="flex items-center gap-3 mb-8">
+                     <div className="w-10 h-10 rounded-xl bg-audi-cyan/20 flex items-center justify-center text-audi-cyan">
+                         <Icons.ShoppingBag className="w-5 h-5" />
+                     </div>
+                     <h2 className="text-2xl font-bold text-white">{lang === 'vi' ? 'Chọn gói nạp' : 'Select Package'}</h2>
+                </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                     {packages.map((pkg) => {
-                        // LOGIC: If Active Campaign exists, use its bonus. Else use Package Specific %.
                         const activeBonusPercent = activeCampaign ? activeCampaign.bonusPercent : pkg.bonusPercent;
                         const hasBonus = activeBonusPercent > 0;
+                        const finalCoins = Math.floor(pkg.coin + (pkg.coin * activeBonusPercent / 100));
 
                         return (
                             <div 
                                 key={pkg.id}
-                                onClick={() => setSelectedPkg(pkg.id)}
-                                className={`relative p-6 rounded-2xl border-2 cursor-pointer transition-all duration-300 group ${selectedPkg === pkg.id ? `${pkg.colorTheme} bg-white/5 scale-105 shadow-[0_0_20px_rgba(0,0,0,0.5)]` : 'border-white/10 bg-[#0c0c14] hover:border-white/30'}`}
+                                className={`group relative bg-[#12121a] rounded-[2rem] p-6 border transition-all duration-300 hover:-translate-y-2 hover:shadow-[0_10px_40px_rgba(0,0,0,0.5)] flex flex-col ${pkg.isPopular ? 'border-audi-pink shadow-[0_0_20px_rgba(255,0,153,0.1)]' : 'border-white/10 hover:border-white/30'}`}
                             >
+                                {/* Badges */}
                                 {pkg.isPopular && (
-                                    <div className="absolute top-0 right-0 bg-audi-pink text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl rounded-tr-lg shadow-lg">
-                                        HOT
+                                    <div className="absolute top-0 right-0 bg-gradient-to-bl from-audi-pink to-audi-purple text-white text-[10px] font-bold px-4 py-1.5 rounded-tr-[1.8rem] rounded-bl-xl shadow-lg z-10 flex items-center gap-1">
+                                        <Icons.Flame className="w-3 h-3 fill-white" /> HOT
                                     </div>
                                 )}
-                                
-                                <div className="flex justify-between items-start mb-4">
-                                    <div className={`w-12 h-12 rounded-full flex items-center justify-center bg-white/5`}>
-                                        <Icons.Gem className={`w-6 h-6 ${pkg.id === 'pkg_4' ? 'text-audi-pink' : pkg.id === 'pkg_3' ? 'text-audi-purple' : pkg.id === 'pkg_2' ? 'text-audi-cyan' : 'text-slate-400'}`} />
+                                {hasBonus && (
+                                    <div className="absolute top-0 left-0 bg-audi-lime text-black text-[10px] font-bold px-4 py-1.5 rounded-tl-[1.8rem] rounded-br-xl shadow-lg z-10">
+                                        BONUS +{activeBonusPercent}%
                                     </div>
-                                    {selectedPkg === pkg.id && <div className="w-4 h-4 rounded-full bg-audi-cyan flex items-center justify-center"><Icons.Sparkles className="w-2.5 h-2.5 text-black" /></div>}
+                                )}
+
+                                {/* Icon & Coin */}
+                                <div className="flex flex-col items-center justify-center py-6 border-b border-white/5 border-dashed relative">
+                                    <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-4 transition-transform group-hover:scale-110 duration-500 bg-gradient-to-b ${pkg.id === 'pkg_4' ? 'from-audi-pink/20 to-transparent' : pkg.id === 'pkg_3' ? 'from-audi-purple/20 to-transparent' : 'from-audi-cyan/20 to-transparent'}`}>
+                                        <Icons.Gem className={`w-10 h-10 ${pkg.id === 'pkg_4' ? 'text-audi-pink' : pkg.id === 'pkg_3' ? 'text-audi-purple' : 'text-audi-cyan'} drop-shadow-[0_0_10px_currentColor]`} />
+                                    </div>
+                                    <div className="text-center">
+                                        <div className="text-4xl font-game font-black text-white mb-1 group-hover:text-audi-yellow transition-colors">{finalCoins}</div>
+                                        <div className="text-xs font-bold text-slate-500 uppercase tracking-widest">VCOIN</div>
+                                        {hasBonus && <div className="text-[10px] text-slate-400 line-through mt-1">{pkg.coin}</div>}
+                                    </div>
                                 </div>
 
-                                <h3 className="text-lg font-bold text-white mb-1">{pkg.name}</h3>
-                                <div className="flex items-baseline gap-1 mb-4">
-                                    <span className="text-2xl font-black text-audi-yellow">{pkg.coin}</span>
-                                    <span className="text-xs text-slate-400">Vcoin</span>
+                                {/* Details */}
+                                <div className="flex-1 py-6 space-y-3">
+                                    <div className="flex justify-between items-center text-sm">
+                                        <span className="text-slate-400">Giá trị thực</span>
+                                        <span className="text-white font-bold">1 Vcoin = 1.000đ</span>
+                                    </div>
+                                    <div className="flex justify-between items-center text-sm">
+                                        <span className="text-slate-400">Bonus Event</span>
+                                        <span className="text-audi-lime font-bold">+{Math.floor(pkg.coin * activeBonusPercent / 100)} VC</span>
+                                    </div>
+                                    <div className="w-full h-px bg-white/5 my-2"></div>
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-slate-400 font-bold uppercase text-xs">Thành tiền</span>
+                                        <span className="text-xl font-bold text-white">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(pkg.price)}</span>
+                                    </div>
                                 </div>
 
-                                <div className="w-full h-px bg-white/10 mb-4"></div>
-
-                                <div className="flex items-center justify-between mb-4">
-                                    <span className="text-sm text-slate-400">Bonus</span>
-                                    {hasBonus ? (
-                                        <span className="text-sm font-bold text-green-400 animate-pulse">
-                                            +{activeBonusPercent}%
-                                        </span>
-                                    ) : (
-                                        <span className="text-sm font-bold text-slate-500">{pkg.bonusText || '0%'}</span>
-                                    )}
-                                </div>
-
-                                <button className={`w-full py-3 rounded-xl font-bold text-sm transition-colors ${selectedPkg === pkg.id ? 'bg-white text-black' : 'bg-white/10 text-white group-hover:bg-white/20'}`}>
-                                    {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(pkg.price)}
+                                {/* Button */}
+                                <button 
+                                    onClick={() => handleBuyPackage(pkg)}
+                                    disabled={loading}
+                                    className={`w-full py-4 rounded-xl font-bold text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all relative overflow-hidden ${pkg.isPopular ? 'bg-gradient-to-r from-audi-pink to-audi-purple text-white shadow-[0_5px_20px_rgba(255,0,153,0.3)] hover:shadow-[0_5px_30px_rgba(255,0,153,0.5)]' : 'bg-white text-black hover:bg-slate-200'}`}
+                                >
+                                    <span className="relative z-10">{lang === 'vi' ? 'Nạp Ngay' : 'Buy Now'}</span>
+                                    <Icons.ChevronRight className="w-4 h-4 relative z-10 group-hover:translate-x-1 transition-transform" />
                                 </button>
                             </div>
                         );
                     })}
                 </div>
-
-                {/* Professional Payment Modal */}
-                {transaction && createPortal(
-                    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-fade-in">
-                        <div className="w-full max-w-4xl bg-white rounded-3xl overflow-hidden shadow-2xl flex flex-col md:flex-row">
-                             
-                             {/* Left: Info */}
-                             <div className="flex-1 p-8 md:p-10 flex flex-col justify-between bg-[#f8f9fa] text-slate-800">
-                                 <div>
-                                     <h3 className="text-2xl font-bold text-[#002e6e] mb-2">{lang === 'vi' ? 'Thanh toán đơn hàng' : 'Payment Information'}</h3>
-                                     <p className="text-slate-500 text-sm mb-8">Vui lòng thực hiện chuyển khoản theo thông tin bên dưới.</p>
-                                     
-                                     <div className="space-y-6">
-                                         <div className="flex justify-between items-center border-b border-slate-200 pb-3">
-                                             <span className="text-slate-500 font-medium">Ngân hàng</span>
-                                             <div className="flex items-center gap-2">
-                                                 <span className="font-bold text-[#002e6e]">{BANK_INFO.bankId} Bank</span>
-                                             </div>
-                                         </div>
-                                         
-                                         <div className="flex justify-between items-center border-b border-slate-200 pb-3">
-                                             <span className="text-slate-500 font-medium">Chủ tài khoản</span>
-                                             <span className="font-bold text-slate-800 uppercase">{BANK_INFO.accountName}</span>
-                                         </div>
-
-                                         <div className="flex justify-between items-center border-b border-slate-200 pb-3">
-                                             <span className="text-slate-500 font-medium">Số tài khoản</span>
-                                             <div className="flex items-center gap-2">
-                                                 <span className="font-bold text-lg text-slate-800">{BANK_INFO.accountNo}</span>
-                                                 <button onClick={() => copyToClipboard(BANK_INFO.accountNo)} className="text-audi-purple hover:text-purple-700"><Icons.Share className="w-4 h-4" /></button>
-                                             </div>
-                                         </div>
-
-                                         <div className="flex justify-between items-center border-b border-slate-200 pb-3">
-                                             <span className="text-slate-500 font-medium">Số tiền</span>
-                                             <span className="font-bold text-2xl text-[#002e6e]">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(transaction.amount)}</span>
-                                         </div>
-
-                                         <div className="flex justify-between items-center bg-yellow-50 p-3 rounded-xl border border-yellow-200">
-                                             <span className="text-yellow-700 font-bold">Nội dung CK</span>
-                                             <div className="flex items-center gap-2">
-                                                 <span className="font-mono font-bold text-lg text-red-500">{transaction.code}</span>
-                                                 <button onClick={() => copyToClipboard(transaction.code)} className="text-audi-purple hover:text-purple-700"><Icons.Share className="w-4 h-4" /></button>
-                                             </div>
-                                         </div>
-                                     </div>
-                                 </div>
-
-                                 <div className="mt-8 text-xs text-slate-500">
-                                     * Vcoin sẽ được cộng tự động sau 1-3 phút khi hệ thống nhận được tiền.
-                                 </div>
-                             </div>
-
-                             {/* Right: QR Code */}
-                             <div className="w-full md:w-[400px] bg-[#002e6e] p-8 md:p-10 flex flex-col items-center justify-center text-white relative overflow-hidden">
-                                 {/* Decorative Circles */}
-                                 <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
-                                 <div className="absolute bottom-0 left-0 w-64 h-64 bg-audi-pink/20 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2"></div>
-
-                                 <h4 className="text-lg font-bold mb-6 relative z-10">Quét mã QR để thanh toán</h4>
-                                 
-                                 <div className="bg-white p-4 rounded-2xl shadow-2xl mb-6 relative z-10">
-                                     {/* Real VietQR Generation */}
-                                     <img 
-                                        src={`https://img.vietqr.io/image/${BANK_INFO.bankId}-${BANK_INFO.accountNo}-${BANK_INFO.template}.png?amount=${transaction.amount}&addInfo=${transaction.code}&accountName=${encodeURIComponent(BANK_INFO.accountName)}`}
-                                        alt="VietQR" 
-                                        className="w-56 h-56 object-contain" 
-                                     />
-                                 </div>
-
-                                 <div className="flex items-center gap-2 text-sm text-white/80 relative z-10">
-                                     <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
-                                     Đang chờ thanh toán...
-                                 </div>
-
-                                 <button onClick={() => setTransaction(null)} className="absolute top-4 right-4 text-white/50 hover:text-white transition-colors">
-                                     <Icons.X className="w-6 h-6" />
-                                 </button>
-                             </div>
-
-                        </div>
-                    </div>,
-                    document.body
-                )}
-
-                {/* Action Bar */}
-                <div className="glass-panel p-6 rounded-2xl flex flex-col md:flex-row justify-between items-center gap-4">
-                    <div className="flex items-center gap-3">
-                         <div className="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center">
-                             <Icons.Shield className="w-5 h-5 text-green-500" />
-                         </div>
-                         <div className="text-sm">
-                             <div className="text-white font-bold">{lang === 'vi' ? 'Thanh toán an toàn' : 'Secure Payment'}</div>
-                             <div className="text-slate-400 text-xs">Hỗ trợ mọi ngân hàng Việt Nam</div>
-                         </div>
-                    </div>
-                    
-                    <button 
-                        onClick={handlePayment}
-                        disabled={loading || !selectedPkg}
-                        className="w-full md:w-auto px-8 py-4 bg-gradient-to-r from-audi-pink to-audi-purple rounded-xl font-bold text-white shadow-lg hover:shadow-audi-pink/40 hover:scale-105 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        {loading ? <Icons.Sparkles className="animate-spin w-5 h-5" /> : <Icons.QrCode className="w-5 h-5" />}
-                        {lang === 'vi' ? 'Tạo Mã Thanh Toán' : 'Generate Payment QR'}
-                    </button>
-                </div>
             </>
         )}
-
     </div>
   );
 };

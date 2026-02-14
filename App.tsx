@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Layout } from './components/Layout';
 import { Home } from './views/Home';
@@ -10,6 +11,7 @@ import { Support } from './views/Support';
 import { Gallery } from './views/Gallery';
 import { Landing } from './views/Landing';
 import { TopUp } from './views/TopUp';
+import { PayOSGateway } from './views/PayOSGateway'; // New Import
 import { Language, Theme, ViewId, Feature } from './types';
 import { APP_CONFIG } from './constants';
 import { supabase } from './services/supabaseClient';
@@ -23,6 +25,9 @@ function App() {
   const [currentView, setCurrentView] = useState<ViewId>('home');
   const [selectedFeature, setSelectedFeature] = useState<Feature | null>(null);
   
+  // State for Payment Flow
+  const [pendingTransaction, setPendingTransaction] = useState<any>(null);
+
   // Lifted state for Daily Checkin Modal
   const [showCheckin, setShowCheckin] = useState(false);
 
@@ -62,7 +67,6 @@ function App() {
   const checkAdminRole = async (userId: string) => {
       if (!supabase) return;
       
-      // FIX: Check 'users' table and 'is_admin' column
       try {
           const { data, error } = await supabase
             .from('users')
@@ -82,7 +86,6 @@ function App() {
   };
 
   const handleLogin = () => {
-    // This is primarily for the "Mock" login flow if Supabase fails or is offline
     setIsAuthenticated(true);
   };
 
@@ -95,9 +98,11 @@ function App() {
       setUserRole('user'); // Reset role
   };
 
-  const handleNavigate = (view: ViewId) => {
+  const handleNavigate = (view: ViewId, data?: any) => {
     setCurrentView(view);
-    if (view !== 'tool_workspace') {
+    if (view === 'payment_gateway' && data?.transaction) {
+        setPendingTransaction(data.transaction);
+    } else if (view !== 'tool_workspace') {
       setSelectedFeature(null);
     }
   };
@@ -135,7 +140,18 @@ function App() {
       case 'gallery':
         return <Gallery lang={lang} />;
       case 'topup':
-        return <TopUp lang={lang} />;
+        return <TopUp lang={lang} onNavigate={handleNavigate} />;
+      case 'payment_gateway':
+        return pendingTransaction ? (
+            <PayOSGateway 
+                transaction={pendingTransaction} 
+                onSuccess={() => {
+                    alert('Giao dịch đã được ghi nhận! Vui lòng chờ Admin duyệt.');
+                    handleNavigate('topup');
+                }}
+                onCancel={() => handleNavigate('topup')}
+            />
+        ) : <TopUp lang={lang} onNavigate={handleNavigate} />;
       default:
         return <Home lang={lang} onSelectFeature={handleSelectFeature} onNavigate={handleNavigate} onOpenCheckin={() => setShowCheckin(true)} />;
     }
@@ -144,6 +160,9 @@ function App() {
   if (!isAuthenticated) {
     return <Landing onEnter={handleLogin} />;
   }
+
+  // Hide Layout Shell for Fullscreen Pages (like Gateway)
+  const isFullscreen = currentView === 'payment_gateway';
 
   return (
     <Layout

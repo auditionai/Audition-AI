@@ -282,7 +282,7 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
       </div>
 
       {/* --- AI SHOWCASE (Marquee Effect) --- */}
-      <div className="py-16 md:py-24 relative z-20 bg-gradient-to-b from-[#090014] to-[#120024] overflow-hidden">
+      <div className="py-16 md:py-24 relative z-20 bg-gradient-to-b from-[#090014] to-[#120024] overflow-hidden border-t border-white/5">
           <div className="max-w-7xl mx-auto px-6 mb-8 md:mb-12">
               <div className="flex flex-col md:flex-row items-end justify-between gap-4">
                   <div>
@@ -308,6 +308,92 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
                    {showcaseImages.map((item, i) => (
                        <ShowcaseCard key={`s2-${i}`} item={item} />
                    ))}
+              </div>
+          </div>
+      </div>
+
+      {/* --- FEATURES SECTION (RESTORED) --- */}
+      <div className="py-16 md:py-24 relative z-20 bg-[#090014]">
+          <div className="max-w-7xl mx-auto px-6">
+              <div className="text-center mb-16">
+                  <h2 className="font-game text-3xl md:text-5xl font-bold text-white mb-4">TÍNH NĂNG ĐỘC QUYỀN</h2>
+                  <div className="w-24 h-1 bg-audi-pink mx-auto"></div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                  <div className="bg-[#12121a] p-8 rounded-[2rem] border border-white/10 hover:border-audi-cyan transition-colors group">
+                      <div className="w-16 h-16 bg-audi-cyan/10 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                          <Icons.Wand className="w-8 h-8 text-audi-cyan" />
+                      </div>
+                      <h3 className="text-xl font-bold text-white mb-3">Tạo Nhân Vật 3D</h3>
+                      <p className="text-slate-400 text-sm leading-relaxed">
+                          Biến hình ảnh cá nhân thành nhân vật game Audition 3D sống động chỉ trong vài giây với công nghệ Gemini Vision 3.0.
+                      </p>
+                  </div>
+
+                  <div className="bg-[#12121a] p-8 rounded-[2rem] border border-white/10 hover:border-audi-pink transition-colors group">
+                      <div className="w-16 h-16 bg-audi-pink/10 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                          <Icons.Heart className="w-8 h-8 text-audi-pink" />
+                      </div>
+                      <h3 className="text-xl font-bold text-white mb-3">Chế Độ Cặp Đôi</h3>
+                      <p className="text-slate-400 text-sm leading-relaxed">
+                          Ghép đôi nhân vật, tạo dáng chụp ảnh Couple lãng mạn chuẩn phong cách Audition. Tùy chỉnh trang phục và bối cảnh.
+                      </p>
+                  </div>
+
+                  <div className="bg-[#12121a] p-8 rounded-[2rem] border border-white/10 hover:border-audi-purple transition-colors group">
+                      <div className="w-16 h-16 bg-audi-purple/10 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                          <Icons.Zap className="w-8 h-8 text-audi-purple" />
+                      </div>
+                      <h3 className="text-xl font-bold text-white mb-3">Studio Chỉnh Sửa</h3>
+                      <p className="text-slate-400 text-sm leading-relaxed">
+                          Bộ công cụ mạnh mẽ: Tách nền thông minh, Nâng cấp ảnh lên 4K, Làm nét ảnh cũ. Tất cả trong một nền tảng.
+                      </p>
+                  </div>
+              </div>
+          </div>
+      </div>
+
+      {/* --- STATS & FOOTER (RESTORED) --- */}
+      <div className="relative z-20 bg-[#05050a] border-t border-white/10 pt-16 pb-8">
+          <div className="max-w-7xl mx-auto px-6">
+              
+              {/* Stats Grid */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-16 border-b border-white/5 pb-16">
+                  {[
+                      { val: '10K+', label: 'Người dùng', color: 'text-audi-cyan' },
+                      { val: '500K+', label: 'Ảnh đã tạo', color: 'text-audi-pink' },
+                      { val: '0.5s', label: 'Tốc độ xử lý', color: 'text-audi-lime' },
+                      { val: '4.9/5', label: 'Đánh giá', color: 'text-audi-yellow' },
+                  ].map((stat, i) => (
+                      <div key={i} className="text-center">
+                          <div className={`font-game text-3xl md:text-4xl font-bold ${stat.color} mb-1`}>{stat.val}</div>
+                          <div className="text-xs text-slate-500 uppercase font-bold tracking-widest">{stat.label}</div>
+                      </div>
+                  ))}
+              </div>
+
+              {/* Footer Content */}
+              <div className="flex flex-col md:flex-row justify-between items-center gap-6">
+                  <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center">
+                          <Icons.Sparkles className="w-5 h-5 text-white" />
+                      </div>
+                      <div>
+                          <h4 className="font-game font-bold text-white text-lg">AUDITION AI</h4>
+                          <p className="text-[10px] text-slate-500">© 2025 DMP Studio. All rights reserved.</p>
+                      </div>
+                  </div>
+
+                  <div className="flex gap-6">
+                      <a href="#" className="text-slate-400 hover:text-white transition-colors"><Icons.Facebook className="w-5 h-5" /></a>
+                      <a href="#" className="text-slate-400 hover:text-white transition-colors"><Icons.Instagram className="w-5 h-5" /></a>
+                      <a href="#" className="text-slate-400 hover:text-white transition-colors"><Icons.Youtube className="w-5 h-5" /></a>
+                  </div>
+                  
+                  <div className="text-xs text-slate-500 font-mono">
+                      Powered by <span className="text-audi-cyan">Gemini 3.0 Pro</span>
+                  </div>
               </div>
           </div>
       </div>

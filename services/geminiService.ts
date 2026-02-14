@@ -1,27 +1,23 @@
 
+
 import { GoogleGenAI } from "@google/genai";
 import { getSystemApiKey } from "./economyService";
 
 // Helper to get the best available API Key ASYNC
 const getDynamicApiKey = async (): Promise<string> => {
-    // Strictly use the centralized logic from economyService which prioritizes Database
     const dbKey = await getSystemApiKey();
     if (dbKey && dbKey.trim().length > 0) {
         return dbKey.trim();
     }
-    
-    // Fallback if DB returns nothing (Env var handling is now inside getSystemApiKey or here as last resort)
     return process.env.API_KEY || "";
 };
 
-// Helper to create a fresh client instance ASYNC
 const getAiClient = async () => {
     const key = await getDynamicApiKey();
     if (!key) throw new Error("Hệ thống chưa có API Key. Vui lòng cấu hình trong Admin > Hệ thống.");
     return new GoogleGenAI({ apiKey: key });
 };
 
-// Helper to construct image output from response
 const extractImage = (response: any): string | null => {
   if (response.candidates && response.candidates[0].content.parts) {
     for (const part of response.candidates[0].content.parts) {
@@ -33,26 +29,32 @@ const extractImage = (response: any): string | null => {
   return null;
 }
 
+/**
+ * generateImage - Enhanced for "3D Game Character" Training
+ * 
+ * @param prompt User prompt
+ * @param aspectRatio Aspect ratio
+ * @param styleRefBase64 This is now treated as "STRUCTURAL/POSE REFERENCE" (e.g., the template image)
+ * @param faceRefBase64 This is the "IDENTITY/FACE REFERENCE" (User upload)
+ */
 export const generateImage = async (
     prompt: string, 
     aspectRatio: string = "1:1", 
-    styleRefBase64?: string,
-    faceRefBase64?: string
+    styleRefBase64?: string, // TEMPLATE IMAGE (Structure/Pose)
+    faceRefBase64?: string  // USER UPLOAD (Face/Identity)
 ): Promise<string | null> => {
   
   try {
     const ai = await getAiClient();
-    // Model: gemini-3-pro-image-preview
-    // Using Pro model is essential for understanding the "Solid Fence" structural conditioning.
     const model = 'gemini-3-pro-image-preview';
     
     const parts: any[] = [];
     let imageIndexCounter = 0;
-    let styleRefIndex = -1;
-    let faceRefIndex = -1;
+    let structureRefIndex = -1;
+    let identityRefIndex = -1;
     
-    // 1. Add "Solid Fence" Body/Structure Reference
-    // This image has already been pre-processed with the #808080 background and black border.
+    // 1. ADD STRUCTURAL REFERENCE (The Template/Sample Image)
+    // This dictates Pose, Composition, Lighting angle.
     if (styleRefBase64) {
       parts.push({
         inlineData: {
@@ -61,10 +63,11 @@ export const generateImage = async (
         },
       });
       imageIndexCounter++;
-      styleRefIndex = imageIndexCounter; 
+      structureRefIndex = imageIndexCounter; 
     }
 
-    // 2. Add Face Reference (Face ID Pipeline)
+    // 2. ADD IDENTITY REFERENCE (The User's Uploaded Photo)
+    // This dictates Face features, and potentially clothing style if user wants.
     if (faceRefBase64) {
         parts.push({
             inlineData: {
@@ -73,26 +76,42 @@ export const generateImage = async (
             }
         });
         imageIndexCounter++;
-        faceRefIndex = imageIndexCounter;
+        identityRefIndex = imageIndexCounter;
     }
 
-    // 3. Construct Contextual Prompt with STRUCTURAL CONDITIONING instructions
-    let fullPrompt = `Generate a photorealistic 3D masterpiece based on: "${prompt}".`;
-    
     const indexToWord = (idx: number) => idx === 1 ? 'first' : 'second';
 
-    if (styleRefIndex > 0) {
-        // Advanced instruction for the Vision Encoder to interpret the Solid Fence
-        fullPrompt += `\n[STRUCTURAL CONDITIONING]: Look at the ${indexToWord(styleRefIndex)} image. This is the master layout.
-        - The area inside the BLACK BORDER is the "Visual Anchor". You must preserve the pose, composition, and structure of the subject inside this border exactly.
-        - The GREY AREA (#808080) surrounding the border is the "Outpainting Zone". Fill this area with background details matching the prompt description.
-        - Blend the subject seamlessly into the new environment while keeping their pose locked.`;
+    // 3. CONSTRUCT "EXPERT 3D ARTIST" PROMPT
+    let fullPrompt = `You are a Senior 3D Character Artist for a high-end game studio. 
+    Your task is to create a "3D Game Character Render" (Not a real photo).
+    
+    Target Style: Semi-realistic 3D, similar to 'Audition' or 'Blind Box' figures. 
+    - Skin: Smooth, plastic/silicone texture, subsurface scattering.
+    - Lighting: Studio softbox, rim lighting, volumetric fog.
+    - Engine: Unreal Engine 5, Octane Render.
+    - DO NOT generate: Real human skin texture, pores, imperfections, noise, grain.
+    
+    User Request: "${prompt}".`;
+
+    // 4. INJECT "SOLID FENCE" LOGIC (Structure)
+    if (structureRefIndex > 0) {
+        fullPrompt += `\n\n[STRUCTURAL CONDITIONING - STAGE 1]:
+        Look at the ${indexToWord(structureRefIndex)} image. This is the "MASTER POSE".
+        - You MUST copy the exact pose, camera angle, and composition of this image.
+        - Ignore the face in this image. Only use the body structure and background environment.
+        - Use the area inside the black border (if visible) as the solid composition guide.`;
     }
 
-    if (faceRefIndex > 0) {
-        fullPrompt += `\n[FACE ID INJECTION]: Use the ${indexToWord(faceRefIndex)} attached image as the Face ID source.
-        - "Sprite Injection": Extract the facial features from this reference and apply them to the main character in the structural layout.
-        - Maintain identity, skin tone, and expression.`;
+    // 5. INJECT "FACE ID" LOGIC (Identity)
+    if (identityRefIndex > 0) {
+        fullPrompt += `\n\n[IDENTITY INJECTION - STAGE 2]:
+        Look at the ${indexToWord(identityRefIndex)} image. This is the "FACE SOURCE".
+        - Extract facial features (eyes, nose shape, mouth) from this image.
+        - "Sprite Injection": Transplant these facial features onto the character in the Structural image.
+        - CRITICAL: Adapt the face to the "3D Game Character" style. Do not paste a photorealistic face on a 3D body. Stylize the face to match the target aesthetic (bigger eyes, smoother skin).`;
+    } else {
+        // If no face uploaded, ensure the style is still 3D
+        fullPrompt += `\n\nEnsure the character face is stylized, beautiful, 3D aesthetic.`;
     }
 
     parts.push({ text: fullPrompt });
@@ -135,7 +154,9 @@ export const editImageWithInstructions = async (
       }
     ];
 
-    let instructionText = `Instruction: ${prompt}. \nOutput: Please generate a high quality image that follows this instruction exactly.`;
+    let instructionText = `Task: Professional Image Editing.
+    Instruction: ${prompt}. 
+    Style: Keep the output high quality. If the input is a 3D character, maintain the 3D texture.`;
 
     if (styleRefBase64) {
         parts.push({
@@ -144,7 +165,7 @@ export const editImageWithInstructions = async (
                 mimeType: 'image/jpeg',
             }
         });
-        instructionText += `\nSTYLE GUIDE: Use the second attached image as a reference for color grading and texture.`;
+        instructionText += `\nUse the second image as a style reference.`;
     }
 
     parts.push({ text: instructionText });
@@ -169,15 +190,16 @@ export const editImageWithInstructions = async (
 export const suggestPrompt = async (currentInput: string, lang: string, featureName: string): Promise<string> => {
     try {
         const ai = await getAiClient();
-        const systemInstruction = `You are an AI Prompt Expert. 
+        const systemInstruction = `You are an AI Prompt Expert for 3D Art. 
         Current Tool: "${featureName}".
-        Task: Refine the user's input into a professional, detailed image generation prompt.
-        Language: Keep the response in ${lang === 'vi' ? 'Vietnamese' : 'English'}.
-        Constraint: Return ONLY the prompt text. No quotes, no explanations.`;
+        Task: Refine the user's input into a prompt for a 3D Game Character.
+        Keywords to add: 3D render, c4d, blender, unreal engine, blind box style, cute, detailed.
+        Language: Keep response in ${lang === 'vi' ? 'Vietnamese' : 'English'}.
+        Return ONLY the prompt text.`;
 
         const response = await ai.models.generateContent({
             model: 'gemini-3-flash-preview', 
-            contents: currentInput || `Create a creative concept for ${featureName}`,
+            contents: currentInput || `Create a 3D character concept for ${featureName}`,
             config: {
                 systemInstruction: systemInstruction,
                 temperature: 0.7,
@@ -186,29 +208,22 @@ export const suggestPrompt = async (currentInput: string, lang: string, featureN
 
         return response.text?.trim() || currentInput;
     } catch (error) {
-        console.error("Prompt Suggestion Error:", error);
         return currentInput;
     }
 }
 
 export const checkConnection = async (testKey?: string): Promise<boolean> => {
   try {
-    let ai;
-    // Ensure key is trimmed to avoid whitespace issues
     const key = testKey ? testKey.trim() : (await getDynamicApiKey()).trim();
-    
     if (!key) return false;
-
-    ai = new GoogleGenAI({ apiKey: key });
-    
+    const ai = new GoogleGenAI({ apiKey: key });
     await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: { parts: [{ text: 'ping' }] }, // Use explicit structure
+      contents: { parts: [{ text: 'ping' }] },
       config: { maxOutputTokens: 1 }
     });
     return true;
   } catch (error) {
-    console.error("Gemini Health Check Failed:", error);
     return false;
   }
 }

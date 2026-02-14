@@ -1,9 +1,10 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { Feature, Language, GeneratedImage } from '../../types';
 import { Icons } from '../../components/Icons';
 import { generateImage, suggestPrompt } from '../../services/geminiService';
 import { saveImageToStorage } from '../../services/storageService';
-import { createSolidFence, optimizePayload } from '../../utils/imageProcessor';
+import { createSolidFence, optimizePayload, urlToBase64 } from '../../utils/imageProcessor';
 import { getUserProfile, updateUserBalance } from '../../services/economyService';
 
 interface GenerationToolProps {
@@ -35,14 +36,15 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
   
   // Prompt & Text
   const [prompt, setPrompt] = useState('');
-  const [negativePrompt, setNegativePrompt] = useState('');
+  const [negativePrompt, setNegativePrompt] = useState('real photo, photorealistic, grainy, noise, bad quality, 2d, sketch');
   const [seed, setSeed] = useState('');
   const [isSuggesting, setIsSuggesting] = useState(false);
+  const [isScanningFace, setIsScanningFace] = useState(false); // Visual Effect State
 
   // Advanced Settings
   const [modelType, setModelType] = useState<'flash' | 'pro'>('flash');
-  const [aspectRatio, setAspectRatio] = useState('1:1');
-  const [selectedStyle, setSelectedStyle] = useState('cinematic');
+  const [aspectRatio, setAspectRatio] = useState('3:4'); // Portrait default for characters
+  const [selectedStyle, setSelectedStyle] = useState('3d');
   const [resolution, setResolution] = useState<Resolution>('1K'); // For Pro
   const [isSharpening, setIsSharpening] = useState(false); // For Flash (Upscale/Sharpen)
 
@@ -58,12 +60,11 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
   const processingSteps = [
       { label: { vi: 'Khởi tạo Worker & Tài nguyên', en: 'Initializing Workers & Resources' } },
       { label: { vi: 'Xác thực & Trừ Vcoin', en: 'Verifying & Deducting Vcoin' } },
-      { label: { vi: 'Tối ưu hóa dữ liệu ảnh đầu vào', en: 'Optimizing Input Payloads' } },
-      { label: { vi: 'Xây dựng cấu trúc Solid Fence', en: 'Constructing Solid Fence Structure' } },
-      { label: { vi: 'Phân tích đặc điểm khuôn mặt (FaceID)', en: 'Analyzing Facial Features (FaceID)' } },
-      { label: { vi: 'Kết nối Gemini 3.0 Vision', en: 'Connecting to Gemini 3.0 Vision' } },
-      { label: { vi: 'Đang vẽ (Multimodal Composition)...', en: 'Generating (Multimodal Composition)...' } },
-      { label: { vi: 'Hoàn tất & Lưu trữ tác phẩm', en: 'Finalizing & Saving Masterpiece' } }
+      { label: { vi: 'Phân tích Pose từ ảnh mẫu (Solid Fence)', en: 'Extracting Pose from Template' } },
+      { label: { vi: 'Quét FaceID & Trích xuất đặc điểm', en: 'Scanning FaceID & Features' } }, // Highlight this
+      { label: { vi: 'Kết nối Gemini 3.0 Vision (3D Artist Mode)', en: 'Connecting Gemini 3.0 Vision' } },
+      { label: { vi: 'Đang render 3D (Blind Box Style)...', en: 'Rendering 3D Character...' } },
+      { label: { vi: 'Hoàn tất & Xử lý hậu kỳ', en: 'Finalizing & Post-processing' } }
   ];
 
   // --- INITIALIZATION ---
@@ -175,13 +176,20 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
         return;
     }
     
+    // VISUAL EFFECT: Face Scanning
+    if (characters.some(c => c.isFaceLocked && c.faceImage)) {
+        setIsScanningFace(true);
+        await new Promise(r => setTimeout(r, 2000)); // Show scan effect for 2s
+        setIsScanningFace(false);
+    }
+    
     // START PROCESSING
     setStage('processing');
     setCurrentStep(0);
 
     try {
-      // Step 0: Init (Visual Delay)
-      await new Promise(r => setTimeout(r, 800));
+      // Step 0: Init
+      await new Promise(r => setTimeout(r, 500));
       setCurrentStep(1);
 
       // Step 1: Payment
@@ -189,34 +197,45 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       await new Promise(r => setTimeout(r, 600));
       setCurrentStep(2);
       
-      // Step 2: Optimization Preparation
-      const primaryStructuralImage = characters[0].bodyImage || refImage;
-      let styleRefData: string | undefined = undefined;
-      let faceRefData: string | undefined = undefined;
+      // Step 2: PREPARE PAYLOADS
+      // LOGIC FIX: 
+      // - Structural Reference = Feature Preview Image (The "Sample") OR User's Body Upload (if any)
+      // - Face Reference = User's Face Upload
       
-      await new Promise(r => setTimeout(r, 500)); // Simulate processing time
+      let structureRefData: string | undefined = undefined;
+      let faceRefData: string | undefined = undefined;
+
+      // 1. Prepare Structure (Pose)
+      // Priority: User Body Upload > Reference Image Upload > Feature Preview Image
+      let sourceForStructure = characters[0].bodyImage || refImage || feature.preview_image;
+      
+      // If it's a URL (preview_image), convert to Base64
+      if (sourceForStructure.startsWith('http')) {
+          const b64 = await urlToBase64(sourceForStructure);
+          if (b64) sourceForStructure = b64;
+      }
+      
+      if (sourceForStructure) {
+          const optimizedStructure = await optimizePayload(sourceForStructure);
+          // Apply Solid Fence to Structure
+          const fencedImage = await createSolidFence(optimizedStructure, aspectRatio);
+          structureRefData = fencedImage.split(',')[1];
+      }
+      
+      await new Promise(r => setTimeout(r, 600));
       setCurrentStep(3);
 
-      // Step 3: Solid Fence Construction
-      if (primaryStructuralImage) {
-          // Optimize first
-          const optimized = await optimizePayload(primaryStructuralImage);
-          // Apply Solid Fence
-          const fencedImage = await createSolidFence(optimized, aspectRatio);
-          styleRefData = fencedImage.split(',')[1];
-      }
-      await new Promise(r => setTimeout(r, 600)); // Simulate fence drawing
-      setCurrentStep(4);
-
-      // Step 4: Face Analysis
+      // Step 3: Prepare Face (Identity)
       if (characters[0].faceImage && characters[0].isFaceLocked) {
+          // Optimize Face image
           const optimizedFace = await optimizePayload(characters[0].faceImage, 512); 
           faceRefData = optimizedFace.split(',')[1];
       }
-      await new Promise(r => setTimeout(r, 500));
-      setCurrentStep(5);
+      
+      await new Promise(r => setTimeout(r, 800)); // Simulate scanning analysis
+      setCurrentStep(4);
 
-      // Step 5: Connecting Gemini (Prepare Prompt)
+      // Step 4: Connecting Gemini
       let finalPrompt = (feature.defaultPrompt || "") + prompt;
       if (selectedStyle) finalPrompt += `, style: ${selectedStyle}`;
       if (negativePrompt) finalPrompt += ` --no ${negativePrompt}`;
@@ -226,14 +245,15 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
           finalPrompt += ` [Context: ${genderStr}]`;
       }
       await new Promise(r => setTimeout(r, 500));
-      setCurrentStep(6);
+      setCurrentStep(5);
 
-      // Step 6: Generating (API Call)
-      const result = await generateImage(finalPrompt, aspectRatio, styleRefData, faceRefData);
+      // Step 5: Generating
+      // Pass structureRefData as arg 3 (Pose), faceRefData as arg 4 (Identity)
+      const result = await generateImage(finalPrompt, aspectRatio, structureRefData, faceRefData);
 
       if (result) {
-        setCurrentStep(7);
-        // Step 7: Finalizing & Saving
+        setCurrentStep(6);
+        // Step 6: Finalizing
         const newImage: GeneratedImage = {
           id: crypto.randomUUID(),
           url: result,
@@ -246,7 +266,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
         setGeneratedData(newImage);
         await saveImageToStorage(newImage);
         
-        await new Promise(r => setTimeout(r, 800)); // Let user see the checkmark
+        await new Promise(r => setTimeout(r, 800));
         
         setResultImage(result);
         setStage('result');
@@ -255,7 +275,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       }
     } catch (error) {
       console.error(error);
-      // Refund if failed
       await updateUserBalance(cost, `Refund: ${feature.name['en']} Failed`, 'refund');
       alert(lang === 'vi' ? 'Tạo ảnh thất bại. Đã hoàn lại Vcoin.' : 'Generation failed. Vcoin refunded.');
       setStage('input'); 
@@ -273,13 +292,12 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
 
   // --- DATA LISTS ---
   const styles = [
+      { id: '3d', name: '3D Game', icon: Icons.MessageCircle }, 
+      { id: 'blindbox', name: 'Blind Box', icon: Icons.Gift },
+      { id: 'anime', name: 'Anime 3D', icon: Icons.Zap },
       { id: 'cinematic', name: 'Cinematic', icon: Icons.Play },
-      { id: 'anime', name: 'Anime', icon: Icons.Zap },
-      { id: '3d', name: '3D Render', icon: Icons.MessageCircle }, 
-      { id: 'photography', name: 'Realistic', icon: Icons.Image },
       { id: 'cyberpunk', name: 'Cyberpunk', icon: Icons.Cpu },
-      { id: 'oil', name: 'Oil Paint', icon: Icons.Palette },
-      { id: 'sketch', name: 'Sketch', icon: Icons.Wand },
+      { id: 'clay', name: 'Clay', icon: Icons.Palette },
       { id: 'fashion', name: 'Fashion', icon: Icons.ShoppingBag },
   ];
 
@@ -295,7 +313,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
   if (stage === 'processing') {
       return (
           <div className="flex flex-col items-center justify-center min-h-[60vh] text-center animate-fade-in w-full max-w-md mx-auto">
-              
               {/* Spinner */}
               <div className="relative w-24 h-24 mb-8">
                   <div className="absolute inset-0 rounded-full border-4 border-slate-800"></div>
@@ -306,10 +323,10 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
               </div>
               
               <h2 className="font-game text-2xl font-bold text-white mb-2 tracking-widest animate-neon-flash">
-                  {lang === 'vi' ? 'ĐANG KHỞI TẠO...' : 'GENERATING...'}
+                  {lang === 'vi' ? 'ĐANG TẠO NHÂN VẬT...' : 'GENERATING CHARACTER...'}
               </h2>
               <p className="text-slate-400 font-mono text-xs max-w-xs mx-auto mb-8">
-                  {lang === 'vi' ? 'Hệ thống đang vẽ nên ý tưởng của bạn. Vui lòng đợi trong giây lát.' : 'The system is painting your imagination. Please wait a moment.'}
+                  {lang === 'vi' ? 'Hệ thống đang render 3D. Vui lòng đợi...' : 'Rendering 3D model. Please wait...'}
               </p>
               
               {/* Detailed Steps List */}
@@ -348,9 +365,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
   if (stage === 'result' && resultImage) {
       return (
           <div className="flex flex-col items-center animate-fade-in pb-20 w-full">
-              {/* Reduced size container (max-w-xl) */}
               <div className="w-full max-w-xl bg-[#090014] border border-white/10 rounded-3xl overflow-hidden shadow-2xl mx-auto">
-                  {/* Result Header */}
                   <div className="flex justify-between items-center p-3 border-b border-white/10 bg-white/5">
                       <div className="flex items-center gap-2">
                           <div className="w-2 h-2 rounded-full bg-green-500"></div>
@@ -363,12 +378,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                       </div>
                   </div>
                   
-                  {/* Image Display */}
-                  {/* Reduced min-height and constrained max-height to 50vh */}
                   <div className="relative bg-black/50 min-h-[300px] flex items-center justify-center p-4">
-                      {/* Pattern Background */}
                       <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-audi-purple via-transparent to-transparent"></div>
-                      
                       <img 
                           src={resultImage} 
                           alt="Result" 
@@ -376,19 +387,14 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                       />
                   </div>
 
-                  {/* Actions Bar */}
                   <div className="p-4 bg-[#12121a]">
                       <div className="flex flex-col gap-3">
-                          
-                          {/* Prompt Info */}
                           <div className="w-full">
                               <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">{lang === 'vi' ? 'Prompt sử dụng' : 'Prompt Used'}</label>
                               <div className="bg-black/40 rounded-lg p-2 border border-white/10">
                                   <p className="text-xs text-slate-300 line-clamp-1 italic">"{generatedData?.prompt}"</p>
                               </div>
                           </div>
-
-                          {/* Action Buttons */}
                           <div className="flex gap-2">
                               <a 
                                   href={resultImage} 
@@ -418,7 +424,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
     <div className="flex flex-col items-center w-full max-w-5xl mx-auto pb-48 animate-fade-in relative">
         <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/*" />
 
-        {/* --- HEADER TABS --- */}
         <div className="w-full flex justify-center mb-8">
             <div className="bg-[#12121a] p-1.5 rounded-2xl border border-white/10 flex gap-1 shadow-lg">
                 {[
@@ -462,7 +467,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                                 <div className="space-y-1">
                                     <div className="flex items-center gap-1.5 mb-1 px-1">
                                         <Icons.User className="w-3 h-3 text-audi-pink" />
-                                        <span className="text-[9px] font-bold text-slate-400 uppercase">{lang === 'vi' ? 'Ảnh Dáng' : 'Body'}</span>
+                                        <span className="text-[9px] font-bold text-slate-400 uppercase">{lang === 'vi' ? 'Ảnh Dáng (Tùy chọn)' : 'Body (Optional)'}</span>
                                     </div>
                                     <div 
                                         onClick={() => handleUploadClick(char.id, 'body')}
@@ -495,6 +500,14 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                                         onClick={() => handleUploadClick(char.id, 'face')}
                                         className={`w-full aspect-square bg-black/40 rounded-xl border-2 border-dashed cursor-pointer relative overflow-hidden group/item transition-colors ${char.isFaceLocked ? 'border-audi-cyan shadow-[0_0_10px_rgba(33,212,253,0.3)]' : 'border-slate-700 hover:border-audi-cyan'}`}
                                     >
+                                        {/* SCAN EFFECT LAYER */}
+                                        {isScanningFace && char.faceImage && (
+                                            <div className="absolute inset-0 z-30 pointer-events-none">
+                                                <div className="absolute inset-0 bg-audi-cyan/20 animate-pulse"></div>
+                                                <div className="absolute top-0 w-full h-1 bg-audi-cyan shadow-[0_0_10px_#21D4FD] animate-[scan_1s_linear_infinite]"></div>
+                                            </div>
+                                        )}
+
                                         {char.faceImage ? (
                                             <>
                                                 <img src={char.faceImage} className="w-full h-full object-cover" alt="Face" />
@@ -503,7 +516,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                                                     <Icons.X className="w-2.5 h-2.5 text-white" />
                                                 </div>
                                                 
-                                                {/* Re-designed Face Lock Toggle Inside Image */}
                                                 <div 
                                                     onClick={(e) => toggleFaceLock(e, char.id)}
                                                     className={`absolute bottom-2 left-1/2 -translate-x-1/2 w-[90%] py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition-all z-20 cursor-pointer shadow-lg backdrop-blur-md border ${
@@ -515,7 +527,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                                                     {char.isFaceLocked ? (
                                                          <>
                                                             <Icons.Lock className="w-3 h-3" />
-                                                            <span className="text-[9px] font-black uppercase">{lang === 'vi' ? 'ĐÃ KHÓA' : 'LOCKED'}</span>
+                                                            <span className="text-[9px] font-black uppercase">{lang === 'vi' ? 'FACE ID ON' : 'LOCKED'}</span>
                                                          </>
                                                     ) : (
                                                          <>
@@ -537,7 +549,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                                     </div>
                                 </div>
                                 
-                                {/* Gender Selector (Only for Multi-character) */}
                                 {activeMode !== 'single' && (
                                     <div className="flex bg-black/40 rounded-lg p-0.5 border border-white/10 mt-1">
                                         <button 
@@ -560,35 +571,12 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                 </div>
             </div>
 
-            {/* --- SECTION 2: REFERENCE (OPTIONAL) --- */}
-            <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4">
-                 <div className="flex items-center gap-4">
-                     <div 
-                        onClick={handleRefUploadClick}
-                        className="w-20 h-20 bg-black/40 rounded-xl border border-dashed border-slate-600 flex items-center justify-center cursor-pointer hover:border-white hover:text-white text-slate-500 shrink-0 overflow-hidden relative"
-                     >
-                         {refImage ? (
-                             <img src={refImage} className="w-full h-full object-cover" alt="Ref" />
-                         ) : (
-                             <Icons.Image className="w-6 h-6" />
-                         )}
-                         {refImage && (
-                            <button onClick={(e) => {e.stopPropagation(); setRefImage(null);}} className="absolute top-0 right-0 p-1 bg-red-500 text-white rounded-bl shadow"><Icons.X className="w-3 h-3"/></button>
-                         )}
-                     </div>
-                     <div>
-                         <h4 className="font-bold text-white text-sm">{lang === 'vi' ? 'Ảnh tham chiếu (Tùy chọn)' : 'Reference Image (Optional)'}</h4>
-                         <p className="text-xs text-slate-400 mt-1">{lang === 'vi' ? 'AI sẽ sử dụng bố cục hoặc màu sắc từ ảnh này.' : 'AI will use composition or colors from this image.'}</p>
-                     </div>
-                 </div>
-            </div>
-
-            {/* --- SECTION 3: PROMPT --- */}
+            {/* --- SECTION 2: PROMPT --- */}
             <div className="space-y-3">
                 <div className="flex items-center justify-between px-2">
                     <h3 className="font-bold text-white flex items-center gap-2">
                         <div className="w-6 h-6 rounded-full bg-audi-purple flex items-center justify-center text-xs">2</div>
-                        {lang === 'vi' ? 'Mô tả ý tưởng' : 'Description'}
+                        {lang === 'vi' ? 'Mô tả nhân vật' : 'Description'}
                     </h3>
                     <button 
                         onClick={handleSuggestPrompt}
@@ -596,34 +584,32 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                         className="text-xs font-bold text-audi-purple hover:text-white flex items-center gap-1 transition-colors"
                     >
                         <Icons.Sparkles className={`w-3 h-3 ${isSuggesting ? 'animate-spin' : ''}`} />
-                        {lang === 'vi' ? 'Dùng Magic Prompt' : 'Use Magic Prompt'}
+                        {lang === 'vi' ? 'Magic Prompt' : 'Magic Prompt'}
                     </button>
                 </div>
                 <div className="relative group">
                     <textarea 
                         value={prompt}
                         onChange={(e) => setPrompt(e.target.value)}
-                        placeholder={lang === 'vi' ? "Mô tả chi tiết bức ảnh bạn muốn tạo (Ví dụ: Một cô gái mặc váy dạ hội đỏ, đứng trên sân khấu neon...)" : "Describe the image in detail..."}
+                        placeholder={lang === 'vi' ? "Mô tả trang phục, bối cảnh (Ví dụ: Váy dạ hội đỏ, sân khấu neon...)" : "Describe outfit, background..."}
                         className="w-full h-32 bg-[#12121a] border border-white/10 rounded-2xl p-4 text-sm text-white placeholder-slate-600 focus:border-audi-purple outline-none resize-none transition-all focus:shadow-[0_0_20px_rgba(183,33,255,0.1)]"
                     />
                 </div>
             </div>
 
-            {/* --- SECTION 4: ADVANCED CONFIGURATION --- */}
+            {/* --- SECTION 3: ADVANCED CONFIGURATION --- */}
             <div className="space-y-3">
                  <div className="flex items-center justify-between px-2">
                     <h3 className="font-bold text-white flex items-center gap-2">
                         <div className="w-6 h-6 rounded-full bg-audi-cyan flex items-center justify-center text-xs text-black">3</div>
-                        {lang === 'vi' ? 'Cấu hình nâng cao' : 'Advanced Config'}
+                        {lang === 'vi' ? 'Cấu hình' : 'Config'}
                     </h3>
                 </div>
                 
                 <div className="bg-[#12121a] border border-white/10 rounded-2xl p-6 space-y-6">
-                    
-                    {/* Row 1: Ratio & Model */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
-                            <label className="text-xs font-bold text-slate-400 uppercase mb-3 block">{lang === 'vi' ? 'Tỉ lệ khung hình' : 'Aspect Ratio'}</label>
+                            <label className="text-xs font-bold text-slate-400 uppercase mb-3 block">{lang === 'vi' ? 'Tỉ lệ' : 'Ratio'}</label>
                             <div className="flex gap-2">
                                 {ratios.map(r => (
                                     <button 
@@ -637,13 +623,13 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                             </div>
                         </div>
                         <div>
-                            <label className="text-xs font-bold text-slate-400 uppercase mb-3 block">{lang === 'vi' ? 'Chất lượng Model' : 'Model Quality'}</label>
+                            <label className="text-xs font-bold text-slate-400 uppercase mb-3 block">{lang === 'vi' ? 'Chất lượng' : 'Quality'}</label>
                             <div className="flex bg-black/40 rounded-lg p-1 border border-white/10">
                                 <button 
                                     onClick={() => setModelType('flash')}
                                     className={`flex-1 py-2 rounded-md text-xs font-bold transition-all flex items-center justify-center gap-2 ${modelType === 'flash' ? 'bg-white/10 text-audi-cyan shadow' : 'text-slate-500'}`}
                                 >
-                                    <Icons.Zap className="w-3 h-3" /> Flash
+                                    <Icons.Zap className="w-3 h-3" /> Standard
                                 </button>
                                 <button 
                                     onClick={() => setModelType('pro')}
@@ -657,10 +643,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
 
                     <div className="h-px bg-white/5 w-full"></div>
 
-                    {/* Row 2: Styles */}
                     <div>
-                        <label className="text-xs font-bold text-slate-400 uppercase mb-3 block">{lang === 'vi' ? 'Phong cách nghệ thuật' : 'Art Style'}</label>
-                        <div className="grid grid-cols-4 md:grid-cols-8 gap-2">
+                        <label className="text-xs font-bold text-slate-400 uppercase mb-3 block">{lang === 'vi' ? 'Phong cách' : 'Style'}</label>
+                        <div className="grid grid-cols-4 md:grid-cols-7 gap-2">
                              {styles.map(s => (
                                  <button
                                     key={s.id}
@@ -673,83 +658,12 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                              ))}
                         </div>
                     </div>
-
-                    <div className="h-px bg-white/5 w-full"></div>
-
-                    {/* Row 3: Negative Prompt & Seed & Upscale/Resolution */}
-                    <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-                        <div className="md:col-span-4">
-                             <label className="text-xs font-bold text-slate-400 uppercase mb-2 block">{lang === 'vi' ? 'Loại trừ (Negative)' : 'Negative'}</label>
-                             <input 
-                                type="text"
-                                value={negativePrompt}
-                                onChange={(e) => setNegativePrompt(e.target.value)}
-                                placeholder="VD: bad quality..."
-                                className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:border-slate-500 outline-none"
-                             />
-                        </div>
-                        <div className="md:col-span-3">
-                             <label className="text-xs font-bold text-slate-400 uppercase mb-2 block">Seed</label>
-                             <input 
-                                type="text"
-                                value={seed}
-                                onChange={(e) => setSeed(e.target.value)}
-                                placeholder="Random"
-                                className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:border-slate-500 outline-none"
-                             />
-                        </div>
-                        
-                        {/* Dynamic Upscale / Resolution Section */}
-                        <div className="md:col-span-5 flex flex-col">
-                             {modelType === 'flash' ? (
-                                <>
-                                    <label className="text-xs font-bold text-slate-400 uppercase mb-2 block">{lang === 'vi' ? 'Nâng cao' : 'Enhanced'}</label>
-                                    <div 
-                                        onClick={() => setIsSharpening(!isSharpening)}
-                                        className={`w-full flex items-center justify-between p-2.5 rounded-xl border cursor-pointer transition-all ${isSharpening ? 'border-audi-yellow bg-audi-yellow/10' : 'border-white/10 bg-black/40 hover:bg-white/5'}`}
-                                    >
-                                        <div className="flex items-center gap-2">
-                                            <Icons.Gem className={`w-4 h-4 ${isSharpening ? 'text-audi-yellow' : 'text-slate-500'}`} />
-                                            <div>
-                                                <div className={`text-xs font-bold ${isSharpening ? 'text-white' : 'text-slate-400'}`}>{lang === 'vi' ? 'Làm Nét Ảnh' : 'Sharpen Image'}</div>
-                                                <div className="text-[9px] text-slate-500">+1 Vcoin</div>
-                                            </div>
-                                        </div>
-                                        <div className={`w-8 h-4 rounded-full relative transition-colors ${isSharpening ? 'bg-audi-yellow' : 'bg-slate-700'}`}>
-                                            <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform ${isSharpening ? 'left-4.5' : 'left-0.5'}`}></div>
-                                        </div>
-                                    </div>
-                                </>
-                             ) : (
-                                <>
-                                    <label className="text-xs font-bold text-slate-400 uppercase mb-2 block">{lang === 'vi' ? 'Độ phân giải (Upscale)' : 'Resolution'}</label>
-                                    <div className="flex bg-black/40 rounded-lg p-1 border border-white/10 h-[42px]">
-                                        {['1K', '2K', '4K'].map((res) => {
-                                            const cost = res === '1K' ? 10 : res === '2K' ? 15 : 20;
-                                            return (
-                                                <button
-                                                    key={res}
-                                                    onClick={() => setResolution(res as Resolution)}
-                                                    className={`flex-1 rounded-md flex flex-col items-center justify-center transition-all ${resolution === res ? 'bg-audi-yellow text-black font-bold shadow-lg' : 'text-slate-500 hover:text-white'}`}
-                                                >
-                                                    <span className="text-[10px] leading-none">{res}</span>
-                                                    <span className={`text-[8px] ${resolution === res ? 'text-black/70' : 'text-slate-600'}`}>{cost} Vcoin</span>
-                                                </button>
-                                            )
-                                        })}
-                                    </div>
-                                </>
-                             )}
-                        </div>
-                    </div>
-
                 </div>
             </div>
 
         </div>
 
         {/* --- STICKY FOOTER --- */}
-        {/* Adjusted Position to be distinct from Global Dock (bottom-24 vs bottom-6) */}
         <div className="fixed bottom-24 left-4 right-4 md:left-[50%] md:right-auto md:-translate-x-1/2 md:w-[900px] p-4 bg-[#090014]/90 backdrop-blur-md border border-white/10 rounded-2xl z-50 shadow-[0_5px_30px_rgba(0,0,0,0.8)]">
             <div className="flex items-center justify-between">
                 <div className="flex flex-col">
@@ -769,7 +683,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                     className="px-8 py-3 bg-gradient-to-r from-audi-pink to-audi-purple rounded-xl font-bold text-white shadow-[0_0_20px_rgba(255,0,153,0.4)] hover:shadow-[0_0_30px_rgba(255,0,153,0.6)] hover:scale-105 active:scale-95 transition-all flex items-center gap-2 group disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     <Icons.Wand className="w-5 h-5 group-hover:rotate-12 transition-transform" />
-                    <span className="tracking-wide">{lang === 'vi' ? 'BẮT ĐẦU TẠO' : 'GENERATE NOW'}</span>
+                    <span className="tracking-wide">{lang === 'vi' ? 'TẠO NHÂN VẬT' : 'GENERATE'}</span>
                 </button>
             </div>
         </div>

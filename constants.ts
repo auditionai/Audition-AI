@@ -30,59 +30,59 @@ export const APP_CONFIG: AppConfig = {
     // --- GENERATION TOOLS (Tạo ảnh) ---
     {
       id: "single_photo_gen",
-      name: {vi: "Tạo Ảnh Đơn", en: "Single Photo Gen"},
+      name: {vi: "Tạo Ảnh Đơn (3D Character)", en: "Single 3D Character"},
       description: {
-        vi: "Tạo ảnh chân dung hoặc toàn thân chất lượng cao cho 1 người.",
-        en: "Generate high-quality portrait or full-body photo for 1 person."
+        vi: "Tạo nhân vật game 3D siêu thực từ ảnh của bạn.",
+        en: "Generate hyper-realistic 3D game character from your photo."
       },
-      engine: "Gemini 3.0 Pro",
+      engine: "Gemini 3.0 Pro Vision",
       preview_image: "https://picsum.photos/400/301?grayscale",
       toolType: 'generation',
-      defaultPrompt: "A high quality professional photo of a single person, detailed face, photorealistic, 8k resolution, cinematic lighting: ",
+      defaultPrompt: "A stunning 3D game character render, semi-realistic anime style, blind box aesthetics, unreal engine 5, octane render, smooth texture, detailed clothing: ",
       category: 'generation',
       supportsStyleReference: true,
       tag: "HOT"
     },
     {
       id: "couple_photo_gen",
-      name: {vi: "Tạo Ảnh Đôi", en: "Couple Photo Gen"},
+      name: {vi: "Tạo Ảnh Đôi (Couple Mode)", en: "Couple 3D Mode"},
       description: {
-        vi: "Tạo ảnh đẹp cho cặp đôi hoặc 2 người bạn.",
-        en: "Generate beautiful photos for couples or 2 friends."
+        vi: "Tạo ảnh đôi phong cách game Audition lãng mạn.",
+        en: "Generate romantic Audition-style couple photos."
       },
-      engine: "Gemini 3.0 Pro",
+      engine: "Gemini 3.0 Pro Vision",
       preview_image: "https://picsum.photos/400/302?grayscale",
       toolType: 'generation',
-      defaultPrompt: "A high quality photo of 2 people together, couple or friends, interaction, detailed faces, photorealistic, 8k resolution: ",
+      defaultPrompt: "A romantic 3D render of a couple in a game world, interaction, semi-realistic style, detailed faces, vibrant lighting, 8k resolution: ",
       category: 'generation',
       supportsStyleReference: true,
       tag: "HOT"
     },
     {
       id: "group_3_gen",
-      name: {vi: "Tạo Ảnh Nhóm 3 Người", en: "Group of 3 Gen"},
+      name: {vi: "Team 3 Người (Squad)", en: "Squad of 3"},
       description: {
-        vi: "Tạo ảnh nhóm 3 người với bố cục hài hòa.",
-        en: "Generate a group photo of 3 people with balanced composition."
+        vi: "Tạo ảnh nhóm 3 nhân vật game với bố cục chuẩn.",
+        en: "Generate a squad of 3 game characters with perfect composition."
       },
-      engine: "Gemini 3.0 Pro",
+      engine: "Gemini 3.0 Pro Vision",
       preview_image: "https://picsum.photos/400/303?grayscale",
       toolType: 'generation',
-      defaultPrompt: "A high quality group photo of exactly 3 people, standing together, happy expression, detailed faces, photorealistic, 8k resolution: ",
+      defaultPrompt: "A high quality 3D render of a squad of 3 game characters, standing together, cool poses, detailed faces, game asset style, 8k: ",
       category: 'generation',
       supportsStyleReference: true
     },
     {
       id: "group_4_gen",
-      name: {vi: "Tạo Ảnh Nhóm 4 Người", en: "Group of 4 Gen"},
+      name: {vi: "Team 4 Người (Clan)", en: "Clan of 4"},
       description: {
-        vi: "Tạo ảnh nhóm 4 người, thích hợp cho gia đình hoặc bạn bè.",
-        en: "Generate a group photo of 4 people, perfect for family or friends."
+        vi: "Tạo ảnh Clan 4 thành viên phong cách Audition.",
+        en: "Generate a Clan photo of 4 members in Audition style."
       },
-      engine: "Gemini 3.0 Pro",
+      engine: "Gemini 3.0 Pro Vision",
       preview_image: "https://picsum.photos/400/304?grayscale",
       toolType: 'generation',
-      defaultPrompt: "A high quality group photo of exactly 4 people, family or friends, standing together, detailed faces, photorealistic, 8k resolution: ",
+      defaultPrompt: "A high quality 3D render of a group of 4 game characters, family or clan, standing together, vivid colors, unreal engine 5: ",
       category: 'generation',
       supportsStyleReference: true
     },
@@ -103,7 +103,7 @@ export const APP_CONFIG: AppConfig = {
     },
     {
       id: "sharpen_upscale",
-      name: {vi: "Làm Nét Ảnh", en: "Sharpen Image"},
+      name: {vi: "Làm Nét Ảnh (4K)", en: "Upscale to 4K"},
       description: {
         vi: "Tăng độ nét, khử nhiễu và nâng cao chất lượng ảnh.",
         en: "Enhance sharpness, denoise and improve image quality."
@@ -111,7 +111,7 @@ export const APP_CONFIG: AppConfig = {
       engine: "Gemini 3.0 Pro",
       preview_image: "https://picsum.photos/400/306?grayscale",
       toolType: 'editing',
-      defaultPrompt: "Upscale this image to high resolution, sharpen details, improve clarity, de-noise, maintain original content and colors. Make it look professional.",
+      defaultPrompt: "Upscale this image to high resolution 4K, sharpen details, improve clarity, de-noise, maintain original content and colors. Make it look professional.",
       category: 'editing'
     }
   ]

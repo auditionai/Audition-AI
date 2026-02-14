@@ -1,21 +1,31 @@
 
+
 /**
  * CORE SOLUTION: "Structural Image Conditioning" (The Solid Fence)
  * 
  * This utility prepares the reference image for the Multimodal LLM (Gemini 3 Vision).
  * Instead of sending the raw image, we place it on a canvas that matches the TARGET aspect ratio.
- * 
- * Technique Details:
- * 1. Background Fill (#808080): This specific neutral grey is interpreted by modern Vision Encoders
- *    as "Latent Noise" or "Empty Space" suitable for Outpainting/Infilling.
- * 2. Visual Anchor (Black Border): A 4px solid black border is drawn around the source image.
- *    This acts as a "hard constraint" or fence, telling the AI: "Keep the structure inside this box exactly as is,
- *    and only generate new content in the grey area or strictly follow the pose within the border."
  */
+
+export const urlToBase64 = async (url: string): Promise<string | null> => {
+    try {
+        const response = await fetch(url);
+        const blob = await response.blob();
+        return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.readAsDataURL(blob);
+        });
+    } catch (error) {
+        console.error("Error converting URL to Base64:", error);
+        return null;
+    }
+};
 
 export const createSolidFence = async (base64Str: string, aspectRatio: string): Promise<string> => {
     return new Promise((resolve) => {
       const img = new Image();
+      img.crossOrigin = "Anonymous"; // Enable CORS for external images
       img.onload = () => {
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
@@ -61,7 +71,6 @@ export const createSolidFence = async (base64Str: string, aspectRatio: string): 
         ctx.lineWidth = 4;
         
         // Draw the border slightly outside the image to frame it perfectly
-        // We adjust x,y and w,h slightly to ensure the stroke doesn't overlap the image content too much
         ctx.strokeRect(x - 2, y - 2, drawW + 4, drawH + 4);
 
         // 3. THE CONTENT: Draw the source image
@@ -80,6 +89,7 @@ export const createSolidFence = async (base64Str: string, aspectRatio: string): 
   export const optimizePayload = async (base64Str: string, maxWidth = 1024): Promise<string> => {
       return new Promise((resolve) => {
           const img = new Image();
+          img.crossOrigin = "Anonymous";
           img.onload = () => {
               // If image is already optimized/small enough, return as is to preserve quality
               if (img.width <= maxWidth && img.height <= maxWidth) {

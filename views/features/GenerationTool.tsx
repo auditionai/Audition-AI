@@ -239,7 +239,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       { id: 'fashion', name: 'Fashion', icon: Icons.ShoppingBag },
   ];
 
-  // RESTORED 5 RATIOS
   const ratios = [
       { id: '1:1', label: '1:1', desc: 'Vuông' },
       { id: '9:16', label: '9:16', desc: 'Story' },
@@ -344,27 +343,28 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                                 </div>
                             </div>
                             
+                            {/* UPDATED: EQUAL SIZE BOXES */}
                             <div className="space-y-3">
-                                {/* BODY SLOT (MAIN) */}
-                                <div onClick={() => handleUploadClick(char.id, 'body')} className="w-full h-48 bg-black/40 rounded-xl border-2 border-dashed border-slate-700 hover:border-audi-pink cursor-pointer relative overflow-hidden group/item transition-all">
+                                {/* BODY SLOT (Main Image) */}
+                                <div onClick={() => handleUploadClick(char.id, 'body')} className="w-full h-40 bg-black/40 rounded-xl border-2 border-dashed border-slate-700 hover:border-audi-pink cursor-pointer relative overflow-hidden group/item transition-all flex flex-col items-center justify-center">
                                     {char.bodyImage ? (
                                         <img src={char.bodyImage} className="w-full h-full object-contain" alt="Body" />
                                     ) : (
-                                        <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500 group-hover/item:text-audi-pink transition-colors">
-                                            <Icons.User className="w-8 h-8 mb-2" />
+                                        <div className="flex flex-col items-center text-slate-500 group-hover/item:text-audi-pink transition-colors">
+                                            <Icons.User className="w-8 h-8 mb-1" />
                                             <span className="text-[10px] uppercase font-bold">Ảnh Toàn Thân</span>
                                         </div>
                                     )}
                                 </div>
 
-                                {/* FACE SLOT (SECONDARY) */}
-                                <div onClick={() => handleUploadClick(char.id, 'face')} className="w-full h-16 bg-black/40 rounded-xl border-2 border-dashed border-slate-700 hover:border-audi-cyan cursor-pointer relative overflow-hidden group/item flex items-center justify-center transition-all">
+                                {/* FACE SLOT (Equal Size) */}
+                                <div onClick={() => handleUploadClick(char.id, 'face')} className="w-full h-40 bg-black/40 rounded-xl border-2 border-dashed border-slate-700 hover:border-audi-cyan cursor-pointer relative overflow-hidden group/item transition-all flex flex-col items-center justify-center">
                                     {char.faceImage ? (
                                         <img src={char.faceImage} className="w-full h-full object-cover" alt="Face" />
                                     ) : (
-                                        <div className="flex items-center gap-2 text-slate-500 group-hover/item:text-audi-cyan transition-colors">
-                                            <Icons.Eye className="w-4 h-4" />
-                                            <span className="text-[10px] uppercase font-bold">Ghép Mặt (Tùy chọn)</span>
+                                        <div className="flex flex-col items-center text-slate-500 group-hover/item:text-audi-cyan transition-colors">
+                                            <Icons.Eye className="w-8 h-8 mb-1" />
+                                            <span className="text-[10px] uppercase font-bold">Ảnh Mặt (Tùy chọn)</span>
                                         </div>
                                     )}
                                 </div>
@@ -373,7 +373,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                     ))}
                 </div>
 
-                {/* PROMPT BOX & REF IMAGE RESTORED */}
+                {/* PROMPT BOX & REF IMAGE */}
                 <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4 shadow-lg">
                     <div className="flex justify-between items-center mb-3">
                         <label className="text-xs font-bold text-slate-400 uppercase flex items-center gap-2">
@@ -385,7 +385,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                     </div>
                     
                     <div className="flex flex-col md:flex-row gap-4">
-                        {/* REF IMAGE UPLOAD RESTORED */}
+                        {/* REF IMAGE UPLOAD */}
                         <div 
                             onClick={handleRefUploadClick}
                             className="w-full md:w-32 aspect-[3/4] md:aspect-square bg-black/40 rounded-xl border-2 border-dashed border-slate-700 hover:border-audi-purple cursor-pointer relative overflow-hidden group shrink-0 flex items-center justify-center transition-all"
@@ -445,7 +445,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                         </div>
                     </div>
 
-                    {/* RATIO (5 Options Restored) */}
+                    {/* RATIO */}
                     <div className="space-y-2">
                         <label className="text-[10px] font-bold text-slate-400 uppercase">Tỉ lệ khung hình</label>
                         <div className="flex flex-wrap gap-2">

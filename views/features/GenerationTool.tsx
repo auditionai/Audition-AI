@@ -33,7 +33,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
   const [activeMode, setActiveMode] = useState<GenMode>('single');
   const [characters, setCharacters] = useState<CharacterInput[]>([{ id: 1, bodyImage: null, faceImage: null, gender: 'female', isFaceLocked: false }]);
   
-  // Reference Image (The missing feature restored)
+  // Reference Image
   const [refImage, setRefImage] = useState<string | null>(null);
   
   // Prompt & Text
@@ -41,13 +41,16 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
   const [negativePrompt, setNegativePrompt] = useState('real photo, photorealistic, grainy, noise, bad quality, 2d, sketch');
   const [seed, setSeed] = useState('');
   const [isSuggesting, setIsSuggesting] = useState(false);
-  const [isScanningFace, setIsScanningFace] = useState(false); // Visual Effect State
+  const [isScanningFace, setIsScanningFace] = useState(false); 
 
   // Advanced Settings
-  const [modelType, setModelType] = useState<'flash' | 'pro'>('flash');
-  const [aspectRatio, setAspectRatio] = useState('3:4'); // Portrait default for characters
+  const [modelType, setModelType] = useState<'flash' | 'pro'>('pro'); // Default to Pro based on user preference
+  const [aspectRatio, setAspectRatio] = useState('3:4'); 
   const [selectedStyle, setSelectedStyle] = useState('3d');
-  const [resolution, setResolution] = useState<Resolution>('1K'); // For Pro
+  
+  // NEW: PRO SETTINGS
+  const [resolution, setResolution] = useState<Resolution>('2K'); 
+  const [useSearch, setUseSearch] = useState(false); 
   const [isSharpening, setIsSharpening] = useState(false); // For Flash (Upscale/Sharpen)
 
   // Result State
@@ -147,9 +150,11 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       
       // Resolution Cost (Only for Pro)
       if (modelType === 'pro') {
-          if (resolution === '1K') cost += 10;
-          if (resolution === '2K') cost += 15;
-          if (resolution === '4K') cost += 20;
+          if (resolution === '1K') cost += 2;
+          if (resolution === '2K') cost += 5;
+          if (resolution === '4K') cost += 10;
+          
+          if (useSearch) cost += 3; // Extra for search
       }
 
       // Upscale Cost (Only for Flash)
@@ -159,7 +164,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
 
       // Face Lock Cost
       const lockedCount = characters.filter(c => c.isFaceLocked).length;
-      cost += lockedCount * 1; // 1 Vcoin per face lock
+      cost += lockedCount * 1; 
 
       return cost;
   };
@@ -205,12 +210,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       let faceRefData: string | undefined = undefined;
 
       // 1. Prepare Structure (Pose) - THE FIX
-      // Logic: Reference Image (Explicit) > Feature Preview Image (Implicit)
-      // We do NOT use bodyImage for structure anymore, bodyImage is for outfit reference mostly.
-      
       let sourceForStructure = refImage || feature.preview_image;
       
-      // If it's a URL (preview_image), convert to Base64
       if (sourceForStructure.startsWith('http')) {
           const b64 = await urlToBase64(sourceForStructure);
           if (b64) sourceForStructure = b64;
@@ -218,7 +219,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       
       if (sourceForStructure) {
           const optimizedStructure = await optimizePayload(sourceForStructure);
-          // Apply Solid Fence to Structure
           const fencedImage = await createSolidFence(optimizedStructure, aspectRatio);
           structureRefData = fencedImage.split(',')[1];
       }
@@ -228,12 +228,11 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
 
       // Step 3: Prepare Face (Identity)
       if (characters[0].faceImage && characters[0].isFaceLocked) {
-          // Optimize Face image
           const optimizedFace = await optimizePayload(characters[0].faceImage, 512); 
           faceRefData = optimizedFace.split(',')[1];
       }
       
-      await new Promise(r => setTimeout(r, 800)); // Simulate scanning analysis
+      await new Promise(r => setTimeout(r, 800)); 
       setCurrentStep(4);
 
       // Step 4: Connecting Gemini
@@ -249,8 +248,15 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       setCurrentStep(5);
 
       // Step 5: Generating
-      // Pass structureRefData as arg 3 (Pose/Reference), faceRefData as arg 4 (Identity)
-      const result = await generateImage(finalPrompt, aspectRatio, structureRefData, faceRefData);
+      // Pass all PRO parameters: Resolution and Search
+      const result = await generateImage(
+          finalPrompt, 
+          aspectRatio, 
+          structureRefData, 
+          faceRefData, 
+          modelType === 'pro' ? resolution : '1K', // Force 1K if Flash
+          modelType === 'pro' ? useSearch : false  // No search for Flash
+      );
 
       if (result) {
         setCurrentStep(6);
@@ -262,7 +268,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
           timestamp: Date.now(),
           toolId: feature.id,
           toolName: feature.name['en'],
-          engine: modelType === 'pro' ? 'Gemini 3.0 Pro' : 'Gemini 2.5 Flash'
+          engine: modelType === 'pro' ? `Gemini 3.0 Pro ${resolution}` : 'Gemini 2.5 Flash'
         };
         setGeneratedData(newImage);
         await saveImageToStorage(newImage);
@@ -662,21 +668,61 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                             </div>
                         </div>
                         <div>
-                            <label className="text-xs font-bold text-slate-400 uppercase mb-3 block">{lang === 'vi' ? 'Chất lượng' : 'Quality'}</label>
-                            <div className="flex bg-black/40 rounded-lg p-1 border border-white/10">
+                            <label className="text-xs font-bold text-slate-400 uppercase mb-3 block">{lang === 'vi' ? 'Chất lượng Mô hình' : 'Model Quality'}</label>
+                            <div className="flex bg-black/40 rounded-lg p-1 border border-white/10 mb-3">
                                 <button 
                                     onClick={() => setModelType('flash')}
                                     className={`flex-1 py-2 rounded-md text-xs font-bold transition-all flex items-center justify-center gap-2 ${modelType === 'flash' ? 'bg-white/10 text-audi-cyan shadow' : 'text-slate-500'}`}
                                 >
-                                    <Icons.Zap className="w-3 h-3" /> Standard
+                                    <Icons.Zap className="w-3 h-3" /> Flash (Fast)
                                 </button>
                                 <button 
                                     onClick={() => setModelType('pro')}
                                     className={`flex-1 py-2 rounded-md text-xs font-bold transition-all flex items-center justify-center gap-2 ${modelType === 'pro' ? 'bg-gradient-to-r from-audi-pink to-audi-purple text-white shadow' : 'text-slate-500'}`}
                                 >
-                                    <Icons.Crown className="w-3 h-3" /> Pro 4K
+                                    <Icons.Crown className="w-3 h-3" /> Pro 3.0
                                 </button>
                             </div>
+
+                            {/* PRO FEATURES: RESOLUTION & SEARCH */}
+                            {modelType === 'pro' && (
+                                <div className="space-y-3 animate-fade-in bg-white/5 rounded-xl p-3 border border-white/10">
+                                    {/* Resolution Selector */}
+                                    <div>
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase mb-2 block">{lang === 'vi' ? 'Độ phân giải' : 'Resolution'}</label>
+                                        <div className="flex gap-2">
+                                            {['1K', '2K', '4K'].map((res) => (
+                                                <button
+                                                    key={res}
+                                                    onClick={() => setResolution(res as Resolution)}
+                                                    className={`flex-1 py-1.5 rounded-lg border text-[10px] font-bold transition-all ${resolution === res ? 'bg-audi-purple text-white border-audi-purple' : 'bg-transparent border-white/10 text-slate-500 hover:border-white/30'}`}
+                                                >
+                                                    {res}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Search Grounding Toggle */}
+                                    <div 
+                                        onClick={() => setUseSearch(!useSearch)}
+                                        className={`flex items-center justify-between p-2 rounded-lg border cursor-pointer transition-all ${useSearch ? 'bg-audi-cyan/10 border-audi-cyan' : 'bg-transparent border-white/10 hover:bg-white/5'}`}
+                                    >
+                                        <div className="flex items-center gap-2">
+                                            <div className={`w-6 h-6 rounded-full flex items-center justify-center ${useSearch ? 'bg-audi-cyan text-black' : 'bg-white/10 text-slate-500'}`}>
+                                                <Icons.Search className="w-3 h-3" />
+                                            </div>
+                                            <div>
+                                                <div className={`text-[10px] font-bold ${useSearch ? 'text-audi-cyan' : 'text-slate-400'}`}>Google Search</div>
+                                                <div className="text-[8px] text-slate-600">Thêm dữ liệu thực tế</div>
+                                            </div>
+                                        </div>
+                                        <div className={`w-8 h-4 rounded-full p-0.5 transition-colors ${useSearch ? 'bg-audi-cyan' : 'bg-slate-700'}`}>
+                                            <div className={`w-3 h-3 rounded-full bg-white transition-transform ${useSearch ? 'translate-x-4' : 'translate-x-0'}`}></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
 

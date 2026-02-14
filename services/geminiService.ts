@@ -29,23 +29,28 @@ const extractImage = (response: any): string | null => {
 }
 
 /**
- * generateImage - STRICT MODE
+ * generateImage - STRICT MODE + PRO FEATURES
  * 
- * @param prompt User prompt (Absolute Command)
+ * @param prompt User prompt
  * @param aspectRatio Aspect ratio
- * @param styleRefBase64 This is the "TEMPLATE/POSE" (Ảnh mẫu - ONLY POSE)
- * @param faceRefBase64 This is the "IDENTITY/SOURCE" (Ảnh tải lên - FACE + OUTFIT)
+ * @param styleRefBase64 TEMPLATE (Pose Only)
+ * @param faceRefBase64 IDENTITY (Face + Outfit)
+ * @param resolution Image Size ('1K', '2K', '4K') - Only for Pro
+ * @param useSearch Enable Google Search Grounding - Only for Pro
  */
 export const generateImage = async (
     prompt: string, 
     aspectRatio: string = "1:1", 
-    styleRefBase64?: string, // TEMPLATE (Pose Only)
-    faceRefBase64?: string  // USER UPLOAD (Identity + Outfit source)
+    styleRefBase64?: string, 
+    faceRefBase64?: string,
+    resolution: string = '2K',
+    useSearch: boolean = false
 ): Promise<string | null> => {
   
   try {
     const ai = await getAiClient();
-    const model = 'gemini-3-pro-image-preview';
+    // Default to Pro for high quality character gen
+    const model = 'gemini-3-pro-image-preview'; 
     
     const parts: any[] = [];
     let imageIndexCounter = 0;
@@ -79,7 +84,6 @@ export const generateImage = async (
     const indexToWord = (idx: number) => idx === 1 ? 'first' : 'second';
 
     // 3. CONSTRUCT "ABSOLUTE COMMAND" PROMPT
-    // We treat the AI as a strict renderer, not a creative artist.
     let fullPrompt = `ROLE: You are a strict 3D Rendering Engine. You must follow instructions precisely without creative deviation.
     
     TASK: Generate a 3D Game Character (Audition/Blind Box style).
@@ -106,27 +110,33 @@ export const generateImage = async (
         - OUTFIT COMMAND: Unless the User Command explicitly describes a new dress/outfit, you MUST COPY the clothing/outfit from THIS image.
         - LOGIC: Apply the Face and Outfit from Image ${indexToWord(identityRefIndex)} onto the Pose of Image ${indexToWord(structureRefIndex)}.`;
     } else {
-        // If no user upload, assume generic 3D style
         fullPrompt += `\n\nEnsure the character face is stylized, beautiful, 3D aesthetic.`;
     }
 
     // 6. FINAL OVERRIDE CHECKS
     fullPrompt += `\n\n[FINAL CHECKS]:
-    1. Did you copy the clothes from the Pose Reference (Image ${indexToWord(structureRefIndex)})? IF YES -> STOP. REVERT. Use the Character Source clothes or the Prompt description.
-    2. Is the face generic? IF YES -> STOP. FIX. Make it look exactly like Image ${indexToWord(identityRefIndex)}.
-    3. Output must be 3D Render style, NOT photorealistic.`;
+    1. Did you copy the clothes from the Pose Reference? IF YES -> STOP. REVERT. Use the Character Source clothes.
+    2. Output must be 3D Render style, NOT photorealistic.`;
 
     parts.push({ text: fullPrompt });
+
+    // 7. CONFIGURATION (Resolution & Search)
+    const config: any = {
+        imageConfig: {
+          aspectRatio: aspectRatio, 
+          imageSize: resolution // '1K', '2K', '4K'
+        }
+    };
+
+    // Add Google Search Tool if enabled
+    if (useSearch) {
+        config.tools = [{ googleSearch: {} }];
+    }
 
     const response = await ai.models.generateContent({
       model: model,
       contents: { parts: parts },
-      config: {
-        imageConfig: {
-          aspectRatio: aspectRatio, 
-          imageSize: "2K" 
-        }
-      }
+      config: config
     });
 
     return extractImage(response);

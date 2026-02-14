@@ -161,15 +161,30 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       const isValid = await checkConnection(apiKey);
       
       if (isValid) {
-          const success = await saveSystemApiKey(apiKey);
-          if (success) {
+          const result = await saveSystemApiKey(apiKey);
+          if (result.success) {
               setKeyStatus('valid');
               showToast('Đã lưu API Key vào Database thành công!');
               await refreshData(); // Refresh list
               runSystemChecks(apiKey);
           } else {
               setKeyStatus('unknown');
-              showToast('Lỗi khi lưu vào Database. Vui lòng kiểm tra kết nối.', 'error');
+              if (result.error?.includes('permission') || result.error?.includes('policy') || result.error?.includes('RLS')) {
+                  setConfirmDialog({
+                      show: true,
+                      title: '⚠️ Cần Cấp Quyền Database cho API Key',
+                      msg: 'Database chưa cho phép lưu API Key mới. Vui lòng chạy lệnh SQL sau để cấp quyền:',
+                      sqlHelp: `ALTER TABLE public.api_keys ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable insert for authenticated users only" ON public.api_keys FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "Enable read for authenticated users only" ON public.api_keys FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Enable update for authenticated users only" ON public.api_keys FOR UPDATE TO authenticated USING (true);
+CREATE POLICY "Enable delete for authenticated users only" ON public.api_keys FOR DELETE TO authenticated USING (true);`,
+                      isAlertOnly: true,
+                      onConfirm: () => {}
+                  });
+              } else {
+                  showToast(`Lỗi Database: ${result.error}`, 'error');
+              }
           }
       } else {
           setKeyStatus('invalid');

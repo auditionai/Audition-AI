@@ -83,31 +83,40 @@ export const getApiKeysList = async (): Promise<any[]> => {
     return [];
 };
 
-export const saveSystemApiKey = async (apiKey: string): Promise<boolean> => {
+export const saveSystemApiKey = async (apiKey: string): Promise<{ success: boolean, error?: string }> => {
     if (supabase) {
         try {
             const cleanKey = apiKey.trim();
             
-            // Deactivate all other keys first (Optional strategy: Single Active Key)
-            await supabase
+            // Step 1: Deactivate all other keys first (Optional strategy: Single Active Key)
+            const { error: updateError } = await supabase
                 .from('api_keys')
                 .update({ status: 'inactive' })
                 .neq('key_value', cleanKey); // Update all others
+            
+            // If update fails due to permissions, we catch it early
+            if (updateError) throw updateError;
 
-            // Insert or Update the new/existing key
-            const { data: existing } = await supabase
+            // Step 2: Check existing
+            const { data: existing, error: selectError } = await supabase
                 .from('api_keys')
                 .select('id')
                 .eq('key_value', cleanKey)
-                .single();
+                .maybeSingle(); // Use maybeSingle to avoid error on 0 rows
+
+            if (selectError) throw selectError;
 
             if (existing) {
-                await supabase
+                // Update Existing
+                const { error: upsertError } = await supabase
                     .from('api_keys')
                     .update({ status: 'active', updated_at: new Date().toISOString() })
                     .eq('id', existing.id);
+                
+                if (upsertError) throw upsertError;
             } else {
-                await supabase
+                // Step 3: Insert New
+                const { error: insertError } = await supabase
                     .from('api_keys')
                     .insert({
                         name: 'Admin Key ' + new Date().toLocaleDateString(),
@@ -115,20 +124,24 @@ export const saveSystemApiKey = async (apiKey: string): Promise<boolean> => {
                         status: 'active',
                         usage_count: 0
                     });
+                
+                // CRITICAL: Throw error if insert fails so UI knows about it
+                if (insertError) throw insertError;
             }
             
             // Also update system_settings for backward compatibility
+            // We do not throw here if this fails, as api_keys is the primary source now
             await supabase
                 .from('system_settings')
                 .upsert({ key: 'gemini_api_key', value: cleanKey }, { onConflict: 'key' });
 
-            return true;
-        } catch (e) {
+            return { success: true };
+        } catch (e: any) {
             console.error("Error saving API Key", e);
-            return false;
+            return { success: false, error: e.message || "Database Error" };
         }
     }
-    return false;
+    return { success: false, error: "Supabase not connected" };
 };
 
 export const deleteApiKey = async (id: string): Promise<boolean> => {

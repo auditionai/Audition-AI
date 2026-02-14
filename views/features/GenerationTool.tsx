@@ -347,58 +347,60 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
   // ================= RENDER: RESULT STAGE =================
   if (stage === 'result' && resultImage) {
       return (
-          <div className="flex flex-col items-center animate-fade-in pb-20">
-              <div className="w-full max-w-4xl bg-[#090014] border border-white/10 rounded-3xl overflow-hidden shadow-2xl">
+          <div className="flex flex-col items-center animate-fade-in pb-20 w-full">
+              {/* Reduced size container (max-w-xl) */}
+              <div className="w-full max-w-xl bg-[#090014] border border-white/10 rounded-3xl overflow-hidden shadow-2xl mx-auto">
                   {/* Result Header */}
-                  <div className="flex justify-between items-center p-4 border-b border-white/10 bg-white/5">
+                  <div className="flex justify-between items-center p-3 border-b border-white/10 bg-white/5">
                       <div className="flex items-center gap-2">
                           <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                          <span className="font-bold text-sm text-white">{lang === 'vi' ? 'Hoàn thành' : 'Completed'}</span>
+                          <span className="font-bold text-xs text-white">{lang === 'vi' ? 'Hoàn thành' : 'Completed'}</span>
                       </div>
                       <div className="flex gap-2">
-                          <button onClick={() => setStage('input')} className="text-xs font-bold text-slate-400 hover:text-white px-3 py-1 rounded bg-white/5 hover:bg-white/10">
+                          <button onClick={() => setStage('input')} className="text-[10px] font-bold text-slate-400 hover:text-white px-2 py-1 rounded bg-white/5 hover:bg-white/10">
                               {lang === 'vi' ? 'Đóng' : 'Close'}
                           </button>
                       </div>
                   </div>
                   
                   {/* Image Display */}
-                  <div className="relative bg-black/50 min-h-[400px] flex items-center justify-center p-4">
+                  {/* Reduced min-height and constrained max-height to 50vh */}
+                  <div className="relative bg-black/50 min-h-[300px] flex items-center justify-center p-4">
                       {/* Pattern Background */}
                       <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-audi-purple via-transparent to-transparent"></div>
                       
                       <img 
                           src={resultImage} 
                           alt="Result" 
-                          className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-[0_0_50px_rgba(0,0,0,0.5)] border border-white/5" 
+                          className="max-w-full max-h-[50vh] object-contain rounded-lg shadow-[0_0_30px_rgba(0,0,0,0.5)] border border-white/5" 
                       />
                   </div>
 
                   {/* Actions Bar */}
-                  <div className="p-6 bg-[#12121a]">
-                      <div className="flex flex-col md:flex-row gap-6 justify-between items-center">
+                  <div className="p-4 bg-[#12121a]">
+                      <div className="flex flex-col gap-3">
                           
                           {/* Prompt Info */}
-                          <div className="flex-1 w-full">
-                              <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">{lang === 'vi' ? 'Prompt sử dụng' : 'Prompt Used'}</label>
-                              <div className="bg-black/40 rounded-lg p-3 border border-white/10">
-                                  <p className="text-sm text-slate-300 line-clamp-2 italic">"{generatedData?.prompt}"</p>
+                          <div className="w-full">
+                              <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">{lang === 'vi' ? 'Prompt sử dụng' : 'Prompt Used'}</label>
+                              <div className="bg-black/40 rounded-lg p-2 border border-white/10">
+                                  <p className="text-xs text-slate-300 line-clamp-1 italic">"{generatedData?.prompt}"</p>
                               </div>
                           </div>
 
                           {/* Action Buttons */}
-                          <div className="flex gap-3 w-full md:w-auto">
+                          <div className="flex gap-2">
                               <a 
                                   href={resultImage} 
                                   download={`dmp-ai-${Date.now()}.png`} 
-                                  className="flex-1 md:flex-none px-6 py-3 bg-white text-black rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-audi-cyan transition-colors"
+                                  className="flex-1 px-4 py-2.5 bg-white text-black rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-audi-cyan transition-colors text-sm"
                               >
                                   <Icons.Download className="w-4 h-4" />
                                   {lang === 'vi' ? 'Tải Về' : 'Download'}
                               </a>
                               <button 
                                   onClick={() => setStage('input')}
-                                  className="flex-1 md:flex-none px-6 py-3 bg-audi-pink text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-pink-600 transition-colors shadow-[0_0_15px_#FF0099]"
+                                  className="flex-1 px-4 py-2.5 bg-audi-pink text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-pink-600 transition-colors shadow-[0_0_15px_#FF0099] text-sm"
                               >
                                   <Icons.Wand className="w-4 h-4" />
                                   {lang === 'vi' ? 'Tạo Tiếp' : 'Create New'}

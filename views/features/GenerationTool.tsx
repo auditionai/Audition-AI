@@ -1,4 +1,5 @@
 
+
 import React, { useState, useRef, useEffect } from 'react';
 import { Feature, Language, GeneratedImage } from '../../types';
 import { Icons } from '../../components/Icons';
@@ -216,7 +217,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       if (sourceForStructure) {
           const optimizedStructure = await optimizePayload(sourceForStructure);
           const fencedImage = await createSolidFence(optimizedStructure, aspectRatio, true);
-          structureRefData = fencedImage.split(',')[1];
+          // FIX: Pass full data URL to prevent 414 error in subsequent fence calls
+          structureRefData = fencedImage; 
       }
       
       await new Promise(r => setTimeout(r, 600));
@@ -229,7 +231,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
           // Use faceImage as the primary source for Identity AND Outfit
           if (char.faceImage) {
               const opt = await optimizePayload(char.faceImage, 1024); // Keep high res for scanning
-              charImageData = opt.split(',')[1];
+              // FIX: Pass full data URL to prevent 414 error in subsequent fence calls
+              charImageData = opt; 
           }
           
           characterDataList.push({

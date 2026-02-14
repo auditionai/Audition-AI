@@ -1,4 +1,5 @@
 
+
 /**
  * CORE SOLUTION: "Structural Image Conditioning" (The Solid Fence)
  * 
@@ -31,6 +32,12 @@ export const urlToBase64 = async (url: string): Promise<string | null> => {
  */
 export const createSolidFence = async (base64Str: string, targetAspectRatio: string = "1:1", isPoseRef: boolean = false): Promise<string> => {
     return new Promise((resolve) => {
+      // SAFEGUARD: Ensure valid Data URL to prevent 414 URI Too Long errors
+      let src = base64Str;
+      if (base64Str && !base64Str.startsWith('data:') && !base64Str.startsWith('http')) {
+           src = `data:image/jpeg;base64,${base64Str}`;
+      }
+
       const img = new Image();
       img.crossOrigin = "Anonymous"; 
       img.onload = () => {
@@ -100,14 +107,25 @@ export const createSolidFence = async (base64Str: string, targetAspectRatio: str
   
         resolve(canvas.toDataURL('image/jpeg', 0.95));
       };
-      img.onerror = () => resolve(base64Str);
-      img.src = base64Str;
+      
+      img.onerror = () => {
+          console.warn("createSolidFence failed to load image");
+          resolve(base64Str);
+      };
+      
+      img.src = src;
     });
   };
   
   // STRICT OPTIMIZER: RESIZE ONLY, NO PADDING, NO GRAY BARS
   export const optimizePayload = async (base64Str: string, maxWidth = 1024): Promise<string> => {
       return new Promise((resolve) => {
+          // SAFEGUARD: Ensure valid Data URL
+          let src = base64Str;
+          if (base64Str && !base64Str.startsWith('data:') && !base64Str.startsWith('http')) {
+             src = `data:image/jpeg;base64,${base64Str}`;
+          }
+
           const img = new Image();
           img.crossOrigin = "Anonymous";
           img.onload = () => {
@@ -148,6 +166,6 @@ export const createSolidFence = async (base64Str: string, targetAspectRatio: str
               resolve(canvas.toDataURL('image/jpeg', 0.9)); 
           };
           img.onerror = () => resolve(base64Str);
-          img.src = base64Str;
+          img.src = src;
       });
   }

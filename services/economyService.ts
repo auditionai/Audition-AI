@@ -887,7 +887,7 @@ export const adminRejectTransaction = async (txId: string): Promise<{ success: b
         try {
             const { data: updatedTx, error } = await supabase
                 .from('transactions')
-                .update({ status: 'cancelled' })
+                .update({ status: 'failed' })
                 .eq('id', txId)
                 .select()
                 .maybeSingle();
@@ -905,7 +905,7 @@ export const adminRejectTransaction = async (txId: string): Promise<{ success: b
                 .eq('id', txId)
                 .maybeSingle();
 
-            if (verifyTx?.status !== 'cancelled') {
+            if (verifyTx?.status !== 'failed') {
                  return { success: false, error: "Lỗi Hệ Thống: Update không được lưu." };
             }
 

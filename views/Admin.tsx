@@ -446,7 +446,7 @@ CREATE POLICY "Enable all access for transactions" ON public.transactions FOR AL
           if (result.success) {
               // Optimistic update
               setTransactions(prev => prev.map(t => 
-                  t.id === txId ? { ...t, status: 'cancelled' } : t
+                  t.id === txId ? { ...t, status: 'failed' } : t
               ));
               showToast('Đã từ chối giao dịch', 'info');
               

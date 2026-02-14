@@ -198,16 +198,29 @@ export const updateUserBalance = async (amount: number, reason: string, type: 't
 
 // --- PACKAGE MANAGEMENT SERVICES ---
 
-export const getPackages = async (): Promise<CreditPackage[]> => {
+export const getPackages = async (onlyActive: boolean = true): Promise<CreditPackage[]> => {
     if (supabase) {
         // Fetch from 'credit_packages'
-        const { data, error } = await supabase
+        let query = supabase
             .from('credit_packages')
             .select('*')
-            .eq('is_active', true)
             .order('display_order', { ascending: true });
+            
+        if (onlyActive) {
+            query = query.eq('is_active', true);
+        }
 
-        if (!error && data && data.length > 0) {
+        const { data, error } = await query;
+
+        if (error) {
+            console.error("Fetch packages error:", error);
+            // Don't fallback to default if we have a connection error, allows Admin to see blank instead of mock
+            // But for safety, if user, maybe fallback.
+            if (onlyActive) return DEFAULT_PACKAGES; 
+            return [];
+        }
+
+        if (data && data.length > 0) {
             return data.map((p: any) => ({
                 id: p.id,
                 name: p.name || 'Gói Vcoin',
@@ -216,15 +229,18 @@ export const getPackages = async (): Promise<CreditPackage[]> => {
                 currency: 'VND',
                 bonusText: p.tag || '', // Store bonus text in tag or handle separated logic
                 isPopular: p.is_featured || false, // Map 'is_featured'
+                isActive: p.is_active, // Map 'is_active'
                 colorTheme: p.is_featured ? 'border-audi-pink' : 'border-slate-600', 
                 transferContent: `NAP ${p.price_vnd}` // Auto gen syntax
             }));
+        } else {
+            return []; // Return empty if no packages found in DB (don't show mock)
         }
     }
     return DEFAULT_PACKAGES;
 };
 
-export const savePackage = async (pkg: CreditPackage): Promise<void> => {
+export const savePackage = async (pkg: CreditPackage): Promise<{success: boolean, error?: string}> => {
     if (supabase) {
         const payload = {
             name: pkg.name,
@@ -232,25 +248,41 @@ export const savePackage = async (pkg: CreditPackage): Promise<void> => {
             price_vnd: pkg.price,
             tag: pkg.bonusText, 
             is_featured: pkg.isPopular,
-            is_active: true,
+            is_active: pkg.isActive ?? true,
             display_order: 0,
             bonus_credits: 0 
         };
 
-        if (isValidUUID(pkg.id)) {
-            // Update existing
-            await supabase.from('credit_packages').update(payload).eq('id', pkg.id);
-        } else {
-            // Insert new (let DB generate UUID)
-            await supabase.from('credit_packages').insert(payload);
+        try {
+            if (isValidUUID(pkg.id)) {
+                // Update existing
+                const { error } = await supabase.from('credit_packages').update(payload).eq('id', pkg.id);
+                if (error) throw error;
+            } else {
+                // Insert new (let DB generate UUID)
+                const { error } = await supabase.from('credit_packages').insert(payload);
+                if (error) throw error;
+            }
+            return { success: true };
+        } catch (e: any) {
+            console.error("Save package error:", e);
+            return { success: false, error: e.message || 'Lỗi lưu gói nạp.' };
         }
     }
+    return { success: false, error: 'Chưa kết nối Database.' };
 };
 
-export const deletePackage = async (id: string): Promise<void> => {
+export const deletePackage = async (id: string): Promise<{success: boolean, error?: string}> => {
     if (supabase && isValidUUID(id)) {
-        await supabase.from('credit_packages').delete().eq('id', id);
+        try {
+            const { error } = await supabase.from('credit_packages').delete().eq('id', id);
+            if (error) throw error;
+            return { success: true };
+        } catch (e: any) {
+            return { success: false, error: e.message };
+        }
     }
+    return { success: false, error: 'Invalid ID' };
 };
 
 // --- GIFTCODE SERVICES ---
@@ -672,7 +704,7 @@ export const getAdminStats = async () => {
         transactions: txs,
         logs: [],
         usersList: users,
-        packages: await getPackages(),
+        packages: await getPackages(false), // PASS FALSE TO FETCH ALL (INCL INACTIVE)
         promotion: await getPromotionConfig(),
         giftcodes: await getGiftcodes()
     };

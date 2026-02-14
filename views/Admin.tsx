@@ -178,18 +178,39 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
   const handleSavePackage = async () => {
       if (editingPackage) {
-          await savePackage(editingPackage);
-          setEditingPackage(null);
-          refreshData();
-          showToast('Cập nhật gói nạp thành công!');
+          const result = await savePackage(editingPackage);
+          if (result.success) {
+              setEditingPackage(null);
+              refreshData();
+              showToast('Cập nhật gói nạp thành công!');
+          } else {
+              if (result.error?.includes('RLS') || result.error?.includes('permission') || result.error?.includes('policy')) {
+                  // Show Helper for SQL Fix
+                  setConfirmDialog({
+                      show: true,
+                      title: '⚠️ Cần Cấp Quyền Database',
+                      msg: 'Database đang chặn việc lưu Gói Nạp. Hãy copy đoạn mã dưới đây và chạy trong SQL Editor của Supabase để mở khóa:',
+                      sqlHelp: `ALTER TABLE public.credit_packages ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable all access for credit packages" ON public.credit_packages FOR ALL USING (true) WITH CHECK (true);`,
+                      isAlertOnly: true,
+                      onConfirm: () => {}
+                  });
+              } else {
+                  showToast(`Lỗi: ${result.error}`, 'error');
+              }
+          }
       }
   };
 
   const handleDeletePackage = async (id: string) => {
       showConfirm('Bạn có chắc chắn muốn xóa gói nạp này?', async () => {
-          await deletePackage(id);
-          refreshData();
-          showToast('Đã xóa gói nạp');
+          const result = await deletePackage(id);
+          if (result.success) {
+              refreshData();
+              showToast('Đã xóa gói nạp');
+          } else {
+              showToast('Lỗi khi xóa: ' + result.error, 'error');
+          }
       });
   };
 
@@ -778,7 +799,7 @@ CREATE POLICY "Enable all access for gift codes" ON public.gift_codes FOR ALL US
                       <h2 className="text-2xl font-bold text-white">Quản Lý Gói Nạp</h2>
                       <button 
                         onClick={() => setEditingPackage({
-                            id: `temp_${Date.now()}`, name: '', coin: 0, price: 0, currency: 'VND', bonusText: '', colorTheme: 'border-white', transferContent: ''
+                            id: `temp_${Date.now()}`, name: '', coin: 0, price: 0, currency: 'VND', bonusText: '', colorTheme: 'border-white', transferContent: '', isActive: true
                         })}
                         className="px-4 py-2 bg-audi-pink text-white rounded-lg font-bold flex items-center gap-2 hover:bg-pink-600"
                       >
@@ -788,8 +809,13 @@ CREATE POLICY "Enable all access for gift codes" ON public.gift_codes FOR ALL US
                   {/* ... Package List ... */}
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                       {packages.map(pkg => (
-                          <div key={pkg.id} className={`bg-[#12121a] p-4 rounded-2xl border-2 ${pkg.colorTheme} relative group`}>
-                              <h3 className="font-bold text-white text-lg">{pkg.name}</h3>
+                          <div key={pkg.id} className={`bg-[#12121a] p-4 rounded-2xl border-2 ${pkg.colorTheme} relative group ${!pkg.isActive ? 'opacity-60 border-dashed' : ''}`}>
+                              {/* Active/Inactive Badge */}
+                              <div className="absolute top-2 left-2">
+                                  {!pkg.isActive && <span className="bg-red-500/20 text-red-500 text-[10px] font-bold px-2 py-1 rounded border border-red-500/50">HIDDEN</span>}
+                              </div>
+
+                              <h3 className="font-bold text-white text-lg mt-2">{pkg.name}</h3>
                               <div className="text-2xl font-black text-audi-yellow">{pkg.coin} Vcoin</div>
                               <div className="text-sm text-slate-400">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(pkg.price)}</div>
                               <div className="text-xs text-green-400 font-bold mt-1">{pkg.bonusText}</div>
@@ -834,6 +860,21 @@ CREATE POLICY "Enable all access for gift codes" ON public.gift_codes FOR ALL US
                                   <div className="col-span-2">
                                       <label className="text-xs font-bold text-slate-400 uppercase">Nội dung chuyển khoản (Syntax)</label>
                                       <input value={editingPackage.transferContent || ''} onChange={e => setEditingPackage({...editingPackage, transferContent: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-lg p-3 text-white mt-1" placeholder="NAP 50K..." />
+                                  </div>
+                                  
+                                  {/* Active Toggle */}
+                                  <div className="col-span-2 mt-2">
+                                      <div 
+                                        className="bg-white/5 rounded-xl p-3 flex items-center gap-3 border border-white/10 cursor-pointer hover:bg-white/10 transition-colors" 
+                                        onClick={() => setEditingPackage({...editingPackage, isActive: !editingPackage.isActive})}
+                                      >
+                                          <div className={`w-5 h-5 rounded border flex items-center justify-center transition-all ${editingPackage.isActive !== false ? 'bg-audi-lime border-audi-lime' : 'border-slate-500'}`}>
+                                              {editingPackage.isActive !== false && <Icons.Check className="w-3 h-3 text-black" />}
+                                          </div>
+                                          <label className="text-sm font-bold text-white cursor-pointer select-none">
+                                              {editingPackage.isActive !== false ? 'Đang Hiển Thị (Active)' : 'Đang Ẩn (Inactive)'}
+                                          </label>
+                                      </div>
                                   </div>
                               </div>
                               <div className="flex gap-3 pt-6">

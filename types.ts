@@ -84,6 +84,7 @@ export interface CreditPackage {
   currency: string;
   bonusText: string;
   isPopular?: boolean;
+  isActive?: boolean; // New field for visibility control
   colorTheme: string;
   transferContent?: string; // Custom transfer syntax
 }

@@ -27,7 +27,10 @@ interface CharacterInput {
 export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang }) => {
   // --- STAGE MANAGEMENT ---
   const [stage, setStage] = useState<Stage>('input');
-  const [currentStep, setCurrentStep] = useState(0);
+  
+  // Custom Progress State
+  const [progressMsg, setProgressMsg] = useState('');
+  const [progressLogs, setProgressLogs] = useState<string[]>([]);
 
   // --- CONFIGURATION STATE ---
   const [activeMode, setActiveMode] = useState<GenMode>('single');
@@ -38,7 +41,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
   
   // Prompt & Text
   const [prompt, setPrompt] = useState('');
-  const [negativePrompt, setNegativePrompt] = useState('real photo, photorealistic, grainy, noise, bad quality, 2d, sketch, extra limbs, missing limbs, mutated hands, bad anatomy, fused bodies, duplicate characters');
+  const [negativePrompt, setNegativePrompt] = useState('real photo, photorealistic, grainy, noise, bad quality, 2d, sketch, extra limbs, missing limbs, mutated hands, bad anatomy, fused bodies, duplicate characters, deformed legs, extra fingers');
   const [seed, setSeed] = useState('');
   const [isSuggesting, setIsSuggesting] = useState(false);
   const [isScanningFace, setIsScanningFace] = useState(false); 
@@ -51,7 +54,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
   // NEW: PRO SETTINGS
   const [resolution, setResolution] = useState<Resolution>('2K'); 
   const [useSearch, setUseSearch] = useState(false); 
-  const [isSharpening, setIsSharpening] = useState(false); // For Flash (Upscale/Sharpen)
+  const [isSharpening, setIsSharpening] = useState(false); 
 
   // Result State
   const [resultImage, setResultImage] = useState<string | null>(null);
@@ -60,17 +63,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
   // Helper Refs
   const fileInputRef = useRef<HTMLInputElement>(null);
   const activeUploadType = useRef<{ charId?: number, type: 'body' | 'face' | 'ref' } | null>(null);
-
-  // --- STEPS CONFIGURATION ---
-  const processingSteps = [
-      { label: { vi: 'Khởi tạo Worker & Tài nguyên', en: 'Initializing Workers & Resources' } },
-      { label: { vi: 'Xác thực & Trừ Vcoin', en: 'Verifying & Deducting Vcoin' } },
-      { label: { vi: 'Phân tích Pose & Bố cục từ Ảnh Mẫu', en: 'Analyzing Pose & Composition from Reference' } },
-      { label: { vi: 'Tách biệt dữ liệu từng nhân vật', en: 'Isolating Character Data' } }, 
-      { label: { vi: 'Kết nối Gemini 3.0 Vision (Multi-Subject Mode)', en: 'Connecting Gemini 3.0 Vision' } },
-      { label: { vi: 'Đang render 3D (Kiểm tra giải phẫu)...', en: 'Rendering 3D (Anatomy Check)...' } },
-      { label: { vi: 'Hoàn tất & Xử lý hậu kỳ', en: 'Finalizing & Post-processing' } }
-  ];
 
   // --- INITIALIZATION ---
   useEffect(() => {
@@ -169,6 +161,11 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       return cost;
   };
 
+  const addLog = (msg: string) => {
+      setProgressLogs(prev => [...prev, msg]);
+      setProgressMsg(msg);
+  };
+
   const handleGenerate = async () => {
     if (!prompt.trim()) {
          alert(lang === 'vi' ? 'Vui lòng nhập mô tả' : 'Please enter a prompt');
@@ -192,19 +189,17 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
     
     // START PROCESSING
     setStage('processing');
-    setCurrentStep(0);
+    setProgressLogs([]);
+    addLog(lang === 'vi' ? 'Khởi tạo quy trình đa luồng...' : 'Initializing multi-thread process...');
 
     try {
-      // Step 0: Init
-      await new Promise(r => setTimeout(r, 500));
-      setCurrentStep(1);
-
       // Step 1: Payment
+      await new Promise(r => setTimeout(r, 500));
       await updateUserBalance(-cost, `Gen: ${feature.name['en']}`, 'usage');
-      await new Promise(r => setTimeout(r, 600));
-      setCurrentStep(2);
+      addLog(lang === 'vi' ? `Đã trừ ${cost} Vcoin` : `Deducted ${cost} Vcoin`);
       
       // Step 2: PREPARE POSE STRUCTURE (BLUEPRINT)
+      addLog(lang === 'vi' ? 'Xây dựng khung xương (Pose)...' : 'Building pose structure...');
       let structureRefData: string | undefined = undefined;
       
       let sourceForStructure = refImage || feature.preview_image;
@@ -221,10 +216,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       }
       
       await new Promise(r => setTimeout(r, 600));
-      setCurrentStep(3);
 
       // Step 3: PREPARE CHARACTER DATA PACKAGES
-      // We package each character's identity/outfit image into a structured list
       const characterDataList = [];
       
       for (const char of characters) {
@@ -242,29 +235,24 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
           });
       }
       
-      await new Promise(r => setTimeout(r, 800)); 
-      setCurrentStep(4);
-
       // Step 4: Connecting Gemini
       let finalPrompt = (feature.defaultPrompt || "") + prompt;
       if (selectedStyle) finalPrompt += `, style: ${selectedStyle}`;
       if (negativePrompt) finalPrompt += ` --no ${negativePrompt}`;
       
-      await new Promise(r => setTimeout(r, 500));
-      setCurrentStep(5);
-
-      // Step 5: Generating
+      // Step 5: Generating with Callback for Analysis Steps
       const result = await generateImage(
           finalPrompt, 
           aspectRatio, 
-          structureRefData, // The Pose Blueprint
-          characterDataList, // The Array of Players
+          structureRefData, 
+          characterDataList, 
           modelType === 'pro' ? resolution : '1K', 
-          modelType === 'pro' ? useSearch : false 
+          modelType === 'pro' ? useSearch : false,
+          (msg) => addLog(msg) // Callback to update logs
       );
 
       if (result) {
-        setCurrentStep(6);
+        addLog(lang === 'vi' ? 'Hoàn tất & Lưu trữ...' : 'Finalizing & Saving...');
         // Step 6: Finalizing
         const newImage: GeneratedImage = {
           id: crypto.randomUUID(),
@@ -338,39 +326,22 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
               </div>
               
               <h2 className="font-game text-2xl font-bold text-white mb-2 tracking-widest animate-neon-flash">
-                  {lang === 'vi' ? 'ĐANG TẠO NHÂN VẬT...' : 'GENERATING CHARACTER...'}
+                  {lang === 'vi' ? 'ĐANG XỬ LÝ...' : 'PROCESSING...'}
               </h2>
-              <p className="text-slate-400 font-mono text-xs max-w-xs mx-auto mb-8">
-                  {lang === 'vi' ? 'Hệ thống đang render 3D. Vui lòng đợi...' : 'Rendering 3D model. Please wait...'}
+              <p className="text-audi-cyan font-mono text-sm max-w-xs mx-auto mb-8 animate-pulse font-bold">
+                  {progressMsg || (lang === 'vi' ? 'Đang phân tích dữ liệu...' : 'Analyzing data...')}
               </p>
               
-              {/* Detailed Steps List */}
-              <div className="w-full bg-[#12121a] border border-white/10 rounded-2xl p-6 space-y-4 shadow-2xl text-left">
-                  {processingSteps.map((s, idx) => {
-                      const isDone = currentStep > idx;
-                      const isCurrent = currentStep === idx;
-                      const isPending = currentStep < idx;
-
-                      return (
-                          <div key={idx} className={`flex items-center gap-4 transition-all duration-300 ${isPending ? 'opacity-30 blur-[0.5px]' : 'opacity-100'}`}>
-                              <div className={`w-5 h-5 rounded-full flex items-center justify-center border shrink-0 transition-all ${
-                                  isDone ? 'bg-green-500 border-green-500' :
-                                  isCurrent ? 'border-audi-pink animate-spin-slow' :
-                                  'border-slate-600'
-                              }`}>
-                                  {isDone && <Icons.Check className="w-3 h-3 text-black" />}
-                                  {isCurrent && <div className="w-1.5 h-1.5 bg-audi-pink rounded-full"></div>}
-                              </div>
-                              <span className={`text-xs font-mono transition-colors ${
-                                  isCurrent ? 'text-audi-pink font-bold animate-pulse' : 
-                                  isDone ? 'text-green-500 line-through decoration-green-500/50' : 
-                                  'text-slate-400'
-                              }`}>
-                                  {s.label[lang === 'vi' ? 'vi' : 'en']}
-                              </span>
-                          </div>
-                      )
-                  })}
+              {/* Detailed Logs List */}
+              <div className="w-full bg-[#12121a] border border-white/10 rounded-2xl p-4 space-y-2 shadow-2xl text-left h-48 overflow-y-auto custom-scrollbar">
+                  {progressLogs.map((log, idx) => (
+                      <div key={idx} className="flex items-start gap-2 text-xs font-mono border-b border-white/5 pb-1 last:border-0 animate-fade-in">
+                          <span className="text-slate-500">[{new Date().toLocaleTimeString().split(' ')[0]}]</span>
+                          <span className={idx === progressLogs.length - 1 ? 'text-audi-pink font-bold' : 'text-slate-300'}>{log}</span>
+                      </div>
+                  ))}
+                  {/* Fake Cursor */}
+                  <div className="w-2 h-4 bg-audi-pink animate-pulse inline-block"></div>
               </div>
           </div>
       );

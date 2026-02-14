@@ -35,15 +35,44 @@ interface CharacterData {
     image: string | null; // Base64 of identity/outfit reference
 }
 
+// --- NEW: ANALYSIS PHASE FUNCTION ---
 /**
- * generateImage - STRICT MULTI-CHARACTER MODE
- * 
- * @param prompt User prompt (Absolute Command)
- * @param aspectRatio Aspect ratio
- * @param styleRefBase64 TEMPLATE (Pose Only - The Blueprint)
- * @param characterDataList Array of Character Objects (Identity + Gender + Outfit)
- * @param resolution Image Size ('1K', '2K', '4K')
- * @param useSearch Enable Google Search
+ * Analyzes a character image to extract clear text descriptions of outfit and features.
+ * This prevents the "mixing" issue by converting visual data to strict text constraints.
+ */
+export const analyzeCharacterVisuals = async (base64Image: string, gender: string): Promise<string> => {
+    try {
+        const ai = await getAiClient();
+        // Use Flash for fast text analysis
+        const model = 'gemini-2.5-flash'; 
+        
+        const prompt = `Analyze the person in this image.
+        Target Gender: ${gender}.
+        
+        OUTPUT ONLY a concise visual description in this format:
+        "wearing [detailed outfit description including colors and textures], [hair style and color], [distinctive accessories]"
+        
+        Do not describe background or pose. Focus ONLY on clothing and physical appearance.`;
+
+        const response = await ai.models.generateContent({
+            model: model,
+            contents: {
+                parts: [
+                    { inlineData: { mimeType: 'image/jpeg', data: base64Image } },
+                    { text: prompt }
+                ]
+            }
+        });
+
+        return response.text?.trim() || `wearing stylish ${gender} clothes`;
+    } catch (error) {
+        console.warn("Analysis failed, using fallback desc", error);
+        return `wearing fashion ${gender} outfit`;
+    }
+};
+
+/**
+ * generateImage - ADVANCED PIPELINE (Analysis -> Synthesis)
  */
 export const generateImage = async (
     prompt: string, 
@@ -51,21 +80,54 @@ export const generateImage = async (
     styleRefBase64?: string, // POSE BLUEPRINT
     characterDataList: CharacterData[] = [], // LIST OF CHARACTERS
     resolution: string = '2K',
-    useSearch: boolean = false
+    useSearch: boolean = false,
+    onProgress?: (msg: string) => void // Callback for UI updates
 ): Promise<string | null> => {
   
   try {
     const ai = await getAiClient();
     const model = 'gemini-3-pro-image-preview'; 
     
+    // ==========================================
+    // PHASE 1: INDIVIDUAL CHARACTER ANALYSIS
+    // ==========================================
+    // We process each character strictly one by one to ensure no data leakage.
+    
+    const characterDescriptions: Record<number, string> = {};
+    const processedCharList = [];
+
+    for (const char of characterDataList) {
+        if (char.image) {
+            if (onProgress) onProgress(`Analyzing Player ${char.id} (Outfit & Identity)...`);
+            
+            // Artificial delay to prevent rate limits/timeouts if calling rapidly
+            await new Promise(r => setTimeout(r, 1000));
+            
+            const description = await analyzeCharacterVisuals(char.image, char.gender);
+            characterDescriptions[char.id] = description;
+            
+            // We keep the image for the main prompt too (Double Reference: Text + Image)
+            processedCharList.push({
+                ...char,
+                description: description
+            });
+        } else {
+            processedCharList.push({
+                ...char,
+                description: `wearing high-fashion ${char.gender} clothes matching the theme "${prompt}"`
+            });
+        }
+    }
+
+    if (onProgress) onProgress("Synthesizing Final Scene...");
+
+    // ==========================================
+    // PHASE 2: CONSTRUCT SYNTHESIS PROMPT
+    // ==========================================
     const parts: any[] = [];
     let imageIndexCounter = 0;
-    
-    // ==========================================
-    // 1. ADD IMAGES TO PAYLOAD
-    // ==========================================
 
-    // A. Pose Reference (Always First if exists)
+    // A. Pose Reference (The Blueprint)
     let poseRefIndex = -1;
     if (styleRefBase64) {
       parts.push({
@@ -78,11 +140,9 @@ export const generateImage = async (
       poseRefIndex = imageIndexCounter; 
     }
 
-    // B. Character Identity Images (Dynamic List)
-    // We map the Character ID to the Image Index for the Prompt
+    // B. Add Character Images (For Face Identity mainly)
     const charIndexMap: Record<number, number> = {};
-
-    for (const char of characterDataList) {
+    for (const char of processedCharList) {
         if (char.image) {
             parts.push({
                 inlineData: {
@@ -95,72 +155,58 @@ export const generateImage = async (
         }
     }
 
-    const indexToWord = (idx: number) => {
-        const words = ['first', 'second', 'third', 'fourth', 'fifth', 'sixth'];
-        return words[idx - 1] || `${idx}th`;
-    };
+    const indexToWord = (idx: number) => `Image ${idx}`;
 
-    // ==========================================
-    // 2. CONSTRUCT SYSTEM PROMPT (The "Engine")
-    // ==========================================
+    // C. The Master System Prompt
+    const charCount = processedCharList.length;
+    let fullPrompt = `ROLE: Strict 3D Scene Renderer.
+    TASK: Render a group of ${charCount} characters.
     
-    const charCount = characterDataList.length;
-    let fullPrompt = `ROLE: You are an expert 3D Character Artist and Anatomy Specialist.
-    TASK: Generate a high-fidelity 3D render of a group of ${charCount} people.
-    STYLE: Semi-realistic, Audition/Blind Box style, Unreal Engine 5, Octane Render.
-    ANATOMY RULE: Each person MUST have exactly 2 arms and 2 legs. No extra limbs. No missing limbs. Hands must have 5 fingers.
+    [GLOBAL RULES]:
+    1. ANATOMY: Absolute strictness. Each human has 2 arms, 2 legs. No fused bodies. No extra fingers.
+    2. SEPARATION: Characters must be distinct entities. Do not blend their clothes.
+    3. STYLE: 3D Render, Unreal Engine 5, Octane Render, Blind Box / Audition Game Style.
     
     USER COMMAND: "${prompt}".`;
 
-    // ==========================================
-    // 3. POSE BLUEPRINT INSTRUCTION
-    // ==========================================
     if (poseRefIndex > 0) {
-        fullPrompt += `\n\n[IMAGE ${indexToWord(poseRefIndex)} IS THE POSE BLUEPRINT]:
-        - STRICT COMPOSITION: You must copy the exact number of people, their positions, and their poses from this image.
-        - IGNORE DETAILS: Do not look at the clothes, faces, or genders in this image. Only look at the skeletons/wireframes.
+        fullPrompt += `\n\n[COMPOSITION SOURCE: ${indexToWord(poseRefIndex)}]:
+        - Use this image ONLY for POSE and POSITIONING.
         - MAPPING: 
-          * Person on Left/First = Player 1
-          * Person next to them = Player 2
-          * ... and so on.`;
+          * Leftmost figure = Player 1.
+          * Next figure to the right = Player 2.
+          * ...and so on sequentially from Left to Right.`;
     }
 
-    // ==========================================
-    // 4. CHARACTER ISOLATION & DEFINITION
-    // ==========================================
-    fullPrompt += `\n\n[CHARACTER DEFINITIONS - STRICT ISOLATION]:`;
+    // D. Inject Analyzed Descriptions (The Solution to Mixing)
+    fullPrompt += `\n\n[CHARACTER DEFINITIONS]:`;
 
-    characterDataList.forEach((char) => {
+    processedCharList.forEach((char) => {
         const imageIdx = charIndexMap[char.id];
         
-        fullPrompt += `\n\n--- PLAYER ${char.id} ---`;
-        fullPrompt += `\n- GENDER: ${char.gender.toUpperCase()}. (MUST RESPECT GENDER)`;
+        fullPrompt += `\n\n--- PLAYER ${char.id} (${char.gender.toUpperCase()}) ---`;
+        fullPrompt += `\n- POSITION: This character is the ${char.id === 1 ? '1st from Left' : char.id === 2 ? '2nd from Left' : char.id + 'th from Left'}.`;
         
+        // VISUAL ANCHOR (TEXT)
+        fullPrompt += `\n- OUTFIT RULE: Must wear ${char.description}.`;
+        
+        // VISUAL ANCHOR (IMAGE)
         if (imageIdx) {
-            fullPrompt += `\n- SOURCE IMAGE: Image ${indexToWord(imageIdx)}.`;
-            fullPrompt += `\n- FACE IDENTITY: Copy the face from Image ${indexToWord(imageIdx)} exactly.`;
-            fullPrompt += `\n- OUTFIT: Copy the clothing/outfit from Image ${indexToWord(imageIdx)} exactly.`;
-            fullPrompt += `\n- CONSTRAINT: Do NOT apply this outfit to any other player.`;
-        } else {
-            fullPrompt += `\n- APPEARANCE: Generate a beautiful, stylish 3D ${char.gender} character.`;
-            fullPrompt += `\n- OUTFIT: High-fashion, futuristic or street style (matching the prompt theme).`;
+            fullPrompt += `\n- FACE SOURCE: Copy face features exactly from ${indexToWord(imageIdx)}.`;
+            fullPrompt += `\n- OUTFIT SOURCE: Refer to ${indexToWord(imageIdx)} for clothing texture details, but DO NOT apply this outfit to other players.`;
         }
     });
 
-    // ==========================================
-    // 5. FINAL QUALITY & NEGATIVE CHECKS
-    // ==========================================
-    fullPrompt += `\n\n[FINAL QUALITY CHECKS]:
-    1. COUNT CHECK: Are there exactly ${charCount} people? If not, regenerate.
-    2. IDENTITY CHECK: Does Player 1 have Player 1's face? Does Player 2 have Player 2's face? NO MIXING.
-    3. OUTFIT CHECK: Are the clothes distinct and correct for each source image?
-    4. GENDER CHECK: Are the genders correct as defined above?
-    5. ANATOMY CHECK: Scan for extra hands or legs. Fix immediately.`;
+    fullPrompt += `\n\n[FINAL QUALITY CHECK]:
+    - Verify: Are there exactly ${charCount} people?
+    - Verify: Does Player 1 have the correct outfit? Does Player 2 have the correct outfit?
+    - Verify: Are genders correct?
+    - Fix: Remove any extra limbs or distorted hands.`;
 
     parts.push({ text: fullPrompt });
 
     // ==========================================
-    // 6. EXECUTE
+    // PHASE 3: EXECUTE
     // ==========================================
     const config: any = {
         imageConfig: {
@@ -182,7 +228,7 @@ export const generateImage = async (
     return extractImage(response);
 
   } catch (error) {
-    console.error("Gemini 3.0 Multi-Char Gen Error:", error);
+    console.error("Gemini 3.0 Multi-Char Pipeline Error:", error);
     throw error;
   }
 };

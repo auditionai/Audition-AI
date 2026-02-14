@@ -239,10 +239,13 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       { id: 'fashion', name: 'Fashion', icon: Icons.ShoppingBag },
   ];
 
+  // RESTORED 5 RATIOS
   const ratios = [
       { id: '1:1', label: '1:1', desc: 'Vuông' },
+      { id: '9:16', label: '9:16', desc: 'Story' },
+      { id: '16:9', label: '16:9', desc: 'Cinema' },
       { id: '3:4', label: '3:4', desc: 'Dọc' },
-      { id: '16:9', label: '16:9', desc: 'Ngang' },
+      { id: '4:3', label: '4:3', desc: 'Ngang' },
   ];
 
   if (stage === 'processing') {
@@ -370,24 +373,50 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                     ))}
                 </div>
 
-                {/* PROMPT BOX */}
-                <div className="space-y-2">
-                    <div className="flex justify-between items-center">
-                        <label className="text-xs font-bold text-slate-400 uppercase">Mô tả chi tiết</label>
+                {/* PROMPT BOX & REF IMAGE RESTORED */}
+                <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4 shadow-lg">
+                    <div className="flex justify-between items-center mb-3">
+                        <label className="text-xs font-bold text-slate-400 uppercase flex items-center gap-2">
+                            <Icons.MessageCircle className="w-4 h-4" /> Mô tả & Ảnh mẫu
+                        </label>
                         <button onClick={handleSuggestPrompt} disabled={isSuggesting} className="text-xs font-bold text-audi-purple flex items-center gap-1 hover:text-white transition-colors">
                             <Icons.Sparkles className={`w-3 h-3 ${isSuggesting ? 'animate-spin' : ''}`} /> AI Viết Hộ
                         </button>
                     </div>
-                    <textarea 
-                        value={prompt}
-                        onChange={(e) => setPrompt(e.target.value)}
-                        placeholder={lang === 'vi' ? "Mô tả trang phục, bối cảnh, hành động..." : "Describe clothing, scene, action..."}
-                        className="w-full h-32 bg-[#12121a] border border-white/10 rounded-2xl p-4 text-sm text-white focus:border-audi-purple outline-none resize-none shadow-inner"
-                    />
+                    
+                    <div className="flex flex-col md:flex-row gap-4">
+                        {/* REF IMAGE UPLOAD RESTORED */}
+                        <div 
+                            onClick={handleRefUploadClick}
+                            className="w-full md:w-32 aspect-[3/4] md:aspect-square bg-black/40 rounded-xl border-2 border-dashed border-slate-700 hover:border-audi-purple cursor-pointer relative overflow-hidden group shrink-0 flex items-center justify-center transition-all"
+                        >
+                            {refImage ? (
+                                <>
+                                    <img src={refImage} className="w-full h-full object-cover opacity-80" alt="Ref" />
+                                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <Icons.X className="w-6 h-6 text-white" onClick={(e) => { e.stopPropagation(); setRefImage(null); }} />
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="flex flex-col items-center text-slate-500 p-2 text-center">
+                                    <Icons.Image className="w-6 h-6 mb-1" />
+                                    <span className="text-[9px] font-bold uppercase leading-tight">Ảnh mẫu<br/>(Pose)</span>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* TEXT AREA */}
+                        <textarea 
+                            value={prompt}
+                            onChange={(e) => setPrompt(e.target.value)}
+                            placeholder={lang === 'vi' ? "Mô tả chi tiết: trang phục, bối cảnh..." : "Detailed prompt: clothes, scene..."}
+                            className="flex-1 bg-black/20 border border-white/5 rounded-xl p-3 text-sm text-white focus:border-audi-purple outline-none resize-none min-h-[100px]"
+                        />
+                    </div>
                 </div>
             </div>
 
-            {/* RIGHT: SETTINGS PANEL (RESTORED) */}
+            {/* RIGHT: SETTINGS PANEL */}
             <div className="lg:col-span-1 space-y-6">
                 <div className="bg-[#12121a] border border-white/10 rounded-2xl p-5 space-y-5 shadow-lg h-full">
                     <h3 className="font-bold text-white flex items-center gap-2 border-b border-white/10 pb-3">
@@ -416,15 +445,15 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                         </div>
                     </div>
 
-                    {/* RATIO */}
+                    {/* RATIO (5 Options Restored) */}
                     <div className="space-y-2">
                         <label className="text-[10px] font-bold text-slate-400 uppercase">Tỉ lệ khung hình</label>
-                        <div className="flex gap-2">
+                        <div className="flex flex-wrap gap-2">
                             {ratios.map(r => (
                                 <button 
                                     key={r.id} 
                                     onClick={() => setAspectRatio(r.id)} 
-                                    className={`flex-1 py-2 rounded-lg border text-xs font-bold transition-all ${aspectRatio === r.id ? 'bg-white text-black border-white' : 'border-white/10 text-slate-500 hover:bg-white/5'}`}
+                                    className={`flex-1 min-w-[50px] py-2 rounded-lg border text-[10px] font-bold transition-all ${aspectRatio === r.id ? 'bg-white text-black border-white' : 'border-white/10 text-slate-500 hover:bg-white/5'}`}
                                 >
                                     {r.label}
                                 </button>

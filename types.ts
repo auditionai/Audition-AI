@@ -86,6 +86,7 @@ export interface CreditPackage {
   bonusPercent: number; // Specific bonus % for this package (e.g. 10 for 10%)
   isPopular?: boolean;
   isActive?: boolean; // New field for visibility control
+  displayOrder?: number; // New field for sorting
   colorTheme: string;
   transferContent: string; // Custom transfer syntax
 }

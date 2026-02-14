@@ -4,7 +4,7 @@ import { Language, Transaction, UserProfile, GeneratedImage, CreditPackage, Prom
 import { Icons } from '../components/Icons';
 import { checkConnection } from '../services/geminiService';
 import { checkSupabaseConnection } from '../services/supabaseClient';
-import { getAdminStats, savePackage, deletePackage, updateAdminUserProfile, savePromotionConfig, getGiftcodes, saveGiftcode, deleteGiftcode, adminApproveTransaction, adminRejectTransaction, getSystemApiKey, saveSystemApiKey } from '../services/economyService';
+import { getAdminStats, savePackage, deletePackage, updateAdminUserProfile, savePromotionConfig, getGiftcodes, saveGiftcode, deleteGiftcode, adminApproveTransaction, adminRejectTransaction, getSystemApiKey, saveSystemApiKey, updatePackageOrder } from '../services/economyService';
 import { getAllImagesFromStorage, deleteImageFromStorage } from '../services/storageService';
 
 interface AdminProps {
@@ -230,6 +230,26 @@ ADD COLUMN IF NOT EXISTS bonus_credits int8 DEFAULT 0;`,
               showToast('Lỗi khi xóa: ' + result.error, 'error');
           }
       });
+  };
+
+  const handleMovePackage = async (index: number, direction: number) => {
+      const newPackages = [...packages];
+      const newIndex = index + direction;
+
+      if (newIndex < 0 || newIndex >= newPackages.length) return;
+
+      // Swap elements
+      [newPackages[index], newPackages[newIndex]] = [newPackages[newIndex], newPackages[index]];
+      
+      // Update local state immediately for UI response
+      setPackages(newPackages);
+
+      // Call service to update order in DB
+      const result = await updatePackageOrder(newPackages);
+      if (!result.success) {
+          showToast('Lỗi khi lưu thứ tự: ' + result.error, 'error');
+          // Revert if needed, but for now we let it stay locally
+      }
   };
 
   const handleSaveGiftcode = async () => {
@@ -825,7 +845,7 @@ CREATE POLICY "Enable all access for gift codes" ON public.gift_codes FOR ALL US
                   </div>
                   {/* ... Package List ... */}
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                      {packages.map(pkg => (
+                      {packages.map((pkg, index) => (
                           <div key={pkg.id} className={`bg-[#12121a] p-4 rounded-2xl border-2 ${pkg.colorTheme} relative group ${!pkg.isActive ? 'opacity-60 border-dashed' : ''}`}>
                               {/* Active/Inactive Badge */}
                               <div className="absolute top-2 left-2">
@@ -846,6 +866,20 @@ CREATE POLICY "Enable all access for gift codes" ON public.gift_codes FOR ALL US
                               <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                   <button onClick={() => setEditingPackage(pkg)} className="p-2 bg-blue-500 text-white rounded-lg"><Icons.Settings className="w-3 h-3" /></button>
                                   <button onClick={() => handleDeletePackage(pkg.id)} className="p-2 bg-red-500 text-white rounded-lg"><Icons.Trash className="w-3 h-3" /></button>
+                              </div>
+
+                              {/* REORDER BUTTONS */}
+                              <div className="absolute bottom-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  {index > 0 && (
+                                      <button onClick={() => handleMovePackage(index, -1)} className="p-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg" title="Move Left/Up">
+                                          <Icons.ChevronLeft className="w-3 h-3" />
+                                      </button>
+                                  )}
+                                  {index < packages.length - 1 && (
+                                      <button onClick={() => handleMovePackage(index, 1)} className="p-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg" title="Move Right/Down">
+                                          <Icons.ChevronRight className="w-3 h-3" />
+                                      </button>
+                                  )}
                               </div>
                           </div>
                       ))}

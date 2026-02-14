@@ -231,6 +231,7 @@ export const getPackages = async (onlyActive: boolean = true): Promise<CreditPac
                 bonusPercent: p.bonus_credits || 0, // Store Percentage in 'bonus_credits' column
                 isPopular: p.is_featured || false, // Map 'is_featured'
                 isActive: p.is_active, // Map 'is_active'
+                displayOrder: p.display_order || 0, // Map 'display_order'
                 colorTheme: p.is_featured ? 'border-audi-pink' : 'border-slate-600', 
                 transferContent: p.transfer_syntax || `NAP ${p.price_vnd}` // Map 'transfer_syntax' or fallback
             }));
@@ -250,7 +251,7 @@ export const savePackage = async (pkg: CreditPackage): Promise<{success: boolean
             tag: pkg.bonusText || '', 
             is_featured: pkg.isPopular,
             is_active: pkg.isActive ?? true,
-            display_order: 0,
+            display_order: pkg.displayOrder ?? 0,
             bonus_credits: pkg.bonusPercent || 0, // Save percentage here
             transfer_syntax: pkg.transferContent || '' // Save syntax here (ensure string)
         };
@@ -273,6 +274,26 @@ export const savePackage = async (pkg: CreditPackage): Promise<{success: boolean
     }
     return { success: false, error: 'Chưa kết nối Database.' };
 };
+
+export const updatePackageOrder = async (packages: CreditPackage[]): Promise<{success: boolean, error?: string}> => {
+    if (supabase) {
+        try {
+            // Iterate and update order for each package
+            // NOTE: A more efficient way would be an upsert or RPC, but this is safe for small lists.
+            for (let i = 0; i < packages.length; i++) {
+                await supabase
+                    .from('credit_packages')
+                    .update({ display_order: i })
+                    .eq('id', packages[i].id);
+            }
+            return { success: true };
+        } catch (e: any) {
+            console.error("Reorder error:", e);
+            return { success: false, error: e.message };
+        }
+    }
+    return { success: false, error: 'No connection' };
+}
 
 export const deletePackage = async (id: string): Promise<{success: boolean, error?: string, action?: 'deleted' | 'hidden'}> => {
     if (supabase && isValidUUID(id)) {

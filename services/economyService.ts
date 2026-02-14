@@ -1,5 +1,5 @@
 
-import { CreditPackage, Transaction, UserProfile, CheckinConfig, DiamondLog, TransactionStatus, PromotionCampaign, Giftcode } from '../types';
+import { CreditPackage, Transaction, UserProfile, CheckinConfig, DiamondLog, TransactionStatus, PromotionCampaign, Giftcode, HistoryItem } from '../types';
 import { supabase } from './supabaseClient';
 
 // --- LOCAL STORAGE HELPERS (Fallback) ---
@@ -697,6 +697,62 @@ export const getUserTransactions = async (): Promise<Transaction[]> => {
         }
     }
     return [];
+};
+
+export const getUnifiedHistory = async (): Promise<HistoryItem[]> => {
+    const user = await getUserProfile();
+    if (!supabase || user.id.length < 20) return [];
+
+    // 1. Fetch Balance Logs (Completed transactions: Usage, Rewards, Successful Topups)
+    const { data: logs } = await supabase
+        .from('diamond_transactions_log')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+    // 2. Fetch Pending Topups (Not in logs yet)
+    const { data: pendingTxs } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false });
+
+    const history: HistoryItem[] = [];
+
+    // Map Pending Txs
+    if (pendingTxs) {
+        pendingTxs.forEach((tx: any) => {
+            history.push({
+                id: tx.id,
+                createdAt: tx.created_at,
+                description: `Đơn nạp chờ duyệt`,
+                vcoinChange: tx.diamonds_received,
+                amountVnd: tx.amount_vnd,
+                type: 'pending_topup',
+                status: 'pending',
+                code: `NAP${tx.order_code}`
+            });
+        });
+    }
+
+    // Map Logs
+    if (logs) {
+        logs.forEach((log: any) => {
+            history.push({
+                id: log.id,
+                createdAt: log.created_at,
+                description: log.description,
+                vcoinChange: log.amount, // Positive or Negative
+                type: log.transaction_type, // 'topup', 'usage', etc.
+                status: 'success',
+                code: log.description.includes('Deposit:') ? log.description.split(':')[1].trim() : undefined
+            });
+        });
+    }
+
+    // Sort combined list by date desc
+    return history.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 };
 
 export const createPaymentLink = async (packageId: string): Promise<Transaction> => {

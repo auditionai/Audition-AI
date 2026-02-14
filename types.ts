@@ -126,6 +126,17 @@ export interface DiamondLog {
   createdAt: string;
 }
 
+export interface HistoryItem {
+    id: string;
+    createdAt: string;
+    description: string;
+    vcoinChange: number;
+    amountVnd?: number;
+    type: 'topup' | 'usage' | 'reward' | 'giftcode' | 'refund' | 'pending_topup' | 'admin_adjustment';
+    status: 'success' | 'pending' | 'failed';
+    code?: string;
+}
+
 export interface CheckinConfig {
   day: number;
   reward: number;

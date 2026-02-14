@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Language, Transaction, CreditPackage, PromotionCampaign, ViewId } from '../types';
+import { Language, Transaction, CreditPackage, PromotionCampaign, ViewId, HistoryItem } from '../types';
 import { Icons } from '../components/Icons';
-import { getPackages, createPaymentLink, getActivePromotion, getUserTransactions } from '../services/economyService';
+import { getPackages, createPaymentLink, getActivePromotion, getUnifiedHistory } from '../services/economyService';
 
 interface TopUpProps {
   lang: Language;
@@ -11,7 +11,7 @@ interface TopUpProps {
 
 export const TopUp: React.FC<TopUpProps> = ({ lang, onNavigate }) => {
   const [activeTab, setActiveTab] = useState<'packages' | 'history'>('packages');
-  const [history, setHistory] = useState<Transaction[]>([]);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
   const [packages, setPackages] = useState<CreditPackage[]>([]);
   const [activeCampaign, setActiveCampaign] = useState<PromotionCampaign | null>(null);
   const [loading, setLoading] = useState(false);
@@ -54,11 +54,11 @@ export const TopUp: React.FC<TopUpProps> = ({ lang, onNavigate }) => {
     return () => clearInterval(interval);
   }, [activeCampaign]);
 
-  // Load History from DB (transactions table)
+  // Load History from DB (merged logs and pending)
   useEffect(() => {
       if (activeTab === 'history') {
           const fetchHistory = async () => {
-              const txs = await getUserTransactions();
+              const txs = await getUnifiedHistory();
               setHistory(txs);
           };
           fetchHistory();
@@ -99,6 +99,30 @@ export const TopUp: React.FC<TopUpProps> = ({ lang, onNavigate }) => {
       }
   };
 
+  const getBadgeStyle = (type: string) => {
+      switch(type) {
+          case 'usage': return 'bg-blue-500/20 text-blue-400 border-blue-500/50';
+          case 'topup': return 'bg-green-500/20 text-green-400 border-green-500/50';
+          case 'pending_topup': return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/50';
+          case 'reward': return 'bg-audi-pink/20 text-audi-pink border-audi-pink/50';
+          case 'giftcode': return 'bg-purple-500/20 text-purple-400 border-purple-500/50';
+          case 'refund': return 'bg-audi-cyan/20 text-audi-cyan border-audi-cyan/50';
+          default: return 'bg-slate-500/20 text-slate-400 border-slate-500/50';
+      }
+  }
+
+  const getBadgeLabel = (type: string) => {
+      switch(type) {
+          case 'usage': return 'SỬ DỤNG';
+          case 'topup': return 'NẠP TIỀN';
+          case 'pending_topup': return 'CHỜ DUYỆT';
+          case 'reward': return 'THƯỞNG';
+          case 'giftcode': return 'GIFTCODE';
+          case 'refund': return 'HOÀN TIỀN';
+          default: return 'KHÁC';
+      }
+  }
+
   return (
     <div className="pb-32 animate-fade-in max-w-6xl mx-auto">
         
@@ -127,15 +151,15 @@ export const TopUp: React.FC<TopUpProps> = ({ lang, onNavigate }) => {
                 <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-audi-cyan via-white to-audi-cyan opacity-50"></div>
                 <h2 className="text-2xl font-game font-bold text-white mb-8 flex items-center gap-3">
                     <Icons.Clock className="w-6 h-6 text-audi-cyan" />
-                    {lang === 'vi' ? 'Lịch Sử Giao Dịch' : 'Transaction Logs'}
+                    {lang === 'vi' ? 'Lịch Sử Biến Động Số Dư' : 'Balance History'}
                 </h2>
                 <div className="overflow-x-auto">
                     <table className="w-full text-left text-sm text-slate-400">
                         <thead className="text-xs uppercase bg-white/5 text-slate-300 font-bold tracking-wider">
                             <tr>
                                 <th className="px-6 py-4 rounded-l-xl">Thời gian</th>
-                                <th className="px-6 py-4">Mã đơn</th>
-                                <th className="px-6 py-4">Giá trị</th>
+                                <th className="px-6 py-4">Nội dung</th>
+                                <th className="px-6 py-4">Loại GD</th>
                                 <th className="px-6 py-4">Vcoin</th>
                                 <th className="px-6 py-4 rounded-r-xl">Trạng thái</th>
                             </tr>
@@ -143,19 +167,29 @@ export const TopUp: React.FC<TopUpProps> = ({ lang, onNavigate }) => {
                         <tbody className="divide-y divide-white/5">
                             {history.length === 0 ? (
                                 <tr><td colSpan={5} className="text-center py-12 text-slate-500 italic">Chưa có giao dịch nào</td></tr>
-                            ) : history.map(tx => (
-                                <tr key={tx.id} className="hover:bg-white/5 transition-colors group">
-                                    <td className="px-6 py-4 font-mono">{new Date(tx.createdAt).toLocaleString()}</td>
-                                    <td className="px-6 py-4 font-mono text-white group-hover:text-audi-cyan">{tx.code}</td>
-                                    <td className="px-6 py-4 text-white font-bold">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(tx.amount)}</td>
-                                    <td className="px-6 py-4 text-audi-yellow font-bold text-base">+{tx.coins}</td>
+                            ) : history.map(item => (
+                                <tr key={item.id} className="hover:bg-white/5 transition-colors group">
+                                    <td className="px-6 py-4 font-mono text-xs">{new Date(item.createdAt).toLocaleString()}</td>
+                                    <td className="px-6 py-4 font-bold text-white max-w-[200px] truncate" title={item.description}>
+                                        {item.description}
+                                        {item.code && <div className="text-[10px] text-slate-500 font-mono mt-0.5">{item.code}</div>}
+                                    </td>
                                     <td className="px-6 py-4">
-                                        <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${
-                                            tx.status === 'paid' ? 'bg-green-500/10 border-green-500 text-green-500' : 
-                                            tx.status === 'pending' ? 'bg-yellow-500/10 border-yellow-500 text-yellow-500' : 'bg-red-500/10 border-red-500 text-red-500'
-                                        }`}>
-                                            {tx.status === 'paid' ? 'THÀNH CÔNG' : tx.status === 'pending' ? 'CHỜ DUYỆT' : 'HỦY/LỖI'}
+                                        <span className={`px-2 py-1 rounded border text-[10px] font-bold ${getBadgeStyle(item.type)}`}>
+                                            {getBadgeLabel(item.type)}
                                         </span>
+                                    </td>
+                                    <td className={`px-6 py-4 font-bold text-base ${item.vcoinChange > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                        {item.vcoinChange > 0 ? '+' : ''}{item.vcoinChange}
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        {item.status === 'success' ? (
+                                            <Icons.Check className="w-4 h-4 text-green-500" />
+                                        ) : item.status === 'pending' ? (
+                                            <Icons.Loader className="w-4 h-4 text-yellow-500 animate-spin" />
+                                        ) : (
+                                            <Icons.X className="w-4 h-4 text-red-500" />
+                                        )}
                                     </td>
                                 </tr>
                             ))}

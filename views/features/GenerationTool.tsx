@@ -41,7 +41,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
   
   // Prompt & Text
   const [prompt, setPrompt] = useState('');
-  const [negativePrompt, setNegativePrompt] = useState('real photo, photorealistic, grainy, noise, bad quality, 2d, sketch, extra limbs, missing limbs, mutated hands, bad anatomy, fused bodies, duplicate characters, deformed legs, extra fingers');
+  const [negativePrompt, setNegativePrompt] = useState('crowd, extra people, audience, bystanders, deformed, bad anatomy, disfigured, poorly drawn face, mutation, mutated, extra limb, ugly, disgusting, poorly drawn hands, missing limb, floating limbs, disconnected limbs, malformed hands, blur, out of focus, long neck, long body, mutated hands and fingers, out of frame, blender, doll, cropped, low-res, close-up, poorly-drawn face, out of frame double, two heads, blurred, ugly, disfigured, too many fingers, deformed, repetitive, black and white, grainy, extra limbs, bad anatomy, duplicate, photorealistic, realistic photo, sketch, cartoon, drawing, art, 2d');
   const [seed, setSeed] = useState('');
   const [isSuggesting, setIsSuggesting] = useState(false);
   const [isScanningFace, setIsScanningFace] = useState(false); 

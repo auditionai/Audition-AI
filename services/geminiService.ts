@@ -91,7 +91,6 @@ export const generateImage = async (
     // ==========================================
     // PHASE 1: INDIVIDUAL CHARACTER ANALYSIS
     // ==========================================
-    const characterDescriptions: Record<number, string> = {};
     const processedCharList = [];
 
     for (const char of characterDataList) {
@@ -102,7 +101,6 @@ export const generateImage = async (
             await new Promise(r => setTimeout(r, 1000));
             
             const description = await analyzeCharacterVisuals(char.image, char.gender);
-            characterDescriptions[char.id] = description;
             
             processedCharList.push({
                 ...char,
@@ -157,27 +155,26 @@ export const generateImage = async (
     // C. The Master System Prompt
     const charCount = processedCharList.length;
     let fullPrompt = `ROLE: Strict 3D Scene Renderer & Composition Expert.
-    TASK: Render a group of ${charCount} characters based on specific instructions.
+    TASK: Render a group of EXACTLY ${charCount} characters. 
     
-    USER COMMAND: "${prompt}".
+    [CRITICAL SECURITY PROTOCOLS - READ CAREFULLY]:
+    1. CHARACTER COUNT LOCK: There must be EXACTLY ${charCount} people in this image. NO MORE, NO LESS. If you see empty space, DO NOT fill it with extra people. Leave it empty or fill with background scenery.
+    2. NO EXTRA LIMBS: Every character implies strict human anatomy. 2 arms, 2 legs.
+    3. SEPARATION OF IDENTITY: Do not blend features between characters.
     
-    [GLOBAL RULES - STRICT ADHERENCE]:
-    1. ANATOMY: Absolute strictness. Each human has 2 arms, 2 legs. No fused bodies.
-    2. SEPARATION: Characters must be distinct entities. Do not blend their clothes.
-    3. NEW BACKGROUND: Do NOT copy the background from any reference image. Create a completely new background based on the User Command or a generic "3D Game Stage" if not specified.
-    4. FULL FRAME: You must fill the ENTIRE image canvas. If the reference image is smaller or has a different ratio, EXTEND the scene. Do not create black bars or borders.`;
+    USER COMMAND: "${prompt}".`;
 
     // --- CRITICAL FIX FOR POSE REF ---
     if (poseRefIndex > 0) {
         fullPrompt += `\n\n[IMAGE ${indexToWord(poseRefIndex)} IS THE POSE BLUEPRINT]:
-        - FUNCTION: This image is a WIREFRAME/SKELETON guide only. 
-        - IGNORE TEXTURE: Do not look at the colors, clothes, or background in this image. It has been processed to be grayscale/structure only.
-        - COMPOSITION: Use the character positions from this image, but place them in the NEW background.
-        - ASPECT RATIO HANDLING: If this image has empty/gray space around it, FILL IT with the new background. Extend the floor and scenery naturally.`;
+        - FUNCTION: This image is ONLY for Skeleton/Pose data.
+        - IGNORE PIXELS: Do NOT copy the background pixels. Do NOT copy the clothing pixels from this image.
+        - BACKGROUND RULE: The background in this reference image is "Void/Null". You MUST replace it entirely with a NEW 3D environment based on the User Command.
+        - ASPECT RATIO: Generate the image filling the full canvas. Extend the *new* background to the edges. Do NOT letterbox.`;
     }
 
     // D. Inject Analyzed Descriptions
-    fullPrompt += `\n\n[CHARACTER DEFINITIONS]:`;
+    fullPrompt += `\n\n[CHARACTER DEFINITIONS - STRICT LOCK]:`;
 
     processedCharList.forEach((char) => {
         const imageIdx = charIndexMap[char.id];
@@ -186,19 +183,20 @@ export const generateImage = async (
         fullPrompt += `\n- POSITION: Maps to the ${char.id === 1 ? 'Leftmost' : char.id === 2 ? 'Next' : char.id + 'th'} figure in the Pose Blueprint.`;
         
         // VISUAL ANCHOR (TEXT) - This overrides the visual reference's clothes
-        fullPrompt += `\n- OUTFIT COMMAND: Must wear ${char.description}. Ignore any clothes seen in Pose Blueprint.`;
+        fullPrompt += `\n- OUTFIT (ABSOLUTE TRUTH): ${char.description}. (You MUST render this outfit exactly. Do not change it. Do not be creative with the clothes).`;
         
         // VISUAL ANCHOR (IMAGE) - Use only for Face
         if (imageIdx) {
-            fullPrompt += `\n- FACE SOURCE: Copy face features exactly from ${indexToWord(imageIdx)}.`;
-            fullPrompt += `\n- CLOTHING REFERENCE: You may check ${indexToWord(imageIdx)} for clothing details/texture, but ensure it applies ONLY to Player ${char.id}.`;
+            fullPrompt += `\n- FACE IDENTITY SOURCE: ${indexToWord(imageIdx)}. Copy the face structure and features.`;
+            fullPrompt += `\n- IGNORE SOURCE CLOTHES: Do not look at the clothes in ${indexToWord(imageIdx)} if they contradict the text description above.`;
         }
     });
 
-    fullPrompt += `\n\n[FINAL QUALITY CHECK]:
-    - Did you create a NEW background? (Yes/No) -> Must be YES.
-    - Did you fill the whole aspect ratio? (Yes/No) -> Must be YES.
-    - Are the clothes distinct for each player? (Yes/No) -> Must be YES.`;
+    fullPrompt += `\n\n[FINAL PRE-RENDER CHECKLIST]:
+    1. Count: Are there exactly ${charCount} people? (Delete any extras).
+    2. Background: Is it a NEW 3D background? (Do not copy reference background).
+    3. Outfits: Do they match the text descriptions for each player? (Do not swap clothes).
+    4. Composition: Is the scene filling the whole ${aspectRatio} frame?`;
 
     parts.push({ text: fullPrompt });
 

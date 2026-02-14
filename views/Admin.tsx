@@ -18,6 +18,19 @@ interface SystemHealth {
     storage: { status: 'connected' | 'disconnected' | 'checking'; };
 }
 
+// --- INTERNAL NOTIFICATION COMPONENTS ---
+interface ToastMsg {
+    id: number;
+    msg: string;
+    type: 'success' | 'error' | 'info';
+}
+
+interface ConfirmState {
+    show: boolean;
+    msg: string;
+    onConfirm: () => void;
+}
+
 export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [activeView, setActiveView] = useState<'overview' | 'transactions' | 'users' | 'packages' | 'promotion' | 'giftcodes' | 'system'>('overview');
   const [stats, setStats] = useState<any>(null);
@@ -43,6 +56,30 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
   const [editingPackage, setEditingPackage] = useState<CreditPackage | null>(null);
   const [editingGiftcode, setEditingGiftcode] = useState<Giftcode | null>(null);
+
+  // Notification State
+  const [toasts, setToasts] = useState<ToastMsg[]>([]);
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmState>({ show: false, msg: '', onConfirm: () => {} });
+
+  // Helpers for Notifications
+  const showToast = (msg: string, type: 'success' | 'error' | 'info' = 'success') => {
+      const id = Date.now();
+      setToasts(prev => [...prev, { id, msg, type }]);
+      setTimeout(() => {
+          setToasts(prev => prev.filter(t => t.id !== id));
+      }, 3000);
+  };
+
+  const showConfirm = (msg: string, action: () => void) => {
+      setConfirmDialog({
+          show: true,
+          msg,
+          onConfirm: () => {
+              action();
+              setConfirmDialog(prev => ({ ...prev, show: false }));
+          }
+      });
+  };
 
   // Load Data Sequence
   useEffect(() => {
@@ -115,15 +152,15 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           const success = await saveSystemApiKey(apiKey);
           if (success) {
               setKeyStatus('valid');
-              alert('Đã lưu API Key vào Database thành công!');
+              showToast('Đã lưu API Key vào Database thành công!');
               runSystemChecks(apiKey);
           } else {
               setKeyStatus('unknown');
-              alert('Lỗi khi lưu vào Database. Vui lòng kiểm tra kết nối.');
+              showToast('Lỗi khi lưu vào Database. Vui lòng kiểm tra kết nối.', 'error');
           }
       } else {
           setKeyStatus('invalid');
-          alert('API Key không hoạt động. Vui lòng kiểm tra lại.');
+          showToast('API Key không hoạt động. Vui lòng kiểm tra lại.', 'error');
       }
   };
 
@@ -132,7 +169,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           await updateAdminUserProfile(editingUser);
           setEditingUser(null);
           refreshData();
-          alert('Cập nhật người dùng thành công!');
+          showToast('Cập nhật người dùng thành công!');
       }
   };
 
@@ -141,62 +178,66 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           await savePackage(editingPackage);
           setEditingPackage(null);
           refreshData();
-          alert('Cập nhật gói nạp thành công!');
+          showToast('Cập nhật gói nạp thành công!');
       }
   };
 
   const handleDeletePackage = async (id: string) => {
-      if (confirm('Bạn có chắc chắn muốn xóa gói nạp này?')) {
+      showConfirm('Bạn có chắc chắn muốn xóa gói nạp này?', async () => {
           await deletePackage(id);
           refreshData();
-      }
+          showToast('Đã xóa gói nạp');
+      });
   };
 
   const handleSaveGiftcode = async () => {
       if (editingGiftcode) {
-          const success = await saveGiftcode(editingGiftcode);
-          if (success) {
+          const result = await saveGiftcode(editingGiftcode);
+          if (result.success) {
               setEditingGiftcode(null);
               refreshData();
-              alert('Lưu Giftcode thành công!');
+              showToast('Lưu Giftcode thành công!');
           } else {
-              alert('Lỗi khi lưu Giftcode! Mã có thể đã tồn tại hoặc lỗi kết nối.');
+              showToast(`Lỗi: ${result.error}`, 'error');
           }
       }
   };
 
   const handleDeleteGiftcode = async (id: string) => {
-      if (confirm('Xóa mã này?')) {
+      showConfirm('Xóa mã này vĩnh viễn?', async () => {
           await deleteGiftcode(id);
           refreshData();
-      }
+          showToast('Đã xóa Giftcode');
+      });
   };
 
   const handleSavePromotion = async () => {
       await savePromotionConfig(promotion);
-      alert('Đã lưu cấu hình khuyến mãi!');
+      showToast('Đã lưu cấu hình khuyến mãi!');
   };
 
   const handleDeleteContent = async (id: string) => {
-      if(confirm('Xóa vĩnh viễn hình ảnh này?')) {
+      showConfirm('Xóa vĩnh viễn hình ảnh này?', async () => {
           await deleteImageFromStorage(id);
           setAllImages(prev => prev.filter(img => img.id !== id));
-      }
+          showToast('Đã xóa ảnh');
+      });
   }
 
   const handleApproveTransaction = async (txId: string) => {
-      if(confirm('Xác nhận duyệt giao dịch này và cộng Vcoin cho user?')) {
+      showConfirm('Xác nhận duyệt giao dịch này và cộng Vcoin cho user?', async () => {
           await adminApproveTransaction(txId);
           refreshData();
-          alert('Đã duyệt thành công!');
-      }
+          showToast('Đã duyệt thành công!');
+      });
   }
 
   const handleRejectTransaction = async (txId: string) => {
-      if(confirm('Từ chối giao dịch này?')) {
+      showConfirm('Từ chối giao dịch này?', async () => {
           await adminRejectTransaction(txId);
           refreshData();
-      }
+          showToast('Đã từ chối giao dịch', 'info');
+      });
   }
 
   // --- ACCESS DENIED ---
@@ -227,6 +268,38 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
   return (
     <div className="min-h-screen pb-24 animate-fade-in bg-[#05050A]">
+      
+      {/* --- TOASTS CONTAINER --- */}
+      <div className="fixed top-24 right-4 z-[9999] flex flex-col gap-2 pointer-events-none">
+          {toasts.map(t => (
+              <div key={t.id} className={`pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-xl border shadow-xl animate-fade-in ${
+                  t.type === 'success' ? 'bg-[#0f1f12] border-green-500/50 text-green-400' : 
+                  t.type === 'error' ? 'bg-[#1f0f0f] border-red-500/50 text-red-400' : 'bg-[#0f151f] border-blue-500/50 text-blue-400'
+              }`}>
+                  {t.type === 'success' && <Icons.Check className="w-5 h-5" />}
+                  {t.type === 'error' && <Icons.X className="w-5 h-5" />}
+                  {t.type === 'info' && <Icons.Info className="w-5 h-5" />}
+                  <span className="text-sm font-bold">{t.msg}</span>
+              </div>
+          ))}
+      </div>
+
+      {/* --- CONFIRM DIALOG --- */}
+      {confirmDialog.show && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
+              <div className="bg-[#12121a] border border-white/20 p-6 rounded-2xl max-w-sm w-full shadow-2xl transform scale-100 transition-all">
+                  <div className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center mb-4 text-audi-yellow mx-auto">
+                      <Icons.Bell className="w-6 h-6 animate-swing" />
+                  </div>
+                  <h3 className="text-lg font-bold text-white text-center mb-2">Xác nhận</h3>
+                  <p className="text-slate-400 text-center text-sm mb-6">{confirmDialog.msg}</p>
+                  <div className="flex gap-3">
+                      <button onClick={() => setConfirmDialog(prev => ({...prev, show: false}))} className="flex-1 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-bold">Hủy</button>
+                      <button onClick={confirmDialog.onConfirm} className="flex-1 py-2 rounded-xl bg-audi-pink hover:bg-pink-600 text-white font-bold">Đồng ý</button>
+                  </div>
+              </div>
+          </div>
+      )}
       
       {/* --- TOP COMMAND BAR --- */}
       <div className="bg-[#12121a] border-b border-white/10 sticky top-[72px] z-40 shadow-lg">
@@ -485,7 +558,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
                   {/* EDIT USER MODAL */}
                   {editingUser && (
-                      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                      <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
                           <div className="bg-[#12121a] w-full max-w-md p-6 rounded-2xl border border-white/20 shadow-2xl">
                               <h3 className="text-xl font-bold text-white mb-4">Chỉnh sửa người dùng</h3>
                               <div className="space-y-4">
@@ -586,15 +659,15 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                       </table>
                   </div>
 
-                  {/* EDIT GIFTCODE MODAL - FIXED LAYOUT */}
+                  {/* EDIT GIFTCODE MODAL - FIXED LAYOUT & Z-INDEX */}
                   {editingGiftcode && (
-                      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-                          <div className="bg-[#12121a] w-full max-w-lg p-6 rounded-2xl border border-white/20 shadow-2xl max-h-[90vh] overflow-y-auto">
-                              <h3 className="text-xl font-bold text-white mb-6 sticky top-0 bg-[#12121a] z-10 py-2 border-b border-white/10">
+                      <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                          <div className="bg-[#12121a] w-full max-w-lg p-6 rounded-2xl border border-white/20 shadow-2xl flex flex-col max-h-[90vh]">
+                              <h3 className="text-xl font-bold text-white mb-6 sticky top-0 bg-[#12121a] z-10 py-2 border-b border-white/10 shrink-0">
                                   {editingGiftcode.id.startsWith('temp_') ? 'Tạo Giftcode Mới' : 'Sửa Giftcode'}
                               </h3>
                               
-                              <div className="space-y-4">
+                              <div className="space-y-4 overflow-y-auto pr-2 custom-scrollbar">
                                   <div>
                                       <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Mã Code (Tự động in hoa)</label>
                                       <input 
@@ -646,7 +719,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                   </div>
                               </div>
 
-                              <div className="flex gap-3 pt-6 mt-2 border-t border-white/10">
+                              <div className="flex gap-3 pt-6 mt-2 border-t border-white/10 shrink-0">
                                   <button onClick={() => setEditingGiftcode(null)} className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-bold transition-colors">Hủy</button>
                                   <button onClick={handleSaveGiftcode} className="flex-1 py-3 rounded-xl bg-audi-lime hover:bg-lime-400 text-black font-bold shadow-[0_0_15px_rgba(204,255,0,0.3)] transition-all">
                                       {editingGiftcode.id.startsWith('temp_') ? 'Tạo Code' : 'Lưu Thay Đổi'}
@@ -695,7 +768,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
                   {/* EDIT PACKAGE MODAL */}
                   {editingPackage && (
-                      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                      <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
                           <div className="bg-[#12121a] w-full max-w-lg p-6 rounded-2xl border border-white/20 shadow-2xl max-h-[90vh] overflow-y-auto">
                               <h3 className="text-xl font-bold text-white mb-4">{editingPackage.id.startsWith('temp_') ? 'Thêm Gói Mới' : 'Sửa Gói Nạp'}</h3>
                               <div className="grid grid-cols-2 gap-4">

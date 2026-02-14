@@ -8,6 +8,7 @@ const setStorage = (key: string, data: any) => localStorage.setItem(key, JSON.st
 
 // --- HELPER: CHECK UUID ---
 const isValidUUID = (id: string) => {
+    if (!id || id.startsWith('temp_')) return false;
     const regex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     return regex.test(id);
 };
@@ -270,7 +271,7 @@ export const getGiftcodes = async (): Promise<Giftcode[]> => {
                 reward: d.diamond_reward, // Exact map: diamond_reward
                 totalLimit: d.usage_limit, // Exact map: usage_limit
                 usedCount: d.usage_count, // Exact map: usage_count
-                maxPerUser: d.max_per_user || 1, // Safe fallback
+                maxPerUser: d.max_per_user || 1, 
                 isActive: d.is_active, // Exact map: is_active
                 expiresAt: d.created_at
             }));
@@ -279,14 +280,15 @@ export const getGiftcodes = async (): Promise<Giftcode[]> => {
     return getStorage('dmp_giftcodes') || [];
 };
 
-export const saveGiftcode = async (giftcode: Giftcode): Promise<boolean> => {
+export const saveGiftcode = async (giftcode: Giftcode): Promise<{success: boolean, error?: string}> => {
     if (supabase) {
+        // Construct payload strictly matching DB Columns
         const payload = {
              code: giftcode.code,
              diamond_reward: giftcode.reward,
              usage_limit: giftcode.totalLimit,
              usage_count: giftcode.usedCount,
-             max_per_user: giftcode.maxPerUser, // New Field
+             max_per_user: giftcode.maxPerUser,
              is_active: giftcode.isActive
         };
 
@@ -296,17 +298,24 @@ export const saveGiftcode = async (giftcode: Giftcode): Promise<boolean> => {
                 const { error } = await supabase.from('gift_codes').update(payload).eq('id', giftcode.id);
                 if (error) throw error;
             } else {
-                // Insert new. IMPORTANT: Do NOT send the temp ID to Supabase. Let DB gen UUID.
+                // Insert new - REMOVE ID if it's temp, let DB generate UUID
                 const { error } = await supabase.from('gift_codes').insert(payload);
                 if (error) throw error;
             }
-            return true;
-        } catch (e) {
+            return { success: true };
+        } catch (e: any) {
             console.error("Save giftcode error:", e);
-            return false;
+            // Handle unique violation (23505)
+            if (e.code === '23505') {
+                return { success: false, error: 'Mã Code này đã tồn tại! Vui lòng chọn mã khác.' };
+            }
+            if (e.code === '42501') {
+                return { success: false, error: 'Không có quyền lưu. Kiểm tra RLS Policy trên Supabase.' };
+            }
+            return { success: false, error: e.message || 'Lỗi hệ thống khi lưu Giftcode.' };
         }
     }
-    return false;
+    return { success: false, error: 'Chưa kết nối Supabase.' };
 };
 
 export const deleteGiftcode = async (id: string): Promise<void> => {

@@ -38,7 +38,7 @@ interface CharacterData {
 // --- NEW: ANALYSIS PHASE FUNCTION ---
 /**
  * Analyzes a character image to extract clear text descriptions of outfit and features.
- * This prevents the "mixing" issue by converting visual data to strict text constraints.
+ * Specifically targets PANTS/SHOES colors to override the pose reference.
  */
 export const analyzeCharacterVisuals = async (base64Image: string, gender: string): Promise<string> => {
     try {
@@ -49,10 +49,16 @@ export const analyzeCharacterVisuals = async (base64Image: string, gender: strin
         const prompt = `Analyze the person in this image.
         Target Gender: ${gender}.
         
-        OUTPUT ONLY a concise visual description in this format:
-        "wearing [detailed outfit description including colors and textures], [hair style and color], [distinctive accessories]"
+        I need a strict visual breakdown for a 3D render.
+        Identify the specific color and type of:
+        1. Top/Shirt
+        2. Bottom/Pants/Skirt (CRITICAL)
+        3. Shoes (CRITICAL)
         
-        Do not describe background or pose. Focus ONLY on clothing and physical appearance.`;
+        OUTPUT format:
+        "wearing [Top Color] [Top Type], [Bottom Color] [Bottom Type], [Shoe Color] [Shoe Type], [Hair Style]"
+        
+        Example: "wearing white suit jacket, white dress pants, white sneakers, silver hair"`;
 
         const response = await ai.models.generateContent({
             model: model,
@@ -95,7 +101,7 @@ export const generateImage = async (
 
     for (const char of characterDataList) {
         if (char.image) {
-            if (onProgress) onProgress(`Analyzing Player ${char.id} (Outfit & Identity)...`);
+            if (onProgress) onProgress(`Analyzing Player ${char.id} (Extracting Colors)...`);
             
             // Artificial delay to prevent rate limits/timeouts if calling rapidly
             await new Promise(r => setTimeout(r, 1000));
@@ -154,52 +160,43 @@ export const generateImage = async (
 
     // C. The Master System Prompt
     const charCount = processedCharList.length;
-    let fullPrompt = `ROLE: Strict 3D Scene Renderer & Composition Expert.
-    TASK: Render a group of EXACTLY ${charCount} characters. 
+    let fullPrompt = `ROLE: Strict 3D Scene Renderer.
+    TASK: Render a group of ${charCount} characters. 
     
     USER COMMAND: "${prompt}".
     
-    [CONFLICT RESOLUTION PROTOCOL]:
-    1. PRIORITY 1 (HIGHEST): The Text Descriptions of outfits below.
-    2. PRIORITY 2: The Face details from character images.
-    3. PRIORITY 3 (LOWEST): The Pose Reference Image.
-    
-    **CRITICAL RULE**: The Pose Reference Image has INCORRECT CLOTHING and COLORS. It is for SKELETON/BONE POSITION only. 
-    - If the Pose Reference shows BLACK pants, but the Text Description says WHITE pants, you MUST RENDER WHITE PANTS.
-    - Ignore the texture and pixels of the Pose Reference. Use it only for geometry.`;
+    [STRICT COLOR OVERRIDE RULES]:
+    The text descriptions below are the ABSOLUTE TRUTH for clothing colors.
+    The Reference Images may contain conflicting colors. IGNORE THEM.
+    If Text says "White Pants" and Image says "Black Pants", YOU MUST RENDER WHITE PANTS.`;
 
     // --- CRITICAL FIX FOR POSE REF ---
     if (poseRefIndex > 0) {
-        fullPrompt += `\n\n[IMAGE ${indexToWord(poseRefIndex)} IS THE POSE BLUEPRINT]:
-        - STATUS: GHOST REFERENCE (Washed out).
-        - USAGE: Trace the human pose/position only.
-        - FORBIDDEN: Do NOT copy the clothing colors (black/dark) from this image.
-        - BACKGROUND: Ignore the room/rug in this image. Create a new environment.`;
+        fullPrompt += `\n\n[IMAGE ${indexToWord(poseRefIndex)} IS A 'GHOST' POSE GUIDE]:
+        - This image has been chemically washed out (bleached).
+        - It contains NO valid color information. It is faint grey/white.
+        - USE IT ONLY FOR SKELETON POSITION (Where arms/legs are).
+        - DO NOT USE IT FOR CLOTHING DARKNESS. Treat it as a transparent wireframe.`;
     }
 
     // D. Inject Analyzed Descriptions
-    fullPrompt += `\n\n[CHARACTER DEFINITIONS - STRICT LOCK]:`;
+    fullPrompt += `\n\n[CHARACTER SPECIFICATIONS]:`;
 
     processedCharList.forEach((char) => {
         const imageIdx = charIndexMap[char.id];
         
         fullPrompt += `\n\n--- PLAYER ${char.id} (${char.gender.toUpperCase()}) ---`;
-        fullPrompt += `\n- POSITION: Matches figure ${char.id} in Pose Blueprint.`;
+        fullPrompt += `\n- POSITION: Matches figure ${char.id} in Ghost Guide.`;
         
-        // VISUAL ANCHOR (TEXT) - This overrides the visual reference's clothes
-        fullPrompt += `\n- OUTFIT (ABSOLUTE TRUTH): ${char.description}. (IGNORE any conflicting clothes in the pose reference).`;
+        // VISUAL ANCHOR (TEXT) - High Priority
+        fullPrompt += `\n- OUTFIT COMMAND: ${char.description}. (Apply these colors EXACTLY. Do not darken them based on shadows).`;
         
         // VISUAL ANCHOR (IMAGE) - Use only for Face
         if (imageIdx) {
-            fullPrompt += `\n- FACE IDENTITY SOURCE: ${indexToWord(imageIdx)}.`;
-            fullPrompt += `\n- CLOTHING SOURCE: ${indexToWord(imageIdx)} (Use this image for clothing texture, NOT the pose reference).`;
+            fullPrompt += `\n- FACE SOURCE: ${indexToWord(imageIdx)}.`;
+            fullPrompt += `\n- CLOTHING TEXTURE SOURCE: ${indexToWord(imageIdx)} (Take fabric details from here, NOT the ghost guide).`;
         }
     });
-
-    fullPrompt += `\n\n[FINAL PRE-RENDER CHECKLIST]:
-    1. Count: Are there exactly ${charCount} people?
-    2. Background: Is it a NEW 3D background (not the reference room)?
-    3. Outfits: Did you fix the outfit colors to match the text description (e.g. White instead of Black)?`;
 
     parts.push({ text: fullPrompt });
 

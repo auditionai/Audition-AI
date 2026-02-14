@@ -28,36 +28,45 @@ const extractImage = (response: any): string | null => {
   return null;
 }
 
+// Interface for character data
+interface CharacterData {
+    id: number;
+    gender: 'male' | 'female';
+    image: string | null; // Base64 of identity/outfit reference
+}
+
 /**
- * generateImage - STRICT MODE + PRO FEATURES
+ * generateImage - STRICT MULTI-CHARACTER MODE
  * 
- * @param prompt User prompt
+ * @param prompt User prompt (Absolute Command)
  * @param aspectRatio Aspect ratio
- * @param styleRefBase64 TEMPLATE (Pose Only)
- * @param faceRefBase64 IDENTITY (Face + Outfit)
- * @param resolution Image Size ('1K', '2K', '4K') - Only for Pro
- * @param useSearch Enable Google Search Grounding - Only for Pro
+ * @param styleRefBase64 TEMPLATE (Pose Only - The Blueprint)
+ * @param characterDataList Array of Character Objects (Identity + Gender + Outfit)
+ * @param resolution Image Size ('1K', '2K', '4K')
+ * @param useSearch Enable Google Search
  */
 export const generateImage = async (
     prompt: string, 
     aspectRatio: string = "1:1", 
-    styleRefBase64?: string, 
-    faceRefBase64?: string,
+    styleRefBase64?: string, // POSE BLUEPRINT
+    characterDataList: CharacterData[] = [], // LIST OF CHARACTERS
     resolution: string = '2K',
     useSearch: boolean = false
 ): Promise<string | null> => {
   
   try {
     const ai = await getAiClient();
-    // Default to Pro for high quality character gen
     const model = 'gemini-3-pro-image-preview'; 
     
     const parts: any[] = [];
     let imageIndexCounter = 0;
-    let structureRefIndex = -1;
-    let identityRefIndex = -1;
     
-    // 1. ADD STRUCTURAL REFERENCE (The Template/Sample Image)
+    // ==========================================
+    // 1. ADD IMAGES TO PAYLOAD
+    // ==========================================
+
+    // A. Pose Reference (Always First if exists)
+    let poseRefIndex = -1;
     if (styleRefBase64) {
       parts.push({
         inlineData: {
@@ -66,69 +75,100 @@ export const generateImage = async (
         },
       });
       imageIndexCounter++;
-      structureRefIndex = imageIndexCounter; 
+      poseRefIndex = imageIndexCounter; 
     }
 
-    // 2. ADD IDENTITY REFERENCE (The User's Uploaded Photo)
-    if (faceRefBase64) {
-        parts.push({
-            inlineData: {
-                data: faceRefBase64,
-                mimeType: 'image/jpeg',
-            }
-        });
-        imageIndexCounter++;
-        identityRefIndex = imageIndexCounter;
+    // B. Character Identity Images (Dynamic List)
+    // We map the Character ID to the Image Index for the Prompt
+    const charIndexMap: Record<number, number> = {};
+
+    for (const char of characterDataList) {
+        if (char.image) {
+            parts.push({
+                inlineData: {
+                    data: char.image,
+                    mimeType: 'image/jpeg',
+                }
+            });
+            imageIndexCounter++;
+            charIndexMap[char.id] = imageIndexCounter;
+        }
     }
 
-    const indexToWord = (idx: number) => idx === 1 ? 'first' : 'second';
+    const indexToWord = (idx: number) => {
+        const words = ['first', 'second', 'third', 'fourth', 'fifth', 'sixth'];
+        return words[idx - 1] || `${idx}th`;
+    };
 
-    // 3. CONSTRUCT "ABSOLUTE COMMAND" PROMPT
-    let fullPrompt = `ROLE: You are a strict 3D Rendering Engine. You must follow instructions precisely without creative deviation.
+    // ==========================================
+    // 2. CONSTRUCT SYSTEM PROMPT (The "Engine")
+    // ==========================================
     
-    TASK: Generate a 3D Game Character (Audition/Blind Box style).
-    render_engine: Unreal Engine 5, Octane Render.
-    skin_texture: Smooth, semi-realistic, doll-like.
-    lighting: Studio softbox.
+    const charCount = characterDataList.length;
+    let fullPrompt = `ROLE: You are an expert 3D Character Artist and Anatomy Specialist.
+    TASK: Generate a high-fidelity 3D render of a group of ${charCount} people.
+    STYLE: Semi-realistic, Audition/Blind Box style, Unreal Engine 5, Octane Render.
+    ANATOMY RULE: Each person MUST have exactly 2 arms and 2 legs. No extra limbs. No missing limbs. Hands must have 5 fingers.
     
     USER COMMAND: "${prompt}".`;
 
-    // 4. INJECT "STRICT POSE" LOGIC (Sample Image)
-    if (structureRefIndex > 0) {
-        fullPrompt += `\n\n[IMAGE ${indexToWord(structureRefIndex)} IS THE POSE REFERENCE]:
-        - COMMAND: Use ONLY the pose, skeleton, camera angle, and background composition from this image.
-        - FORBIDDEN: DO NOT COPY the clothing, outfit, colors, or hair from this image.
-        - FORBIDDEN: DO NOT use the face from this image.
-        - TREAT AS: A gray mannequin/wireframe for structure only.`;
+    // ==========================================
+    // 3. POSE BLUEPRINT INSTRUCTION
+    // ==========================================
+    if (poseRefIndex > 0) {
+        fullPrompt += `\n\n[IMAGE ${indexToWord(poseRefIndex)} IS THE POSE BLUEPRINT]:
+        - STRICT COMPOSITION: You must copy the exact number of people, their positions, and their poses from this image.
+        - IGNORE DETAILS: Do not look at the clothes, faces, or genders in this image. Only look at the skeletons/wireframes.
+        - MAPPING: 
+          * Person on Left/First = Player 1
+          * Person next to them = Player 2
+          * ... and so on.`;
     }
 
-    // 5. INJECT "STRICT IDENTITY" LOGIC (User Upload)
-    if (identityRefIndex > 0) {
-        fullPrompt += `\n\n[IMAGE ${indexToWord(identityRefIndex)} IS THE CHARACTER SOURCE]:
-        - IDENTITY COMMAND: You MUST copy the face, eyes, and facial features exactly from this image. 
-        - EXPRESSION COMMAND: Keep the facial expression exactly as it is in this image unless the prompt explicitly says "smile" or "angry". Do not invent expressions.
-        - OUTFIT COMMAND: Unless the User Command explicitly describes a new dress/outfit, you MUST COPY the clothing/outfit from THIS image.
-        - LOGIC: Apply the Face and Outfit from Image ${indexToWord(identityRefIndex)} onto the Pose of Image ${indexToWord(structureRefIndex)}.`;
-    } else {
-        fullPrompt += `\n\nEnsure the character face is stylized, beautiful, 3D aesthetic.`;
-    }
+    // ==========================================
+    // 4. CHARACTER ISOLATION & DEFINITION
+    // ==========================================
+    fullPrompt += `\n\n[CHARACTER DEFINITIONS - STRICT ISOLATION]:`;
 
-    // 6. FINAL OVERRIDE CHECKS
-    fullPrompt += `\n\n[FINAL CHECKS]:
-    1. Did you copy the clothes from the Pose Reference? IF YES -> STOP. REVERT. Use the Character Source clothes.
-    2. Output must be 3D Render style, NOT photorealistic.`;
+    characterDataList.forEach((char) => {
+        const imageIdx = charIndexMap[char.id];
+        
+        fullPrompt += `\n\n--- PLAYER ${char.id} ---`;
+        fullPrompt += `\n- GENDER: ${char.gender.toUpperCase()}. (MUST RESPECT GENDER)`;
+        
+        if (imageIdx) {
+            fullPrompt += `\n- SOURCE IMAGE: Image ${indexToWord(imageIdx)}.`;
+            fullPrompt += `\n- FACE IDENTITY: Copy the face from Image ${indexToWord(imageIdx)} exactly.`;
+            fullPrompt += `\n- OUTFIT: Copy the clothing/outfit from Image ${indexToWord(imageIdx)} exactly.`;
+            fullPrompt += `\n- CONSTRAINT: Do NOT apply this outfit to any other player.`;
+        } else {
+            fullPrompt += `\n- APPEARANCE: Generate a beautiful, stylish 3D ${char.gender} character.`;
+            fullPrompt += `\n- OUTFIT: High-fashion, futuristic or street style (matching the prompt theme).`;
+        }
+    });
+
+    // ==========================================
+    // 5. FINAL QUALITY & NEGATIVE CHECKS
+    // ==========================================
+    fullPrompt += `\n\n[FINAL QUALITY CHECKS]:
+    1. COUNT CHECK: Are there exactly ${charCount} people? If not, regenerate.
+    2. IDENTITY CHECK: Does Player 1 have Player 1's face? Does Player 2 have Player 2's face? NO MIXING.
+    3. OUTFIT CHECK: Are the clothes distinct and correct for each source image?
+    4. GENDER CHECK: Are the genders correct as defined above?
+    5. ANATOMY CHECK: Scan for extra hands or legs. Fix immediately.`;
 
     parts.push({ text: fullPrompt });
 
-    // 7. CONFIGURATION (Resolution & Search)
+    // ==========================================
+    // 6. EXECUTE
+    // ==========================================
     const config: any = {
         imageConfig: {
           aspectRatio: aspectRatio, 
-          imageSize: resolution // '1K', '2K', '4K'
+          imageSize: resolution
         }
     };
 
-    // Add Google Search Tool if enabled
     if (useSearch) {
         config.tools = [{ googleSearch: {} }];
     }
@@ -142,7 +182,7 @@ export const generateImage = async (
     return extractImage(response);
 
   } catch (error) {
-    console.error("Gemini 3.0 Image Generation Error:", error);
+    console.error("Gemini 3.0 Multi-Char Gen Error:", error);
     throw error;
   }
 };

@@ -19,7 +19,7 @@ type Resolution = '1K' | '2K' | '4K';
 interface CharacterInput {
   id: number;
   bodyImage: string | null;
-  faceImage: string | null;
+  faceImage: string | null; // This acts as the IDENTITY + OUTFIT source
   gender: 'female' | 'male';
   isFaceLocked: boolean;
 }
@@ -38,7 +38,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
   
   // Prompt & Text
   const [prompt, setPrompt] = useState('');
-  const [negativePrompt, setNegativePrompt] = useState('real photo, photorealistic, grainy, noise, bad quality, 2d, sketch');
+  const [negativePrompt, setNegativePrompt] = useState('real photo, photorealistic, grainy, noise, bad quality, 2d, sketch, extra limbs, missing limbs, mutated hands, bad anatomy, fused bodies, duplicate characters');
   const [seed, setSeed] = useState('');
   const [isSuggesting, setIsSuggesting] = useState(false);
   const [isScanningFace, setIsScanningFace] = useState(false); 
@@ -66,9 +66,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       { label: { vi: 'Khởi tạo Worker & Tài nguyên', en: 'Initializing Workers & Resources' } },
       { label: { vi: 'Xác thực & Trừ Vcoin', en: 'Verifying & Deducting Vcoin' } },
       { label: { vi: 'Phân tích Pose & Bố cục từ Ảnh Mẫu', en: 'Analyzing Pose & Composition from Reference' } },
-      { label: { vi: 'Quét FaceID & Trích xuất đặc điểm', en: 'Scanning FaceID & Features' } }, 
-      { label: { vi: 'Kết nối Gemini 3.0 Vision (3D Artist Mode)', en: 'Connecting Gemini 3.0 Vision' } },
-      { label: { vi: 'Đang render 3D (Blind Box Style)...', en: 'Rendering 3D Character...' } },
+      { label: { vi: 'Tách biệt dữ liệu từng nhân vật', en: 'Isolating Character Data' } }, 
+      { label: { vi: 'Kết nối Gemini 3.0 Vision (Multi-Subject Mode)', en: 'Connecting Gemini 3.0 Vision' } },
+      { label: { vi: 'Đang render 3D (Kiểm tra giải phẫu)...', en: 'Rendering 3D (Anatomy Check)...' } },
       { label: { vi: 'Hoàn tất & Xử lý hậu kỳ', en: 'Finalizing & Post-processing' } }
   ];
 
@@ -93,7 +93,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
           const newChars = [];
           for (let i = 1; i <= count; i++) {
               const existing = prev.find(p => p.id === i);
-              newChars.push(existing || { id: i, bodyImage: null, faceImage: null, gender: 'female', isFaceLocked: false });
+              newChars.push(existing || { id: i, bodyImage: null, faceImage: null, gender: i % 2 === 0 ? 'male' : 'female', isFaceLocked: false });
           }
           return newChars;
       });
@@ -157,10 +157,10 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
           if (useSearch) cost += 3; // Extra for search
       }
 
-      // Upscale Cost (Only for Flash)
-      if (modelType === 'flash' && isSharpening) {
-          cost += 1;
-      }
+      // Multi-character cost
+      if (activeMode === 'couple') cost += 2;
+      if (activeMode === 'group3') cost += 4;
+      if (activeMode === 'group4') cost += 6;
 
       // Face Lock Cost
       const lockedCount = characters.filter(c => c.isFaceLocked).length;
@@ -184,7 +184,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
     }
     
     // VISUAL EFFECT: Face Scanning
-    if (characters.some(c => c.isFaceLocked && c.faceImage)) {
+    if (characters.some(c => c.faceImage)) {
         setIsScanningFace(true);
         await new Promise(r => setTimeout(r, 2000)); // Show scan effect for 2s
         setIsScanningFace(false);
@@ -204,12 +204,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       await new Promise(r => setTimeout(r, 600));
       setCurrentStep(2);
       
-      // Step 2: PREPARE PAYLOADS
-      
+      // Step 2: PREPARE POSE STRUCTURE (BLUEPRINT)
       let structureRefData: string | undefined = undefined;
-      let faceRefData: string | undefined = undefined;
-
-      // 1. Prepare Structure (Pose) - THE FIX
+      
       let sourceForStructure = refImage || feature.preview_image;
       
       if (sourceForStructure.startsWith('http')) {
@@ -226,10 +223,23 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       await new Promise(r => setTimeout(r, 600));
       setCurrentStep(3);
 
-      // Step 3: Prepare Face (Identity)
-      if (characters[0].faceImage && characters[0].isFaceLocked) {
-          const optimizedFace = await optimizePayload(characters[0].faceImage, 512); 
-          faceRefData = optimizedFace.split(',')[1];
+      // Step 3: PREPARE CHARACTER DATA PACKAGES
+      // We package each character's identity/outfit image into a structured list
+      const characterDataList = [];
+      
+      for (const char of characters) {
+          let charImageData = null;
+          // Use faceImage as the primary source for Identity AND Outfit
+          if (char.faceImage) {
+              const opt = await optimizePayload(char.faceImage, 512);
+              charImageData = opt.split(',')[1];
+          }
+          
+          characterDataList.push({
+              id: char.id,
+              gender: char.gender,
+              image: charImageData // Can be null if no upload, AI will gen generic
+          });
       }
       
       await new Promise(r => setTimeout(r, 800)); 
@@ -240,22 +250,17 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       if (selectedStyle) finalPrompt += `, style: ${selectedStyle}`;
       if (negativePrompt) finalPrompt += ` --no ${negativePrompt}`;
       
-      if (activeMode !== 'single') {
-          const genderStr = characters.map(c => `Player ${c.id}: ${c.gender}`).join(', ');
-          finalPrompt += ` [Context: ${genderStr}]`;
-      }
       await new Promise(r => setTimeout(r, 500));
       setCurrentStep(5);
 
       // Step 5: Generating
-      // Pass all PRO parameters: Resolution and Search
       const result = await generateImage(
           finalPrompt, 
           aspectRatio, 
-          structureRefData, 
-          faceRefData, 
-          modelType === 'pro' ? resolution : '1K', // Force 1K if Flash
-          modelType === 'pro' ? useSearch : false  // No search for Flash
+          structureRefData, // The Pose Blueprint
+          characterDataList, // The Array of Players
+          modelType === 'pro' ? resolution : '1K', 
+          modelType === 'pro' ? useSearch : false 
       );
 
       if (result) {
@@ -297,6 +302,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
     finally { setIsSuggesting(false); }
   };
 
+  // ... (Keep existing Ratios, Styles, Render Logic unchanged) ...
+  // Re-using the same UI render code as before
+  
   // --- DATA LISTS ---
   const styles = [
       { id: '3d', name: '3D Game', icon: Icons.MessageCircle }, 

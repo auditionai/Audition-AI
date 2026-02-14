@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect } from 'react';
 import { Language, Transaction, UserProfile, CreditPackage, PromotionCampaign, Giftcode, GeneratedImage } from '../types';
 import { Icons } from '../components/Icons';
@@ -64,6 +65,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [editingPackage, setEditingPackage] = useState<CreditPackage | null>(null);
   const [editingGiftcode, setEditingGiftcode] = useState<Giftcode | null>(null);
   const [editingPromotion, setEditingPromotion] = useState<PromotionCampaign | null>(null);
+
+  // UX States
+  const [processingTxId, setProcessingTxId] = useState<string | null>(null);
 
   // Notification State
   const [toasts, setToasts] = useState<ToastMsg[]>([]);
@@ -398,26 +402,52 @@ CREATE POLICY "Enable access" ON public.promotions FOR ALL USING (true) WITH CHE
   }
 
   const handleApproveTransaction = async (txId: string) => {
+      if (processingTxId) return;
+
       showConfirm('Xác nhận duyệt giao dịch này và cộng Vcoin cho user?', async () => {
-          await adminApproveTransaction(txId);
-          refreshData();
-          showToast('Đã duyệt thành công!');
+          setProcessingTxId(txId);
+          const result = await adminApproveTransaction(txId);
+          if (result.success) {
+              // Optimistic update: Update local state immediately without full refresh
+              setTransactions(prev => prev.map(t => 
+                  t.id === txId ? { ...t, status: 'paid' } : t
+              ));
+              showToast('Đã duyệt thành công!');
+          } else {
+              showToast('Lỗi: ' + result.error, 'error');
+          }
+          setProcessingTxId(null);
       });
   }
 
   const handleRejectTransaction = async (txId: string) => {
+      if (processingTxId) return;
+
       showConfirm('Từ chối giao dịch này?', async () => {
-          await adminRejectTransaction(txId);
-          refreshData();
-          showToast('Đã từ chối giao dịch', 'info');
+          setProcessingTxId(txId);
+          const result = await adminRejectTransaction(txId);
+          if (result.success) {
+              // Optimistic update
+              setTransactions(prev => prev.map(t => 
+                  t.id === txId ? { ...t, status: 'cancelled' } : t
+              ));
+              showToast('Đã từ chối giao dịch', 'info');
+          } else {
+              showToast('Lỗi: ' + result.error, 'error');
+          }
+          setProcessingTxId(null);
       });
   }
 
   const handleDeleteTransaction = async (txId: string) => {
+      if (processingTxId) return;
+
       showConfirm('Xóa lịch sử giao dịch này khỏi hệ thống?', async () => {
+          setProcessingTxId(txId);
           const res = await deleteTransaction(txId);
           if (res.success) {
-              await refreshData();
+              // Optimistic update
+              setTransactions(prev => prev.filter(t => t.id !== txId));
               showToast('Đã xóa giao dịch vĩnh viễn', 'info');
           } else {
               // Handle known errors (RLS or not found)
@@ -434,6 +464,7 @@ CREATE POLICY "Enable access" ON public.promotions FOR ALL USING (true) WITH CHE
                    showToast('Lỗi xóa: ' + res.error, 'error');
               }
           }
+          setProcessingTxId(null);
       });
   }
 
@@ -689,7 +720,7 @@ CREATE POLICY "Enable access" ON public.promotions FOR ALL USING (true) WITH CHE
                               {transactions.length === 0 ? (
                                   <tr><td colSpan={7} className="text-center py-8">Chưa có giao dịch nào.</td></tr>
                               ) : transactions.map(tx => (
-                                  <tr key={tx.id} className="hover:bg-white/5">
+                                  <tr key={tx.id} className={`hover:bg-white/5 transition-colors ${processingTxId === tx.id ? 'opacity-50 pointer-events-none' : ''}`}>
                                       <td className="px-6 py-4 text-xs font-mono">{new Date(tx.createdAt).toLocaleString()}</td>
                                       <td className="px-6 py-4 font-mono font-bold text-white">{tx.code}</td>
                                       <td className="px-6 py-4 text-xs font-mono text-slate-500" title={tx.userId}>{tx.userId.substring(0,8)}...</td>
@@ -707,16 +738,31 @@ CREATE POLICY "Enable access" ON public.promotions FOR ALL USING (true) WITH CHE
                                           <div className="flex justify-end gap-2">
                                               {tx.status === 'pending' && (
                                                   <>
-                                                      <button onClick={() => handleApproveTransaction(tx.id)} className="p-2 bg-green-500/20 text-green-500 rounded hover:bg-green-500 hover:text-white" title="Duyệt">
-                                                          <Icons.Check className="w-4 h-4" />
+                                                      <button 
+                                                        onClick={() => handleApproveTransaction(tx.id)} 
+                                                        className="p-2 bg-green-500/20 text-green-500 rounded hover:bg-green-500 hover:text-white transition-all disabled:opacity-50" 
+                                                        title="Duyệt"
+                                                        disabled={!!processingTxId}
+                                                      >
+                                                          {processingTxId === tx.id ? <Icons.Loader className="w-4 h-4 animate-spin"/> : <Icons.Check className="w-4 h-4" />}
                                                       </button>
-                                                      <button onClick={() => handleRejectTransaction(tx.id)} className="p-2 bg-red-500/20 text-red-500 rounded hover:bg-red-500 hover:text-white" title="Hủy">
-                                                          <Icons.X className="w-4 h-4" />
+                                                      <button 
+                                                        onClick={() => handleRejectTransaction(tx.id)} 
+                                                        className="p-2 bg-red-500/20 text-red-500 rounded hover:bg-red-500 hover:text-white transition-all disabled:opacity-50" 
+                                                        title="Hủy"
+                                                        disabled={!!processingTxId}
+                                                      >
+                                                          {processingTxId === tx.id ? <Icons.Loader className="w-4 h-4 animate-spin"/> : <Icons.X className="w-4 h-4" />}
                                                       </button>
                                                   </>
                                               )}
-                                              <button onClick={() => handleDeleteTransaction(tx.id)} className="p-2 bg-slate-500/20 text-slate-500 rounded hover:bg-slate-500 hover:text-white" title="Xóa lịch sử">
-                                                  <Icons.Trash className="w-4 h-4" />
+                                              <button 
+                                                onClick={() => handleDeleteTransaction(tx.id)} 
+                                                className="p-2 bg-slate-500/20 text-slate-500 rounded hover:bg-slate-500 hover:text-white transition-all disabled:opacity-50" 
+                                                title="Xóa lịch sử"
+                                                disabled={!!processingTxId}
+                                              >
+                                                  {processingTxId === tx.id ? <Icons.Loader className="w-4 h-4 animate-spin"/> : <Icons.Trash className="w-4 h-4" />}
                                               </button>
                                           </div>
                                       </td>

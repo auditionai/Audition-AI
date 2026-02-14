@@ -807,19 +807,27 @@ export const updateAdminUserProfile = async (updatedUser: UserProfile): Promise<
     return updatedUser;
 };
 
-export const adminApproveTransaction = async (txId: string): Promise<boolean> => {
+export const adminApproveTransaction = async (txId: string): Promise<{ success: boolean; error?: string }> => {
     if (supabase) {
-        const { data: tx } = await supabase.from('transactions').select('*').eq('id', txId).single();
-        if (tx && tx.status === 'pending') {
-            await supabase.from('transactions').update({ status: 'paid' }).eq('id', txId);
+        try {
+            const { data: tx, error: fetchError } = await supabase.from('transactions').select('*').eq('id', txId).single();
+            if (fetchError || !tx) return { success: false, error: "Giao dịch không tồn tại" };
             
-            const { data: user } = await supabase.from('users').select('diamonds').eq('id', tx.user_id).single();
+            if (tx.status === 'paid') return { success: false, error: "Giao dịch đã được duyệt trước đó" };
+
+            // 1. Update status
+            const { error: updateError } = await supabase.from('transactions').update({ status: 'paid' }).eq('id', txId);
+            if (updateError) throw updateError;
+            
+            // 2. Add coins
+            const { data: user, error: userError } = await supabase.from('users').select('diamonds').eq('id', tx.user_id).single();
             if(user) {
                 const currentBalance = user.diamonds || 0;
                 const coins = tx.diamonds_received || 0;
                 
                 await supabase.from('users').update({ diamonds: currentBalance + coins }).eq('id', tx.user_id);
                 
+                // 3. Log
                 await supabase.from('diamond_transactions_log').insert({
                     user_id: tx.user_id,
                     amount: coins,
@@ -827,19 +835,30 @@ export const adminApproveTransaction = async (txId: string): Promise<boolean> =>
                     transaction_type: 'topup',
                     created_at: new Date().toISOString()
                 });
+            } else {
+                 return { success: true, error: "Đã duyệt nhưng không tìm thấy User để cộng tiền." };
             }
-            return true;
+
+            return { success: true };
+        } catch (e: any) {
+            console.error(e);
+            return { success: false, error: e.message };
         }
     }
-    return false;
+    return { success: false, error: "No DB Connection" };
 };
 
-export const adminRejectTransaction = async (txId: string): Promise<boolean> => {
+export const adminRejectTransaction = async (txId: string): Promise<{ success: boolean; error?: string }> => {
     if (supabase) {
-        await supabase.from('transactions').update({ status: 'cancelled' }).eq('id', txId);
-        return true;
+        try {
+            const { error } = await supabase.from('transactions').update({ status: 'cancelled' }).eq('id', txId);
+            if (error) throw error;
+            return { success: true };
+        } catch (e: any) {
+            return { success: false, error: e.message };
+        }
     }
-    return false;
+    return { success: false, error: "No DB Connection" };
 };
 
 export const deleteTransaction = async (txId: string): Promise<{success: boolean, error?: string}> => {

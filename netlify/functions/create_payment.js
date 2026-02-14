@@ -7,12 +7,16 @@ export const handler = async (event, context) => {
   }
 
   try {
-    const { amount, description, orderCode, returnUrl, cancelUrl } = JSON.parse(event.body);
+    const { amount, description, orderCode, returnUrl: clientReturnUrl, cancelUrl: clientCancelUrl } = JSON.parse(event.body);
     
     // Lấy Env Vars từ Netlify
     const PAYOS_CLIENT_ID = process.env.PAYOS_CLIENT_ID;
     const PAYOS_API_KEY = process.env.PAYOS_API_KEY;
     const PAYOS_CHECKSUM_KEY = process.env.PAYOS_CHECKSUM_KEY;
+    
+    // Lấy URL cấu hình từ Server (Ưu tiên dùng cái này để bảo mật/cố định domain)
+    const ENV_RETURN_URL = process.env.PAYOS_RETURN_URL;
+    const ENV_CANCEL_URL = process.env.PAYOS_CANCEL_URL;
 
     if (!PAYOS_CLIENT_ID || !PAYOS_API_KEY || !PAYOS_CHECKSUM_KEY) {
       console.error("Missing PayOS Env Vars");
@@ -22,14 +26,31 @@ export const handler = async (event, context) => {
       };
     }
 
+    // Xử lý Logic URL:
+    // Nếu có biến môi trường PAYOS_RETURN_URL, ta dùng nó làm base và nối query string vào.
+    // Nếu không (ví dụ localhost), ta dùng URL do client gửi lên.
+    let finalReturnUrl = clientReturnUrl;
+    let finalCancelUrl = clientCancelUrl;
+
+    if (ENV_RETURN_URL && ENV_RETURN_URL.startsWith('http')) {
+        // Loại bỏ slash cuối nếu có để tránh double slash
+        const baseUrl = ENV_RETURN_URL.replace(/\/$/, "");
+        finalReturnUrl = `${baseUrl}/?status=PAID&orderCode=${orderCode}`;
+    }
+
+    if (ENV_CANCEL_URL && ENV_CANCEL_URL.startsWith('http')) {
+        const baseUrl = ENV_CANCEL_URL.replace(/\/$/, "");
+        finalCancelUrl = `${baseUrl}/?status=CANCELLED&orderCode=${orderCode}`;
+    }
+
     // Tạo chữ ký (Signature)
     // PayOS yêu cầu sắp xếp key theo alphabet
     const signatureData = {
         amount,
-        cancelUrl,
+        cancelUrl: finalCancelUrl,
         description,
         orderCode,
-        returnUrl
+        returnUrl: finalReturnUrl
     };
 
     const sortedKeys = Object.keys(signatureData).sort();
@@ -44,6 +65,8 @@ export const handler = async (event, context) => {
 
     // Body gửi sang PayOS
     const requestBody = { ...signatureData, signature };
+
+    console.log("Creating PayOS Link with returnUrl:", finalReturnUrl);
 
     // Gọi API PayOS
     const response = await fetch('https://api-merchant.payos.vn/v2/payment-requests', {

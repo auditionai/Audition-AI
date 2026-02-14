@@ -1,7 +1,7 @@
 
 import { GoogleGenAI } from "@google/genai";
 import { getSystemApiKey } from "./economyService";
-import { createSolidFence, optimizePayload, sliceImageVertical } from "../utils/imageProcessor";
+import { createSolidFence, optimizePayload, createTextureSheet } from "../utils/imageProcessor";
 
 // --- CONFIGURATION & HELPERS ---
 
@@ -40,134 +40,43 @@ interface CharacterData {
     gender: 'male' | 'female';
     image: string | null; 
     description?: string;
-    slices?: { top: string, bottom: string } | null; // New field for slices
 }
 
-// --- MODULE 2: STRATEGY IMPLEMENTATIONS (DIGITAL TWIN PROTOCOL V3) ---
+// --- MODULE 2: STRATEGY IMPLEMENTATIONS (DIGITAL TWIN PROTOCOL V4 - TEXTURE SHEET) ---
 
-/**
- * STRATEGY 1: SINGLE MODE - "The 3D Photocopier"
- */
-const processSingleMode = (
-    prompt: string, 
-    refImagePart: any | null, 
-    charParts: any[], // Now contains [Full, Top, Bottom] if slices exist
-    charDescriptions: string[]
-): { systemPrompt: string, parts: any[] } => {
-    
-    const parts = [];
-    let systemPrompt = "";
-
-    // Image Index Tracking
-    // [0]: Char Full (Always)
-    // [1]: Char Top (If exists)
-    // [2]: Char Bottom (If exists)
-    // [3]: Ref Pose (If exists)
-    
-    parts.push(charParts[0]); // Full Body
-    
-    let instructions = `** PROTOCOL: 3D PHOTOCOPIER (DIGITAL TWIN) **
-    [ROLE]: You are a specialized 3D Texture Scanner.
-    [TASK]: Reconstruct the character in Image 1 EXACTLY.
-    [INPUT MAPPING]:
-    - IMAGE 1: [MASTER REFERENCE] Full Body Identity.`;
-
-    if (charParts.length > 1) {
-        parts.push(charParts[1]); // Top Slice
-        parts.push(charParts[2]); // Bottom Slice
-        instructions += `
-    - IMAGE 2: [MACRO ZOOM A] FACE, HAIR, & OUTFIT TEXTURE. 
-    - IMAGE 3: [MACRO ZOOM B] SHOES, LEGS & PANTS TEXTURE.
-    
-    [CRITICAL INSTRUCTION - DO NOT INVENT]:
-    1. **FACE & HAIR**: Look at IMAGE 2. Copy the hairstyle, face shape, and makeup EXACTLY.
-    2. **OUTFIT**: Look at IMAGE 2. Copy the fabric patterns, logos, and necklines EXACTLY.
-    3. **SHOES**: Look at IMAGE 3. This is the source of truth for footwear. If Image 1 is blurry at the bottom, USE IMAGE 3. Copy the exact shoe type (sneakers, heels, boots) and color.
-        `;
-    }
-
-    if (refImagePart) {
-        parts.push(refImagePart);
-        instructions += `\n- FINAL IMAGE: [POSE GUIDE] Use the skeleton from this image, but keep the Character from Images 1-3.`;
-    }
-
-    systemPrompt = instructions + `
-    [STRICT CONSTRAINTS]:
-    - NO HALLUCINATION. If you see stripes, render stripes. If you see white shoes, render white shoes.
-    - OUTPUT: A high-fidelity 3D Render (Unreal Engine 5 style) of the Character in Image 1 performing: "${prompt}".
-    `;
-
-    return { systemPrompt, parts };
-};
-
-/**
- * STRATEGY 2: COUPLE MODE - "Texture Swapping"
- */
-const processCoupleMode = (
+const processDigitalTwinMode = (
     prompt: string, 
     refImagePart: any | null, 
     charParts: any[], 
     charDescriptions: string[]
 ): { systemPrompt: string, parts: any[] } => {
-
-    // Handling 2 characters. We likely won't send slices for both to avoid token overload (Gemini limit).
-    // We send FULL images for both. 
     
-    const parts = [];
-    
-    // Image 1: Char 1
-    // Image 2: Char 2
-    // Image 3: Pose (Optional)
-    
-    // Flatten the charParts. Assuming input is [Char1_Full, Char2_Full] (Slices ignored for couple to save complexity for now)
-    // NOTE: In generateImage below, we flatMapped the slices. We need to handle that.
-    // For Couple Mode, let's simplify: Just take the FULL images (indices 0 of each char set if we had slices, but logic below handles it)
-    
-    // In this updated logic, we pass prepared parts.
-    parts.push(...charParts); 
+    const parts = [...charParts]; // These are now Texture Sheets
     if (refImagePart) parts.push(refImagePart);
 
-    const systemPrompt = `** PROTOCOL: DUAL IDENTITY CLONING **
+    let systemPrompt = `** PROTOCOL: 3D PHOTOGRAMMETRY & TEXTURE BAKING **
     
-    [SOURCE DATA]:
-    - CHARACTER A (Left/Male typically): IMAGE 1.
-    - CHARACTER B (Right/Female typically): IMAGE 2.
-    ${refImagePart ? '- POSE REFERENCE: IMAGE 3.' : ''}
+    [ROLE]: You are a 3D Texture Mapping Engine (Not a creative artist).
+    [TASK]: Transfer the textures from the Input Sheets onto a 3D Mesh.
     
-    [INSTRUCTIONS]:
-    1. **CLONE CHAR A**: Transfer Face + Outfit + Shoes from IMAGE 1. Look at the feet in Image 1 carefully.
-    2. **CLONE CHAR B**: Transfer Face + Outfit + Shoes from IMAGE 2. Look at the feet in Image 2 carefully.
+    [INPUT DATA EXPLANATION]:
+    - Images 1 to ${charParts.length} are "TEXTURE SHEETS".
+    - LEFT SIDE of Sheet = Full Body Reference.
+    - RIGHT TOP of Sheet = FACE TEXTURE (High Res).
+    - RIGHT BOTTOM of Sheet = SHOE/PANTS TEXTURE (High Res).
     
-    [INTERACTION]: "${prompt}"
+    [STRICT EXECUTION RULES]:
+    1. **NO REDRAWING**: Do not invent new clothes. "Bake" the pixels from the Sheet onto the output character.
+    2. **SHOE MANDATE**: Look at the Bottom-Right of each input sheet. Those are the shoes. If they are sandals, render sandals. If sneakers, render sneakers.
+    3. **FACE CLONING**: Look at the Top-Right of each input sheet. Reconstruct that face exactly.
+    4. **GROUP CONSISTENCY**:
+       - Input Image 1 -> Player 1 (Leftmost).
+       - Input Image 2 -> Player 2.
+       - Input Image 3 -> Player 3...
+       - Do not mix up their clothes.
     
-    Style: Romantic 3D Game Art, Audition Style. High fidelity textures.`;
-
-    return { systemPrompt, parts };
-};
-
-/**
- * STRATEGY 3: GROUP MODE
- */
-const processGroupMode = (
-    prompt: string, 
-    refImagePart: any | null, 
-    charParts: any[], 
-    charDescriptions: string[]
-): { systemPrompt: string, parts: any[] } => {
-
-    const parts = [...charParts];
-    if (refImagePart) parts.push(refImagePart);
-
-    const systemPrompt = `** PROTOCOL: TEAM REPLICATION **
-    
-    [INPUTS]: Images 1 to ${charParts.length} are the team members.
-    ${refImagePart ? `Last Image is the POSE/FORMATION guide.` : ''}
-    
-    [EXECUTION]:
-    - Create a group photo.
-    - Each member must look exactly like their source image (Face, Clothes, Shoes).
-    - Do not change their outfits.
-    - Context: "${prompt}"`;
+    [SCENE]: "${prompt}"
+    [STYLE]: Unreal Engine 5, 8K, Raytracing, Hyper-Realistic Textures.`;
 
     return { systemPrompt, parts };
 };
@@ -189,92 +98,52 @@ export const generateImage = async (
     const isPro = resolution === '2K' || resolution === '4K';
     const model = isPro ? 'gemini-3-pro-image-preview' : 'gemini-2.5-flash-image';
     
-    if (onProgress) onProgress(`Engine: ${model} | Scanning High-Res Inputs...`);
+    if (onProgress) onProgress(`Engine: ${model} | Scanning Texture Sheets...`);
 
     // 2. PREPARE ASSETS
     let refImagePart = null;
     if (styleRefBase64) {
+        // Pose Reference doesn't need to be a sheet, just optimized
         const fencedData = await createSolidFence(styleRefBase64, aspectRatio, true);
+        const optData = await optimizePayload(fencedData, 1024);
         refImagePart = {
-            inlineData: { data: cleanBase64(fencedData), mimeType: 'image/jpeg' }
+            inlineData: { data: cleanBase64(optData), mimeType: 'image/jpeg' }
         };
     }
 
     const allParts: any[] = [];
     const charDescriptions: string[] = [];
 
-    // --- PRE-PROCESSING: SLICING IMAGES FOR DETAIL ---
-    // Only slice if Single Mode (for max quality) or Couple Mode (if manageable)
-    // Group mode: No slicing to avoid token limit errors.
-    const enableSlicing = characterDataList.length === 1;
-
+    // --- PRE-PROCESSING: CREATING TEXTURE SHEETS ---
     for (const char of characterDataList) {
         if (char.image) {
-            // 1. Full Body (Optimized but not cropped)
-            const fencedData = await createSolidFence(char.image, "1:1", false);
-            const optimizedFull = await optimizePayload(fencedData, 1024); 
+            if (onProgress) onProgress(`Generating ID Card for Player ${char.id}...`);
             
+            // 1. Create the Composite Sheet (Full + Face + Shoes)
+            // This is the "Nuclear Option" for consistency
+            const textureSheet = await createTextureSheet(char.image);
+            
+            // 2. Optimize the Sheet (It might be large now)
+            const optimizedSheet = await optimizePayload(textureSheet, 1280); // Allow slightly larger for sheets
+
             allParts.push({
-                inlineData: { data: cleanBase64(optimizedFull), mimeType: 'image/jpeg' }
+                inlineData: { data: cleanBase64(optimizedSheet), mimeType: 'image/jpeg' }
             });
 
-            // 2. Slices (If enabled)
-            if (enableSlicing) {
-                if (onProgress) onProgress("Digital Twin: Generating Texture Slices...");
-                const slices = await sliceImageVertical(char.image);
-                if (slices) {
-                    // Top Slice (Face/Torso)
-                    allParts.push({
-                        inlineData: { data: cleanBase64(slices.top), mimeType: 'image/jpeg' }
-                    });
-                    // Bottom Slice (Shoes)
-                    allParts.push({
-                        inlineData: { data: cleanBase64(slices.bottom), mimeType: 'image/jpeg' }
-                    });
-                }
-            }
-
             charDescriptions.push(char.gender);
-        } else {
-            // Generic placeholder if needed, though usually UI prevents this
-            // allParts.push(null); // Logic handled in strategy
         }
     }
 
-    // 3. ROUTE STRATEGY
-    let payload;
-    const modeCount = characterDataList.length;
-
-    if (modeCount === 1) {
-        // Single mode logic handles the slices (Full, Top, Bottom)
-        payload = processSingleMode(prompt, refImagePart, allParts, charDescriptions);
-    } else if (modeCount === 2) {
-        // Couple mode logic expects just 2 images (Full, Full) currently
-        // If we want to support slices later, we need to update processCoupleMode
-        payload = processCoupleMode(prompt, refImagePart, allParts, charDescriptions);
-    } else {
-        payload = processGroupMode(prompt, refImagePart, allParts, charDescriptions);
-    }
+    // 3. ROUTE STRATEGY (UNIFIED)
+    // We now use the same robust strategy for Single, Couple, and Group
+    const payload = processDigitalTwinMode(prompt, refImagePart, allParts, charDescriptions);
 
     // 4. CONSTRUCT FINAL CONFIG
-    const globalSystemInstruction = `
-    CRITICAL OVERRIDE - PHOTOGRAPHY MODE:
-    You are NOT an artist. You are a 3D RECONSTRUCTION ENGINE.
-    
-    [MANDATORY RULES]:
-    1. **IDENTITY LOCK**: The output face must match the input image face.
-    2. **OUTFIT LOCK**: The output clothes must match the input clothes pixel-for-pixel (Color, Style, Logos).
-    3. **SHOE LOCK**: Look at the bottom of the input image(s). REPLICATE THE SHOES EXACTLY. Do not default to generic sneakers if the user wears boots/heels.
-    4. **NO CREATIVITY**: Do not "improve" the outfit. Copy it.
-    
-    If multiple images are provided for one person, they are ZOOM-INS. Use them to fix blurry details.
-    `;
-
     const finalParts = [...payload.parts, { text: payload.systemPrompt }];
 
     const config: any = {
         imageConfig: { aspectRatio: aspectRatio },
-        systemInstruction: globalSystemInstruction, 
+        systemInstruction: "You are a 3D Scanner. Copy input pixels exactly. Do not hallucinate clothes.", 
         safetySettings: [
             { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
             { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
@@ -285,13 +154,12 @@ export const generateImage = async (
 
     if (isPro) {
         config.imageConfig.imageSize = resolution;
-        // Search mostly useful for background/context, not character replication
         if (useSearch && !refImagePart) {
             config.tools = [{ googleSearch: {} }];
         }
     }
 
-    if (onProgress) onProgress("Running Digital Twin Protocol...");
+    if (onProgress) onProgress("Rendering Digital Twin (V4 Protocol)...");
 
     const response = await ai.models.generateContent({
       model: model,

@@ -169,8 +169,9 @@ export const createSolidFence = async (base64Str: string, targetAspectRatio: str
       });
   }
 
-  // NEW: DIGITAL TWIN SLICER (Cắt ảnh thành 2 phần để AI soi chi tiết)
-  export const sliceImageVertical = async (base64Str: string): Promise<{ top: string, bottom: string } | null> => {
+  // --- NEW: TEXTURE SHEET GENERATOR (THE 3D PHOTOCOPIER ENGINE) ---
+  // Tạo ra một bức ảnh ghép: Trái = Toàn thân, Phải Trên = Mặt, Phải Dưới = Giày
+  export const createTextureSheet = async (base64Str: string): Promise<string> => {
     return new Promise((resolve) => {
         let src = base64Str;
         if (!base64Str.startsWith('data:')) src = `data:image/jpeg;base64,${base64Str}`;
@@ -181,33 +182,65 @@ export const createSolidFence = async (base64Str: string, targetAspectRatio: str
             const w = img.width;
             const h = img.height;
             
-            // Nếu ảnh quá nhỏ hoặc quá ngang (Landscape), không cần cắt
-            if (h < 500 || w > h * 1.5) {
-                resolve(null);
-                return;
-            }
+            // Create a canvas 1.5x width of original to hold details
+            // Structure:
+            // [ ORIGINAL IMAGE (100%) ] [ ZOOM FACE (50%)  ]
+            //                           [ ZOOM SHOES (50%) ]
+            
+            const sheetW = Math.floor(w * 1.5);
+            const sheetH = h;
+            
+            const canvas = document.createElement('canvas');
+            canvas.width = sheetW;
+            canvas.height = sheetH;
+            const ctx = canvas.getContext('2d');
+            
+            if (!ctx) { resolve(base64Str); return; }
 
-            // Create Top Slice (Face & Body) - 0% to 65%
-            const canvasTop = document.createElement('canvas');
-            canvasTop.width = w;
-            canvasTop.height = Math.floor(h * 0.65);
-            const ctxTop = canvasTop.getContext('2d');
-            if (ctxTop) ctxTop.drawImage(img, 0, 0, w, h * 0.65, 0, 0, w, h * 0.65);
+            // Fill Background
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(0, 0, sheetW, sheetH);
 
-            // Create Bottom Slice (Legs & Shoes) - 40% to 100% (Overlap to ensure context)
-            const canvasBottom = document.createElement('canvas');
-            canvasBottom.width = w;
-            canvasBottom.height = Math.floor(h * 0.60);
-            const ctxBottom = canvasBottom.getContext('2d');
-            // Source Y starts at 40% of height
-            if (ctxBottom) ctxBottom.drawImage(img, 0, h * 0.40, w, h * 0.60, 0, 0, w, h * 0.60);
+            // 1. Draw Original (Left)
+            ctx.drawImage(img, 0, 0, w, h);
+            
+            // Draw Divider
+            ctx.fillStyle = '#FF0099'; // Pink separator for AI to notice boundary
+            ctx.fillRect(w - 2, 0, 4, h);
 
-            resolve({
-                top: canvasTop.toDataURL('image/jpeg', 0.9),
-                bottom: canvasBottom.toDataURL('image/jpeg', 0.9)
-            });
+            const detailW = Math.floor(w * 0.5);
+            const detailH = Math.floor(h * 0.5);
+            const detailX = w; // Start drawing details to the right
+
+            // 2. Draw Face Zoom (Top Right)
+            // Source: Top 40% of image
+            const faceSrcH = Math.floor(h * 0.4);
+            ctx.drawImage(img, 
+                0, 0, w, faceSrcH, // Source Crop
+                detailX, 0, detailW, detailH // Dest
+            );
+            // Label for Face
+            ctx.strokeStyle = '#00FF00';
+            ctx.lineWidth = 5;
+            ctx.strokeRect(detailX, 0, detailW, detailH);
+
+            // 3. Draw Shoes Zoom (Bottom Right)
+            // Source: Bottom 35% of image
+            const shoeSrcH = Math.floor(h * 0.35);
+            const shoeSrcY = h - shoeSrcH;
+            ctx.drawImage(img,
+                0, shoeSrcY, w, shoeSrcH, // Source Crop
+                detailX, detailH, detailW, detailH // Dest
+            );
+            // Label for Shoes
+            ctx.strokeStyle = '#0000FF';
+            ctx.lineWidth = 5;
+            ctx.strokeRect(detailX, detailH, detailW, detailH);
+
+            // Return high quality jpeg
+            resolve(canvas.toDataURL('image/jpeg', 0.95));
         };
-        img.onerror = () => resolve(null);
+        img.onerror = () => resolve(base64Str);
         img.src = src;
     });
   };

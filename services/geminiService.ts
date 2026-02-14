@@ -1,43 +1,23 @@
 
+import { GoogleGenAI } from "@google/genai";
 import { getSystemApiKey } from "./economyService";
 
 // Helper to get the best available API Key ASYNC
 const getDynamicApiKey = async (): Promise<string> => {
+    // Strictly use the centralized logic from economyService which prioritizes Database
     const dbKey = await getSystemApiKey();
     if (dbKey && dbKey.trim().length > 0) {
         return dbKey.trim();
     }
+    
+    // Fallback if DB returns nothing (Env var handling is now inside getSystemApiKey or here as last resort)
     return process.env.API_KEY || "";
-};
-
-// DYNAMIC IMPORT HELPER
-// We do not import { GoogleGenAI } at the top level to avoid app crash on load.
-const loadGeminiSDK = async () => {
-    try {
-        // Use a PINNED version to avoid 404s on @latest redirects
-        // @ts-ignore
-        const module = await import("https://esm.sh/@google/genai@0.1.2");
-        return module.GoogleGenAI;
-    } catch (e) {
-        console.warn("Primary CDN failed, trying fallback...", e);
-        try {
-            // Fallback to generic URL if version specific fails
-            // @ts-ignore
-            const module = await import("https://esm.sh/@google/genai");
-            return module.GoogleGenAI;
-        } catch (e2) {
-            console.error("CRITICAL: Failed to load Google GenAI SDK.", e2);
-            throw new Error("Không thể tải thư viện AI. Vui lòng kiểm tra kết nối mạng.");
-        }
-    }
 };
 
 // Helper to create a fresh client instance ASYNC
 const getAiClient = async () => {
     const key = await getDynamicApiKey();
     if (!key) throw new Error("Hệ thống chưa có API Key. Vui lòng cấu hình trong Admin > Hệ thống.");
-    
-    const GoogleGenAI = await loadGeminiSDK();
     return new GoogleGenAI({ apiKey: key });
 };
 
@@ -62,6 +42,8 @@ export const generateImage = async (
   
   try {
     const ai = await getAiClient();
+    // Model: gemini-3-pro-image-preview
+    // Using Pro model is essential for understanding the "Solid Fence" structural conditioning.
     const model = 'gemini-3-pro-image-preview';
     
     const parts: any[] = [];
@@ -69,6 +51,8 @@ export const generateImage = async (
     let styleRefIndex = -1;
     let faceRefIndex = -1;
     
+    // 1. Add "Solid Fence" Body/Structure Reference
+    // This image has already been pre-processed with the #808080 background and black border.
     if (styleRefBase64) {
       parts.push({
         inlineData: {
@@ -80,6 +64,7 @@ export const generateImage = async (
       styleRefIndex = imageIndexCounter; 
     }
 
+    // 2. Add Face Reference (Face ID Pipeline)
     if (faceRefBase64) {
         parts.push({
             inlineData: {
@@ -91,11 +76,13 @@ export const generateImage = async (
         faceRefIndex = imageIndexCounter;
     }
 
+    // 3. Construct Contextual Prompt with STRUCTURAL CONDITIONING instructions
     let fullPrompt = `Generate a photorealistic 3D masterpiece based on: "${prompt}".`;
     
     const indexToWord = (idx: number) => idx === 1 ? 'first' : 'second';
 
     if (styleRefIndex > 0) {
+        // Advanced instruction for the Vision Encoder to interpret the Solid Fence
         fullPrompt += `\n[STRUCTURAL CONDITIONING]: Look at the ${indexToWord(styleRefIndex)} image. This is the master layout.
         - The area inside the BLACK BORDER is the "Visual Anchor". You must preserve the pose, composition, and structure of the subject inside this border exactly.
         - The GREY AREA (#808080) surrounding the border is the "Outpainting Zone". Fill this area with background details matching the prompt description.
@@ -206,16 +193,17 @@ export const suggestPrompt = async (currentInput: string, lang: string, featureN
 
 export const checkConnection = async (testKey?: string): Promise<boolean> => {
   try {
+    let ai;
+    // Ensure key is trimmed to avoid whitespace issues
     const key = testKey ? testKey.trim() : (await getDynamicApiKey()).trim();
+    
     if (!key) return false;
 
-    // Use dynamic import here too
-    const GoogleGenAI = await loadGeminiSDK();
-    const ai = new GoogleGenAI({ apiKey: key });
+    ai = new GoogleGenAI({ apiKey: key });
     
     await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: { parts: [{ text: 'ping' }] }, 
+      contents: { parts: [{ text: 'ping' }] }, // Use explicit structure
       config: { maxOutputTokens: 1 }
     });
     return true;

@@ -1,14 +1,13 @@
-
 import { GeneratedImage } from '../types';
 import { supabase } from './supabaseClient';
-import { getR2Client, R2_BUCKET_NAME, R2_PUBLIC_DOMAIN } from './r2Client';
 import { getUserProfile } from './economyService';
 
 const DB_NAME = 'DMP_AI_Studio_DB';
 const STORE_NAME = 'images';
 const TABLE_NAME = 'generated_images';
+const BUCKET_NAME = 'images';
 
-// --- INDEXED DB HELPERS ---
+// --- INDEXED DB HELPERS (FALLBACK) ---
 const openDB = (): Promise<IDBDatabase> => {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, 1);
@@ -40,73 +39,85 @@ const base64ToBlob = (base64: string): Blob => {
 export const saveImageToStorage = async (image: GeneratedImage): Promise<void> => {
   const user = await getUserProfile();
   const imageWithUser = { ...image, userName: user.username, isShared: false };
-  const client = await getR2Client();
 
-  // 1. CLOUDFLARE R2 (IMAGE FILE) + SUPABASE (METADATA)
-  if (client && supabase && user.id.length > 20 && R2_BUCKET_NAME && R2_PUBLIC_DOMAIN) {
+  // 1. SUPABASE (CLOUD)
+  if (supabase && user.id.length > 20) {
     try {
-      console.log("[Storage] Uploading to R2...");
+      console.log("[Storage] Attempting to upload to Supabase...");
       const blob = base64ToBlob(image.url);
-      const contentType = image.url.substring(5, image.url.indexOf(';')); 
-      const fileName = `${user.id}/${image.id}.png`;
+      const fileName = `${image.id}.png`;
       
-      // Dynamic import Command
-      // @ts-ignore
-      const { PutObjectCommand } = await import("https://esm.sh/@aws-sdk/client-s3@3.620.0");
+      // Upload file
+      const { error: uploadError } = await supabase.storage
+        .from(BUCKET_NAME)
+        .upload(fileName, blob, { upsert: true });
 
-      const command = new PutObjectCommand({
-          Bucket: R2_BUCKET_NAME,
-          Key: fileName,
-          Body: blob,
-          ContentType: contentType,
-      });
+      if (uploadError) {
+          console.error("[Storage] Upload Failed:", uploadError.message);
+          throw uploadError;
+      }
 
-      await client.send(command);
+      // Get URL
+      const { data: { publicUrl } } = supabase.storage
+        .from(BUCKET_NAME)
+        .getPublicUrl(fileName);
 
-      const publicUrl = `${R2_PUBLIC_DOMAIN}/${fileName}`;
-      console.log("[Storage] Uploaded:", publicUrl);
-
+      // Save Metadata using corrected column names
       const { error: dbError } = await supabase
         .from(TABLE_NAME)
         .insert({
           id: image.id,
-          user_id: user.id, 
-          image_url: publicUrl,
+          user_id: user.id, // Linked to 'users' table
+          image_url: publicUrl, // Column: image_url
           prompt: image.prompt,
-          model_used: image.engine,
+          model_used: image.engine, // Column: model_used
           created_at: new Date(image.timestamp).toISOString(),
-          is_public: false 
+          is_public: false // Column: is_public
         });
 
-      if (dbError) throw dbError;
+      if (dbError) {
+          console.error("[Storage] DB Insert Failed:", dbError.message);
+          throw dbError;
+      }
+      
+      console.log("[Storage] Saved successfully to Cloud.");
       return; 
     } catch (error: any) {
-      console.warn("Cloud Save Failed (Using Local):", error.message);
+      console.warn("Supabase Error (Fallback to Local). Details:", error.message || error);
+      // Alert user if in Dev mode
+      if (process.env.NODE_ENV === 'development') alert("Cloud Save Failed: " + (error.message || "Unknown error"));
     }
   }
 
-  // 2. INDEXED DB (LOCAL FALLBACK)
+  // 2. INDEXED DB (LOCAL)
+  console.log("[Storage] Saving to Local IndexedDB...");
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const transaction = db.transaction([STORE_NAME], 'readwrite');
     const store = transaction.objectStore(STORE_NAME);
     const request = store.add(imageWithUser);
+
     request.onsuccess = () => resolve();
     request.onerror = () => reject(request.error);
   });
 };
 
 export const shareImageToShowcase = async (id: string, isShared: boolean): Promise<boolean> => {
+    // 1. SUPABASE
     if (supabase) {
         try {
             const { error } = await supabase
                 .from(TABLE_NAME)
-                .update({ is_public: isShared }) 
+                .update({ is_public: isShared }) // Column: is_public
                 .eq('id', id);
+            
             if (!error) return true;
-        } catch (e) { console.warn("Share error", e); }
+        } catch (e) {
+            console.warn("Share cloud error", e);
+        }
     }
 
+    // 2. INDEXED DB
     const db = await openDB();
     return new Promise((resolve, reject) => {
         const transaction = db.transaction([STORE_NAME], 'readwrite');
@@ -117,7 +128,9 @@ export const shareImageToShowcase = async (id: string, isShared: boolean): Promi
             const data = getReq.result as GeneratedImage;
             if (data) {
                 data.isShared = isShared;
-                store.put(data).onsuccess = () => resolve(true);
+                const updateReq = store.put(data);
+                updateReq.onsuccess = () => resolve(true);
+                updateReq.onerror = () => reject(updateReq.error);
             } else {
                 resolve(false);
             }
@@ -127,47 +140,53 @@ export const shareImageToShowcase = async (id: string, isShared: boolean): Promi
 };
 
 export const getShowcaseImages = async (): Promise<GeneratedImage[]> => {
+    // 1. SUPABASE
     if (supabase) {
         try {
+            // Join with 'users' table to get display_name
             const { data, error } = await supabase
                 .from(TABLE_NAME)
                 .select('*, users(display_name)')
-                .eq('is_public', true)
+                .eq('is_public', true) // Column: is_public
                 .order('created_at', { ascending: false })
                 .limit(20);
 
             if (!error && data) {
                 return data.map((row: any) => ({
                     id: row.id,
-                    url: row.image_url,
+                    url: row.image_url, // Column: image_url
                     prompt: row.prompt,
                     timestamp: new Date(row.created_at).getTime(),
-                    toolId: 'gen_tool',
-                    toolName: row.model_used || 'AI Tool',
+                    toolId: 'gen_tool', // Generic for showcase
+                    toolName: row.model_used || 'AI Tool', // Column: model_used
                     engine: row.model_used,
                     isShared: row.is_public,
                     userName: row.users?.display_name || 'Artist'
                 }));
             }
-        } catch (e) { console.warn("Fetch showcase error", e); }
+        } catch (e) {
+            console.warn("Fetch showcase cloud error", e);
+        }
     }
 
+    // 2. INDEXED DB
     const db = await openDB();
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
         const transaction = db.transaction([STORE_NAME], 'readonly');
         const store = transaction.objectStore(STORE_NAME);
         const request = store.getAll();
+
         request.onsuccess = () => {
             const results = request.result as GeneratedImage[];
-            resolve(results.filter(img => img.isShared).sort((a, b) => b.timestamp - a.timestamp).slice(0, 20));
+            const shared = results.filter(img => img.isShared);
+            resolve(shared.sort((a, b) => b.timestamp - a.timestamp).slice(0, 20));
         };
-        request.onerror = () => resolve([]);
+        request.onerror = () => reject(request.error);
     });
 };
 
 export const getAllImagesFromStorage = async (): Promise<GeneratedImage[]> => {
-  let cloudImages: GeneratedImage[] = [];
-  
+  // 1. SUPABASE
   if (supabase) {
     try {
         const { data: { user } } = await supabase.auth.getUser();
@@ -175,13 +194,14 @@ export const getAllImagesFromStorage = async (): Promise<GeneratedImage[]> => {
             const { data, error } = await supabase
                 .from(TABLE_NAME)
                 .select('*')
-                .eq('user_id', user.id)
+                .eq('user_id', user.id) // Filter by current user
                 .order('created_at', { ascending: false });
 
             if (!error && data) {
-                cloudImages = data.map((row: any) => ({
+                // Return cloud data if successful
+                return data.map((row: any) => ({
                     id: row.id,
-                    url: row.image_url,
+                    url: row.image_url, // Column: image_url
                     prompt: row.prompt,
                     timestamp: new Date(row.created_at).getTime(),
                     toolId: 'gen_tool',
@@ -192,47 +212,41 @@ export const getAllImagesFromStorage = async (): Promise<GeneratedImage[]> => {
                 }));
             }
         }
-    } catch (e) {}
+    } catch (error) {
+      console.error("Supabase Load Error (Fallback to Local):", error);
+    }
   }
 
+  // 2. INDEXED DB - Fallback if Supabase fails or is empty (optional logic)
+  // Currently we just return IndexedDB if code reaches here
   const db = await openDB();
-  const localImages = await new Promise<GeneratedImage[]>((resolve) => {
+  return new Promise((resolve, reject) => {
     const transaction = db.transaction([STORE_NAME], 'readonly');
     const store = transaction.objectStore(STORE_NAME);
     const request = store.getAll();
-    request.onsuccess = () => resolve((request.result as GeneratedImage[]) || []);
-    request.onerror = () => resolve([]);
+
+    request.onsuccess = () => {
+      const results = request.result as GeneratedImage[];
+      resolve(results.sort((a, b) => b.timestamp - a.timestamp));
+    };
+    request.onerror = () => reject(request.error);
   });
-
-  const imageMap = new Map<string, GeneratedImage>();
-  localImages.forEach(img => imageMap.set(img.id, img));
-  cloudImages.forEach(img => imageMap.set(img.id, img));
-
-  return Array.from(imageMap.values()).sort((a, b) => b.timestamp - a.timestamp);
 };
 
 export const deleteImageFromStorage = async (id: string): Promise<void> => {
-  const client = await getR2Client();
-  
-  if (client && supabase && R2_BUCKET_NAME) {
+  if (supabase) {
     try {
-        const user = await getUserProfile();
-        const { error } = await supabase.from(TABLE_NAME).delete().eq('id', id);
-        
-        if (!error) {
-            const fileName = `${user.id}/${id}.png`;
-            // @ts-ignore
-            const { DeleteObjectCommand } = await import("https://esm.sh/@aws-sdk/client-s3@3.620.0");
-            const command = new DeleteObjectCommand({ Bucket: R2_BUCKET_NAME, Key: fileName });
-            await client.send(command);
-        }
+        await supabase.from(TABLE_NAME).delete().eq('id', id);
+        await supabase.storage.from(BUCKET_NAME).remove([`${id}.png`]);
     } catch (e) { console.warn("Delete cloud error", e); }
   }
 
   const db = await openDB();
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const transaction = db.transaction([STORE_NAME], 'readwrite');
     const store = transaction.objectStore(STORE_NAME);
-    store.delete(id).onsuccess = () => resolve();
+    const request = store.delete(id);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
   });
 };

@@ -1,6 +1,7 @@
 
 import { GoogleGenAI } from "@google/genai";
 import { getSystemApiKey } from "./economyService";
+import { createSolidFence } from "../utils/imageProcessor";
 
 // Helper to get the best available API Key ASYNC
 const getDynamicApiKey = async (): Promise<string> => {
@@ -36,29 +37,14 @@ interface CharacterData {
 }
 
 // --- NEW: ANALYSIS PHASE FUNCTION ---
-/**
- * Analyzes a character image to extract clear text descriptions of outfit and features.
- * Specifically targets PANTS/SHOES colors to override the pose reference.
- */
 export const analyzeCharacterVisuals = async (base64Image: string, gender: string): Promise<string> => {
     try {
         const ai = await getAiClient();
-        // Use Flash for fast text analysis
         const model = 'gemini-2.5-flash'; 
         
-        const prompt = `Analyze the person in this image.
+        const prompt = `Analyze the person inside the border.
         Target Gender: ${gender}.
-        
-        I need a strict visual breakdown for a 3D render.
-        Identify the specific color and type of:
-        1. Top/Shirt
-        2. Bottom/Pants/Skirt (CRITICAL)
-        3. Shoes (CRITICAL)
-        
-        OUTPUT format:
-        "wearing [Top Color] [Top Type], [Bottom Color] [Bottom Type], [Shoe Color] [Shoe Type], [Hair Style]"
-        
-        Example: "wearing white suit jacket, white dress pants, white sneakers, silver hair"`;
+        Output concise description of: Top, Bottom, Shoes. Colors MUST be exact.`;
 
         const response = await ai.models.generateContent({
             model: model,
@@ -78,13 +64,13 @@ export const analyzeCharacterVisuals = async (base64Image: string, gender: strin
 };
 
 /**
- * generateImage - ADVANCED PIPELINE (Analysis -> Synthesis)
+ * generateImage - ADVANCED PIPELINE (Gray Canvas / Solid Fence)
  */
 export const generateImage = async (
     prompt: string, 
     aspectRatio: string = "1:1", 
-    styleRefBase64?: string, // POSE BLUEPRINT
-    characterDataList: CharacterData[] = [], // LIST OF CHARACTERS
+    styleRefBase64?: string, // POSE BLUEPRINT (Will be Ghosted)
+    characterDataList: CharacterData[] = [], // LIST OF CHARACTERS (Will be Fenced)
     resolution: string = '2K',
     useSearch: boolean = false,
     onProgress?: (msg: string) => void // Callback for UI updates
@@ -95,21 +81,34 @@ export const generateImage = async (
     const model = 'gemini-3-pro-image-preview'; 
     
     // ==========================================
-    // PHASE 1: INDIVIDUAL CHARACTER ANALYSIS
+    // PHASE 1: PREPARE VISUAL TOKENS (The "Solid Fence" Logic)
     // ==========================================
     const processedCharList = [];
 
+    // 1. Prepare Pose Ref (The Ghost)
+    let processedPoseRef = null;
+    if (styleRefBase64) {
+        if (onProgress) onProgress("Processing Pose Blueprint (Ghosting)...");
+        // isPoseRef = true -> Applies Bleach/Ghost effect
+        const ghostData = await createSolidFence(styleRefBase64, aspectRatio, true);
+        processedPoseRef = ghostData.split(',')[1];
+    }
+
+    // 2. Prepare Characters (The Solid Fence)
     for (const char of characterDataList) {
         if (char.image) {
-            if (onProgress) onProgress(`Analyzing Player ${char.id} (Extracting Colors)...`);
+            if (onProgress) onProgress(`Building Solid Fence for Player ${char.id}...`);
             
-            // Artificial delay to prevent rate limits/timeouts if calling rapidly
-            await new Promise(r => setTimeout(r, 1000));
-            
-            const description = await analyzeCharacterVisuals(char.image, char.gender);
+            // isPoseRef = false -> Applies Gray Canvas + Solid Border
+            const fencedData = await createSolidFence(char.image, "1:1", false);
+            const fencedBase64 = fencedData.split(',')[1];
+
+            // Analyze strictly for text reinforcement
+            const description = await analyzeCharacterVisuals(fencedBase64, char.gender);
             
             processedCharList.push({
                 ...char,
+                image: fencedBase64, // This is now the Gray-Canvas version
                 description: description
             });
         } else {
@@ -128,12 +127,12 @@ export const generateImage = async (
     const parts: any[] = [];
     let imageIndexCounter = 0;
 
-    // A. Pose Reference (The Blueprint)
+    // A. Add Pose Reference (Ghost)
     let poseRefIndex = -1;
-    if (styleRefBase64) {
+    if (processedPoseRef) {
       parts.push({
         inlineData: {
-          data: styleRefBase64,
+          data: processedPoseRef,
           mimeType: 'image/jpeg', 
         },
       });
@@ -141,7 +140,7 @@ export const generateImage = async (
       poseRefIndex = imageIndexCounter; 
     }
 
-    // B. Add Character Images (For Face Identity mainly)
+    // B. Add Character Images (Fenced)
     const charIndexMap: Record<number, number> = {};
     for (const char of processedCharList) {
         if (char.image) {
@@ -158,43 +157,44 @@ export const generateImage = async (
 
     const indexToWord = (idx: number) => `Image ${idx}`;
 
-    // C. The Master System Prompt
+    // C. The Master System Prompt (EXACT AUDITION AI PROTOCOL)
     const charCount = processedCharList.length;
-    let fullPrompt = `ROLE: Strict 3D Scene Renderer.
-    TASK: Render a group of ${charCount} characters. 
+    let fullPrompt = `*** SYSTEM COMMAND: OUTPAINTING & EXPANSION ***
     
-    USER COMMAND: "${prompt}".
+    1. [INPUT ANALYSIS]: The images labeled 'INPUT_CANVAS' (Images ${imageIndexCounter > 0 ? '1 to ' + imageIndexCounter : 'Provided'}) contain subjects placed on a GRAY (#808080) background with a SOLID BORDER.
     
-    [STRICT COLOR OVERRIDE RULES]:
-    The text descriptions below are the ABSOLUTE TRUTH for clothing colors.
-    The Reference Images may contain conflicting colors. IGNORE THEM.
-    If Text says "White Pants" and Image says "Black Pants", YOU MUST RENDER WHITE PANTS.`;
+    2. [MANDATORY ACTION]: The GRAY area (#808080) is VOID space. You must NOT preserve it. You must REGENERATE the scene to fill the canvas.
+    
+    3. [GENERATION TASK]:
+       - USER SCENE: "${prompt}".
+       - Render exactly ${charCount} characters into this scene.
+    
+    4. [SUBJECT PRESERVATION]: 
+       - For each character provided with a solid border, keep the character's Pose, Outfit, and Identity EXACTLY as shown inside the border.
+       - Do not modify pixels inside the black border unless necessary for lighting.
+       - Treat the bordered area as a "Texture Stamp".`;
 
-    // --- CRITICAL FIX FOR POSE REF ---
+    // --- RULE FOR POSE ---
     if (poseRefIndex > 0) {
-        fullPrompt += `\n\n[IMAGE ${indexToWord(poseRefIndex)} IS A 'GHOST' POSE GUIDE]:
-        - This image has been chemically washed out (bleached).
-        - It contains NO valid color information. It is faint grey/white.
-        - USE IT ONLY FOR SKELETON POSITION (Where arms/legs are).
-        - DO NOT USE IT FOR CLOTHING DARKNESS. Treat it as a transparent wireframe.`;
+        fullPrompt += `\n\n5. [POSE BLUEPRINT - IMAGE ${indexToWord(poseRefIndex)}]:
+        - This image is a GHOST/BLEACHED guide.
+        - Use it ONLY for skeleton/bone positioning.
+        - IGNORE its colors/textures.`;
     }
 
-    // D. Inject Analyzed Descriptions
-    fullPrompt += `\n\n[CHARACTER SPECIFICATIONS]:`;
+    // --- CHARACTER MAPPING ---
+    fullPrompt += `\n\n[MAPPING PROTOCOL]:`;
 
     processedCharList.forEach((char) => {
         const imageIdx = charIndexMap[char.id];
         
         fullPrompt += `\n\n--- PLAYER ${char.id} (${char.gender.toUpperCase()}) ---`;
-        fullPrompt += `\n- POSITION: Matches figure ${char.id} in Ghost Guide.`;
+        if (poseRefIndex > 0) fullPrompt += `\n- POSE: Matches figure ${char.id} in Pose Blueprint.`;
         
-        // VISUAL ANCHOR (TEXT) - High Priority
-        fullPrompt += `\n- OUTFIT COMMAND: ${char.description}. (Apply these colors EXACTLY. Do not darken them based on shadows).`;
-        
-        // VISUAL ANCHOR (IMAGE) - Use only for Face
         if (imageIdx) {
-            fullPrompt += `\n- FACE SOURCE: ${indexToWord(imageIdx)}.`;
-            fullPrompt += `\n- CLOTHING TEXTURE SOURCE: ${indexToWord(imageIdx)} (Take fabric details from here, NOT the ghost guide).`;
+            fullPrompt += `\n- SOURCE: ${indexToWord(imageIdx)} (Inside Solid Fence).`;
+            fullPrompt += `\n- CONSTRAINT: COPY Outfit from Source -> PASTE onto Scene.`;
+            fullPrompt += `\n- CLARIFICATION: ${char.description}. (If visual is unclear, follow this text).`;
         }
     });
 

@@ -22,11 +22,14 @@ export const urlToBase64 = async (url: string): Promise<string | null> => {
 };
 
 /**
- * Creates a "Blueprint" version of the reference image.
- * Matches Target Aspect Ratio.
- * APPLIES "VISUAL BLEACH": Heavily washes out the image to remove dark colors.
+ * TECHNQUE: GRAY-CANVAS SOLID FENCE (From Audition AI Logic)
+ * 
+ * Instead of just cropping, we place the image in a "Safe Box".
+ * 1. Background: Neutral Gray (#808080) - The universal "Mask/Void" color for AI.
+ * 2. Border: Solid 4px Border - The "Fence" that tells AI "Do not modify pixels inside".
+ * 3. Purpose: Forces AI to treat this image as a "Texture Source" rather than a flexible scene.
  */
-export const createSolidFence = async (base64Str: string, aspectRatio: string): Promise<string> => {
+export const createSolidFence = async (base64Str: string, aspectRatio: string = "1:1", isPoseRef: boolean = false): Promise<string> => {
     return new Promise((resolve) => {
       const img = new Image();
       img.crossOrigin = "Anonymous"; 
@@ -35,55 +38,54 @@ export const createSolidFence = async (base64Str: string, aspectRatio: string): 
         const ctx = canvas.getContext('2d');
         if (!ctx) return resolve(base64Str);
   
-        const BASE_SIZE = 1536; 
-        const [wRatio, hRatio] = aspectRatio.split(':').map(Number);
+        // Standardize size for AI Input (Square usually best for Token parsing, or match aspect)
+        const BASE_SIZE = 1024; 
         
-        let targetW, targetH;
-        if (wRatio > hRatio) {
-            targetW = BASE_SIZE;
-            targetH = Math.round(BASE_SIZE * (hRatio / wRatio));
-        } else {
-            targetH = BASE_SIZE;
-            targetW = Math.round(BASE_SIZE * (wRatio / hRatio));
-        }
+        // If it's a pose ref, we might want to match aspect ratio exactly.
+        // If it's a character ref (Solid Fence), we want a focus card.
+        canvas.width = BASE_SIZE;
+        canvas.height = BASE_SIZE;
   
-        canvas.width = targetW;
-        canvas.height = targetH;
+        // 1. FILL THE VOID (Neutral Gray #808080)
+        // This is crucial. It tells the AI "There is no context here, look ONLY at the subject".
+        ctx.fillStyle = '#808080'; 
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
   
-        // 1. Fill Background White
-        ctx.fillStyle = '#FFFFFF'; 
-        ctx.fillRect(0, 0, targetW, targetH);
-  
-        const scale = Math.min(targetW / img.width, targetH / img.height);
+        // Calculate fit dimensions (contain)
+        const scale = Math.min((BASE_SIZE - 40) / img.width, (BASE_SIZE - 40) / img.height);
         const drawW = Math.round(img.width * scale);
         const drawH = Math.round(img.height * scale);
-        const x = Math.round((targetW - drawW) / 2);
-        const y = Math.round((targetH - drawH) / 2);
+        const x = Math.round((BASE_SIZE - drawW) / 2);
+        const y = Math.round((BASE_SIZE - drawH) / 2);
         
-        // 2. Draw Image with Grayscale Filter
-        ctx.filter = 'grayscale(100%)';
-        ctx.drawImage(img, x, y, drawW, drawH);
-        ctx.filter = 'none';
-
-        // --- THE BRUTAL FIX: WHITE OVERLAY (BLEACHING) ---
-        // We draw a semi-transparent white box over the entire image.
-        // This physically lightens "Black" (0,0,0) to "Light Grey" (e.g., 200,200,200).
-        // The AI simply CANNOT see black pixels anymore because they don't exist.
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.85)'; // 85% White Overlay
-        ctx.fillRect(0, 0, targetW, targetH);
-
-        // 3. Re-enhance edges slightly so pose is still visible (optional, but good for structure)
-        // Since we washed it out, we don't want it invisible. The contrast logic is handled by the model seeing "faint lines".
-        
-        // 4. Draw Guide Border
-        if (targetW > drawW + 50 || targetH > drawH + 50) {
-            ctx.setLineDash([10, 10]);
-            ctx.strokeStyle = '#DDDDDD'; 
-            ctx.lineWidth = 2;
-            ctx.strokeRect(x, y, drawW, drawH);
+        if (isPoseRef) {
+            // --- POSE REFERENCE LOGIC (GHOSTING) ---
+            // If this is the POSE ref, we want structure but NO color influence.
+            // We apply the "Bleach" effect here.
+            ctx.filter = 'grayscale(100%) brightness(1.5) contrast(0.6)';
+            ctx.drawImage(img, x, y, drawW, drawH);
+            ctx.filter = 'none';
+            
+            // Overlay white to further kill dark pixels
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // No border for pose ref, it should be subtle.
+        } else {
+            // --- CHARACTER LOGIC (SOLID FENCE) ---
+            // This is the "Audition AI" technique. EXACT IMPLEMENTATION.
+            
+            // Draw the image normally (keep colors true)
+            ctx.drawImage(img, x, y, drawW, drawH);
+            
+            // DRAW THE FENCE (Solid Border)
+            // Use exactly 4px Black border as per spec.
+            ctx.strokeStyle = '#000000'; // Black border
+            ctx.lineWidth = 4; // EXACTLY 4px
+            ctx.strokeRect(x, y, drawW, drawH); // The "Cage"
         }
   
-        resolve(canvas.toDataURL('image/jpeg', 0.9));
+        resolve(canvas.toDataURL('image/jpeg', 0.95));
       };
       img.onerror = () => resolve(base64Str);
       img.src = base64Str;

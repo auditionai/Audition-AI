@@ -83,7 +83,8 @@ const openDB = (): Promise<IDBDatabase> => {
   });
 };
 
-const base64ToBlob = (base64: string): { blob: Blob, type: string } => {
+// Modified to return Uint8Array for AWS SDK compatibility
+const processBase64Data = (base64: string): { blob: Blob, type: string, buffer: Uint8Array } => {
   const parts = base64.split(';base64,');
   const contentType = parts[0].split(':')[1];
   const raw = window.atob(parts[1]);
@@ -92,7 +93,11 @@ const base64ToBlob = (base64: string): { blob: Blob, type: string } => {
   for (let i = 0; i < rawLength; ++i) {
     uInt8Array[i] = raw.charCodeAt(i);
   }
-  return { blob: new Blob([uInt8Array], { type: contentType }), type: contentType };
+  return { 
+      blob: new Blob([uInt8Array], { type: contentType }), 
+      type: contentType,
+      buffer: uInt8Array // Direct buffer for R2
+  };
 };
 
 // --- MAIN SERVICE FUNCTIONS ---
@@ -105,14 +110,15 @@ export const saveImageToStorage = async (image: GeneratedImage): Promise<void> =
   if (r2Client && supabase && user.id.length > 20) {
     console.log("[Storage] Attempting R2 Upload...");
     try {
-        const { blob, type } = base64ToBlob(image.url);
+        const { blob, type, buffer } = processBase64Data(image.url);
         const fileName = `${user.id}/${image.id}.png`; 
         
         // A. Upload file to R2
+        // FIX: Using 'buffer' (Uint8Array) instead of 'blob' to avoid "getReader is not a function" error
         const command = new PutObjectCommand({
             Bucket: R2_BUCKET_NAME,
             Key: fileName,
-            Body: blob,
+            Body: buffer, 
             ContentType: type,
             // ACL: 'public-read' // Uncomment if bucket is not public by default but allows ACL
         });
@@ -151,7 +157,7 @@ export const saveImageToStorage = async (image: GeneratedImage): Promise<void> =
   // 2. SUPABASE STORAGE (LEGACY BACKUP)
   else if (supabase && user.id.length > 20 && !r2Client) {
     try {
-      const { blob } = base64ToBlob(image.url);
+      const { blob } = processBase64Data(image.url);
       const fileName = `${image.id}.png`;
       
       const { error: uploadError } = await supabase.storage

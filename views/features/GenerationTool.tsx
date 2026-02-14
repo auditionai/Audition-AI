@@ -26,7 +26,7 @@ interface CharacterInput {
 export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang }) => {
   // --- STAGE MANAGEMENT ---
   const [stage, setStage] = useState<Stage>('input');
-  const [processingStep, setProcessingStep] = useState<string>('');
+  const [currentStep, setCurrentStep] = useState(0);
 
   // --- CONFIGURATION STATE ---
   const [activeMode, setActiveMode] = useState<GenMode>('single');
@@ -53,6 +53,18 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
   // Helper Refs
   const fileInputRef = useRef<HTMLInputElement>(null);
   const activeUploadType = useRef<{ charId: number, type: 'body' | 'face' } | { type: 'ref' } | null>(null);
+
+  // --- STEPS CONFIGURATION ---
+  const processingSteps = [
+      { label: { vi: 'Khởi tạo Worker & Tài nguyên', en: 'Initializing Workers & Resources' } },
+      { label: { vi: 'Xác thực & Trừ Vcoin', en: 'Verifying & Deducting Vcoin' } },
+      { label: { vi: 'Tối ưu hóa dữ liệu ảnh đầu vào', en: 'Optimizing Input Payloads' } },
+      { label: { vi: 'Xây dựng cấu trúc Solid Fence', en: 'Constructing Solid Fence Structure' } },
+      { label: { vi: 'Phân tích đặc điểm khuôn mặt (FaceID)', en: 'Analyzing Facial Features (FaceID)' } },
+      { label: { vi: 'Kết nối Gemini 3.0 Vision', en: 'Connecting to Gemini 3.0 Vision' } },
+      { label: { vi: 'Đang vẽ (Multimodal Composition)...', en: 'Generating (Multimodal Composition)...' } },
+      { label: { vi: 'Hoàn tất & Lưu trữ tác phẩm', en: 'Finalizing & Saving Masterpiece' } }
+  ];
 
   // --- INITIALIZATION ---
   useEffect(() => {
@@ -163,65 +175,65 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
         return;
     }
     
-    // 1. Move to Processing Stage
+    // START PROCESSING
     setStage('processing');
+    setCurrentStep(0);
 
     try {
-      // --- WORKER PATTERN SIMULATION ---
-      setProcessingStep('Initializing Workers...');
+      // Step 0: Init (Visual Delay)
+      await new Promise(r => setTimeout(r, 800));
+      setCurrentStep(1);
 
-      // Deduct Vcoin first (and log it for admin stats)
+      // Step 1: Payment
       await updateUserBalance(-cost, `Gen: ${feature.name['en']}`, 'usage');
+      await new Promise(r => setTimeout(r, 600));
+      setCurrentStep(2);
       
+      // Step 2: Optimization Preparation
+      const primaryStructuralImage = characters[0].bodyImage || refImage;
+      let styleRefData: string | undefined = undefined;
+      let faceRefData: string | undefined = undefined;
+      
+      await new Promise(r => setTimeout(r, 500)); // Simulate processing time
+      setCurrentStep(3);
+
+      // Step 3: Solid Fence Construction
+      if (primaryStructuralImage) {
+          // Optimize first
+          const optimized = await optimizePayload(primaryStructuralImage);
+          // Apply Solid Fence
+          const fencedImage = await createSolidFence(optimized, aspectRatio);
+          styleRefData = fencedImage.split(',')[1];
+      }
+      await new Promise(r => setTimeout(r, 600)); // Simulate fence drawing
+      setCurrentStep(4);
+
+      // Step 4: Face Analysis
+      if (characters[0].faceImage && characters[0].isFaceLocked) {
+          const optimizedFace = await optimizePayload(characters[0].faceImage, 512); 
+          faceRefData = optimizedFace.split(',')[1];
+      }
+      await new Promise(r => setTimeout(r, 500));
+      setCurrentStep(5);
+
+      // Step 5: Connecting Gemini (Prepare Prompt)
       let finalPrompt = (feature.defaultPrompt || "") + prompt;
       if (selectedStyle) finalPrompt += `, style: ${selectedStyle}`;
       if (negativePrompt) finalPrompt += ` --no ${negativePrompt}`;
       
-      // Context for multiple characters
       if (activeMode !== 'single') {
           const genderStr = characters.map(c => `Player ${c.id}: ${c.gender}`).join(', ');
           finalPrompt += ` [Context: ${genderStr}]`;
       }
+      await new Promise(r => setTimeout(r, 500));
+      setCurrentStep(6);
 
-      // --- CLIENT-SIDE PRE-PROCESSING (Hybrid Flow) ---
-      
-      let styleRefData: string | undefined = undefined;
-      let faceRefData: string | undefined = undefined;
-
-      // 1. Process Body / Style Reference (Solid Fence Strategy)
-      // Apply the Structural Image Conditioning to whatever image is in the primary slot (Body or Ref)
-      const primaryStructuralImage = characters[0].bodyImage || refImage;
-
-      if (primaryStructuralImage) {
-          setProcessingStep('Structural Conditioning (Solid Fence)...');
-          
-          // First, optimize the payload size
-          const optimized = await optimizePayload(primaryStructuralImage);
-          
-          // Then, apply the Solid Fence technique using the TARGET aspect ratio
-          // This creates the #808080 background and black border anchor
-          const fencedImage = await createSolidFence(optimized, aspectRatio);
-          
-          // Extract base64 for API
-          styleRefData = fencedImage.split(',')[1];
-      }
-
-      // 2. Process Face Reference (Face ID Pipeline)
-      // We take the face of the first character if locked or present
-      if (characters[0].faceImage && characters[0].isFaceLocked) {
-          setProcessingStep('Injecting Face Sprite...');
-          const optimizedFace = await optimizePayload(characters[0].faceImage, 512); // Faces can be smaller
-          faceRefData = optimizedFace.split(',')[1];
-      }
-
-      setProcessingStep('Multimodal Composition (Gemini 3 Vision)...');
-
-      // 3. Call API with Pre-processed Assets
+      // Step 6: Generating (API Call)
       const result = await generateImage(finalPrompt, aspectRatio, styleRefData, faceRefData);
 
       if (result) {
-        setProcessingStep('Finalizing & Saving...');
-        setResultImage(result);
+        setCurrentStep(7);
+        // Step 7: Finalizing & Saving
         const newImage: GeneratedImage = {
           id: crypto.randomUUID(),
           url: result,
@@ -234,7 +246,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
         setGeneratedData(newImage);
         await saveImageToStorage(newImage);
         
-        // Move to Result Stage
+        await new Promise(r => setTimeout(r, 800)); // Let user see the checkmark
+        
+        setResultImage(result);
         setStage('result');
       } else {
           throw new Error("No result returned");
@@ -280,23 +294,51 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
   // ================= RENDER: PROCESSING STAGE =================
   if (stage === 'processing') {
       return (
-          <div className="flex flex-col items-center justify-center min-h-[60vh] text-center animate-fade-in">
-              <div className="relative w-32 h-32 mb-8">
+          <div className="flex flex-col items-center justify-center min-h-[60vh] text-center animate-fade-in w-full max-w-md mx-auto">
+              
+              {/* Spinner */}
+              <div className="relative w-24 h-24 mb-8">
                   <div className="absolute inset-0 rounded-full border-4 border-slate-800"></div>
                   <div className="absolute inset-0 rounded-full border-4 border-t-audi-pink border-r-audi-purple border-b-transparent border-l-transparent animate-spin"></div>
                   <div className="absolute inset-4 rounded-full bg-white/5 flex items-center justify-center animate-pulse">
-                      <Icons.Sparkles className="w-12 h-12 text-white" />
+                      <Icons.Sparkles className="w-10 h-10 text-white" />
                   </div>
               </div>
-              <h2 className="font-game text-3xl font-bold text-white mb-2 tracking-widest animate-neon-flash">
+              
+              <h2 className="font-game text-2xl font-bold text-white mb-2 tracking-widest animate-neon-flash">
                   {lang === 'vi' ? 'ĐANG KHỞI TẠO...' : 'GENERATING...'}
               </h2>
-              <p className="text-slate-400 font-mono text-sm max-w-md mx-auto mb-4">
+              <p className="text-slate-400 font-mono text-xs max-w-xs mx-auto mb-8">
                   {lang === 'vi' ? 'Hệ thống đang vẽ nên ý tưởng của bạn. Vui lòng đợi trong giây lát.' : 'The system is painting your imagination. Please wait a moment.'}
               </p>
               
-              <div className="px-4 py-2 bg-white/5 rounded-full border border-white/10">
-                  <span className="text-xs font-bold text-audi-cyan animate-pulse">{processingStep || 'Processing...'}</span>
+              {/* Detailed Steps List */}
+              <div className="w-full bg-[#12121a] border border-white/10 rounded-2xl p-6 space-y-4 shadow-2xl text-left">
+                  {processingSteps.map((s, idx) => {
+                      const isDone = currentStep > idx;
+                      const isCurrent = currentStep === idx;
+                      const isPending = currentStep < idx;
+
+                      return (
+                          <div key={idx} className={`flex items-center gap-4 transition-all duration-300 ${isPending ? 'opacity-30 blur-[0.5px]' : 'opacity-100'}`}>
+                              <div className={`w-5 h-5 rounded-full flex items-center justify-center border shrink-0 transition-all ${
+                                  isDone ? 'bg-green-500 border-green-500' :
+                                  isCurrent ? 'border-audi-pink animate-spin-slow' :
+                                  'border-slate-600'
+                              }`}>
+                                  {isDone && <Icons.Check className="w-3 h-3 text-black" />}
+                                  {isCurrent && <div className="w-1.5 h-1.5 bg-audi-pink rounded-full"></div>}
+                              </div>
+                              <span className={`text-xs font-mono transition-colors ${
+                                  isCurrent ? 'text-audi-pink font-bold animate-pulse' : 
+                                  isDone ? 'text-green-500 line-through decoration-green-500/50' : 
+                                  'text-slate-400'
+                              }`}>
+                                  {s.label[lang === 'vi' ? 'vi' : 'en']}
+                              </span>
+                          </div>
+                      )
+                  })}
               </div>
           </div>
       );

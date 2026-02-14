@@ -115,6 +115,7 @@ export interface Transaction {
   createdAt: string;
   paymentMethod: 'payos' | 'manual';
   code: string; // Order Code
+  checkoutUrl?: string; // URL thanh toán PayOS
 }
 
 export interface DiamondLog {

@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect } from 'react';
 import { Layout } from './components/Layout';
 import { Home } from './views/Home';
@@ -63,6 +64,28 @@ function App() {
         return () => subscription.unsubscribe();
     }
   }, []);
+
+  // --- HANDLE PAYOS RETURN ---
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get('status');
+    // const code = params.get('orderCode'); 
+    
+    if (status) {
+        // Clear params to avoid loop/dirty URL
+        window.history.replaceState({}, '', window.location.pathname);
+        
+        if (status === 'PAID') {
+             // We can optionally verify orderCode against DB here, but simplest is just to notify user 
+             // and redirect to TopUp History where they can see the 'pending' turning to 'success' via webhook.
+             alert(lang === 'vi' ? 'Thanh toán thành công! Vcoin sẽ được cộng trong giây lát.' : 'Payment successful! Vcoin will be added shortly.');
+             setCurrentView('topup');
+        } else if (status === 'CANCELLED') {
+             alert(lang === 'vi' ? 'Đã hủy thanh toán.' : 'Payment cancelled.');
+             setCurrentView('topup');
+        }
+    }
+  }, [lang]); // Depend on lang to show localized alert
 
   const checkAdminRole = async (userId: string) => {
       if (!supabase) return;

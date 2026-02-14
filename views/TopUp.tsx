@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { Language, Transaction, CreditPackage, PromotionCampaign, ViewId, HistoryItem } from '../types';
 import { Icons } from '../components/Icons';
@@ -90,7 +91,14 @@ export const TopUp: React.FC<TopUpProps> = ({ lang, onNavigate }) => {
       setLoading(true);
       try {
           const tx = await createPaymentLink(pkg.id);
-          onNavigate('payment_gateway', { transaction: tx });
+          
+          if (tx.checkoutUrl) {
+              // Redirect to PayOS
+              window.location.href = tx.checkoutUrl;
+          } else {
+              // Fallback to internal Manual Gateway if PayOS link generation failed
+              onNavigate('payment_gateway', { transaction: tx });
+          }
       } catch (e) {
           console.error(e);
           alert(lang === 'vi' ? 'Có lỗi khi tạo giao dịch' : 'Error creating transaction');
@@ -320,8 +328,10 @@ export const TopUp: React.FC<TopUpProps> = ({ lang, onNavigate }) => {
                                     disabled={loading}
                                     className={`w-full py-4 rounded-xl font-bold text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all relative overflow-hidden ${pkg.isPopular ? 'bg-gradient-to-r from-audi-pink to-audi-purple text-white shadow-[0_5px_20px_rgba(255,0,153,0.3)] hover:shadow-[0_5px_30px_rgba(255,0,153,0.5)]' : 'bg-white text-black hover:bg-slate-200'}`}
                                 >
-                                    <span className="relative z-10">{lang === 'vi' ? 'Nạp Ngay' : 'Buy Now'}</span>
-                                    <Icons.ChevronRight className="w-4 h-4 relative z-10 group-hover:translate-x-1 transition-transform" />
+                                    <span className="relative z-10">
+                                        {loading ? <Icons.Loader className="animate-spin" /> : (lang === 'vi' ? 'Nạp Ngay' : 'Buy Now')}
+                                    </span>
+                                    {!loading && <Icons.ChevronRight className="w-4 h-4 relative z-10 group-hover:translate-x-1 transition-transform" />}
                                 </button>
                             </div>
                         );

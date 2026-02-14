@@ -1,4 +1,5 @@
 
+
 import { CreditPackage, Transaction, UserProfile, CheckinConfig, DiamondLog, TransactionStatus, PromotionCampaign, Giftcode, HistoryItem } from '../types';
 import { supabase } from './supabaseClient';
 
@@ -139,7 +140,7 @@ export const saveSystemApiKey = async (apiKey: string): Promise<{ success: boole
                         usage_count: 0
                     });
                 
-                // CRITICAL: Throw error if insert fails so UI knows about it
+                // CRITICAL: Throw error if insert fails so UI knows it
                 if (insertError) throw insertError;
             }
             
@@ -279,8 +280,6 @@ export const getPackages = async (onlyActive: boolean = true): Promise<CreditPac
 
         if (error) {
             console.error("Fetch packages error:", error);
-            // Don't fallback to default if we have a connection error, allows Admin to see blank instead of mock
-            // But for safety, if user, maybe fallback.
             if (onlyActive) return DEFAULT_PACKAGES; 
             return [];
         }
@@ -301,7 +300,7 @@ export const getPackages = async (onlyActive: boolean = true): Promise<CreditPac
                 transferContent: p.transfer_syntax || `NAP ${p.price_vnd}` // Map 'transfer_syntax' or fallback
             }));
         } else {
-            return []; // Return empty if no packages found in DB (don't show mock)
+            return []; 
         }
     }
     return DEFAULT_PACKAGES;
@@ -343,8 +342,6 @@ export const savePackage = async (pkg: CreditPackage): Promise<{success: boolean
 export const updatePackageOrder = async (packages: CreditPackage[]): Promise<{success: boolean, error?: string}> => {
     if (supabase) {
         try {
-            // Iterate and update order for each package
-            // NOTE: A more efficient way would be an upsert or RPC, but this is safe for small lists.
             for (let i = 0; i < packages.length; i++) {
                 await supabase
                     .from('credit_packages')
@@ -363,12 +360,9 @@ export const updatePackageOrder = async (packages: CreditPackage[]): Promise<{su
 export const deletePackage = async (id: string): Promise<{success: boolean, error?: string, action?: 'deleted' | 'hidden'}> => {
     if (supabase && isValidUUID(id)) {
         try {
-            // 1. Try Hard Delete First
             const { error } = await supabase.from('credit_packages').delete().eq('id', id);
             
             if (error) {
-                // Check for Foreign Key Constraint (Postgres code 23503)
-                // If it fails because it's referenced in transactions, we SOFT DELETE (hide) it instead
                 if (error.code === '23503') {
                     const { error: updateError } = await supabase
                         .from('credit_packages')
@@ -376,8 +370,6 @@ export const deletePackage = async (id: string): Promise<{success: boolean, erro
                         .eq('id', id);
                     
                     if (updateError) throw updateError;
-                    
-                    // Return specific action status so UI knows it wasn't fully deleted
                     return { success: true, action: 'hidden' };
                 }
                 throw error;
@@ -394,7 +386,6 @@ export const deletePackage = async (id: string): Promise<{success: boolean, erro
 
 export const getGiftcodes = async (): Promise<Giftcode[]> => {
     if (supabase) {
-        // Fetch all giftcodes, ordered by creation
         const { data, error } = await supabase.from('gift_codes').select('*').order('created_at', { ascending: false });
         
         if (error) {
@@ -419,7 +410,6 @@ export const getGiftcodes = async (): Promise<Giftcode[]> => {
 
 export const saveGiftcode = async (giftcode: Giftcode): Promise<{success: boolean, error?: string}> => {
     if (supabase) {
-        // Construct payload strictly matching DB Columns
         const payload = {
              code: giftcode.code,
              diamond_reward: giftcode.reward,
@@ -435,14 +425,13 @@ export const saveGiftcode = async (giftcode: Giftcode): Promise<{success: boolea
                 const { error } = await supabase.from('gift_codes').update(payload).eq('id', giftcode.id);
                 if (error) throw error;
             } else {
-                // Insert new - REMOVE ID if it's temp, let DB generate UUID
+                // Insert new
                 const { error } = await supabase.from('gift_codes').insert(payload);
                 if (error) throw error;
             }
             return { success: true };
         } catch (e: any) {
             console.error("Save giftcode error:", e);
-            // Handle unique violation (23505)
             if (e.code === '23505') {
                 return { success: false, error: 'Mã Code này đã tồn tại! Vui lòng chọn mã khác.' };
             }
@@ -466,7 +455,6 @@ export const redeemGiftcode = async (codeStr: string): Promise<{success: boolean
     const user = await getUserProfile();
 
     if (supabase && user.id.length > 20) {
-        // 1. Get Code
         const { data: codeData, error } = await supabase
             .from('gift_codes')
             .select('*')
@@ -476,31 +464,25 @@ export const redeemGiftcode = async (codeStr: string): Promise<{success: boolean
 
         if (error || !codeData) return { success: false, message: 'Mã không hợp lệ' };
         
-        // 2. Check Global Limits
         if (codeData.usage_count >= codeData.usage_limit) return { success: false, message: 'Mã đã hết lượt dùng' };
 
-        // 3. Check Per-User Limit via 'redeemed_gift_codes'
         const { count, error: redeemError } = await supabase
             .from('redeemed_gift_codes')
             .select('*', { count: 'exact', head: true })
             .eq('user_id', user.id)
             .eq('gift_code_id', codeData.id);
             
-        // Default max per user is 1 if column missing or null
         const maxPerUser = codeData.max_per_user || 1;
         
         if ((count || 0) >= maxPerUser) {
             return { success: false, message: `Bạn đã dùng mã này rồi (${maxPerUser}/${maxPerUser})` };
         }
 
-        // 4. Update Balance
         const reward = codeData.diamond_reward;
         await updateUserBalance(reward, `Giftcode: ${normalizedCode}`, 'giftcode');
         
-        // 5. Update Global Usage
         await supabase.from('gift_codes').update({ usage_count: codeData.usage_count + 1 }).eq('id', codeData.id);
         
-        // 6. Record Redemption Log
         await supabase.from('redeemed_gift_codes').insert({
             user_id: user.id,
             gift_code_id: codeData.id,
@@ -524,8 +506,8 @@ export const getAllPromotions = async (): Promise<PromotionCampaign[]> => {
         if (!error && data) {
             return data.map((p: any) => ({
                 id: p.id,
-                name: p.title || 'Chiến dịch', // Internal Name
-                marqueeText: p.description || '', // Marquee content
+                name: p.title || 'Chiến dịch', 
+                marqueeText: p.description || '', 
                 bonusPercent: p.bonus_percent || 0,
                 startTime: p.start_time,
                 endTime: p.end_time,
@@ -538,19 +520,14 @@ export const getAllPromotions = async (): Promise<PromotionCampaign[]> => {
 
 export const getActivePromotion = async (): Promise<PromotionCampaign | null> => {
     if (supabase) {
-        // Fetch all ACTIVE campaigns
-        // We filter by time on client-side to ensure precise comparison, 
-        // or we can use DB filter if time zones match. Client-side is safer for this scope.
         const { data } = await supabase
             .from('promotions')
             .select('*')
             .eq('is_active', true)
-            .order('bonus_percent', { ascending: false }); // Prioritize highest bonus
+            .order('bonus_percent', { ascending: false });
 
         if (data && data.length > 0) {
             const now = new Date().getTime();
-            
-            // Find the first campaign that is currently running
             const validCampaign = data.find((p: any) => {
                 const start = new Date(p.start_time).getTime();
                 const end = new Date(p.end_time).getTime();
@@ -597,7 +574,6 @@ export const savePromotion = async (campaign: PromotionCampaign): Promise<{succe
             return { success: true };
         } catch (e: any) {
             console.error("Save promotion error:", e);
-            // Return detailed message if possible
             return { success: false, error: e.message || 'Unknown Error' };
         }
     }
@@ -635,9 +611,8 @@ export const performCheckin = async (): Promise<{ success: boolean; reward: numb
     
     if (supabase && user.id.length > 20) {
         const todayISO = new Date().toISOString();
-        const dateOnly = todayISO.split('T')[0]; // Format for 'date' column type
+        const dateOnly = todayISO.split('T')[0]; 
         
-        // Check 'check_in_rewards' table for milestone rewards
         const { data: rewardRule } = await supabase
             .from('check_in_rewards')
             .select('diamond_reward')
@@ -648,19 +623,16 @@ export const performCheckin = async (): Promise<{ success: boolean; reward: numb
             reward = rewardRule.diamond_reward;
         }
 
-        // Update 'users'
         await supabase.from('users').update({ 
             consecutive_check_ins: newStreak, 
             last_check_in: todayISO
         }).eq('id', user.id);
 
-        // Insert 'daily_check_ins'
         await supabase.from('daily_check_ins').insert({
             user_id: user.id,
             check_in_date: dateOnly
         }).catch(e => console.warn("Log checkin failed", e));
         
-        // Track 'daily_active_users' (Composite Key upsert)
         await supabase.from('daily_active_users').upsert({
             user_id: user.id,
             activity_date: dateOnly
@@ -703,14 +675,12 @@ export const getUnifiedHistory = async (): Promise<HistoryItem[]> => {
     const user = await getUserProfile();
     if (!supabase || user.id.length < 20) return [];
 
-    // 1. Fetch Balance Logs (Completed transactions: Usage, Rewards, Successful Topups)
     const { data: logs } = await supabase
         .from('diamond_transactions_log')
         .select('*')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
-    // 2. Fetch Pending Topups (Not in logs yet)
     const { data: pendingTxs } = await supabase
         .from('transactions')
         .select('*')
@@ -720,7 +690,6 @@ export const getUnifiedHistory = async (): Promise<HistoryItem[]> => {
 
     const history: HistoryItem[] = [];
 
-    // Map Pending Txs
     if (pendingTxs) {
         pendingTxs.forEach((tx: any) => {
             history.push({
@@ -736,22 +705,20 @@ export const getUnifiedHistory = async (): Promise<HistoryItem[]> => {
         });
     }
 
-    // Map Logs
     if (logs) {
         logs.forEach((log: any) => {
             history.push({
                 id: log.id,
                 createdAt: log.created_at,
                 description: log.description,
-                vcoinChange: log.amount, // Positive or Negative
-                type: log.transaction_type, // 'topup', 'usage', etc.
+                vcoinChange: log.amount, 
+                type: log.transaction_type, 
                 status: 'success',
                 code: log.description.includes('Deposit:') ? log.description.split(':')[1].trim() : undefined
             });
         });
     }
 
-    // Sort combined list by date desc
     return history.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 };
 
@@ -761,13 +728,13 @@ export const createPaymentLink = async (packageId: string): Promise<Transaction>
     const pkg = pkgs.find(p => p.id === packageId);
     if (!pkg) throw new Error("Package not found");
 
-    const orderCode = Math.floor(Date.now() / 1000); // Use timestamp as order code (int8)
+    // PayOS requires integer orderCode (safe max ~9007199254740991)
+    // We use truncated timestamp to ensure uniqueness but short enough
+    const orderCode = Number(String(Date.now()).slice(-10)); 
 
-    // Calculate Bonus logic: Priority Active Campaign > Package Promo
     const activeCampaign = await getActivePromotion();
     const activeBonusPercent = activeCampaign ? activeCampaign.bonusPercent : pkg.bonusPercent;
     
-    // Calculate total coins
     const baseCoins = pkg.coin;
     const bonusCoins = Math.floor(baseCoins * (activeBonusPercent / 100));
     const totalCoins = baseCoins + bonusCoins;
@@ -777,22 +744,49 @@ export const createPaymentLink = async (packageId: string): Promise<Transaction>
         userId: user.id,
         packageId: pkg.id,
         amount: pkg.price,
-        coins: totalCoins, // Use total coins with bonus
+        coins: totalCoins, 
         status: 'pending',
         createdAt: new Date().toISOString(),
         paymentMethod: 'payos',
         code: `NAP${orderCode}`
     };
 
+    // 1. CALL NETLIFY FUNCTION TO GET PAYOS LINK
+    try {
+        const response = await fetch('/.netlify/functions/create_payment', {
+            method: 'POST',
+            body: JSON.stringify({
+                orderCode: orderCode,
+                amount: pkg.price,
+                description: `Nap Vcoin ${orderCode}`,
+                returnUrl: `${window.location.origin}/?status=PAID&orderCode=${orderCode}`,
+                cancelUrl: `${window.location.origin}/?status=CANCELLED&orderCode=${orderCode}`
+            })
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            if (data.checkoutUrl) {
+                newTx.checkoutUrl = data.checkoutUrl;
+                console.log("PayOS Link Created:", data.checkoutUrl);
+            }
+        } else {
+            console.warn("PayOS Function Error", await response.text());
+        }
+    } catch (e) {
+        console.warn("PayOS Link Creation Failed (Fallback to Manual)", e);
+    }
+
+    // 2. SAVE TRANSACTION TO DB
     if (supabase && user.id.length > 20) {
         await supabase.from('transactions').insert({
             id: newTx.id,
             user_id: user.id,
             package_id: pkg.id,
-            amount_vnd: pkg.price, // Map 'amount_vnd'
-            diamonds_received: totalCoins, // Map 'diamonds_received' (Base + Bonus)
+            amount_vnd: pkg.price, 
+            diamonds_received: totalCoins,
             status: 'pending',
-            order_code: orderCode, // Map 'order_code'
+            order_code: orderCode,
             created_at: newTx.createdAt
         });
     }
@@ -851,16 +845,11 @@ export const adminRejectTransaction = async (txId: string): Promise<boolean> => 
 export const deleteTransaction = async (txId: string): Promise<{success: boolean, error?: string}> => {
     if (supabase) {
         try {
-            // Using select() is critical to verify if RLS actually allowed deletion
             const { data, error } = await supabase.from('transactions').delete().eq('id', txId).select();
-            
             if (error) throw error;
-            
-            // If data is null or empty array, it means no row was deleted (likely due to RLS)
             if (!data || data.length === 0) {
-                 return { success: false, error: "Không thể xóa. Vui lòng kiểm tra quyền hạn (RLS Policy) hoặc ID không tồn tại." };
+                 return { success: false, error: "Không thể xóa. Kiểm tra quyền hạn hoặc ID." };
             }
-
             return { success: true };
         } catch (e: any) {
              return { success: false, error: e.message };
@@ -876,7 +865,6 @@ export const mockPayOSSuccess = async (txId: string) => {
 export const getAdminStats = async () => {
     let users = [], txs = [];
     
-    // Default stats if DB is empty or fails
     let dashboardStats = {
         visitsToday: 0,
         visitsTotal: 0,
@@ -888,7 +876,6 @@ export const getAdminStats = async () => {
     };
     
     if (supabase) {
-        // 1. Fetch Users (List for Table + Count for Stats)
         const { data: u, count: totalUsers } = await supabase
             .from('users')
             .select('id, display_name, email, photo_url, diamonds, is_admin, created_at', { count: 'exact' });
@@ -905,7 +892,6 @@ export const getAdminStats = async () => {
             }));
         }
 
-        // 2. Fetch Transactions
         const { data: t } = await supabase.from('transactions').select('*');
         if(t) txs = t.map((row:any) => ({
             id: row.id,
@@ -919,27 +905,20 @@ export const getAdminStats = async () => {
             paymentMethod: 'payos'
         }));
 
-        // 3. REALTIME DASHBOARD STATS CALCULATION
         const todayStr = new Date().toISOString().split('T')[0];
         
-        // Count New Users Today
         const newUsersCount = users.filter((u:any) => u.createdAt && u.createdAt.startsWith(todayStr)).length;
         
-        // Count Images (Total & Today) from 'generated_images' table
         const { count: totalImgs } = await supabase.from('generated_images').select('*', { count: 'exact', head: true });
         const { count: todayImgs } = await supabase.from('generated_images').select('*', { count: 'exact', head: true }).gte('created_at', todayStr);
 
-        // --- NEW: VISIT STATS FROM 'app_visits' TABLE ---
-        // Requires creating table: create table app_visits (id uuid, created_at timestamptz);
         let visitsToday = 0;
         let visitsTotal = 0;
 
         try {
-             // Total
              const { count: vTotal } = await supabase.from('app_visits').select('*', { count: 'exact', head: true });
              if (vTotal !== null) visitsTotal = vTotal;
 
-             // Today
              const { count: vToday } = await supabase.from('app_visits')
                  .select('*', { count: 'exact', head: true })
                  .gte('created_at', todayStr);
@@ -949,26 +928,17 @@ export const getAdminStats = async () => {
             console.warn("Table app_visits likely missing", e);
         }
 
-        // Calculate Revenue from PAID transactions
-        const revenue = txs.filter((t:any) => t.status === 'paid').reduce((sum:number, t:any) => sum + t.amount, 0);
-
-        // --- NEW: AI USAGE AGGREGATION FROM LOGS ---
         let aiUsageStats: any[] = [];
         try {
-            // Fetch usage logs (where transaction_type = 'usage')
-            // Using a raw select. For heavy loads, this should be an RPC or View.
             const { data: logs } = await supabase
                 .from('diamond_transactions_log')
                 .select('amount, description')
-                .eq('transaction_type', 'usage'); // Filter only spending
+                .eq('transaction_type', 'usage'); 
             
             if (logs) {
-                // Group by Description (Feature Name)
                 const usageMap = new Map<string, { count: number, vcoins: number }>();
                 
                 logs.forEach(log => {
-                    // Normalize description to group similar features if needed
-                    // For now, assume description is consistent (e.g., "Single Photo Gen", "Remove Background")
                     const feature = log.description || 'Unknown Feature';
                     
                     if (!usageMap.has(feature)) {
@@ -977,15 +947,14 @@ export const getAdminStats = async () => {
                     
                     const entry = usageMap.get(feature)!;
                     entry.count += 1;
-                    entry.vcoins += Math.abs(log.amount); // amount is negative for usage
+                    entry.vcoins += Math.abs(log.amount); 
                 });
 
-                // Convert map to array for frontend
                 aiUsageStats = Array.from(usageMap.entries()).map(([feature, stats]) => ({
                     feature: feature,
                     count: stats.count,
                     vcoins: stats.vcoins,
-                    revenue: stats.vcoins * 1000 // Estimated revenue 1 Vcoin = 1000 VND
+                    revenue: stats.vcoins * 1000 
                 }));
             }
         } catch(e) {
@@ -1009,9 +978,9 @@ export const getAdminStats = async () => {
         transactions: txs,
         logs: [],
         usersList: users,
-        packages: await getPackages(false), // PASS FALSE TO FETCH ALL (INCL INACTIVE)
-        promotions: await getAllPromotions(), // Fetch list for admin
-        activePromotion: await getActivePromotion(), // Fetch single active for logic
+        packages: await getPackages(false), 
+        promotions: await getAllPromotions(), 
+        activePromotion: await getActivePromotion(), 
         giftcodes: await getGiftcodes()
     };
 };

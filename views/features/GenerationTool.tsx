@@ -1,5 +1,4 @@
 
-
 import React, { useState, useRef, useEffect } from 'react';
 import { Feature, Language, GeneratedImage } from '../../types';
 import { Icons } from '../../components/Icons';
@@ -21,63 +20,46 @@ type Resolution = '1K' | '2K' | '4K';
 interface CharacterInput {
   id: number;
   bodyImage: string | null;
-  faceImage: string | null; // This acts as the IDENTITY + OUTFIT source
+  faceImage: string | null; 
+  shoesImage: string | null; 
   gender: 'female' | 'male';
   isFaceLocked: boolean;
 }
 
 export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang }) => {
-  // Notification Hook
   const { notify } = useNotification();
-
-  // --- STAGE MANAGEMENT ---
   const [stage, setStage] = useState<Stage>('input');
-  
-  // Custom Progress State
   const [progressMsg, setProgressMsg] = useState('');
   const [progressLogs, setProgressLogs] = useState<string[]>([]);
 
-  // --- CONFIGURATION STATE ---
   const [activeMode, setActiveMode] = useState<GenMode>('single');
-  const [characters, setCharacters] = useState<CharacterInput[]>([{ id: 1, bodyImage: null, faceImage: null, gender: 'female', isFaceLocked: false }]);
+  const [characters, setCharacters] = useState<CharacterInput[]>([{ id: 1, bodyImage: null, faceImage: null, shoesImage: null, gender: 'female', isFaceLocked: false }]);
   
-  // Reference Image
   const [refImage, setRefImage] = useState<string | null>(null);
-  
-  // Prompt & Text
   const [prompt, setPrompt] = useState('');
   const [negativePrompt, setNegativePrompt] = useState('crowd, extra people, audience, bystanders, deformed, bad anatomy, disfigured, poorly drawn face, mutation, mutated, extra limb, ugly, disgusting, poorly drawn hands, missing limb, floating limbs, disconnected limbs, malformed hands, blur, out of focus, long neck, long body, mutated hands and fingers, out of frame, blender, doll, cropped, low-res, close-up, poorly-drawn face, out of frame double, two heads, blurred, ugly, disfigured, too many fingers, deformed, repetitive, black and white, grainy, extra limbs, bad anatomy, duplicate, photorealistic, realistic photo, sketch, cartoon, drawing, art, 2d');
-  const [seed, setSeed] = useState('');
   const [isSuggesting, setIsSuggesting] = useState(false);
   const [isScanningFace, setIsScanningFace] = useState(false); 
 
-  // Advanced Settings
-  const [modelType, setModelType] = useState<'flash' | 'pro'>('pro'); // Default to Pro based on user preference
+  const [modelType, setModelType] = useState<'flash' | 'pro'>('pro'); 
   const [aspectRatio, setAspectRatio] = useState('3:4'); 
   const [selectedStyle, setSelectedStyle] = useState('3d');
-  
-  // NEW: PRO SETTINGS
   const [resolution, setResolution] = useState<Resolution>('2K'); 
   const [useSearch, setUseSearch] = useState(false); 
-  const [isSharpening, setIsSharpening] = useState(false); 
+  const [useCloudRef, setUseCloudRef] = useState(true); // Default to True for High Quality
 
-  // Result State
   const [resultImage, setResultImage] = useState<string | null>(null);
   const [generatedData, setGeneratedData] = useState<GeneratedImage | null>(null);
 
-  // Helper Refs
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const activeUploadType = useRef<{ charId?: number, type: 'body' | 'face' | 'ref' } | null>(null);
+  const activeUploadType = useRef<{ charId?: number, type: 'body' | 'face' | 'shoes' | 'ref' } | null>(null);
 
-  // --- INITIALIZATION ---
   useEffect(() => {
     if (feature.id.includes('couple')) handleModeChange('couple');
     else if (feature.id.includes('group_3')) handleModeChange('group3');
     else if (feature.id.includes('group_4')) handleModeChange('group4');
     else handleModeChange('single');
   }, [feature]);
-
-  // --- HANDLERS ---
 
   const handleModeChange = (mode: GenMode) => {
       setActiveMode(mode);
@@ -90,13 +72,13 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
           const newChars = [];
           for (let i = 1; i <= count; i++) {
               const existing = prev.find(p => p.id === i);
-              newChars.push(existing || { id: i, bodyImage: null, faceImage: null, gender: i % 2 === 0 ? 'male' : 'female', isFaceLocked: false });
+              newChars.push(existing || { id: i, bodyImage: null, faceImage: null, shoesImage: null, gender: i % 2 === 0 ? 'male' : 'female', isFaceLocked: false });
           }
           return newChars;
       });
   };
 
-  const handleUploadClick = (charId: number, type: 'body' | 'face') => {
+  const handleUploadClick = (charId: number, type: 'body' | 'face' | 'shoes') => {
       activeUploadType.current = { charId, type };
       fileInputRef.current?.click();
   };
@@ -120,9 +102,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
           } else if (currentType?.charId) {
               setCharacters(prev => prev.map(c => {
                   if (c.id === currentType.charId) {
-                      return currentType.type === 'body' 
-                          ? { ...c, bodyImage: result } 
-                          : { ...c, faceImage: result };
+                      if (currentType.type === 'body') return { ...c, bodyImage: result };
+                      if (currentType.type === 'face') return { ...c, faceImage: result };
+                      if (currentType.type === 'shoes') return { ...c, shoesImage: result };
                   }
                   return c;
               }));
@@ -132,37 +114,23 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       e.target.value = '';
   };
 
-  const toggleFaceLock = (e: React.MouseEvent, charId: number) => {
-      e.stopPropagation();
-      setCharacters(prev => prev.map(c => c.id === charId ? { ...c, isFaceLocked: !c.isFaceLocked } : c));
-  };
-
   const toggleGender = (charId: number, gender: 'male' | 'female') => {
       setCharacters(prev => prev.map(c => c.id === charId ? { ...c, gender } : c));
   }
 
   const calculateCost = () => {
-      // Base Cost
       let cost = modelType === 'pro' ? 2 : 1;
-      
-      // Resolution Cost (Only for Pro)
       if (modelType === 'pro') {
           if (resolution === '1K') cost += 2;
           if (resolution === '2K') cost += 5;
           if (resolution === '4K') cost += 10;
-          
-          if (useSearch) cost += 3; // Extra for search
+          if (useSearch) cost += 3; 
+          if (useCloudRef) cost += 2; // Extra for cloud upload handling
       }
-
-      // Multi-character cost
       if (activeMode === 'couple') cost += 2;
       if (activeMode === 'group3') cost += 4;
       if (activeMode === 'group4') cost += 6;
-
-      // Face Lock Cost
-      const lockedCount = characters.filter(c => c.isFaceLocked).length;
-      cost += lockedCount * 1; 
-
+      
       return cost;
   };
 
@@ -181,73 +149,51 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
     const user = await getUserProfile();
 
     if ((user.balance || 0) < cost) {
-        notify(lang === 'vi' ? 'Số dư không đủ! Vui lòng nạp thêm.' : 'Insufficient balance!', 'error');
+        notify(lang === 'vi' ? 'Số dư không đủ!' : 'Insufficient balance!', 'error');
         return;
     }
     
-    // VISUAL EFFECT: Face Scanning
     if (characters.some(c => c.faceImage)) {
         setIsScanningFace(true);
-        await new Promise(r => setTimeout(r, 2000)); // Show scan effect for 2s
+        await new Promise(r => setTimeout(r, 2000)); 
         setIsScanningFace(false);
     }
     
-    // START PROCESSING
     setStage('processing');
     setProgressLogs([]);
-    addLog(lang === 'vi' ? 'Khởi tạo quy trình đa luồng...' : 'Initializing multi-thread process...');
+    addLog(lang === 'vi' ? 'Khởi tạo Digital Twin V6 (High-Fidelity)...' : 'Initializing Protocol V6...');
 
     try {
-      // Step 1: Payment
       await new Promise(r => setTimeout(r, 500));
       await updateUserBalance(-cost, `Gen: ${feature.name['en']}`, 'usage');
       addLog(lang === 'vi' ? `Đã trừ ${cost} Vcoin` : `Deducted ${cost} Vcoin`);
       
-      // Step 2: PREPARE POSE STRUCTURE (BLUEPRINT)
-      addLog(lang === 'vi' ? 'Xây dựng khung xương (Pose)...' : 'Building pose structure...');
       let structureRefData: string | undefined = undefined;
-      
       let sourceForStructure = refImage || feature.preview_image;
-      
       if (sourceForStructure.startsWith('http')) {
           const b64 = await urlToBase64(sourceForStructure);
           if (b64) sourceForStructure = b64;
       }
-      
       if (sourceForStructure) {
           const optimizedStructure = await optimizePayload(sourceForStructure);
-          const fencedImage = await createSolidFence(optimizedStructure, aspectRatio, true);
-          // FIX: Pass full data URL to prevent 414 error in subsequent fence calls
-          structureRefData = fencedImage; 
+          structureRefData = await createSolidFence(optimizedStructure, aspectRatio, true);
       }
       
-      await new Promise(r => setTimeout(r, 600));
-
-      // Step 3: PREPARE CHARACTER DATA PACKAGES
       const characterDataList = [];
-      
       for (const char of characters) {
-          let charImageData = null;
-          // Use faceImage as the primary source for Identity AND Outfit
-          if (char.faceImage) {
-              const opt = await optimizePayload(char.faceImage, 1024); // Keep high res for scanning
-              // FIX: Pass full data URL to prevent 414 error in subsequent fence calls
-              charImageData = opt; 
-          }
-          
           characterDataList.push({
               id: char.id,
               gender: char.gender,
-              image: charImageData // Can be null if no upload, AI will gen generic
+              image: char.bodyImage, 
+              faceImage: char.faceImage,
+              shoesImage: char.shoesImage
           });
       }
       
-      // Step 4: Connecting Gemini
       let finalPrompt = (feature.defaultPrompt || "") + prompt;
       if (selectedStyle) finalPrompt += `, style: ${selectedStyle}`;
       if (negativePrompt) finalPrompt += ` --no ${negativePrompt}`;
       
-      // Step 5: Generating with Callback for Analysis Steps
       const result = await generateImage(
           finalPrompt, 
           aspectRatio, 
@@ -255,12 +201,12 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
           characterDataList, 
           modelType === 'pro' ? resolution : '1K', 
           modelType === 'pro' ? useSearch : false,
-          (msg) => addLog(msg) // Callback to update logs
+          useCloudRef, // Pass the new flag
+          (msg) => addLog(msg)
       );
 
       if (result) {
-        addLog(lang === 'vi' ? 'Hoàn tất & Lưu trữ...' : 'Finalizing & Saving...');
-        // Step 6: Finalizing
+        addLog(lang === 'vi' ? 'Hoàn tất!' : 'Finalizing...');
         const newImage: GeneratedImage = {
           id: crypto.randomUUID(),
           url: result,
@@ -272,9 +218,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
         };
         setGeneratedData(newImage);
         await saveImageToStorage(newImage);
-        
-        await new Promise(r => setTimeout(r, 800));
-        
         setResultImage(result);
         setStage('result');
         notify(lang === 'vi' ? 'Tạo ảnh thành công!' : 'Generation successful!', 'success');
@@ -284,7 +227,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
     } catch (error) {
       console.error(error);
       await updateUserBalance(cost, `Refund: ${feature.name['en']} Failed`, 'refund');
-      notify(lang === 'vi' ? 'Tạo ảnh thất bại. Đã hoàn lại Vcoin.' : 'Generation failed. Vcoin refunded.', 'error');
+      notify(lang === 'vi' ? 'Lỗi. Đã hoàn tiền.' : 'Error. Refunded.', 'error');
       setStage('input'); 
     }
   };
@@ -298,30 +241,15 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
     finally { setIsSuggesting(false); }
   };
 
-  // --- DATA LISTS ---
-  const styles = [
-      { id: '3d', name: '3D Game', icon: Icons.MessageCircle }, 
-      { id: 'blindbox', name: 'Blind Box', icon: Icons.Gift },
-      { id: 'anime', name: 'Anime 3D', icon: Icons.Zap },
-      { id: 'cinematic', name: 'Cinematic', icon: Icons.Play },
-      { id: 'cyberpunk', name: 'Cyberpunk', icon: Icons.Cpu },
-      { id: 'clay', name: 'Clay', icon: Icons.Palette },
-      { id: 'fashion', name: 'Fashion', icon: Icons.ShoppingBag },
-  ];
-
   const ratios = [
       { id: '1:1', label: '1:1', desc: 'Square' },
       { id: '3:4', label: '3:4', desc: 'Portrait' },
-      { id: '4:3', label: '4:3', desc: 'Landscape' },
-      { id: '9:16', label: '9:16', desc: 'Story' },
       { id: '16:9', label: '16:9', desc: 'Cinema' },
   ];
 
-  // ================= RENDER: PROCESSING STAGE =================
   if (stage === 'processing') {
       return (
           <div className="flex flex-col items-center justify-center min-h-[60vh] text-center animate-fade-in w-full max-w-md mx-auto">
-              {/* Spinner */}
               <div className="relative w-24 h-24 mb-8">
                   <div className="absolute inset-0 rounded-full border-4 border-slate-800"></div>
                   <div className="absolute inset-0 rounded-full border-4 border-t-audi-pink border-r-audi-purple border-b-transparent border-l-transparent animate-spin"></div>
@@ -329,30 +257,24 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                       <Icons.Sparkles className="w-10 h-10 text-white" />
                   </div>
               </div>
-              
               <h2 className="font-game text-2xl font-bold text-white mb-2 tracking-widest animate-neon-flash">
-                  {lang === 'vi' ? 'ĐANG XỬ LÝ...' : 'PROCESSING...'}
+                  {lang === 'vi' ? 'VISUAL ANCHORING V6' : 'PROCESSING V6'}
               </h2>
               <p className="text-audi-cyan font-mono text-sm max-w-xs mx-auto mb-8 animate-pulse font-bold">
-                  {progressMsg || (lang === 'vi' ? 'Đang phân tích dữ liệu...' : 'Analyzing data...')}
+                  {progressMsg}
               </p>
-              
-              {/* Detailed Logs List */}
               <div className="w-full bg-[#12121a] border border-white/10 rounded-2xl p-4 space-y-2 shadow-2xl text-left h-48 overflow-y-auto custom-scrollbar">
                   {progressLogs.map((log, idx) => (
                       <div key={idx} className="flex items-start gap-2 text-xs font-mono border-b border-white/5 pb-1 last:border-0 animate-fade-in">
-                          <span className="text-slate-500">[{new Date().toLocaleTimeString().split(' ')[0]}]</span>
-                          <span className={idx === progressLogs.length - 1 ? 'text-audi-pink font-bold' : 'text-slate-300'}>{log}</span>
+                          <span className="text-audi-pink"> &gt; </span>
+                          <span className={idx === progressLogs.length - 1 ? 'text-white font-bold' : 'text-slate-400'}>{log}</span>
                       </div>
                   ))}
-                  {/* Fake Cursor */}
-                  <div className="w-2 h-4 bg-audi-pink animate-pulse inline-block"></div>
               </div>
           </div>
       );
   }
 
-  // ================= RENDER: RESULT STAGE =================
   if (stage === 'result' && resultImage) {
       return (
           <div className="flex flex-col items-center animate-fade-in pb-20 w-full">
@@ -360,49 +282,21 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                   <div className="flex justify-between items-center p-3 border-b border-white/10 bg-white/5">
                       <div className="flex items-center gap-2">
                           <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                          <span className="font-bold text-xs text-white">{lang === 'vi' ? 'Hoàn thành' : 'Completed'}</span>
+                          <span className="font-bold text-xs text-white">Result</span>
                       </div>
-                      <div className="flex gap-2">
-                          <button onClick={() => setStage('input')} className="text-[10px] font-bold text-slate-400 hover:text-white px-2 py-1 rounded bg-white/5 hover:bg-white/10">
-                              {lang === 'vi' ? 'Đóng' : 'Close'}
-                          </button>
-                      </div>
+                      <button onClick={() => setStage('input')} className="text-[10px] font-bold text-slate-400 hover:text-white px-2 py-1 rounded bg-white/5 hover:bg-white/10">X</button>
                   </div>
-                  
                   <div className="relative bg-black/50 min-h-[300px] flex items-center justify-center p-4">
-                      <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-audi-purple via-transparent to-transparent"></div>
-                      <img 
-                          src={resultImage} 
-                          alt="Result" 
-                          className="max-w-full max-h-[50vh] object-contain rounded-lg shadow-[0_0_30px_rgba(0,0,0,0.5)] border border-white/5" 
-                      />
+                      <img src={resultImage} alt="Result" className="max-w-full max-h-[50vh] object-contain rounded-lg shadow-[0_0_30px_rgba(0,0,0,0.5)] border border-white/5" />
                   </div>
-
-                  <div className="p-4 bg-[#12121a]">
-                      <div className="flex flex-col gap-3">
-                          <div className="w-full">
-                              <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">{lang === 'vi' ? 'Prompt sử dụng' : 'Prompt Used'}</label>
-                              <div className="bg-black/40 rounded-lg p-2 border border-white/10">
-                                  <p className="text-xs text-slate-300 line-clamp-1 italic">"{generatedData?.prompt}"</p>
-                              </div>
-                          </div>
-                          <div className="flex gap-2">
-                              <a 
-                                  href={resultImage} 
-                                  download={`dmp-ai-${Date.now()}.png`} 
-                                  className="flex-1 px-4 py-2.5 bg-white text-black rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-audi-cyan transition-colors text-sm"
-                              >
-                                  <Icons.Download className="w-4 h-4" />
-                                  {lang === 'vi' ? 'Tải Về' : 'Download'}
-                              </a>
-                              <button 
-                                  onClick={() => setStage('input')}
-                                  className="flex-1 px-4 py-2.5 bg-audi-pink text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-pink-600 transition-colors shadow-[0_0_15px_#FF0099] text-sm"
-                              >
-                                  <Icons.Wand className="w-4 h-4" />
-                                  {lang === 'vi' ? 'Tạo Tiếp' : 'Create New'}
-                              </button>
-                          </div>
+                  <div className="p-4 bg-[#12121a] flex flex-col gap-3">
+                      <div className="flex gap-2">
+                          <a href={resultImage} download={`dmp-ai-${Date.now()}.png`} className="flex-1 px-4 py-2.5 bg-white text-black rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-audi-cyan transition-colors text-sm">
+                              <Icons.Download className="w-4 h-4" /> Download
+                          </a>
+                          <button onClick={() => setStage('input')} className="flex-1 px-4 py-2.5 bg-audi-pink text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-pink-600 transition-colors shadow-[0_0_15px_#FF0099] text-sm">
+                              <Icons.Wand className="w-4 h-4" /> New
+                          </button>
                       </div>
                   </div>
               </div>
@@ -410,7 +304,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       );
   }
 
-  // ================= RENDER: INPUT STAGE (DEFAULT) =================
   return (
     <div className="flex flex-col items-center w-full max-w-5xl mx-auto pb-48 animate-fade-in relative">
         <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/*" />
@@ -437,106 +330,56 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
 
         <div className="w-full space-y-6">
             
-            {/* --- SECTION 1: CHARACTER UPLOAD --- */}
+            {/* CHARACTER INPUT SECTION */}
             <div className="space-y-3">
                 <div className="flex items-center justify-between px-2">
                     <h3 className="font-bold text-white flex items-center gap-2">
                         <div className="w-6 h-6 rounded-full bg-audi-pink flex items-center justify-center text-xs">1</div>
-                        {lang === 'vi' ? 'Thiết lập nhân vật' : 'Character Setup'}
+                        {lang === 'vi' ? 'Hồ sơ nhân vật (Body - Face - Shoes)' : 'Character Dossier'}
                     </h3>
                 </div>
 
                 <div className="flex flex-wrap justify-center gap-4 w-full">
                     {characters.map((char) => (
-                        <div key={char.id} className="w-[180px] bg-[#12121a] border border-white/10 rounded-2xl p-3 hover:border-white/20 transition-colors relative group shrink-0">
+                        <div key={char.id} className="w-[200px] bg-[#12121a] border border-white/10 rounded-2xl p-3 hover:border-white/20 transition-colors relative group shrink-0">
                             <div className="absolute top-0 left-0 bg-white/10 text-[10px] font-bold px-3 py-1 rounded-br-xl rounded-tl-xl text-white">
                                 PLAYER {char.id}
                             </div>
                             
-                            <div className="flex flex-col gap-3 mt-7">
-                                {/* Body Upload Slot */}
-                                <div className="space-y-1">
-                                    <div className="flex items-center gap-1.5 mb-1 px-1">
-                                        <Icons.User className="w-3 h-3 text-audi-pink" />
-                                        <span className="text-[9px] font-bold text-slate-400 uppercase">{lang === 'vi' ? 'Body (Optional)' : 'Body (Optional)'}</span>
-                                    </div>
-                                    <div 
-                                        onClick={() => handleUploadClick(char.id, 'body')}
-                                        className="w-full aspect-square bg-black/40 rounded-xl border-2 border-dashed border-slate-700 hover:border-audi-pink cursor-pointer relative overflow-hidden group/item transition-colors"
-                                    >
-                                        {char.bodyImage ? (
-                                            <>
-                                                <img src={char.bodyImage} className="w-full h-full object-contain bg-black" alt="Body" />
-                                                <div className="absolute top-1 right-1 p-1 bg-black/60 rounded-full cursor-pointer hover:bg-red-500 transition-colors z-10" 
-                                                     onClick={(e) => { e.stopPropagation(); setCharacters(prev => prev.map(c => c.id === char.id ? {...c, bodyImage: null} : c)); }}>
-                                                    <Icons.X className="w-2.5 h-2.5 text-white" />
-                                                </div>
-                                            </>
-                                        ) : (
-                                            <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500 group-hover/item:text-audi-pink">
-                                                <Icons.User className="w-5 h-5 mb-1" />
-                                                <span className="text-[8px] uppercase font-bold text-center leading-tight px-1">{lang === 'vi' ? 'Tải Dáng' : 'Up Body'}</span>
-                                            </div>
-                                        )}
-                                    </div>
+                            <div className="flex flex-col gap-2 mt-7">
+                                {/* BODY SLOT */}
+                                <div onClick={() => handleUploadClick(char.id, 'body')} className="w-full h-32 bg-black/40 rounded-xl border-2 border-dashed border-slate-700 hover:border-audi-pink cursor-pointer relative overflow-hidden group/item">
+                                    {char.bodyImage ? (
+                                        <img src={char.bodyImage} className="w-full h-full object-contain" alt="Body" />
+                                    ) : (
+                                        <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500">
+                                            <Icons.User className="w-5 h-5 mb-1" />
+                                            <span className="text-[8px] uppercase font-bold">BODY (Required)</span>
+                                        </div>
+                                    )}
                                 </div>
 
-                                {/* Face Upload Slot - NOW USING OBJECT-CONTAIN TO SHOW FULL SHOES */}
-                                <div className="space-y-1">
-                                    <div className="flex items-center gap-1.5 mb-1 px-1">
-                                        <Icons.Eye className="w-3 h-3 text-audi-cyan" />
-                                        <span className="text-[9px] font-bold text-slate-400 uppercase">{lang === 'vi' ? 'Gương Mặt' : 'Face'}</span>
-                                    </div>
-                                    <div 
-                                        onClick={() => handleUploadClick(char.id, 'face')}
-                                        className={`w-full aspect-square bg-black/40 rounded-xl border-2 border-dashed cursor-pointer relative overflow-hidden group/item transition-colors ${char.isFaceLocked ? 'border-audi-cyan shadow-[0_0_10px_rgba(33,212,253,0.3)]' : 'border-slate-700 hover:border-audi-cyan'}`}
-                                    >
-                                        {/* SCAN EFFECT */}
-                                        {isScanningFace && char.faceImage && (
-                                            <div className="absolute inset-0 z-30 pointer-events-none">
-                                                <div className="absolute inset-0 bg-audi-cyan/20 animate-pulse"></div>
-                                                <div className="absolute top-0 w-full h-1 bg-audi-cyan shadow-[0_0_10px_#21D4FD] animate-[scan_1s_linear_infinite]"></div>
+                                <div className="grid grid-cols-2 gap-2">
+                                    {/* FACE SLOT */}
+                                    <div onClick={() => handleUploadClick(char.id, 'face')} className="aspect-square bg-black/40 rounded-xl border-2 border-dashed border-slate-700 hover:border-audi-cyan cursor-pointer relative overflow-hidden group/item">
+                                        {char.faceImage ? (
+                                            <img src={char.faceImage} className="w-full h-full object-cover" alt="Face" />
+                                        ) : (
+                                            <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500">
+                                                <Icons.Eye className="w-4 h-4 mb-1" />
+                                                <span className="text-[7px] uppercase font-bold">FACE</span>
                                             </div>
                                         )}
+                                    </div>
 
-                                        {char.faceImage ? (
-                                            <>
-                                                {/* FIXED: changed to object-contain so users see full image including shoes */}
-                                                <img src={char.faceImage} className="w-full h-full object-contain bg-black" alt="Face" />
-                                                
-                                                <div className="absolute top-1 right-1 p-1 bg-black/60 rounded-full cursor-pointer hover:bg-red-500 transition-colors z-10" 
-                                                     onClick={(e) => { e.stopPropagation(); setCharacters(prev => prev.map(c => c.id === char.id ? {...c, faceImage: null, isFaceLocked: false} : c)); }}>
-                                                    <Icons.X className="w-2.5 h-2.5 text-white" />
-                                                </div>
-                                                
-                                                <div 
-                                                    onClick={(e) => toggleFaceLock(e, char.id)}
-                                                    className={`absolute bottom-2 left-1/2 -translate-x-1/2 w-[90%] py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition-all z-20 cursor-pointer shadow-lg backdrop-blur-md border ${
-                                                        char.isFaceLocked 
-                                                        ? 'bg-audi-cyan/90 border-audi-cyan text-black' 
-                                                        : 'bg-black/60 border-white/20 text-white hover:bg-black/80'
-                                                    }`}
-                                                >
-                                                    {char.isFaceLocked ? (
-                                                         <>
-                                                            <Icons.Lock className="w-3 h-3" />
-                                                            <span className="text-[9px] font-black uppercase">{lang === 'vi' ? 'FACE ID ON' : 'LOCKED'}</span>
-                                                         </>
-                                                    ) : (
-                                                         <>
-                                                            <Icons.Unlock className="w-3 h-3 text-slate-400" />
-                                                            <div className="flex flex-col leading-none text-left">
-                                                                <span className="text-[8px] font-bold uppercase">{lang === 'vi' ? 'KHÓA MẶT' : 'LOCK FACE'}</span>
-                                                                <span className="text-[8px] font-bold text-audi-yellow">1 Vcoin</span>
-                                                            </div>
-                                                         </>
-                                                    )}
-                                                </div>
-                                            </>
+                                    {/* SHOES SLOT */}
+                                    <div onClick={() => handleUploadClick(char.id, 'shoes')} className="aspect-square bg-black/40 rounded-xl border-2 border-dashed border-slate-700 hover:border-audi-yellow cursor-pointer relative overflow-hidden group/item">
+                                        {char.shoesImage ? (
+                                            <img src={char.shoesImage} className="w-full h-full object-cover" alt="Shoes" />
                                         ) : (
-                                            <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500 group-hover/item:text-audi-cyan">
-                                                <Icons.Eye className="w-5 h-5 mb-1" />
-                                                <span className="text-[8px] uppercase font-bold text-center leading-tight px-1">{lang === 'vi' ? 'Tải Mặt' : 'Up Face'}</span>
+                                            <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500">
+                                                <div className="w-4 h-4 border-2 border-current rounded-sm mb-1"></div>
+                                                <span className="text-[7px] uppercase font-bold text-center">SHOES<br/>(Vital)</span>
                                             </div>
                                         )}
                                     </div>
@@ -544,18 +387,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                                 
                                 {activeMode !== 'single' && (
                                     <div className="flex bg-black/40 rounded-lg p-0.5 border border-white/10 mt-1">
-                                        <button 
-                                            onClick={() => toggleGender(char.id, 'female')}
-                                            className={`flex-1 py-1 rounded text-[9px] font-bold transition-all ${char.gender === 'female' ? 'bg-audi-pink text-white' : 'text-slate-500 hover:text-white'}`}
-                                        >
-                                            Nữ
-                                        </button>
-                                        <button 
-                                            onClick={() => toggleGender(char.id, 'male')}
-                                            className={`flex-1 py-1 rounded text-[9px] font-bold transition-all ${char.gender === 'male' ? 'bg-blue-500 text-white' : 'text-slate-500 hover:text-white'}`}
-                                        >
-                                            Nam
-                                        </button>
+                                        <button onClick={() => toggleGender(char.id, 'female')} className={`flex-1 py-1 rounded text-[9px] font-bold ${char.gender === 'female' ? 'bg-audi-pink text-white' : 'text-slate-500'}`}>Nữ</button>
+                                        <button onClick={() => toggleGender(char.id, 'male')} className={`flex-1 py-1 rounded text-[9px] font-bold ${char.gender === 'male' ? 'bg-blue-500 text-white' : 'text-slate-500'}`}>Nam</button>
                                     </div>
                                 )}
                             </div>
@@ -564,169 +397,81 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                 </div>
             </div>
 
-            {/* --- SECTION 2: PROMPT & REFERENCE --- */}
+            {/* PROMPT SECTION */}
             <div className="space-y-3">
                 <div className="flex items-center justify-between px-2">
                     <h3 className="font-bold text-white flex items-center gap-2">
                         <div className="w-6 h-6 rounded-full bg-audi-purple flex items-center justify-center text-xs">2</div>
-                        {lang === 'vi' ? 'Mô tả & Ảnh Mẫu' : 'Prompt & Reference'}
+                        {lang === 'vi' ? 'Mô tả & Bối cảnh' : 'Prompt & Scene'}
                     </h3>
-                    <button 
-                        onClick={handleSuggestPrompt}
-                        disabled={isSuggesting}
-                        className="text-xs font-bold text-audi-purple hover:text-white flex items-center gap-1 transition-colors"
-                    >
-                        <Icons.Sparkles className={`w-3 h-3 ${isSuggesting ? 'animate-spin' : ''}`} />
-                        {lang === 'vi' ? 'Magic Prompt' : 'Magic Prompt'}
+                    <button onClick={handleSuggestPrompt} disabled={isSuggesting} className="text-xs font-bold text-audi-purple flex items-center gap-1">
+                        <Icons.Sparkles className={`w-3 h-3 ${isSuggesting ? 'animate-spin' : ''}`} /> Magic Prompt
                     </button>
                 </div>
                 
                 <div className="flex flex-col md:flex-row gap-4">
-                    {/* Reference Image Upload */}
                     <div className="w-full md:w-1/3 space-y-2">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block pl-1">
-                            {lang === 'vi' ? 'Ảnh Mẫu (Pose/Bố cục)' : 'Reference Image'}
-                        </label>
-                        <div 
-                            onClick={handleRefUploadClick}
-                            className="w-full aspect-[3/4] md:h-32 md:aspect-auto bg-[#12121a] border-2 border-dashed border-slate-700 hover:border-audi-purple rounded-2xl cursor-pointer relative overflow-hidden group transition-all"
-                        >
+                        <div onClick={handleRefUploadClick} className="w-full aspect-[16/9] bg-[#12121a] border-2 border-dashed border-slate-700 hover:border-audi-purple rounded-2xl cursor-pointer relative overflow-hidden flex items-center justify-center">
                              {refImage ? (
-                                <>
-                                    <img src={refImage} className="w-full h-full object-contain opacity-90 group-hover:opacity-100 transition-opacity bg-black" alt="Reference" />
-                                    <div className="absolute top-1 right-1 p-1 bg-black/60 rounded-full cursor-pointer hover:bg-red-500 transition-colors z-10" 
-                                         onClick={(e) => { e.stopPropagation(); setRefImage(null); }}>
-                                        <Icons.X className="w-3 h-3 text-white" />
-                                    </div>
-                                    <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[9px] font-bold text-center py-1">
-                                        REFERENCE ACTIVE
-                                    </div>
-                                </>
+                                <img src={refImage} className="w-full h-full object-contain bg-black" alt="Ref" />
                              ) : (
-                                <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500 group-hover:text-audi-purple">
-                                    <Icons.Image className="w-6 h-6 mb-1" />
-                                    <span className="text-[9px] uppercase font-bold text-center leading-tight px-4">
-                                        {lang === 'vi' ? 'Tải ảnh mẫu để AI học theo' : 'Upload Reference'}
-                                    </span>
+                                <div className="text-center text-slate-500">
+                                    <Icons.Image className="w-6 h-6 mx-auto mb-1" />
+                                    <span className="text-[9px] font-bold">POSE REF (Optional)</span>
                                 </div>
                              )}
                         </div>
                     </div>
-
-                    {/* Prompt Text Area */}
-                    <div className="w-full md:w-2/3 relative group">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block pl-1 mb-2">
-                            {lang === 'vi' ? 'Mô tả chi tiết' : 'Detailed Prompt'}
-                        </label>
+                    <div className="w-full md:w-2/3">
                         <textarea 
                             value={prompt}
                             onChange={(e) => setPrompt(e.target.value)}
-                            placeholder={lang === 'vi' ? "Mô tả trang phục, bối cảnh (Ví dụ: Váy dạ hội đỏ, sân khấu neon...)" : "Describe outfit, background..."}
-                            className="w-full h-32 bg-[#12121a] border border-white/10 rounded-2xl p-4 text-sm text-white placeholder-slate-600 focus:border-audi-purple outline-none resize-none transition-all focus:shadow-[0_0_20px_rgba(183,33,255,0.1)]"
+                            placeholder={lang === 'vi' ? "Mô tả bối cảnh..." : "Describe background..."}
+                            className="w-full h-full min-h-[100px] bg-[#12121a] border border-white/10 rounded-2xl p-4 text-sm text-white focus:border-audi-purple outline-none resize-none"
                         />
                     </div>
                 </div>
             </div>
 
-            {/* --- SECTION 3: ADVANCED CONFIGURATION --- */}
-            <div className="space-y-3">
-                 <div className="flex items-center justify-between px-2">
-                    <h3 className="font-bold text-white flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-full bg-audi-cyan flex items-center justify-center text-xs text-black">3</div>
-                        {lang === 'vi' ? 'Cấu hình' : 'Config'}
-                    </h3>
-                </div>
-                
-                <div className="bg-[#12121a] border border-white/10 rounded-2xl p-6 space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                            <label className="text-xs font-bold text-slate-400 uppercase mb-3 block">{lang === 'vi' ? 'Tỉ lệ' : 'Ratio'}</label>
-                            <div className="flex gap-2">
-                                {ratios.map(r => (
-                                    <button 
-                                        key={r.id}
-                                        onClick={() => setAspectRatio(r.id)}
-                                        className={`flex-1 py-2 rounded-lg border text-xs font-bold transition-all ${aspectRatio === r.id ? 'bg-white text-black border-white' : 'bg-transparent border-white/10 text-slate-500 hover:border-white/30'}`}
-                                    >
-                                        {r.label}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                        <div>
-                            <label className="text-xs font-bold text-slate-400 uppercase mb-3 block">{lang === 'vi' ? 'Chất lượng Mô hình' : 'Model Quality'}</label>
-                            <div className="flex bg-black/40 rounded-lg p-1 border border-white/10 mb-3">
-                                <button 
-                                    onClick={() => setModelType('flash')}
-                                    className={`flex-1 py-2 rounded-md text-xs font-bold transition-all flex items-center justify-center gap-2 ${modelType === 'flash' ? 'bg-white/10 text-audi-cyan shadow' : 'text-slate-500'}`}
-                                >
-                                    <Icons.Zap className="w-3 h-3" /> Flash (Fast)
-                                </button>
-                                <button 
-                                    onClick={() => setModelType('pro')}
-                                    className={`flex-1 py-2 rounded-md text-xs font-bold transition-all flex items-center justify-center gap-2 ${modelType === 'pro' ? 'bg-gradient-to-r from-audi-pink to-audi-purple text-white shadow' : 'text-slate-500'}`}
-                                >
-                                    <Icons.Crown className="w-3 h-3" /> Pro 3.0
-                                </button>
-                            </div>
-
-                            {/* PRO FEATURES: RESOLUTION & SEARCH */}
-                            {modelType === 'pro' && (
-                                <div className="space-y-3 animate-fade-in bg-white/5 rounded-xl p-3 border border-white/10">
-                                    {/* Resolution Selector */}
-                                    <div>
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase mb-2 block">{lang === 'vi' ? 'Độ phân giải' : 'Resolution'}</label>
-                                        <div className="flex gap-2">
-                                            {['1K', '2K', '4K'].map((res) => (
-                                                <button
-                                                    key={res}
-                                                    onClick={() => setResolution(res as Resolution)}
-                                                    className={`flex-1 py-1.5 rounded-lg border text-[10px] font-bold transition-all ${resolution === res ? 'bg-audi-purple text-white border-audi-purple' : 'bg-transparent border-white/10 text-slate-500 hover:border-white/30'}`}
-                                                >
-                                                    {res}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-
-                                    {/* Search Grounding Toggle */}
-                                    <div 
-                                        onClick={() => setUseSearch(!useSearch)}
-                                        className={`flex items-center justify-between p-2 rounded-lg border cursor-pointer transition-all ${useSearch ? 'bg-audi-cyan/10 border-audi-cyan' : 'bg-transparent border-white/10 hover:bg-white/5'}`}
-                                    >
-                                        <div className="flex items-center gap-2">
-                                            <div className={`w-6 h-6 rounded-full flex items-center justify-center ${useSearch ? 'bg-audi-cyan text-black' : 'bg-white/10 text-slate-500'}`}>
-                                                <Icons.Search className="w-3 h-3" />
-                                            </div>
-                                            <div>
-                                                <div className={`text-[10px] font-bold ${useSearch ? 'text-audi-cyan' : 'text-slate-400'}`}>Google Search</div>
-                                                <div className="text-[8px] text-slate-600">Thêm dữ liệu thực tế</div>
-                                            </div>
-                                        </div>
-                                        <div className={`w-8 h-4 rounded-full p-0.5 transition-colors ${useSearch ? 'bg-audi-cyan' : 'bg-slate-700'}`}>
-                                            <div className={`w-3 h-3 rounded-full bg-white transition-transform ${useSearch ? 'translate-x-4' : 'translate-x-0'}`}></div>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    <div className="h-px bg-white/5 w-full"></div>
-
+            {/* CONFIG SECTION */}
+            <div className="bg-[#12121a] border border-white/10 rounded-2xl p-6 space-y-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div>
-                        <label className="text-xs font-bold text-slate-400 uppercase mb-3 block">{lang === 'vi' ? 'Phong cách' : 'Style'}</label>
-                        <div className="grid grid-cols-4 md:grid-cols-7 gap-2">
-                             {styles.map(s => (
-                                 <button
-                                    key={s.id}
-                                    onClick={() => setSelectedStyle(s.id)}
-                                    className={`flex flex-col items-center justify-center p-2 rounded-xl border transition-all ${selectedStyle === s.id ? 'border-audi-cyan bg-audi-cyan/10 text-audi-cyan' : 'border-white/5 bg-white/5 text-slate-500 hover:bg-white/10'}`}
-                                 >
-                                     <s.icon className="w-4 h-4 mb-1" />
-                                     <span className="text-[9px] font-bold">{s.name}</span>
-                                 </button>
-                             ))}
+                        <label className="text-[10px] font-bold text-slate-400 uppercase mb-2 block">Aspect Ratio</label>
+                        <div className="flex gap-2">
+                            {ratios.map(r => (
+                                <button key={r.id} onClick={() => setAspectRatio(r.id)} className={`flex-1 py-1.5 rounded border text-[10px] font-bold ${aspectRatio === r.id ? 'bg-white text-black' : 'border-white/10 text-slate-500'}`}>{r.label}</button>
+                            ))}
+                        </div>
+                    </div>
+                    <div>
+                        <label className="text-[10px] font-bold text-slate-400 uppercase mb-2 block">Resolution</label>
+                        <div className="flex gap-2">
+                            {['1K', '2K', '4K'].map(r => (
+                                <button key={r} onClick={() => setResolution(r as any)} className={`flex-1 py-1.5 rounded border text-[10px] font-bold ${resolution === r ? 'bg-audi-purple text-white border-audi-purple' : 'border-white/10 text-slate-500'}`}>{r}</button>
+                            ))}
+                        </div>
+                    </div>
+                    
+                    {/* NEW: CLOUD REF TOGGLE */}
+                    <div className="col-span-2 md:col-span-2">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase mb-2 block">Chế độ xử lý</label>
+                        <div 
+                            onClick={() => setUseCloudRef(!useCloudRef)}
+                            className={`flex items-center justify-between p-2 rounded-xl border cursor-pointer transition-all ${useCloudRef ? 'bg-audi-cyan/10 border-audi-cyan shadow-[0_0_10px_rgba(33,212,253,0.1)]' : 'bg-white/5 border-white/10'}`}
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${useCloudRef ? 'bg-audi-cyan text-black' : 'bg-white/10 text-slate-500'}`}>
+                                    <Icons.Cloud className="w-4 h-4" />
+                                </div>
+                                <div>
+                                    <div className={`text-xs font-bold ${useCloudRef ? 'text-audi-cyan' : 'text-slate-400'}`}>HQ Cloud Link (R2/File API)</div>
+                                    <div className="text-[9px] text-slate-500">Giữ nguyên chất lượng ảnh gốc, không nén Base64.</div>
+                                </div>
+                            </div>
+                            <div className={`w-8 h-4 rounded-full p-0.5 transition-colors ${useCloudRef ? 'bg-audi-cyan' : 'bg-slate-700'}`}>
+                                <div className={`w-3 h-3 rounded-full bg-white transition-transform ${useCloudRef ? 'translate-x-4' : 'translate-x-0'}`}></div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -734,31 +479,21 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
 
         </div>
 
-        {/* --- STICKY FOOTER --- */}
-        <div className="fixed bottom-24 left-4 right-4 md:left-[50%] md:right-auto md:-translate-x-1/2 md:w-[900px] p-4 bg-[#090014]/90 backdrop-blur-md border border-white/10 rounded-2xl z-50 shadow-[0_5px_30px_rgba(0,0,0,0.8)]">
-            <div className="flex items-center justify-between">
-                <div className="flex flex-col">
-                    <span className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-0.5">{lang === 'vi' ? 'Tổng chi phí' : 'Total Cost'}</span>
-                    <div className="flex items-center gap-1.5">
-                        <span className="text-2xl font-black text-white">{calculateCost()}</span>
-                        <div className="flex flex-col leading-none">
-                            <span className="text-[10px] font-bold text-audi-yellow uppercase">VCOIN</span>
-                            <span className="text-[8px] text-slate-500">Credits</span>
-                        </div>
-                    </div>
-                </div>
-
-                <button 
-                    onClick={handleGenerate}
-                    disabled={isSuggesting}
-                    className="px-8 py-3 bg-gradient-to-r from-audi-pink to-audi-purple rounded-xl font-bold text-white shadow-[0_0_20px_rgba(255,0,153,0.4)] hover:shadow-[0_0_30px_rgba(255,0,153,0.6)] hover:scale-105 active:scale-95 transition-all flex items-center gap-2 group disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    <Icons.Wand className="w-5 h-5 group-hover:rotate-12 transition-transform" />
-                    <span className="tracking-wide">{lang === 'vi' ? 'TẠO NHÂN VẬT' : 'GENERATE'}</span>
-                </button>
+        {/* FOOTER */}
+        <div className="fixed bottom-24 left-4 right-4 md:left-[50%] md:-translate-x-1/2 md:w-[900px] p-4 bg-[#090014]/90 backdrop-blur-md border border-white/10 rounded-2xl z-50 shadow-2xl flex items-center justify-between">
+            <div className="flex flex-col">
+                <span className="text-[10px] text-slate-400 font-bold uppercase">Total Cost</span>
+                <span className="text-xl font-black text-white">{calculateCost()} <span className="text-audi-yellow text-sm">VCOIN</span></span>
             </div>
+            <button 
+                onClick={handleGenerate}
+                disabled={isSuggesting}
+                className="px-8 py-3 bg-gradient-to-r from-audi-pink to-audi-purple rounded-xl font-bold text-white shadow-[0_0_20px_rgba(255,0,153,0.4)] hover:scale-105 transition-all flex items-center gap-2"
+            >
+                <Icons.Wand className="w-5 h-5" />
+                <span>{lang === 'vi' ? 'RENDER 3D' : 'GENERATE'}</span>
+            </button>
         </div>
-
     </div>
   );
 };

@@ -3,8 +3,6 @@ import { GoogleGenAI } from "@google/genai";
 import { getSystemApiKey } from "./economyService";
 import { createSolidFence, optimizePayload, createTextureSheet } from "../utils/imageProcessor";
 
-// --- CONFIGURATION & HELPERS ---
-
 const getDynamicApiKey = async (): Promise<string> => {
     const dbKey = await getSystemApiKey();
     if (dbKey && dbKey.trim().length > 0) return dbKey.trim();
@@ -17,7 +15,6 @@ const getAiClient = async () => {
     return new GoogleGenAI({ apiKey: key });
 };
 
-// Helper to strictly clean base64 string
 const cleanBase64 = (data: string): string => {
     if (!data) return "";
     if (data.includes(',')) {
@@ -39,10 +36,50 @@ interface CharacterData {
     id: number;
     gender: 'male' | 'female';
     image: string | null; 
+    faceImage?: string | null;
+    shoesImage?: string | null;
     description?: string;
 }
 
-// --- MODULE 2: STRATEGY IMPLEMENTATIONS (DIGITAL TWIN PROTOCOL V4 - TEXTURE SHEET) ---
+// --- NEW: GOOGLE FILE API UPLOADER ---
+// Converts Base64 to Blob and uploads to Google GenAI Files
+const uploadToGemini = async (base64Data: string, mimeType: string = 'image/jpeg'): Promise<string> => {
+    try {
+        const ai = await getAiClient();
+        
+        // 1. Convert Base64 to Blob
+        const byteCharacters = atob(cleanBase64(base64Data));
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: mimeType });
+
+        // 2. Upload using SDK
+        // NOTE: The SDK supports `ai.files.upload` in newer versions.
+        const uploadResult = await ai.files.upload({
+            file: blob,
+            config: { 
+                displayName: `texture_sheet_${Date.now()}` 
+            }
+        });
+
+        // SAFE ACCESS TO URI: Handle SDK response variations
+        // Some versions return { file: { uri: ... } }, others return { uri: ... } directly
+        const fileUri = (uploadResult as any).file?.uri || (uploadResult as any).uri;
+        
+        if (!fileUri) {
+            console.error("Upload Result Structure:", uploadResult);
+            throw new Error("Không lấy được File URI từ Google Cloud.");
+        }
+
+        return fileUri;
+    } catch (e) {
+        console.error("Gemini File Upload Failed", e);
+        throw new Error("Failed to upload reference image to Google Cloud.");
+    }
+};
 
 const processDigitalTwinMode = (
     prompt: string, 
@@ -51,37 +88,30 @@ const processDigitalTwinMode = (
     charDescriptions: string[]
 ): { systemPrompt: string, parts: any[] } => {
     
-    const parts = [...charParts]; // These are now Texture Sheets
+    const parts = [...charParts]; 
     if (refImagePart) parts.push(refImagePart);
 
-    let systemPrompt = `** PROTOCOL: 3D PHOTOGRAMMETRY & TEXTURE BAKING **
+    let systemPrompt = `** PROTOCOL V6: VISUAL ANCHORING & TEXTURE INJECTION **
     
-    [ROLE]: You are a 3D Texture Mapping Engine (Not a creative artist).
-    [TASK]: Transfer the textures from the Input Sheets onto a 3D Mesh.
+    [ROLE]: You are a Hyper-Precise 3D Texture Mapper.
+    [INPUT]: You are receiving high-resolution "VISUAL ANCHOR SHEETS".
     
-    [INPUT DATA EXPLANATION]:
-    - Images 1 to ${charParts.length} are "TEXTURE SHEETS".
-    - LEFT SIDE of Sheet = Full Body Reference.
-    - RIGHT TOP of Sheet = FACE TEXTURE (High Res).
-    - RIGHT BOTTOM of Sheet = SHOE/PANTS TEXTURE (High Res).
+    [VISUAL ANCHORING RULES]:
+    1. **READ THE LABELS**: The input images have explicit text labels drawn on them (e.g., "MANDATORY_SHOES", "MANDATORY_FACE").
+    2. **FOLLOW THE LINES**: There are colored lines connecting the Details to the Body. Follow these lines to understand exactly where to map the texture.
+    3. **NO HALLUCINATIONS**: 
+       - If you see a "MANDATORY_SHOES" box, you MUST copy those shoes pixel-perfect. 
+       - Do not invent generic sneakers if the reference shows boots.
     
-    [STRICT EXECUTION RULES]:
-    1. **NO REDRAWING**: Do not invent new clothes. "Bake" the pixels from the Sheet onto the output character.
-    2. **SHOE MANDATE**: Look at the Bottom-Right of each input sheet. Those are the shoes. If they are sandals, render sandals. If sneakers, render sneakers.
-    3. **FACE CLONING**: Look at the Top-Right of each input sheet. Reconstruct that face exactly.
-    4. **GROUP CONSISTENCY**:
-       - Input Image 1 -> Player 1 (Leftmost).
-       - Input Image 2 -> Player 2.
-       - Input Image 3 -> Player 3...
-       - Do not mix up their clothes.
+    [EXECUTION]:
+    - Map Input 1 -> Character 1 (Left).
+    - Map Input 2 -> Character 2 (if exists).
     
     [SCENE]: "${prompt}"
-    [STYLE]: Unreal Engine 5, 8K, Raytracing, Hyper-Realistic Textures.`;
+    [RENDER]: Unreal Engine 5, 8K, Raytracing.`;
 
     return { systemPrompt, parts };
 };
-
-// --- MAIN CONTROLLER ---
 
 export const generateImage = async (
     prompt: string, 
@@ -90,6 +120,7 @@ export const generateImage = async (
     characterDataList: CharacterData[] = [], 
     resolution: string = '2K',
     useSearch: boolean = false,
+    useCloudRef: boolean = false, // NEW FLAG
     onProgress?: (msg: string) => void
 ): Promise<string | null> => {
   
@@ -98,12 +129,11 @@ export const generateImage = async (
     const isPro = resolution === '2K' || resolution === '4K';
     const model = isPro ? 'gemini-3-pro-image-preview' : 'gemini-2.5-flash-image';
     
-    if (onProgress) onProgress(`Engine: ${model} | Scanning Texture Sheets...`);
+    if (onProgress) onProgress(`Engine: ${model} | Mode: ${useCloudRef ? 'CLOUD NEURAL LINK (HQ)' : 'STANDARD'}`);
 
-    // 2. PREPARE ASSETS
+    // 1. PREPARE STYLE REF
     let refImagePart = null;
     if (styleRefBase64) {
-        // Pose Reference doesn't need to be a sheet, just optimized
         const fencedData = await createSolidFence(styleRefBase64, aspectRatio, true);
         const optData = await optimizePayload(fencedData, 1024);
         refImagePart = {
@@ -114,36 +144,50 @@ export const generateImage = async (
     const allParts: any[] = [];
     const charDescriptions: string[] = [];
 
-    // --- PRE-PROCESSING: CREATING TEXTURE SHEETS ---
+    // 2. PREPARE CHARACTERS
     for (const char of characterDataList) {
         if (char.image) {
-            if (onProgress) onProgress(`Generating ID Card for Player ${char.id}...`);
+            if (onProgress) onProgress(`Constructing V6 Anchor Sheet for Player ${char.id}...`);
             
-            // 1. Create the Composite Sheet (Full + Face + Shoes)
-            // This is the "Nuclear Option" for consistency
-            const textureSheet = await createTextureSheet(char.image);
+            // Create the Labeled Texture Sheet
+            const textureSheet = await createTextureSheet(
+                char.image, 
+                char.faceImage, 
+                char.shoesImage
+            );
             
-            // 2. Optimize the Sheet (It might be large now)
-            const optimizedSheet = await optimizePayload(textureSheet, 1280); // Allow slightly larger for sheets
+            let finalPart;
 
-            allParts.push({
-                inlineData: { data: cleanBase64(optimizedSheet), mimeType: 'image/jpeg' }
-            });
+            if (useCloudRef) {
+                // STRATEGY A: CLOUD UPLOAD (FILE API)
+                // Upload full resolution sheet (no downscaling)
+                if (onProgress) onProgress(`Uploading HQ Reference to Google Brain (Player ${char.id})...`);
+                const fileUri = await uploadToGemini(textureSheet, 'image/jpeg');
+                console.log("File URI received:", fileUri);
+                finalPart = {
+                    fileData: { mimeType: 'image/jpeg', fileUri: fileUri }
+                };
+            } else {
+                // STRATEGY B: INLINE BASE64 (Legacy/Fast)
+                const optimizedSheet = await optimizePayload(textureSheet, 1280); 
+                finalPart = {
+                    inlineData: { data: cleanBase64(optimizedSheet), mimeType: 'image/jpeg' }
+                };
+            }
 
+            allParts.push(finalPart);
             charDescriptions.push(char.gender);
         }
     }
 
-    // 3. ROUTE STRATEGY (UNIFIED)
-    // We now use the same robust strategy for Single, Couple, and Group
+    // 3. BUILD PAYLOAD
     const payload = processDigitalTwinMode(prompt, refImagePart, allParts, charDescriptions);
-
-    // 4. CONSTRUCT FINAL CONFIG
     const finalParts = [...payload.parts, { text: payload.systemPrompt }];
 
     const config: any = {
         imageConfig: { aspectRatio: aspectRatio },
-        systemInstruction: "You are a 3D Scanner. Copy input pixels exactly. Do not hallucinate clothes.", 
+        // Strict system instruction
+        systemInstruction: "PROTOCOL V6: READ TEXT LABELS ON IMAGE. COPY TEXTURES EXACTLY.", 
         safetySettings: [
             { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
             { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
@@ -159,7 +203,7 @@ export const generateImage = async (
         }
     }
 
-    if (onProgress) onProgress("Rendering Digital Twin (V4 Protocol)...");
+    if (onProgress) onProgress("Rendering Digital Twin...");
 
     const response = await ai.models.generateContent({
       model: model,
@@ -175,8 +219,7 @@ export const generateImage = async (
   }
 };
 
-// --- UTILS REMAIN UNCHANGED ---
-
+// ... existing utils (editImageWithInstructions, etc.) remain unchanged ...
 export const editImageWithInstructions = async (
   imageBase64: string,
   prompt: string,
@@ -190,10 +233,7 @@ export const editImageWithInstructions = async (
     const cleanMain = cleanBase64(imageBase64);
     const parts: any[] = [{ inlineData: { data: cleanMain, mimeType: mimeType } }];
     
-    // Strict Edit Prompt
-    let instructionText = `TASK: EDIT IMAGE. 
-    INSTRUCTION: ${prompt}. 
-    CONSTRAINT: Keep all other details unchanged.`;
+    let instructionText = `TASK: EDIT IMAGE. INSTRUCTION: ${prompt}. CONSTRAINT: Keep all other details unchanged.`;
     
     if (styleRefBase64) {
         const cleanStyle = cleanBase64(styleRefBase64);

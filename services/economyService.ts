@@ -1,4 +1,3 @@
-
 import { CreditPackage, Transaction, UserProfile, CheckinConfig, DiamondLog, TransactionStatus, PromotionCampaign, Giftcode } from '../types';
 import { supabase } from './supabaseClient';
 
@@ -31,6 +30,20 @@ const MOCK_USER: UserProfile = {
 const DEFAULT_PACKAGES: CreditPackage[] = [
   { id: 'pkg_1', name: "Gói Khởi Động", coin: 10, price: 10000, currency: 'VND', bonusText: "Mới", bonusPercent: 0, colorTheme: "border-slate-600", transferContent: "NAP 10K" },
 ];
+
+// --- VISIT TRACKING SERVICE ---
+
+export const logVisit = async () => {
+    if (supabase) {
+        try {
+            // Simply insert a timestamp row. 
+            // This counts every reload/entry as a visit.
+            await supabase.from('app_visits').insert({});
+        } catch (e) {
+            console.warn("Error logging visit", e);
+        }
+    }
+};
 
 // --- SYSTEM CONFIG (API KEY) SERVICES ---
 
@@ -233,9 +246,9 @@ export const updateUserBalance = async (amount: number, reason: string, type: 't
              // Log transaction in 'diamond_transactions_log'
             await supabase.from('diamond_transactions_log').insert({
                 user_id: user.id,
-                amount,
-                description: reason, // Map to 'description' column
-                transaction_type: type || 'usage', // Map to 'transaction_type'
+                amount, // Negative for usage, positive for reward
+                description: reason, 
+                transaction_type: type || 'usage',
                 created_at: new Date().toISOString()
             });
             return { ...user, balance: newBalance };
@@ -833,30 +846,83 @@ export const getAdminStats = async () => {
         const { count: totalImgs } = await supabase.from('generated_images').select('*', { count: 'exact', head: true });
         const { count: todayImgs } = await supabase.from('generated_images').select('*', { count: 'exact', head: true }).gte('created_at', todayStr);
 
-        // Count "Visits" (Approximation via daily_active_users table)
-        const { count: visitsToday } = await supabase.from('daily_active_users').select('*', { count: 'exact', head: true }).eq('activity_date', todayStr);
-        // Total visits is harder without a full log, we'll approximate or use total rows in DAU
-        const { count: visitsTotal } = await supabase.from('daily_active_users').select('*', { count: 'exact', head: true });
+        // --- NEW: VISIT STATS FROM 'app_visits' TABLE ---
+        // Requires creating table: create table app_visits (id uuid, created_at timestamptz);
+        let visitsToday = 0;
+        let visitsTotal = 0;
+
+        try {
+             // Total
+             const { count: vTotal } = await supabase.from('app_visits').select('*', { count: 'exact', head: true });
+             if (vTotal !== null) visitsTotal = vTotal;
+
+             // Today
+             const { count: vToday } = await supabase.from('app_visits')
+                 .select('*', { count: 'exact', head: true })
+                 .gte('created_at', todayStr);
+             if (vToday !== null) visitsToday = vToday;
+
+        } catch (e) {
+            console.warn("Table app_visits likely missing", e);
+        }
 
         // Calculate Revenue from PAID transactions
         const revenue = txs.filter((t:any) => t.status === 'paid').reduce((sum:number, t:any) => sum + t.amount, 0);
 
+        // --- NEW: AI USAGE AGGREGATION FROM LOGS ---
+        let aiUsageStats: any[] = [];
+        try {
+            // Fetch usage logs (where transaction_type = 'usage')
+            // Using a raw select. For heavy loads, this should be an RPC or View.
+            const { data: logs } = await supabase
+                .from('diamond_transactions_log')
+                .select('amount, description')
+                .eq('transaction_type', 'usage'); // Filter only spending
+            
+            if (logs) {
+                // Group by Description (Feature Name)
+                const usageMap = new Map<string, { count: number, vcoins: number }>();
+                
+                logs.forEach(log => {
+                    // Normalize description to group similar features if needed
+                    // For now, assume description is consistent (e.g., "Single Photo Gen", "Remove Background")
+                    const feature = log.description || 'Unknown Feature';
+                    
+                    if (!usageMap.has(feature)) {
+                        usageMap.set(feature, { count: 0, vcoins: 0 });
+                    }
+                    
+                    const entry = usageMap.get(feature)!;
+                    entry.count += 1;
+                    entry.vcoins += Math.abs(log.amount); // amount is negative for usage
+                });
+
+                // Convert map to array for frontend
+                aiUsageStats = Array.from(usageMap.entries()).map(([feature, stats]) => ({
+                    feature: feature,
+                    count: stats.count,
+                    vcoins: stats.vcoins,
+                    revenue: stats.vcoins * 1000 // Estimated revenue 1 Vcoin = 1000 VND
+                }));
+            }
+        } catch(e) {
+            console.warn("AI Usage Aggregation Error", e);
+        }
+
         dashboardStats = {
-            visitsToday: visitsToday || 0,
-            visitsTotal: visitsTotal || 0,
+            visitsToday: visitsToday,
+            visitsTotal: visitsTotal,
             newUsersToday: newUsersCount,
             usersTotal: totalUsers || users.length,
             imagesToday: todayImgs || 0,
             imagesTotal: totalImgs || 0,
-            aiUsage: [
-                { feature: 'All Tools', flash: 0, pro: 0, vcoins: 0, revenue: revenue }
-            ]
+            aiUsage: aiUsageStats
         };
     }
 
     return {
         dashboard: dashboardStats,
-        revenue: dashboardStats.aiUsage[0].revenue,
+        revenue: dashboardStats.aiUsage.reduce((acc, curr) => acc + curr.revenue, 0),
         transactions: txs,
         logs: [],
         usersList: users,

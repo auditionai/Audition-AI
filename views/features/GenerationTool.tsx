@@ -1,10 +1,10 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { Feature, Language, GeneratedImage } from '../../types';
 import { Icons } from '../../components/Icons';
 import { generateImage, suggestPrompt } from '../../services/geminiService';
 import { saveImageToStorage } from '../../services/storageService';
 import { createSolidFence, optimizePayload } from '../../utils/imageProcessor';
+import { getUserProfile, updateUserBalance } from '../../services/economyService';
 
 interface GenerationToolProps {
   feature: Feature;
@@ -126,10 +126,41 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       setCharacters(prev => prev.map(c => c.id === charId ? { ...c, gender } : c));
   }
 
+  const calculateCost = () => {
+      // Base Cost
+      let cost = modelType === 'pro' ? 2 : 1;
+      
+      // Resolution Cost (Only for Pro)
+      if (modelType === 'pro') {
+          if (resolution === '1K') cost += 10;
+          if (resolution === '2K') cost += 15;
+          if (resolution === '4K') cost += 20;
+      }
+
+      // Upscale Cost (Only for Flash)
+      if (modelType === 'flash' && isSharpening) {
+          cost += 1;
+      }
+
+      // Face Lock Cost
+      const lockedCount = characters.filter(c => c.isFaceLocked).length;
+      cost += lockedCount * 1; // 1 Vcoin per face lock
+
+      return cost;
+  };
+
   const handleGenerate = async () => {
     if (!prompt.trim()) {
          alert(lang === 'vi' ? 'Vui lòng nhập mô tả' : 'Please enter a prompt');
          return;
+    }
+
+    const cost = calculateCost();
+    const user = await getUserProfile();
+
+    if ((user.balance || 0) < cost) {
+        alert(lang === 'vi' ? 'Số dư không đủ!' : 'Insufficient balance!');
+        return;
     }
     
     // 1. Move to Processing Stage
@@ -138,6 +169,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
     try {
       // --- WORKER PATTERN SIMULATION ---
       setProcessingStep('Initializing Workers...');
+
+      // Deduct Vcoin first (and log it for admin stats)
+      await updateUserBalance(-cost, `Gen: ${feature.name['en']}`, 'usage');
       
       let finalPrompt = (feature.defaultPrompt || "") + prompt;
       if (selectedStyle) finalPrompt += `, style: ${selectedStyle}`;
@@ -207,7 +241,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       }
     } catch (error) {
       console.error(error);
-      // Fail-Safe / Refund Simulation logic could go here
+      // Refund if failed
+      await updateUserBalance(cost, `Refund: ${feature.name['en']} Failed`, 'refund');
       alert(lang === 'vi' ? 'Tạo ảnh thất bại. Đã hoàn lại Vcoin.' : 'Generation failed. Vcoin refunded.');
       setStage('input'); 
     }
@@ -220,29 +255,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
         if (enhancedPrompt) setPrompt(enhancedPrompt);
     } catch (error) { console.error(error); } 
     finally { setIsSuggesting(false); }
-  };
-
-  const calculateCost = () => {
-      // Base Cost
-      let cost = modelType === 'pro' ? 2 : 1;
-      
-      // Resolution Cost (Only for Pro)
-      if (modelType === 'pro') {
-          if (resolution === '1K') cost += 10;
-          if (resolution === '2K') cost += 15;
-          if (resolution === '4K') cost += 20;
-      }
-
-      // Upscale Cost (Only for Flash)
-      if (modelType === 'flash' && isSharpening) {
-          cost += 1;
-      }
-
-      // Face Lock Cost
-      const lockedCount = characters.filter(c => c.isFaceLocked).length;
-      cost += lockedCount * 1; // 1 Vcoin per face lock
-
-      return cost;
   };
 
   // --- DATA LISTS ---

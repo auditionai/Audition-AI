@@ -1,9 +1,9 @@
-
 import React, { useState, useRef } from 'react';
 import { Feature, Language, GeneratedImage } from '../../types';
 import { Icons } from '../../components/Icons';
 import { editImageWithInstructions } from '../../services/geminiService';
 import { saveImageToStorage } from '../../services/storageService';
+import { getUserProfile, updateUserBalance } from '../../services/economyService';
 
 interface EditingToolProps {
   feature: Feature;
@@ -33,10 +33,21 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
          return;
      }
 
+     const cost = 1; // Default edit cost
+     const user = await getUserProfile();
+     
+     if ((user.balance || 0) < cost) {
+         alert(lang === 'vi' ? 'Số dư không đủ (Cần 1 Vcoin)' : 'Insufficient balance (Need 1 Vcoin)');
+         return;
+     }
+
      setLoading(true);
      setResultImage(null);
 
      try {
+         // Deduct cost and log usage
+         await updateUserBalance(-cost, `Edit: ${feature.name['en']}`, 'usage');
+
          // Logic specific to Editing
          let instruction = feature.defaultPrompt || "";
          if (prompt) instruction += " " + prompt;
@@ -58,9 +69,13 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
                 engine: feature.engine
             };
             await saveImageToStorage(newImage);
+         } else {
+             throw new Error("Editing failed");
          }
      } catch (error) {
          console.error(error);
+         // Refund on fail
+         await updateUserBalance(cost, `Refund: ${feature.name['en']} Failed`, 'refund');
          alert(lang === 'vi' ? 'Chỉnh sửa thất bại' : 'Editing failed');
      } finally {
          setLoading(false);
@@ -107,6 +122,11 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
                 className="w-full p-3 rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-sm focus:ring-2 focus:ring-purple-500 outline-none dark:text-white"
                 placeholder={lang === 'vi' ? 'Ví dụ: Làm sáng hơn...' : 'Ex: Make it brighter...'}
              />
+         </div>
+
+         <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/10">
+             <span className="text-xs text-slate-400 font-bold uppercase">{lang === 'vi' ? 'Chi phí' : 'Cost'}</span>
+             <span className="text-sm font-bold text-audi-yellow">1 Vcoin</span>
          </div>
 
          <button 

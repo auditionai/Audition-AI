@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Layout } from './components/Layout';
 import { Home } from './views/Home';
@@ -14,6 +13,7 @@ import { TopUp } from './views/TopUp';
 import { Language, Theme, ViewId, Feature } from './types';
 import { APP_CONFIG } from './constants';
 import { supabase } from './services/supabaseClient';
+import { logVisit } from './services/economyService';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -32,6 +32,9 @@ function App() {
       setTheme('dark');
       document.documentElement.classList.add('dark');
     }
+
+    // Log Visit (Tracks every reload)
+    logVisit();
 
     // Check for existing session on load
     if (supabase) {

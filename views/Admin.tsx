@@ -1,10 +1,9 @@
-
 import React, { useState, useEffect } from 'react';
-import { Language, Transaction, UserProfile, GeneratedImage, CreditPackage, PromotionCampaign, Giftcode } from '../types';
+import { Language, Transaction, UserProfile, CreditPackage, PromotionCampaign, Giftcode, GeneratedImage } from '../types';
 import { Icons } from '../components/Icons';
 import { checkConnection } from '../services/geminiService';
 import { checkSupabaseConnection } from '../services/supabaseClient';
-import { getAdminStats, savePackage, deletePackage, updateAdminUserProfile, savePromotion, deletePromotion, getGiftcodes, saveGiftcode, deleteGiftcode, adminApproveTransaction, adminRejectTransaction, getSystemApiKey, saveSystemApiKey, updatePackageOrder, deleteTransaction, getApiKeysList, deleteApiKey } from '../services/economyService';
+import { getAdminStats, savePackage, deletePackage, updateAdminUserProfile, savePromotion, deletePromotion, saveGiftcode, deleteGiftcode, adminApproveTransaction, adminRejectTransaction, saveSystemApiKey, deleteApiKey, deleteTransaction, getSystemApiKey, getApiKeysList, updatePackageOrder } from '../services/economyService';
 import { getAllImagesFromStorage, deleteImageFromStorage } from '../services/storageService';
 
 interface AdminProps {
@@ -583,49 +582,59 @@ CREATE POLICY "Enable access" ON public.promotions FOR ALL USING (true) WITH CHE
                       ))}
                   </div>
 
-                  {/* AI Stats Table (UPDATED: Kim Cương -> Vcoin) */}
+                  {/* AI Stats Table (Updated to show Transaction Logs) */}
                   <div className="bg-[#12121a] border border-white/10 rounded-2xl p-6 shadow-xl">
                       <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
                           <Icons.BarChart className="w-5 h-5 text-audi-yellow" />
-                          Thống Kê Chi Tiết Sử Dụng AI
+                          Thống Kê Chi Tiết Sử Dụng AI (Logs)
                       </h3>
                       
                       <div className="overflow-x-auto">
                           <table className="w-full text-left text-sm text-slate-400">
                               <thead className="bg-[#090014] text-xs font-bold text-slate-500 uppercase">
                                   <tr>
-                                      <th className="px-6 py-4">Tính năng</th>
-                                      <th className="px-6 py-4 text-audi-cyan">Flash (1 💎)</th>
-                                      <th className="px-6 py-4 text-audi-yellow">Pro (10-20 💎)</th>
-                                      <th className="px-6 py-4 text-audi-pink">Tổng Vcoin</th>
-                                      <th className="px-6 py-4 text-right text-green-500">Doanh Thu (VND)</th>
+                                      <th className="px-6 py-4">Tính năng (Mô tả)</th>
+                                      <th className="px-6 py-4 text-audi-cyan">Số lượt dùng</th>
+                                      <th className="px-6 py-4 text-audi-pink">Tổng Vcoin tiêu thụ</th>
+                                      <th className="px-6 py-4 text-right text-green-500">Doanh Thu Ước Tính (100%)</th>
                                   </tr>
                               </thead>
                               <tbody className="divide-y divide-white/5">
-                                  {stats?.dashboard?.aiUsage.map((row: any, i: number) => (
-                                      <tr key={i} className="hover:bg-white/5 transition-colors">
-                                          <td className="px-6 py-4 font-bold text-white">{row.feature}</td>
-                                          <td className="px-6 py-4 text-audi-cyan font-mono">{new Intl.NumberFormat('de-DE').format(row.flash)}</td>
-                                          <td className="px-6 py-4 text-audi-yellow font-mono">{new Intl.NumberFormat('de-DE').format(row.pro)}</td>
-                                          <td className="px-6 py-4 text-audi-pink font-bold">{new Intl.NumberFormat('de-DE').format(row.vcoins)} Vcoin</td>
-                                          <td className="px-6 py-4 text-right text-green-500 font-bold">
-                                              {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(row.revenue)}
-                                          </td>
+                                  {stats?.dashboard?.aiUsage && stats.dashboard.aiUsage.length > 0 ? (
+                                      stats.dashboard.aiUsage.map((row: any, i: number) => (
+                                          <tr key={i} className="hover:bg-white/5 transition-colors">
+                                              <td className="px-6 py-4 font-bold text-white capitalize">{row.feature}</td>
+                                              <td className="px-6 py-4 text-audi-cyan font-mono">{new Intl.NumberFormat('de-DE').format(row.count)}</td>
+                                              <td className="px-6 py-4 text-audi-pink font-bold">{new Intl.NumberFormat('de-DE').format(row.vcoins)} Vcoin</td>
+                                              <td className="px-6 py-4 text-right text-green-500 font-bold">
+                                                  {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(row.revenue)}
+                                              </td>
+                                          </tr>
+                                      ))
+                                  ) : (
+                                      <tr>
+                                          <td colSpan={4} className="px-6 py-8 text-center text-slate-500 italic">Chưa có dữ liệu sử dụng AI (Cần người dùng thực hiện tạo ảnh/chỉnh sửa).</td>
                                       </tr>
-                                  ))}
+                                  )}
+                                  
                                   {/* Total Row */}
                                   <tr className="bg-white/5 font-bold">
                                       <td className="px-6 py-4 text-white uppercase">TỔNG CỘNG</td>
-                                      <td className="px-6 py-4 text-white">6.221</td>
-                                      <td className="px-6 py-4 text-white">125</td>
-                                      <td className="px-6 py-4 text-audi-pink">9.158 Vcoin</td>
-                                      <td className="px-6 py-4 text-right text-green-500">9.158.000 ₫</td>
+                                      <td className="px-6 py-4 text-audi-cyan">
+                                          {stats?.dashboard?.aiUsage ? new Intl.NumberFormat('de-DE').format(stats.dashboard.aiUsage.reduce((acc: number, curr: any) => acc + curr.count, 0)) : 0}
+                                      </td>
+                                      <td className="px-6 py-4 text-audi-pink">
+                                          {stats?.dashboard?.aiUsage ? new Intl.NumberFormat('de-DE').format(stats.dashboard.aiUsage.reduce((acc: number, curr: any) => acc + curr.vcoins, 0)) : 0} Vcoin
+                                      </td>
+                                      <td className="px-6 py-4 text-right text-green-500">
+                                          {stats?.dashboard?.aiUsage ? new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(stats.dashboard.aiUsage.reduce((acc: number, curr: any) => acc + curr.revenue, 0)) : '0 ₫'}
+                                      </td>
                                   </tr>
                               </tbody>
                           </table>
                       </div>
                       <p className="text-[10px] text-slate-600 mt-4 italic">
-                          * Doanh thu ước tính dựa trên quy đổi 1 Vcoin = 1.000đ. Số liệu dựa trên 5000 giao dịch gần nhất.
+                          * Doanh thu ước tính dựa trên quy đổi 1 Vcoin = 1.000đ. Số liệu được tổng hợp từ lịch sử giao dịch (Table: diamond_transactions_log).
                       </p>
                   </div>
               </div>

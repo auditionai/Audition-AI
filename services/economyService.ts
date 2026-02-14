@@ -247,12 +247,12 @@ export const savePackage = async (pkg: CreditPackage): Promise<{success: boolean
             name: pkg.name,
             credits_amount: pkg.coin,
             price_vnd: pkg.price,
-            tag: pkg.bonusText, 
+            tag: pkg.bonusText || '', 
             is_featured: pkg.isPopular,
             is_active: pkg.isActive ?? true,
             display_order: 0,
-            bonus_credits: pkg.bonusPercent, // Save percentage here
-            transfer_syntax: pkg.transferContent // Save syntax here
+            bonus_credits: pkg.bonusPercent || 0, // Save percentage here
+            transfer_syntax: pkg.transferContent || '' // Save syntax here (ensure string)
         };
 
         try {
@@ -560,21 +560,12 @@ export const createPaymentLink = async (packageId: string): Promise<Transaction>
 
     const orderCode = Math.floor(Date.now() / 1000); // Use timestamp as order code (int8)
 
-    // Calculate Bonus logic: Priority Global Promo > Package Promo
-    const promo = await getPromotionConfig();
-    const activeBonusPercent = promo.isActive ? promo.bonusPercent : pkg.bonusPercent;
-    
-    // Calculate total coins
-    const baseCoins = pkg.coin;
-    const bonusCoins = Math.floor(baseCoins * (activeBonusPercent / 100));
-    const totalCoins = baseCoins + bonusCoins;
-
     const newTx: Transaction = {
         id: crypto.randomUUID(),
         userId: user.id,
         packageId: pkg.id,
         amount: pkg.price,
-        coins: totalCoins, // Use total coins with bonus
+        coins: pkg.coin,
         status: 'pending',
         createdAt: new Date().toISOString(),
         paymentMethod: 'payos',
@@ -587,7 +578,7 @@ export const createPaymentLink = async (packageId: string): Promise<Transaction>
             user_id: user.id,
             package_id: pkg.id,
             amount_vnd: pkg.price, // Map 'amount_vnd'
-            diamonds_received: totalCoins, // Map 'diamonds_received' (Base + Bonus)
+            diamonds_received: pkg.coin, // Map 'diamonds_received'
             status: 'pending',
             order_code: orderCode, // Map 'order_code'
             created_at: newTx.createdAt

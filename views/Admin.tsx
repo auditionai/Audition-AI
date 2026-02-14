@@ -184,18 +184,32 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               refreshData();
               showToast('Cập nhật gói nạp thành công!');
           } else {
+              // 1. Check for RLS Errors
               if (result.error?.includes('RLS') || result.error?.includes('permission') || result.error?.includes('policy')) {
-                  // Show Helper for SQL Fix
                   setConfirmDialog({
                       show: true,
-                      title: '⚠️ Cần Cấp Quyền Database',
-                      msg: 'Database đang chặn việc lưu Gói Nạp. Hãy copy đoạn mã dưới đây và chạy trong SQL Editor của Supabase để mở khóa:',
+                      title: '⚠️ Cần Cấp Quyền Database (RLS)',
+                      msg: 'Database đang chặn việc lưu Gói Nạp. Hãy copy đoạn mã dưới đây và chạy trong SQL Editor của Supabase:',
                       sqlHelp: `ALTER TABLE public.credit_packages ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Enable all access for credit packages" ON public.credit_packages FOR ALL USING (true) WITH CHECK (true);`,
                       isAlertOnly: true,
                       onConfirm: () => {}
                   });
-              } else {
+              } 
+              // 2. Check for Missing Column Errors (transfer_syntax)
+              else if (result.error?.includes('transfer_syntax') || result.error?.includes('column')) {
+                  setConfirmDialog({
+                      show: true,
+                      title: '⚠️ Cần Cập Nhật Database (Thiếu Cột)',
+                      msg: 'Database thiếu cột "transfer_syntax" hoặc "bonus_credits". Hãy chạy lệnh SQL sau để sửa:',
+                      sqlHelp: `ALTER TABLE public.credit_packages 
+ADD COLUMN IF NOT EXISTS transfer_syntax text DEFAULT '',
+ADD COLUMN IF NOT EXISTS bonus_credits int8 DEFAULT 0;`,
+                      isAlertOnly: true,
+                      onConfirm: () => {}
+                  });
+              }
+              else {
                   showToast(`Lỗi: ${result.error}`, 'error');
               }
           }
@@ -227,7 +241,6 @@ CREATE POLICY "Enable all access for credit packages" ON public.credit_packages 
               showToast('Lưu Giftcode thành công!');
           } else {
               if (result.error?.includes('RLS') || result.error?.includes('permission') || result.error?.includes('policy')) {
-                  // Show Helper for SQL Fix
                   setConfirmDialog({
                       show: true,
                       title: '⚠️ Cần Cấp Quyền Database',

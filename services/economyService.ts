@@ -1,5 +1,4 @@
 
-
 import { CreditPackage, Transaction, UserProfile, CheckinConfig, DiamondLog, TransactionStatus, PromotionCampaign, Giftcode } from '../types';
 import { supabase } from './supabaseClient';
 
@@ -533,7 +532,8 @@ export const savePromotion = async (campaign: PromotionCampaign): Promise<{succe
             return { success: true };
         } catch (e: any) {
             console.error("Save promotion error:", e);
-            return { success: false, error: e.message };
+            // Return detailed message if possible
+            return { success: false, error: e.message || 'Unknown Error' };
         }
     }
     return { success: false, error: 'No DB connection' };
@@ -700,6 +700,19 @@ export const adminRejectTransaction = async (txId: string): Promise<boolean> => 
     }
     return false;
 };
+
+export const deleteTransaction = async (txId: string): Promise<{success: boolean, error?: string}> => {
+    if (supabase) {
+        try {
+            const { error } = await supabase.from('transactions').delete().eq('id', txId);
+            if (error) throw error;
+            return { success: true };
+        } catch (e: any) {
+             return { success: false, error: e.message };
+        }
+    }
+    return { success: false, error: "No DB Connection" };
+}
 
 export const mockPayOSSuccess = async (txId: string) => {
     return adminApproveTransaction(txId);

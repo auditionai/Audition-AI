@@ -4,7 +4,7 @@ import { Language, Transaction, UserProfile, GeneratedImage, CreditPackage, Prom
 import { Icons } from '../components/Icons';
 import { checkConnection } from '../services/geminiService';
 import { checkSupabaseConnection } from '../services/supabaseClient';
-import { getAdminStats, savePackage, deletePackage, updateAdminUserProfile, savePromotion, deletePromotion, getGiftcodes, saveGiftcode, deleteGiftcode, adminApproveTransaction, adminRejectTransaction, getSystemApiKey, saveSystemApiKey, updatePackageOrder } from '../services/economyService';
+import { getAdminStats, savePackage, deletePackage, updateAdminUserProfile, savePromotion, deletePromotion, getGiftcodes, saveGiftcode, deleteGiftcode, adminApproveTransaction, adminRejectTransaction, getSystemApiKey, saveSystemApiKey, updatePackageOrder, deleteTransaction } from '../services/economyService';
 import { getAllImagesFromStorage, deleteImageFromStorage } from '../services/storageService';
 
 interface AdminProps {
@@ -172,7 +172,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       if (editingUser) {
           await updateAdminUserProfile(editingUser);
           setEditingUser(null);
-          refreshData();
+          await refreshData(); // Await to ensure UI updates
           showToast('Cập nhật người dùng thành công!');
       }
   };
@@ -294,7 +294,29 @@ CREATE POLICY "Enable all access for gift codes" ON public.gift_codes FOR ALL US
               refreshData();
               showToast('Lưu chiến dịch thành công!');
           } else {
-              showToast(`Lỗi: ${result.error}`, 'error');
+              // DETECT MISSING COLUMN ERROR AND SHOW SQL HELP
+              if (result.error?.includes('column') || result.error?.includes('bonus_percent') || result.error?.includes('title')) {
+                  setConfirmDialog({
+                      show: true,
+                      title: '⚠️ Cấu trúc Database chưa đồng bộ',
+                      msg: 'Bảng "promotions" thiếu các cột quan trọng. Vui lòng chạy lệnh SQL sau trong Supabase Editor:',
+                      sqlHelp: `ALTER TABLE public.promotions 
+ADD COLUMN IF NOT EXISTS title text,
+ADD COLUMN IF NOT EXISTS description text,
+ADD COLUMN IF NOT EXISTS bonus_percent int8 DEFAULT 0,
+ADD COLUMN IF NOT EXISTS start_time timestamptz DEFAULT now(),
+ADD COLUMN IF NOT EXISTS end_time timestamptz DEFAULT now(),
+ADD COLUMN IF NOT EXISTS is_active boolean DEFAULT true;
+
+-- Enable RLS just in case
+ALTER TABLE public.promotions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable access" ON public.promotions FOR ALL USING (true) WITH CHECK (true);`,
+                      isAlertOnly: true,
+                      onConfirm: () => {}
+                  });
+              } else {
+                  showToast(`Lỗi: ${result.error}`, 'error');
+              }
           }
       }
   };
@@ -328,6 +350,29 @@ CREATE POLICY "Enable all access for gift codes" ON public.gift_codes FOR ALL US
           await adminRejectTransaction(txId);
           refreshData();
           showToast('Đã từ chối giao dịch', 'info');
+      });
+  }
+
+  const handleDeleteTransaction = async (txId: string) => {
+      showConfirm('Xóa lịch sử giao dịch này khỏi hệ thống?', async () => {
+          const res = await deleteTransaction(txId);
+          if (res.success) {
+              refreshData();
+              showToast('Đã xóa giao dịch vĩnh viễn', 'info');
+          } else {
+              if (res.error?.includes('policy')) {
+                   setConfirmDialog({
+                      show: true,
+                      title: '⚠️ Cần Cấp Quyền Xóa Giao Dịch',
+                      msg: 'Database chưa cho phép xóa giao dịch. Chạy lệnh sau:',
+                      sqlHelp: `CREATE POLICY "Enable delete for admin" ON public.transactions FOR DELETE USING (true);`,
+                      isAlertOnly: true,
+                      onConfirm: () => {}
+                   });
+              } else {
+                   showToast('Lỗi xóa: ' + res.error, 'error');
+              }
+          }
       });
   }
 
@@ -587,16 +632,21 @@ CREATE POLICY "Enable all access for gift codes" ON public.gift_codes FOR ALL US
                                           </span>
                                       </td>
                                       <td className="px-6 py-4 text-right">
-                                          {tx.status === 'pending' && (
-                                              <div className="flex justify-end gap-2">
-                                                  <button onClick={() => handleApproveTransaction(tx.id)} className="p-2 bg-green-500/20 text-green-500 rounded hover:bg-green-500 hover:text-white" title="Duyệt">
-                                                      <Icons.Check className="w-4 h-4" />
-                                                  </button>
-                                                  <button onClick={() => handleRejectTransaction(tx.id)} className="p-2 bg-red-500/20 text-red-500 rounded hover:bg-red-500 hover:text-white" title="Hủy">
-                                                      <Icons.X className="w-4 h-4" />
-                                                  </button>
-                                              </div>
-                                          )}
+                                          <div className="flex justify-end gap-2">
+                                              {tx.status === 'pending' && (
+                                                  <>
+                                                      <button onClick={() => handleApproveTransaction(tx.id)} className="p-2 bg-green-500/20 text-green-500 rounded hover:bg-green-500 hover:text-white" title="Duyệt">
+                                                          <Icons.Check className="w-4 h-4" />
+                                                      </button>
+                                                      <button onClick={() => handleRejectTransaction(tx.id)} className="p-2 bg-red-500/20 text-red-500 rounded hover:bg-red-500 hover:text-white" title="Hủy">
+                                                          <Icons.X className="w-4 h-4" />
+                                                      </button>
+                                                  </>
+                                              )}
+                                              <button onClick={() => handleDeleteTransaction(tx.id)} className="p-2 bg-slate-500/20 text-slate-500 rounded hover:bg-slate-500 hover:text-white" title="Xóa lịch sử">
+                                                  <Icons.Trash className="w-4 h-4" />
+                                              </button>
+                                          </div>
                                       </td>
                                   </tr>
                               ))}
@@ -669,35 +719,35 @@ CREATE POLICY "Enable all access for gift codes" ON public.gift_codes FOR ALL US
                       </table>
                   </div>
                   
-                  {/* EDIT USER MODAL */}
+                  {/* EDIT USER MODAL - Fixed Structure */}
                   {editingUser && (
-                      <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-                          <div className="bg-[#12121a] w-full max-w-md p-6 rounded-2xl border border-white/20 shadow-2xl">
+                      <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
+                          <div className="bg-[#12121a] w-full max-w-md p-6 rounded-2xl border border-white/20 shadow-2xl relative">
                               <h3 className="text-xl font-bold text-white mb-4">Sửa Người Dùng</h3>
                               <div className="space-y-4 mb-6">
                                   <div>
                                       <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Tên hiển thị</label>
                                       <input 
-                                          value={editingUser.username} 
+                                          value={editingUser.username || ''} 
                                           onChange={e => setEditingUser({...editingUser, username: e.target.value})}
-                                          className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white" 
+                                          className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white focus:border-audi-pink outline-none" 
                                       />
                                   </div>
                                   <div>
                                       <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Số dư Vcoin</label>
                                       <input 
                                           type="number" 
-                                          value={editingUser.balance} 
+                                          value={editingUser.balance || 0} 
                                           onChange={e => setEditingUser({...editingUser, balance: Number(e.target.value)})}
-                                          className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-audi-yellow font-bold" 
+                                          className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-audi-yellow font-bold focus:border-audi-pink outline-none" 
                                       />
                                   </div>
                                   <div>
                                       <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Ảnh đại diện URL</label>
                                       <input 
-                                          value={editingUser.avatar} 
+                                          value={editingUser.avatar || ''} 
                                           onChange={e => setEditingUser({...editingUser, avatar: e.target.value})}
-                                          className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-slate-300 text-xs font-mono" 
+                                          className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-slate-300 text-xs font-mono focus:border-audi-pink outline-none" 
                                       />
                                   </div>
                               </div>

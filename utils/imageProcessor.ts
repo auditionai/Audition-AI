@@ -58,22 +58,12 @@ export const createSolidFence = async (base64Str: string, aspectRatio: string = 
         const x = Math.round((BASE_SIZE - drawW) / 2);
         const y = Math.round((BASE_SIZE - drawH) / 2);
         
-        if (isPoseRef) {
-            // --- POSE/SCENE REFERENCE LOGIC ---
-            // CHANGED: Removed Grayscale/White Overlay.
-            // We draw the image AS IS so the AI can see the Background/Lighting context.
-            ctx.drawImage(img, x, y, drawW, drawH);
-            
-            // No border for pose ref - allow AI to blend it.
-        } else {
-            // --- CHARACTER LOGIC (SOLID FENCE) ---
-            // This is the "Audition AI" technique. EXACT IMPLEMENTATION.
-            
-            // Draw the image normally (keep colors true)
-            ctx.drawImage(img, x, y, drawW, drawH);
-            
-            // DRAW THE FENCE (Solid Border)
-            // Use exactly 4px Black border as per spec.
+        // Draw the image normally (keep colors true)
+        ctx.drawImage(img, x, y, drawW, drawH);
+        
+        // DRAW THE FENCE (Solid Border) - ONLY FOR CHARACTER INPUTS
+        // Use exactly 4px Black border as per spec.
+        if (!isPoseRef) {
             ctx.strokeStyle = '#000000'; // Black border
             ctx.lineWidth = 4; // EXACTLY 4px
             ctx.strokeRect(x, y, drawW, drawH); // The "Cage"
@@ -86,17 +76,19 @@ export const createSolidFence = async (base64Str: string, aspectRatio: string = 
     });
   };
   
+  // STRICT OPTIMIZER: RESIZE ONLY, NO PADDING, NO GRAY BARS
   export const optimizePayload = async (base64Str: string, maxWidth = 1024): Promise<string> => {
       return new Promise((resolve) => {
           const img = new Image();
           img.crossOrigin = "Anonymous";
           img.onload = () => {
+              // If image is small enough, return as is
               if (img.width <= maxWidth && img.height <= maxWidth) {
                   resolve(base64Str);
                   return;
               }
   
-              const canvas = document.createElement('canvas');
+              // Calculate new dimensions maintaining aspect ratio
               let width = img.width;
               let height = img.height;
   
@@ -112,6 +104,7 @@ export const createSolidFence = async (base64Str: string, aspectRatio: string = 
                   }
               }
   
+              const canvas = document.createElement('canvas');
               canvas.width = width;
               canvas.height = height;
               const ctx = canvas.getContext('2d');
@@ -119,6 +112,7 @@ export const createSolidFence = async (base64Str: string, aspectRatio: string = 
               if (ctx) {
                   ctx.imageSmoothingEnabled = true;
                   ctx.imageSmoothingQuality = 'high';
+                  // Draw image filling the canvas exactly
                   ctx.drawImage(img, 0, 0, width, height);
               }
               

@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 
 // Access Environment Variables Safely
 const metaEnv = (import.meta as any).env || {};
-const processEnv = typeof window !== 'undefined' && window.process ? window.process.env : {};
+const processEnv = typeof window !== 'undefined' && (window as any).process ? (window as any).process.env : {};
 
 const supabaseUrl = metaEnv.VITE_SUPABASE_URL || processEnv.VITE_SUPABASE_URL;
 const supabaseAnonKey = metaEnv.VITE_SUPABASE_ANON_KEY || processEnv.VITE_SUPABASE_ANON_KEY;

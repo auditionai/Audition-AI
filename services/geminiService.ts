@@ -157,20 +157,24 @@ export const generateImage = async (
     let fullPrompt = `ROLE: Strict 3D Scene Renderer & Composition Expert.
     TASK: Render a group of EXACTLY ${charCount} characters. 
     
-    [CRITICAL SECURITY PROTOCOLS - READ CAREFULLY]:
-    1. CHARACTER COUNT LOCK: There must be EXACTLY ${charCount} people in this image. NO MORE, NO LESS. If you see empty space, DO NOT fill it with extra people. Leave it empty or fill with background scenery.
-    2. NO EXTRA LIMBS: Every character implies strict human anatomy. 2 arms, 2 legs.
-    3. SEPARATION OF IDENTITY: Do not blend features between characters.
+    USER COMMAND: "${prompt}".
     
-    USER COMMAND: "${prompt}".`;
+    [CONFLICT RESOLUTION PROTOCOL]:
+    1. PRIORITY 1 (HIGHEST): The Text Descriptions of outfits below.
+    2. PRIORITY 2: The Face details from character images.
+    3. PRIORITY 3 (LOWEST): The Pose Reference Image.
+    
+    **CRITICAL RULE**: The Pose Reference Image has INCORRECT CLOTHING and COLORS. It is for SKELETON/BONE POSITION only. 
+    - If the Pose Reference shows BLACK pants, but the Text Description says WHITE pants, you MUST RENDER WHITE PANTS.
+    - Ignore the texture and pixels of the Pose Reference. Use it only for geometry.`;
 
     // --- CRITICAL FIX FOR POSE REF ---
     if (poseRefIndex > 0) {
         fullPrompt += `\n\n[IMAGE ${indexToWord(poseRefIndex)} IS THE POSE BLUEPRINT]:
-        - FUNCTION: This image is ONLY for Skeleton/Pose data.
-        - IGNORE PIXELS: Do NOT copy the background pixels. Do NOT copy the clothing pixels from this image.
-        - BACKGROUND RULE: The background in this reference image is "Void/Null". You MUST replace it entirely with a NEW 3D environment based on the User Command.
-        - ASPECT RATIO: Generate the image filling the full canvas. Extend the *new* background to the edges. Do NOT letterbox.`;
+        - STATUS: GHOST REFERENCE (Washed out).
+        - USAGE: Trace the human pose/position only.
+        - FORBIDDEN: Do NOT copy the clothing colors (black/dark) from this image.
+        - BACKGROUND: Ignore the room/rug in this image. Create a new environment.`;
     }
 
     // D. Inject Analyzed Descriptions
@@ -180,23 +184,22 @@ export const generateImage = async (
         const imageIdx = charIndexMap[char.id];
         
         fullPrompt += `\n\n--- PLAYER ${char.id} (${char.gender.toUpperCase()}) ---`;
-        fullPrompt += `\n- POSITION: Maps to the ${char.id === 1 ? 'Leftmost' : char.id === 2 ? 'Next' : char.id + 'th'} figure in the Pose Blueprint.`;
+        fullPrompt += `\n- POSITION: Matches figure ${char.id} in Pose Blueprint.`;
         
         // VISUAL ANCHOR (TEXT) - This overrides the visual reference's clothes
-        fullPrompt += `\n- OUTFIT (ABSOLUTE TRUTH): ${char.description}. (You MUST render this outfit exactly. Do not change it. Do not be creative with the clothes).`;
+        fullPrompt += `\n- OUTFIT (ABSOLUTE TRUTH): ${char.description}. (IGNORE any conflicting clothes in the pose reference).`;
         
         // VISUAL ANCHOR (IMAGE) - Use only for Face
         if (imageIdx) {
-            fullPrompt += `\n- FACE IDENTITY SOURCE: ${indexToWord(imageIdx)}. Copy the face structure and features.`;
-            fullPrompt += `\n- IGNORE SOURCE CLOTHES: Do not look at the clothes in ${indexToWord(imageIdx)} if they contradict the text description above.`;
+            fullPrompt += `\n- FACE IDENTITY SOURCE: ${indexToWord(imageIdx)}.`;
+            fullPrompt += `\n- CLOTHING SOURCE: ${indexToWord(imageIdx)} (Use this image for clothing texture, NOT the pose reference).`;
         }
     });
 
     fullPrompt += `\n\n[FINAL PRE-RENDER CHECKLIST]:
-    1. Count: Are there exactly ${charCount} people? (Delete any extras).
-    2. Background: Is it a NEW 3D background? (Do not copy reference background).
-    3. Outfits: Do they match the text descriptions for each player? (Do not swap clothes).
-    4. Composition: Is the scene filling the whole ${aspectRatio} frame?`;
+    1. Count: Are there exactly ${charCount} people?
+    2. Background: Is it a NEW 3D background (not the reference room)?
+    3. Outfits: Did you fix the outfit colors to match the text description (e.g. White instead of Black)?`;
 
     parts.push({ text: fullPrompt });
 

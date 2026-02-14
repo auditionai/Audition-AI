@@ -24,8 +24,9 @@ export const urlToBase64 = async (url: string): Promise<string | null> => {
 /**
  * Creates a "Blueprint" version of the reference image.
  * 1. Matches Target Aspect Ratio (adding padding if needed).
- * 2. Applies Grayscale & Contrast filters to REMOVE clothing color/texture information.
- *    This forces the AI to use the reference ONLY for Pose, not for Outfit.
+ * 2. Applies "GHOST FILTER" (Grayscale + High Brightness + Low Contrast).
+ *    This makes the reference look like a faded photocopy. 
+ *    Result: Strong colors (black pants) become light grey, forcing AI to ignore them.
  */
 export const createSolidFence = async (base64Str: string, aspectRatio: string): Promise<string> => {
     return new Promise((resolve) => {
@@ -37,13 +38,11 @@ export const createSolidFence = async (base64Str: string, aspectRatio: string): 
         if (!ctx) return resolve(base64Str);
   
         // Determine target dimensions based on aspect ratio
-        // We use a high-fidelity base size (e.g., 1536px) to ensure the structure is clear
         const BASE_SIZE = 1536; 
         const [wRatio, hRatio] = aspectRatio.split(':').map(Number);
         
         let targetW, targetH;
         
-        // Calculate dimensions maintaining aspect ratio logic
         if (wRatio > hRatio) {
             targetW = BASE_SIZE;
             targetH = Math.round(BASE_SIZE * (hRatio / wRatio));
@@ -55,41 +54,39 @@ export const createSolidFence = async (base64Str: string, aspectRatio: string): 
         canvas.width = targetW;
         canvas.height = targetH;
   
-        // 1. THE VOID: Fill background with a specific "Chroma Key" style or Noise
-        // Instead of plain gray, we use a very light pattern to signal "This is empty space"
-        ctx.fillStyle = '#E0E0E0'; 
+        // 1. THE VOID: Fill background with white to blend with the high brightness filter
+        ctx.fillStyle = '#FFFFFF'; 
         ctx.fillRect(0, 0, targetW, targetH);
   
-        // Calculate scaling to fit the source image *inside* the fence (Contain mode)
         const scale = Math.min(targetW / img.width, targetH / img.height);
         const drawW = Math.round(img.width * scale);
         const drawH = Math.round(img.height * scale);
         
-        // Center the image
         const x = Math.round((targetW - drawW) / 2);
         const y = Math.round((targetH - drawH) / 2);
         
-        // --- CRITICAL UPDATE: DE-TEXTURING FILTER ---
-        // Convert to Grayscale and High Contrast.
-        // This removes "Red Shirt" or "Blue Jeans" info, leaving only luminance/structure.
-        ctx.filter = 'grayscale(100%) contrast(1.2) brightness(1.1)';
+        // --- CRITICAL UPDATE: THE "GHOST" FILTER ---
+        // 1. Grayscale: Remove color bias.
+        // 2. Brightness(1.4): Wash out dark blacks to light greys.
+        // 3. Contrast(0.6): Flatten texture details so it looks like a wireframe, not a photo.
+        // 4. Blur(0.5px): Slight blur to destroy specific fabric textures.
+        ctx.filter = 'grayscale(100%) brightness(1.4) contrast(0.6) blur(0.5px)';
         
         // Draw the source image
         ctx.drawImage(img, x, y, drawW, drawH);
         
-        // Reset filter for borders
+        // Reset filter for guide lines
         ctx.filter = 'none';
 
-        // 2. THE ANCHOR: Draw a faint border to define the pose area vs the extension area
-        // If there is significant empty space (aspect ratio mismatch), draw a dashed guide
+        // 2. THE ANCHOR: Draw a faint border to indicate the frame
         if (targetW > drawW + 50 || targetH > drawH + 50) {
             ctx.setLineDash([10, 10]);
-            ctx.strokeStyle = '#AAAAAA';
+            ctx.strokeStyle = '#CCCCCC'; // Very faint
             ctx.lineWidth = 2;
             ctx.strokeRect(x, y, drawW, drawH);
         }
   
-        resolve(canvas.toDataURL('image/jpeg', 0.90));
+        resolve(canvas.toDataURL('image/jpeg', 0.85));
       };
       img.onerror = () => resolve(base64Str);
       img.src = base64Str;
@@ -101,7 +98,6 @@ export const createSolidFence = async (base64Str: string, aspectRatio: string): 
           const img = new Image();
           img.crossOrigin = "Anonymous";
           img.onload = () => {
-              // If image is already optimized/small enough, return as is to preserve quality
               if (img.width <= maxWidth && img.height <= maxWidth) {
                   resolve(base64Str);
                   return;
@@ -111,7 +107,6 @@ export const createSolidFence = async (base64Str: string, aspectRatio: string): 
               let width = img.width;
               let height = img.height;
   
-              // Calculate new size maintaining aspect ratio
               if (width > height) {
                   if (width > maxWidth) {
                       height *= maxWidth / width;

@@ -16,6 +16,9 @@
       window.process = window.process || { env: { API_KEY: '' } };
     </script>
 
+    <!-- ES Module Shims: Fixes importmap support in older browsers & some edge cases -->
+    <script async src="https://ga.jspm.io/npm:es-module-shims@1.10.0/dist/es-module-shims.js"></script>
+
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {

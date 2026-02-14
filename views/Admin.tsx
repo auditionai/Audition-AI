@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect } from 'react';
 import { Language, Transaction, UserProfile, CreditPackage, PromotionCampaign, Giftcode, GeneratedImage } from '../types';
 import { Icons } from '../components/Icons';
@@ -127,7 +126,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           setPackages(s.packages || []);
           setPromotions(s.promotions || []);
           setGiftcodes(s.giftcodes || []);
-          setTransactions((s.transactions || []).reverse()); 
+          // Transactions are already sorted by DESC in getAdminStats now
+          setTransactions(s.transactions || []); 
           const imgs = await getAllImagesFromStorage();
           setAllImages(imgs);
       }
@@ -408,13 +408,30 @@ CREATE POLICY "Enable access" ON public.promotions FOR ALL USING (true) WITH CHE
           setProcessingTxId(txId);
           const result = await adminApproveTransaction(txId);
           if (result.success) {
-              // Optimistic update: Update local state immediately without full refresh
+              // Optimistic update for UI smoothness
               setTransactions(prev => prev.map(t => 
                   t.id === txId ? { ...t, status: 'paid' } : t
               ));
               showToast('Đã duyệt thành công!');
+              
+              // Force Refresh Data to verify persistence
+              await refreshData();
           } else {
-              showToast('Lỗi: ' + result.error, 'error');
+              if (result.error?.includes('RLS') || result.error?.includes('permission') || result.error?.includes('policy')) {
+                  setConfirmDialog({
+                      show: true,
+                      title: '⚠️ Cần Cấp Quyền Duyệt Giao Dịch',
+                      msg: 'Database chưa cho phép tài khoản của bạn cập nhật trạng thái giao dịch. Chạy lệnh sau để sửa:',
+                      sqlHelp: `ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable all access for transactions" ON public.transactions FOR ALL USING (true) WITH CHECK (true);`,
+                      isAlertOnly: true,
+                      onConfirm: () => {}
+                  });
+              } else {
+                  showToast('Lỗi: ' + result.error, 'error');
+                  // Revert if failed
+                  await refreshData();
+              }
           }
           setProcessingTxId(null);
       });
@@ -432,8 +449,23 @@ CREATE POLICY "Enable access" ON public.promotions FOR ALL USING (true) WITH CHE
                   t.id === txId ? { ...t, status: 'cancelled' } : t
               ));
               showToast('Đã từ chối giao dịch', 'info');
+              
+              // Force refresh to verify
+              await refreshData();
           } else {
-              showToast('Lỗi: ' + result.error, 'error');
+              if (result.error?.includes('RLS') || result.error?.includes('permission') || result.error?.includes('policy')) {
+                  setConfirmDialog({
+                      show: true,
+                      title: '⚠️ Cần Cấp Quyền Duyệt Giao Dịch',
+                      msg: 'Database chưa cho phép tài khoản của bạn cập nhật trạng thái giao dịch. Chạy lệnh sau để sửa:',
+                      sqlHelp: `ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable all access for transactions" ON public.transactions FOR ALL USING (true) WITH CHECK (true);`,
+                      isAlertOnly: true,
+                      onConfirm: () => {}
+                  });
+              } else {
+                  showToast('Lỗi: ' + result.error, 'error');
+              }
           }
           setProcessingTxId(null);
       });
@@ -451,7 +483,7 @@ CREATE POLICY "Enable access" ON public.promotions FOR ALL USING (true) WITH CHE
               showToast('Đã xóa giao dịch vĩnh viễn', 'info');
           } else {
               // Handle known errors (RLS or not found)
-              if (res.error?.includes('policy') || res.error?.includes('phân quyền')) {
+              if (res.error?.includes('policy') || res.error?.includes('phân quyền') || res.error?.includes('RLS')) {
                    setConfirmDialog({
                       show: true,
                       title: '⚠️ Cần Cấp Quyền Xóa Giao Dịch',

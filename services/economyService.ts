@@ -1,5 +1,4 @@
 
-
 import { CreditPackage, Transaction, UserProfile, CheckinConfig, DiamondLog, TransactionStatus, PromotionCampaign, Giftcode, HistoryItem } from '../types';
 import { supabase } from './supabaseClient';
 
@@ -810,21 +809,55 @@ export const updateAdminUserProfile = async (updatedUser: UserProfile): Promise<
 export const adminApproveTransaction = async (txId: string): Promise<{ success: boolean; error?: string }> => {
     if (supabase) {
         try {
-            const { data: tx, error: fetchError } = await supabase.from('transactions').select('*').eq('id', txId).single();
-            if (fetchError || !tx) return { success: false, error: "Giao dịch không tồn tại" };
-            
+            // 0. Verify Transaction Exists & Status
+            const { data: tx, error: fetchError } = await supabase
+                .from('transactions')
+                .select('*')
+                .eq('id', txId)
+                .maybeSingle(); // Safer than single()
+
+            if (fetchError) return { success: false, error: fetchError.message };
+            if (!tx) return { success: false, error: "Giao dịch không tồn tại" };
             if (tx.status === 'paid') return { success: false, error: "Giao dịch đã được duyệt trước đó" };
 
             // 1. Update status
-            const { error: updateError } = await supabase.from('transactions').update({ status: 'paid' }).eq('id', txId);
+            const { data: updatedTx, error: updateError } = await supabase
+                .from('transactions')
+                .update({ status: 'paid' })
+                .eq('id', txId)
+                .select()
+                .maybeSingle(); // Explicitly return single row
+
             if (updateError) throw updateError;
             
-            // 2. Add coins
-            const { data: user, error: userError } = await supabase.from('users').select('diamonds').eq('id', tx.user_id).single();
+            // Check if RLS blocked the update (silent failure)
+            if (!updatedTx) {
+                return { success: false, error: "Quyền hạn bị từ chối (RLS Policy) hoặc ID không khớp." };
+            }
+
+            // DOUBLE CHECK PERSISTENCE (VERIFY UPDATE)
+            const { data: verifyTx } = await supabase
+                .from('transactions')
+                .select('status')
+                .eq('id', txId)
+                .maybeSingle();
+
+            if (verifyTx?.status !== 'paid') {
+                 return { success: false, error: "Lỗi Hệ Thống: Update không được lưu (DB Reverted)." };
+            }
+            
+            // 2. Add coins to User
+            const { data: user, error: userError } = await supabase
+                .from('users')
+                .select('diamonds')
+                .eq('id', tx.user_id)
+                .single();
+                
             if(user) {
                 const currentBalance = user.diamonds || 0;
                 const coins = tx.diamonds_received || 0;
                 
+                // Use RPC or direct update? Direct update is risky for concurrency but fine for low traffic
                 await supabase.from('users').update({ diamonds: currentBalance + coins }).eq('id', tx.user_id);
                 
                 // 3. Log
@@ -836,12 +869,13 @@ export const adminApproveTransaction = async (txId: string): Promise<{ success: 
                     created_at: new Date().toISOString()
                 });
             } else {
+                 // Transaction approved but user not found? Odd edge case.
                  return { success: true, error: "Đã duyệt nhưng không tìm thấy User để cộng tiền." };
             }
 
             return { success: true };
         } catch (e: any) {
-            console.error(e);
+            console.error("Approve Error:", e);
             return { success: false, error: e.message };
         }
     }
@@ -851,8 +885,30 @@ export const adminApproveTransaction = async (txId: string): Promise<{ success: 
 export const adminRejectTransaction = async (txId: string): Promise<{ success: boolean; error?: string }> => {
     if (supabase) {
         try {
-            const { error } = await supabase.from('transactions').update({ status: 'cancelled' }).eq('id', txId);
+            const { data: updatedTx, error } = await supabase
+                .from('transactions')
+                .update({ status: 'cancelled' })
+                .eq('id', txId)
+                .select()
+                .maybeSingle();
+
             if (error) throw error;
+
+            if (!updatedTx) {
+                return { success: false, error: "Quyền hạn bị từ chối (RLS Policy)." };
+            }
+            
+             // DOUBLE CHECK PERSISTENCE
+            const { data: verifyTx } = await supabase
+                .from('transactions')
+                .select('status')
+                .eq('id', txId)
+                .maybeSingle();
+
+            if (verifyTx?.status !== 'cancelled') {
+                 return { success: false, error: "Lỗi Hệ Thống: Update không được lưu." };
+            }
+
             return { success: true };
         } catch (e: any) {
             return { success: false, error: e.message };
@@ -867,7 +923,7 @@ export const deleteTransaction = async (txId: string): Promise<{success: boolean
             const { data, error } = await supabase.from('transactions').delete().eq('id', txId).select();
             if (error) throw error;
             if (!data || data.length === 0) {
-                 return { success: false, error: "Không thể xóa. Kiểm tra quyền hạn hoặc ID." };
+                 return { success: false, error: "Không thể xóa (RLS Policy hoặc ID sai)." };
             }
             return { success: true };
         } catch (e: any) {
@@ -911,7 +967,11 @@ export const getAdminStats = async () => {
             }));
         }
 
-        const { data: t } = await supabase.from('transactions').select('*');
+        const { data: t } = await supabase
+            .from('transactions')
+            .select('*')
+            .order('created_at', { ascending: false }); // Explicitly sort by date desc
+
         if(t) txs = t.map((row:any) => ({
             id: row.id,
             userId: row.user_id,

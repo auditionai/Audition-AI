@@ -17,6 +17,16 @@ const getAiClient = async () => {
     return new GoogleGenAI({ apiKey: key });
 };
 
+// Helper to strictly clean base64 string
+const cleanBase64 = (data: string): string => {
+    if (!data) return "";
+    // Remove data:image/...;base64, prefix if present
+    if (data.includes(',')) {
+        return data.split(',')[1];
+    }
+    return data;
+};
+
 const extractImage = (response: any): string | null => {
   if (response.candidates && response.candidates[0].content.parts) {
     for (const part of response.candidates[0].content.parts) {
@@ -34,11 +44,9 @@ interface CharacterData {
 }
 
 // --- MODULE 1: VISUAL ANALYSIS (Low Cost, High Speed) ---
-// Tách riêng module phân tích để AI "hiểu" quần áo trước khi vẽ.
 export const analyzeCharacterVisuals = async (base64Image: string, gender: string): Promise<string> => {
     try {
         const ai = await getAiClient();
-        // Dùng Flash cho tác vụ text (nhanh, rẻ, chính xác cho text)
         const model = 'gemini-2.5-flash'; 
         
         const prompt = `Analyze the person in this image.
@@ -54,7 +62,7 @@ export const analyzeCharacterVisuals = async (base64Image: string, gender: strin
             model: model,
             contents: {
                 parts: [
-                    { inlineData: { mimeType: 'image/jpeg', data: base64Image } },
+                    { inlineData: { mimeType: 'image/jpeg', data: cleanBase64(base64Image) } },
                     { text: prompt }
                 ]
             }
@@ -69,7 +77,7 @@ export const analyzeCharacterVisuals = async (base64Image: string, gender: strin
 // --- MODULE 2: STRATEGY IMPLEMENTATIONS ---
 
 /**
- * STRATEGY 1: SINGLE MODE (Focus on Detail & Character Fidelity)
+ * STRATEGY 1: SINGLE MODE
  */
 const processSingleMode = (
     prompt: string, 
@@ -121,7 +129,7 @@ const processSingleMode = (
 };
 
 /**
- * STRATEGY 2: COUPLE MODE (Focus on Interaction & Chemistry)
+ * STRATEGY 2: COUPLE MODE
  */
 const processCoupleMode = (
     prompt: string, 
@@ -149,8 +157,8 @@ const processCoupleMode = (
         2. **INTERACTION**: The two characters must be interacting (e.g., holding hands, hugging, dancing) as described in: "${prompt}".
         
         [CHARACTERS]:
-        - P1 (${charDescriptions[0].split('|')[0]}): ${charDescriptions[0].split('|')[1]}
-        - P2 (${charDescriptions[1].split('|')[0]}): ${charDescriptions[1].split('|')[1]}
+        - P1 (${charDescriptions[0]?.split('|')[0]}): ${charDescriptions[0]?.split('|')[1]}
+        - P2 (${charDescriptions[1]?.split('|')[0]}): ${charDescriptions[1]?.split('|')[1]}
         
         Use the provided character reference images (if any) for their specific outfits.
         Style: Romantic 3D Game Art, Soft Lighting.`;
@@ -172,7 +180,7 @@ const processCoupleMode = (
 };
 
 /**
- * STRATEGY 3: GROUP MODE (Focus on Composition & Non-overlapping)
+ * STRATEGY 3: GROUP MODE
  */
 const processGroupMode = (
     prompt: string, 
@@ -217,43 +225,48 @@ export const generateImage = async (
   try {
     const ai = await getAiClient();
     
-    // 1. SELECT MODEL (User Choice is Absolute)
-    // Pro = 2K/4K, Flash = 1K. We NEVER switch this automatically.
+    // 1. SELECT MODEL
+    // Force Pro for high quality, but Flash if resolution is set to '1K' specifically to save cost
     const isPro = resolution === '2K' || resolution === '4K';
     const model = isPro ? 'gemini-3-pro-image-preview' : 'gemini-2.5-flash-image';
     
-    // 2. PREPARE COMMON ASSETS
-    if (onProgress) onProgress(`Preparing Assets for ${model}...`);
+    if (onProgress) onProgress(`Engine: ${model} | Res: ${resolution}`);
 
-    // A. Background/Scene Reference (The "Ground Truth")
+    // 2. PREPARE COMMON ASSETS
+
+    // A. Background/Scene Reference
     let refImagePart = null;
     if (styleRefBase64) {
-        // Optimize ONLY. NO SOLID FENCE for background.
-        // We need the AI to see the full context of the room.
-        const optimizedRef = await optimizePayload(styleRefBase64, isPro ? 1280 : 1024);
+        // CRITICAL FIX: Limit background ref to 1024px to prevent Payload Too Large
+        const optimizedRef = await optimizePayload(styleRefBase64, 1024);
         refImagePart = {
-            inlineData: { data: optimizedRef.split(',')[1], mimeType: 'image/jpeg' }
+            inlineData: { data: cleanBase64(optimizedRef), mimeType: 'image/jpeg' }
         };
     }
 
-    // B. Character References (The "Identity/Outfit")
+    // B. Character References
     const charParts: any[] = [];
     const charDescriptions: string[] = [];
 
     for (const char of characterDataList) {
         let desc = `${char.gender}`;
         if (char.image) {
-            // Use Solid Fence for Characters to isolate them from their original photo's background
+            // STEP 1: Solid Fence (1024x1024)
             const fencedData = await createSolidFence(char.image, "1:1", false);
-            const fencedBase64 = fencedData.split(',')[1];
             
-            // Analyze for text backup
+            // STEP 2: CRITICAL DOWN-SAMPLING (512x512)
+            // We reduce the fenced character to 512px. The AI still sees the "fence" structure
+            // but the data size is 4x smaller, preventing Error 400.
+            const optimizedFence = await optimizePayload(fencedData, 512);
+            const cleanFenceBase64 = cleanBase64(optimizedFence);
+            
+            // Analyze for text backup (using the smaller image is fine)
             if (onProgress) onProgress(`Analyzing Player ${char.id}...`);
-            const visualDesc = await analyzeCharacterVisuals(fencedBase64, char.gender);
+            const visualDesc = await analyzeCharacterVisuals(cleanFenceBase64, char.gender);
             
             desc += `|${visualDesc}`;
             charParts.push({
-                inlineData: { data: fencedBase64, mimeType: 'image/jpeg' }
+                inlineData: { data: cleanFenceBase64, mimeType: 'image/jpeg' }
             });
         } else {
             desc += `|High fashion ${char.gender} game outfit`;
@@ -285,7 +298,6 @@ export const generateImage = async (
 
     if (isPro) {
         config.imageConfig.imageSize = resolution;
-        // Only enable search if strictly needed and NO reference image (to avoid conflict)
         if (useSearch && !refImagePart) {
             config.tools = [{ googleSearch: {} }];
         }
@@ -313,17 +325,19 @@ export const editImageWithInstructions = async (
   mimeType: string = "image/jpeg",
   styleRefBase64?: string
 ): Promise<string | null> => {
-  // Editing always uses Flash Image for best "Instruction-following" on pixels
-  // unless we specifically want to reimagine the image.
-  // For now, sticking to Flash Image as it's the most stable "Editor".
   try {
     const ai = await getAiClient();
     const model = 'gemini-2.5-flash-image'; 
     
-    const parts: any[] = [{ inlineData: { data: imageBase64, mimeType: mimeType } }];
+    // Optimize input for edit too
+    const cleanMain = cleanBase64(imageBase64);
+    
+    const parts: any[] = [{ inlineData: { data: cleanMain, mimeType: mimeType } }];
     let instructionText = `Edit this image. Instruction: ${prompt}`;
+    
     if (styleRefBase64) {
-        parts.push({ inlineData: { data: styleRefBase64, mimeType: 'image/jpeg' } });
+        const cleanStyle = cleanBase64(styleRefBase64);
+        parts.push({ inlineData: { data: cleanStyle, mimeType: 'image/jpeg' } });
         instructionText += ` Use the second image as a style reference.`;
     }
     parts.push({ text: instructionText });

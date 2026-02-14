@@ -26,6 +26,7 @@ if (R2_ENDPOINT && R2_ACCESS_KEY_ID && R2_SECRET_ACCESS_KEY) {
         console.log("[System] Cloudflare R2 Client Initialized.");
     } catch (e) {
         console.error("Failed to initialize R2 Client", e);
+        s3Client = null;
     }
 } else {
     console.warn("[System] Missing R2 Configuration. Images will fall back to Local Storage.");

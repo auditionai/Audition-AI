@@ -36,14 +36,14 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
 
   // Default Fallback Showcase Items (If no shared images exist)
   const defaultShowcaseItems = useMemo(() => [
-    { title: "CYBERPUNK", author: "@NeoArtist", img: "https://picsum.photos/400/600?random=10", border: "border-audi-pink" },
-    { title: "FANTASY", author: "@DragonSlayer", img: "https://picsum.photos/400/600?random=11", border: "border-audi-purple" },
-    { title: "VINTAGE", author: "@ClassicVibe", img: "https://picsum.photos/400/600?random=12", border: "border-audi-cyan" },
-    { title: "CHIBI", author: "@KawaiiMode", img: "https://picsum.photos/400/600?random=13", border: "border-audi-lime" },
-    { title: "MECHA", author: "@BotMaker", img: "https://picsum.photos/400/600?random=14", border: "border-audi-pink" },
-    { title: "REALISTIC", author: "@PhotoGenius", img: "https://picsum.photos/400/600?random=15", border: "border-audi-purple" },
-    { title: "ANIME", author: "@OtakuKing", img: "https://picsum.photos/400/600?random=16", border: "border-audi-cyan" },
-    { title: "PIXEL", author: "@RetroGamer", img: "https://picsum.photos/400/600?random=17", border: "border-audi-lime" },
+    { author: "@NeoArtist", img: "https://picsum.photos/400/600?random=10", border: "border-audi-pink" },
+    { author: "@DragonSlayer", img: "https://picsum.photos/400/600?random=11", border: "border-audi-purple" },
+    { author: "@ClassicVibe", img: "https://picsum.photos/400/600?random=12", border: "border-audi-cyan" },
+    { author: "@KawaiiMode", img: "https://picsum.photos/400/600?random=13", border: "border-audi-lime" },
+    { author: "@BotMaker", img: "https://picsum.photos/400/600?random=14", border: "border-audi-pink" },
+    { author: "@PhotoGenius", img: "https://picsum.photos/400/600?random=15", border: "border-audi-purple" },
+    { author: "@OtakuKing", img: "https://picsum.photos/400/600?random=16", border: "border-audi-cyan" },
+    { author: "@RetroGamer", img: "https://picsum.photos/400/600?random=17", border: "border-audi-lime" },
   ], []);
 
   // Load Data
@@ -62,8 +62,7 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
               const borderColors = ["border-audi-pink", "border-audi-purple", "border-audi-cyan", "border-audi-lime"];
               
               const mappedImages = sharedImages.map((img, index) => ({
-                  title: (img.toolName || "AI ART").toUpperCase(),
-                  author: `@${img.userName || 'Creator'}`,
+                  author: `@${img.userName || 'Artist'}`,
                   img: img.url,
                   border: borderColors[index % borderColors.length]
               }));
@@ -683,14 +682,19 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
 const ShowcaseCard = ({ item }: { item: any }) => (
     <div className="group relative w-64 h-96 md:w-80 md:h-[500px] shrink-0 cursor-pointer overflow-hidden rounded-[2rem] border-2 border-transparent hover:border-white/50 transition-all duration-300">
         <div className={`absolute inset-0 bg-black rounded-[2rem] border-2 ${item.border} transition-transform duration-500 z-10 overflow-hidden`}>
-            <img src={item.img} className="w-full h-full object-cover opacity-70 group-hover:opacity-100 transition-opacity duration-500 scale-110 group-hover:scale-100" alt={item.title} />
+            <img src={item.img} className="w-full h-full object-cover opacity-70 group-hover:opacity-100 transition-opacity duration-500 scale-110 group-hover:scale-100" alt={item.author} />
             <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-90"></div>
             
             <div className="absolute bottom-0 left-0 right-0 p-6 transform translate-y-2 group-hover:translate-y-0 transition-transform duration-300">
-                <h3 className="font-game text-2xl font-bold text-white italic leading-none mb-1 drop-shadow-lg truncate">{item.title}</h3>
-                <div className="flex items-center gap-2 mt-2">
-                    <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-slate-700 to-slate-600 border border-white/20"></div>
-                    <span className="text-xs text-slate-300 font-bold tracking-wider">{item.author}</span>
+                {/* Modified Author Section to stand out more since title is gone */}
+                <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-slate-800 to-slate-900 border border-white/20 flex items-center justify-center shadow-lg">
+                         <Icons.User className="w-4 h-4 text-slate-400" />
+                    </div>
+                    <div className="flex flex-col">
+                        <span className="text-lg font-game font-bold text-white italic tracking-wider drop-shadow-md">{item.author}</span>
+                        <span className="text-[9px] text-audi-cyan font-bold uppercase tracking-[0.2em]">Creator</span>
+                    </div>
                 </div>
             </div>
 

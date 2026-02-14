@@ -1,9 +1,9 @@
 
 import { S3Client } from "@aws-sdk/client-s3";
 
-// Ensure env vars are loaded (Vite or Process)
+// Ensure env vars are loaded safely
 const metaEnv = (import.meta as any).env || {};
-const processEnv = window.process?.env || {};
+const processEnv = typeof window !== 'undefined' && window.process ? window.process.env : {};
 
 const R2_ENDPOINT = metaEnv.VITE_R2_ENDPOINT || processEnv.VITE_R2_ENDPOINT;
 const R2_ACCESS_KEY_ID = metaEnv.VITE_R2_ACCESS_KEY_ID || processEnv.VITE_R2_ACCESS_KEY_ID;
@@ -13,8 +13,8 @@ export const R2_PUBLIC_DOMAIN = metaEnv.VITE_R2_PUBLIC_DOMAIN || processEnv.VITE
 
 let s3Client: S3Client | null = null;
 
-if (R2_ENDPOINT && R2_ACCESS_KEY_ID && R2_SECRET_ACCESS_KEY) {
-    try {
+try {
+    if (R2_ENDPOINT && R2_ACCESS_KEY_ID && R2_SECRET_ACCESS_KEY) {
         s3Client = new S3Client({
             region: "auto",
             endpoint: R2_ENDPOINT,
@@ -23,13 +23,11 @@ if (R2_ENDPOINT && R2_ACCESS_KEY_ID && R2_SECRET_ACCESS_KEY) {
                 secretAccessKey: R2_SECRET_ACCESS_KEY,
             },
         });
-        console.log("[System] Cloudflare R2 Client Initialized.");
-    } catch (e) {
-        console.error("Failed to initialize R2 Client", e);
-        s3Client = null;
+        console.log("[System] R2 Client Ready.");
     }
-} else {
-    console.warn("[System] Missing R2 Configuration. Images will fall back to Local Storage.");
+} catch (e) {
+    console.warn("[System] R2 Client Failed to Init (Safe Mode):", e);
+    s3Client = null;
 }
 
 export const r2Client = s3Client;

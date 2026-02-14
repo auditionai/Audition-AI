@@ -543,7 +543,281 @@ CREATE POLICY "Enable all access for gift codes" ON public.gift_codes FOR ALL US
               </div>
           )}
 
-          {/* ... (Keep Transactions, Users, Packages) ... */}
+          {/* ================= VIEW: TRANSACTIONS ================= */}
+          {activeView === 'transactions' && (
+              <div className="space-y-6 animate-slide-in-right">
+                  <div className="flex justify-between items-center">
+                      <h2 className="text-2xl font-bold text-white">Quản Lý Giao Dịch Nạp Tiền</h2>
+                      <div className="flex gap-2">
+                           <button onClick={refreshData} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm font-bold text-white flex items-center gap-2">
+                              <Icons.Clock className="w-4 h-4" /> Làm mới
+                           </button>
+                      </div>
+                  </div>
+
+                  <div className="bg-[#12121a] border border-white/10 rounded-2xl overflow-hidden">
+                      <table className="w-full text-left text-sm text-slate-400">
+                          <thead className="bg-black/30 text-xs font-bold text-slate-300 uppercase">
+                              <tr>
+                                  <th className="px-6 py-4">Thời gian</th>
+                                  <th className="px-6 py-4">Mã đơn</th>
+                                  <th className="px-6 py-4">User ID</th>
+                                  <th className="px-6 py-4">Gói nạp</th>
+                                  <th className="px-6 py-4 text-right">Số tiền</th>
+                                  <th className="px-6 py-4">Trạng thái</th>
+                                  <th className="px-6 py-4 text-right">Hành động</th>
+                              </tr>
+                          </thead>
+                          <tbody className="divide-y divide-white/5">
+                              {transactions.length === 0 ? (
+                                  <tr><td colSpan={7} className="text-center py-8">Chưa có giao dịch nào.</td></tr>
+                              ) : transactions.map(tx => (
+                                  <tr key={tx.id} className="hover:bg-white/5">
+                                      <td className="px-6 py-4 text-xs font-mono">{new Date(tx.createdAt).toLocaleString()}</td>
+                                      <td className="px-6 py-4 font-mono font-bold text-white">{tx.code}</td>
+                                      <td className="px-6 py-4 text-xs font-mono text-slate-500" title={tx.userId}>{tx.userId.substring(0,8)}...</td>
+                                      <td className="px-6 py-4 text-audi-pink font-bold">+{tx.coins} Vcoin</td>
+                                      <td className="px-6 py-4 text-right font-bold text-white">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(tx.amount)}</td>
+                                      <td className="px-6 py-4">
+                                          <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${
+                                              tx.status === 'paid' ? 'bg-green-500/20 text-green-500' : 
+                                              tx.status === 'pending' ? 'bg-yellow-500/20 text-yellow-500' : 'bg-red-500/20 text-red-500'
+                                          }`}>
+                                              {tx.status}
+                                          </span>
+                                      </td>
+                                      <td className="px-6 py-4 text-right">
+                                          {tx.status === 'pending' && (
+                                              <div className="flex justify-end gap-2">
+                                                  <button onClick={() => handleApproveTransaction(tx.id)} className="p-2 bg-green-500/20 text-green-500 rounded hover:bg-green-500 hover:text-white" title="Duyệt">
+                                                      <Icons.Check className="w-4 h-4" />
+                                                  </button>
+                                                  <button onClick={() => handleRejectTransaction(tx.id)} className="p-2 bg-red-500/20 text-red-500 rounded hover:bg-red-500 hover:text-white" title="Hủy">
+                                                      <Icons.X className="w-4 h-4" />
+                                                  </button>
+                                              </div>
+                                          )}
+                                      </td>
+                                  </tr>
+                              ))}
+                          </tbody>
+                      </table>
+                  </div>
+              </div>
+          )}
+
+          {/* ================= VIEW: USERS ================= */}
+          {activeView === 'users' && (
+              <div className="space-y-6 animate-slide-in-right">
+                  <div className="flex justify-between items-center">
+                      <h2 className="text-2xl font-bold text-white">Danh Sách Người Dùng</h2>
+                      <div className="flex items-center gap-2 bg-white/5 rounded-xl border border-white/10 px-3 py-2 w-64">
+                          <Icons.Search className="w-4 h-4 text-slate-500" />
+                          <input 
+                              type="text" 
+                              placeholder="Tìm email..." 
+                              value={userSearchEmail}
+                              onChange={(e) => setUserSearchEmail(e.target.value)}
+                              className="bg-transparent border-none outline-none text-sm text-white w-full placeholder-slate-500"
+                          />
+                      </div>
+                  </div>
+
+                  <div className="bg-[#12121a] border border-white/10 rounded-2xl overflow-hidden">
+                      <table className="w-full text-left text-sm text-slate-400">
+                          <thead className="bg-black/30 text-xs font-bold text-slate-300 uppercase">
+                              <tr>
+                                  <th className="px-6 py-4">User</th>
+                                  <th className="px-6 py-4">Số dư</th>
+                                  <th className="px-6 py-4">Vai trò</th>
+                                  <th className="px-6 py-4">Ngày tham gia</th>
+                                  <th className="px-6 py-4 text-right">Hành động</th>
+                              </tr>
+                          </thead>
+                          <tbody className="divide-y divide-white/5">
+                              {stats?.usersList
+                                  .filter((u: any) => u.email.toLowerCase().includes(userSearchEmail.toLowerCase()))
+                                  .map((u: UserProfile) => (
+                                  <tr key={u.id} className="hover:bg-white/5">
+                                      <td className="px-6 py-4">
+                                          <div className="flex items-center gap-3">
+                                              <img src={u.avatar} className="w-8 h-8 rounded-full border border-white/10" onError={(e) => (e.currentTarget.src = 'https://picsum.photos/100/100')} />
+                                              <div>
+                                                  <div className="font-bold text-white">{u.username}</div>
+                                                  <div className="text-xs text-slate-500">{u.email}</div>
+                                              </div>
+                                          </div>
+                                      </td>
+                                      <td className="px-6 py-4 text-audi-yellow font-bold font-mono">{u.balance}</td>
+                                      <td className="px-6 py-4">
+                                          <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${u.role === 'admin' ? 'bg-red-500/20 text-red-500' : 'bg-blue-500/20 text-blue-500'}`}>
+                                              {u.role}
+                                          </span>
+                                      </td>
+                                      <td className="px-6 py-4 text-xs font-mono">{u.lastCheckin ? new Date(u.lastCheckin).toLocaleDateString() : 'N/A'}</td>
+                                      <td className="px-6 py-4 text-right">
+                                          <button 
+                                              onClick={() => setEditingUser(u)} 
+                                              className="text-xs font-bold text-audi-cyan hover:text-white bg-audi-cyan/10 hover:bg-audi-cyan/30 px-3 py-1.5 rounded transition-colors"
+                                          >
+                                              Sửa
+                                          </button>
+                                      </td>
+                                  </tr>
+                              ))}
+                          </tbody>
+                      </table>
+                  </div>
+                  
+                  {/* EDIT USER MODAL */}
+                  {editingUser && (
+                      <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                          <div className="bg-[#12121a] w-full max-w-md p-6 rounded-2xl border border-white/20 shadow-2xl">
+                              <h3 className="text-xl font-bold text-white mb-4">Sửa Người Dùng</h3>
+                              <div className="space-y-4 mb-6">
+                                  <div>
+                                      <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Tên hiển thị</label>
+                                      <input 
+                                          value={editingUser.username} 
+                                          onChange={e => setEditingUser({...editingUser, username: e.target.value})}
+                                          className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white" 
+                                      />
+                                  </div>
+                                  <div>
+                                      <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Số dư Vcoin</label>
+                                      <input 
+                                          type="number" 
+                                          value={editingUser.balance} 
+                                          onChange={e => setEditingUser({...editingUser, balance: Number(e.target.value)})}
+                                          className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-audi-yellow font-bold" 
+                                      />
+                                  </div>
+                                  <div>
+                                      <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Ảnh đại diện URL</label>
+                                      <input 
+                                          value={editingUser.avatar} 
+                                          onChange={e => setEditingUser({...editingUser, avatar: e.target.value})}
+                                          className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-slate-300 text-xs font-mono" 
+                                      />
+                                  </div>
+                              </div>
+                              <div className="flex gap-3">
+                                  <button onClick={() => setEditingUser(null)} className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-bold">Hủy</button>
+                                  <button onClick={handleSaveUser} className="flex-1 py-3 rounded-xl bg-audi-pink hover:bg-pink-600 text-white font-bold">Lưu</button>
+                              </div>
+                          </div>
+                      </div>
+                  )}
+              </div>
+          )}
+
+          {/* ================= VIEW: PACKAGES ================= */}
+          {activeView === 'packages' && (
+              <div className="space-y-6 animate-slide-in-right">
+                  <div className="flex justify-between items-center">
+                      <h2 className="text-2xl font-bold text-white">Cấu Hình Gói Nạp</h2>
+                      <button 
+                          onClick={() => setEditingPackage({
+                              id: `temp_${Date.now()}`, name: 'Gói Mới', coin: 100, price: 50000, currency: 'VND', bonusText: '', bonusPercent: 0, isPopular: false, isActive: true, displayOrder: packages.length, colorTheme: 'border-slate-600', transferContent: 'NAP 50K'
+                          })}
+                          className="px-4 py-2 bg-audi-pink text-white rounded-lg font-bold flex items-center gap-2 hover:bg-pink-600"
+                      >
+                          <Icons.Plus className="w-4 h-4" /> Thêm Gói
+                      </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4">
+                      {packages.map((pkg, idx) => (
+                          <div key={pkg.id} className="bg-[#12121a] border border-white/10 rounded-xl p-4 flex items-center justify-between group hover:border-white/30 transition-all">
+                              <div className="flex items-center gap-4">
+                                  <div className="flex flex-col gap-1 pr-4 border-r border-white/10">
+                                      <button onClick={() => handleMovePackage(idx, -1)} disabled={idx === 0} className="p-1 hover:bg-white/10 rounded text-slate-500 disabled:opacity-30"><Icons.ArrowUp className="w-3 h-3" /></button>
+                                      <button onClick={() => handleMovePackage(idx, 1)} disabled={idx === packages.length - 1} className="p-1 hover:bg-white/10 rounded text-slate-500 disabled:opacity-30"><Icons.ArrowUp className="w-3 h-3 rotate-180" /></button>
+                                  </div>
+                                  <div className={`w-10 h-10 rounded-full border-2 ${pkg.colorTheme} flex items-center justify-center bg-black/50`}>
+                                      <Icons.Gem className="w-5 h-5 text-white" />
+                                  </div>
+                                  <div>
+                                      <h4 className="font-bold text-white flex items-center gap-2">
+                                          {pkg.name}
+                                          {!pkg.isActive && <span className="text-[9px] bg-red-500 text-white px-1.5 py-0.5 rounded">HIDDEN</span>}
+                                          {pkg.isPopular && <span className="text-[9px] bg-audi-pink text-white px-1.5 py-0.5 rounded">HOT</span>}
+                                      </h4>
+                                      <div className="flex gap-3 text-xs text-slate-400">
+                                          <span>Giá: <b className="text-green-400">{pkg.price.toLocaleString()}đ</b></span>
+                                          <span>Vcoin: <b className="text-audi-yellow">{pkg.coin}</b></span>
+                                          {pkg.bonusPercent > 0 && <span className="text-audi-pink">Bonus: +{pkg.bonusPercent}%</span>}
+                                      </div>
+                                  </div>
+                              </div>
+                              <div className="flex gap-2 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <button onClick={() => setEditingPackage(pkg)} className="p-2 bg-blue-500/20 text-blue-500 rounded hover:bg-blue-500 hover:text-white"><Icons.Settings className="w-4 h-4" /></button>
+                                  <button onClick={() => handleDeletePackage(pkg.id)} className="p-2 bg-red-500/20 text-red-500 rounded hover:bg-red-500 hover:text-white"><Icons.Trash className="w-4 h-4" /></button>
+                              </div>
+                          </div>
+                      ))}
+                  </div>
+
+                  {/* EDIT PACKAGE MODAL */}
+                  {editingPackage && (
+                      <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                          <div className="bg-[#12121a] w-full max-w-lg p-6 rounded-2xl border border-white/20 shadow-2xl flex flex-col max-h-[90vh] overflow-y-auto">
+                              <h3 className="text-xl font-bold text-white mb-6">
+                                  {editingPackage.id.startsWith('temp_') ? 'Thêm Gói Mới' : 'Sửa Gói Nạp'}
+                              </h3>
+                              <div className="space-y-4 mb-6">
+                                  <div className="grid grid-cols-2 gap-4">
+                                      <div>
+                                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Tên gói</label>
+                                          <input value={editingPackage.name} onChange={e => setEditingPackage({...editingPackage, name: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white" />
+                                      </div>
+                                      <div>
+                                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Tag (VD: Mới)</label>
+                                          <input value={editingPackage.bonusText} onChange={e => setEditingPackage({...editingPackage, bonusText: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white" />
+                                      </div>
+                                  </div>
+                                  <div className="grid grid-cols-2 gap-4">
+                                      <div>
+                                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Giá (VND)</label>
+                                          <input type="number" value={editingPackage.price} onChange={e => setEditingPackage({...editingPackage, price: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-green-400 font-bold" />
+                                      </div>
+                                      <div>
+                                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Vcoin nhận</label>
+                                          <input type="number" value={editingPackage.coin} onChange={e => setEditingPackage({...editingPackage, coin: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-audi-yellow font-bold" />
+                                      </div>
+                                  </div>
+                                  <div>
+                                      <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">% Bonus thêm (Mặc định)</label>
+                                      <div className="relative">
+                                          <input type="number" value={editingPackage.bonusPercent} onChange={e => setEditingPackage({...editingPackage, bonusPercent: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-audi-pink font-bold pl-3" />
+                                          <span className="absolute right-3 top-3.5 text-xs text-slate-500 font-bold">%</span>
+                                      </div>
+                                  </div>
+                                  <div>
+                                      <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Cú pháp chuyển khoản</label>
+                                      <input value={editingPackage.transferContent} onChange={e => setEditingPackage({...editingPackage, transferContent: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-mono" />
+                                  </div>
+                                  <div className="flex gap-4 pt-2">
+                                      <label className="flex items-center gap-2 cursor-pointer bg-white/5 p-3 rounded-xl border border-white/10 flex-1 hover:bg-white/10 transition-colors">
+                                          <input type="checkbox" checked={editingPackage.isPopular} onChange={e => setEditingPackage({...editingPackage, isPopular: e.target.checked})} className="accent-audi-pink w-4 h-4" />
+                                          <span className="text-sm font-bold text-white">Gói HOT (Nổi bật)</span>
+                                      </label>
+                                      <label className="flex items-center gap-2 cursor-pointer bg-white/5 p-3 rounded-xl border border-white/10 flex-1 hover:bg-white/10 transition-colors">
+                                          <input type="checkbox" checked={editingPackage.isActive} onChange={e => setEditingPackage({...editingPackage, isActive: e.target.checked})} className="accent-green-500 w-4 h-4" />
+                                          <span className="text-sm font-bold text-white">Đang bán (Active)</span>
+                                      </label>
+                                  </div>
+                              </div>
+                              <div className="flex gap-3">
+                                  <button onClick={() => setEditingPackage(null)} className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-bold">Hủy</button>
+                                  <button onClick={handleSavePackage} className="flex-1 py-3 rounded-xl bg-audi-pink hover:bg-pink-600 text-white font-bold">Lưu Thay Đổi</button>
+                              </div>
+                          </div>
+                      </div>
+                  )}
+              </div>
+          )}
+
           {/* ================= VIEW: PROMOTION CAMPAIGNS ================= */}
           {activeView === 'promotion' && (
               <div className="space-y-6 animate-slide-in-right">
@@ -698,6 +972,127 @@ CREATE POLICY "Enable all access for gift codes" ON public.gift_codes FOR ALL US
                                   <button onClick={handleSavePromotion} className="flex-1 py-3 rounded-xl bg-audi-pink hover:bg-pink-600 text-white font-bold shadow-lg transition-all">
                                       Lưu Chiến Dịch
                                   </button>
+                              </div>
+                          </div>
+                      </div>
+                  )}
+              </div>
+          )}
+
+          {/* ================= VIEW: GIFTCODES ================= */}
+          {activeView === 'giftcodes' && (
+              <div className="space-y-6 animate-slide-in-right">
+                  <div className="flex justify-between items-center">
+                      <h2 className="text-2xl font-bold text-white">Quản Lý Giftcode</h2>
+                      <button 
+                          onClick={() => setEditingGiftcode({
+                              id: `temp_${Date.now()}`, code: '', reward: 10, totalLimit: 100, usedCount: 0, maxPerUser: 1, isActive: true
+                          })}
+                          className="px-4 py-2 bg-audi-pink text-white rounded-lg font-bold flex items-center gap-2 hover:bg-pink-600"
+                      >
+                          <Icons.Plus className="w-4 h-4" /> Tạo Code
+                      </button>
+                  </div>
+
+                  <div className="bg-[#12121a] border border-white/10 rounded-2xl overflow-hidden">
+                      <table className="w-full text-left text-sm text-slate-400">
+                          <thead className="bg-black/30 text-xs font-bold text-slate-300 uppercase">
+                              <tr>
+                                  <th className="px-6 py-4">Mã Code</th>
+                                  <th className="px-6 py-4">Phần thưởng</th>
+                                  <th className="px-6 py-4">Sử dụng</th>
+                                  <th className="px-6 py-4">Trạng thái</th>
+                                  <th className="px-6 py-4 text-right">Hành động</th>
+                              </tr>
+                          </thead>
+                          <tbody className="divide-y divide-white/5">
+                              {giftcodes.length === 0 ? (
+                                  <tr><td colSpan={5} className="text-center py-8">Chưa có Giftcode nào.</td></tr>
+                              ) : giftcodes.map(code => (
+                                  <tr key={code.id} className="hover:bg-white/5">
+                                      <td className="px-6 py-4 font-mono font-bold text-white">{code.code}</td>
+                                      <td className="px-6 py-4 text-audi-yellow font-bold">+{code.reward} Vcoin</td>
+                                      <td className="px-6 py-4">
+                                          <div className="flex items-center gap-2">
+                                              <span className="font-mono">{code.usedCount}/{code.totalLimit}</span>
+                                              <div className="w-16 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                                                  <div className="h-full bg-green-500" style={{ width: `${Math.min(100, (code.usedCount / code.totalLimit) * 100)}%` }}></div>
+                                              </div>
+                                          </div>
+                                      </td>
+                                      <td className="px-6 py-4">
+                                          {code.isActive ? (
+                                              <span className="text-green-500 text-[10px] font-bold border border-green-500/20 px-2 py-1 rounded">ACTIVE</span>
+                                          ) : (
+                                              <span className="text-red-500 text-[10px] font-bold border border-red-500/20 px-2 py-1 rounded">INACTIVE</span>
+                                          )}
+                                      </td>
+                                      <td className="px-6 py-4 text-right">
+                                          <div className="flex justify-end gap-2">
+                                              <button onClick={() => setEditingGiftcode(code)} className="p-2 bg-blue-500/20 text-blue-500 rounded hover:bg-blue-500 hover:text-white"><Icons.Settings className="w-4 h-4" /></button>
+                                              <button onClick={() => handleDeleteGiftcode(code.id)} className="p-2 bg-red-500/20 text-red-500 rounded hover:bg-red-500 hover:text-white"><Icons.Trash className="w-4 h-4" /></button>
+                                          </div>
+                                      </td>
+                                  </tr>
+                              ))}
+                          </tbody>
+                      </table>
+                  </div>
+
+                  {/* EDIT GIFTCODE MODAL */}
+                  {editingGiftcode && (
+                      <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                          <div className="bg-[#12121a] w-full max-w-md p-6 rounded-2xl border border-white/20 shadow-2xl">
+                              <h3 className="text-xl font-bold text-white mb-6">
+                                  {editingGiftcode.id.startsWith('temp_') ? 'Tạo Giftcode' : 'Sửa Giftcode'}
+                              </h3>
+                              <div className="space-y-4 mb-6">
+                                  <div>
+                                      <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Mã Code (Tự động in hoa)</label>
+                                      <input 
+                                          value={editingGiftcode.code} 
+                                          onChange={e => setEditingGiftcode({...editingGiftcode, code: e.target.value.toUpperCase()})}
+                                          className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-mono font-bold" 
+                                          placeholder="Vd: CHAOMUNG"
+                                      />
+                                  </div>
+                                  <div>
+                                      <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Phần thưởng (Vcoin)</label>
+                                      <input 
+                                          type="number" 
+                                          value={editingGiftcode.reward} 
+                                          onChange={e => setEditingGiftcode({...editingGiftcode, reward: Number(e.target.value)})}
+                                          className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-audi-yellow font-bold" 
+                                      />
+                                  </div>
+                                  <div className="grid grid-cols-2 gap-4">
+                                      <div>
+                                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Giới hạn tổng</label>
+                                          <input 
+                                              type="number" 
+                                              value={editingGiftcode.totalLimit} 
+                                              onChange={e => setEditingGiftcode({...editingGiftcode, totalLimit: Number(e.target.value)})}
+                                              className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white" 
+                                          />
+                                      </div>
+                                      <div>
+                                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Max/Người</label>
+                                          <input 
+                                              type="number" 
+                                              value={editingGiftcode.maxPerUser} 
+                                              onChange={e => setEditingGiftcode({...editingGiftcode, maxPerUser: Number(e.target.value)})}
+                                              className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white" 
+                                          />
+                                      </div>
+                                  </div>
+                                  <label className="flex items-center gap-2 cursor-pointer bg-white/5 p-3 rounded-xl border border-white/10 hover:bg-white/10 transition-colors mt-2">
+                                      <input type="checkbox" checked={editingGiftcode.isActive} onChange={e => setEditingGiftcode({...editingGiftcode, isActive: e.target.checked})} className="accent-green-500 w-4 h-4" />
+                                      <span className="text-sm font-bold text-white">Kích hoạt ngay</span>
+                                  </label>
+                              </div>
+                              <div className="flex gap-3">
+                                  <button onClick={() => setEditingGiftcode(null)} className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-bold">Hủy</button>
+                                  <button onClick={handleSaveGiftcode} className="flex-1 py-3 rounded-xl bg-audi-pink hover:bg-pink-600 text-white font-bold">Lưu Code</button>
                               </div>
                           </div>
                       </div>

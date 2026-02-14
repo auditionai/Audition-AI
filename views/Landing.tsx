@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Icons } from '../components/Icons';
 import { signInWithGoogle } from '../services/supabaseClient';
 import { getPackages, getActivePromotion } from '../services/economyService';
+import { getShowcaseImages } from '../services/storageService'; // Import storage service
 import { CreditPackage, PromotionCampaign } from '../types';
 
 interface LandingProps {
@@ -20,6 +21,9 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
   const [packages, setPackages] = useState<CreditPackage[]>([]);
   const [activePromo, setActivePromo] = useState<PromotionCampaign | null>(null);
   
+  // Showcase Data
+  const [displayShowcase, setDisplayShowcase] = useState<any[]>([]);
+
   // Timer for Flash Sale
   const [timeLeft, setTimeLeft] = useState({ d: 0, h: 0, m: 0, s: 0 });
 
@@ -30,17 +34,52 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
     visits: 10559
   });
 
-  // Load Admin Configs
+  // Default Fallback Showcase Items (If no shared images exist)
+  const defaultShowcaseItems = useMemo(() => [
+    { title: "CYBERPUNK", author: "@NeoArtist", img: "https://picsum.photos/400/600?random=10", border: "border-audi-pink" },
+    { title: "FANTASY", author: "@DragonSlayer", img: "https://picsum.photos/400/600?random=11", border: "border-audi-purple" },
+    { title: "VINTAGE", author: "@ClassicVibe", img: "https://picsum.photos/400/600?random=12", border: "border-audi-cyan" },
+    { title: "CHIBI", author: "@KawaiiMode", img: "https://picsum.photos/400/600?random=13", border: "border-audi-lime" },
+    { title: "MECHA", author: "@BotMaker", img: "https://picsum.photos/400/600?random=14", border: "border-audi-pink" },
+    { title: "REALISTIC", author: "@PhotoGenius", img: "https://picsum.photos/400/600?random=15", border: "border-audi-purple" },
+    { title: "ANIME", author: "@OtakuKing", img: "https://picsum.photos/400/600?random=16", border: "border-audi-cyan" },
+    { title: "PIXEL", author: "@RetroGamer", img: "https://picsum.photos/400/600?random=17", border: "border-audi-lime" },
+  ], []);
+
+  // Load Data
   useEffect(() => {
       const fetchData = async () => {
-          // Get packages (Removed slice limit to show all packages like 10, 20, 50, 100...)
+          // 1. Get packages & promo
           const pkgs = await getPackages();
           const promo = await getActivePromotion();
           setPackages(pkgs); 
           setActivePromo(promo);
+
+          // 2. Get Shared Images for Showcase
+          const sharedImages = await getShowcaseImages();
+          
+          if (sharedImages && sharedImages.length > 0) {
+              const borderColors = ["border-audi-pink", "border-audi-purple", "border-audi-cyan", "border-audi-lime"];
+              
+              const mappedImages = sharedImages.map((img, index) => ({
+                  title: (img.toolName || "AI ART").toUpperCase(),
+                  author: `@${img.userName || 'Creator'}`,
+                  img: img.url,
+                  border: borderColors[index % borderColors.length]
+              }));
+
+              // If less than 5 images, mix with default to fill the marquee
+              if (mappedImages.length < 5) {
+                  setDisplayShowcase([...mappedImages, ...defaultShowcaseItems.slice(0, 8 - mappedImages.length)]);
+              } else {
+                  setDisplayShowcase(mappedImages);
+              }
+          } else {
+              setDisplayShowcase(defaultShowcaseItems);
+          }
       };
       fetchData();
-  }, []);
+  }, [defaultShowcaseItems]);
 
   // Update Countdown Timer based on Campaign End Time
   useEffect(() => {
@@ -134,18 +173,6 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
       }
       return "🎉 Sự kiện Khai Trương: Miễn phí 50 lượt tạo ảnh cho thành viên mới! 💎 Nạp Vcoin lần đầu x2 giá trị";
   };
-
-  // Expanded Showcase Data
-  const showcaseItems = [
-    { title: "CYBERPUNK", author: "@NeoArtist", img: "https://picsum.photos/400/600?random=10", border: "border-audi-pink" },
-    { title: "FANTASY", author: "@DragonSlayer", img: "https://picsum.photos/400/600?random=11", border: "border-audi-purple" },
-    { title: "VINTAGE", author: "@ClassicVibe", img: "https://picsum.photos/400/600?random=12", border: "border-audi-cyan" },
-    { title: "CHIBI", author: "@KawaiiMode", img: "https://picsum.photos/400/600?random=13", border: "border-audi-lime" },
-    { title: "MECHA", author: "@BotMaker", img: "https://picsum.photos/400/600?random=14", border: "border-audi-pink" },
-    { title: "REALISTIC", author: "@PhotoGenius", img: "https://picsum.photos/400/600?random=15", border: "border-audi-purple" },
-    { title: "ANIME", author: "@OtakuKing", img: "https://picsum.photos/400/600?random=16", border: "border-audi-cyan" },
-    { title: "PIXEL", author: "@RetroGamer", img: "https://picsum.photos/400/600?random=17", border: "border-audi-lime" },
-  ];
 
   return (
     <div 
@@ -363,7 +390,7 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
          </div>
       </div>
 
-      {/* --- AI SHOWCASE --- */}
+      {/* --- AI SHOWCASE (SYNCED) --- */}
       <div className="py-16 md:py-24 relative z-20 bg-gradient-to-b from-[#090014] to-[#120024] overflow-hidden">
           <div className="max-w-7xl mx-auto px-6 mb-8 md:mb-12">
               <div className="flex flex-col md:flex-row items-end justify-between gap-4">
@@ -380,8 +407,8 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
               <div className="absolute top-0 left-0 bottom-0 w-12 md:w-32 bg-gradient-to-r from-[#090014] to-transparent z-10 pointer-events-none"></div>
               <div className="absolute top-0 right-0 bottom-0 w-12 md:w-32 bg-gradient-to-l from-[#090014] to-transparent z-10 pointer-events-none"></div>
               <div className="flex w-max animate-marquee pause-on-hover gap-6 px-6">
-                   {showcaseItems.map((item, i) => <ShowcaseCard key={`s1-${i}`} item={item} />)}
-                   {showcaseItems.map((item, i) => <ShowcaseCard key={`s2-${i}`} item={item} />)}
+                   {displayShowcase.map((item, i) => <ShowcaseCard key={`s1-${i}`} item={item} />)}
+                   {displayShowcase.map((item, i) => <ShowcaseCard key={`s2-${i}`} item={item} />)}
               </div>
           </div>
       </div>
@@ -660,7 +687,7 @@ const ShowcaseCard = ({ item }: { item: any }) => (
             <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-90"></div>
             
             <div className="absolute bottom-0 left-0 right-0 p-6 transform translate-y-2 group-hover:translate-y-0 transition-transform duration-300">
-                <h3 className="font-game text-2xl font-bold text-white italic leading-none mb-1 drop-shadow-lg">{item.title}</h3>
+                <h3 className="font-game text-2xl font-bold text-white italic leading-none mb-1 drop-shadow-lg truncate">{item.title}</h3>
                 <div className="flex items-center gap-2 mt-2">
                     <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-slate-700 to-slate-600 border border-white/20"></div>
                     <span className="text-xs text-slate-300 font-bold tracking-wider">{item.author}</span>

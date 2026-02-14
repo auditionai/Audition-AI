@@ -42,11 +42,12 @@ interface CharacterData {
 const generateSprite = async (char: CharacterData, stylePrompt: string): Promise<string | null> => {
     try {
         const ai = await getAiClient();
-        const model = 'gemini-2.5-flash'; // Fast model for sprites
+        // FIX: Must use an IMAGE GENERATION model, not a text model.
+        const model = 'gemini-2.5-flash-image'; 
         
         const parts: any[] = [];
         
-        // Input Image (Face/Body)
+        // Input Image (Face/Body) - Used for img2img guidance
         if (char.image) {
             parts.push({ inlineData: { mimeType: 'image/jpeg', data: char.image } });
         }
@@ -89,7 +90,8 @@ const generateSprite = async (char: CharacterData, stylePrompt: string): Promise
 export const analyzeCharacterVisuals = async (base64Image: string, gender: string): Promise<string> => {
     try {
         const ai = await getAiClient();
-        const model = 'gemini-2.5-flash'; 
+        // FIX: Use Gemini 3 Flash for better multimodal understanding
+        const model = 'gemini-3-flash-preview'; 
         
         const prompt = `Analyze the person inside the border.
         Target Gender: ${gender}.
@@ -148,7 +150,12 @@ export const generateImage = async (
         const sprites = await Promise.all(spritePromises);
         
         const validSprites = sprites.filter(s => s.sprite !== null);
-        if (validSprites.length === 0) throw new Error("Failed to generate character sprites.");
+        
+        // CRITICAL CHECK: If Sprite Gen failed (e.g. API Error), stop here.
+        if (validSprites.length === 0) {
+            console.error("All sprite generations failed.");
+            throw new Error("Failed to generate character sprites (Phase 1).");
+        }
 
         if (onProgress) onProgress("Phase 2: Context Assembly (Compositing)...");
 

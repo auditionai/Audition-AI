@@ -55,7 +55,8 @@ import {
   Trash,
   Search,
   Clock,
-  Copy
+  Copy,
+  Scissors
 } from 'lucide-react';
 
 export const Icons = {
@@ -114,5 +115,6 @@ export const Icons = {
   Trash,
   Search,
   Clock,
-  Copy
+  Copy,
+  Scissors
 };

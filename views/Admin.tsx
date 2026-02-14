@@ -803,7 +803,7 @@ CREATE POLICY "Enable all access for gift codes" ON public.gift_codes FOR ALL US
                       <h2 className="text-2xl font-bold text-white">Quản Lý Gói Nạp</h2>
                       <button 
                         onClick={() => setEditingPackage({
-                            id: `temp_${Date.now()}`, name: '', coin: 0, price: 0, currency: 'VND', bonusText: '', colorTheme: 'border-white', transferContent: '', isActive: true
+                            id: `temp_${Date.now()}`, name: '', coin: 0, price: 0, currency: 'VND', bonusText: '', bonusPercent: 0, colorTheme: 'border-white', transferContent: '', isActive: true
                         })}
                         className="px-4 py-2 bg-audi-pink text-white rounded-lg font-bold flex items-center gap-2 hover:bg-pink-600"
                       >
@@ -822,7 +822,10 @@ CREATE POLICY "Enable all access for gift codes" ON public.gift_codes FOR ALL US
                               <h3 className="font-bold text-white text-lg mt-2">{pkg.name}</h3>
                               <div className="text-2xl font-black text-audi-yellow">{pkg.coin} Vcoin</div>
                               <div className="text-sm text-slate-400">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(pkg.price)}</div>
-                              <div className="text-xs text-green-400 font-bold mt-1">{pkg.bonusText}</div>
+                              <div className="flex items-center gap-2 mt-1">
+                                  {pkg.bonusPercent > 0 && <span className="text-[10px] font-bold bg-green-500/20 text-green-400 px-2 py-0.5 rounded border border-green-500/50">+{pkg.bonusPercent}%</span>}
+                                  <span className="text-xs text-slate-500 font-bold">{pkg.bonusText}</span>
+                              </div>
                               <div className="mt-2 text-[10px] bg-white/5 p-2 rounded text-slate-500 font-mono">
                                   Cú pháp: {pkg.transferContent || 'Tự động'}
                               </div>
@@ -853,17 +856,32 @@ CREATE POLICY "Enable all access for gift codes" ON public.gift_codes FOR ALL US
                                       <label className="text-xs font-bold text-slate-400 uppercase">Giá tiền (VND)</label>
                                       <input type="number" value={editingPackage.price} onChange={e => setEditingPackage({...editingPackage, price: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-lg p-3 text-white mt-1" />
                                   </div>
+                                  
+                                  {/* NEW: BONUS CONFIG */}
                                   <div>
-                                      <label className="text-xs font-bold text-slate-400 uppercase">Bonus Text</label>
-                                      <input value={editingPackage.bonusText} onChange={e => setEditingPackage({...editingPackage, bonusText: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-lg p-3 text-white mt-1" placeholder="+10%..." />
+                                      <label className="text-xs font-bold text-slate-400 uppercase">% Khuyến mãi (Permanent)</label>
+                                      <div className="relative mt-1">
+                                          <input 
+                                            type="number" 
+                                            value={editingPackage.bonusPercent} 
+                                            onChange={e => setEditingPackage({...editingPackage, bonusPercent: Number(e.target.value)})} 
+                                            className="w-full bg-black/40 border border-white/10 rounded-lg p-3 text-green-400 font-bold pl-3" 
+                                          />
+                                          <span className="absolute right-3 top-3.5 text-xs text-slate-500 font-bold">%</span>
+                                      </div>
                                   </div>
+                                  <div>
+                                      <label className="text-xs font-bold text-slate-400 uppercase">Tag (Huy hiệu)</label>
+                                      <input value={editingPackage.bonusText} onChange={e => setEditingPackage({...editingPackage, bonusText: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-lg p-3 text-white mt-1" placeholder="HOT, NEW..." />
+                                  </div>
+
                                   <div>
                                       <label className="text-xs font-bold text-slate-400 uppercase">Màu viền (Tailwind)</label>
                                       <input value={editingPackage.colorTheme} onChange={e => setEditingPackage({...editingPackage, colorTheme: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-lg p-3 text-white mt-1" placeholder="border-audi-cyan" />
                                   </div>
                                   <div className="col-span-2">
                                       <label className="text-xs font-bold text-slate-400 uppercase">Nội dung chuyển khoản (Syntax)</label>
-                                      <input value={editingPackage.transferContent || ''} onChange={e => setEditingPackage({...editingPackage, transferContent: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-lg p-3 text-white mt-1" placeholder="NAP 50K..." />
+                                      <input value={editingPackage.transferContent || ''} onChange={e => setEditingPackage({...editingPackage, transferContent: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-lg p-3 text-white mt-1 font-mono" placeholder="NAP 50K..." />
                                   </div>
                                   
                                   {/* Active Toggle */}
@@ -942,7 +960,9 @@ CREATE POLICY "Enable all access for gift codes" ON public.gift_codes FOR ALL US
                                       />
                                       <Icons.Gem className="absolute left-3 top-3.5 w-4 h-4 text-audi-yellow" />
                                   </div>
-                                  <p className="text-xs text-slate-500 mt-1">Người dùng sẽ nhận thêm % Vcoin này khi nạp tiền.</p>
+                                  <p className="text-xs text-slate-500 mt-1">
+                                      Lưu ý: Khi bật khuyến mãi này, % bonus riêng của từng gói sẽ bị ghi đè.
+                                  </p>
                               </div>
                               
                               <div className="col-span-2 md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">

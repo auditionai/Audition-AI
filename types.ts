@@ -82,11 +82,12 @@ export interface CreditPackage {
   coin: number;
   price: number;
   currency: string;
-  bonusText: string;
+  bonusText: string; // Visual tag like "Best Seller"
+  bonusPercent: number; // Specific bonus % for this package (e.g. 10 for 10%)
   isPopular?: boolean;
   isActive?: boolean; // New field for visibility control
   colorTheme: string;
-  transferContent?: string; // Custom transfer syntax
+  transferContent: string; // Custom transfer syntax
 }
 
 export interface Giftcode {

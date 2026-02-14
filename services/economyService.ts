@@ -29,7 +29,7 @@ const MOCK_USER: UserProfile = {
 };
 
 const DEFAULT_PACKAGES: CreditPackage[] = [
-  { id: 'pkg_1', name: "Gói Khởi Động", coin: 10, price: 10000, currency: 'VND', bonusText: "+0%", colorTheme: "border-slate-600", transferContent: "NAP 10K" },
+  { id: 'pkg_1', name: "Gói Khởi Động", coin: 10, price: 10000, currency: 'VND', bonusText: "Mới", bonusPercent: 0, colorTheme: "border-slate-600", transferContent: "NAP 10K" },
 ];
 
 // --- SYSTEM CONFIG (API KEY) SERVICES ---
@@ -227,11 +227,12 @@ export const getPackages = async (onlyActive: boolean = true): Promise<CreditPac
                 coin: p.credits_amount || 0, // Map 'credits_amount'
                 price: p.price_vnd || 0, // Map 'price_vnd'
                 currency: 'VND',
-                bonusText: p.tag || '', // Store bonus text in tag or handle separated logic
+                bonusText: p.tag || '', // Store tag visual
+                bonusPercent: p.bonus_credits || 0, // Store Percentage in 'bonus_credits' column
                 isPopular: p.is_featured || false, // Map 'is_featured'
                 isActive: p.is_active, // Map 'is_active'
                 colorTheme: p.is_featured ? 'border-audi-pink' : 'border-slate-600', 
-                transferContent: `NAP ${p.price_vnd}` // Auto gen syntax
+                transferContent: p.transfer_syntax || `NAP ${p.price_vnd}` // Map 'transfer_syntax' or fallback
             }));
         } else {
             return []; // Return empty if no packages found in DB (don't show mock)
@@ -250,7 +251,8 @@ export const savePackage = async (pkg: CreditPackage): Promise<{success: boolean
             is_featured: pkg.isPopular,
             is_active: pkg.isActive ?? true,
             display_order: 0,
-            bonus_credits: 0 
+            bonus_credits: pkg.bonusPercent, // Save percentage here
+            transfer_syntax: pkg.transferContent // Save syntax here
         };
 
         try {
@@ -558,12 +560,21 @@ export const createPaymentLink = async (packageId: string): Promise<Transaction>
 
     const orderCode = Math.floor(Date.now() / 1000); // Use timestamp as order code (int8)
 
+    // Calculate Bonus logic: Priority Global Promo > Package Promo
+    const promo = await getPromotionConfig();
+    const activeBonusPercent = promo.isActive ? promo.bonusPercent : pkg.bonusPercent;
+    
+    // Calculate total coins
+    const baseCoins = pkg.coin;
+    const bonusCoins = Math.floor(baseCoins * (activeBonusPercent / 100));
+    const totalCoins = baseCoins + bonusCoins;
+
     const newTx: Transaction = {
         id: crypto.randomUUID(),
         userId: user.id,
         packageId: pkg.id,
         amount: pkg.price,
-        coins: pkg.coin,
+        coins: totalCoins, // Use total coins with bonus
         status: 'pending',
         createdAt: new Date().toISOString(),
         paymentMethod: 'payos',
@@ -576,7 +587,7 @@ export const createPaymentLink = async (packageId: string): Promise<Transaction>
             user_id: user.id,
             package_id: pkg.id,
             amount_vnd: pkg.price, // Map 'amount_vnd'
-            diamonds_received: pkg.coin, // Map 'diamonds_received'
+            diamonds_received: totalCoins, // Map 'diamonds_received' (Base + Bonus)
             status: 'pending',
             order_code: orderCode, // Map 'order_code'
             created_at: newTx.createdAt

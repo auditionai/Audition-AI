@@ -147,7 +147,7 @@ export const TopUp: React.FC<TopUpProps> = ({ lang }) => {
             </div>
         ) : (
             <>
-                {/* Header Banner */}
+                {/* Header Banner (Active only if Global Promotion is ON) */}
                 {promo.isActive && (
                     <div className="relative rounded-3xl overflow-hidden mb-8 border border-audi-pink/30 shadow-[0_0_30px_rgba(255,0,153,0.2)]">
                         <div className="absolute inset-0 bg-gradient-to-r from-audi-purple/80 to-audi-pink/80 z-0"></div>
@@ -190,45 +190,55 @@ export const TopUp: React.FC<TopUpProps> = ({ lang }) => {
                 </h2>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
-                    {packages.map((pkg) => (
-                        <div 
-                            key={pkg.id}
-                            onClick={() => setSelectedPkg(pkg.id)}
-                            className={`relative p-6 rounded-2xl border-2 cursor-pointer transition-all duration-300 group ${selectedPkg === pkg.id ? `${pkg.colorTheme} bg-white/5 scale-105 shadow-[0_0_20px_rgba(0,0,0,0.5)]` : 'border-white/10 bg-[#0c0c14] hover:border-white/30'}`}
-                        >
-                            {pkg.isPopular && (
-                                <div className="absolute top-0 right-0 bg-audi-pink text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl rounded-tr-lg shadow-lg">
-                                    HOT
+                    {packages.map((pkg) => {
+                        // LOGIC: If Global Promo is active, use Global %. Else use Package Specific %.
+                        const activeBonusPercent = promo.isActive ? promo.bonusPercent : pkg.bonusPercent;
+                        const hasBonus = activeBonusPercent > 0;
+
+                        return (
+                            <div 
+                                key={pkg.id}
+                                onClick={() => setSelectedPkg(pkg.id)}
+                                className={`relative p-6 rounded-2xl border-2 cursor-pointer transition-all duration-300 group ${selectedPkg === pkg.id ? `${pkg.colorTheme} bg-white/5 scale-105 shadow-[0_0_20px_rgba(0,0,0,0.5)]` : 'border-white/10 bg-[#0c0c14] hover:border-white/30'}`}
+                            >
+                                {pkg.isPopular && (
+                                    <div className="absolute top-0 right-0 bg-audi-pink text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl rounded-tr-lg shadow-lg">
+                                        HOT
+                                    </div>
+                                )}
+                                
+                                <div className="flex justify-between items-start mb-4">
+                                    <div className={`w-12 h-12 rounded-full flex items-center justify-center bg-white/5`}>
+                                        <Icons.Gem className={`w-6 h-6 ${pkg.id === 'pkg_4' ? 'text-audi-pink' : pkg.id === 'pkg_3' ? 'text-audi-purple' : pkg.id === 'pkg_2' ? 'text-audi-cyan' : 'text-slate-400'}`} />
+                                    </div>
+                                    {selectedPkg === pkg.id && <div className="w-4 h-4 rounded-full bg-audi-cyan flex items-center justify-center"><Icons.Sparkles className="w-2.5 h-2.5 text-black" /></div>}
                                 </div>
-                            )}
-                            
-                            <div className="flex justify-between items-start mb-4">
-                                <div className={`w-12 h-12 rounded-full flex items-center justify-center bg-white/5`}>
-                                    <Icons.Gem className={`w-6 h-6 ${pkg.id === 'pkg_4' ? 'text-audi-pink' : pkg.id === 'pkg_3' ? 'text-audi-purple' : pkg.id === 'pkg_2' ? 'text-audi-cyan' : 'text-slate-400'}`} />
+
+                                <h3 className="text-lg font-bold text-white mb-1">{pkg.name}</h3>
+                                <div className="flex items-baseline gap-1 mb-4">
+                                    <span className="text-2xl font-black text-audi-yellow">{pkg.coin}</span>
+                                    <span className="text-xs text-slate-400">Vcoin</span>
                                 </div>
-                                {selectedPkg === pkg.id && <div className="w-4 h-4 rounded-full bg-audi-cyan flex items-center justify-center"><Icons.Sparkles className="w-2.5 h-2.5 text-black" /></div>}
+
+                                <div className="w-full h-px bg-white/10 mb-4"></div>
+
+                                <div className="flex items-center justify-between mb-4">
+                                    <span className="text-sm text-slate-400">Bonus</span>
+                                    {hasBonus ? (
+                                        <span className="text-sm font-bold text-green-400 animate-pulse">
+                                            +{activeBonusPercent}%
+                                        </span>
+                                    ) : (
+                                        <span className="text-sm font-bold text-slate-500">{pkg.bonusText || '0%'}</span>
+                                    )}
+                                </div>
+
+                                <button className={`w-full py-3 rounded-xl font-bold text-sm transition-colors ${selectedPkg === pkg.id ? 'bg-white text-black' : 'bg-white/10 text-white group-hover:bg-white/20'}`}>
+                                    {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(pkg.price)}
+                                </button>
                             </div>
-
-                            <h3 className="text-lg font-bold text-white mb-1">{pkg.name}</h3>
-                            <div className="flex items-baseline gap-1 mb-4">
-                                <span className="text-2xl font-black text-audi-yellow">{pkg.coin}</span>
-                                <span className="text-xs text-slate-400">Vcoin</span>
-                            </div>
-
-                            <div className="w-full h-px bg-white/10 mb-4"></div>
-
-                            <div className="flex items-center justify-between mb-4">
-                                <span className="text-sm text-slate-400">Bonus</span>
-                                <span className="text-sm font-bold text-green-400">
-                                    {promo.isActive ? `+${promo.bonusPercent}%` : pkg.bonusText}
-                                </span>
-                            </div>
-
-                            <button className={`w-full py-3 rounded-xl font-bold text-sm transition-colors ${selectedPkg === pkg.id ? 'bg-white text-black' : 'bg-white/10 text-white group-hover:bg-white/20'}`}>
-                                {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(pkg.price)}
-                            </button>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
 
                 {/* Professional Payment Modal */}

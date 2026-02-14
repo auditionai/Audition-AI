@@ -10,11 +10,9 @@
     <script>
       window.process = window.process || { env: { API_KEY: '' } };
       window.onerror = function(message, source, lineno, colno, error) {
-        // Ignroe resize loop errors usually caused by extensions
         if (message.includes('ResizeObserver loop')) return;
         
         console.error('CRITICAL ERROR:', message);
-        // Only show fatal errors if root is empty (app failed to mount)
         var root = document.getElementById('root');
         if(root && root.innerHTML.trim() === '') {
             var errorDiv = document.createElement('div');
@@ -92,8 +90,6 @@
   }
 }
 </script>
-<!-- Note: @google/genai and @aws-sdk are intentionally REMOVED from importmap. 
-     They will be loaded dynamically via `import()` in the TS files to prevent load-time crashes. -->
 </head>
   <body class="antialiased text-white font-sans selection:bg-audi-pink selection:text-white">
     <div id="root">

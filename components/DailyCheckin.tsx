@@ -1,5 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Icons } from './Icons';
 import { getCheckinStatus, performCheckin } from '../services/economyService';
 
@@ -95,7 +96,7 @@ export const DailyCheckin: React.FC<DailyCheckinProps> = ({ onClose, onSuccess, 
     ? ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7']
     : ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 animate-fade-in">
         <div className="w-full max-w-[450px] bg-[#0c0c14] border border-white/20 rounded-[2rem] p-6 relative shadow-[0_0_50px_rgba(0,0,0,0.8)] flex flex-col max-h-[90vh] overflow-y-auto">
             {/* Header */}
@@ -186,6 +187,7 @@ export const DailyCheckin: React.FC<DailyCheckinProps> = ({ onClose, onSuccess, 
                 }
             </button>
         </div>
-    </div>
+    </div>,
+    document.body
   );
 };

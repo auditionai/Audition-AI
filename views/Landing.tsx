@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Icons } from '../components/Icons';
 import { getShowcaseImages } from '../services/storageService';
 import { supabase } from '../services/supabaseClient';
@@ -310,7 +311,7 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
       </div>
 
       {/* --- LOGIN / REGISTER MODAL --- */}
-      {showLogin && (
+      {showLogin && createPortal(
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
               <div className="w-full max-w-md bg-[#090014] border-2 border-audi-pink rounded-3xl p-8 relative shadow-[0_0_50px_rgba(255,0,153,0.3)]">
                   <button onClick={() => setShowLogin(false)} className="absolute top-4 right-4 text-slate-500 hover:text-white">
@@ -410,7 +411,8 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
                       </div>
                   </div>
               </div>
-          </div>
+          </div>,
+          document.body
       )}
     </div>
   );

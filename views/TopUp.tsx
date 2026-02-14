@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Language, Transaction, CreditPackage, PromotionCampaign } from '../types';
 import { Icons } from '../components/Icons';
 import { getPackages, createPaymentLink, mockPayOSSuccess, getActivePromotion } from '../services/economyService';
@@ -252,7 +253,7 @@ export const TopUp: React.FC<TopUpProps> = ({ lang }) => {
                 </div>
 
                 {/* Professional Payment Modal */}
-                {transaction && (
+                {transaction && createPortal(
                     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-fade-in">
                         <div className="w-full max-w-4xl bg-white rounded-3xl overflow-hidden shadow-2xl flex flex-col md:flex-row">
                              
@@ -331,7 +332,8 @@ export const TopUp: React.FC<TopUpProps> = ({ lang }) => {
                              </div>
 
                         </div>
-                    </div>
+                    </div>,
+                    document.body
                 )}
 
                 {/* Action Bar */}

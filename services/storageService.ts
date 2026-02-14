@@ -9,15 +9,35 @@ const STORE_NAME = 'images';
 const TABLE_NAME = 'generated_images';
 
 // --- CLOUDFLARE R2 CONFIGURATION ---
-// These should be set in your .env or Environment Variables
-const metaEnv = (import.meta as any).env || {};
-const R2_ENDPOINT = metaEnv.VITE_R2_ENDPOINT;
-const R2_ACCESS_KEY_ID = metaEnv.VITE_R2_ACCESS_KEY_ID;
-const R2_SECRET_ACCESS_KEY = metaEnv.VITE_R2_SECRET_ACCESS_KEY;
-const R2_BUCKET_NAME = metaEnv.VITE_R2_BUCKET_NAME;
-const R2_PUBLIC_URL = metaEnv.VITE_R2_PUBLIC_URL; // e.g., https://pub-xxx.r2.dev or custom domain
+// Helper to get Env Var from either Vite's import.meta.env or process.env shim
+const getEnv = (key: string) => {
+    // Priority 1: Vite Environment
+    const viteEnv = (import.meta as any).env?.[key];
+    if (viteEnv) return viteEnv;
+    
+    // Priority 2: Process Env (if injected differently)
+    try {
+        return process.env[key];
+    } catch (e) {
+        return undefined;
+    }
+};
+
+const R2_ENDPOINT = getEnv('VITE_R2_ENDPOINT');
+const R2_ACCESS_KEY_ID = getEnv('VITE_R2_ACCESS_KEY_ID');
+const R2_SECRET_ACCESS_KEY = getEnv('VITE_R2_SECRET_ACCESS_KEY');
+const R2_BUCKET_NAME = getEnv('VITE_R2_BUCKET_NAME');
+const R2_PUBLIC_URL = getEnv('VITE_R2_PUBLIC_URL'); 
 
 let r2Client: S3Client | null = null;
+
+// Debug Log on Init
+console.log("[System] R2 Config Check:", {
+    hasEndpoint: !!R2_ENDPOINT,
+    hasKeyId: !!R2_ACCESS_KEY_ID,
+    hasSecret: !!R2_SECRET_ACCESS_KEY,
+    bucket: R2_BUCKET_NAME
+});
 
 if (R2_ENDPOINT && R2_ACCESS_KEY_ID && R2_SECRET_ACCESS_KEY) {
     try {
@@ -34,7 +54,7 @@ if (R2_ENDPOINT && R2_ACCESS_KEY_ID && R2_SECRET_ACCESS_KEY) {
         console.error("Failed to init R2 Client", e);
     }
 } else {
-    console.warn("[System] R2 Config Missing. Falling back to Local/Supabase Storage.");
+    console.warn("[System] R2 Config Missing. Please ensure Env Vars start with 'VITE_'. Falling back to Local/Supabase Storage.");
 }
 
 export const checkR2Connection = async (): Promise<boolean> => {
@@ -43,7 +63,7 @@ export const checkR2Connection = async (): Promise<boolean> => {
         await r2Client.send(new ListBucketsCommand({}));
         return true;
     } catch (e) {
-        console.error("R2 Connection Check Failed", e);
+        console.error("R2 Connection Check Failed (Check CORS or Keys)", e);
         return false;
     }
 };
@@ -83,9 +103,10 @@ export const saveImageToStorage = async (image: GeneratedImage): Promise<void> =
 
   // 1. CLOUDFLARE R2 + SUPABASE METADATA (PRIMARY)
   if (r2Client && supabase && user.id.length > 20) {
+    console.log("[Storage] Attempting R2 Upload...");
     try {
         const { blob, type } = base64ToBlob(image.url);
-        const fileName = `${user.id}/${image.id}.png`; // Folder structure: userId/imageId.png
+        const fileName = `${user.id}/${image.id}.png`; 
         
         // A. Upload file to R2
         const command = new PutObjectCommand({
@@ -97,12 +118,12 @@ export const saveImageToStorage = async (image: GeneratedImage): Promise<void> =
         });
 
         await r2Client.send(command);
+        console.log("[Storage] R2 Upload Success");
         
         // B. Construct Public URL
         const publicUrl = `${R2_PUBLIC_URL}/${fileName}`;
 
         // C. Save Metadata to Supabase DB
-        // NOTE: We still use Supabase Table for indexing/querying, but image_url points to R2
         const { error: dbError } = await supabase
             .from(TABLE_NAME)
             .insert({
@@ -118,8 +139,12 @@ export const saveImageToStorage = async (image: GeneratedImage): Promise<void> =
         if (dbError) throw dbError;
         return;
 
-    } catch (error) {
-        console.error("R2 Upload Error (Fallback to Local):", error);
+    } catch (error: any) {
+        console.error("R2 Upload Error details:", error);
+        if (error.name === 'TypeError' && error.message === 'Failed to fetch') {
+             console.error("⚠️ LỖI MẠNG/CORS: Vui lòng kiểm tra cấu hình CORS trên R2 Bucket.");
+        }
+        // Fallback continues below...
     }
   } 
   
@@ -157,6 +182,7 @@ export const saveImageToStorage = async (image: GeneratedImage): Promise<void> =
   }
 
   // 3. INDEXED DB (OFFLINE/LOCAL FALLBACK)
+  console.log("[Storage] Saving to Local (Fallback)");
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const transaction = db.transaction([STORE_NAME], 'readwrite');

@@ -160,7 +160,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               refreshData();
               alert('Lưu Giftcode thành công!');
           } else {
-              alert('Lỗi khi lưu Giftcode! Vui lòng kiểm tra kết nối hoặc mã trùng lặp.');
+              alert('Lỗi khi lưu Giftcode! Mã có thể đã tồn tại hoặc lỗi kết nối.');
           }
       }
   };
@@ -565,7 +565,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                           {gc.usedCount} / <span className="text-slate-500">{gc.totalLimit}</span>
                                       </td>
                                       <td className="px-6 py-4 text-slate-500">
-                                         1 lần/người
+                                         {gc.maxPerUser} lần/người
                                       </td>
                                       <td className="px-6 py-4">
                                           {gc.isActive ? (
@@ -619,11 +619,20 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                           </div>
                                       </div>
                                       <div>
-                                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Số lượng</label>
+                                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Tổng số lượng</label>
                                           <input 
                                             type="number" 
                                             value={editingGiftcode.totalLimit} 
                                             onChange={e => setEditingGiftcode({...editingGiftcode, totalLimit: Number(e.target.value)})}
+                                            className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white focus:border-audi-lime outline-none" 
+                                          />
+                                      </div>
+                                       <div>
+                                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Giới hạn mỗi user</label>
+                                          <input 
+                                            type="number" 
+                                            value={editingGiftcode.maxPerUser} 
+                                            onChange={e => setEditingGiftcode({...editingGiftcode, maxPerUser: Number(e.target.value)})}
                                             className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white focus:border-audi-lime outline-none" 
                                           />
                                       </div>

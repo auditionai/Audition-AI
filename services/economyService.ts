@@ -270,7 +270,7 @@ export const getGiftcodes = async (): Promise<Giftcode[]> => {
                 reward: d.diamond_reward, // Exact map: diamond_reward
                 totalLimit: d.usage_limit, // Exact map: usage_limit
                 usedCount: d.usage_count, // Exact map: usage_count
-                maxPerUser: 1, 
+                maxPerUser: d.max_per_user || 1, // Safe fallback
                 isActive: d.is_active, // Exact map: is_active
                 expiresAt: d.created_at
             }));
@@ -286,6 +286,7 @@ export const saveGiftcode = async (giftcode: Giftcode): Promise<boolean> => {
              diamond_reward: giftcode.reward,
              usage_limit: giftcode.totalLimit,
              usage_count: giftcode.usedCount,
+             max_per_user: giftcode.maxPerUser, // New Field
              is_active: giftcode.isActive
         };
 
@@ -295,7 +296,7 @@ export const saveGiftcode = async (giftcode: Giftcode): Promise<boolean> => {
                 const { error } = await supabase.from('gift_codes').update(payload).eq('id', giftcode.id);
                 if (error) throw error;
             } else {
-                // Insert new
+                // Insert new. IMPORTANT: Do NOT send the temp ID to Supabase. Let DB gen UUID.
                 const { error } = await supabase.from('gift_codes').insert(payload);
                 if (error) throw error;
             }
@@ -329,27 +330,31 @@ export const redeemGiftcode = async (codeStr: string): Promise<{success: boolean
 
         if (error || !codeData) return { success: false, message: 'Mã không hợp lệ' };
         
-        // 2. Check Limits
+        // 2. Check Global Limits
         if (codeData.usage_count >= codeData.usage_limit) return { success: false, message: 'Mã đã hết lượt dùng' };
 
-        // 3. Check Redeemed History in 'redeemed_gift_codes'
-        const { data: redeemed } = await supabase
+        // 3. Check Per-User Limit via 'redeemed_gift_codes'
+        const { count, error: redeemError } = await supabase
             .from('redeemed_gift_codes')
-            .select('*')
+            .select('*', { count: 'exact', head: true })
             .eq('user_id', user.id)
-            .eq('gift_code_id', codeData.id)
-            .single();
+            .eq('gift_code_id', codeData.id);
             
-        if (redeemed) return { success: false, message: 'Bạn đã dùng mã này rồi' };
+        // Default max per user is 1 if column missing or null
+        const maxPerUser = codeData.max_per_user || 1;
+        
+        if ((count || 0) >= maxPerUser) {
+            return { success: false, message: `Bạn đã dùng mã này rồi (${maxPerUser}/${maxPerUser})` };
+        }
 
         // 4. Update Balance
         const reward = codeData.diamond_reward;
         await updateUserBalance(reward, `Giftcode: ${normalizedCode}`, 'giftcode');
         
-        // 5. Update Code Usage
+        // 5. Update Global Usage
         await supabase.from('gift_codes').update({ usage_count: codeData.usage_count + 1 }).eq('id', codeData.id);
         
-        // 6. Record Redemption
+        // 6. Record Redemption Log
         await supabase.from('redeemed_gift_codes').insert({
             user_id: user.id,
             gift_code_id: codeData.id,

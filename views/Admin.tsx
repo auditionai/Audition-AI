@@ -184,7 +184,6 @@ create policy "Public images are visible to everyone" on public.generated_images
       });
   };
 
-  // ... (Handlers unchanged)
   const handleSaveApiKey = async () => { 
       if (!apiKey.trim()) return;
       setKeyStatus('checking');
@@ -220,12 +219,14 @@ CREATE POLICY "Enable delete for authenticated users only" ON public.api_keys FO
           showToast('API Key không hoạt động. Vui lòng kiểm tra lại.', 'error');
       }
   };
+
   const handleTestKey = async (key: string) => { 
       showToast('Đang kiểm tra key...', 'info');
       const isValid = await checkConnection(key);
       if (isValid) showToast('Kết nối thành công! Key hoạt động tốt.', 'success');
       else showToast('Key không hoạt động hoặc hết hạn ngạch.', 'error');
   }
+
   const handleDeleteApiKey = async (id: string) => { 
       showConfirm('Xóa API Key này khỏi database?', async () => {
           await deleteApiKey(id);
@@ -233,6 +234,7 @@ CREATE POLICY "Enable delete for authenticated users only" ON public.api_keys FO
           showToast('Đã xóa API Key');
       });
   }
+
   const handleSaveUser = async () => { 
       if (editingUser) {
           await updateAdminUserProfile(editingUser);
@@ -241,6 +243,7 @@ CREATE POLICY "Enable delete for authenticated users only" ON public.api_keys FO
           showToast('Cập nhật người dùng thành công!');
       }
   };
+
   const handleSavePackage = async () => { 
       if (editingPackage) {
           const result = await savePackage(editingPackage);
@@ -276,6 +279,7 @@ ADD COLUMN IF NOT EXISTS bonus_credits int8 DEFAULT 0;`,
           }
       }
   };
+
   const handleDeletePackage = async (id: string) => { 
       showConfirm('Bạn có chắc chắn muốn xóa gói nạp này?', async () => {
           const result = await deletePackage(id);
@@ -286,6 +290,7 @@ ADD COLUMN IF NOT EXISTS bonus_credits int8 DEFAULT 0;`,
           } else showToast('Lỗi khi xóa: ' + result.error, 'error');
       });
   };
+
   const handleMovePackage = async (index: number, direction: number) => { 
       const newPackages = [...packages];
       const newIndex = index + direction;
@@ -295,6 +300,7 @@ ADD COLUMN IF NOT EXISTS bonus_credits int8 DEFAULT 0;`,
       const result = await updatePackageOrder(newPackages);
       if (!result.success) showToast('Lỗi khi lưu thứ tự: ' + result.error, 'error');
   };
+
   const handleSaveGiftcode = async () => { 
       if (editingGiftcode) {
           const result = await saveGiftcode(editingGiftcode);
@@ -317,6 +323,7 @@ CREATE POLICY "Enable all access for gift codes" ON public.gift_codes FOR ALL US
           }
       }
   };
+
   const handleDeleteGiftcode = async (id: string) => { 
       showConfirm('Xóa mã này vĩnh viễn?', async () => {
           await deleteGiftcode(id);
@@ -324,6 +331,7 @@ CREATE POLICY "Enable all access for gift codes" ON public.gift_codes FOR ALL US
           showToast('Đã xóa Giftcode');
       });
   };
+
   const handleSavePromotion = async () => { 
       if (editingPromotion) {
           const result = await savePromotion(editingPromotion);
@@ -355,6 +363,7 @@ CREATE POLICY "Enable access" ON public.promotions FOR ALL USING (true) WITH CHE
           }
       }
   };
+
   const handleDeletePromotion = async (id: string) => { 
       showConfirm('Xóa chiến dịch này vĩnh viễn?', async () => {
           await deletePromotion(id);
@@ -362,6 +371,7 @@ CREATE POLICY "Enable access" ON public.promotions FOR ALL USING (true) WITH CHE
           showToast('Đã xóa chiến dịch');
       });
   };
+
   const handleDeleteContent = async (id: string) => { 
       showConfirm('Xóa vĩnh viễn hình ảnh này?', async () => {
           await deleteImageFromStorage(id);
@@ -369,6 +379,7 @@ CREATE POLICY "Enable access" ON public.promotions FOR ALL USING (true) WITH CHE
           showToast('Đã xóa ảnh');
       });
   }
+
   const handleApproveTransaction = async (txId: string) => { 
       showConfirm('Xác nhận duyệt giao dịch này và cộng Vcoin cho user?', async () => {
           await adminApproveTransaction(txId);
@@ -376,6 +387,7 @@ CREATE POLICY "Enable access" ON public.promotions FOR ALL USING (true) WITH CHE
           showToast('Đã duyệt thành công!');
       });
   }
+
   const handleRejectTransaction = async (txId: string) => { 
       showConfirm('Từ chối giao dịch này?', async () => {
           await adminRejectTransaction(txId);
@@ -383,6 +395,7 @@ CREATE POLICY "Enable access" ON public.promotions FOR ALL USING (true) WITH CHE
           showToast('Đã từ chối giao dịch', 'info');
       });
   }
+
   const handleDeleteTransaction = async (txId: string) => { 
       showConfirm('Xóa lịch sử giao dịch này khỏi hệ thống?', async () => {
           const res = await deleteTransaction(txId);
@@ -538,7 +551,7 @@ CREATE POLICY "Enable access" ON public.promotions FOR ALL USING (true) WITH CHE
 
       <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
           
-          {/* ... (Overview, Transactions, Users, Packages, Promotion, Giftcodes Views unchanged) ... */}
+          {/* ... (Overview) ... */}
           {activeView === 'overview' && (
               <div className="space-y-6 animate-slide-in-right">
                   {/* Grid 3x2 Dashboard */}
@@ -568,7 +581,7 @@ CREATE POLICY "Enable access" ON public.promotions FOR ALL USING (true) WITH CHE
                       ))}
                   </div>
 
-                  {/* AI Stats Table (Updated to show Transaction Logs) */}
+                  {/* AI Stats Table */}
                   <div className="bg-[#12121a] border border-white/10 rounded-2xl p-6 shadow-xl">
                       <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
                           <Icons.BarChart className="w-5 h-5 text-audi-yellow" />
@@ -626,7 +639,7 @@ CREATE POLICY "Enable access" ON public.promotions FOR ALL USING (true) WITH CHE
               </div>
           )}
           
-          {/* ... (Other tabs) ... */}
+          {/* ... (Transactions) ... */}
           {activeView === 'transactions' && (
               <div className="space-y-6 animate-slide-in-right">
                   <div className="flex justify-between items-center">
@@ -693,8 +706,8 @@ CREATE POLICY "Enable access" ON public.promotions FOR ALL USING (true) WITH CHE
               </div>
           )}
           
+          {/* ... (Users) ... */}
           {activeView === 'users' && (
-              // ... existing users view ...
               <div className="space-y-6 animate-slide-in-right">
                   <div className="flex justify-between items-center">
                       <h2 className="text-2xl font-bold text-white">Danh Sách Người Dùng</h2>
@@ -766,7 +779,7 @@ CREATE POLICY "Enable access" ON public.promotions FOR ALL USING (true) WITH CHE
               </div>
           )}
 
-          {/* ... (Packages, Promotion, Giftcodes Views same as before) ... */}
+          {/* ... (Packages) ... */}
           {activeView === 'packages' && (
               <div className="space-y-6 animate-slide-in-right">
                   <div className="flex justify-between items-center">
@@ -813,8 +826,8 @@ CREATE POLICY "Enable access" ON public.promotions FOR ALL USING (true) WITH CHE
               </div>
           )}
 
+          {/* ... (Promotion) ... */}
           {activeView === 'promotion' && (
-              // ... existing promotion view ...
               <div className="space-y-6 animate-slide-in-right">
                   <div className="flex justify-between items-center">
                       <h2 className="text-2xl font-bold text-white">Quản Lý Chiến Dịch Khuyến Mãi</h2>
@@ -855,8 +868,8 @@ CREATE POLICY "Enable access" ON public.promotions FOR ALL USING (true) WITH CHE
               </div>
           )}
 
+          {/* ... (Giftcodes) ... */}
           {activeView === 'giftcodes' && (
-              // ... existing giftcodes view ...
               <div className="space-y-6 animate-slide-in-right">
                   <div className="flex justify-between items-center">
                       <h2 className="text-2xl font-bold text-white">Quản Lý Giftcode</h2>

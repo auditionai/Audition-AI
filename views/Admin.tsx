@@ -27,8 +27,11 @@ interface ToastMsg {
 
 interface ConfirmState {
     show: boolean;
+    title?: string;
     msg: string;
     onConfirm: () => void;
+    isAlertOnly?: boolean; // Just an OK button
+    sqlHelp?: string; // Optional SQL code to copy
 }
 
 export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
@@ -67,7 +70,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       setToasts(prev => [...prev, { id, msg, type }]);
       setTimeout(() => {
           setToasts(prev => prev.filter(t => t.id !== id));
-      }, 3000);
+      }, 4000);
   };
 
   const showConfirm = (msg: string, action: () => void) => {
@@ -80,6 +83,11 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           }
       });
   };
+
+  const copySql = (sql: string) => {
+      navigator.clipboard.writeText(sql);
+      showToast('Đã sao chép mã SQL!', 'info');
+  }
 
   // Load Data Sequence
   useEffect(() => {
@@ -117,11 +125,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   };
 
   const runSystemChecks = async (specificKey?: string) => {
-      // Don't reset health state here to avoid flickering if already loaded
-      
       const startGemini = Date.now();
-      // Use specific key if provided (init load), otherwise use state
-      // If state is empty string, we try undefined to trigger Env Var check inside service
       const keyToUse = specificKey !== undefined ? specificKey : (apiKey || undefined);
       
       const geminiOk = await checkConnection(keyToUse);
@@ -134,7 +138,6 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           storage: { status: sbCheck.storage ? 'connected' : 'disconnected' }
       });
       
-      // Update Key Status explicitly based on connection result
       if (keyToUse || geminiOk) {
           setKeyStatus(geminiOk ? 'valid' : 'invalid');
       }
@@ -198,7 +201,20 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               refreshData();
               showToast('Lưu Giftcode thành công!');
           } else {
-              showToast(`Lỗi: ${result.error}`, 'error');
+              if (result.error?.includes('RLS') || result.error?.includes('permission') || result.error?.includes('policy')) {
+                  // Show Helper for SQL Fix
+                  setConfirmDialog({
+                      show: true,
+                      title: '⚠️ Cần Cấp Quyền Database',
+                      msg: 'Database đang chặn việc tạo Giftcode mới. Hãy copy đoạn mã dưới đây và chạy trong SQL Editor của Supabase để mở khóa:',
+                      sqlHelp: `ALTER TABLE public.gift_codes ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable all access for gift codes" ON public.gift_codes FOR ALL USING (true) WITH CHECK (true);`,
+                      isAlertOnly: true,
+                      onConfirm: () => {}
+                  });
+              } else {
+                  showToast(`Lỗi: ${result.error}`, 'error');
+              }
           }
       }
   };
@@ -272,9 +288,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       {/* --- TOASTS CONTAINER --- */}
       <div className="fixed top-24 right-4 z-[9999] flex flex-col gap-2 pointer-events-none">
           {toasts.map(t => (
-              <div key={t.id} className={`pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-xl border shadow-xl animate-fade-in ${
-                  t.type === 'success' ? 'bg-[#0f1f12] border-green-500/50 text-green-400' : 
-                  t.type === 'error' ? 'bg-[#1f0f0f] border-red-500/50 text-red-400' : 'bg-[#0f151f] border-blue-500/50 text-blue-400'
+              <div key={t.id} className={`pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-xl border shadow-xl animate-fade-in backdrop-blur-md ${
+                  t.type === 'success' ? 'bg-[#0f1f12]/90 border-green-500/50 text-green-400' : 
+                  t.type === 'error' ? 'bg-[#1f0f0f]/90 border-red-500/50 text-red-400' : 'bg-[#0f151f]/90 border-blue-500/50 text-blue-400'
               }`}>
                   {t.type === 'success' && <Icons.Check className="w-5 h-5" />}
                   {t.type === 'error' && <Icons.X className="w-5 h-5" />}
@@ -284,18 +300,41 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           ))}
       </div>
 
-      {/* --- CONFIRM DIALOG --- */}
+      {/* --- CONFIRM / ALERT DIALOG --- */}
       {confirmDialog.show && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
-              <div className="bg-[#12121a] border border-white/20 p-6 rounded-2xl max-w-sm w-full shadow-2xl transform scale-100 transition-all">
+          <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-fade-in">
+              <div className="bg-[#12121a] border border-white/20 p-6 rounded-2xl max-w-lg w-full shadow-[0_0_50px_rgba(0,0,0,0.8)] transform scale-100 transition-all">
                   <div className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center mb-4 text-audi-yellow mx-auto">
                       <Icons.Bell className="w-6 h-6 animate-swing" />
                   </div>
-                  <h3 className="text-lg font-bold text-white text-center mb-2">Xác nhận</h3>
-                  <p className="text-slate-400 text-center text-sm mb-6">{confirmDialog.msg}</p>
+                  <h3 className="text-lg font-bold text-white text-center mb-2">{confirmDialog.title || 'Thông báo'}</h3>
+                  <p className="text-slate-400 text-center text-sm mb-6 leading-relaxed">{confirmDialog.msg}</p>
+                  
+                  {/* SQL Helper Box */}
+                  {confirmDialog.sqlHelp && (
+                      <div className="mb-6 relative">
+                          <pre className="bg-black/50 p-4 rounded-lg border border-red-500/30 text-xs text-green-400 font-mono overflow-x-auto whitespace-pre-wrap">
+                              {confirmDialog.sqlHelp}
+                          </pre>
+                          <button 
+                            onClick={() => copySql(confirmDialog.sqlHelp!)}
+                            className="absolute top-2 right-2 p-1.5 bg-white/10 hover:bg-white/20 rounded text-white"
+                            title="Copy Code"
+                          >
+                              <Icons.Share className="w-3 h-3" />
+                          </button>
+                      </div>
+                  )}
+
                   <div className="flex gap-3">
-                      <button onClick={() => setConfirmDialog(prev => ({...prev, show: false}))} className="flex-1 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-bold">Hủy</button>
-                      <button onClick={confirmDialog.onConfirm} className="flex-1 py-2 rounded-xl bg-audi-pink hover:bg-pink-600 text-white font-bold">Đồng ý</button>
+                      {!confirmDialog.isAlertOnly && (
+                          <button onClick={() => setConfirmDialog(prev => ({...prev, show: false}))} className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-bold transition-colors">
+                              Hủy
+                          </button>
+                      )}
+                      <button onClick={() => { confirmDialog.onConfirm(); setConfirmDialog(prev => ({...prev, show: false})) }} className="flex-1 py-3 rounded-xl bg-audi-pink hover:bg-pink-600 text-white font-bold transition-colors shadow-lg">
+                          {confirmDialog.isAlertOnly ? 'Đã Hiểu' : 'Đồng ý'}
+                      </button>
                   </div>
               </div>
           </div>
@@ -558,7 +597,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
                   {/* EDIT USER MODAL */}
                   {editingUser && (
-                      <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                      <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
                           <div className="bg-[#12121a] w-full max-w-md p-6 rounded-2xl border border-white/20 shadow-2xl">
                               <h3 className="text-xl font-bold text-white mb-4">Chỉnh sửa người dùng</h3>
                               <div className="space-y-4">
@@ -661,7 +700,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
                   {/* EDIT GIFTCODE MODAL - FIXED LAYOUT & Z-INDEX */}
                   {editingGiftcode && (
-                      <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                      <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
                           <div className="bg-[#12121a] w-full max-w-lg p-6 rounded-2xl border border-white/20 shadow-2xl flex flex-col max-h-[90vh]">
                               <h3 className="text-xl font-bold text-white mb-6 sticky top-0 bg-[#12121a] z-10 py-2 border-b border-white/10 shrink-0">
                                   {editingGiftcode.id.startsWith('temp_') ? 'Tạo Giftcode Mới' : 'Sửa Giftcode'}
@@ -768,7 +807,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
                   {/* EDIT PACKAGE MODAL */}
                   {editingPackage && (
-                      <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                      <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
                           <div className="bg-[#12121a] w-full max-w-lg p-6 rounded-2xl border border-white/20 shadow-2xl max-h-[90vh] overflow-y-auto">
                               <h3 className="text-xl font-bold text-white mb-4">{editingPackage.id.startsWith('temp_') ? 'Thêm Gói Mới' : 'Sửa Gói Nạp'}</h3>
                               <div className="grid grid-cols-2 gap-4">

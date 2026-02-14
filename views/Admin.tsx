@@ -1,10 +1,11 @@
+
 import React, { useState, useEffect } from 'react';
 import { Language, Transaction, UserProfile, CreditPackage, PromotionCampaign, Giftcode, GeneratedImage } from '../types';
 import { Icons } from '../components/Icons';
 import { checkConnection } from '../services/geminiService';
 import { checkSupabaseConnection } from '../services/supabaseClient';
 import { getAdminStats, savePackage, deletePackage, updateAdminUserProfile, savePromotion, deletePromotion, saveGiftcode, deleteGiftcode, adminApproveTransaction, adminRejectTransaction, saveSystemApiKey, deleteApiKey, deleteTransaction, getSystemApiKey, getApiKeysList, updatePackageOrder } from '../services/economyService';
-import { getAllImagesFromStorage, deleteImageFromStorage } from '../services/storageService';
+import { getAllImagesFromStorage, deleteImageFromStorage, checkR2Connection } from '../services/storageService';
 
 interface AdminProps {
   lang: Language;
@@ -14,7 +15,7 @@ interface AdminProps {
 interface SystemHealth {
     gemini: { status: 'connected' | 'disconnected' | 'checking'; latency: number };
     supabase: { status: 'connected' | 'disconnected' | 'checking'; latency: number };
-    storage: { status: 'connected' | 'disconnected' | 'checking'; };
+    storage: { status: 'connected' | 'disconnected' | 'checking'; type: 'R2' | 'Supabase' | 'None' };
 }
 
 // --- INTERNAL NOTIFICATION COMPONENTS ---
@@ -55,7 +56,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [health, setHealth] = useState<SystemHealth>({
       gemini: { status: 'checking', latency: 0 },
       supabase: { status: 'checking', latency: 0 },
-      storage: { status: 'checking' }
+      storage: { status: 'checking', type: 'None' }
   });
 
   // Modal States
@@ -136,14 +137,32 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       const startGemini = Date.now();
       const keyToUse = specificKey !== undefined ? specificKey : (apiKey || undefined);
       
+      // 1. Check Gemini
       const geminiOk = await checkConnection(keyToUse);
       const geminiLatency = Date.now() - startGemini;
+      
+      // 2. Check Supabase DB
       const sbCheck = await checkSupabaseConnection();
+
+      // 3. Check R2 Storage
+      const r2Ok = await checkR2Connection();
+      
+      // Determine Storage Status
+      let storageStatus: 'connected' | 'disconnected' = 'disconnected';
+      let storageType: 'R2' | 'Supabase' | 'None' = 'None';
+
+      if (r2Ok) {
+          storageStatus = 'connected';
+          storageType = 'R2';
+      } else if (sbCheck.storage) {
+          storageStatus = 'connected';
+          storageType = 'Supabase';
+      }
 
       setHealth({
           gemini: { status: geminiOk ? 'connected' : 'disconnected', latency: geminiLatency },
           supabase: { status: sbCheck.db ? 'connected' : 'disconnected', latency: sbCheck.latency },
-          storage: { status: sbCheck.storage ? 'connected' : 'disconnected' }
+          storage: { status: storageStatus, type: storageType }
       });
       
       if (keyToUse || geminiOk) {
@@ -519,7 +538,7 @@ CREATE POLICY "Enable access" ON public.promotions FOR ALL USING (true) WITH CHE
               <div className="flex items-center gap-2">
                   <div title="Gemini API" className={`w-3 h-3 rounded-full ${health.gemini.status === 'connected' ? 'bg-blue-500 shadow-[0_0_10px_#3b82f6]' : 'bg-red-500'}`}></div>
                   <div title="Database" className={`w-3 h-3 rounded-full ${health.supabase.status === 'connected' ? 'bg-green-500 shadow-[0_0_10px_#22c55e]' : 'bg-red-500'}`}></div>
-                  <div title="Storage R2" className={`w-3 h-3 rounded-full ${health.storage.status === 'connected' ? 'bg-orange-500 shadow-[0_0_10px_#f97316]' : 'bg-red-500'}`}></div>
+                  <div title="Storage (R2/S3)" className={`w-3 h-3 rounded-full ${health.storage.status === 'connected' ? 'bg-orange-500 shadow-[0_0_10px_#f97316]' : 'bg-red-500'}`}></div>
               </div>
           </div>
 
@@ -1230,7 +1249,7 @@ CREATE POLICY "Enable access" ON public.promotions FOR ALL USING (true) WITH CHE
                       <div className="bg-[#12121a] border border-white/10 rounded-2xl p-6 relative overflow-hidden">
                           <h3 className="font-bold text-lg text-white mb-1">Cloud Storage</h3>
                           <div className="flex items-center justify-between mb-4">
-                              <span className="text-sm text-slate-400">Quyền truy cập</span>
+                              <span className="text-sm text-slate-400">Loại: {health.storage.type}</span>
                               <StatusBadge status={health.storage.status} />
                           </div>
                       </div>

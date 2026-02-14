@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Language, Transaction, CreditPackage, PromotionCampaign, ViewId } from '../types';
 import { Icons } from '../components/Icons';
-import { getPackages, createPaymentLink, getActivePromotion } from '../services/economyService';
+import { getPackages, createPaymentLink, getActivePromotion, getUserTransactions } from '../services/economyService';
 
 interface TopUpProps {
   lang: Language;
@@ -54,11 +54,14 @@ export const TopUp: React.FC<TopUpProps> = ({ lang, onNavigate }) => {
     return () => clearInterval(interval);
   }, [activeCampaign]);
 
-  // Load History
+  // Load History from DB (transactions table)
   useEffect(() => {
       if (activeTab === 'history') {
-          const txs = JSON.parse(localStorage.getItem('dmp_transactions') || '[]');
-          setHistory(txs.reverse());
+          const fetchHistory = async () => {
+              const txs = await getUserTransactions();
+              setHistory(txs);
+          };
+          fetchHistory();
       }
   }, [activeTab]);
 

@@ -1,3 +1,4 @@
+
 import { CreditPackage, Transaction, UserProfile, CheckinConfig, DiamondLog, TransactionStatus, PromotionCampaign, Giftcode } from '../types';
 import { supabase } from './supabaseClient';
 
@@ -671,6 +672,32 @@ export const performCheckin = async (): Promise<{ success: boolean; reward: numb
 };
 
 // --- TRANSACTION SERVICES ---
+
+export const getUserTransactions = async (): Promise<Transaction[]> => {
+    const user = await getUserProfile();
+    if (supabase && user.id.length > 20) {
+        const { data, error } = await supabase
+            .from('transactions')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false });
+
+        if (!error && data) {
+            return data.map((t: any) => ({
+                id: t.id,
+                userId: t.user_id,
+                packageId: t.package_id,
+                amount: t.amount_vnd,
+                coins: t.diamonds_received,
+                status: t.status,
+                createdAt: t.created_at,
+                paymentMethod: 'payos',
+                code: `NAP${t.order_code}`
+            }));
+        }
+    }
+    return [];
+};
 
 export const createPaymentLink = async (packageId: string): Promise<Transaction> => {
     const user = await getUserProfile();

@@ -21,9 +21,7 @@ interface CharacterInput {
   id: number;
   bodyImage: string | null;
   faceImage: string | null; 
-  shoesImage: string | null; 
   gender: 'female' | 'male';
-  isFaceLocked: boolean;
 }
 
 export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang }) => {
@@ -33,26 +31,26 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
   const [progressLogs, setProgressLogs] = useState<string[]>([]);
 
   const [activeMode, setActiveMode] = useState<GenMode>('single');
-  const [characters, setCharacters] = useState<CharacterInput[]>([{ id: 1, bodyImage: null, faceImage: null, shoesImage: null, gender: 'female', isFaceLocked: false }]);
+  const [characters, setCharacters] = useState<CharacterInput[]>([{ id: 1, bodyImage: null, faceImage: null, gender: 'female' }]);
   
   const [refImage, setRefImage] = useState<string | null>(null);
   const [prompt, setPrompt] = useState('');
   const [negativePrompt, setNegativePrompt] = useState('crowd, extra people, audience, bystanders, deformed, bad anatomy, disfigured, poorly drawn face, mutation, mutated, extra limb, ugly, disgusting, poorly drawn hands, missing limb, floating limbs, disconnected limbs, malformed hands, blur, out of focus, long neck, long body, mutated hands and fingers, out of frame, blender, doll, cropped, low-res, close-up, poorly-drawn face, out of frame double, two heads, blurred, ugly, disfigured, too many fingers, deformed, repetitive, black and white, grainy, extra limbs, bad anatomy, duplicate, photorealistic, realistic photo, sketch, cartoon, drawing, art, 2d');
   const [isSuggesting, setIsSuggesting] = useState(false);
-  const [isScanningFace, setIsScanningFace] = useState(false); 
 
+  // --- SETTINGS RESTORED ---
   const [modelType, setModelType] = useState<'flash' | 'pro'>('pro'); 
   const [aspectRatio, setAspectRatio] = useState('3:4'); 
   const [selectedStyle, setSelectedStyle] = useState('3d');
   const [resolution, setResolution] = useState<Resolution>('2K'); 
   const [useSearch, setUseSearch] = useState(false); 
-  const [useCloudRef, setUseCloudRef] = useState(true); // Default to True for High Quality
+  const [useCloudRef, setUseCloudRef] = useState(true);
 
   const [resultImage, setResultImage] = useState<string | null>(null);
   const [generatedData, setGeneratedData] = useState<GeneratedImage | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const activeUploadType = useRef<{ charId?: number, type: 'body' | 'face' | 'shoes' | 'ref' } | null>(null);
+  const activeUploadType = useRef<{ charId?: number, type: 'body' | 'face' | 'ref' } | null>(null);
 
   useEffect(() => {
     if (feature.id.includes('couple')) handleModeChange('couple');
@@ -72,13 +70,13 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
           const newChars = [];
           for (let i = 1; i <= count; i++) {
               const existing = prev.find(p => p.id === i);
-              newChars.push(existing || { id: i, bodyImage: null, faceImage: null, shoesImage: null, gender: i % 2 === 0 ? 'male' : 'female', isFaceLocked: false });
+              newChars.push(existing || { id: i, bodyImage: null, faceImage: null, gender: i % 2 === 0 ? 'male' : 'female' });
           }
           return newChars;
       });
   };
 
-  const handleUploadClick = (charId: number, type: 'body' | 'face' | 'shoes') => {
+  const handleUploadClick = (charId: number, type: 'body' | 'face') => {
       activeUploadType.current = { charId, type };
       fileInputRef.current?.click();
   };
@@ -104,7 +102,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                   if (c.id === currentType.charId) {
                       if (currentType.type === 'body') return { ...c, bodyImage: result };
                       if (currentType.type === 'face') return { ...c, faceImage: result };
-                      if (currentType.type === 'shoes') return { ...c, shoesImage: result };
                   }
                   return c;
               }));
@@ -125,7 +122,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
           if (resolution === '2K') cost += 5;
           if (resolution === '4K') cost += 10;
           if (useSearch) cost += 3; 
-          if (useCloudRef) cost += 2; // Extra for cloud upload handling
+          if (useCloudRef) cost += 2;
       }
       if (activeMode === 'couple') cost += 2;
       if (activeMode === 'group3') cost += 4;
@@ -153,20 +150,13 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
         return;
     }
     
-    if (characters.some(c => c.faceImage)) {
-        setIsScanningFace(true);
-        await new Promise(r => setTimeout(r, 2000)); 
-        setIsScanningFace(false);
-    }
-    
     setStage('processing');
     setProgressLogs([]);
-    addLog(lang === 'vi' ? 'Khởi tạo Digital Twin V6 (High-Fidelity)...' : 'Initializing Protocol V6...');
+    addLog(lang === 'vi' ? 'Đang khởi tạo...' : 'Initializing...');
 
     try {
       await new Promise(r => setTimeout(r, 500));
       await updateUserBalance(-cost, `Gen: ${feature.name['en']}`, 'usage');
-      addLog(lang === 'vi' ? `Đã trừ ${cost} Vcoin` : `Deducted ${cost} Vcoin`);
       
       let structureRefData: string | undefined = undefined;
       let sourceForStructure = refImage || feature.preview_image;
@@ -186,7 +176,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
               gender: char.gender,
               image: char.bodyImage, 
               faceImage: char.faceImage,
-              shoesImage: char.shoesImage
+              shoesImage: null // Removed per user request
           });
       }
       
@@ -201,7 +191,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
           characterDataList, 
           modelType === 'pro' ? resolution : '1K', 
           modelType === 'pro' ? useSearch : false,
-          useCloudRef, // Pass the new flag
+          useCloudRef, 
           (msg) => addLog(msg)
       );
 
@@ -241,10 +231,18 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
     finally { setIsSuggesting(false); }
   };
 
+  const styles = [
+      { id: '3d', name: '3D Game', icon: Icons.MessageCircle }, 
+      { id: 'blindbox', name: 'Blind Box', icon: Icons.Gift },
+      { id: 'anime', name: 'Anime 3D', icon: Icons.Zap },
+      { id: 'cinematic', name: 'Cinematic', icon: Icons.Play },
+      { id: 'fashion', name: 'Fashion', icon: Icons.ShoppingBag },
+  ];
+
   const ratios = [
-      { id: '1:1', label: '1:1', desc: 'Square' },
-      { id: '3:4', label: '3:4', desc: 'Portrait' },
-      { id: '16:9', label: '16:9', desc: 'Cinema' },
+      { id: '1:1', label: '1:1', desc: 'Vuông' },
+      { id: '3:4', label: '3:4', desc: 'Dọc' },
+      { id: '16:9', label: '16:9', desc: 'Ngang' },
   ];
 
   if (stage === 'processing') {
@@ -258,7 +256,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                   </div>
               </div>
               <h2 className="font-game text-2xl font-bold text-white mb-2 tracking-widest animate-neon-flash">
-                  {lang === 'vi' ? 'VISUAL ANCHORING V6' : 'PROCESSING V6'}
+                  {lang === 'vi' ? 'AI ĐANG VẼ...' : 'GENERATING...'}
               </h2>
               <p className="text-audi-cyan font-mono text-sm max-w-xs mx-auto mb-8 animate-pulse font-bold">
                   {progressMsg}
@@ -292,10 +290,10 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                   <div className="p-4 bg-[#12121a] flex flex-col gap-3">
                       <div className="flex gap-2">
                           <a href={resultImage} download={`dmp-ai-${Date.now()}.png`} className="flex-1 px-4 py-2.5 bg-white text-black rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-audi-cyan transition-colors text-sm">
-                              <Icons.Download className="w-4 h-4" /> Download
+                              <Icons.Download className="w-4 h-4" /> Tải Về
                           </a>
                           <button onClick={() => setStage('input')} className="flex-1 px-4 py-2.5 bg-audi-pink text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-pink-600 transition-colors shadow-[0_0_15px_#FF0099] text-sm">
-                              <Icons.Wand className="w-4 h-4" /> New
+                              <Icons.Wand className="w-4 h-4" /> Tạo Tiếp
                           </button>
                       </div>
                   </div>
@@ -328,152 +326,159 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
             </div>
         </div>
 
-        <div className="w-full space-y-6">
+        <div className="w-full grid grid-cols-1 lg:grid-cols-3 gap-6">
             
-            {/* CHARACTER INPUT SECTION */}
-            <div className="space-y-3">
-                <div className="flex items-center justify-between px-2">
-                    <h3 className="font-bold text-white flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-full bg-audi-pink flex items-center justify-center text-xs">1</div>
-                        {lang === 'vi' ? 'Hồ sơ nhân vật (Body - Face - Shoes)' : 'Character Dossier'}
-                    </h3>
-                </div>
-
+            {/* LEFT: CHARACTER INPUT SECTION */}
+            <div className="lg:col-span-2 space-y-6">
                 <div className="flex flex-wrap justify-center gap-4 w-full">
                     {characters.map((char) => (
-                        <div key={char.id} className="w-[200px] bg-[#12121a] border border-white/10 rounded-2xl p-3 hover:border-white/20 transition-colors relative group shrink-0">
-                            <div className="absolute top-0 left-0 bg-white/10 text-[10px] font-bold px-3 py-1 rounded-br-xl rounded-tl-xl text-white">
-                                PLAYER {char.id}
+                        <div key={char.id} className="w-[220px] bg-[#12121a] border border-white/10 rounded-2xl p-4 hover:border-white/20 transition-colors relative group shrink-0 shadow-lg">
+                            <div className="flex justify-between items-center mb-3">
+                                <span className="text-xs font-bold text-white bg-white/10 px-2 py-1 rounded">NV {char.id}</span>
+                                <div className="flex bg-black/40 rounded-lg p-0.5 border border-white/10">
+                                    <button onClick={() => toggleGender(char.id, 'female')} className={`px-2 py-0.5 rounded text-[9px] font-bold ${char.gender === 'female' ? 'bg-audi-pink text-white' : 'text-slate-500'}`}>Nữ</button>
+                                    <button onClick={() => toggleGender(char.id, 'male')} className={`px-2 py-0.5 rounded text-[9px] font-bold ${char.gender === 'male' ? 'bg-blue-500 text-white' : 'text-slate-500'}`}>Nam</button>
+                                </div>
                             </div>
                             
-                            <div className="flex flex-col gap-2 mt-7">
-                                {/* BODY SLOT */}
-                                <div onClick={() => handleUploadClick(char.id, 'body')} className="w-full h-32 bg-black/40 rounded-xl border-2 border-dashed border-slate-700 hover:border-audi-pink cursor-pointer relative overflow-hidden group/item">
+                            <div className="space-y-3">
+                                {/* BODY SLOT (MAIN) */}
+                                <div onClick={() => handleUploadClick(char.id, 'body')} className="w-full h-48 bg-black/40 rounded-xl border-2 border-dashed border-slate-700 hover:border-audi-pink cursor-pointer relative overflow-hidden group/item transition-all">
                                     {char.bodyImage ? (
                                         <img src={char.bodyImage} className="w-full h-full object-contain" alt="Body" />
                                     ) : (
-                                        <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500">
-                                            <Icons.User className="w-5 h-5 mb-1" />
-                                            <span className="text-[8px] uppercase font-bold">BODY (Required)</span>
+                                        <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500 group-hover/item:text-audi-pink transition-colors">
+                                            <Icons.User className="w-8 h-8 mb-2" />
+                                            <span className="text-[10px] uppercase font-bold">Ảnh Toàn Thân</span>
                                         </div>
                                     )}
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-2">
-                                    {/* FACE SLOT */}
-                                    <div onClick={() => handleUploadClick(char.id, 'face')} className="aspect-square bg-black/40 rounded-xl border-2 border-dashed border-slate-700 hover:border-audi-cyan cursor-pointer relative overflow-hidden group/item">
-                                        {char.faceImage ? (
-                                            <img src={char.faceImage} className="w-full h-full object-cover" alt="Face" />
-                                        ) : (
-                                            <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500">
-                                                <Icons.Eye className="w-4 h-4 mb-1" />
-                                                <span className="text-[7px] uppercase font-bold">FACE</span>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* SHOES SLOT */}
-                                    <div onClick={() => handleUploadClick(char.id, 'shoes')} className="aspect-square bg-black/40 rounded-xl border-2 border-dashed border-slate-700 hover:border-audi-yellow cursor-pointer relative overflow-hidden group/item">
-                                        {char.shoesImage ? (
-                                            <img src={char.shoesImage} className="w-full h-full object-cover" alt="Shoes" />
-                                        ) : (
-                                            <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500">
-                                                <div className="w-4 h-4 border-2 border-current rounded-sm mb-1"></div>
-                                                <span className="text-[7px] uppercase font-bold text-center">SHOES<br/>(Vital)</span>
-                                            </div>
-                                        )}
-                                    </div>
+                                {/* FACE SLOT (SECONDARY) */}
+                                <div onClick={() => handleUploadClick(char.id, 'face')} className="w-full h-16 bg-black/40 rounded-xl border-2 border-dashed border-slate-700 hover:border-audi-cyan cursor-pointer relative overflow-hidden group/item flex items-center justify-center transition-all">
+                                    {char.faceImage ? (
+                                        <img src={char.faceImage} className="w-full h-full object-cover" alt="Face" />
+                                    ) : (
+                                        <div className="flex items-center gap-2 text-slate-500 group-hover/item:text-audi-cyan transition-colors">
+                                            <Icons.Eye className="w-4 h-4" />
+                                            <span className="text-[10px] uppercase font-bold">Ghép Mặt (Tùy chọn)</span>
+                                        </div>
+                                    )}
                                 </div>
-                                
-                                {activeMode !== 'single' && (
-                                    <div className="flex bg-black/40 rounded-lg p-0.5 border border-white/10 mt-1">
-                                        <button onClick={() => toggleGender(char.id, 'female')} className={`flex-1 py-1 rounded text-[9px] font-bold ${char.gender === 'female' ? 'bg-audi-pink text-white' : 'text-slate-500'}`}>Nữ</button>
-                                        <button onClick={() => toggleGender(char.id, 'male')} className={`flex-1 py-1 rounded text-[9px] font-bold ${char.gender === 'male' ? 'bg-blue-500 text-white' : 'text-slate-500'}`}>Nam</button>
-                                    </div>
-                                )}
                             </div>
                         </div>
                     ))}
                 </div>
+
+                {/* PROMPT BOX */}
+                <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                        <label className="text-xs font-bold text-slate-400 uppercase">Mô tả chi tiết</label>
+                        <button onClick={handleSuggestPrompt} disabled={isSuggesting} className="text-xs font-bold text-audi-purple flex items-center gap-1 hover:text-white transition-colors">
+                            <Icons.Sparkles className={`w-3 h-3 ${isSuggesting ? 'animate-spin' : ''}`} /> AI Viết Hộ
+                        </button>
+                    </div>
+                    <textarea 
+                        value={prompt}
+                        onChange={(e) => setPrompt(e.target.value)}
+                        placeholder={lang === 'vi' ? "Mô tả trang phục, bối cảnh, hành động..." : "Describe clothing, scene, action..."}
+                        className="w-full h-32 bg-[#12121a] border border-white/10 rounded-2xl p-4 text-sm text-white focus:border-audi-purple outline-none resize-none shadow-inner"
+                    />
+                </div>
             </div>
 
-            {/* PROMPT SECTION */}
-            <div className="space-y-3">
-                <div className="flex items-center justify-between px-2">
-                    <h3 className="font-bold text-white flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-full bg-audi-purple flex items-center justify-center text-xs">2</div>
-                        {lang === 'vi' ? 'Mô tả & Bối cảnh' : 'Prompt & Scene'}
+            {/* RIGHT: SETTINGS PANEL (RESTORED) */}
+            <div className="lg:col-span-1 space-y-6">
+                <div className="bg-[#12121a] border border-white/10 rounded-2xl p-5 space-y-5 shadow-lg h-full">
+                    <h3 className="font-bold text-white flex items-center gap-2 border-b border-white/10 pb-3">
+                        <Icons.Settings className="w-5 h-5 text-slate-400" />
+                        Cấu Hình Ảnh
                     </h3>
-                    <button onClick={handleSuggestPrompt} disabled={isSuggesting} className="text-xs font-bold text-audi-purple flex items-center gap-1">
-                        <Icons.Sparkles className={`w-3 h-3 ${isSuggesting ? 'animate-spin' : ''}`} /> Magic Prompt
-                    </button>
-                </div>
-                
-                <div className="flex flex-col md:flex-row gap-4">
-                    <div className="w-full md:w-1/3 space-y-2">
-                        <div onClick={handleRefUploadClick} className="w-full aspect-[16/9] bg-[#12121a] border-2 border-dashed border-slate-700 hover:border-audi-purple rounded-2xl cursor-pointer relative overflow-hidden flex items-center justify-center">
-                             {refImage ? (
-                                <img src={refImage} className="w-full h-full object-contain bg-black" alt="Ref" />
-                             ) : (
-                                <div className="text-center text-slate-500">
-                                    <Icons.Image className="w-6 h-6 mx-auto mb-1" />
-                                    <span className="text-[9px] font-bold">POSE REF (Optional)</span>
-                                </div>
-                             )}
+
+                    {/* MODEL SELECTION */}
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase">Chất lượng AI (Model)</label>
+                        <div className="grid grid-cols-2 gap-2">
+                            <button 
+                                onClick={() => setModelType('flash')}
+                                className={`p-3 rounded-xl border text-left transition-all ${modelType === 'flash' ? 'bg-white/10 border-white text-white' : 'border-white/10 text-slate-500 hover:border-white/30'}`}
+                            >
+                                <div className="font-bold text-xs">Flash (Tiết kiệm)</div>
+                                <div className="text-[9px] opacity-70">Tốc độ cao</div>
+                            </button>
+                            <button 
+                                onClick={() => setModelType('pro')}
+                                className={`p-3 rounded-xl border text-left transition-all relative overflow-hidden ${modelType === 'pro' ? 'bg-audi-purple/20 border-audi-purple text-white shadow-[0_0_10px_rgba(183,33,255,0.2)]' : 'border-white/10 text-slate-500 hover:border-white/30'}`}
+                            >
+                                <div className="font-bold text-xs flex items-center gap-1">Pro (Cao cấp) <Icons.Crown className="w-3 h-3 text-audi-yellow"/></div>
+                                <div className="text-[9px] opacity-70">Chi tiết 4K</div>
+                            </button>
                         </div>
                     </div>
-                    <div className="w-full md:w-2/3">
-                        <textarea 
-                            value={prompt}
-                            onChange={(e) => setPrompt(e.target.value)}
-                            placeholder={lang === 'vi' ? "Mô tả bối cảnh..." : "Describe background..."}
-                            className="w-full h-full min-h-[100px] bg-[#12121a] border border-white/10 rounded-2xl p-4 text-sm text-white focus:border-audi-purple outline-none resize-none"
-                        />
-                    </div>
-                </div>
-            </div>
 
-            {/* CONFIG SECTION */}
-            <div className="bg-[#12121a] border border-white/10 rounded-2xl p-6 space-y-4">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div>
-                        <label className="text-[10px] font-bold text-slate-400 uppercase mb-2 block">Aspect Ratio</label>
+                    {/* RATIO */}
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase">Tỉ lệ khung hình</label>
                         <div className="flex gap-2">
                             {ratios.map(r => (
-                                <button key={r.id} onClick={() => setAspectRatio(r.id)} className={`flex-1 py-1.5 rounded border text-[10px] font-bold ${aspectRatio === r.id ? 'bg-white text-black' : 'border-white/10 text-slate-500'}`}>{r.label}</button>
+                                <button 
+                                    key={r.id} 
+                                    onClick={() => setAspectRatio(r.id)} 
+                                    className={`flex-1 py-2 rounded-lg border text-xs font-bold transition-all ${aspectRatio === r.id ? 'bg-white text-black border-white' : 'border-white/10 text-slate-500 hover:bg-white/5'}`}
+                                >
+                                    {r.label}
+                                </button>
                             ))}
                         </div>
                     </div>
-                    <div>
-                        <label className="text-[10px] font-bold text-slate-400 uppercase mb-2 block">Resolution</label>
-                        <div className="flex gap-2">
-                            {['1K', '2K', '4K'].map(r => (
-                                <button key={r} onClick={() => setResolution(r as any)} className={`flex-1 py-1.5 rounded border text-[10px] font-bold ${resolution === r ? 'bg-audi-purple text-white border-audi-purple' : 'border-white/10 text-slate-500'}`}>{r}</button>
+
+                    {/* STYLES */}
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase">Phong cách (Style)</label>
+                        <div className="grid grid-cols-2 gap-2">
+                            {styles.map(s => (
+                                <button
+                                    key={s.id}
+                                    onClick={() => setSelectedStyle(s.id)}
+                                    className={`flex items-center gap-2 p-2 rounded-lg border text-xs font-bold transition-all ${selectedStyle === s.id ? 'bg-audi-pink text-white border-audi-pink' : 'border-white/10 text-slate-500 hover:bg-white/5'}`}
+                                >
+                                    <s.icon className="w-3 h-3" /> {s.name}
+                                </button>
                             ))}
                         </div>
                     </div>
-                    
-                    {/* NEW: CLOUD REF TOGGLE */}
-                    <div className="col-span-2 md:col-span-2">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase mb-2 block">Chế độ xử lý</label>
+
+                    {/* RESOLUTION */}
+                    {modelType === 'pro' && (
+                        <div className="space-y-2 animate-fade-in">
+                            <label className="text-[10px] font-bold text-slate-400 uppercase">Độ phân giải</label>
+                            <div className="flex gap-2 bg-black/30 p-1 rounded-lg">
+                                {['1K', '2K', '4K'].map(r => (
+                                    <button 
+                                        key={r} 
+                                        onClick={() => setResolution(r as any)} 
+                                        className={`flex-1 py-1.5 rounded text-[10px] font-bold transition-all ${resolution === r ? 'bg-audi-purple text-white shadow' : 'text-slate-500 hover:text-white'}`}
+                                    >
+                                        {r}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ADVANCED TOGGLES */}
+                    <div className="pt-2 border-t border-white/10 space-y-2">
                         <div 
                             onClick={() => setUseCloudRef(!useCloudRef)}
-                            className={`flex items-center justify-between p-2 rounded-xl border cursor-pointer transition-all ${useCloudRef ? 'bg-audi-cyan/10 border-audi-cyan shadow-[0_0_10px_rgba(33,212,253,0.1)]' : 'bg-white/5 border-white/10'}`}
+                            className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors ${useCloudRef ? 'bg-audi-cyan/10' : 'hover:bg-white/5'}`}
                         >
-                            <div className="flex items-center gap-3">
-                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${useCloudRef ? 'bg-audi-cyan text-black' : 'bg-white/10 text-slate-500'}`}>
-                                    <Icons.Cloud className="w-4 h-4" />
-                                </div>
-                                <div>
-                                    <div className={`text-xs font-bold ${useCloudRef ? 'text-audi-cyan' : 'text-slate-400'}`}>HQ Cloud Link (R2/File API)</div>
-                                    <div className="text-[9px] text-slate-500">Giữ nguyên chất lượng ảnh gốc, không nén Base64.</div>
-                                </div>
-                            </div>
+                            <span className={`text-xs font-bold ${useCloudRef ? 'text-audi-cyan' : 'text-slate-400'}`}>HQ Cloud Link (R2)</span>
                             <div className={`w-8 h-4 rounded-full p-0.5 transition-colors ${useCloudRef ? 'bg-audi-cyan' : 'bg-slate-700'}`}>
                                 <div className={`w-3 h-3 rounded-full bg-white transition-transform ${useCloudRef ? 'translate-x-4' : 'translate-x-0'}`}></div>
                             </div>
                         </div>
                     </div>
+
                 </div>
             </div>
 
@@ -482,7 +487,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
         {/* FOOTER */}
         <div className="fixed bottom-24 left-4 right-4 md:left-[50%] md:-translate-x-1/2 md:w-[900px] p-4 bg-[#090014]/90 backdrop-blur-md border border-white/10 rounded-2xl z-50 shadow-2xl flex items-center justify-between">
             <div className="flex flex-col">
-                <span className="text-[10px] text-slate-400 font-bold uppercase">Total Cost</span>
+                <span className="text-[10px] text-slate-400 font-bold uppercase">Chi phí ước tính</span>
                 <span className="text-xl font-black text-white">{calculateCost()} <span className="text-audi-yellow text-sm">VCOIN</span></span>
             </div>
             <button 
@@ -491,7 +496,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                 className="px-8 py-3 bg-gradient-to-r from-audi-pink to-audi-purple rounded-xl font-bold text-white shadow-[0_0_20px_rgba(255,0,153,0.4)] hover:scale-105 transition-all flex items-center gap-2"
             >
                 <Icons.Wand className="w-5 h-5" />
-                <span>{lang === 'vi' ? 'RENDER 3D' : 'GENERATE'}</span>
+                <span>{lang === 'vi' ? 'TẠO ẢNH NGAY' : 'GENERATE'}</span>
             </button>
         </div>
     </div>

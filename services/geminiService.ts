@@ -37,7 +37,7 @@ interface CharacterData {
     gender: 'male' | 'female';
     image: string | null; 
     faceImage?: string | null;
-    shoesImage?: string | null;
+    shoesImage?: string | null; // Made optional again
     description?: string;
 }
 
@@ -91,24 +91,22 @@ const processDigitalTwinMode = (
     const parts = [...charParts]; 
     if (refImagePart) parts.push(refImagePart);
 
-    let systemPrompt = `** PROTOCOL V6: VISUAL ANCHORING & TEXTURE INJECTION **
+    // Simplified System Prompt for Classic Mode
+    let systemPrompt = `** SYSTEM: 3D CHARACTER RECONSTRUCTION **
     
-    [ROLE]: You are a Hyper-Precise 3D Texture Mapper.
-    [INPUT]: You are receiving high-resolution "VISUAL ANCHOR SHEETS".
+    [TASK]: Recreate the character(s) based on the provided Reference Sheets.
     
-    [VISUAL ANCHORING RULES]:
-    1. **READ THE LABELS**: The input images have explicit text labels drawn on them (e.g., "MANDATORY_SHOES", "MANDATORY_FACE").
-    2. **FOLLOW THE LINES**: There are colored lines connecting the Details to the Body. Follow these lines to understand exactly where to map the texture.
-    3. **NO HALLUCINATIONS**: 
-       - If you see a "MANDATORY_SHOES" box, you MUST copy those shoes pixel-perfect. 
-       - Do not invent generic sneakers if the reference shows boots.
+    [INPUT FORMAT]:
+    - Each input image contains the MAIN BODY (Left) and optionally TARGET FACE (Right).
+    - If a specific Face is provided, you MUST Swap/Map that face onto the character.
+    - If no specific shoes are provided, infer appropriate footwear based on the outfit style.
     
-    [EXECUTION]:
-    - Map Input 1 -> Character 1 (Left).
-    - Map Input 2 -> Character 2 (if exists).
+    [MAPPING]:
+    - Image 1 -> Character 1 (Left).
+    - Image 2 -> Character 2 (Right/Center).
     
     [SCENE]: "${prompt}"
-    [RENDER]: Unreal Engine 5, 8K, Raytracing.`;
+    [RENDER]: Unreal Engine 5, 8K, Raytracing, Detailed Texture.`;
 
     return { systemPrompt, parts };
 };
@@ -120,7 +118,7 @@ export const generateImage = async (
     characterDataList: CharacterData[] = [], 
     resolution: string = '2K',
     useSearch: boolean = false,
-    useCloudRef: boolean = false, // NEW FLAG
+    useCloudRef: boolean = false, 
     onProgress?: (msg: string) => void
 ): Promise<string | null> => {
   
@@ -129,7 +127,7 @@ export const generateImage = async (
     const isPro = resolution === '2K' || resolution === '4K';
     const model = isPro ? 'gemini-3-pro-image-preview' : 'gemini-2.5-flash-image';
     
-    if (onProgress) onProgress(`Engine: ${model} | Mode: ${useCloudRef ? 'CLOUD NEURAL LINK (HQ)' : 'STANDARD'}`);
+    if (onProgress) onProgress(`Engine: ${model} | Mode: ${useCloudRef ? 'CLOUD NEURAL LINK' : 'STANDARD'}`);
 
     // 1. PREPARE STYLE REF
     let refImagePart = null;
@@ -147,28 +145,27 @@ export const generateImage = async (
     // 2. PREPARE CHARACTERS
     for (const char of characterDataList) {
         if (char.image) {
-            if (onProgress) onProgress(`Constructing V6 Anchor Sheet for Player ${char.id}...`);
+            if (onProgress) onProgress(`Processing Player ${char.id}...`);
             
-            // Create the Labeled Texture Sheet
+            // Create the Texture Sheet (Now simpler)
             const textureSheet = await createTextureSheet(
                 char.image, 
                 char.faceImage, 
-                char.shoesImage
+                char.shoesImage // Optional/Null
             );
             
             let finalPart;
 
             if (useCloudRef) {
                 // STRATEGY A: CLOUD UPLOAD (FILE API)
-                // Upload full resolution sheet (no downscaling)
-                if (onProgress) onProgress(`Uploading HQ Reference to Google Brain (Player ${char.id})...`);
+                if (onProgress) onProgress(`Uploading Reference (Player ${char.id})...`);
                 const fileUri = await uploadToGemini(textureSheet, 'image/jpeg');
                 console.log("File URI received:", fileUri);
                 finalPart = {
                     fileData: { mimeType: 'image/jpeg', fileUri: fileUri }
                 };
             } else {
-                // STRATEGY B: INLINE BASE64 (Legacy/Fast)
+                // STRATEGY B: INLINE BASE64
                 const optimizedSheet = await optimizePayload(textureSheet, 1280); 
                 finalPart = {
                     inlineData: { data: cleanBase64(optimizedSheet), mimeType: 'image/jpeg' }
@@ -186,8 +183,7 @@ export const generateImage = async (
 
     const config: any = {
         imageConfig: { aspectRatio: aspectRatio },
-        // Strict system instruction
-        systemInstruction: "PROTOCOL V6: READ TEXT LABELS ON IMAGE. COPY TEXTURES EXACTLY.", 
+        systemInstruction: "Create high quality 3D character render. Follow the reference image structure.", 
         safetySettings: [
             { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
             { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
@@ -203,7 +199,7 @@ export const generateImage = async (
         }
     }
 
-    if (onProgress) onProgress("Rendering Digital Twin...");
+    if (onProgress) onProgress("Rendering...");
 
     const response = await ai.models.generateContent({
       model: model,

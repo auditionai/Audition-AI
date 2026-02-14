@@ -563,8 +563,23 @@ export const mockPayOSSuccess = async (txId: string) => {
 export const getAdminStats = async () => {
     let users = [], txs = [];
     
+    // Default stats if DB is empty or fails
+    let dashboardStats = {
+        visitsToday: 0,
+        visitsTotal: 0,
+        newUsersToday: 0,
+        usersTotal: 0,
+        imagesToday: 0,
+        imagesTotal: 0,
+        aiUsage: [] as any[]
+    };
+    
     if (supabase) {
-        const { data: u } = await supabase.from('users').select('id, display_name, email, photo_url, diamonds, is_admin');
+        // 1. Fetch Users (List for Table + Count for Stats)
+        const { data: u, count: totalUsers } = await supabase
+            .from('users')
+            .select('id, display_name, email, photo_url, diamonds, is_admin, created_at', { count: 'exact' });
+
         if(u) {
             users = u.map((p: any) => ({
                 id: p.id,
@@ -572,10 +587,12 @@ export const getAdminStats = async () => {
                 email: p.email,
                 avatar: p.photo_url || MOCK_USER.avatar,
                 balance: p.diamonds || 0,
-                role: p.is_admin ? 'admin' : 'user'
+                role: p.is_admin ? 'admin' : 'user',
+                createdAt: p.created_at
             }));
         }
-        
+
+        // 2. Fetch Transactions
         const { data: t } = await supabase.from('transactions').select('*');
         if(t) txs = t.map((row:any) => ({
             id: row.id,
@@ -588,21 +605,41 @@ export const getAdminStats = async () => {
             createdAt: row.created_at,
             paymentMethod: 'payos'
         }));
+
+        // 3. REALTIME DASHBOARD STATS CALCULATION
+        const todayStr = new Date().toISOString().split('T')[0];
+        
+        // Count New Users Today
+        const newUsersCount = users.filter((u:any) => u.createdAt && u.createdAt.startsWith(todayStr)).length;
+        
+        // Count Images (Total & Today) from 'generated_images' table
+        const { count: totalImgs } = await supabase.from('generated_images').select('*', { count: 'exact', head: true });
+        const { count: todayImgs } = await supabase.from('generated_images').select('*', { count: 'exact', head: true }).gte('created_at', todayStr);
+
+        // Count "Visits" (Approximation via daily_active_users table)
+        const { count: visitsToday } = await supabase.from('daily_active_users').select('*', { count: 'exact', head: true }).eq('activity_date', todayStr);
+        // Total visits is harder without a full log, we'll approximate or use total rows in DAU
+        const { count: visitsTotal } = await supabase.from('daily_active_users').select('*', { count: 'exact', head: true });
+
+        // Calculate Revenue from PAID transactions
+        const revenue = txs.filter((t:any) => t.status === 'paid').reduce((sum:number, t:any) => sum + t.amount, 0);
+
+        dashboardStats = {
+            visitsToday: visitsToday || 0,
+            visitsTotal: visitsTotal || 0,
+            newUsersToday: newUsersCount,
+            usersTotal: totalUsers || users.length,
+            imagesToday: todayImgs || 0,
+            imagesTotal: totalImgs || 0,
+            aiUsage: [
+                { feature: 'All Tools', flash: 0, pro: 0, vcoins: 0, revenue: revenue }
+            ]
+        };
     }
 
     return {
-        dashboard: {
-            visitsToday: 150,
-            visitsTotal: 12500,
-            newUsersToday: 5,
-            usersTotal: users.length,
-            imagesToday: 24,
-            imagesTotal: 1800,
-            aiUsage: [
-                { feature: 'Single Image', flash: 5000, pro: 20, vcoins: 5200, revenue: 5200000 }
-            ]
-        },
-        revenue: 0,
+        dashboard: dashboardStats,
+        revenue: dashboardStats.aiUsage[0].revenue,
         transactions: txs,
         logs: [],
         usersList: users,

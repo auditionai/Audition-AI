@@ -14,18 +14,15 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login'); 
   const [beat, setBeat] = useState(false);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
-  const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  
+  // Form State
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [username, setUsername] = useState(''); // Only for register
   
   // Showcase State
   const [showcaseImages, setShowcaseImages] = useState<any[]>([]);
-
-  // Real-time Stats State
-  const [stats, setStats] = useState({
-    users: 662,
-    images: 1648,
-    visits: 10559
-  });
 
   // Load Showcase Images
   useEffect(() => {
@@ -73,19 +70,6 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
     return () => clearInterval(interval);
   }, []);
 
-  // Real-time Counter Simulation
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setStats(prev => ({
-        users: prev.users + (Math.random() > 0.7 ? 1 : 0), 
-        images: prev.images + Math.floor(Math.random() * 2) + 1,
-        visits: prev.visits + Math.floor(Math.random() * 5) + 1
-      }));
-    }, 1000); 
-
-    return () => clearInterval(interval);
-  }, []);
-
   // Mouse Parallax
   const handleMouseMove = (e: React.MouseEvent) => {
     const { clientX, clientY } = e;
@@ -99,9 +83,56 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
     setShowLogin(true);
   };
 
+  const handleAuthAction = async () => {
+      if (!email || !password) {
+          alert("Vui lòng nhập đầy đủ Email và Mật khẩu");
+          return;
+      }
+      
+      setIsLoggingIn(true);
+
+      try {
+          if (supabase) {
+              if (authMode === 'login') {
+                  // LOGIN FLOW
+                  const { error } = await supabase.auth.signInWithPassword({
+                      email,
+                      password
+                  });
+                  if (error) throw error;
+                  // Auth state listener in App.tsx will handle redirection
+                  onEnter();
+              } else {
+                  // REGISTER FLOW
+                  const { data, error } = await supabase.auth.signUp({
+                      email,
+                      password,
+                      options: {
+                          data: {
+                              full_name: username || email.split('@')[0],
+                              avatar_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${email}`
+                          }
+                      }
+                  });
+                  if (error) throw error;
+                  
+                  alert("Đăng ký thành công! Vui lòng kiểm tra email để xác thực hoặc đăng nhập ngay.");
+                  setAuthMode('login'); // Switch to login
+              }
+          } else {
+              // Mock Login if Supabase is offline
+              onEnter();
+          }
+      } catch (e: any) {
+          alert(`Lỗi: ${e.message}`);
+      } finally {
+          setIsLoggingIn(false);
+      }
+  };
+
   const handleGoogleLogin = async () => {
       if (!supabase) {
-          alert("Không thể kết nối đến máy chủ xác thực. Vui lòng kiểm tra cấu hình mạng hoặc biến môi trường.");
+          alert("Chế độ Offline: Đăng nhập giả lập thành công.");
           onEnter(); 
           return;
       }
@@ -109,45 +140,28 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
       setIsLoggingIn(true);
       
       try {
-          // Debugging info for deployment issues
-          console.log("[Auth] Starting Google OAuth...");
-          console.log("[Auth] Redirect URL:", window.location.origin);
-
           const { error } = await supabase.auth.signInWithOAuth({
               provider: 'google',
               options: {
                   redirectTo: window.location.origin,
-                  queryParams: {
-                      access_type: 'offline',
-                      prompt: 'consent'
-                  }
+                  queryParams: { access_type: 'offline', prompt: 'consent' }
               }
           });
 
           if (error) {
-              console.error("[Auth] Error:", error);
-              // Handle common misconfiguration errors
-              if (error.message.includes('redirect_uri_mismatch') || error.status === 400) {
-                  alert(`Lỗi Cấu Hình: Vui lòng thêm "${window.location.origin}" vào danh sách "Redirect URLs" trong Supabase Dashboard > Authentication > URL Configuration.`);
+              if (error.message.includes('redirect_uri_mismatch')) {
+                  alert(`Lỗi Cấu Hình: Vui lòng thêm "${window.location.origin}" vào Redirect URLs trên Supabase.`);
               } else {
                   alert("Lỗi đăng nhập: " + error.message);
               }
               setIsLoggingIn(false);
           }
       } catch (e: any) {
-          console.error("[Auth] Exception:", e);
-          alert("Đã xảy ra lỗi không mong muốn: " + (e.message || e));
+          alert("Lỗi: " + e.message);
           setIsLoggingIn(false);
       }
   };
 
-  const toggleFaq = (index: number) => {
-    setOpenFaq(openFaq === index ? null : index);
-  };
-
-  const formatNumber = (num: number) => {
-    return new Intl.NumberFormat('de-DE').format(num);
-  };
 
   return (
     <div 
@@ -295,19 +309,19 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
           </div>
       </div>
 
-      {/* --- LOGIN MODAL --- */}
+      {/* --- LOGIN / REGISTER MODAL --- */}
       {showLogin && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
               <div className="w-full max-w-md bg-[#090014] border-2 border-audi-pink rounded-3xl p-8 relative shadow-[0_0_50px_rgba(255,0,153,0.3)]">
                   <button onClick={() => setShowLogin(false)} className="absolute top-4 right-4 text-slate-500 hover:text-white">
                       <Icons.X className="w-6 h-6" />
                   </button>
-                  <div className="text-center mb-8">
+                  <div className="text-center mb-6">
                       <div className="w-16 h-16 rounded-full bg-gradient-to-br from-audi-pink to-audi-purple flex items-center justify-center mx-auto mb-4 animate-bounce">
                           <Icons.User className="w-8 h-8 text-white" />
                       </div>
                       <h2 className="font-game text-2xl font-bold text-white">{authMode === 'login' ? 'ĐĂNG NHẬP' : 'ĐĂNG KÝ'}</h2>
-                      <p className="text-slate-400 text-sm">{authMode === 'login' ? 'Chào mừng vũ công quay trở lại!' : 'Tạo tài khoản để bắt đầu sáng tạo!'}</p>
+                      <p className="text-slate-400 text-sm mt-1">{authMode === 'login' ? 'Chào mừng vũ công quay trở lại!' : 'Tạo tài khoản để bắt đầu sáng tạo!'}</p>
                   </div>
                   
                   {/* Google Quick Login Button */}
@@ -337,17 +351,63 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
                   </div>
 
                   <div className="space-y-4">
+                      {authMode === 'register' && (
+                          <div className="animate-fade-in">
+                              <label className="text-xs font-bold text-audi-cyan uppercase mb-1 block">Tên hiển thị</label>
+                              <input 
+                                  type="text" 
+                                  value={username}
+                                  onChange={(e) => setUsername(e.target.value)}
+                                  className="w-full bg-white/5 border border-white/20 rounded-xl p-3 text-white focus:border-audi-pink outline-none transition-colors" 
+                                  placeholder="Nhập tên của bạn..." 
+                              />
+                          </div>
+                      )}
                       <div>
-                          <label className="text-xs font-bold text-audi-cyan uppercase mb-1 block">Tên tài khoản</label>
-                          <input type="text" className="w-full bg-white/5 border border-white/20 rounded-xl p-3 text-white focus:border-audi-pink outline-none transition-colors" placeholder="Nhập tên đăng nhập..." />
+                          <label className="text-xs font-bold text-audi-cyan uppercase mb-1 block">Email</label>
+                          <input 
+                              type="email" 
+                              value={email}
+                              onChange={(e) => setEmail(e.target.value)}
+                              className="w-full bg-white/5 border border-white/20 rounded-xl p-3 text-white focus:border-audi-pink outline-none transition-colors" 
+                              placeholder="Nhập email..." 
+                          />
                       </div>
                       <div>
                           <label className="text-xs font-bold text-audi-cyan uppercase mb-1 block">Mật khẩu</label>
-                          <input type="password" className="w-full bg-white/5 border border-white/20 rounded-xl p-3 text-white focus:border-audi-pink outline-none transition-colors" placeholder="Nhập mật khẩu..." />
+                          <input 
+                              type="password" 
+                              value={password}
+                              onChange={(e) => setPassword(e.target.value)}
+                              className="w-full bg-white/5 border border-white/20 rounded-xl p-3 text-white focus:border-audi-pink outline-none transition-colors" 
+                              placeholder="Nhập mật khẩu..." 
+                          />
                       </div>
-                      <button onClick={onEnter} className="w-full py-4 mt-4 bg-gradient-to-r from-audi-pink to-audi-purple rounded-xl font-bold text-white shadow-lg hover:shadow-audi-pink/50 transition-all transform hover:scale-[1.02]">
-                          {authMode === 'login' ? 'ĐĂNG NHẬP NGAY' : 'ĐĂNG KÝ NGAY'}
+                      
+                      <button 
+                        onClick={handleAuthAction}
+                        disabled={isLoggingIn}
+                        className="w-full py-4 mt-2 bg-gradient-to-r from-audi-pink to-audi-purple rounded-xl font-bold text-white shadow-lg hover:shadow-audi-pink/50 transition-all transform hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                          {isLoggingIn 
+                             ? <Icons.Loader className="w-5 h-5 animate-spin mx-auto" /> 
+                             : (authMode === 'login' ? 'ĐĂNG NHẬP NGAY' : 'ĐĂNG KÝ NGAY')
+                          }
                       </button>
+
+                      <div className="text-center mt-2">
+                          <button 
+                              onClick={() => {
+                                  setAuthMode(authMode === 'login' ? 'register' : 'login');
+                                  setEmail('');
+                                  setPassword('');
+                                  setUsername('');
+                              }}
+                              className="text-sm text-slate-400 hover:text-audi-cyan transition-colors underline underline-offset-4"
+                          >
+                              {authMode === 'login' ? 'Chưa có tài khoản? Đăng ký' : 'Đã có tài khoản? Đăng nhập'}
+                          </button>
+                      </div>
                   </div>
               </div>
           </div>

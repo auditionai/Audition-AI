@@ -1,5 +1,4 @@
 
-
 /**
  * CORE SOLUTION: "Structural Image Conditioning" (The Solid Fence)
  * 
@@ -22,6 +21,12 @@ export const urlToBase64 = async (url: string): Promise<string | null> => {
     }
 };
 
+/**
+ * Creates a "Blueprint" version of the reference image.
+ * 1. Matches Target Aspect Ratio (adding padding if needed).
+ * 2. Applies Grayscale & Contrast filters to REMOVE clothing color/texture information.
+ *    This forces the AI to use the reference ONLY for Pose, not for Outfit.
+ */
 export const createSolidFence = async (base64Str: string, aspectRatio: string): Promise<string> => {
     return new Promise((resolve) => {
       const img = new Image();
@@ -32,7 +37,7 @@ export const createSolidFence = async (base64Str: string, aspectRatio: string): 
         if (!ctx) return resolve(base64Str);
   
         // Determine target dimensions based on aspect ratio
-        // We use a high-fidelity base size (e.g., 1536px) to ensure the structure is clear to the Vision Encoder
+        // We use a high-fidelity base size (e.g., 1536px) to ensure the structure is clear
         const BASE_SIZE = 1536; 
         const [wRatio, hRatio] = aspectRatio.split(':').map(Number);
         
@@ -50,13 +55,12 @@ export const createSolidFence = async (base64Str: string, aspectRatio: string): 
         canvas.width = targetW;
         canvas.height = targetH;
   
-        // 1. THE VOID: Fill background with #808080 (Neutral Grey)
-        // This signals "Outpainting Area" to the model.
-        ctx.fillStyle = '#808080';
+        // 1. THE VOID: Fill background with a specific "Chroma Key" style or Noise
+        // Instead of plain gray, we use a very light pattern to signal "This is empty space"
+        ctx.fillStyle = '#E0E0E0'; 
         ctx.fillRect(0, 0, targetW, targetH);
   
         // Calculate scaling to fit the source image *inside* the fence (Contain mode)
-        // We want the reference structure to be fully visible, not cropped.
         const scale = Math.min(targetW / img.width, targetH / img.height);
         const drawW = Math.round(img.width * scale);
         const drawH = Math.round(img.height * scale);
@@ -65,21 +69,27 @@ export const createSolidFence = async (base64Str: string, aspectRatio: string): 
         const x = Math.round((targetW - drawW) / 2);
         const y = Math.round((targetH - drawH) / 2);
         
-        // 2. THE ANCHOR: Draw a 4px Solid Black Border
-        // This creates a high-contrast boundary that the Vision Encoder locks onto as a structural limit.
-        ctx.strokeStyle = '#000000';
-        ctx.lineWidth = 4;
+        // --- CRITICAL UPDATE: DE-TEXTURING FILTER ---
+        // Convert to Grayscale and High Contrast.
+        // This removes "Red Shirt" or "Blue Jeans" info, leaving only luminance/structure.
+        ctx.filter = 'grayscale(100%) contrast(1.2) brightness(1.1)';
         
-        // Draw the border slightly outside the image to frame it perfectly
-        ctx.strokeRect(x - 2, y - 2, drawW + 4, drawH + 4);
-
-        // 3. THE CONTENT: Draw the source image
-        // High quality smoothing is essential so the AI sees clear details
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
+        // Draw the source image
         ctx.drawImage(img, x, y, drawW, drawH);
+        
+        // Reset filter for borders
+        ctx.filter = 'none';
+
+        // 2. THE ANCHOR: Draw a faint border to define the pose area vs the extension area
+        // If there is significant empty space (aspect ratio mismatch), draw a dashed guide
+        if (targetW > drawW + 50 || targetH > drawH + 50) {
+            ctx.setLineDash([10, 10]);
+            ctx.strokeStyle = '#AAAAAA';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(x, y, drawW, drawH);
+        }
   
-        resolve(canvas.toDataURL('image/jpeg', 0.95));
+        resolve(canvas.toDataURL('image/jpeg', 0.90));
       };
       img.onerror = () => resolve(base64Str);
       img.src = base64Str;
@@ -124,7 +134,6 @@ export const createSolidFence = async (base64Str: string, aspectRatio: string): 
                   ctx.drawImage(img, 0, 0, width, height);
               }
               
-              // Compress to JPEG 0.9 to reduce payload size for API without losing structural details
               resolve(canvas.toDataURL('image/jpeg', 0.9)); 
           };
           img.onerror = () => resolve(base64Str);

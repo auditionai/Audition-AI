@@ -164,6 +164,7 @@ export const generateImage = async (
         
         let processedPoseRef = null;
         if (styleRefBase64) {
+            // isPoseRef=true passed to utility (now cleaned to NOT bleach image)
             const ghostData = await createSolidFence(styleRefBase64, aspectRatio, true);
             processedPoseRef = ghostData.split(',')[1];
         }
@@ -195,13 +196,16 @@ export const generateImage = async (
         I have provided pre-generated character sprites labeled ${validSprites.map(s => `[SPRITE_${s.id}]`).join(', ')}.
         
         [INPUT MAPPING]:
-        ${masterCanvasIndex > 0 ? `- [MASTER_CANVAS] (Image ${masterCanvasIndex}): Scene/Pose Reference.` : ''}
+        ${masterCanvasIndex > 0 ? `- [MASTER_CANVAS] (Image ${masterCanvasIndex}): STRICT REFERENCE for Scene, Background, Lighting, and Camera Angle.` : ''}
         ${validSprites.map(s => `- [SPRITE_${s.id}] (Image ${spriteMap[s.id]}): Character ${s.id} on GREEN SCREEN.`).join('\n')}
         
         [MISSION]:
-        You MUST place these specific sprites into the scene.
+        Composit the sprites into a scene that MATCHES [MASTER_CANVAS].
+        1. **BACKGROUND**: Recreate the environment shown in [MASTER_CANVAS] (e.g. if it's a bedroom, make it a bedroom).
+        2. **POSE**: Position the characters exactly as shown in [MASTER_CANVAS].
+        3. **SPRITES**: Use the visual features of [SPRITE_X] (Outfit/Face) but adapt their pose to match the reference.
         
-        **RULE:** DO NOT regenerate their features (Face/Clothes/Gender). USE THE SPRITES PROVIDED.
+        **RULE:** DO NOT regenerate character features (Face/Clothes). USE THE SPRITE'S VISUALS.
         Blend them into the lighting of the scene.
         
         [SCENE DESCRIPTION]: ${prompt}`;

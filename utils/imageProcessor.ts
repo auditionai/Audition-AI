@@ -59,18 +59,12 @@ export const createSolidFence = async (base64Str: string, aspectRatio: string = 
         const y = Math.round((BASE_SIZE - drawH) / 2);
         
         if (isPoseRef) {
-            // --- POSE REFERENCE LOGIC (GHOSTING) ---
-            // If this is the POSE ref, we want structure but NO color influence.
-            // We apply the "Bleach" effect here.
-            ctx.filter = 'grayscale(100%) brightness(1.5) contrast(0.6)';
+            // --- POSE/SCENE REFERENCE LOGIC ---
+            // CHANGED: Removed Grayscale/White Overlay.
+            // We draw the image AS IS so the AI can see the Background/Lighting context.
             ctx.drawImage(img, x, y, drawW, drawH);
-            ctx.filter = 'none';
             
-            // Overlay white to further kill dark pixels
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            
-            // No border for pose ref, it should be subtle.
+            // No border for pose ref - allow AI to blend it.
         } else {
             // --- CHARACTER LOGIC (SOLID FENCE) ---
             // This is the "Audition AI" technique. EXACT IMPLEMENTATION.

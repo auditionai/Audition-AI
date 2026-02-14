@@ -380,10 +380,11 @@ export const redeemGiftcode = async (codeStr: string): Promise<{success: boolean
 export const getPromotionConfig = async (): Promise<PromotionConfig> => {
     if (supabase) {
         // Fetch active promotion from 'promotions' table
+        // CHANGED: Removed .eq('is_active', true) to fetch latest record regardless of status
+        // This allows Admin to see disabled promotions and re-enable them.
         const { data } = await supabase
             .from('promotions')
             .select('*')
-            .eq('is_active', true)
             .order('created_at', { ascending: false })
             .limit(1)
             .single();
@@ -418,10 +419,11 @@ export const savePromotionConfig = async (config: PromotionConfig): Promise<void
             is_active: config.isActive
         };
 
-        // Check if there is ANY active promotion record we should update, or insert new
+        // Check if there is ANY promotion record (active or not) to update latest
         const { data: existing } = await supabase
             .from('promotions')
             .select('id')
+            .order('created_at', { ascending: false })
             .limit(1);
 
         if (existing && existing.length > 0) {

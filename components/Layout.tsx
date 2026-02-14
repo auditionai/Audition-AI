@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { APP_CONFIG } from '../constants';
-import { Language, Theme, ViewId, UserProfile } from '../types';
+import { Language, Theme, ViewId, UserProfile, PromotionConfig } from '../types';
 import { Icons } from './Icons';
 import { DailyCheckin } from './DailyCheckin';
 import { getUserProfile, getPromotionConfig } from '../services/economyService';
@@ -23,7 +23,7 @@ export const Layout: React.FC<LayoutProps> = ({
 }) => {
   const [scrolled, setScrolled] = useState(false);
   const [user, setUser] = useState<UserProfile | null>(null);
-  const [marqueeText, setMarqueeText] = useState("🎉 Chào mừng bạn đến với DMP AI Studio!");
+  const [promoConfig, setPromoConfig] = useState<PromotionConfig | null>(null);
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
@@ -34,7 +34,7 @@ export const Layout: React.FC<LayoutProps> = ({
     
     // Load Marquee
     getPromotionConfig().then(config => {
-        if (config.marqueeText) setMarqueeText(config.marqueeText);
+        setPromoConfig(config);
     });
     
     // Interval to refresh user balance
@@ -52,6 +52,8 @@ export const Layout: React.FC<LayoutProps> = ({
     ['home', 'tools', 'gallery'].includes(item.id)
   );
 
+  const showMarquee = promoConfig?.isActive && promoConfig?.marqueeText;
+
   return (
     <div className="min-h-screen bg-[#05050A] text-white font-sans selection:bg-audi-pink selection:text-white relative overflow-x-hidden">
       
@@ -59,12 +61,15 @@ export const Layout: React.FC<LayoutProps> = ({
       {showCheckin && <DailyCheckin onClose={() => setShowCheckin(false)} onSuccess={() => getUserProfile().then(setUser)} lang={lang === 'vi' ? 'vi' : 'en'} />}
 
       {/* --- PROMOTION MARQUEE --- */}
-      <div className="fixed top-0 left-0 right-0 h-8 bg-gradient-to-r from-audi-purple via-audi-pink to-audi-cyan z-[60] flex items-center overflow-hidden border-b border-white/20 shadow-[0_0_15px_#FF0099]">
-          <div className="animate-[marquee_20s_linear_infinite] whitespace-nowrap flex gap-10 items-center font-game text-xs font-bold text-black uppercase tracking-widest">
-              <span>{marqueeText}</span>
-              <span>{marqueeText}</span>
+      {showMarquee && (
+          <div className="fixed top-0 left-0 right-0 h-8 bg-gradient-to-r from-audi-purple via-audi-pink to-audi-cyan z-[60] flex items-center overflow-hidden border-b border-white/20 shadow-[0_0_15px_#FF0099]">
+              <div className="animate-[marquee_20s_linear_infinite] whitespace-nowrap flex gap-10 items-center font-game text-xs font-bold text-black uppercase tracking-widest">
+                  <span>{promoConfig.marqueeText}</span>
+                  <span>{promoConfig.marqueeText}</span>
+                  <span>{promoConfig.marqueeText}</span>
+              </div>
           </div>
-      </div>
+      )}
 
       {/* --- BACKGROUND --- */}
       <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
@@ -74,7 +79,7 @@ export const Layout: React.FC<LayoutProps> = ({
       </div>
 
       {/* --- HEADER --- */}
-      <header className={`fixed top-8 left-0 right-0 z-50 transition-all duration-300 ${scrolled ? 'py-2 bg-black/40 backdrop-blur-md' : 'py-4 md:py-6'}`}>
+      <header className={`fixed ${showMarquee ? 'top-8' : 'top-0'} left-0 right-0 z-50 transition-all duration-300 ${scrolled ? 'py-2 bg-black/40 backdrop-blur-md' : 'py-4 md:py-6'}`}>
          <div className="max-w-7xl mx-auto px-4 md:px-6 flex justify-between items-center">
             
             <div 
@@ -103,7 +108,7 @@ export const Layout: React.FC<LayoutProps> = ({
          </div>
       </header>
 
-      <main className="relative z-10 pt-32 pb-32 min-h-screen">
+      <main className={`relative z-10 ${showMarquee ? 'pt-32' : 'pt-24'} pb-32 min-h-screen`}>
          <div className="max-w-7xl mx-auto px-4 md:px-6 animate-fade-in">
              {children}
          </div>

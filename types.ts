@@ -1,4 +1,5 @@
 
+
 export type Language = 'vi' | 'en';
 export type Theme = 'light' | 'dark';
 export type ViewId = 'home' | 'tools' | 'gallery' | 'admin' | 'guide' | 'about' | 'tool_workspace' | 'support' | 'settings' | 'topup';
@@ -131,10 +132,14 @@ export interface CheckinConfig {
   isMilestone?: boolean;
 }
 
-export interface PromotionConfig {
-    isActive: boolean;
+export interface PromotionCampaign {
+    id: string;
+    name: string; // Internal Campaign Name
     marqueeText: string;
-    bonusPercent: number; // e.g., 20 for 20% bonus
+    bonusPercent: number; 
     startTime: string; // ISO Date String
     endTime: string; // ISO Date String
+    isActive: boolean; // Manual Kill Switch
 }
+
+export type PromotionConfig = PromotionCampaign;

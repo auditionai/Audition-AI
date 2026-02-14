@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import { Language, Transaction, CreditPackage } from '../types';
+import { Language, Transaction, CreditPackage, PromotionCampaign } from '../types';
 import { Icons } from '../components/Icons';
-import { getPackages, createPaymentLink, mockPayOSSuccess, getPromotionConfig } from '../services/economyService';
+import { getPackages, createPaymentLink, mockPayOSSuccess, getActivePromotion } from '../services/economyService';
 
 interface TopUpProps {
   lang: Language;
@@ -15,7 +15,7 @@ export const TopUp: React.FC<TopUpProps> = ({ lang }) => {
   const [loading, setLoading] = useState(false);
   const [history, setHistory] = useState<Transaction[]>([]);
   const [packages, setPackages] = useState<CreditPackage[]>([]);
-  const [promo, setPromo] = useState({ isActive: false, bonusPercent: 0 });
+  const [activeCampaign, setActiveCampaign] = useState<PromotionCampaign | null>(null);
 
   // Timer for Flash Sale
   const [timeLeft, setTimeLeft] = useState({ h: 0, m: 0, s: 0 });
@@ -29,29 +29,39 @@ export const TopUp: React.FC<TopUpProps> = ({ lang }) => {
   };
 
   useEffect(() => {
-    // Load Packages & Promo
+    // Load Packages & Active Campaign
     const loadData = async () => {
         const pkgs = await getPackages();
         setPackages(pkgs);
-        const p = await getPromotionConfig();
-        setPromo({ isActive: p.isActive, bonusPercent: p.bonusPercent });
+        const campaign = await getActivePromotion();
+        setActiveCampaign(campaign);
     };
     loadData();
+  }, []);
 
-    // Mock countdown
-    const target = new Date();
-    target.setHours(target.getHours() + 5); 
+  // Update Countdown Timer based on Campaign End Time
+  useEffect(() => {
+    if (!activeCampaign) return;
+
     const interval = setInterval(() => {
-        const now = new Date();
-        const diff = target.getTime() - now.getTime();
-        if (diff <= 0) return;
+        const now = new Date().getTime();
+        const end = new Date(activeCampaign.endTime).getTime();
+        const diff = end - now;
+
+        if (diff <= 0) {
+            setTimeLeft({ h: 0, m: 0, s: 0 });
+            // Optionally refresh campaign status here
+            return;
+        }
+
         const h = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
         const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
         const s = Math.floor((diff % (1000 * 60)) / 1000);
         setTimeLeft({ h, m, s });
     }, 1000);
+
     return () => clearInterval(interval);
-  }, []);
+  }, [activeCampaign]);
 
   // Load History
   useEffect(() => {
@@ -147,8 +157,8 @@ export const TopUp: React.FC<TopUpProps> = ({ lang }) => {
             </div>
         ) : (
             <>
-                {/* Header Banner (Active only if Global Promotion is ON) */}
-                {promo.isActive && (
+                {/* Header Banner (Active only if Active Campaign found) */}
+                {activeCampaign && (
                     <div className="relative rounded-3xl overflow-hidden mb-8 border border-audi-pink/30 shadow-[0_0_30px_rgba(255,0,153,0.2)]">
                         <div className="absolute inset-0 bg-gradient-to-r from-audi-purple/80 to-audi-pink/80 z-0"></div>
                         <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] z-0"></div>
@@ -157,13 +167,13 @@ export const TopUp: React.FC<TopUpProps> = ({ lang }) => {
                             <div>
                                 <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-black/30 border border-white/20 mb-2">
                                     <Icons.Zap className="w-4 h-4 text-audi-yellow animate-pulse" />
-                                    <span className="text-xs font-bold text-audi-yellow uppercase tracking-wider">Flash Sale</span>
+                                    <span className="text-xs font-bold text-audi-yellow uppercase tracking-wider">{activeCampaign.name}</span>
                                 </div>
                                 <h1 className="text-3xl md:text-5xl font-game font-bold text-white mb-2">
-                                    BONUS +{promo.bonusPercent}% <span className="text-audi-cyan">VCOIN</span>
+                                    BONUS +{activeCampaign.bonusPercent}% <span className="text-audi-cyan">VCOIN</span>
                                 </h1>
                                 <p className="text-white/80 text-sm max-w-md">
-                                    {lang === 'vi' ? 'Khuyến mãi đặc biệt trong thời gian có hạn.' : 'Special promotion for a limited time.'}
+                                    {activeCampaign.marqueeText || (lang === 'vi' ? 'Khuyến mãi đặc biệt trong thời gian có hạn.' : 'Special promotion for a limited time.')}
                                 </p>
                             </div>
                             {/* Timer */}
@@ -191,8 +201,8 @@ export const TopUp: React.FC<TopUpProps> = ({ lang }) => {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
                     {packages.map((pkg) => {
-                        // LOGIC: If Global Promo is active, use Global %. Else use Package Specific %.
-                        const activeBonusPercent = promo.isActive ? promo.bonusPercent : pkg.bonusPercent;
+                        // LOGIC: If Active Campaign exists, use its bonus. Else use Package Specific %.
+                        const activeBonusPercent = activeCampaign ? activeCampaign.bonusPercent : pkg.bonusPercent;
                         const hasBonus = activeBonusPercent > 0;
 
                         return (

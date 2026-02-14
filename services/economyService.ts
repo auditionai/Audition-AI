@@ -1,5 +1,6 @@
 
-import { CreditPackage, Transaction, UserProfile, CheckinConfig, DiamondLog, TransactionStatus, PromotionConfig, Giftcode } from '../types';
+
+import { CreditPackage, Transaction, UserProfile, CheckinConfig, DiamondLog, TransactionStatus, PromotionCampaign, Giftcode } from '../types';
 import { supabase } from './supabaseClient';
 
 // --- LOCAL STORAGE HELPERS (Fallback) ---
@@ -447,67 +448,101 @@ export const redeemGiftcode = async (codeStr: string): Promise<{success: boolean
     return { success: false, message: 'Vui lòng đăng nhập' };
 };
 
-// --- PROMOTION SERVICES ---
+// --- PROMOTION SERVICES (CAMPAIGNS) ---
 
-export const getPromotionConfig = async (): Promise<PromotionConfig> => {
+export const getAllPromotions = async (): Promise<PromotionCampaign[]> => {
     if (supabase) {
-        // Fetch active promotion from 'promotions' table
-        // CHANGED: Removed .eq('is_active', true) to fetch latest record regardless of status
-        // This allows Admin to see disabled promotions and re-enable them.
+        const { data, error } = await supabase
+            .from('promotions')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (!error && data) {
+            return data.map((p: any) => ({
+                id: p.id,
+                name: p.title || 'Chiến dịch', // Internal Name
+                marqueeText: p.description || '', // Marquee content
+                bonusPercent: p.bonus_percent || 0,
+                startTime: p.start_time,
+                endTime: p.end_time,
+                isActive: p.is_active
+            }));
+        }
+    }
+    return [];
+};
+
+export const getActivePromotion = async (): Promise<PromotionCampaign | null> => {
+    if (supabase) {
+        // Fetch all ACTIVE campaigns
+        // We filter by time on client-side to ensure precise comparison, 
+        // or we can use DB filter if time zones match. Client-side is safer for this scope.
         const { data } = await supabase
             .from('promotions')
             .select('*')
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .single();
+            .eq('is_active', true)
+            .order('bonus_percent', { ascending: false }); // Prioritize highest bonus
 
-        if (data) {
-            return {
-                isActive: data.is_active,
-                marqueeText: data.description || "Chào mừng!",
-                bonusPercent: data.bonus_percent || 0,
-                startTime: data.start_time,
-                endTime: data.end_time
-            };
+        if (data && data.length > 0) {
+            const now = new Date().getTime();
+            
+            // Find the first campaign that is currently running
+            const validCampaign = data.find((p: any) => {
+                const start = new Date(p.start_time).getTime();
+                const end = new Date(p.end_time).getTime();
+                return now >= start && now <= end;
+            });
+
+            if (validCampaign) {
+                return {
+                    id: validCampaign.id,
+                    name: validCampaign.title,
+                    marqueeText: validCampaign.description,
+                    bonusPercent: validCampaign.bonus_percent,
+                    startTime: validCampaign.start_time,
+                    endTime: validCampaign.end_time,
+                    isActive: true
+                };
+            }
         }
     }
-    return getStorage('dmp_promotion') || {
-        isActive: true,
-        marqueeText: "🎉 Chào mừng đến với DMP AI Studio!",
-        bonusPercent: 0,
-        startTime: new Date().toISOString(),
-        endTime: new Date().toISOString()
-    };
+    return null;
 };
 
-export const savePromotionConfig = async (config: PromotionConfig): Promise<void> => {
+export const savePromotion = async (campaign: PromotionCampaign): Promise<{success: boolean, error?: string}> => {
     if (supabase) {
         const payload = {
-            title: "Khuyến mãi đặc biệt",
-            description: config.marqueeText,
-            bonus_percent: config.bonusPercent,
-            start_time: config.startTime,
-            end_time: config.endTime,
-            is_active: config.isActive
+            title: campaign.name,
+            description: campaign.marqueeText,
+            bonus_percent: campaign.bonusPercent,
+            start_time: campaign.startTime,
+            end_time: campaign.endTime,
+            is_active: campaign.isActive
         };
 
-        // Check if there is ANY promotion record (active or not) to update latest
-        const { data: existing } = await supabase
-            .from('promotions')
-            .select('id')
-            .order('created_at', { ascending: false })
-            .limit(1);
-
-        if (existing && existing.length > 0) {
-            await supabase.from('promotions').update(payload).eq('id', existing[0].id);
-        } else {
-            await supabase.from('promotions').insert(payload);
+        try {
+            if (isValidUUID(campaign.id)) {
+                // Update
+                const { error } = await supabase.from('promotions').update(payload).eq('id', campaign.id);
+                if (error) throw error;
+            } else {
+                // Insert
+                const { error } = await supabase.from('promotions').insert(payload);
+                if (error) throw error;
+            }
+            return { success: true };
+        } catch (e: any) {
+            console.error("Save promotion error:", e);
+            return { success: false, error: e.message };
         }
-        
-        // Fallback sync to system_settings for marquee legacy
-        await supabase.from('system_settings').upsert({ key: 'promotion_config', value: config });
     }
-    setStorage('dmp_promotion', config);
+    return { success: false, error: 'No DB connection' };
+};
+
+export const deletePromotion = async (id: string): Promise<void> => {
+    if (supabase && isValidUUID(id)) {
+        await supabase.from('promotions').delete().eq('id', id);
+    }
 };
 
 // --- ATTENDANCE SERVICES ---
@@ -581,12 +616,21 @@ export const createPaymentLink = async (packageId: string): Promise<Transaction>
 
     const orderCode = Math.floor(Date.now() / 1000); // Use timestamp as order code (int8)
 
+    // Calculate Bonus logic: Priority Active Campaign > Package Promo
+    const activeCampaign = await getActivePromotion();
+    const activeBonusPercent = activeCampaign ? activeCampaign.bonusPercent : pkg.bonusPercent;
+    
+    // Calculate total coins
+    const baseCoins = pkg.coin;
+    const bonusCoins = Math.floor(baseCoins * (activeBonusPercent / 100));
+    const totalCoins = baseCoins + bonusCoins;
+
     const newTx: Transaction = {
         id: crypto.randomUUID(),
         userId: user.id,
         packageId: pkg.id,
         amount: pkg.price,
-        coins: pkg.coin,
+        coins: totalCoins, // Use total coins with bonus
         status: 'pending',
         createdAt: new Date().toISOString(),
         paymentMethod: 'payos',
@@ -599,7 +643,7 @@ export const createPaymentLink = async (packageId: string): Promise<Transaction>
             user_id: user.id,
             package_id: pkg.id,
             amount_vnd: pkg.price, // Map 'amount_vnd'
-            diamonds_received: pkg.coin, // Map 'diamonds_received'
+            diamonds_received: totalCoins, // Map 'diamonds_received' (Base + Bonus)
             status: 'pending',
             order_code: orderCode, // Map 'order_code'
             created_at: newTx.createdAt
@@ -745,7 +789,10 @@ export const getAdminStats = async () => {
         logs: [],
         usersList: users,
         packages: await getPackages(false), // PASS FALSE TO FETCH ALL (INCL INACTIVE)
-        promotion: await getPromotionConfig(),
+        promotions: await getAllPromotions(), // Fetch list for admin
+        activePromotion: await getActivePromotion(), // Fetch single active for logic
         giftcodes: await getGiftcodes()
     };
 };
+
+export const getPromotionConfig = getActivePromotion;

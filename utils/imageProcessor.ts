@@ -1,5 +1,4 @@
 
-
 /**
  * CORE SOLUTION: "Structural Image Conditioning" (The Solid Fence)
  * 
@@ -169,3 +168,46 @@ export const createSolidFence = async (base64Str: string, targetAspectRatio: str
           img.src = src;
       });
   }
+
+  // NEW: DIGITAL TWIN SLICER (Cắt ảnh thành 2 phần để AI soi chi tiết)
+  export const sliceImageVertical = async (base64Str: string): Promise<{ top: string, bottom: string } | null> => {
+    return new Promise((resolve) => {
+        let src = base64Str;
+        if (!base64Str.startsWith('data:')) src = `data:image/jpeg;base64,${base64Str}`;
+
+        const img = new Image();
+        img.crossOrigin = "Anonymous";
+        img.onload = () => {
+            const w = img.width;
+            const h = img.height;
+            
+            // Nếu ảnh quá nhỏ hoặc quá ngang (Landscape), không cần cắt
+            if (h < 500 || w > h * 1.5) {
+                resolve(null);
+                return;
+            }
+
+            // Create Top Slice (Face & Body) - 0% to 65%
+            const canvasTop = document.createElement('canvas');
+            canvasTop.width = w;
+            canvasTop.height = Math.floor(h * 0.65);
+            const ctxTop = canvasTop.getContext('2d');
+            if (ctxTop) ctxTop.drawImage(img, 0, 0, w, h * 0.65, 0, 0, w, h * 0.65);
+
+            // Create Bottom Slice (Legs & Shoes) - 40% to 100% (Overlap to ensure context)
+            const canvasBottom = document.createElement('canvas');
+            canvasBottom.width = w;
+            canvasBottom.height = Math.floor(h * 0.60);
+            const ctxBottom = canvasBottom.getContext('2d');
+            // Source Y starts at 40% of height
+            if (ctxBottom) ctxBottom.drawImage(img, 0, h * 0.40, w, h * 0.60, 0, 0, w, h * 0.60);
+
+            resolve({
+                top: canvasTop.toDataURL('image/jpeg', 0.9),
+                bottom: canvasBottom.toDataURL('image/jpeg', 0.9)
+            });
+        };
+        img.onerror = () => resolve(null);
+        img.src = src;
+    });
+  };

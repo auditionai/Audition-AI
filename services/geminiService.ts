@@ -1,7 +1,7 @@
 
 import { GoogleGenAI } from "@google/genai";
 import { getSystemApiKey } from "./economyService";
-import { createSolidFence, optimizePayload } from "../utils/imageProcessor";
+import { createSolidFence, optimizePayload, sliceImageVertical } from "../utils/imageProcessor";
 
 // --- CONFIGURATION & HELPERS ---
 
@@ -40,51 +40,62 @@ interface CharacterData {
     gender: 'male' | 'female';
     image: string | null; 
     description?: string;
+    slices?: { top: string, bottom: string } | null; // New field for slices
 }
 
-// --- MODULE 2: STRATEGY IMPLEMENTATIONS (DIGITAL TWIN PROTOCOL V2) ---
+// --- MODULE 2: STRATEGY IMPLEMENTATIONS (DIGITAL TWIN PROTOCOL V3) ---
 
 /**
- * STRATEGY 1: SINGLE MODE - "The 3D Scan"
+ * STRATEGY 1: SINGLE MODE - "The 3D Photocopier"
  */
 const processSingleMode = (
     prompt: string, 
     refImagePart: any | null, 
-    charParts: any[], 
+    charParts: any[], // Now contains [Full, Top, Bottom] if slices exist
     charDescriptions: string[]
 ): { systemPrompt: string, parts: any[] } => {
     
     const parts = [];
-    
-    // LOGIC: Image 1 is ALWAYS the Identity Source (Face + Clothes)
-    if (charParts[0]) parts.push(charParts[0]);
-    
-    // If there is a background/pose ref, it becomes Image 2
-    if (refImagePart) parts.push(refImagePart);
+    let systemPrompt = "";
 
-    const systemPrompt = `** PROTOCOL: FULL BODY PHOTOGRAMMETRY **
+    // Image Index Tracking
+    // [0]: Char Full (Always)
+    // [1]: Char Top (If exists)
+    // [2]: Char Bottom (If exists)
+    // [3]: Ref Pose (If exists)
     
-    [ROLE]: You are a high-precision 3D Scanner.
-    [INPUT]: 
-    - IMAGE 1: [SOURCE_IDENTITY] (Full Body Shot).
-    ${refImagePart ? '- IMAGE 2: [POSE_GUIDE] (Skeleton reference).' : ''}
+    parts.push(charParts[0]); // Full Body
     
-    [SCANNING SEQUENCE]:
-    1. **FACE SCAN**: Capture facial features, hair style, and hair color.
-    2. **BODY SCAN**: Capture the exact outfit (Top, Bottom).
-    3. **FEET SCAN**: Look at the BOTTOM of Image 1. Capture the SHOES/FOOTWEAR exactly.
+    let instructions = `** PROTOCOL: 3D PHOTOCOPIER (DIGITAL TWIN) **
+    [ROLE]: You are a specialized 3D Texture Scanner.
+    [TASK]: Reconstruct the character in Image 1 EXACTLY.
+    [INPUT MAPPING]:
+    - IMAGE 1: [MASTER REFERENCE] Full Body Identity.`;
+
+    if (charParts.length > 1) {
+        parts.push(charParts[1]); // Top Slice
+        parts.push(charParts[2]); // Bottom Slice
+        instructions += `
+    - IMAGE 2: [MACRO ZOOM A] FACE, HAIR, & OUTFIT TEXTURE. 
+    - IMAGE 3: [MACRO ZOOM B] SHOES, LEGS & PANTS TEXTURE.
     
-    [EXECUTION]:
-    - Transfer the scanned 3D mesh (Face + Outfit + Shoes) to the new scene.
-    - If the Source Image is cropped, hallucinate matching shoes.
-    - BUT IF SHOES ARE VISIBLE in Image 1, YOU MUST COPY THEM.
-    
+    [CRITICAL INSTRUCTION - DO NOT INVENT]:
+    1. **FACE & HAIR**: Look at IMAGE 2. Copy the hairstyle, face shape, and makeup EXACTLY.
+    2. **OUTFIT**: Look at IMAGE 2. Copy the fabric patterns, logos, and necklines EXACTLY.
+    3. **SHOES**: Look at IMAGE 3. This is the source of truth for footwear. If Image 1 is blurry at the bottom, USE IMAGE 3. Copy the exact shoe type (sneakers, heels, boots) and color.
+        `;
+    }
+
+    if (refImagePart) {
+        parts.push(refImagePart);
+        instructions += `\n- FINAL IMAGE: [POSE GUIDE] Use the skeleton from this image, but keep the Character from Images 1-3.`;
+    }
+
+    systemPrompt = instructions + `
     [STRICT CONSTRAINTS]:
-    - DO NOT CHANGE THE SHOES.
-    - DO NOT CHANGE THE FACE.
-    - Action: "${prompt}"
-    
-    Style: High Fidelity 3D Render, Unreal Engine 5.`;
+    - NO HALLUCINATION. If you see stripes, render stripes. If you see white shoes, render white shoes.
+    - OUTPUT: A high-fidelity 3D Render (Unreal Engine 5 style) of the Character in Image 1 performing: "${prompt}".
+    `;
 
     return { systemPrompt, parts };
 };
@@ -99,28 +110,37 @@ const processCoupleMode = (
     charDescriptions: string[]
 ): { systemPrompt: string, parts: any[] } => {
 
+    // Handling 2 characters. We likely won't send slices for both to avoid token overload (Gemini limit).
+    // We send FULL images for both. 
+    
     const parts = [];
     
+    // Image 1: Char 1
+    // Image 2: Char 2
+    // Image 3: Pose (Optional)
+    
+    // Flatten the charParts. Assuming input is [Char1_Full, Char2_Full] (Slices ignored for couple to save complexity for now)
+    // NOTE: In generateImage below, we flatMapped the slices. We need to handle that.
+    // For Couple Mode, let's simplify: Just take the FULL images (indices 0 of each char set if we had slices, but logic below handles it)
+    
+    // In this updated logic, we pass prepared parts.
+    parts.push(...charParts); 
     if (refImagePart) parts.push(refImagePart);
-    charParts.forEach(p => parts.push(p));
 
-    const p1Idx = refImagePart ? 2 : 1;
-    const p2Idx = refImagePart ? 3 : 2;
-
-    const systemPrompt = `** PROTOCOL: MULTI-CHARACTER SCAN **
+    const systemPrompt = `** PROTOCOL: DUAL IDENTITY CLONING **
     
     [SOURCE DATA]:
-    - CHARACTER A: IMAGE ${p1Idx}.
-    - CHARACTER B: IMAGE ${p2Idx}.
+    - CHARACTER A (Left/Male typically): IMAGE 1.
+    - CHARACTER B (Right/Female typically): IMAGE 2.
+    ${refImagePart ? '- POSE REFERENCE: IMAGE 3.' : ''}
     
-    [VISUAL ENFORCEMENT]:
-    1. **CHARACTER A**: Copy Outfit + SHOES from Image ${p1Idx}.
-    2. **CHARACTER B**: Copy Outfit + SHOES from Image ${p2Idx}.
-    3. **ATTENTION**: Look at the very bottom of the source images for footwear.
+    [INSTRUCTIONS]:
+    1. **CLONE CHAR A**: Transfer Face + Outfit + Shoes from IMAGE 1. Look at the feet in Image 1 carefully.
+    2. **CLONE CHAR B**: Transfer Face + Outfit + Shoes from IMAGE 2. Look at the feet in Image 2 carefully.
     
     [INTERACTION]: "${prompt}"
     
-    Style: Romantic 3D Game Art, Audition Style.`;
+    Style: Romantic 3D Game Art, Audition Style. High fidelity textures.`;
 
     return { systemPrompt, parts };
 };
@@ -135,28 +155,19 @@ const processGroupMode = (
     charDescriptions: string[]
 ): { systemPrompt: string, parts: any[] } => {
 
-    const parts = [];
+    const parts = [...charParts];
     if (refImagePart) parts.push(refImagePart);
-    charParts.forEach(p => parts.push(p));
 
-    const startIndex = refImagePart ? 2 : 1;
-
-    // Strict mapping list
-    const mapping = charDescriptions.map((gender, i) => 
-        `MEMBER ${i+1}: Scan IMAGE ${startIndex + i} for Full Outfit & Shoes.`
-    ).join('\n');
-
-    const systemPrompt = `** PROTOCOL: SQUAD REPLICATION **
+    const systemPrompt = `** PROTOCOL: TEAM REPLICATION **
     
-    [STRICT MAPPING]:
-    ${mapping}
+    [INPUTS]: Images 1 to ${charParts.length} are the team members.
+    ${refImagePart ? `Last Image is the POSE/FORMATION guide.` : ''}
     
-    [INSTRUCTIONS]:
-    1. For each member, COPY pixels from Head to Toe.
-    2. Ensure SHOES match the source image.
-    3. Context: "${prompt}"
-    
-    Style: Cool, Energetic, Game Promo Art.`;
+    [EXECUTION]:
+    - Create a group photo.
+    - Each member must look exactly like their source image (Face, Clothes, Shoes).
+    - Do not change their outfits.
+    - Context: "${prompt}"`;
 
     return { systemPrompt, parts };
 };
@@ -178,63 +189,85 @@ export const generateImage = async (
     const isPro = resolution === '2K' || resolution === '4K';
     const model = isPro ? 'gemini-3-pro-image-preview' : 'gemini-2.5-flash-image';
     
-    if (onProgress) onProgress(`Engine: ${model} | Scanning Inputs...`);
+    if (onProgress) onProgress(`Engine: ${model} | Scanning High-Res Inputs...`);
 
     // 2. PREPARE ASSETS
     let refImagePart = null;
     if (styleRefBase64) {
-        // Pose Ref: Use strict aspect ratio matching for the pose guide
         const fencedData = await createSolidFence(styleRefBase64, aspectRatio, true);
         refImagePart = {
             inlineData: { data: cleanBase64(fencedData), mimeType: 'image/jpeg' }
         };
     }
 
-    const charParts: any[] = [];
+    const allParts: any[] = [];
     const charDescriptions: string[] = [];
+
+    // --- PRE-PROCESSING: SLICING IMAGES FOR DETAIL ---
+    // Only slice if Single Mode (for max quality) or Couple Mode (if manageable)
+    // Group mode: No slicing to avoid token limit errors.
+    const enableSlicing = characterDataList.length === 1;
 
     for (const char of characterDataList) {
         if (char.image) {
-            // STEP: ADAPTIVE FENCE
-            // We pass "1:1" but the function ignores it for character inputs 
-            // and uses the image's own aspect ratio to prevent shoe cropping.
+            // 1. Full Body (Optimized but not cropped)
             const fencedData = await createSolidFence(char.image, "1:1", false);
+            const optimizedFull = await optimizePayload(fencedData, 1024); 
             
-            // We optimized AFTER fencing to ensure the whole fence fits
-            const optimizedFence = await optimizePayload(fencedData, 1024); 
-            
-            charParts.push({
-                inlineData: { data: cleanBase64(optimizedFence), mimeType: 'image/jpeg' }
+            allParts.push({
+                inlineData: { data: cleanBase64(optimizedFull), mimeType: 'image/jpeg' }
             });
+
+            // 2. Slices (If enabled)
+            if (enableSlicing) {
+                if (onProgress) onProgress("Digital Twin: Generating Texture Slices...");
+                const slices = await sliceImageVertical(char.image);
+                if (slices) {
+                    // Top Slice (Face/Torso)
+                    allParts.push({
+                        inlineData: { data: cleanBase64(slices.top), mimeType: 'image/jpeg' }
+                    });
+                    // Bottom Slice (Shoes)
+                    allParts.push({
+                        inlineData: { data: cleanBase64(slices.bottom), mimeType: 'image/jpeg' }
+                    });
+                }
+            }
+
             charDescriptions.push(char.gender);
         } else {
-            charParts.push(null);
-            charDescriptions.push(char.gender);
+            // Generic placeholder if needed, though usually UI prevents this
+            // allParts.push(null); // Logic handled in strategy
         }
     }
-
-    const validCharParts = charParts.filter(p => p !== null);
 
     // 3. ROUTE STRATEGY
     let payload;
     const modeCount = characterDataList.length;
 
     if (modeCount === 1) {
-        payload = processSingleMode(prompt, refImagePart, validCharParts, charDescriptions);
+        // Single mode logic handles the slices (Full, Top, Bottom)
+        payload = processSingleMode(prompt, refImagePart, allParts, charDescriptions);
     } else if (modeCount === 2) {
-        payload = processCoupleMode(prompt, refImagePart, validCharParts, charDescriptions);
+        // Couple mode logic expects just 2 images (Full, Full) currently
+        // If we want to support slices later, we need to update processCoupleMode
+        payload = processCoupleMode(prompt, refImagePart, allParts, charDescriptions);
     } else {
-        payload = processGroupMode(prompt, refImagePart, validCharParts, charDescriptions);
+        payload = processGroupMode(prompt, refImagePart, allParts, charDescriptions);
     }
 
     // 4. CONSTRUCT FINAL CONFIG
     const globalSystemInstruction = `
-    CRITICAL OVERRIDE:
-    You are a 3D Scanning Utility. 
-    1. SCAN the Source Image from TOP (Hair) to BOTTOM (Shoes).
-    2. DO NOT CROP the character. If the source image is vertical, read the shoes at the bottom.
-    3. REPLICATE the shoes exactly.
-    4. Maintain the Face Identity strictly.
+    CRITICAL OVERRIDE - PHOTOGRAPHY MODE:
+    You are NOT an artist. You are a 3D RECONSTRUCTION ENGINE.
+    
+    [MANDATORY RULES]:
+    1. **IDENTITY LOCK**: The output face must match the input image face.
+    2. **OUTFIT LOCK**: The output clothes must match the input clothes pixel-for-pixel (Color, Style, Logos).
+    3. **SHOE LOCK**: Look at the bottom of the input image(s). REPLICATE THE SHOES EXACTLY. Do not default to generic sneakers if the user wears boots/heels.
+    4. **NO CREATIVITY**: Do not "improve" the outfit. Copy it.
+    
+    If multiple images are provided for one person, they are ZOOM-INS. Use them to fix blurry details.
     `;
 
     const finalParts = [...payload.parts, { text: payload.systemPrompt }];
@@ -252,12 +285,13 @@ export const generateImage = async (
 
     if (isPro) {
         config.imageConfig.imageSize = resolution;
-        if (useSearch && !refImagePart && characterDataList.every(c => !c.image)) {
+        // Search mostly useful for background/context, not character replication
+        if (useSearch && !refImagePart) {
             config.tools = [{ googleSearch: {} }];
         }
     }
 
-    if (onProgress) onProgress("Executing Full Body Transfer...");
+    if (onProgress) onProgress("Running Digital Twin Protocol...");
 
     const response = await ai.models.generateContent({
       model: model,

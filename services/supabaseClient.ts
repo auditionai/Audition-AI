@@ -93,8 +93,16 @@ export const signUpWithEmail = async (email: string, password: string) => {
 
     // 2. Manual Insert Fallback (Belt and Suspenders)
     // We try to insert directly into public.users just in case the trigger fails or delays.
-    // If this fails due to RLS, the trigger is our only hope.
     if (data.user) {
+        // Check if session exists. If not, Email Confirmation might be ON.
+        // Without a session, RLS will block the insert below unless the policy allows 'anon' (which is insecure)
+        // or the trigger handles it (which runs as admin).
+        if (!data.session) {
+            console.log("SignUp success but NO SESSION returned. Email confirmation likely required.");
+            console.log("Skipping manual profile insert. Relying on DB Trigger.");
+            return { data, error };
+        }
+
         // Wait 100ms to avoid race condition with Trigger
         await new Promise(r => setTimeout(r, 100));
 
@@ -109,10 +117,10 @@ export const signUpWithEmail = async (email: string, password: string) => {
 
         if (profileError) {
             // Ignore Duplicate Key error (23505) because it means Trigger worked!
-            if (profileError.code !== '23505') {
-                 console.warn("Manual profile creation failed:", profileError.message, profileError.code);
-            } else {
+            if (profileError.code === '23505') {
                  console.log("Trigger successfully created user before manual insert.");
+            } else {
+                 console.warn("Manual profile creation failed:", profileError.message, profileError.code);
             }
         }
     }

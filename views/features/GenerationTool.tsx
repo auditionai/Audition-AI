@@ -127,18 +127,49 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       setLoadingSamples(true);
       
       try {
-          // Changed table 'prompts' to 'images' based on your database screenshot
-          // Assuming 'image_url' contains the link and 'prompt' contains text
+          // Define category filters based on activeMode
+          // Note: Database needs a 'category' column with values like 'male', 'female', 'couple', 'group'
+          let filterCategories: string[] = [];
+          if (activeMode === 'single') {
+              filterCategories = ['single', 'male', 'female', 'boy', 'girl', 'nam', 'nu', 'don'];
+          } else if (activeMode === 'couple') {
+              filterCategories = ['couple', 'doi', 'couple_mode', 'love'];
+          } else if (activeMode.startsWith('group')) {
+              filterCategories = ['group', 'group3', 'group4', 'nhom', 'team', 'squad', 'clan'];
+          }
+
           let query = caulenhauClient
               .from('images')
-              .select('id, image_url, prompt')
-              .order('created_at', { ascending: false })
-              .limit(50);
+              .select('id, image_url, prompt, category');
+          
+          if (filterCategories.length > 0) {
+              query = query.in('category', filterCategories);
+          }
+
+          query = query.order('created_at', { ascending: false }).limit(50);
           
           const { data, error } = await query;
 
           if (error) {
-              console.error("Supabase Error:", error);
+              // Fallback if 'category' column missing (Error 42703 is undefined_column)
+              if (error.code === '42703') {
+                  console.warn("Column 'category' missing in DB. Fetching all images as fallback.");
+                  const { data: fallbackData, error: fallbackError } = await caulenhauClient
+                      .from('images')
+                      .select('id, image_url, prompt')
+                      .order('created_at', { ascending: false })
+                      .limit(50);
+                  
+                  if (fallbackError) throw fallbackError;
+                  
+                  setSamplePrompts(fallbackData?.map((item: any) => ({
+                      id: item.id,
+                      image_url: item.image_url,
+                      prompt: item.prompt,
+                      category: 'uncategorized'
+                  })) || []);
+                  return;
+              }
               throw error;
           }
           
@@ -147,12 +178,14 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                   id: item.id,
                   image_url: item.image_url,
                   prompt: item.prompt,
-                  category: 'general'
+                  category: item.category
               })));
+          } else {
+              setSamplePrompts([]);
           }
       } catch (e: any) {
           console.error("Fetch samples error", e);
-          notify(`Lỗi tải dữ liệu: ${e.message}`, 'error');
+          // Silent fail or minimal notify to avoid spamming
           setSamplePrompts([]);
       } finally {
           setLoadingSamples(false);

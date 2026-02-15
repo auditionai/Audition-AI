@@ -106,34 +106,34 @@ const processDigitalTwinMode = (
     let systemPrompt = "";
 
     if (isSingle) {
-        // --- UPGRADED LOGIC FOR SINGLE IMAGE (CHARACTER REPLACEMENT) ---
-        // If there is a reference image, we treat this as a "Replacement" task, not just reconstruction.
+        // --- UPGRADED LOGIC FOR SINGLE IMAGE (STRICT CHARACTER SWAP) ---
         if (refImagePart) {
-            systemPrompt = `** SYSTEM: 3D CHARACTER REPLACEMENT & SCENE INTEGRATION **
+            systemPrompt = `** SYSTEM: 3D CHARACTER REPLACEMENT ENGINE **
             
-            [INPUTS]:
-            - IMAGE 1 (First Image): This is the TARGET SCENE and POSE. It contains the background and camera angle you MUST keep.
-            - IMAGE 2 (Second Image): This is the SOURCE CHARACTER. It contains the identity, face, and outfit you MUST use.
+            [INPUT ANALYSIS]
+            - IMAGE 1 (The Reference): A photo showing a specific POSE and BACKGROUND.
+            - IMAGE 2 (The Character): A photo showing the IDENTITY (Face/Outfit) to insert.
             
-            [MISSION]:
-            1. TAKE the Background, Lighting, and Camera Angle from IMAGE 1.
-            2. TAKE the Identity, Face, and Outfit from IMAGE 2.
-            3. REPLACE the person in Image 1 with the Character from Image 2.
-            4. The Character from Image 2 MUST adopt the EXACT POSE of the person in Image 1.
+            [YOUR MISSION]
+            1. IGNORE the person in IMAGE 1. Treat them as a placeholder.
+            2. EXTRACT the POSE and CAMERA ANGLE from IMAGE 1.
+            3. RENDER the Character from IMAGE 2 into that exact pose.
+            4. COMPOSITE the new character back into the environment of IMAGE 1.
             
-            [STRICT RULES]:
-            - DO NOT simply copy Image 1. You MUST change the character to match Image 2.
-            - DO NOT change the background or camera angle of Image 1.
-            - Render Style: Unreal Engine 5, 3D Game Character, Semi-realistic.
+            [CRITICAL CONSTRAINTS FOR FLASH MODEL]
+            - DO NOT OUTPUT IMAGE 1 UNCHANGED. You MUST replace the person.
+            - If Image 2 has a specific face, the result MUST look like Image 2, not Image 1.
+            - Style: High-fidelity 3D Game Render (Unreal Engine 5).
+            - NO 2D flat cartoon style. Keep the lighting realistic.
             
-            [SCENE DETAILS]: "${prompt}"
+            [CONTEXT]: "${prompt}"
             `;
         } else {
             // No Reference Image -> Standard Text-to-Image
-            systemPrompt = `** SYSTEM: 3D CHARACTER CREATION **
-            Create a high-quality 3D character based on the input description.
-            - Style: Unreal Engine 5, Audition Online style.
-            - Scene: "${prompt}"`;
+            systemPrompt = `** SYSTEM: 3D CHARACTER CREATOR **
+            Create a stunning 3D game character (Audition Online/Sims style).
+            - Detail: 8K, Unreal Engine 5, Raytracing.
+            - Context: "${prompt}"`;
         }
     } else {
         // --- LOGIC FOR COUPLE / GROUP (KEPT STABLE) ---
@@ -182,8 +182,6 @@ export const generateImage = async (
     // 1. PREPARE STYLE REF (POSE/SCENE)
     let refImagePart = null;
     if (styleRefBase64) {
-        // Note: For Single Mode, styleRefBase64 is passed RAW (optimized) from the view to preserve background.
-        // For Group Mode, it is passed FENCED (gray bg).
         refImagePart = {
             inlineData: { data: cleanBase64(styleRefBase64), mimeType: 'image/jpeg' }
         };
@@ -241,9 +239,9 @@ export const generateImage = async (
 
     const config: any = {
         imageConfig: { aspectRatio: aspectRatio },
-        // Enhanced system instruction for the API config
+        // ENHANCED INSTRUCTION FOR API LEVEL
         systemInstruction: characterDataList.length === 1 && styleRefBase64
-            ? "CRITICAL TASK: REPLACE THE PERSON IN IMAGE 1 WITH THE CHARACTER IN IMAGE 2. KEEP BACKGROUND OF IMAGE 1."
+            ? "CRITICAL: YOU ARE REPLACING THE PERSON IN IMAGE 1 WITH THE CHARACTER IN IMAGE 2. DO NOT OUTPUT IMAGE 1 AS IS."
             : "Create high quality 3D character render. Follow the reference image structure.", 
         safetySettings: [
             { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },

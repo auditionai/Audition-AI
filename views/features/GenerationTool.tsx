@@ -238,42 +238,38 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       setCharacters(prev => prev.map(c => c.id === charId ? { ...c, isFaceLocked: !c.isFaceLocked } : c));
   }
 
-  // --- FIXED DOWNLOAD FUNCTION FOR BASE64 ---
-  const handleForceDownload = (imageUrl: string, filename: string) => {
+  // --- FORCE DOWNLOAD FROM BLOB ---
+  const handleForceDownload = (dataUri: string, filename: string) => {
       try {
-          // If it's Base64 (Data URI), download directly using Anchor
-          if (imageUrl.startsWith('data:')) {
+          if (!dataUri) return;
+          
+          // Direct Blob conversion for Base64 (Robust)
+          if (dataUri.startsWith('data:')) {
+              const byteString = atob(dataUri.split(',')[1]);
+              const mimeString = dataUri.split(',')[0].split(':')[1].split(';')[0];
+              const ab = new ArrayBuffer(byteString.length);
+              const ia = new Uint8Array(ab);
+              for (let i = 0; i < byteString.length; i++) {
+                  ia[i] = byteString.charCodeAt(i);
+              }
+              const blob = new Blob([ab], { type: mimeString });
+              const url = window.URL.createObjectURL(blob);
+              
               const link = document.createElement('a');
-              link.href = imageUrl;
+              link.href = url;
               link.download = filename;
               document.body.appendChild(link);
               link.click();
               document.body.removeChild(link);
+              window.URL.revokeObjectURL(url); // Clean up memory
               notify('Đã tải ảnh về máy!', 'success');
           } else {
-              // If URL, Try Fetch Blob
-              fetch(imageUrl)
-                  .then(response => response.blob())
-                  .then(blob => {
-                      const url = window.URL.createObjectURL(blob);
-                      const link = document.createElement('a');
-                      link.href = url;
-                      link.download = filename;
-                      document.body.appendChild(link);
-                      link.click();
-                      document.body.removeChild(link);
-                      window.URL.revokeObjectURL(url);
-                      notify('Đã tải ảnh về máy!', 'success');
-                  })
-                  .catch(() => {
-                      // CORS Fallback: Open in New Tab
-                      window.open(imageUrl, '_blank');
-                      notify('Không thể tự động tải (Lỗi CORS), đang mở tab mới.', 'warning');
-                  });
+              // Fallback just in case (should not happen in this view for new results)
+              window.open(dataUri, '_blank');
           }
       } catch (error) {
-          console.error("Download failed:", error);
-          window.open(imageUrl, '_blank');
+          console.error("Download error:", error);
+          window.open(dataUri, '_blank');
       }
   };
 
@@ -378,11 +374,11 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
           engine: modelType === 'pro' ? `Gemini 3.0 Pro ${resolution}` : 'Gemini 2.5 Flash'
         };
         setGeneratedData(newImage);
+        setResultImage(result); // result is guaranteed Base64 here
         
         // Save to Storage (Async, don't wait for UI)
         saveImageToStorage(newImage).catch(console.error);
         
-        setResultImage(result);
         setStage('result');
         notify(lang === 'vi' ? 'Tạo ảnh thành công!' : 'Generation successful!', 'success');
       } else {

@@ -78,8 +78,10 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
       }
   };
 
+  // --- SMART DOWNLOAD (CORS BYPASS VIA CANVAS) ---
   const handleDownload = async (imageUrl: string, filename: string) => {
       try {
+          // Attempt 1: Direct Fetch
           const response = await fetch(imageUrl);
           const blob = await response.blob();
           const url = window.URL.createObjectURL(blob);
@@ -92,8 +94,33 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
           window.URL.revokeObjectURL(url);
           notify(lang === 'vi' ? 'Đã tải ảnh xuống!' : 'Image downloaded!', 'success');
       } catch (error) {
-          console.error("Download failed:", error);
-          window.open(imageUrl, '_blank');
+          console.warn("Direct fetch failed, trying canvas proxy...", error);
+          
+          // Attempt 2: Canvas Proxy (Slower but bypasses basic CORs if image is readable)
+          const img = new Image();
+          img.crossOrigin = "Anonymous";
+          img.src = imageUrl;
+          img.onload = () => {
+              const canvas = document.createElement('canvas');
+              canvas.width = img.width;
+              canvas.height = img.height;
+              const ctx = canvas.getContext('2d');
+              if(ctx) {
+                  ctx.drawImage(img, 0, 0);
+                  const dataURL = canvas.toDataURL('image/png');
+                  const link = document.createElement('a');
+                  link.href = dataURL;
+                  link.download = filename;
+                  document.body.appendChild(link);
+                  link.click();
+                  document.body.removeChild(link);
+                  notify(lang === 'vi' ? 'Đã tải ảnh xuống!' : 'Image downloaded!', 'success');
+              }
+          };
+          img.onerror = () => {
+              window.open(imageUrl, '_blank');
+              notify(lang === 'vi' ? 'Mở tab mới (Server chặn tải trực tiếp)' : 'Opened in new tab (Download blocked by server)', 'warning');
+          };
       }
   };
 

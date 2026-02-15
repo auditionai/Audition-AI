@@ -518,7 +518,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
 
         {showVideo && (
             <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 animate-fade-in" onClick={() => setShowVideo(false)}>
-                <div className="relative w-full max-w-2xl aspect-video bg-black rounded-2xl overflow-hidden border border-white/20 shadow-[0_0_50px_rgba(255,255,255,0.1)]" onClick={e => e.stopPropagation()}>
+                <div className="relative w-full max-w-2xl aspect-video bg-black rounded-2xl overflow-hidden border border-white/20 shadow-[0_0_50px_rgba(255,255,255,0.1)] mb-20" onClick={e => e.stopPropagation()}>
                     <button 
                         onClick={() => setShowVideo(false)} 
                         className="absolute -top-10 right-0 md:top-4 md:right-4 bg-white/10 hover:bg-red-600 text-white p-2 rounded-full transition-colors z-50 backdrop-blur-md"
@@ -538,7 +538,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
 
         {guideTopic && (
             <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-fade-in" onClick={() => setGuideTopic(null)}>
-                <div className="bg-[#12121a] w-full max-w-md p-6 rounded-2xl border border-audi-yellow/50 shadow-[0_0_30px_rgba(251,218,97,0.2)] relative" onClick={e => e.stopPropagation()}>
+                <div className="bg-[#12121a] w-full max-w-md p-6 rounded-2xl border border-audi-yellow/50 shadow-[0_0_30px_rgba(251,218,97,0.2)] relative mb-20" onClick={e => e.stopPropagation()}>
                     <button onClick={() => setGuideTopic(null)} className="absolute top-4 right-4 text-slate-500 hover:text-white">
                         <Icons.X className="w-6 h-6" />
                     </button>

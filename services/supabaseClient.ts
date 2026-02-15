@@ -16,7 +16,6 @@ if (supabaseUrl && supabaseAnonKey) {
             autoRefreshToken: true,
         }
     });
-    // Log connected Project ID (Safe log)
     const projectId = supabaseUrl.split('//')[1]?.split('.')[0] || 'Unknown';
     console.log(`[System] Supabase Initialized. Project ID: ${projectId}`);
   } catch (e) {
@@ -24,7 +23,6 @@ if (supabaseUrl && supabaseAnonKey) {
   }
 } else {
   console.warn("Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY. App running in offline mode.");
-  console.log("Env Check:", { hasUrl: !!supabaseUrl, hasKey: !!supabaseAnonKey });
 }
 
 export const supabase = client;
@@ -34,16 +32,10 @@ export const checkSupabaseConnection = async (): Promise<{ db: boolean; storage:
     
     const start = Date.now();
     try {
-        // 1. Check DB Connection via a simple query
         const { error: dbError } = await supabase.from('users').select('id').limit(1);
-        
-        // Note: It might error if table doesn't exist, but connection is still technically 'ok' if error code isn't connection related
         const dbStatus = !dbError || (dbError.code !== 'PGRST301'); 
-
-        // 2. Check Storage
         const { data, error: storageError } = await supabase.storage.from('images').list();
         const storageStatus = !storageError;
-
         const latency = Date.now() - start;
         return { db: dbStatus, storage: storageStatus, latency };
     } catch (e) {
@@ -57,10 +49,7 @@ export const signInWithGoogle = async () => {
         provider: 'google',
         options: {
             redirectTo: window.location.origin,
-            queryParams: {
-                access_type: 'offline',
-                prompt: 'consent',
-            },
+            queryParams: { access_type: 'offline', prompt: 'consent' },
         },
     });
 };
@@ -75,7 +64,7 @@ export const signUpWithEmail = async (email: string, password: string) => {
     
     const displayName = email.split('@')[0];
 
-    // 1. Create Auth User with Explicit Metadata
+    // 1. Create Auth User
     const { data, error } = await supabase.auth.signUp({ 
         email, 
         password,
@@ -90,43 +79,42 @@ export const signUpWithEmail = async (email: string, password: string) => {
 
     if (error) return { data, error };
 
-    // 2. ROBUST SYNC LOGIC (The Safety Net)
-    // This is crucial: We manually insert into public.users to ensure data consistency
-    // even if the Database Trigger fails or is delayed.
+    // 2. MANUAL INSERT (FAIL-SAFE)
+    // We try to insert using the schema that matches economyService.ts (diamonds, photo_url)
+    // This allows the app to work even if the Server Trigger fails or is missing.
     if (data.user) {
-        console.log("Auth User created. Ensuring public profile exists...");
+        console.log("Auth User created. Attempting manual profile creation...");
         
-        // Wait a tiny bit for the trigger to fire (optional, but helps avoid race conditions)
+        // Wait briefly for any triggers
         await new Promise(r => setTimeout(r, 500));
 
         // Check if profile exists
         const { data: profile } = await supabase.from('users').select('id').eq('id', data.user.id).single();
 
-        // If NO profile, force create it using the Client
-        // This requires RLS Policy: "Users can insert their own profile" (provided in SQL)
         if (!profile) {
-            console.warn("Trigger failed or delayed. Executing Manual Insert...");
+            console.warn("Profile missing. Executing Manual Insert with Legacy Schema...");
+            
+            // USING CORRECT COLUMN NAMES BASED ON YOUR ECONOMY SERVICE
             const { error: insertError } = await supabase.from('users').insert({
                 id: data.user.id,
                 email: email,
                 display_name: displayName,
-                balance: 0,
-                role: 'user',
+                diamonds: 0,        // Correct: diamonds, not balance
+                photo_url: '',      // Correct: photo_url, not avatar_url
+                is_admin: false,    // Correct: is_admin, not role
                 created_at: new Date().toISOString()
             });
 
             if (insertError) {
-                // If error is duplicate key, it means Trigger won the race -> Good!
+                // If this fails with 23505, it means the Trigger actually worked -> Good
                 if (insertError.code === '23505') {
-                    console.log("Profile confirmed via Trigger (Race condition won).");
+                    console.log("Profile already exists (Trigger worked).");
                 } else {
-                    console.error("CRITICAL: Failed to create public profile manually.", insertError);
+                    console.error("Manual Insert Failed:", insertError);
                 }
             } else {
                 console.log("Manual Insert Successful.");
             }
-        } else {
-            console.log("Profile confirmed via Trigger.");
         }
     }
 

@@ -22,6 +22,9 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isAuthLoading, setIsAuthLoading] = useState(false);
+  
+  // ERROR FIXING STATE
+  const [showSqlFix, setShowSqlFix] = useState(false);
 
   // Data from Admin Settings
   const [packages, setPackages] = useState<CreditPackage[]>([]);
@@ -199,14 +202,16 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
 
               const { error } = await signUpWithEmail(email, password);
               if (error) {
-                  if (error.message.includes('User already registered')) {
+                  // DETECT DATABASE TRIGGER ERROR
+                  if (error.message.includes('Database error') || error.message.includes('saving new user')) {
+                      setShowSqlFix(true); // Show SQL Fix Modal
+                  } else if (error.message.includes('User already registered')) {
                       alert("Email này đã được đăng ký. Vui lòng đăng nhập.");
                   } else {
                       alert("Đăng ký thất bại: " + error.message);
                   }
               } else {
                   alert("Đăng ký thành công! Hệ thống đang tự động đăng nhập...");
-                  // If confirm email is off, user is logged in automatically
               }
           }
       } catch (e: any) {
@@ -244,6 +249,32 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
       }
       return "🎉 Sự kiện Khai Trương: Miễn phí 50 lượt tạo ảnh cho thành viên mới! 💎 Nạp Vcoin lần đầu x2 giá trị";
   };
+
+  const sqlFixCode = `-- CHẠY MÃ NÀY TRONG SQL EDITOR ĐỂ SỬA LỖI ĐĂNG KÝ
+-- 1. Xóa Trigger lỗi (nguyên nhân chính gây lỗi Database Error)
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+DROP FUNCTION IF EXISTS public.handle_new_user();
+
+-- 2. Đảm bảo bảng users có đủ cột (theo đúng code App)
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS diamonds numeric default 0;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS photo_url text;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS is_admin boolean default false;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS display_name text;
+
+-- 3. Cấp quyền cho App tự ghi dữ liệu (Thay thế Trigger)
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can insert own profile" ON public.users;
+CREATE POLICY "Users can insert own profile" ON public.users FOR INSERT WITH CHECK (auth.uid() = id);
+
+DROP POLICY IF EXISTS "Users can update own profile" ON public.users;
+CREATE POLICY "Users can update own profile" ON public.users FOR UPDATE USING (auth.uid() = id);
+
+DROP POLICY IF EXISTS "Users can read own profile" ON public.users;
+CREATE POLICY "Users can read own profile" ON public.users FOR SELECT USING (auth.uid() = id);
+
+DROP POLICY IF EXISTS "Public read access" ON public.users;
+CREATE POLICY "Public read access" ON public.users FOR SELECT TO anon USING (true);`;
 
   return (
     <div 
@@ -770,6 +801,62 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
                               Bỏ qua & Dùng thử (Chế độ Khách)
                           </button>
                       </div>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* --- SQL FIX MODAL (NEW) --- */}
+      {showSqlFix && (
+          <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-fade-in">
+              <div className="bg-[#12121a] w-full max-w-2xl p-6 rounded-2xl border border-red-500/50 shadow-[0_0_50px_rgba(255,0,0,0.2)] flex flex-col max-h-[90vh]">
+                  <div className="flex items-center gap-4 mb-4">
+                      <div className="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center text-red-500 animate-pulse">
+                          <Icons.Database className="w-6 h-6" />
+                      </div>
+                      <div>
+                          <h3 className="text-xl font-bold text-white">LỖI DATABASE NGHIÊM TRỌNG</h3>
+                          <p className="text-slate-400 text-xs">Phát hiện xung đột Schema hoặc Trigger bị hỏng</p>
+                      </div>
+                  </div>
+                  
+                  <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-xl mb-4">
+                      <p className="text-sm text-red-300 font-bold mb-1">Nguyên nhân:</p>
+                      <p className="text-xs text-slate-300 leading-relaxed">
+                          Trigger <code>handle_new_user</code> đang cố gắng ghi vào các cột không tồn tại (balance, role, avatar_url) thay vì (diamonds, is_admin, photo_url). Điều này làm hỏng quá trình đăng ký.
+                      </p>
+                  </div>
+
+                  <div className="flex-1 overflow-hidden flex flex-col">
+                      <p className="text-sm font-bold text-green-400 mb-2 uppercase">Giải pháp: Copy đoạn mã SQL dưới đây và chạy trong Supabase SQL Editor</p>
+                      <div className="relative flex-1 bg-black/50 border border-white/10 rounded-xl overflow-hidden">
+                          <pre className="absolute inset-0 p-4 text-[10px] md:text-xs font-mono text-slate-300 overflow-auto whitespace-pre-wrap selection:bg-audi-pink selection:text-white">
+                              {sqlFixCode}
+                          </pre>
+                          <button 
+                            onClick={() => {
+                                navigator.clipboard.writeText(sqlFixCode);
+                                alert("Đã sao chép SQL!");
+                            }}
+                            className="absolute top-2 right-2 p-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors flex items-center gap-2 text-xs font-bold"
+                          >
+                              <Icons.Copy className="w-4 h-4" /> Sao chép
+                          </button>
+                      </div>
+                  </div>
+
+                  <div className="flex gap-3 mt-6">
+                      <a 
+                        href="https://supabase.com/dashboard/project/_/sql" 
+                        target="_blank" 
+                        rel="noreferrer"
+                        className="flex-1 py-3 bg-audi-purple hover:bg-purple-600 text-white rounded-xl font-bold text-center transition-colors flex items-center justify-center gap-2"
+                      >
+                          <Icons.Database className="w-4 h-4" /> Mở SQL Editor
+                      </a>
+                      <button onClick={() => setShowSqlFix(false)} className="flex-1 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold transition-colors">
+                          Đóng
+                      </button>
                   </div>
               </div>
           </div>

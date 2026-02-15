@@ -76,7 +76,6 @@ export const signUpWithEmail = async (email: string, password: string) => {
     const displayName = email.split('@')[0];
 
     // 1. Create Auth User with Explicit Metadata
-    // Metadata is critical for the Trigger to pick up the name
     const { data, error } = await supabase.auth.signUp({ 
         email, 
         password,
@@ -91,37 +90,43 @@ export const signUpWithEmail = async (email: string, password: string) => {
 
     if (error) return { data, error };
 
-    // 2. Manual Insert Fallback (Belt and Suspenders)
-    // We try to insert directly into public.users just in case the trigger fails or delays.
+    // 2. ROBUST SYNC LOGIC (The Safety Net)
+    // This is crucial: We manually insert into public.users to ensure data consistency
+    // even if the Database Trigger fails or is delayed.
     if (data.user) {
-        // Check if session exists. If not, Email Confirmation might be ON.
-        // Without a session, RLS will block the insert below unless the policy allows 'anon' (which is insecure)
-        // or the trigger handles it (which runs as admin).
-        if (!data.session) {
-            console.log("SignUp success but NO SESSION returned. Email confirmation likely required.");
-            console.log("Skipping manual profile insert. Relying on DB Trigger.");
-            return { data, error };
-        }
+        console.log("Auth User created. Ensuring public profile exists...");
+        
+        // Wait a tiny bit for the trigger to fire (optional, but helps avoid race conditions)
+        await new Promise(r => setTimeout(r, 500));
 
-        // Wait 100ms to avoid race condition with Trigger
-        await new Promise(r => setTimeout(r, 100));
+        // Check if profile exists
+        const { data: profile } = await supabase.from('users').select('id').eq('id', data.user.id).single();
 
-        const { error: profileError } = await supabase.from('users').insert({
-            id: data.user.id,
-            email: email,
-            display_name: displayName,
-            balance: 0,
-            role: 'user',
-            created_at: new Date().toISOString()
-        });
+        // If NO profile, force create it using the Client
+        // This requires RLS Policy: "Users can insert their own profile" (provided in SQL)
+        if (!profile) {
+            console.warn("Trigger failed or delayed. Executing Manual Insert...");
+            const { error: insertError } = await supabase.from('users').insert({
+                id: data.user.id,
+                email: email,
+                display_name: displayName,
+                balance: 0,
+                role: 'user',
+                created_at: new Date().toISOString()
+            });
 
-        if (profileError) {
-            // Ignore Duplicate Key error (23505) because it means Trigger worked!
-            if (profileError.code === '23505') {
-                 console.log("Trigger successfully created user before manual insert.");
+            if (insertError) {
+                // If error is duplicate key, it means Trigger won the race -> Good!
+                if (insertError.code === '23505') {
+                    console.log("Profile confirmed via Trigger (Race condition won).");
+                } else {
+                    console.error("CRITICAL: Failed to create public profile manually.", insertError);
+                }
             } else {
-                 console.warn("Manual profile creation failed:", profileError.message, profileError.code);
+                console.log("Manual Insert Successful.");
             }
+        } else {
+            console.log("Profile confirmed via Trigger.");
         }
     }
 

@@ -183,7 +183,7 @@ export const deleteApiKey = async (id: string): Promise<boolean> => {
     return false;
 };
 
-// --- USER SERVICES ---
+// --- USER SERVICES (UPDATED WITH SELF-HEALING) ---
 
 export const getUserProfile = async (): Promise<UserProfile> => {
     if (supabase) {
@@ -191,11 +191,49 @@ export const getUserProfile = async (): Promise<UserProfile> => {
         
         if (user) {
             try {
-                const { data: profile, error } = await supabase
+                // Define fetch function for reuse
+                const fetchProfile = async () => await supabase
                     .from('users')
                     .select('*')
                     .eq('id', user.id)
                     .single();
+
+                let { data: profile, error } = await fetchProfile();
+
+                // RETRY LOGIC: If profile not found, wait 500ms and try again (Wait for Trigger)
+                if (!profile) {
+                    await new Promise(r => setTimeout(r, 500));
+                    const retry = await fetchProfile();
+                    profile = retry.data;
+                }
+
+                // SELF-HEALING: If still missing, create it manually
+                if (!profile) {
+                    console.warn("Profile missing after retry. Executing Self-Healing...");
+                    const newProfile = {
+                        id: user.id,
+                        email: user.email,
+                        display_name: user.user_metadata.full_name || user.email?.split('@')[0],
+                        photo_url: user.user_metadata.avatar_url,
+                        diamonds: 0,
+                        is_admin: false,
+                        consecutive_check_ins: 0,
+                        created_at: new Date().toISOString()
+                    };
+                    
+                    const { error: insertError } = await supabase.from('users').insert(newProfile);
+                    
+                    if (!insertError || insertError.code === '23505') {
+                         return { 
+                            ...MOCK_USER, 
+                            id: user.id,
+                            username: newProfile.display_name,
+                            email: newProfile.email || '',
+                            avatar: newProfile.photo_url || MOCK_USER.avatar,
+                            balance: 0
+                        } as UserProfile;
+                    }
+                }
 
                 if (profile) {
                     return {
@@ -211,33 +249,7 @@ export const getUserProfile = async (): Promise<UserProfile> => {
                         checkinHistory: [], 
                         usedGiftcodes: []
                     };
-                } 
-                
-                // Profile missing -> Create new with conflict handling
-                const newProfile = {
-                    id: user.id,
-                    email: user.email,
-                    display_name: user.user_metadata.full_name || user.email?.split('@')[0],
-                    photo_url: user.user_metadata.avatar_url,
-                    diamonds: 10,
-                    is_admin: false,
-                    consecutive_check_ins: 0,
-                    created_at: new Date().toISOString()
-                };
-                
-                const { error: insertError } = await supabase.from('users').insert(newProfile);
-                
-                if (!insertError || insertError.code === '23505') { // 23505 = Unique Violation
-                    return { 
-                        ...MOCK_USER, 
-                        id: user.id,
-                        username: newProfile.display_name,
-                        email: newProfile.email || '',
-                        avatar: newProfile.photo_url || MOCK_USER.avatar,
-                        balance: newProfile.diamonds
-                    } as UserProfile;
                 }
-
             } catch (e) {
                 console.error("Critical User Fetch Error:", e);
             }

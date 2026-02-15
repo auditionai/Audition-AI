@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Icons } from '../components/Icons';
-import { signInWithGoogle } from '../services/supabaseClient';
+import { signInWithGoogle, signInWithEmail, signUpWithEmail } from '../services/supabaseClient';
 import { getPackages, getActivePromotion } from '../services/economyService';
 import { getShowcaseImages } from '../services/storageService'; // Import storage service
 import { CreditPackage, PromotionCampaign } from '../types';
@@ -16,6 +16,12 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
   const [beat, setBeat] = useState(false);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+
+  // Auth Inputs
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isAuthLoading, setIsAuthLoading] = useState(false);
 
   // Data from Admin Settings
   const [packages, setPackages] = useState<CreditPackage[]>([]);
@@ -142,6 +148,72 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
       const { error } = await signInWithGoogle();
       if (error) {
           alert(error.message || "Không thể kết nối với Google.");
+      }
+  };
+
+  // --- VALIDATION LOGIC ADDED HERE ---
+  const isValidEmail = (email: string) => {
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  };
+
+  const handleEmailAuth = async () => {
+      // 1. Basic Empty Check
+      if (!email.trim() || !password.trim()) {
+          alert("Vui lòng nhập đầy đủ Email và Mật khẩu");
+          return;
+      }
+
+      // 2. Email Format Check
+      if (!isValidEmail(email)) {
+          alert("Địa chỉ Email không đúng định dạng (ví dụ: user@example.com)");
+          return;
+      }
+
+      // 3. Password Length Check
+      if (password.length < 6) {
+          alert("Mật khẩu quá ngắn! Vui lòng nhập ít nhất 6 ký tự.");
+          return;
+      }
+      
+      setIsAuthLoading(true);
+      try {
+          if (authMode === 'login') {
+              const { error } = await signInWithEmail(email, password);
+              if (error) {
+                  // Translate Common Errors
+                  if (error.message.includes('Invalid login credentials')) {
+                      alert("Sai email hoặc mật khẩu.");
+                  } else {
+                      alert("Đăng nhập thất bại: " + error.message);
+                  }
+              } else {
+                  // Success: App.tsx will handle redirect
+              }
+          } else {
+              // Register Mode Validations
+              if (password !== confirmPassword) {
+                  alert("Mật khẩu xác nhận không khớp!");
+                  setIsAuthLoading(false);
+                  return;
+              }
+
+              const { error } = await signUpWithEmail(email, password);
+              if (error) {
+                  if (error.message.includes('User already registered')) {
+                      alert("Email này đã được đăng ký. Vui lòng đăng nhập.");
+                  } else {
+                      alert("Đăng ký thất bại: " + error.message);
+                  }
+              } else {
+                  alert("Đăng ký thành công! Hệ thống đang tự động đăng nhập...");
+                  // If confirm email is off, user is logged in automatically
+              }
+          }
+      } catch (e: any) {
+          console.error(e);
+          alert("Có lỗi hệ thống: " + e.message);
+      } finally {
+          setIsAuthLoading(false);
       }
   };
 
@@ -601,7 +673,7 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
            </div>
       </footer>
 
-      {/* --- LOGIN MODAL --- */}
+      {/* --- LOGIN MODAL (UPDATED) --- */}
       {showLogin && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
               <div className="w-full max-w-md bg-[#090014] border-2 border-audi-pink rounded-3xl p-8 relative shadow-[0_0_50px_rgba(255,0,153,0.3)]">
@@ -619,25 +691,45 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
 
                   <div className="space-y-4">
                       <div>
-                          <label className="text-xs font-bold text-audi-cyan uppercase mb-1 block">Tên tài khoản</label>
-                          <input type="text" className="w-full bg-white/5 border border-white/20 rounded-xl p-3 text-white focus:border-audi-pink outline-none transition-colors" placeholder="Nhập tên đăng nhập..." />
+                          <label className="text-xs font-bold text-audi-cyan uppercase mb-1 block">Email</label>
+                          <input 
+                            type="email" 
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            className="w-full bg-white/5 border border-white/20 rounded-xl p-3 text-white focus:border-audi-pink outline-none transition-colors" 
+                            placeholder="Nhập email..." 
+                          />
                       </div>
                       <div>
                           <label className="text-xs font-bold text-audi-cyan uppercase mb-1 block">Mật khẩu</label>
-                          <input type="password" className="w-full bg-white/5 border border-white/20 rounded-xl p-3 text-white focus:border-audi-pink outline-none transition-colors" placeholder="Nhập mật khẩu..." />
+                          <input 
+                            type="password" 
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            className="w-full bg-white/5 border border-white/20 rounded-xl p-3 text-white focus:border-audi-pink outline-none transition-colors" 
+                            placeholder="Nhập mật khẩu (tối thiểu 6 ký tự)..." 
+                          />
                       </div>
                       
                       {authMode === 'register' && (
                          <div>
                             <label className="text-xs font-bold text-audi-cyan uppercase mb-1 block">Nhập lại Mật khẩu</label>
-                            <input type="password" className="w-full bg-white/5 border border-white/20 rounded-xl p-3 text-white focus:border-audi-pink outline-none transition-colors" placeholder="Xác nhận mật khẩu..." />
+                            <input 
+                                type="password" 
+                                value={confirmPassword}
+                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                className="w-full bg-white/5 border border-white/20 rounded-xl p-3 text-white focus:border-audi-pink outline-none transition-colors" 
+                                placeholder="Xác nhận mật khẩu..." 
+                            />
                         </div>
                       )}
                       
                       <button 
-                        onClick={onEnter}
-                        className="w-full py-4 mt-4 bg-gradient-to-r from-audi-pink to-audi-purple rounded-xl font-bold text-white shadow-lg hover:shadow-audi-pink/50 transition-all transform hover:scale-[1.02]"
+                        onClick={handleEmailAuth}
+                        disabled={isAuthLoading}
+                        className="w-full py-4 mt-4 bg-gradient-to-r from-audi-pink to-audi-purple rounded-xl font-bold text-white shadow-lg hover:shadow-audi-pink/50 transition-all transform hover:scale-[1.02] disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                       >
+                          {isAuthLoading && <Icons.Loader className="w-4 h-4 animate-spin" />}
                           {authMode === 'login' ? 'ĐĂNG NHẬP NGAY' : 'ĐĂNG KÝ NGAY'}
                       </button>
 
@@ -660,13 +752,22 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
                           <span>Tiếp tục với Google</span>
                       </button>
 
-                      <div className="text-center mt-4">
-                          <span className="text-slate-500 text-xs">{authMode === 'login' ? 'Chưa có tài khoản? ' : 'Đã có tài khoản? '}</span>
+                      <div className="text-center mt-4 flex flex-col gap-2">
+                          <div>
+                              <span className="text-slate-500 text-xs">{authMode === 'login' ? 'Chưa có tài khoản? ' : 'Đã có tài khoản? '}</span>
+                              <button 
+                                onClick={() => setAuthMode(authMode === 'login' ? 'register' : 'login')}
+                                className="text-audi-lime font-bold text-xs cursor-pointer hover:underline bg-transparent border-none p-0 inline"
+                              >
+                                {authMode === 'login' ? 'Đăng ký mới' : 'Đăng nhập'}
+                              </button>
+                          </div>
+                          
                           <button 
-                            onClick={() => setAuthMode(authMode === 'login' ? 'register' : 'login')}
-                            className="text-audi-lime font-bold text-xs cursor-pointer hover:underline bg-transparent border-none p-0 inline"
+                            onClick={onEnter}
+                            className="text-slate-500 text-xs hover:text-white underline decoration-dashed"
                           >
-                            {authMode === 'login' ? 'Đăng ký mới' : 'Đăng nhập'}
+                              Bỏ qua & Dùng thử (Chế độ Khách)
                           </button>
                       </div>
                   </div>
@@ -686,7 +787,6 @@ const ShowcaseCard = ({ item }: { item: any }) => (
             <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-90"></div>
             
             <div className="absolute bottom-0 left-0 right-0 p-6 transform translate-y-2 group-hover:translate-y-0 transition-transform duration-300">
-                {/* Modified Author Section to stand out more since title is gone */}
                 <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-slate-800 to-slate-900 border border-white/20 flex items-center justify-center shadow-lg">
                          <Icons.User className="w-4 h-4 text-slate-400" />
@@ -697,8 +797,6 @@ const ShowcaseCard = ({ item }: { item: any }) => (
                     </div>
                 </div>
             </div>
-
-             {/* Hover overlay sheen */}
              <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
         </div>
     </div>

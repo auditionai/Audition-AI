@@ -220,7 +220,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
               <h4 className="text-sm font-bold text-white">Chính sách lưu trữ ảnh</h4>
               <p className="text-xs text-slate-400 leading-relaxed">
                   Ảnh trong thư viện sẽ tự động bị xóa sau <b className="text-yellow-500">7 ngày</b> để tối ưu bộ nhớ hệ thống. 
-                  Vui lòng tải ảnh về máy hoặc bấm <b>"Chia sẻ lên Trang chủ"</b> để lưu trữ vĩnh viễn trên Cloud.
+                  Vui lòng tải ảnh về máy để lưu trữ.
               </p>
           </div>
       </div>

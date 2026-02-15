@@ -423,10 +423,10 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
     <div className="flex flex-col items-center w-full max-w-5xl mx-auto pb-48 animate-fade-in relative">
         <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/*" />
 
-        {/* --- VIDEO TUTORIAL MODAL --- */}
+        {/* --- VIDEO TUTORIAL MODAL (RESIZED & TRANSPARENT BG) --- */}
         {showVideo && (
-            <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-fade-in" onClick={() => setShowVideo(false)}>
-                <div className="relative w-full max-w-4xl aspect-video bg-black rounded-2xl overflow-hidden border border-white/20 shadow-[0_0_50px_rgba(255,255,255,0.1)]" onClick={e => e.stopPropagation()}>
+            <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/20 backdrop-blur-md p-4 animate-fade-in" onClick={() => setShowVideo(false)}>
+                <div className="relative w-full max-w-2xl aspect-video bg-black rounded-2xl overflow-hidden border border-white/20 shadow-[0_0_50px_rgba(255,255,255,0.1)]" onClick={e => e.stopPropagation()}>
                     <button 
                         onClick={() => setShowVideo(false)} 
                         className="absolute -top-10 right-0 md:top-4 md:right-4 bg-white/10 hover:bg-red-600 text-white p-2 rounded-full transition-colors z-50 backdrop-blur-md"
@@ -444,9 +444,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
             </div>
         )}
 
-        {/* --- GUIDE MODAL (Existing) --- */}
+        {/* --- GUIDE MODAL (UPDATED BG) --- */}
         {guideTopic && (
-            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fade-in" onClick={() => setGuideTopic(null)}>
+            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/20 backdrop-blur-md p-4 animate-fade-in" onClick={() => setGuideTopic(null)}>
                 <div className="bg-[#12121a] w-full max-w-md p-6 rounded-2xl border border-audi-yellow/50 shadow-[0_0_30px_rgba(251,218,97,0.2)] relative" onClick={e => e.stopPropagation()}>
                     <button onClick={() => setGuideTopic(null)} className="absolute top-4 right-4 text-slate-500 hover:text-white">
                         <Icons.X className="w-6 h-6" />
@@ -482,7 +482,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
             </div>
         </div>
 
-        {/* --- SMART TIPS BANNER (NEW) --- */}
+        {/* --- SMART TIPS BANNER --- */}
         <div className="w-full bg-gradient-to-r from-orange-500/10 via-yellow-500/10 to-orange-500/10 border-y border-white/5 md:border md:rounded-xl md:mb-6 p-2 md:p-3 flex items-center justify-center gap-3 backdrop-blur-md overflow-hidden relative min-h-[40px]">
             <div key={currentTipIdx} className="flex items-center gap-2 animate-fade-in transition-all duration-500">
                 <TipIcon className="w-4 h-4 md:w-5 md:h-5 text-audi-yellow shrink-0 animate-bounce-slow" />

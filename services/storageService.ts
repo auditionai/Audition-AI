@@ -2,7 +2,7 @@
 import { GeneratedImage } from '../types';
 import { supabase } from './supabaseClient';
 import { getUserProfile } from './economyService';
-import { S3Client, PutObjectCommand, DeleteObjectCommand, ListBucketsCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 
 const DB_NAME = 'DMP_AI_Studio_DB';
 const STORE_NAME = 'images';
@@ -58,14 +58,10 @@ if (R2_ENDPOINT && R2_ACCESS_KEY_ID && R2_SECRET_ACCESS_KEY) {
 }
 
 export const checkR2Connection = async (): Promise<boolean> => {
-    if (!r2Client) return false;
-    try {
-        await r2Client.send(new ListBucketsCommand({}));
-        return true;
-    } catch (e) {
-        console.error("R2 Connection Check Failed (Check CORS or Keys)", e);
-        return false;
-    }
+    // FIX: Do not make a network request (like ListBuckets) here.
+    // Browsers block ListBuckets by default due to CORS policies, causing red errors in console.
+    // We simply return true if the client was initialized with keys.
+    return !!r2Client;
 };
 
 // --- INDEXED DB HELPERS (FALLBACK) ---

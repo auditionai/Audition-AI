@@ -241,7 +241,7 @@ export const getUserProfile = async (): Promise<UserProfile> => {
     return localUser;
 };
 
-export const updateUserBalance = async (amount: number, reason: string, type: 'topup' | 'usage' | 'reward' | 'refund' | 'admin_adjustment' | 'giftcode'): Promise<UserProfile> => {
+export const updateUserBalance = async (amount: number, reason: string, type: 'topup' | 'usage' | 'reward' | 'refund' | 'admin_adjustment' | 'giftcode' | 'milestone_reward'): Promise<UserProfile> => {
     const user = await getUserProfile();
     const newBalance = (user.balance || 0) + amount;
 
@@ -591,16 +591,17 @@ export const deletePromotion = async (id: string): Promise<void> => {
     }
 };
 
-// --- ATTENDANCE SERVICES (UPDATED) ---
+// --- ATTENDANCE SERVICES (UPDATED: MANUAL CLAIM) ---
 
 export const getCheckinStatus = async () => {
     const user = await getUserProfile();
-    const today = getLocalDateStr(); // YYYY-MM-DD in local time
+    const today = getLocalDateStr(); // YYYY-MM-DD
     
-    // Default values from user profile
-    let streak = user.streak;
+    // Default values
+    let cumulativeStreak = 0;
     let isCheckedInToday = false;
     let history: string[] = [];
+    let claimedMilestones: number[] = [];
 
     // If connected, sync actual history from daily_check_ins table
     if (supabase && user.id.length > 20) {
@@ -610,28 +611,52 @@ export const getCheckinStatus = async () => {
             .eq('user_id', user.id);
         
         if (data) {
-            history = data.map(d => d.check_in_date); // Should be YYYY-MM-DD
+            history = data.map(d => d.check_in_date); // YYYY-MM-DD
             isCheckedInToday = history.includes(today);
             
-            // Recalculate streak based on last_check_in from DB profile vs today
-            if (user.lastCheckin) {
-                 const lastDate = new Date(user.lastCheckin).toLocaleDateString('sv-SE');
-                 // If last checkin was today, user is checked in
-                 if (lastDate === today) isCheckedInToday = true;
+            // Calculate Cumulative Checkins for Current Month
+            const currentMonthPrefix = today.substring(0, 7); // "YYYY-MM"
+            cumulativeStreak = history.filter(d => d.startsWith(currentMonthPrefix)).length;
+
+            // Check Claimed Milestones by scanning Transaction Logs
+            // We look for 'transaction_type' = 'milestone_reward' and distinct description for this month
+            // Example Description: "Milestone Reward: Day 7 - [YYYY-MM]"
+            const { data: logs } = await supabase
+                .from('diamond_transactions_log')
+                .select('description')
+                .eq('user_id', user.id)
+                .eq('transaction_type', 'milestone_reward')
+                .ilike('description', `%${currentMonthPrefix}%`);
+            
+            if (logs) {
+                logs.forEach((log: any) => {
+                    if (log.description.includes('Day 7')) claimedMilestones.push(7);
+                    if (log.description.includes('Day 14')) claimedMilestones.push(14);
+                    if (log.description.includes('Day 30')) claimedMilestones.push(30);
+                });
             }
+        }
+    } else {
+        // Fallback for mock user
+        cumulativeStreak = user.streak; 
+        if (user.lastCheckin) {
+             const lastDate = new Date(user.lastCheckin).toLocaleDateString('sv-SE');
+             if (lastDate === today) isCheckedInToday = true;
         }
     }
 
     return {
-        streak,
+        streak: cumulativeStreak,
         isCheckedInToday,
-        history
+        history,
+        claimedMilestones
     };
 };
 
 export const performCheckin = async (): Promise<{ success: boolean; reward: number; newStreak: number; message?: string }> => {
     const user = await getUserProfile();
     const today = getLocalDateStr(); // YYYY-MM-DD
+    const currentMonthPrefix = today.substring(0, 7); // "YYYY-MM"
     
     if (supabase && user.id.length > 20) {
         // 1. Double check if already checked in today in DB
@@ -646,49 +671,13 @@ export const performCheckin = async (): Promise<{ success: boolean; reward: numb
             return { success: false, reward: 0, newStreak: user.streak, message: 'Đã điểm danh hôm nay!' };
         }
 
-        // 2. Calculate Streak
-        let newStreak = 1;
-        let lastCheckinDate = null;
-        
-        // Retrieve latest accurate check-in date
-        if (user.lastCheckin) {
-            // Ensure we treat the stored timestamp as local date for calculation
-            const lastDateObj = new Date(user.lastCheckin); 
-            const lastDateStr = getLocalDateStr(lastDateObj);
-            
-            const diffTime = new Date(today).getTime() - new Date(lastDateStr).getTime();
-            const diffDays = diffTime / (1000 * 3600 * 24);
-            
-            if (diffDays === 1) {
-                newStreak = user.streak + 1;
-            } else if (diffDays === 0) {
-                return { success: false, reward: 0, newStreak: user.streak, message: 'Đã điểm danh hôm nay!' };
-            } else {
-                newStreak = 1; // Reset streak if missed a day
-            }
-        }
-
-        // 3. Calculate Reward (Base + Milestone)
+        // 2. Insert into daily_check_ins (Base Reward Only)
         const baseReward = 5;
-        let bonusReward = 0;
         
-        // Milestone Logic
-        if (newStreak === 7) bonusReward = 20;
-        else if (newStreak === 14) bonusReward = 50;
-        else if (newStreak === 30) bonusReward = 100;
-        
-        const totalReward = baseReward + bonusReward;
-        const description = bonusReward > 0 
-            ? `Check-in Day ${newStreak} (Bonus +${bonusReward})` 
-            : `Check-in Day ${newStreak}`;
-
-        // 4. Update Database (Sequential)
-        
-        // A. Insert into daily_check_ins
         const { error: insertError } = await supabase.from('daily_check_ins').insert({
             user_id: user.id,
             check_in_date: today,
-            reward_amount: totalReward
+            reward_amount: baseReward
         });
         
         if (insertError) {
@@ -696,28 +685,84 @@ export const performCheckin = async (): Promise<{ success: boolean; reward: numb
              return { success: false, reward: 0, newStreak: user.streak };
         }
 
-        // B. Update User Profile (Streak + Balance)
+        // 3. Recalculate Monthly Count
+        const { count } = await supabase
+            .from('daily_check_ins')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', user.id)
+            .gte('check_in_date', `${currentMonthPrefix}-01`)
+            .lte('check_in_date', `${currentMonthPrefix}-31`);
+
+        const monthlyCount = count || 1;
+
+        // 4. Update User Profile
         await supabase.from('users').update({ 
-            consecutive_check_ins: newStreak, 
-            last_check_in: new Date().toISOString(), // Save full ISO for timestamp precision
-            diamonds: (user.balance || 0) + totalReward
+            consecutive_check_ins: monthlyCount, 
+            last_check_in: new Date().toISOString(),
+            diamonds: (user.balance || 0) + baseReward
         }).eq('id', user.id);
 
-        // C. Log Transaction
+        // 5. Log Transaction
         await supabase.from('diamond_transactions_log').insert({
             user_id: user.id,
-            amount: totalReward, 
-            description: description, 
+            amount: baseReward, 
+            description: `Check-in Day ${monthlyCount}`, 
             transaction_type: 'reward',
             created_at: new Date().toISOString()
         });
         
-        return { success: true, reward: totalReward, newStreak };
+        return { success: true, reward: baseReward, newStreak: monthlyCount };
     }
     
-    // Local fallback
     return { success: true, reward: 5, newStreak: (user.streak || 0) + 1 };
 };
+
+export const claimMilestoneReward = async (day: number): Promise<{ success: boolean; reward: number; message: string }> => {
+    const user = await getUserProfile();
+    const today = getLocalDateStr();
+    const currentMonthPrefix = today.substring(0, 7);
+
+    if (!supabase || user.id.length < 20) {
+        return { success: false, reward: 0, message: 'Chưa đăng nhập' };
+    }
+
+    // 1. Verify Eligibility (Monthly Count)
+    const { count } = await supabase
+        .from('daily_check_ins')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .gte('check_in_date', `${currentMonthPrefix}-01`)
+        .lte('check_in_date', `${currentMonthPrefix}-31`);
+    
+    const monthlyCount = count || 0;
+    if (monthlyCount < day) {
+        return { success: false, reward: 0, message: `Chưa đủ ${day} ngày điểm danh!` };
+    }
+
+    // 2. Check if already claimed this month
+    const descriptionKey = `Milestone Reward: Day ${day} - [${currentMonthPrefix}]`;
+    const { data: existingLog } = await supabase
+        .from('diamond_transactions_log')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('description', descriptionKey)
+        .maybeSingle();
+
+    if (existingLog) {
+        return { success: false, reward: 0, message: 'Đã nhận thưởng mốc này rồi!' };
+    }
+
+    // 3. Determine Reward
+    let reward = 0;
+    if (day === 7) reward = 20;
+    else if (day === 14) reward = 50;
+    else if (day === 30) reward = 100;
+
+    // 4. Distribute Reward
+    await updateUserBalance(reward, descriptionKey, 'milestone_reward');
+
+    return { success: true, reward, message: `Nhận thành công ${reward} Vcoin!` };
+}
 
 // --- TRANSACTION SERVICES ---
 

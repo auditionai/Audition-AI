@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Icons } from './Icons';
-import { getCheckinStatus, performCheckin } from '../services/economyService';
+import { getCheckinStatus, performCheckin, claimMilestoneReward } from '../services/economyService';
 
 interface DailyCheckinProps {
   onClose: () => void;
@@ -15,6 +15,7 @@ export const DailyCheckin: React.FC<DailyCheckinProps> = ({ onClose, onSuccess, 
   const [checkedIn, setCheckedIn] = useState(false);
   const [loading, setLoading] = useState(false);
   const [history, setHistory] = useState<string[]>([]);
+  const [claimedMilestones, setClaimedMilestones] = useState<number[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   
   // Calendar State
@@ -25,9 +26,10 @@ export const DailyCheckin: React.FC<DailyCheckinProps> = ({ onClose, onSuccess, 
   useEffect(() => {
     const loadStatus = async () => {
         const status = await getCheckinStatus();
-        setStreak(status.streak);
+        setStreak(status.streak); // Now represents total monthly check-ins
         setCheckedIn(status.isCheckedInToday);
         setHistory(status.history);
+        setClaimedMilestones(status.claimedMilestones);
     };
     loadStatus();
   }, []);
@@ -42,11 +44,7 @@ export const DailyCheckin: React.FC<DailyCheckinProps> = ({ onClose, onSuccess, 
               setCheckedIn(true);
               setHistory(prev => [...prev, new Date().toLocaleDateString('sv-SE')]);
               
-              if (res.reward > 5) {
-                  setMessage(lang === 'vi' ? `Nhận ${res.reward} Vcoin (Có thưởng mốc!)` : `Received ${res.reward} Vcoin (Bonus!)`);
-              } else {
-                  setMessage(lang === 'vi' ? `Điểm danh thành công! +${res.reward} Vcoin` : `Check-in success! +${res.reward} Vcoin`);
-              }
+              setMessage(lang === 'vi' ? `Điểm danh thành công! +${res.reward} Vcoin` : `Check-in success! +${res.reward} Vcoin`);
 
               setTimeout(() => {
                   onSuccess();
@@ -61,6 +59,24 @@ export const DailyCheckin: React.FC<DailyCheckinProps> = ({ onClose, onSuccess, 
           setLoading(false);
       }
   };
+
+  const handleClaimMilestone = async (day: number) => {
+      setLoading(true);
+      try {
+          const res = await claimMilestoneReward(day);
+          if (res.success) {
+              setMessage(res.message);
+              setClaimedMilestones(prev => [...prev, day]);
+              onSuccess(); // Refresh balance
+          } else {
+              setMessage(res.message);
+          }
+      } catch (e) {
+          console.error(e);
+      } finally {
+          setLoading(false);
+      }
+  }
 
   const getDaysInMonth = (month: number, year: number) => new Date(year, month + 1, 0).getDate();
   const getFirstDayOfMonth = (month: number, year: number) => new Date(year, month, 1).getDay();
@@ -127,7 +143,7 @@ export const DailyCheckin: React.FC<DailyCheckinProps> = ({ onClose, onSuccess, 
                     <Icons.Flame className="w-6 h-6 text-white" />
                 </div>
                 <div>
-                    <p className="text-xs text-slate-400 font-bold uppercase">{lang === 'vi' ? 'Chuỗi điểm danh' : 'Current Streak'}</p>
+                    <p className="text-xs text-slate-400 font-bold uppercase">{lang === 'vi' ? 'Tích lũy tháng này' : 'Monthly Check-ins'}</p>
                     <p className="text-2xl font-black text-white">{streak} {lang === 'vi' ? 'ngày' : 'days'}</p>
                 </div>
                 <div className="ml-auto text-right">
@@ -174,17 +190,40 @@ export const DailyCheckin: React.FC<DailyCheckinProps> = ({ onClose, onSuccess, 
                         { days: 7, reward: 20 },
                         { days: 14, reward: 50 },
                         { days: 30, reward: 100 },
-                    ].map((m) => (
-                        <div key={m.days} className={`bg-[#1a1a24] rounded-xl p-3 flex flex-col items-center border border-white/5 transition-all ${streak >= m.days ? 'border-audi-lime shadow-[0_0_10px_rgba(204,255,0,0.2)]' : ''}`}>
-                            <div className="relative">
-                                <Icons.Gift className={`w-5 h-5 mb-2 ${streak >= m.days ? 'text-audi-lime' : 'text-slate-600'}`} />
-                                {streak >= m.days && <div className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full animate-ping"></div>}
+                    ].map((m) => {
+                        const isUnlocked = streak >= m.days;
+                        const isClaimed = claimedMilestones.includes(m.days);
+
+                        return (
+                            <div key={m.days} className={`bg-[#1a1a24] rounded-xl p-3 flex flex-col items-center border border-white/5 transition-all ${isUnlocked ? 'border-audi-lime shadow-[0_0_10px_rgba(204,255,0,0.2)]' : ''}`}>
+                                <div className="relative">
+                                    <Icons.Gift className={`w-5 h-5 mb-2 ${isUnlocked ? 'text-audi-lime' : 'text-slate-600'}`} />
+                                    {isUnlocked && !isClaimed && <div className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full animate-ping"></div>}
+                                </div>
+                                <span className="text-[9px] text-slate-500 uppercase">{lang === 'vi' ? `Mốc ${m.days}` : `Day ${m.days}`}</span>
+                                <span className={`text-xs font-bold ${isUnlocked ? 'text-white' : 'text-slate-500'}`}>{m.reward} Vcoin</span>
+                                
+                                <div className="mt-2 w-full">
+                                    {isClaimed ? (
+                                        <div className="w-full py-1 bg-white/5 rounded text-[9px] font-bold text-green-500 flex items-center justify-center gap-1">
+                                            <Icons.Check className="w-3 h-3" /> Đã nhận
+                                        </div>
+                                    ) : isUnlocked ? (
+                                        <button 
+                                            onClick={() => handleClaimMilestone(m.days)}
+                                            className="w-full py-1 bg-audi-lime hover:bg-lime-400 text-black rounded text-[9px] font-bold animate-pulse"
+                                        >
+                                            NHẬN
+                                        </button>
+                                    ) : (
+                                        <div className="flex justify-center">
+                                            <Icons.Lock className="w-3 h-3 text-slate-700" />
+                                        </div>
+                                    )}
+                                </div>
                             </div>
-                            <span className="text-[9px] text-slate-500 uppercase">{lang === 'vi' ? `Mốc ${m.days}` : `Day ${m.days}`}</span>
-                            <span className={`text-xs font-bold ${streak >= m.days ? 'text-white' : 'text-slate-500'}`}>{m.reward} Vcoin</span>
-                            {streak < m.days && <Icons.Lock className="w-3 h-3 text-slate-700 mt-1" />}
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             </div>
             

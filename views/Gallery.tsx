@@ -78,6 +78,25 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
       }
   };
 
+  const handleDownload = async (imageUrl: string, filename: string) => {
+      try {
+          const response = await fetch(imageUrl);
+          const blob = await response.blob();
+          const url = window.URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = filename;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          window.URL.revokeObjectURL(url);
+          notify(lang === 'vi' ? 'Đã tải ảnh xuống!' : 'Image downloaded!', 'success');
+      } catch (error) {
+          console.error("Download failed:", error);
+          window.open(imageUrl, '_blank');
+      }
+  };
+
   const formatDate = (timestamp: number) => {
     return new Date(timestamp).toLocaleDateString(lang === 'vi' ? 'vi-VN' : 'en-US', {
       month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
@@ -213,14 +232,13 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                     </button>
 
                     <div className="flex gap-3">
-                        <a 
-                          href={selectedImage.url} 
-                          download={`dmp-ai-${selectedImage.id}.png`}
+                        <button 
+                          onClick={() => handleDownload(selectedImage.url, `auditionai-image-${selectedImage.id}.png`)}
                           className="flex-1 py-3 bg-slate-700 hover:bg-brand-500 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-colors border border-white/5"
                         >
                             <Icons.Download className="w-4 h-4" />
                             {lang === 'vi' ? 'Tải về' : 'Download'}
-                        </a>
+                        </button>
                         <button 
                            onClick={(e) => handleDelete(e, selectedImage.id)}
                            className="p-3 bg-slate-700 hover:bg-red-500/20 hover:text-red-500 text-slate-300 rounded-xl transition-colors border border-white/5"

@@ -246,6 +246,27 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       setCharacters(prev => prev.map(c => c.id === charId ? { ...c, isFaceLocked: !c.isFaceLocked } : c));
   }
 
+  // --- FORCE DOWNLOAD FUNCTION (FIXED) ---
+  const handleForceDownload = async (imageUrl: string, filename: string) => {
+      try {
+          const response = await fetch(imageUrl);
+          const blob = await response.blob();
+          const url = window.URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = filename; // Sets the filename correctly
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          window.URL.revokeObjectURL(url);
+          notify('Đã tải ảnh về máy!', 'success');
+      } catch (error) {
+          console.error("Download failed:", error);
+          window.open(imageUrl, '_blank'); // Fallback
+          notify('Tự động tải thất bại, đang mở tab mới.', 'warning');
+      }
+  };
+
   const calculateCost = () => {
       let cost = modelType === 'pro' ? 2 : 1;
       if (modelType === 'pro') {
@@ -476,9 +497,12 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                   </div>
                   <div className="p-4 bg-[#12121a] flex flex-col gap-3">
                       <div className="flex gap-2">
-                          <a href={resultImage} download={`dmp-ai-${Date.now()}.png`} className="flex-1 px-4 py-2.5 bg-white text-black rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-audi-cyan transition-colors text-sm">
+                          <button 
+                            onClick={() => handleForceDownload(resultImage, `auditionai-image-${Date.now()}.png`)}
+                            className="flex-1 px-4 py-2.5 bg-white text-black rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-audi-cyan transition-colors text-sm"
+                          >
                               <Icons.Download className="w-4 h-4" /> Tải Về
-                          </a>
+                          </button>
                           <button onClick={() => setStage('input')} className="flex-1 px-4 py-2.5 bg-audi-pink text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-pink-600 transition-colors shadow-[0_0_15px_#FF0099] text-sm">
                               <Icons.Wand className="w-4 h-4" /> Tạo Tiếp
                           </button>

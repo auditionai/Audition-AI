@@ -103,35 +103,30 @@ const processDigitalTwinMode = (
     let systemPrompt = "";
 
     if (isSingle) {
-        // --- FIXED LOGIC FOR SINGLE IMAGE (SCENE RECONSTRUCTION) ---
-        systemPrompt = `** SYSTEM: 3D SCENE RECONSTRUCTION & CHARACTER ARTIST **
+        // --- UPGRADED LOGIC FOR SINGLE IMAGE (FLASH & PRO) ---
+        systemPrompt = `** SYSTEM: ELITE 3D SCENE RECONSTRUCTOR **
         
-        [TASK]: You are an expert 3D Artist. Recreate the input image as a high-end 3D Game Render (Unreal Engine 5 Style).
+        [OBJECTIVE]: Recreate the input photo as a high-end 3D Render (Unreal Engine 5 style) while preserving the EXACT scene composition.
         
-        [CRITICAL INSTRUCTION - COMPOSITION & CAMERA]:
-        - COPY the Camera Angle, Field of View, and Framing from the Reference Image EXACTLY.
-        - If Reference is Portrait/Close-up -> Output Portrait/Close-up.
-        - If Reference is Full Body -> Output Full Body.
-        - If Reference is Dutch Angle/Low Angle -> Copy it.
+        [MANDATORY ANALYSIS STEP]:
+        1. Look at the Reference Image Background. Is it a room? A street? A dark bar? 
+        2. YOU MUST REPAINT THIS EXACT BACKGROUND IN 3D.
+        3. Look at the Camera Distance. Is it a Close-up (Face only)? Half-body? Full-body?
+        4. YOU MUST MATCH THIS CAMERA FRAMING EXACTLY.
         
-        [CRITICAL INSTRUCTION - BACKGROUND]:
-        - Analyze the background in the Reference Image (lights, furniture, atmosphere, darkness).
-        - RECONSTRUCT the same environment in 3D.
-        - DO NOT use a plain or studio background unless the reference has one.
-        - Match the lighting mood (e.g., dark bar, neon lights, sunny park, bedroom).
+        [STRICT CONSTRAINTS FOR FLASH MODEL]:
+        - DO NOT generate a plain color background.
+        - DO NOT generate a studio grey/white background.
+        - DO NOT zoom out if the reference is a close-up.
+        - DO NOT crop the head if the reference shows the full head.
+        - IF the reference implies a dark atmosphere, output a DARK image.
         
-        [CHARACTER]:
-        - Style: Stylized 3D, semi-realistic anime features (Audition Online / Sims 4 Alpha CC style).
-        - Skin: Smooth, glowing, no realistic human pores.
-        - Outfit: Match the reference outfit exactly based on the texture sheet provided.
+        [CHARACTER STYLING]:
+        - Style: 3D Game Character (Audition/Sims Alpha CC), Semi-realistic anime eyes.
+        - Skin: Smooth, glowing, no realistic pores.
+        - Outfit: Match the reference design.
         
-        [SCENE]: "${prompt}"
-        
-        [STRICT NEGATIVE CONSTRAINTS]:
-        - NO real humans, NO photorealism.
-        - NO collage, NO grid, NO split-screen.
-        - NO text, NO UI elements.
-        - NO plain background (unless reference is plain).
+        [SCENE DESCRIPTION]: "${prompt}"
         `;
     } else {
         // --- LOGIC FOR COUPLE / GROUP (KEPT STABLE) ---
@@ -173,8 +168,6 @@ export const generateImage = async (
     const ai = await getAiClient();
     
     // --- FIXED MODEL SELECTION LOGIC ---
-    // Flash always uses 'gemini-2.5-flash-image'
-    // Pro always uses 'gemini-3-pro-image-preview' (even at 1K)
     const model = modelTier === 'pro' ? 'gemini-3-pro-image-preview' : 'gemini-2.5-flash-image';
     
     if (onProgress) onProgress(`Engine: ${model} | Mode: ${useCloudRef ? 'CLOUD NEURAL LINK' : 'STANDARD'}`);
@@ -184,7 +177,6 @@ export const generateImage = async (
     if (styleRefBase64) {
         // Note: For Single Mode, styleRefBase64 is passed RAW (optimized) from the view to preserve background.
         // For Group Mode, it is passed FENCED (gray bg).
-        // We just wrap it here.
         refImagePart = {
             inlineData: { data: cleanBase64(styleRefBase64), mimeType: 'image/jpeg' }
         };
@@ -242,9 +234,9 @@ export const generateImage = async (
 
     const config: any = {
         imageConfig: { aspectRatio: aspectRatio },
-        // Use a clearer system instruction for the API config as well
+        // Enhanced system instruction for the API config
         systemInstruction: characterDataList.length === 1 
-            ? "You are a professional 3D Scene Artist. Recreate the photo in 3D style. Match Composition and Background."
+            ? "CRITICAL: OUTPUT A 3D RENDER MATCHING THE INPUT COMPOSITION EXACTLY. IF INPUT IS PORTRAIT, OUTPUT PORTRAIT. IF INPUT HAS BACKGROUND, RECREATE IT. DO NOT USE PLAIN BACKGROUND."
             : "Create high quality 3D character render. Follow the reference image structure.", 
         safetySettings: [
             { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
@@ -256,10 +248,7 @@ export const generateImage = async (
 
     // Apply Pro features if model is Pro
     if (modelTier === 'pro') {
-        // Only set imageSize for Pro model
         config.imageConfig.imageSize = resolution;
-        
-        // Add Search tool if requested and NO style ref (to avoid conflicts)
         if (useSearch && !refImagePart) {
             config.tools = [{ googleSearch: {} }];
         }

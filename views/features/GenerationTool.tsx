@@ -65,12 +65,14 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
   const [loadingSamples, setLoadingSamples] = useState(false);
   const [currentCategoryName, setCurrentCategoryName] = useState('');
 
-  // Removed modelType state - defaulting to Pro
+  // Default Resolution 1K
   const [aspectRatio, setAspectRatio] = useState('3:4'); 
   const [selectedStyle, setSelectedStyle] = useState('3d');
-  const [resolution, setResolution] = useState<Resolution>('2K'); 
-  const [useSearch, setUseSearch] = useState(false); 
-  const [useCloudRef, setUseCloudRef] = useState(true);
+  const [resolution, setResolution] = useState<Resolution>('1K'); 
+  
+  // Features always ON
+  const useSearch = true; 
+  const useCloudRef = true;
 
   const [guideTopic, setGuideTopic] = useState<'chars' | 'settings' | null>(null);
   const [currentTipIdx, setCurrentTipIdx] = useState(0);
@@ -261,9 +263,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       if (resolution === '2K') cost = 10;
       if (resolution === '4K') cost = 15;
 
-      // Add-ons
-      if (useSearch) cost += 3; 
-      if (useCloudRef) cost += 2;
+      // Add-ons (Search & CloudRef are now FREE/INCLUDED)
+      // if (useSearch) cost += 0; 
+      // if (useCloudRef) cost += 0;
       
       // Mode Multipliers (More characters = more processing)
       if (activeMode === 'couple') cost += 2;
@@ -843,33 +845,68 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                         </div>
                     </div>
 
-                    <div className="space-y-2 animate-fade-in">
+                    <div className="space-y-3 animate-fade-in">
                         <label className="text-[10px] font-bold text-slate-400 uppercase">Độ phân giải (3.0 Pro)</label>
-                        <div className="flex gap-2 bg-black/30 p-1 rounded-lg">
+                        <div className="flex gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5">
                             {['1K', '2K', '4K'].map(r => (
                                 <button 
                                     key={r} 
                                     onClick={() => setResolution(r as any)} 
-                                    className={`flex-1 py-2 rounded text-[10px] font-bold transition-all ${resolution === r ? 'bg-audi-purple text-white shadow' : 'text-slate-500 hover:text-white'}`}
+                                    className={`flex-1 py-3 rounded-lg text-xs font-bold transition-all ${resolution === r ? 'bg-audi-purple text-white shadow-lg' : 'text-slate-500 hover:text-white hover:bg-white/5'}`}
                                 >
                                     {r}
                                 </button>
                             ))}
                         </div>
-                        <div className="text-[9px] text-center text-slate-500 mt-1">
-                            1K: 5 VC • 2K: 10 VC • 4K: 15 VC
+                        
+                        {/* Redesigned Pricing Display */}
+                        <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-audi-purple/20 to-audi-pink/20 border border-white/10 p-3">
+                            <div className="flex justify-between items-center relative z-10">
+                                <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Giá hiện tại</span>
+                                <div className="flex items-end gap-1">
+                                    <span className="text-xl font-black text-white font-game drop-shadow-md">
+                                        {resolution === '1K' ? '5' : resolution === '2K' ? '10' : '15'}
+                                    </span>
+                                    <span className="text-[10px] font-bold text-audi-yellow mb-1">VCOIN</span>
+                                </div>
+                            </div>
+                            <div className="flex justify-between text-[9px] text-slate-500 mt-2 font-mono border-t border-white/5 pt-2">
+                                <span className={resolution === '1K' ? 'text-white font-bold' : ''}>1K: 5VC</span>
+                                <span className={resolution === '2K' ? 'text-white font-bold' : ''}>2K: 10VC</span>
+                                <span className={resolution === '4K' ? 'text-white font-bold' : ''}>4K: 15VC</span>
+                            </div>
                         </div>
                     </div>
 
-                    <div className="pt-2 border-t border-white/10 space-y-2">
-                        <div 
-                            onClick={() => setUseCloudRef(!useCloudRef)}
-                            className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors ${useCloudRef ? 'bg-audi-cyan/10' : 'hover:bg-white/5'}`}
-                        >
-                            <span className={`text-xs font-bold ${useCloudRef ? 'text-audi-cyan' : 'text-slate-400'}`}>HQ Cloud Link (R2)</span>
-                            <div className={`w-8 h-4 rounded-full p-0.5 transition-colors ${useCloudRef ? 'bg-audi-cyan' : 'bg-slate-700'}`}>
-                                <div className={`w-3 h-3 rounded-full bg-white transition-transform ${useCloudRef ? 'translate-x-4' : 'translate-x-0'}`}></div>
+                    <div className="pt-4 border-t border-white/10 space-y-3">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase">Tính năng mặc định (Included)</label>
+                        
+                        {/* HQ Cloud Link (Always On) */}
+                        <div className="flex items-center justify-between p-3 rounded-xl bg-audi-cyan/10 border border-audi-cyan/30">
+                            <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-audi-cyan/20 flex items-center justify-center text-audi-cyan">
+                                    <Icons.Cloud className="w-4 h-4" />
+                                </div>
+                                <div>
+                                    <div className="text-xs font-bold text-white">HQ Cloud Link (R2)</div>
+                                    <div className="text-[9px] text-audi-cyan font-bold">ACTIVE • FREE</div>
+                                </div>
                             </div>
+                            <Icons.Lock className="w-4 h-4 text-audi-cyan opacity-50" />
+                        </div>
+
+                        {/* Google Search (Always On) */}
+                        <div className="flex items-center justify-between p-3 rounded-xl bg-blue-500/10 border border-blue-500/30">
+                            <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400">
+                                    <Icons.Search className="w-4 h-4" />
+                                </div>
+                                <div>
+                                    <div className="text-xs font-bold text-white">Google Search (Grounding)</div>
+                                    <div className="text-[9px] text-blue-400 font-bold">ACTIVE • FREE</div>
+                                </div>
+                            </div>
+                            <Icons.Lock className="w-4 h-4 text-blue-400 opacity-50" />
                         </div>
                     </div>
 

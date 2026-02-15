@@ -147,9 +147,9 @@ export const generateImage = async (
     styleRefBase64?: string, 
     characterDataList: CharacterData[] = [], 
     resolution: string = '2K',
-    _modelTier: 'flash' | 'pro' = 'pro', // Deprecated param, kept for signature compatibility
-    useSearch: boolean = false,
-    useCloudRef: boolean = false, 
+    _modelTier: 'flash' | 'pro' = 'pro', // Deprecated param
+    useSearch: boolean = true, // Default ON
+    useCloudRef: boolean = true, // Default ON
     onProgress?: (msg: string) => void
 ): Promise<string | null> => {
   

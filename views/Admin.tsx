@@ -30,8 +30,8 @@ interface ConfirmState {
     title?: string;
     msg: string;
     onConfirm: () => void;
-    isAlertOnly?: boolean; // Just an OK button
-    sqlHelp?: string; // Optional SQL code to copy
+    isAlertOnly?: boolean; 
+    sqlHelp?: string; 
 }
 
 const TRIGGER_FIX_SQL = `-- 1. Clean up old triggers and functions
@@ -197,17 +197,14 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           setPackages(s.packages || []);
           setPromotions(s.promotions || []);
           setGiftcodes(s.giftcodes || []);
-          // Transactions are already sorted by DESC in getAdminStats now
           setTransactions(s.transactions || []); 
           const imgs = await getAllImagesFromStorage();
           setAllImages(imgs);
       }
       
-      // Fetch DB Keys list
       const keys = await getApiKeysList();
       setDbKeys(keys);
 
-      // Fetch Giftcode Config
       const promoConfig = await getGiftcodePromoConfig();
       setGiftcodePromo(promoConfig);
   };
@@ -216,17 +213,11 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       const startGemini = Date.now();
       const keyToUse = specificKey !== undefined ? specificKey : (apiKey || undefined);
       
-      // 1. Check Gemini
       const geminiOk = await checkConnection(keyToUse);
       const geminiLatency = Date.now() - startGemini;
-      
-      // 2. Check Supabase DB
       const sbCheck = await checkSupabaseConnection();
-
-      // 3. Check R2 Storage
       const r2Ok = await checkR2Connection();
       
-      // Determine Storage Status
       let storageStatus: 'connected' | 'disconnected' = 'disconnected';
       let storageType: 'R2' | 'Supabase' | 'None' = 'None';
 
@@ -262,7 +253,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           if (result.success) {
               setKeyStatus('valid');
               showToast('Đã lưu API Key vào Database thành công!');
-              await refreshData(); // Refresh list
+              await refreshData(); 
               runSystemChecks(apiKey);
           } else {
               setKeyStatus('unknown');
@@ -309,7 +300,6 @@ CREATE POLICY "Enable delete for authenticated users only" ON public.api_keys FO
 
   const handleSaveUser = async () => {
       if (editingUser) {
-          // Check result from service
           const result = await updateAdminUserProfile(editingUser);
           
           if (result.success) {
@@ -339,7 +329,6 @@ CREATE POLICY "Enable delete for authenticated users only" ON public.api_keys FO
               refreshData();
               showToast('Cập nhật gói nạp thành công!');
           } else {
-              // 1. Check for RLS Errors
               if (result.error?.includes('RLS') || result.error?.includes('permission') || result.error?.includes('policy')) {
                   setConfirmDialog({
                       show: true,
@@ -351,7 +340,6 @@ CREATE POLICY "Enable all access for credit packages" ON public.credit_packages 
                       onConfirm: () => {}
                   });
               } 
-              // 2. Check for Missing Column Errors (transfer_syntax)
               else if (result.error?.includes('transfer_syntax') || result.error?.includes('column')) {
                   setConfirmDialog({
                       show: true,
@@ -393,17 +381,12 @@ ADD COLUMN IF NOT EXISTS bonus_credits int8 DEFAULT 0;`,
 
       if (newIndex < 0 || newIndex >= newPackages.length) return;
 
-      // Swap elements
       [newPackages[index], newPackages[newIndex]] = [newPackages[newIndex], newPackages[index]];
-      
-      // Update local state immediately for UI response
       setPackages(newPackages);
 
-      // Call service to update order in DB
       const result = await updatePackageOrder(newPackages);
       if (!result.success) {
           showToast('Lỗi khi lưu thứ tự: ' + result.error, 'error');
-          // Revert if needed, but for now we let it stay locally
       }
   };
 
@@ -445,7 +428,6 @@ CREATE POLICY "Enable all access for gift codes" ON public.gift_codes FOR ALL US
       if (result.success) {
           showToast('Đã lưu thông báo thành công!');
       } else {
-          // Check for RLS
           if (result.error?.includes('permission') || result.error?.includes('policy')) {
               setConfirmDialog({
                   show: true,
@@ -470,7 +452,6 @@ CREATE POLICY "Enable all access" ON public.system_settings FOR ALL USING (true)
               refreshData();
               showToast('Lưu chiến dịch thành công!');
           } else {
-              // DETECT MISSING COLUMN ERROR AND SHOW SQL HELP
               if (result.error?.includes('column') || result.error?.includes('bonus_percent') || result.error?.includes('title')) {
                   setConfirmDialog({
                       show: true,
@@ -520,13 +501,10 @@ CREATE POLICY "Enable access" ON public.promotions FOR ALL USING (true) WITH CHE
           setProcessingTxId(txId);
           const result = await adminApproveTransaction(txId);
           if (result.success) {
-              // Optimistic update for UI smoothness
               setTransactions(prev => prev.map(t => 
                   t.id === txId ? { ...t, status: 'paid' } : t
               ));
               showToast('Đã duyệt thành công!');
-              
-              // Force Refresh Data to verify persistence
               await refreshData();
           } else {
               if (result.error?.includes('RLS') || result.error?.includes('permission') || result.error?.includes('policy')) {
@@ -541,7 +519,6 @@ CREATE POLICY "Enable all access for transactions" ON public.transactions FOR AL
                   });
               } else {
                   showToast('Lỗi: ' + result.error, 'error');
-                  // Revert if failed
                   await refreshData();
               }
           }
@@ -556,13 +533,10 @@ CREATE POLICY "Enable all access for transactions" ON public.transactions FOR AL
           setProcessingTxId(txId);
           const result = await adminRejectTransaction(txId);
           if (result.success) {
-              // Optimistic update
               setTransactions(prev => prev.map(t => 
                   t.id === txId ? { ...t, status: 'failed' } : t
               ));
               showToast('Đã từ chối giao dịch', 'info');
-              
-              // Force refresh to verify
               await refreshData();
           } else {
               if (result.error?.includes('RLS') || result.error?.includes('permission') || result.error?.includes('policy')) {
@@ -590,11 +564,9 @@ CREATE POLICY "Enable all access for transactions" ON public.transactions FOR AL
           setProcessingTxId(txId);
           const res = await deleteTransaction(txId);
           if (res.success) {
-              // Optimistic update
               setTransactions(prev => prev.filter(t => t.id !== txId));
               showToast('Đã xóa giao dịch vĩnh viễn', 'info');
           } else {
-              // Handle known errors (RLS or not found)
               if (res.error?.includes('policy') || res.error?.includes('phân quyền') || res.error?.includes('RLS')) {
                    setConfirmDialog({
                       show: true,
@@ -674,7 +646,6 @@ using (true);`,
 
   return (
     <div className="min-h-screen pb-24 animate-fade-in bg-[#05050A]">
-      {/* ... (Rest of Admin Component remains exactly the same as previously rendered) ... */}
       {/* --- TOASTS CONTAINER --- */}
       <div className="fixed top-24 right-4 z-[9999] flex flex-col gap-2 pointer-events-none w-full max-w-sm px-4 md:px-0">
           {toasts.map(t => (
@@ -1345,7 +1316,7 @@ using (true);`,
                   <div className="bg-[#12121a] p-6 rounded-2xl border border-white/10">
                       <h3 className="font-bold text-lg text-white mb-4 flex items-center gap-2">
                           <Icons.Wand className="w-5 h-5 text-audi-yellow" />
-                          Công Cụ Sửa Lỗi Nhanh (Database Fixer)
+                          Công Cụ Sửa Lỗi Nhanh
                       </h3>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div className="p-4 bg-white/5 rounded-xl border border-white/10">

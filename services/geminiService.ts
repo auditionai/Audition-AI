@@ -104,8 +104,9 @@ const uploadToGemini = async (base64Data: string, mimeType: string): Promise<str
 export const checkConnection = async (key?: string): Promise<boolean> => {
     try {
         const ai = await getAiClient(key);
+        // UPDATED: Use gemini-3-flash-preview for a reliable ping (Flash 2.5 deprecated)
         await ai.models.generateContent({
-             model: 'gemini-2.5-flash-latest',
+             model: 'gemini-3-flash-preview',
              contents: 'ping'
         });
         return true;
@@ -119,8 +120,9 @@ export const checkConnection = async (key?: string): Promise<boolean> => {
 const optimizePromptWithThinking = async (rawPrompt: string): Promise<string> => {
     try {
         const ai = await getAiClient();
+        // UPDATED: Use gemini-3-flash-preview
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-3-flash-preview',
             contents: `You are a Technical Prompt Engineer for a 3D Game Asset Generator.
             
             USER INPUT: "${rawPrompt}"
@@ -334,8 +336,9 @@ export const editImageWithInstructions = async (base64Data: string, instruction:
 export const suggestPrompt = async (currentInput: string, lang: string, featureName: string): Promise<string> => {
     try {
         const ai = await getAiClient();
+        // UPDATED: Use gemini-3-flash-preview
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash', 
+            model: 'gemini-3-flash-preview', 
             contents: currentInput || `Create a 3D character concept for ${featureName}`,
             config: {
                 systemInstruction: `You are an AI Prompt Expert for 3D Game Assets. Output ONLY the refined 3D-centric prompt.`,

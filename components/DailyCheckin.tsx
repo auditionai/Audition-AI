@@ -14,7 +14,7 @@ const DB_FIX_SQL = `-- 1. Xóa Trigger cũ để tránh xung đột
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 DROP FUNCTION IF EXISTS public.handle_new_user();
 
--- 2. Tạo Function xử lý người dùng mới
+-- 2. Tạo Function xử lý người dùng mới (Cập nhật logic)
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -48,16 +48,16 @@ CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
 
--- 4. Cấp quyền (RLS Policies)
+-- 4. Cấp quyền (RLS Policies) - Xóa cũ trước khi tạo mới
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 
--- Cho phép xem profile (Public hoặc chính chủ)
+DROP POLICY IF EXISTS "Public read users" ON public.users;
 CREATE POLICY "Public read users" ON public.users FOR SELECT USING (true);
 
--- Cho phép user tự sửa profile của mình
+DROP POLICY IF EXISTS "Users can update own profile" ON public.users;
 CREATE POLICY "Users can update own profile" ON public.users FOR UPDATE USING (auth.uid() = id);
 
--- Cho phép user tự insert (đề phòng trigger lỗi)
+DROP POLICY IF EXISTS "Users can insert own profile" ON public.users;
 CREATE POLICY "Users can insert own profile" ON public.users FOR INSERT WITH CHECK (auth.uid() = id);
 `;
 

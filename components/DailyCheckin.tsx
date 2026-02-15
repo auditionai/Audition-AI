@@ -127,7 +127,7 @@ export const DailyCheckin: React.FC<DailyCheckinProps> = ({ onClose, onSuccess, 
     : ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 
   return createPortal(
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-md p-4 animate-fade-in">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-fade-in">
         <div className="w-full max-w-[450px] bg-[#0c0c14] border border-white/20 rounded-[2rem] p-6 relative shadow-[0_0_50px_rgba(0,0,0,0.8)] flex flex-col max-h-[90vh] overflow-y-auto">
             {/* Header */}
             <div className="flex justify-between items-center mb-6">

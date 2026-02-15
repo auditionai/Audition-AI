@@ -569,7 +569,7 @@ using (true);`,
 
       {/* --- CONFIRM / ALERT DIALOG (Updated Overlay) --- */}
       {confirmDialog.show && (
-          <div className="fixed inset-0 z-[10000] flex items-start justify-center bg-black/50 backdrop-blur-md p-4 pt-24 animate-fade-in overflow-y-auto">
+          <div className="fixed inset-0 z-[10000] flex items-start justify-center p-4 pt-24 animate-fade-in overflow-y-auto">
               <div className="bg-[#12121a] border border-white/20 p-6 rounded-2xl max-w-lg w-full shadow-[0_0_50px_rgba(0,0,0,0.8)] transform scale-100 transition-all m-4 max-h-[90vh] overflow-y-auto custom-scrollbar">
                   <div className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center mb-4 text-audi-yellow mx-auto">
                       <Icons.Bell className="w-6 h-6 animate-swing" />
@@ -1353,7 +1353,7 @@ using (true);`,
       
       {/* EDIT USER MODAL - TOP ALIGNED */}
       {editingUser && (
-          <div className="fixed inset-0 z-[2000] flex justify-center items-start bg-black/50 backdrop-blur-md p-4 pt-24 animate-fade-in overflow-y-auto">
+          <div className="fixed inset-0 z-[2000] flex justify-center items-start p-4 pt-24 animate-fade-in overflow-y-auto">
               <div className="bg-[#12121a] w-full max-w-md p-6 rounded-2xl border border-white/20 shadow-2xl relative max-h-[90vh] overflow-y-auto custom-scrollbar">
                   <h3 className="text-xl font-bold text-white mb-4">Sửa Người Dùng</h3>
                   <div className="space-y-4 mb-6">
@@ -1393,7 +1393,7 @@ using (true);`,
 
       {/* EDIT PACKAGE MODAL - TOP ALIGNED */}
       {editingPackage && (
-          <div className="fixed inset-0 z-[2000] flex justify-center items-start bg-black/50 backdrop-blur-md p-4 pt-24 overflow-y-auto">
+          <div className="fixed inset-0 z-[2000] flex justify-center items-start p-4 pt-24 overflow-y-auto">
               <div className="bg-[#12121a] w-full max-w-lg p-6 rounded-2xl border border-white/20 shadow-2xl flex flex-col max-h-[90vh] overflow-y-auto custom-scrollbar">
                   <h3 className="text-xl font-bold text-white mb-6">
                       {editingPackage.id.startsWith('temp_') ? 'Thêm Gói Mới' : 'Sửa Gói Nạp'}
@@ -1451,7 +1451,7 @@ using (true);`,
 
       {/* EDIT PROMOTION MODAL - TOP ALIGNED */}
       {editingPromotion && (
-          <div className="fixed inset-0 z-[2000] flex justify-center items-start bg-black/50 backdrop-blur-md p-4 pt-24 overflow-y-auto">
+          <div className="fixed inset-0 z-[2000] flex justify-center items-start p-4 pt-24 overflow-y-auto">
               <div className="bg-[#12121a] w-full max-w-lg p-6 rounded-2xl border border-white/20 shadow-2xl flex flex-col max-h-[90vh]">
                   <h3 className="text-xl font-bold text-white mb-6 sticky top-0 bg-[#12121a] z-10 py-2 border-b border-white/10 shrink-0">
                       {editingPromotion.id.startsWith('temp_') ? 'Tạo Chiến Dịch Mới' : 'Sửa Chiến Dịch'}
@@ -1533,7 +1533,7 @@ using (true);`,
 
       {/* EDIT GIFTCODE MODAL - TOP ALIGNED */}
       {editingGiftcode && (
-          <div className="fixed inset-0 z-[2000] flex justify-center items-start bg-black/50 backdrop-blur-md p-4 pt-24 overflow-y-auto">
+          <div className="fixed inset-0 z-[2000] flex justify-center items-start p-4 pt-24 overflow-y-auto">
               <div className="bg-[#12121a] w-full max-w-md p-6 rounded-2xl border border-white/20 shadow-2xl">
                   <h3 className="text-xl font-bold text-white mb-6">
                       {editingGiftcode.id.startsWith('temp_') ? 'Tạo Giftcode' : 'Sửa Giftcode'}

@@ -425,7 +425,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
 
         {/* --- VIDEO TUTORIAL MODAL (RESIZED & CLEANER BG) --- */}
         {showVideo && (
-            <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-md p-4 animate-fade-in" onClick={() => setShowVideo(false)}>
+            <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 animate-fade-in" onClick={() => setShowVideo(false)}>
                 <div className="relative w-full max-w-2xl aspect-video bg-black rounded-2xl overflow-hidden border border-white/20 shadow-[0_0_50px_rgba(255,255,255,0.1)]" onClick={e => e.stopPropagation()}>
                     <button 
                         onClick={() => setShowVideo(false)} 
@@ -446,7 +446,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
 
         {/* --- GUIDE MODAL (UPDATED BG) --- */}
         {guideTopic && (
-            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-md p-4 animate-fade-in" onClick={() => setGuideTopic(null)}>
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-fade-in" onClick={() => setGuideTopic(null)}>
                 <div className="bg-[#12121a] w-full max-w-md p-6 rounded-2xl border border-audi-yellow/50 shadow-[0_0_30px_rgba(251,218,97,0.2)] relative" onClick={e => e.stopPropagation()}>
                     <button onClick={() => setGuideTopic(null)} className="absolute top-4 right-4 text-slate-500 hover:text-white">
                         <Icons.X className="w-6 h-6" />

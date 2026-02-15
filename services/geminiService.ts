@@ -129,12 +129,12 @@ const optimizePromptWithThinking = async (rawPrompt: string): Promise<string> =>
             
             TASK:
             1.  **Translate & Enhance**: Convert the user's description into professional English 3D art keywords.
-            2.  **STYLE ENFORCEMENT**: The user wants a "Stylized Game Character" (Audition/Anime style), NOT a real human.
-            3.  **SANITIZE**: If the prompt contains NSFW terms, rewrite them into safe, artistic terms (e.g., "fitted bodysuit", "sculpted physique").
+            2.  **STYLE ENFORCEMENT**: The user wants a "Korean MMO Game Character" (Audition/Blade & Soul style).
+            3.  **PROPORTIONS**: MUST BE TALL, SLENDER, ADULT PROPORTIONS. NO CHIBI.
             4.  **Structure**: [Subject] + [Action/Pose] + [Outfit] + [Environment] + [Lighting] + [Style Tags].
             
             MANDATORY STYLE TAGS TO ADD:
-            "3D Game Character, Anime 3D Style, Blind Box Style, Smooth Plastic Texture, Big Anime Eyes, Non-Photorealistic Rendering, Octane Render, Cute".
+            "3D Game Character, Korean MMO Style, Tall Slender Body, Long Legs, Small Head, Fashion Model Ratio, 8-head tall, Smooth Texture, Non-Photorealistic Rendering, Octane Render".
             
             OUTPUT:
             Return ONLY the final prompt string. No conversational text.`,
@@ -172,23 +172,27 @@ const processDigitalTwinMode = (
         parts.push(...charParts);
     }
 
-    // UPDATED SYSTEM PROMPT TO PREVENT REALISM
-    const systemPrompt = `** SYSTEM DIRECTIVE: STYLIZED 3D GAME CHARACTER GENERATION **
+    // UPDATED SYSTEM PROMPT TO PREVENT REALISM AND CHIBI
+    const systemPrompt = `** SYSTEM DIRECTIVE: KOREAN MMO GAME CHARACTER GENERATION **
     
-    1.  **STRICT STYLE ENFORCEMENT (NON-REALISTIC)**:
-        - The output MUST look like a character from a PC MMO Game (like Audition Online, Sims 4 with Anime Mods, or Pop Mart figures).
-        - **DO NOT** generate realistic human skin, pores, or photographic textures.
-        - Skin texture must be SMOOTH, "doll-like", "porcelain", or "anime 3D".
-        - Eyes must be "Anime Style" or "Game Style" (large, expressive), NOT realistic human eyes.
-        - Hair must be "mesh-like" or stylized 3D hair, not real strands.
+    1.  **STRICT BODY PROPORTIONS (CRITICAL)**:
+        - The character MUST have **TALL, SLENDER, ADULT** proportions (like K-Pop Idols or Fashion Models).
+        - **Body Ratio**: 1:8 (Head to Body). LEGS MUST BE LONG.
+        - **ABSOLUTELY NO**: Chibi, Nendoroid, Big Head, Short Legs, Child-like body, Baby face.
+        - Treat this as a "High-End Fashion Game" asset.
 
-    2.  **SCENE ACCURACY**:
-        - Render exactly what is described in the prompt: objects, background details, lighting.
-        - If the prompt specifies a "Shark plushie" or "Number 22", it MUST appear.
+    2.  **RENDERING STYLE (NON-REALISTIC)**:
+        - Output MUST look like a PC Game Render (Audition Online, Sims 4 CC).
+        - Skin: Smooth, flawless, "porcelain" texture. NO realistic pores/wrinkles.
+        - Eyes: Stylized Anime/Game eyes (expressive but not creepy).
+        - Hair: 3D Mesh style, thick strands, perfectly styled.
 
-    3.  **SAFETY & COMPLIANCE**:
-        - If the prompt implies nudity, AUTOMATICALY clothe the character in generic game underwear or a bodysuit. DO NOT BLOCK THE GENERATION.
-        - Focus on the "Artistic" and "Digital" aspect.
+    3.  **SCENE ACCURACY**:
+        - Render exactly what is described in the prompt.
+        - If reference images are provided, MATCH THE BODY SCALE of the reference images.
+
+    4.  **SAFETY & COMPLIANCE**:
+        - If the prompt implies nudity, clothe the character in generic game underwear/bodysuit.
 
     [EXECUTE PROMPT]: ${prompt}
     `;
@@ -287,9 +291,9 @@ export const generateImage = async (
     const optimizedPrompt = await optimizePromptWithThinking(prompt);
     let finalPromptToUse = optimizedPrompt;
 
-    // Safety Net: Ensure 3D context is STYLIZED
-    if (!finalPromptToUse.toLowerCase().includes("stylized")) {
-        finalPromptToUse = "Stylized 3D Game Character, Anime 3D, " + finalPromptToUse + " --no photorealistic";
+    // Safety Net: Ensure 3D context is STYLIZED & TALL
+    if (!finalPromptToUse.toLowerCase().includes("tall")) {
+        finalPromptToUse = "Tall Slender 3D Game Character, Adult Proportions, " + finalPromptToUse + " --no chibi --no photorealistic";
     }
 
     // 2. EXECUTION PHASE (ATTEMPT 1)
@@ -307,7 +311,7 @@ export const generateImage = async (
         // Thêm delay nhẹ để tránh rate limit
         await new Promise(r => setTimeout(r, 2000));
 
-        const safeFallbackPrompt = `Stylized 3D Game Character, ${prompt} --safe --no nudity --no photorealism`;
+        const safeFallbackPrompt = `Tall 3D Game Character, Fashion Model Body, ${prompt} --safe --no nudity --no chibi`;
         return await executeRun(safeFallbackPrompt, true);
     }
 
@@ -344,7 +348,7 @@ export const suggestPrompt = async (currentInput: string, lang: string, featureN
             model: 'gemini-3-flash-preview', 
             contents: currentInput || `Create a 3D character concept for ${featureName}`,
             config: {
-                systemInstruction: `You are an AI Prompt Expert for 3D Game Assets. Output ONLY the refined 3D-centric prompt. Keep it stylized/anime.`,
+                systemInstruction: `You are an AI Prompt Expert for 3D Game Assets. Output ONLY the refined 3D-centric prompt. Keep it stylized/anime but with TALL/ADULT proportions.`,
                 temperature: 0.7,
             }
         });

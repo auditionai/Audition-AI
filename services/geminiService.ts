@@ -129,12 +129,12 @@ const optimizePromptWithThinking = async (rawPrompt: string): Promise<string> =>
             
             TASK:
             1.  **Translate & Enhance**: Convert the user's description into professional English 3D art keywords.
-            2.  **SANITIZE (IMPORTANT)**: If the prompt contains potentially NSFW, violent, or policy-violating terms (e.g., specific body parts, nudity terms), YOU MUST REWRITE them into safe, artistic terms (e.g., "fitted bodysuit", "sculpted physique"). Do not refuse the prompt, just clean it.
-            3.  **Structure**: [Subject] + [Action/Pose] + [Outfit] + [Environment] + [Lighting] + [Style: 3D Game Render].
-            4.  **Preserve Details**: Keep numbers (e.g., "22"), colors, and specific items (e.g., "Shark plushie").
+            2.  **STYLE ENFORCEMENT**: The user wants a "Stylized Game Character" (Audition/Anime style), NOT a real human.
+            3.  **SANITIZE**: If the prompt contains NSFW terms, rewrite them into safe, artistic terms (e.g., "fitted bodysuit", "sculpted physique").
+            4.  **Structure**: [Subject] + [Action/Pose] + [Outfit] + [Environment] + [Lighting] + [Style Tags].
             
-            MANDATORY STYLE TAGS:
-            "3D Game Character, Unreal Engine 5, Octane Render, Blind Box Style, Clean Textures".
+            MANDATORY STYLE TAGS TO ADD:
+            "3D Game Character, Anime 3D Style, Blind Box Style, Smooth Plastic Texture, Big Anime Eyes, Non-Photorealistic Rendering, Octane Render, Cute".
             
             OUTPUT:
             Return ONLY the final prompt string. No conversational text.`,
@@ -172,12 +172,15 @@ const processDigitalTwinMode = (
         parts.push(...charParts);
     }
 
-    const systemPrompt = `** SYSTEM DIRECTIVE: 3D GAME ASSET GENERATION **
+    // UPDATED SYSTEM PROMPT TO PREVENT REALISM
+    const systemPrompt = `** SYSTEM DIRECTIVE: STYLIZED 3D GAME CHARACTER GENERATION **
     
-    1.  **STYLE ENFORCEMENT**:
-        - Output MUST be a "3D Game Character Render" (like Audition, Sims 4 with mods, or Pop Mart figures).
-        - NOT a real photo. NOT a 2D drawing.
-        - Skin should have "Subsurface Scattering" but retain a stylized "Game Ready" look.
+    1.  **STRICT STYLE ENFORCEMENT (NON-REALISTIC)**:
+        - The output MUST look like a character from a PC MMO Game (like Audition Online, Sims 4 with Anime Mods, or Pop Mart figures).
+        - **DO NOT** generate realistic human skin, pores, or photographic textures.
+        - Skin texture must be SMOOTH, "doll-like", "porcelain", or "anime 3D".
+        - Eyes must be "Anime Style" or "Game Style" (large, expressive), NOT realistic human eyes.
+        - Hair must be "mesh-like" or stylized 3D hair, not real strands.
 
     2.  **SCENE ACCURACY**:
         - Render exactly what is described in the prompt: objects, background details, lighting.
@@ -284,9 +287,9 @@ export const generateImage = async (
     const optimizedPrompt = await optimizePromptWithThinking(prompt);
     let finalPromptToUse = optimizedPrompt;
 
-    // Safety Net: Ensure 3D context
-    if (!finalPromptToUse.toLowerCase().includes("3d")) {
-        finalPromptToUse = "3D Game Character Render, " + finalPromptToUse;
+    // Safety Net: Ensure 3D context is STYLIZED
+    if (!finalPromptToUse.toLowerCase().includes("stylized")) {
+        finalPromptToUse = "Stylized 3D Game Character, Anime 3D, " + finalPromptToUse + " --no photorealistic";
     }
 
     // 2. EXECUTION PHASE (ATTEMPT 1)
@@ -304,7 +307,7 @@ export const generateImage = async (
         // Thêm delay nhẹ để tránh rate limit
         await new Promise(r => setTimeout(r, 2000));
 
-        const safeFallbackPrompt = `3D Game Character, ${prompt} --safe --no nudity`;
+        const safeFallbackPrompt = `Stylized 3D Game Character, ${prompt} --safe --no nudity --no photorealism`;
         return await executeRun(safeFallbackPrompt, true);
     }
 
@@ -341,7 +344,7 @@ export const suggestPrompt = async (currentInput: string, lang: string, featureN
             model: 'gemini-3-flash-preview', 
             contents: currentInput || `Create a 3D character concept for ${featureName}`,
             config: {
-                systemInstruction: `You are an AI Prompt Expert for 3D Game Assets. Output ONLY the refined 3D-centric prompt.`,
+                systemInstruction: `You are an AI Prompt Expert for 3D Game Assets. Output ONLY the refined 3D-centric prompt. Keep it stylized/anime.`,
                 temperature: 0.7,
             }
         });

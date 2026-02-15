@@ -4,7 +4,7 @@ import { Language, Transaction, UserProfile, CreditPackage, PromotionCampaign, G
 import { Icons } from '../components/Icons';
 import { checkConnection } from '../services/geminiService';
 import { checkSupabaseConnection } from '../services/supabaseClient';
-import { getAdminStats, savePackage, deletePackage, updateAdminUserProfile, savePromotion, deletePromotion, saveGiftcode, deleteGiftcode, adminApproveTransaction, adminRejectTransaction, saveSystemApiKey, deleteApiKey, deleteTransaction, getSystemApiKey, getApiKeysList, updatePackageOrder } from '../services/economyService';
+import { getAdminStats, savePackage, deletePackage, updateAdminUserProfile, savePromotion, deletePromotion, saveGiftcode, deleteGiftcode, adminApproveTransaction, adminRejectTransaction, saveSystemApiKey, deleteApiKey, deleteTransaction, getSystemApiKey, getApiKeysList, updatePackageOrder, getGiftcodePromoConfig, saveGiftcodePromoConfig } from '../services/economyService';
 import { getAllImagesFromStorage, deleteImageFromStorage, checkR2Connection } from '../services/storageService';
 
 interface AdminProps {
@@ -49,6 +49,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [keyStatus, setKeyStatus] = useState<'valid' | 'invalid' | 'unknown' | 'checking'>('unknown');
   const [dbKeys, setDbKeys] = useState<any[]>([]); // List of keys from DB
   
+  // Giftcode Promo Config
+  const [giftcodePromo, setGiftcodePromo] = useState({ text: '', isActive: false });
+
   // Search States
   const [userSearchEmail, setUserSearchEmail] = useState('');
 
@@ -135,6 +138,10 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       // Fetch DB Keys list
       const keys = await getApiKeysList();
       setDbKeys(keys);
+
+      // Fetch Giftcode Config
+      const promoConfig = await getGiftcodePromoConfig();
+      setGiftcodePromo(promoConfig);
   };
 
   const runSystemChecks = async (specificKey?: string) => {
@@ -350,6 +357,28 @@ CREATE POLICY "Enable all access for gift codes" ON public.gift_codes FOR ALL US
       });
   };
 
+  const handleSaveGiftcodePromo = async () => {
+      const result = await saveGiftcodePromoConfig(giftcodePromo.text, giftcodePromo.isActive);
+      if (result.success) {
+          showToast('Đã lưu thông báo thành công!');
+      } else {
+          // Check for RLS
+          if (result.error?.includes('permission') || result.error?.includes('policy')) {
+              setConfirmDialog({
+                  show: true,
+                  title: '⚠️ Cần Cấp Quyền Settings',
+                  msg: 'Cần mở quyền ghi cho bảng system_settings.',
+                  sqlHelp: `ALTER TABLE public.system_settings ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable all access" ON public.system_settings FOR ALL USING (true) WITH CHECK (true);`,
+                  isAlertOnly: true,
+                  onConfirm: () => {}
+              });
+          } else {
+              showToast('Lỗi lưu: ' + result.error, 'error');
+          }
+      }
+  }
+
   const handleSavePromotion = async () => {
       if (editingPromotion) {
           const result = await savePromotion(editingPromotion);
@@ -544,7 +573,7 @@ using (true);`,
           'bg-red-500/10 border-red-500 text-red-500'
       }`}>
           <div className={`w-2 h-2 rounded-full ${status === 'connected' ? 'bg-green-500 animate-pulse' : status === 'checking' ? 'bg-yellow-500 animate-bounce' : 'bg-red-500'}`}></div>
-          {status === 'connected' ? 'Ổn định' : status === 'checking' ? 'Đang kiểm tra' : 'Mất kết nối'}
+          {status === 'connected' ? 'Ổn định' : status === 'checking' ? 'Checking' : 'Mất kết nối'}
           {latency !== undefined && latency > 0 && <span className="text-[9px] opacity-70 ml-1">({latency}ms)</span>}
       </div>
   );
@@ -553,34 +582,33 @@ using (true);`,
     <div className="min-h-screen pb-24 animate-fade-in bg-[#05050A]">
       
       {/* --- TOASTS CONTAINER --- */}
-      <div className="fixed top-24 right-4 z-[9999] flex flex-col gap-2 pointer-events-none">
+      <div className="fixed top-24 right-4 z-[9999] flex flex-col gap-2 pointer-events-none w-full max-w-sm px-4 md:px-0">
           {toasts.map(t => (
               <div key={t.id} className={`pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-xl border shadow-xl animate-fade-in backdrop-blur-md ${
                   t.type === 'success' ? 'bg-[#0f1f12]/90 border-green-500/50 text-green-400' : 
                   t.type === 'error' ? 'bg-[#1f0f0f]/90 border-red-500/50 text-red-400' : 'bg-[#0f151f]/90 border-blue-500/50 text-blue-400'
               }`}>
-                  {t.type === 'success' && <Icons.Check className="w-5 h-5" />}
-                  {t.type === 'error' && <Icons.X className="w-5 h-5" />}
-                  {t.type === 'info' && <Icons.Info className="w-5 h-5" />}
-                  <span className="text-sm font-bold">{t.msg}</span>
+                  {t.type === 'success' && <Icons.Check className="w-5 h-5 shrink-0" />}
+                  {t.type === 'error' && <Icons.X className="w-5 h-5 shrink-0" />}
+                  {t.type === 'info' && <Icons.Info className="w-5 h-5 shrink-0" />}
+                  <span className="text-sm font-bold break-words">{t.msg}</span>
               </div>
           ))}
       </div>
 
-      {/* --- CONFIRM / ALERT DIALOG --- */}
+      {/* --- CONFIRM / ALERT DIALOG (Updated Overlay) --- */}
       {confirmDialog.show && (
-          <div className="fixed inset-0 z-[10000] flex items-start justify-center pt-32 bg-black/90 backdrop-blur-md p-4 animate-fade-in overflow-y-auto">
-              <div className="bg-[#12121a] border border-white/20 p-6 rounded-2xl max-w-lg w-full shadow-[0_0_50px_rgba(0,0,0,0.8)] transform scale-100 transition-all">
+          <div className="fixed inset-0 z-[10000] flex items-start justify-center p-4 pt-24 animate-fade-in overflow-y-auto">
+              <div className="bg-[#12121a] border border-white/20 p-6 rounded-2xl max-w-lg w-full shadow-[0_0_50px_rgba(0,0,0,0.8)] transform scale-100 transition-all m-4 max-h-[90vh] overflow-y-auto custom-scrollbar">
                   <div className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center mb-4 text-audi-yellow mx-auto">
                       <Icons.Bell className="w-6 h-6 animate-swing" />
                   </div>
                   <h3 className="text-lg font-bold text-white text-center mb-2">{confirmDialog.title || 'Thông báo'}</h3>
                   <p className="text-slate-400 text-center text-sm mb-6 leading-relaxed">{confirmDialog.msg}</p>
                   
-                  {/* SQL Helper Box */}
                   {confirmDialog.sqlHelp && (
                       <div className="mb-6 relative">
-                          <pre className="bg-black/50 p-4 rounded-lg border border-red-500/30 text-xs text-green-400 font-mono overflow-x-auto whitespace-pre-wrap">
+                          <pre className="bg-black/50 p-4 rounded-lg border border-red-500/30 text-xs text-green-400 font-mono overflow-x-auto whitespace-pre-wrap max-h-40">
                               {confirmDialog.sqlHelp}
                           </pre>
                           <button 
@@ -607,48 +635,48 @@ using (true);`,
           </div>
       )}
       
-      {/* --- TOP COMMAND BAR --- */}
+      {/* Top Command Bar */}
       <div className="bg-[#12121a] border-b border-white/10 sticky top-[72px] z-40 shadow-lg">
-          <div className="max-w-7xl mx-auto px-4 py-3 flex flex-col md:flex-row justify-between items-center gap-4">
-              <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-lg bg-audi-pink flex items-center justify-center text-white font-bold shadow-lg shadow-audi-pink/30">
-                      <Icons.Shield className="w-6 h-6" />
+          <div className="max-w-7xl mx-auto px-4 py-3 flex flex-row justify-between items-center gap-4">
+              <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-audi-pink flex items-center justify-center text-white font-bold shadow-lg shadow-audi-pink/30">
+                      <Icons.Shield className="w-5 h-5 md:w-6 md:h-6" />
                   </div>
                   <div>
-                      <h1 className="font-game text-xl font-bold text-white leading-none">QUẢN TRỊ VIÊN</h1>
-                      <p className="text-[10px] text-audi-cyan font-mono tracking-widest mt-0.5">V42.0.0-RELEASE • SYSTEM MONITOR</p>
+                      <h1 className="font-game text-base md:text-xl font-bold text-white leading-none">QUẢN TRỊ</h1>
+                      <p className="text-[9px] md:text-[10px] text-audi-cyan font-mono tracking-widest mt-0.5 hidden md:block">V42.0.0-RELEASE • SYSTEM MONITOR</p>
                   </div>
               </div>
 
-              {/* Quick Health Indicators */}
-              <div className="flex items-center gap-2">
-                  <div title="Gemini API" className={`w-3 h-3 rounded-full ${health.gemini.status === 'connected' ? 'bg-blue-500 shadow-[0_0_10px_#3b82f6]' : 'bg-red-500'}`}></div>
-                  <div title="Database" className={`w-3 h-3 rounded-full ${health.supabase.status === 'connected' ? 'bg-green-500 shadow-[0_0_10px_#22c55e]' : 'bg-red-500'}`}></div>
-                  <div title="Storage (R2/S3)" className={`w-3 h-3 rounded-full ${health.storage.status === 'connected' ? 'bg-orange-500 shadow-[0_0_10px_#f97316]' : 'bg-red-500'}`}></div>
+              {/* Quick Health Indicators (Compact Mobile) */}
+              <div className="flex items-center gap-2 bg-black/40 px-2 py-1 rounded-full border border-white/5">
+                  <div title="Gemini" className={`w-2 h-2 rounded-full ${health.gemini.status === 'connected' ? 'bg-blue-500' : 'bg-red-500'}`}></div>
+                  <div title="DB" className={`w-2 h-2 rounded-full ${health.supabase.status === 'connected' ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                  <div title="Storage" className={`w-2 h-2 rounded-full ${health.storage.status === 'connected' ? 'bg-orange-500' : 'bg-red-500'}`}></div>
               </div>
           </div>
 
-          {/* Navigation Tabs */}
-          <div className="max-w-7xl mx-auto px-4 flex gap-1 overflow-x-auto no-scrollbar py-2">
+          {/* Navigation Tabs (Scrollable) */}
+          <div className="max-w-7xl mx-auto px-4 flex gap-2 overflow-x-auto no-scrollbar py-2 border-t border-white/5">
               {[
                   { id: 'overview', icon: Icons.Home, label: 'Tổng Quan' },
                   { id: 'transactions', icon: Icons.Gem, label: 'Giao Dịch' },
                   { id: 'users', icon: Icons.User, label: 'Người Dùng' },
                   { id: 'packages', icon: Icons.ShoppingBag, label: 'Gói Nạp' },
-                  { id: 'giftcodes', icon: Icons.Gift, label: 'Giftcode' },
-                  { id: 'promotion', icon: Icons.Zap, label: 'Khuyến Mãi' },
+                  { id: 'giftcodes', icon: Icons.Gift, label: 'Code' },
+                  { id: 'promotion', icon: Icons.Zap, label: 'Sự Kiện' },
                   { id: 'system', icon: Icons.Cpu, label: 'Hệ Thống' },
               ].map(tab => (
                   <button
                       key={tab.id}
                       onClick={() => setActiveView(tab.id as any)}
-                      className={`px-4 py-2 rounded-lg flex items-center gap-2 text-xs font-bold uppercase tracking-wider transition-all whitespace-nowrap ${
+                      className={`px-3 py-1.5 md:px-4 md:py-2 rounded-lg flex items-center gap-2 text-xs font-bold uppercase tracking-wider transition-all whitespace-nowrap shrink-0 ${
                           activeView === tab.id 
-                          ? 'bg-white text-black shadow-[0_0_15px_rgba(255,255,255,0.3)]' 
-                          : 'text-slate-400 hover:text-white hover:bg-white/5'
+                          ? 'bg-white text-black shadow-md' 
+                          : 'text-slate-400 hover:text-white hover:bg-white/5 bg-white/5 border border-white/5'
                       }`}
                   >
-                      <tab.icon className="w-4 h-4" />
+                      <tab.icon className="w-3 h-3 md:w-4 md:h-4" />
                       {tab.label}
                   </button>
               ))}
@@ -661,24 +689,24 @@ using (true);`,
           {activeView === 'overview' && (
               <div className="space-y-6 animate-slide-in-right">
                   {/* Grid 3x2 Dashboard */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-6">
                       {[
-                          { title: 'Lượt truy cập (hôm nay)', value: stats?.dashboard?.visitsToday, icon: Icons.Menu, color: 'text-white' },
-                          { title: 'Tổng lượt truy cập', value: new Intl.NumberFormat('de-DE').format(stats?.dashboard?.visitsTotal || 0), icon: Icons.Cloud, color: 'text-audi-cyan' },
-                          { title: 'Người dùng mới (hôm nay)', value: stats?.dashboard?.newUsersToday, icon: Icons.User, color: 'text-white' },
-                          { title: 'Tổng người dùng', value: stats?.dashboard?.usersTotal, icon: Icons.User, color: 'text-green-500' },
-                          { title: 'Ảnh tạo (hôm nay)', value: stats?.dashboard?.imagesToday, icon: Icons.Image, color: 'text-white' },
+                          { title: 'Truy cập hôm nay', value: stats?.dashboard?.visitsToday, icon: Icons.Menu, color: 'text-white' },
+                          { title: 'Tổng truy cập', value: new Intl.NumberFormat('de-DE').format(stats?.dashboard?.visitsTotal || 0), icon: Icons.Cloud, color: 'text-audi-cyan' },
+                          { title: 'User mới hôm nay', value: stats?.dashboard?.newUsersToday, icon: Icons.User, color: 'text-white' },
+                          { title: 'Tổng User', value: stats?.dashboard?.usersTotal, icon: Icons.User, color: 'text-green-500' },
+                          { title: 'Ảnh hôm nay', value: stats?.dashboard?.imagesToday, icon: Icons.Image, color: 'text-white' },
                           { title: 'Tổng số ảnh', value: new Intl.NumberFormat('de-DE').format(stats?.dashboard?.imagesTotal || 0), icon: Icons.Image, color: 'text-audi-pink' },
                       ].map((item, i) => (
-                          <div key={i} className="bg-[#12121a] border border-white/5 rounded-2xl p-6 relative overflow-hidden shadow-lg hover:border-white/10 transition-all">
+                          <div key={i} className="bg-[#12121a] border border-white/5 rounded-2xl p-4 md:p-6 relative overflow-hidden shadow-lg hover:border-white/10 transition-all">
                               <div className="flex justify-between items-start">
                                   <div>
-                                      <p className="text-xs font-bold text-slate-400 uppercase mb-2">{item.title}</p>
-                                      <h3 className={`text-4xl font-game font-bold ${item.color} drop-shadow-[0_0_10px_rgba(255,255,255,0.2)]`}>
+                                      <p className="text-[9px] md:text-xs font-bold text-slate-400 uppercase mb-1 md:mb-2 truncate">{item.title}</p>
+                                      <h3 className={`text-2xl md:text-4xl font-game font-bold ${item.color} drop-shadow-[0_0_10px_rgba(255,255,255,0.2)]`}>
                                           {item.value}
                                       </h3>
                                   </div>
-                                  <div className="p-3 bg-white/5 rounded-xl text-slate-400">
+                                  <div className="p-2 md:p-3 bg-white/5 rounded-xl text-slate-400 hidden md:block">
                                       <item.icon className="w-6 h-6" />
                                   </div>
                               </div>
@@ -687,21 +715,22 @@ using (true);`,
                       ))}
                   </div>
 
-                  {/* AI Stats Table (Updated to show Transaction Logs) */}
-                  <div className="bg-[#12121a] border border-white/10 rounded-2xl p-6 shadow-xl">
-                      <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
+                  {/* AI Stats Table (Mobile Card View) */}
+                  <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4 md:p-6 shadow-xl">
+                      <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
                           <Icons.BarChart className="w-5 h-5 text-audi-yellow" />
-                          Thống Kê Chi Tiết Sử Dụng AI (Logs)
+                          Thống Kê Sử Dụng
                       </h3>
                       
-                      <div className="overflow-x-auto">
+                      {/* Desktop Table */}
+                      <div className="hidden md:block overflow-x-auto">
                           <table className="w-full text-left text-sm text-slate-400">
                               <thead className="bg-[#090014] text-xs font-bold text-slate-500 uppercase">
                                   <tr>
-                                      <th className="px-6 py-4">Tính năng (Mô tả)</th>
-                                      <th className="px-6 py-4 text-audi-cyan">Số lượt dùng</th>
-                                      <th className="px-6 py-4 text-audi-pink">Tổng Vcoin tiêu thụ</th>
-                                      <th className="px-6 py-4 text-right text-green-500">Doanh Thu Ước Tính (100%)</th>
+                                      <th className="px-6 py-4">Tính năng</th>
+                                      <th className="px-6 py-4 text-audi-cyan">Số lượt</th>
+                                      <th className="px-6 py-4 text-audi-pink">Vcoin tiêu thụ</th>
+                                      <th className="px-6 py-4 text-right text-green-500">Doanh Thu (Ước tính)</th>
                                   </tr>
                               </thead>
                               <tbody className="divide-y divide-white/5">
@@ -718,53 +747,56 @@ using (true);`,
                                       ))
                                   ) : (
                                       <tr>
-                                          <td colSpan={4} className="px-6 py-8 text-center text-slate-500 italic">Chưa có dữ liệu sử dụng AI (Cần người dùng thực hiện tạo ảnh/chỉnh sửa).</td>
+                                          <td colSpan={4} className="px-6 py-8 text-center text-slate-500 italic">Chưa có dữ liệu.</td>
                                       </tr>
                                   )}
-                                  
-                                  {/* Total Row */}
-                                  <tr className="bg-white/5 font-bold">
-                                      <td className="px-6 py-4 text-white uppercase">TỔNG CỘNG</td>
-                                      <td className="px-6 py-4 text-audi-cyan">
-                                          {stats?.dashboard?.aiUsage ? new Intl.NumberFormat('de-DE').format(stats.dashboard.aiUsage.reduce((acc: number, curr: any) => acc + curr.count, 0)) : 0}
-                                      </td>
-                                      <td className="px-6 py-4 text-audi-pink">
-                                          {stats?.dashboard?.aiUsage ? new Intl.NumberFormat('de-DE').format(stats.dashboard.aiUsage.reduce((acc: number, curr: any) => acc + curr.vcoins, 0)) : 0} Vcoin
-                                      </td>
-                                      <td className="px-6 py-4 text-right text-green-500">
-                                          {stats?.dashboard?.aiUsage ? new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(stats.dashboard.aiUsage.reduce((acc: number, curr: any) => acc + curr.revenue, 0)) : '0 ₫'}
-                                      </td>
-                                  </tr>
                               </tbody>
                           </table>
                       </div>
-                      <p className="text-[10px] text-slate-600 mt-4 italic">
-                          * Doanh thu ước tính dựa trên quy đổi 1 Vcoin = 1.000đ. Số liệu được tổng hợp từ lịch sử giao dịch (Table: diamond_transactions_log).
-                      </p>
+
+                      {/* Mobile Card List */}
+                      <div className="md:hidden space-y-3">
+                          {stats?.dashboard?.aiUsage && stats.dashboard.aiUsage.length > 0 ? (
+                              stats.dashboard.aiUsage.map((row: any, i: number) => (
+                                  <div key={i} className="bg-white/5 rounded-xl p-3 border border-white/5 flex justify-between items-center">
+                                      <div>
+                                          <div className="font-bold text-white capitalize text-sm">{row.feature}</div>
+                                          <div className="text-xs text-slate-500">{new Intl.NumberFormat('de-DE').format(row.count)} lượt</div>
+                                      </div>
+                                      <div className="text-right">
+                                          <div className="text-audi-pink font-bold text-sm">{new Intl.NumberFormat('de-DE').format(row.vcoins)} VC</div>
+                                          <div className="text-green-500 text-[10px] font-bold">
+                                              {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(row.revenue)}
+                                          </div>
+                                      </div>
+                                  </div>
+                              ))
+                          ) : (
+                              <div className="text-center text-slate-500 italic text-sm py-4">Chưa có dữ liệu.</div>
+                          )}
+                      </div>
                   </div>
               </div>
           )}
 
-          {/* ... (Keep other views transactions, users, packages, promotion, giftcodes unchanged) ... */}
-          {/* ================= VIEW: TRANSACTIONS ================= */}
+          {/* ================= VIEW: TRANSACTIONS (MOBILE OPTIMIZED) ================= */}
           {activeView === 'transactions' && (
               <div className="space-y-6 animate-slide-in-right">
                   <div className="flex justify-between items-center">
-                      <h2 className="text-2xl font-bold text-white">Quản Lý Giao Dịch Nạp Tiền</h2>
-                      <div className="flex gap-2">
-                           <button onClick={refreshData} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm font-bold text-white flex items-center gap-2">
-                              <Icons.Clock className="w-4 h-4" /> Làm mới
-                           </button>
-                      </div>
+                      <h2 className="text-lg md:text-2xl font-bold text-white">Giao Dịch</h2>
+                      <button onClick={refreshData} className="px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-xs md:text-sm font-bold text-white flex items-center gap-2">
+                          <Icons.Clock className="w-3 h-3 md:w-4 md:h-4" /> Làm mới
+                      </button>
                   </div>
 
-                  <div className="bg-[#12121a] border border-white/10 rounded-2xl overflow-hidden">
+                  {/* DESKTOP TABLE */}
+                  <div className="hidden md:block bg-[#12121a] border border-white/10 rounded-2xl overflow-hidden">
                       <table className="w-full text-left text-sm text-slate-400">
                           <thead className="bg-black/30 text-xs font-bold text-slate-300 uppercase">
                               <tr>
                                   <th className="px-6 py-4">Thời gian</th>
                                   <th className="px-6 py-4">Mã đơn</th>
-                                  <th className="px-6 py-4">User ID</th>
+                                  <th className="px-6 py-4">Người dùng</th>
                                   <th className="px-6 py-4">Gói nạp</th>
                                   <th className="px-6 py-4 text-right">Số tiền</th>
                                   <th className="px-6 py-4">Trạng thái</th>
@@ -778,7 +810,15 @@ using (true);`,
                                   <tr key={tx.id} className={`hover:bg-white/5 transition-colors ${processingTxId === tx.id ? 'opacity-50 pointer-events-none' : ''}`}>
                                       <td className="px-6 py-4 text-xs font-mono">{new Date(tx.createdAt).toLocaleString()}</td>
                                       <td className="px-6 py-4 font-mono font-bold text-white">{tx.code}</td>
-                                      <td className="px-6 py-4 text-xs font-mono text-slate-500" title={tx.userId}>{tx.userId.substring(0,8)}...</td>
+                                      <td className="px-6 py-4">
+                                          <div className="flex items-center gap-3">
+                                              <img src={tx.userAvatar || 'https://picsum.photos/100/100'} className="w-8 h-8 rounded-full border border-white/10 object-cover" />
+                                              <div className="flex flex-col">
+                                                  <span className="font-bold text-white text-xs">{tx.userName || 'Unknown'}</span>
+                                                  <span className="text-[10px] text-slate-500">{tx.userEmail || 'No Email'}</span>
+                                              </div>
+                                          </div>
+                                      </td>
                                       <td className="px-6 py-4 text-audi-pink font-bold">+{tx.coins} Vcoin</td>
                                       <td className="px-6 py-4 text-right font-bold text-white">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(tx.amount)}</td>
                                       <td className="px-6 py-4">
@@ -793,32 +833,11 @@ using (true);`,
                                           <div className="flex justify-end gap-2">
                                               {tx.status === 'pending' && (
                                                   <>
-                                                      <button 
-                                                        onClick={() => handleApproveTransaction(tx.id)} 
-                                                        className="p-2 bg-green-500/20 text-green-500 rounded hover:bg-green-500 hover:text-white transition-all disabled:opacity-50" 
-                                                        title="Duyệt"
-                                                        disabled={!!processingTxId}
-                                                      >
-                                                          {processingTxId === tx.id ? <Icons.Loader className="w-4 h-4 animate-spin"/> : <Icons.Check className="w-4 h-4" />}
-                                                      </button>
-                                                      <button 
-                                                        onClick={() => handleRejectTransaction(tx.id)} 
-                                                        className="p-2 bg-red-500/20 text-red-500 rounded hover:bg-red-500 hover:text-white transition-all disabled:opacity-50" 
-                                                        title="Hủy"
-                                                        disabled={!!processingTxId}
-                                                      >
-                                                          {processingTxId === tx.id ? <Icons.Loader className="w-4 h-4 animate-spin"/> : <Icons.X className="w-4 h-4" />}
-                                                      </button>
+                                                      <button onClick={() => handleApproveTransaction(tx.id)} className="p-2 bg-green-500/20 text-green-500 rounded hover:bg-green-500 hover:text-white" title="Duyệt"><Icons.Check className="w-4 h-4" /></button>
+                                                      <button onClick={() => handleRejectTransaction(tx.id)} className="p-2 bg-red-500/20 text-red-500 rounded hover:bg-red-500 hover:text-white" title="Hủy"><Icons.X className="w-4 h-4" /></button>
                                                   </>
                                               )}
-                                              <button 
-                                                onClick={() => handleDeleteTransaction(tx.id)} 
-                                                className="p-2 bg-slate-500/20 text-slate-500 rounded hover:bg-slate-500 hover:text-white transition-all disabled:opacity-50" 
-                                                title="Xóa lịch sử"
-                                                disabled={!!processingTxId}
-                                              >
-                                                  {processingTxId === tx.id ? <Icons.Loader className="w-4 h-4 animate-spin"/> : <Icons.Trash className="w-4 h-4" />}
-                                              </button>
+                                              <button onClick={() => handleDeleteTransaction(tx.id)} className="p-2 bg-slate-500/20 text-slate-500 rounded hover:bg-slate-500 hover:text-white" title="Xóa"><Icons.Trash className="w-4 h-4" /></button>
                                           </div>
                                       </td>
                                   </tr>
@@ -826,14 +845,77 @@ using (true);`,
                           </tbody>
                       </table>
                   </div>
+
+                  {/* MOBILE CARDS */}
+                  <div className="md:hidden space-y-4">
+                      {transactions.length === 0 ? (
+                          <div className="text-center text-slate-500 py-8">Chưa có giao dịch nào.</div>
+                      ) : transactions.map(tx => (
+                          <div key={tx.id} className="bg-[#12121a] border border-white/10 rounded-xl p-4 relative overflow-hidden shadow-md">
+                              {/* Status Line */}
+                              <div className={`absolute top-0 left-0 w-1 h-full ${
+                                  tx.status === 'paid' ? 'bg-green-500' : 
+                                  tx.status === 'pending' ? 'bg-yellow-500' : 'bg-red-500'
+                              }`}></div>
+                              
+                              <div className="pl-3">
+                                  <div className="flex justify-between items-start mb-3">
+                                      <div className="flex items-center gap-3">
+                                          <img src={tx.userAvatar || 'https://picsum.photos/100/100'} className="w-10 h-10 rounded-full border border-white/10 object-cover bg-black" />
+                                          <div>
+                                              <div className="font-bold text-white text-sm">{tx.userName || 'Unknown'}</div>
+                                              <div className="text-xs text-slate-500 font-mono">{tx.code}</div>
+                                          </div>
+                                      </div>
+                                      <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${
+                                          tx.status === 'paid' ? 'bg-green-500/10 text-green-500 border border-green-500/30' : 
+                                          tx.status === 'pending' ? 'bg-yellow-500/10 text-yellow-500 border border-yellow-500/30' : 
+                                          'bg-red-500/10 text-red-500 border border-red-500/30'
+                                      }`}>
+                                          {tx.status}
+                                      </span>
+                                  </div>
+
+                                  <div className="grid grid-cols-2 gap-4 mb-3 bg-white/5 p-3 rounded-lg">
+                                      <div>
+                                          <div className="text-[10px] text-slate-500 uppercase font-bold">Số tiền</div>
+                                          <div className="text-white font-bold">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(tx.amount)}</div>
+                                      </div>
+                                      <div>
+                                          <div className="text-[10px] text-slate-500 uppercase font-bold">Gói nạp</div>
+                                          <div className="text-audi-pink font-bold">+{tx.coins} Vcoin</div>
+                                      </div>
+                                  </div>
+                                  
+                                  <div className="text-[10px] text-slate-600 font-mono mb-3 text-right">{new Date(tx.createdAt).toLocaleString()}</div>
+
+                                  <div className="flex gap-2 border-t border-white/5 pt-3">
+                                      {tx.status === 'pending' && (
+                                          <>
+                                              <button onClick={() => handleApproveTransaction(tx.id)} className="flex-1 py-2 bg-green-500 text-white rounded-lg font-bold text-xs shadow-lg shadow-green-500/20 active:scale-95 transition-all">
+                                                  DUYỆT ĐƠN
+                                              </button>
+                                              <button onClick={() => handleRejectTransaction(tx.id)} className="flex-1 py-2 bg-red-500/10 text-red-500 border border-red-500/30 rounded-lg font-bold text-xs active:scale-95 transition-all">
+                                                  HỦY
+                                              </button>
+                                          </>
+                                      )}
+                                      <button onClick={() => handleDeleteTransaction(tx.id)} className="px-3 py-2 bg-slate-800 text-slate-400 rounded-lg font-bold text-xs border border-white/10 active:scale-95">
+                                          <Icons.Trash className="w-4 h-4" />
+                                      </button>
+                                  </div>
+                              </div>
+                          </div>
+                      ))}
+                  </div>
               </div>
           )}
 
           {activeView === 'users' && (
               <div className="space-y-6 animate-slide-in-right">
-                  <div className="flex justify-between items-center">
-                      <h2 className="text-2xl font-bold text-white">Danh Sách Người Dùng</h2>
-                      <div className="flex items-center gap-2 bg-white/5 rounded-xl border border-white/10 px-3 py-2 w-64">
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                      <h2 className="text-lg md:text-2xl font-bold text-white">Người Dùng</h2>
+                      <div className="flex items-center gap-2 bg-white/5 rounded-xl border border-white/10 px-3 py-2 w-full md:w-64">
                           <Icons.Search className="w-4 h-4 text-slate-500" />
                           <input 
                               type="text" 
@@ -845,7 +927,8 @@ using (true);`,
                       </div>
                   </div>
 
-                  <div className="bg-[#12121a] border border-white/10 rounded-2xl overflow-hidden">
+                  {/* Desktop Table */}
+                  <div className="hidden md:block bg-[#12121a] border border-white/10 rounded-2xl overflow-hidden">
                       <table className="w-full text-left text-sm text-slate-400">
                           <thead className="bg-black/30 text-xs font-bold text-slate-300 uppercase">
                               <tr>
@@ -878,10 +961,7 @@ using (true);`,
                                       </td>
                                       <td className="px-6 py-4 text-xs font-mono">{u.lastCheckin ? new Date(u.lastCheckin).toLocaleDateString() : 'N/A'}</td>
                                       <td className="px-6 py-4 text-right">
-                                          <button 
-                                              onClick={() => setEditingUser(u)} 
-                                              className="text-xs font-bold text-audi-cyan hover:text-white bg-audi-cyan/10 hover:bg-audi-cyan/30 px-3 py-1.5 rounded transition-colors"
-                                          >
+                                          <button onClick={() => setEditingUser(u)} className="text-xs font-bold text-audi-cyan hover:text-white bg-audi-cyan/10 hover:bg-audi-cyan/30 px-3 py-1.5 rounded transition-colors">
                                               Sửa
                                           </button>
                                       </td>
@@ -890,58 +970,47 @@ using (true);`,
                           </tbody>
                       </table>
                   </div>
-                  
-                  {/* EDIT USER MODAL - MOVED TO TOP WITH items-start and pt-28 */}
-                  {editingUser && (
-                      <div className="fixed inset-0 z-[2000] flex items-start justify-center pt-28 bg-black/80 backdrop-blur-sm p-4 animate-fade-in overflow-y-auto">
-                          <div className="bg-[#12121a] w-full max-w-md p-6 rounded-2xl border border-white/20 shadow-2xl relative mb-10">
-                              <h3 className="text-xl font-bold text-white mb-4">Sửa Người Dùng</h3>
-                              <div className="space-y-4 mb-6">
-                                  <div>
-                                      <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Tên hiển thị</label>
-                                      <input 
-                                          value={editingUser.username || ''} 
-                                          onChange={e => setEditingUser({...editingUser, username: e.target.value})}
-                                          className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white focus:border-audi-pink outline-none" 
-                                      />
-                                  </div>
-                                  <div>
-                                      <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Số dư Vcoin</label>
-                                      <input 
-                                          type="number" 
-                                          value={editingUser.balance || 0} 
-                                          onChange={e => setEditingUser({...editingUser, balance: Number(e.target.value)})}
-                                          className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-audi-yellow font-bold focus:border-audi-pink outline-none" 
-                                      />
-                                  </div>
-                                  <div>
-                                      <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Ảnh đại diện URL</label>
-                                      <input 
-                                          value={editingUser.avatar || ''} 
-                                          onChange={e => setEditingUser({...editingUser, avatar: e.target.value})}
-                                          className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-slate-300 text-xs font-mono focus:border-audi-pink outline-none" 
-                                      />
-                                  </div>
-                              </div>
-                              <div className="flex gap-3">
-                                  <button onClick={() => setEditingUser(null)} className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-bold">Hủy</button>
-                                  <button onClick={handleSaveUser} className="flex-1 py-3 rounded-xl bg-audi-pink hover:bg-pink-600 text-white font-bold">Lưu</button>
-                              </div>
-                          </div>
-                      </div>
-                  )}
+
+                  {/* Mobile Cards */}
+                  <div className="md:hidden grid grid-cols-1 gap-4">
+                        {stats?.usersList
+                            .filter((u: any) => u.email.toLowerCase().includes(userSearchEmail.toLowerCase()))
+                            .map((u: UserProfile) => (
+                            <div key={u.id} className="bg-[#12121a] p-4 rounded-xl border border-white/10 flex items-center justify-between shadow-sm">
+                                <div className="flex items-center gap-3 overflow-hidden">
+                                    <img src={u.avatar} className="w-12 h-12 rounded-full border border-white/10 shrink-0" onError={(e) => (e.currentTarget.src = 'https://picsum.photos/100/100')} />
+                                    <div className="min-w-0">
+                                        <div className="font-bold text-white text-sm truncate">{u.username}</div>
+                                        <div className="text-xs text-slate-500 truncate">{u.email}</div>
+                                        <div className="flex items-center gap-2 mt-1">
+                                            <span className="text-audi-yellow font-mono font-bold text-xs">{u.balance} VC</span>
+                                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase border ${u.role === 'admin' ? 'text-red-500 border-red-500/30' : 'text-blue-500 border-blue-500/30'}`}>
+                                                {u.role}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button 
+                                    onClick={() => setEditingUser(u)} 
+                                    className="ml-2 p-2 bg-white/5 rounded-lg text-slate-400 hover:text-white border border-white/5 shrink-0"
+                                >
+                                    <Icons.Settings className="w-5 h-5" />
+                                </button>
+                            </div>
+                        ))}
+                  </div>
               </div>
           )}
 
           {activeView === 'packages' && (
               <div className="space-y-6 animate-slide-in-right">
                   <div className="flex justify-between items-center">
-                      <h2 className="text-2xl font-bold text-white">Cấu Hình Gói Nạp</h2>
+                      <h2 className="text-lg md:text-2xl font-bold text-white">Gói Nạp</h2>
                       <button 
                           onClick={() => setEditingPackage({
                               id: `temp_${Date.now()}`, name: 'Gói Mới', coin: 100, price: 50000, currency: 'VND', bonusText: '', bonusPercent: 0, isPopular: false, isActive: true, displayOrder: packages.length, colorTheme: 'border-slate-600', transferContent: 'NAP 50K'
                           })}
-                          className="px-4 py-2 bg-audi-pink text-white rounded-lg font-bold flex items-center gap-2 hover:bg-pink-600"
+                          className="px-3 py-1.5 md:px-4 md:py-2 bg-audi-pink text-white rounded-lg font-bold flex items-center gap-2 hover:bg-pink-600 text-xs md:text-sm"
                       >
                           <Icons.Plus className="w-4 h-4" /> Thêm Gói
                       </button>
@@ -949,100 +1018,42 @@ using (true);`,
 
                   <div className="grid grid-cols-1 gap-4">
                       {packages.map((pkg, idx) => (
-                          <div key={pkg.id} className="bg-[#12121a] border border-white/10 rounded-xl p-4 flex items-center justify-between group hover:border-white/30 transition-all">
-                              <div className="flex items-center gap-4">
-                                  <div className="flex flex-col gap-1 pr-4 border-r border-white/10">
+                          <div key={pkg.id} className="bg-[#12121a] border border-white/10 rounded-xl p-4 flex items-center justify-between group hover:border-white/30 transition-all shadow-md">
+                              <div className="flex items-center gap-3 md:gap-4">
+                                  <div className="flex flex-col gap-1 pr-3 md:pr-4 border-r border-white/10">
                                       <button onClick={() => handleMovePackage(idx, -1)} disabled={idx === 0} className="p-1 hover:bg-white/10 rounded text-slate-500 disabled:opacity-30"><Icons.ArrowUp className="w-3 h-3" /></button>
                                       <button onClick={() => handleMovePackage(idx, 1)} disabled={idx === packages.length - 1} className="p-1 hover:bg-white/10 rounded text-slate-500 disabled:opacity-30"><Icons.ArrowUp className="w-3 h-3 rotate-180" /></button>
                                   </div>
-                                  <div className={`w-10 h-10 rounded-full border-2 ${pkg.colorTheme} flex items-center justify-center bg-black/50`}>
+                                  <div className={`w-10 h-10 rounded-full border-2 ${pkg.colorTheme} flex items-center justify-center bg-black/50 shrink-0`}>
                                       <Icons.Gem className="w-5 h-5 text-white" />
                                   </div>
                                   <div>
-                                      <h4 className="font-bold text-white flex items-center gap-2">
+                                      <h4 className="font-bold text-white flex items-center gap-2 text-sm md:text-base">
                                           {pkg.name}
                                           {!pkg.isActive && <span className="text-[9px] bg-red-500 text-white px-1.5 py-0.5 rounded">HIDDEN</span>}
                                           {pkg.isPopular && <span className="text-[9px] bg-audi-pink text-white px-1.5 py-0.5 rounded">HOT</span>}
                                       </h4>
-                                      <div className="flex gap-3 text-xs text-slate-400">
-                                          <span>Giá: <b className="text-green-400">{pkg.price.toLocaleString()}đ</b></span>
-                                          <span>Vcoin: <b className="text-audi-yellow">{pkg.coin}</b></span>
-                                          {pkg.bonusPercent > 0 && <span className="text-audi-pink">Bonus: +{pkg.bonusPercent}%</span>}
+                                      <div className="flex gap-3 text-xs text-slate-400 mt-1">
+                                          <span><b className="text-green-400">{pkg.price.toLocaleString()}đ</b></span>
+                                          <span><b className="text-audi-yellow">{pkg.coin} VC</b></span>
+                                          {pkg.bonusPercent > 0 && <span className="text-audi-pink">+{pkg.bonusPercent}%</span>}
                                       </div>
                                   </div>
                               </div>
-                              <div className="flex gap-2 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
+                              <div className="flex gap-2">
                                   <button onClick={() => setEditingPackage(pkg)} className="p-2 bg-blue-500/20 text-blue-500 rounded hover:bg-blue-500 hover:text-white"><Icons.Settings className="w-4 h-4" /></button>
                                   <button onClick={() => handleDeletePackage(pkg.id)} className="p-2 bg-red-500/20 text-red-500 rounded hover:bg-red-500 hover:text-white"><Icons.Trash className="w-4 h-4" /></button>
                               </div>
                           </div>
                       ))}
                   </div>
-
-                  {/* EDIT PACKAGE MODAL */}
-                  {editingPackage && (
-                      <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-                          <div className="bg-[#12121a] w-full max-w-lg p-6 rounded-2xl border border-white/20 shadow-2xl flex flex-col max-h-[90vh] overflow-y-auto">
-                              <h3 className="text-xl font-bold text-white mb-6">
-                                  {editingPackage.id.startsWith('temp_') ? 'Thêm Gói Mới' : 'Sửa Gói Nạp'}
-                              </h3>
-                              <div className="space-y-4 mb-6">
-                                  <div className="grid grid-cols-2 gap-4">
-                                      <div>
-                                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Tên gói</label>
-                                          <input value={editingPackage.name} onChange={e => setEditingPackage({...editingPackage, name: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white" />
-                                      </div>
-                                      <div>
-                                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Tag (VD: Mới)</label>
-                                          <input value={editingPackage.bonusText} onChange={e => setEditingPackage({...editingPackage, bonusText: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white" />
-                                      </div>
-                                  </div>
-                                  <div className="grid grid-cols-2 gap-4">
-                                      <div>
-                                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Giá (VND)</label>
-                                          <input type="number" value={editingPackage.price} onChange={e => setEditingPackage({...editingPackage, price: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-green-400 font-bold" />
-                                      </div>
-                                      <div>
-                                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Vcoin nhận</label>
-                                          <input type="number" value={editingPackage.coin} onChange={e => setEditingPackage({...editingPackage, coin: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-audi-yellow font-bold" />
-                                      </div>
-                                  </div>
-                                  <div>
-                                      <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">% Bonus thêm (Mặc định)</label>
-                                      <div className="relative">
-                                          <input type="number" value={editingPackage.bonusPercent} onChange={e => setEditingPackage({...editingPackage, bonusPercent: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-audi-pink font-bold pl-3" />
-                                          <span className="absolute right-3 top-3.5 text-xs text-slate-500 font-bold">%</span>
-                                      </div>
-                                  </div>
-                                  <div>
-                                      <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Cú pháp chuyển khoản</label>
-                                      <input value={editingPackage.transferContent} onChange={e => setEditingPackage({...editingPackage, transferContent: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-mono" />
-                                  </div>
-                                  <div className="flex gap-4 pt-2">
-                                      <label className="flex items-center gap-2 cursor-pointer bg-white/5 p-3 rounded-xl border border-white/10 flex-1 hover:bg-white/10 transition-colors">
-                                          <input type="checkbox" checked={editingPackage.isPopular} onChange={e => setEditingPackage({...editingPackage, isPopular: e.target.checked})} className="accent-audi-pink w-4 h-4" />
-                                          <span className="text-sm font-bold text-white">Gói HOT (Nổi bật)</span>
-                                      </label>
-                                      <label className="flex items-center gap-2 cursor-pointer bg-white/5 p-3 rounded-xl border border-white/10 flex-1 hover:bg-white/10 transition-colors">
-                                          <input type="checkbox" checked={editingPackage.isActive} onChange={e => setEditingPackage({...editingPackage, isActive: e.target.checked})} className="accent-green-500 w-4 h-4" />
-                                          <span className="text-sm font-bold text-white">Đang bán (Active)</span>
-                                      </label>
-                                  </div>
-                              </div>
-                              <div className="flex gap-3">
-                                  <button onClick={() => setEditingPackage(null)} className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-bold">Hủy</button>
-                                  <button onClick={handleSavePackage} className="flex-1 py-3 rounded-xl bg-audi-pink hover:bg-pink-600 text-white font-bold">Lưu Thay Đổi</button>
-                              </div>
-                          </div>
-                      </div>
-                  )}
               </div>
           )}
 
           {activeView === 'promotion' && (
               <div className="space-y-6 animate-slide-in-right">
                   <div className="flex justify-between items-center">
-                      <h2 className="text-2xl font-bold text-white">Quản Lý Chiến Dịch Khuyến Mãi</h2>
+                      <h2 className="text-lg md:text-2xl font-bold text-white">Chiến Dịch Khuyến Mãi</h2>
                       <div className="flex gap-2">
                           <button 
                             onClick={refreshData} 
@@ -1055,277 +1066,157 @@ using (true);`,
                             onClick={() => setEditingPromotion({
                                 id: `temp_${Date.now()}`, name: '', marqueeText: '', bonusPercent: 10, startTime: new Date().toISOString(), endTime: new Date(Date.now() + 86400000).toISOString(), isActive: true
                             })}
-                            className="px-4 py-2 bg-audi-pink text-white rounded-lg font-bold flex items-center gap-2 hover:bg-pink-600"
+                            className="px-3 py-2 md:px-4 bg-audi-pink text-white rounded-lg font-bold flex items-center gap-2 hover:bg-pink-600 text-xs md:text-sm"
                           >
-                              <Icons.Plus className="w-4 h-4" /> Tạo Chiến Dịch Mới
+                              <Icons.Plus className="w-4 h-4" /> <span className="hidden md:inline">Tạo Chiến Dịch Mới</span><span className="md:hidden">Mới</span>
                           </button>
                       </div>
                   </div>
 
-                  <div className="bg-[#12121a] border border-white/10 rounded-2xl overflow-hidden">
-                      <table className="w-full text-left text-sm text-slate-400">
-                          <thead className="bg-black/30 text-xs font-bold text-slate-300 uppercase">
-                              <tr>
-                                  <th className="px-6 py-4">Tên chiến dịch</th>
-                                  <th className="px-6 py-4">Khuyến mãi</th>
-                                  <th className="px-6 py-4">Thời gian hiệu lực</th>
-                                  <th className="px-6 py-4">Trạng thái</th>
-                                  <th className="px-6 py-4 text-right">Thao tác</th>
-                              </tr>
-                          </thead>
-                          <tbody className="divide-y divide-white/5">
-                              {promotions.length === 0 ? (
-                                  <tr><td colSpan={5} className="text-center py-8">Chưa có chiến dịch nào.</td></tr>
-                              ) : promotions.map(p => {
-                                  const now = new Date().getTime();
-                                  const start = new Date(p.startTime).getTime();
-                                  const end = new Date(p.endTime).getTime();
-                                  
-                                  let statusBadge = <span className="text-slate-500 text-xs font-bold border border-slate-500/20 px-2 py-1 rounded">Stopped</span>;
-                                  
-                                  if (p.isActive) {
-                                      if (now < start) statusBadge = <span className="text-yellow-500 text-xs font-bold border border-yellow-500/20 px-2 py-1 rounded flex items-center gap-1"><Icons.Clock className="w-3 h-3" /> Scheduled</span>;
-                                      else if (now > end) statusBadge = <span className="text-slate-500 text-xs font-bold border border-slate-500/20 px-2 py-1 rounded">Expired</span>;
-                                      else statusBadge = <span className="text-green-500 text-xs font-bold border border-green-500/20 px-2 py-1 rounded flex items-center gap-1 animate-pulse"><Icons.Zap className="w-3 h-3" /> Running</span>;
-                                  } else {
-                                      statusBadge = <span className="text-red-500 text-xs font-bold border border-red-500/20 px-2 py-1 rounded">Disabled</span>;
-                                  }
+                  <div className="grid grid-cols-1 gap-4">
+                      {promotions.length === 0 ? (
+                          <div className="text-center py-8 text-slate-500">Chưa có chiến dịch nào.</div>
+                      ) : promotions.map(p => {
+                          const now = new Date().getTime();
+                          const start = new Date(p.startTime).getTime();
+                          const end = new Date(p.endTime).getTime();
+                          
+                          let statusBadge = <span className="text-slate-500 text-xs font-bold border border-slate-500/20 px-2 py-1 rounded">Stopped</span>;
+                          
+                          if (p.isActive) {
+                              if (now < start) statusBadge = <span className="text-yellow-500 text-xs font-bold border border-yellow-500/20 px-2 py-1 rounded flex items-center gap-1"><Icons.Clock className="w-3 h-3" /> Scheduled</span>;
+                              else if (now > end) statusBadge = <span className="text-slate-500 text-xs font-bold border border-slate-500/20 px-2 py-1 rounded">Expired</span>;
+                              else statusBadge = <span className="text-green-500 text-xs font-bold border border-green-500/20 px-2 py-1 rounded flex items-center gap-1 animate-pulse"><Icons.Zap className="w-3 h-3" /> Running</span>;
+                          } else {
+                              statusBadge = <span className="text-red-500 text-xs font-bold border border-red-500/20 px-2 py-1 rounded">Disabled</span>;
+                          }
 
-                                  return (
-                                      <tr key={p.id} className="hover:bg-white/5">
-                                          <td className="px-6 py-4 font-bold text-white">{p.name}</td>
-                                          <td className="px-6 py-4 text-audi-pink font-bold">+{p.bonusPercent}%</td>
-                                          <td className="px-6 py-4 text-xs font-mono">
-                                              <div className="text-green-400">S: {new Date(p.startTime).toLocaleString()}</div>
-                                              <div className="text-red-400">E: {new Date(p.endTime).toLocaleString()}</div>
-                                          </td>
-                                          <td className="px-6 py-4">
-                                              {statusBadge}
-                                          </td>
-                                          <td className="px-6 py-4 text-right">
-                                              <div className="flex justify-end gap-2">
-                                                <button onClick={() => setEditingPromotion(p)} className="p-2 bg-blue-500/20 text-blue-500 rounded hover:bg-blue-500 hover:text-white"><Icons.Settings className="w-4 h-4" /></button>
-                                                <button onClick={() => handleDeletePromotion(p.id)} className="p-2 bg-red-500/20 text-red-500 rounded hover:bg-red-500 hover:text-white"><Icons.Trash className="w-4 h-4" /></button>
-                                              </div>
-                                          </td>
-                                      </tr>
-                                  );
-                              })}
-                          </tbody>
-                      </table>
+                          return (
+                              <div key={p.id} className="bg-[#12121a] border border-white/10 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+                                  <div className="flex-1">
+                                      <div className="flex justify-between items-start">
+                                          <div>
+                                              <div className="font-bold text-white text-lg">{p.name}</div>
+                                              <div className="text-audi-pink font-bold text-sm">+{p.bonusPercent}% Vcoin Bonus</div>
+                                          </div>
+                                          <div className="md:hidden">{statusBadge}</div>
+                                      </div>
+                                      <div className="text-xs font-mono mt-2 space-y-1 bg-black/20 p-2 rounded-lg border border-white/5">
+                                          <div className="text-green-400 flex items-center gap-2"><Icons.Calendar className="w-3 h-3"/> Start: {new Date(p.startTime).toLocaleString()}</div>
+                                          <div className="text-red-400 flex items-center gap-2"><Icons.Calendar className="w-3 h-3"/> End: {new Date(p.endTime).toLocaleString()}</div>
+                                      </div>
+                                  </div>
+                                  
+                                  <div className="flex items-center justify-between md:justify-end gap-4 border-t md:border-t-0 border-white/5 pt-3 md:pt-0">
+                                      <div className="hidden md:block">{statusBadge}</div>
+                                      <div className="flex gap-2">
+                                        <button onClick={() => setEditingPromotion(p)} className="px-3 py-2 bg-blue-500/20 text-blue-500 rounded-lg hover:bg-blue-500 hover:text-white font-bold text-xs"><Icons.Settings className="w-4 h-4" /></button>
+                                        <button onClick={() => handleDeletePromotion(p.id)} className="px-3 py-2 bg-red-500/20 text-red-500 rounded-lg hover:bg-red-500 hover:text-white font-bold text-xs"><Icons.Trash className="w-4 h-4" /></button>
+                                      </div>
+                                  </div>
+                              </div>
+                          );
+                      })}
                   </div>
-
-                  {/* EDIT PROMOTION MODAL */}
-                  {editingPromotion && (
-                      <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-                          <div className="bg-[#12121a] w-full max-w-lg p-6 rounded-2xl border border-white/20 shadow-2xl flex flex-col max-h-[90vh]">
-                              <h3 className="text-xl font-bold text-white mb-6 sticky top-0 bg-[#12121a] z-10 py-2 border-b border-white/10 shrink-0">
-                                  {editingPromotion.id.startsWith('temp_') ? 'Tạo Chiến Dịch Mới' : 'Sửa Chiến Dịch'}
-                              </h3>
-                              
-                              <div className="space-y-4 overflow-y-auto pr-2 custom-scrollbar">
-                                  <div>
-                                      <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Tên chiến dịch (Nội bộ)</label>
-                                      <input 
-                                        value={editingPromotion.name} 
-                                        onChange={e => setEditingPromotion({...editingPromotion, name: e.target.value})}
-                                        className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-bold" 
-                                        placeholder="Ví dụ: Sale 8/3"
-                                      />
-                                  </div>
-
-                                  <div>
-                                      <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Thông báo chạy (Marquee)</label>
-                                      <input 
-                                        value={editingPromotion.marqueeText} 
-                                        onChange={e => setEditingPromotion({...editingPromotion, marqueeText: e.target.value})}
-                                        className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white" 
-                                        placeholder="Khuyến mãi đặc biệt..."
-                                      />
-                                  </div>
-
-                                  <div>
-                                      <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">% Bonus Vcoin</label>
-                                      <div className="relative">
-                                          <input 
-                                            type="number" 
-                                            value={editingPromotion.bonusPercent} 
-                                            onChange={e => setEditingPromotion({...editingPromotion, bonusPercent: Number(e.target.value)})}
-                                            className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-audi-pink font-bold pl-3" 
-                                          />
-                                          <span className="absolute right-3 top-3.5 text-xs text-slate-500 font-bold">%</span>
-                                      </div>
-                                  </div>
-
-                                  <div className="grid grid-cols-2 gap-4">
-                                      <div>
-                                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Bắt đầu</label>
-                                          <input 
-                                            type="datetime-local" 
-                                            value={editingPromotion.startTime ? new Date(editingPromotion.startTime).toISOString().slice(0, 16) : ''}
-                                            onChange={e => setEditingPromotion({...editingPromotion, startTime: new Date(e.target.value).toISOString()})}
-                                            className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-mono text-xs" 
-                                          />
-                                      </div>
-                                      <div>
-                                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Kết thúc</label>
-                                          <input 
-                                            type="datetime-local" 
-                                            value={editingPromotion.endTime ? new Date(editingPromotion.endTime).toISOString().slice(0, 16) : ''}
-                                            onChange={e => setEditingPromotion({...editingPromotion, endTime: new Date(e.target.value).toISOString()})}
-                                            className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-mono text-xs" 
-                                          />
-                                      </div>
-                                  </div>
-
-                                  <div className="bg-white/5 rounded-xl p-3 flex items-center gap-3 border border-white/10 cursor-pointer hover:bg-white/10 transition-colors" onClick={() => setEditingPromotion({...editingPromotion, isActive: !editingPromotion.isActive})}>
-                                      <div className={`w-5 h-5 rounded border flex items-center justify-center transition-all ${editingPromotion.isActive ? 'bg-audi-lime border-audi-lime' : 'border-slate-500'}`}>
-                                          {editingPromotion.isActive && <Icons.Check className="w-3 h-3 text-black" />}
-                                      </div>
-                                      <label className="text-sm font-bold text-white cursor-pointer select-none">Kích hoạt (Manual Switch)</label>
-                                  </div>
-                                  <p className="text-[10px] text-slate-500 italic">Chiến dịch chỉ chạy khi BẬT và trong khoảng thời gian quy định.</p>
-                              </div>
-
-                              <div className="flex gap-3 pt-6 mt-2 border-t border-white/10 shrink-0">
-                                  <button onClick={() => setEditingPromotion(null)} className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-bold transition-colors">Hủy</button>
-                                  <button onClick={handleSavePromotion} className="flex-1 py-3 rounded-xl bg-audi-pink hover:bg-pink-600 text-white font-bold shadow-lg transition-all">
-                                      Lưu Chiến Dịch
-                                  </button>
-                              </div>
-                          </div>
-                      </div>
-                  )}
               </div>
           )}
 
           {activeView === 'giftcodes' && (
               <div className="space-y-6 animate-slide-in-right">
                   <div className="flex justify-between items-center">
-                      <h2 className="text-2xl font-bold text-white">Quản Lý Giftcode</h2>
+                      <h2 className="text-lg md:text-2xl font-bold text-white">Quản Lý Giftcode</h2>
                       <button 
                           onClick={() => setEditingGiftcode({
                               id: `temp_${Date.now()}`, code: '', reward: 10, totalLimit: 100, usedCount: 0, maxPerUser: 1, isActive: true
                           })}
-                          className="px-4 py-2 bg-audi-pink text-white rounded-lg font-bold flex items-center gap-2 hover:bg-pink-600"
+                          className="px-3 py-2 bg-audi-pink text-white rounded-lg font-bold flex items-center gap-2 hover:bg-pink-600 text-xs md:text-sm"
                       >
-                          <Icons.Plus className="w-4 h-4" /> Tạo Code
+                          <Icons.Plus className="w-4 h-4" /> <span className="hidden md:inline">Tạo Code</span><span className="md:hidden">Tạo</span>
                       </button>
                   </div>
 
-                  <div className="bg-[#12121a] border border-white/10 rounded-2xl overflow-hidden">
-                      <table className="w-full text-left text-sm text-slate-400">
-                          <thead className="bg-black/30 text-xs font-bold text-slate-300 uppercase">
-                              <tr>
-                                  <th className="px-6 py-4">Mã Code</th>
-                                  <th className="px-6 py-4">Phần thưởng</th>
-                                  <th className="px-6 py-4">Sử dụng</th>
-                                  <th className="px-6 py-4">Trạng thái</th>
-                                  <th className="px-6 py-4 text-right">Hành động</th>
-                              </tr>
-                          </thead>
-                          <tbody className="divide-y divide-white/5">
-                              {giftcodes.length === 0 ? (
-                                  <tr><td colSpan={5} className="text-center py-8">Chưa có Giftcode nào.</td></tr>
-                              ) : giftcodes.map(code => (
-                                  <tr key={code.id} className="hover:bg-white/5">
-                                      <td className="px-6 py-4 font-mono font-bold text-white">{code.code}</td>
-                                      <td className="px-6 py-4 text-audi-yellow font-bold">+{code.reward} Vcoin</td>
-                                      <td className="px-6 py-4">
-                                          <div className="flex items-center gap-2">
-                                              <span className="font-mono">{code.usedCount}/{code.totalLimit}</span>
-                                              <div className="w-16 h-1.5 bg-white/10 rounded-full overflow-hidden">
-                                                  <div className="h-full bg-green-500" style={{ width: `${Math.min(100, (code.usedCount / code.totalLimit) * 100)}%` }}></div>
-                                              </div>
-                                          </div>
-                                      </td>
-                                      <td className="px-6 py-4">
-                                          {code.isActive ? (
-                                              <span className="text-green-500 text-[10px] font-bold border border-green-500/20 px-2 py-1 rounded">ACTIVE</span>
-                                          ) : (
-                                              <span className="text-red-500 text-[10px] font-bold border border-red-500/20 px-2 py-1 rounded">INACTIVE</span>
-                                          )}
-                                      </td>
-                                      <td className="px-6 py-4 text-right">
-                                          <div className="flex justify-end gap-2">
-                                              <button onClick={() => setEditingGiftcode(code)} className="p-2 bg-blue-500/20 text-blue-500 rounded hover:bg-blue-500 hover:text-white"><Icons.Settings className="w-4 h-4" /></button>
-                                              <button onClick={() => handleDeleteGiftcode(code.id)} className="p-2 bg-red-500/20 text-red-500 rounded hover:bg-red-500 hover:text-white"><Icons.Trash className="w-4 h-4" /></button>
-                                          </div>
-                                      </td>
-                                  </tr>
-                              ))}
-                          </tbody>
-                      </table>
+                  {/* GIFTCODE ANNOUNCEMENT CONFIG - NEWLY ADDED */}
+                  <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4 md:p-6 mb-6">
+                      <h3 className="font-bold text-white mb-4 flex items-center gap-2">
+                          <Icons.Bell className="w-5 h-5 text-audi-yellow" />
+                          Cấu Hình Thông Báo Sự Kiện (Nổi bật)
+                      </h3>
+                      <div className="space-y-4">
+                          <input 
+                              type="text" 
+                              value={giftcodePromo.text}
+                              onChange={(e) => setGiftcodePromo({...giftcodePromo, text: e.target.value})}
+                              placeholder="Ví dụ: Nhập CODE 'HELLO2026' để nhận 20Vcoin miễn phí"
+                              className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white focus:border-audi-cyan outline-none"
+                          />
+                          <div className="flex items-center justify-between">
+                              <label className="flex items-center gap-2 cursor-pointer bg-white/5 px-4 py-2 rounded-lg border border-white/5 hover:bg-white/10 transition-colors">
+                                  <input 
+                                      type="checkbox" 
+                                      checked={giftcodePromo.isActive} 
+                                      onChange={(e) => setGiftcodePromo({...giftcodePromo, isActive: e.target.checked})}
+                                      className="accent-audi-cyan w-4 h-4"
+                                  />
+                                  <span className="text-sm font-bold text-white">Hiển thị thông báo này</span>
+                              </label>
+                              <button 
+                                  onClick={handleSaveGiftcodePromo}
+                                  className="px-4 py-2 bg-audi-cyan/20 text-audi-cyan hover:bg-audi-cyan hover:text-black font-bold rounded-lg transition-colors border border-audi-cyan/30 text-xs md:text-sm"
+                              >
+                                  Lưu Cấu Hình
+                              </button>
+                          </div>
+                          <p className="text-[10px] text-slate-500">Thông báo này sẽ xuất hiện nổi bật phía trên ô nhập Giftcode của người dùng.</p>
+                      </div>
                   </div>
 
-                  {/* EDIT GIFTCODE MODAL */}
-                  {editingGiftcode && (
-                      <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-                          <div className="bg-[#12121a] w-full max-w-md p-6 rounded-2xl border border-white/20 shadow-2xl">
-                              <h3 className="text-xl font-bold text-white mb-6">
-                                  {editingGiftcode.id.startsWith('temp_') ? 'Tạo Giftcode' : 'Sửa Giftcode'}
-                              </h3>
-                              <div className="space-y-4 mb-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {giftcodes.length === 0 ? (
+                          <div className="text-center py-8 text-slate-500 col-span-full">Chưa có Giftcode nào.</div>
+                      ) : giftcodes.map(code => (
+                          <div key={code.id} className="bg-[#12121a] border border-white/10 rounded-xl p-4 shadow-sm relative overflow-hidden">
+                              <div className="flex justify-between items-start mb-3">
                                   <div>
-                                      <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Mã Code (Tự động in hoa)</label>
-                                      <input 
-                                          value={editingGiftcode.code} 
-                                          onChange={e => setEditingGiftcode({...editingGiftcode, code: e.target.value.toUpperCase()})}
-                                          className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-mono font-bold" 
-                                          placeholder="Vd: CHAOMUNG"
-                                      />
+                                      <div className="font-mono font-bold text-white text-lg tracking-wider">{code.code}</div>
+                                      <div className="text-audi-yellow font-bold text-sm">+{code.reward} Vcoin</div>
                                   </div>
-                                  <div>
-                                      <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Phần thưởng (Vcoin)</label>
-                                      <input 
-                                          type="number" 
-                                          value={editingGiftcode.reward} 
-                                          onChange={e => setEditingGiftcode({...editingGiftcode, reward: Number(e.target.value)})}
-                                          className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-audi-yellow font-bold" 
-                                      />
-                                  </div>
-                                  <div className="grid grid-cols-2 gap-4">
-                                      <div>
-                                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Giới hạn tổng</label>
-                                          <input 
-                                              type="number" 
-                                              value={editingGiftcode.totalLimit} 
-                                              onChange={e => setEditingGiftcode({...editingGiftcode, totalLimit: Number(e.target.value)})}
-                                              className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white" 
-                                          />
-                                      </div>
-                                      <div>
-                                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Max/Người</label>
-                                          <input 
-                                              type="number" 
-                                              value={editingGiftcode.maxPerUser} 
-                                              onChange={e => setEditingGiftcode({...editingGiftcode, maxPerUser: Number(e.target.value)})}
-                                              className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white" 
-                                          />
-                                      </div>
-                                  </div>
-                                  <label className="flex items-center gap-2 cursor-pointer bg-white/5 p-3 rounded-xl border border-white/10 hover:bg-white/10 transition-colors mt-2">
-                                      <input type="checkbox" checked={editingGiftcode.isActive} onChange={e => setEditingGiftcode({...editingGiftcode, isActive: e.target.checked})} className="accent-green-500 w-4 h-4" />
-                                      <span className="text-sm font-bold text-white">Kích hoạt ngay</span>
-                                  </label>
+                                  {code.isActive ? (
+                                      <span className="text-green-500 text-[10px] font-bold border border-green-500/20 px-2 py-1 rounded bg-green-500/10">ACTIVE</span>
+                                  ) : (
+                                      <span className="text-red-500 text-[10px] font-bold border border-red-500/20 px-2 py-1 rounded bg-red-500/10">INACTIVE</span>
+                                  )}
                               </div>
-                              <div className="flex gap-3">
-                                  <button onClick={() => setEditingGiftcode(null)} className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-bold">Hủy</button>
-                                  <button onClick={handleSaveGiftcode} className="flex-1 py-3 rounded-xl bg-audi-pink hover:bg-pink-600 text-white font-bold">Lưu Code</button>
+                              
+                              <div className="mb-3">
+                                  <div className="flex justify-between text-[10px] text-slate-500 mb-1 font-bold uppercase">
+                                      <span>Sử dụng</span>
+                                      <span>{code.usedCount}/{code.totalLimit}</span>
+                                  </div>
+                                  <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+                                      <div className="h-full bg-green-500" style={{ width: `${Math.min(100, (code.usedCount / code.totalLimit) * 100)}%` }}></div>
+                                  </div>
+                              </div>
+
+                              <div className="flex justify-between items-center border-t border-white/5 pt-3">
+                                  <span className="text-[10px] text-slate-500">Max: {code.maxPerUser}/người</span>
+                                  <div className="flex gap-2">
+                                      <button onClick={() => setEditingGiftcode(code)} className="p-1.5 bg-blue-500/20 text-blue-500 rounded hover:bg-blue-500 hover:text-white transition-colors"><Icons.Settings className="w-4 h-4" /></button>
+                                      <button onClick={() => handleDeleteGiftcode(code.id)} className="p-1.5 bg-red-500/20 text-red-500 rounded hover:bg-red-500 hover:text-white transition-colors"><Icons.Trash className="w-4 h-4" /></button>
+                                  </div>
                               </div>
                           </div>
-                      </div>
-                  )}
+                      ))}
+                  </div>
               </div>
           )}
 
-           {/* ... System ... */}
+           {/* ================= VIEW: SYSTEM ================= */}
            {activeView === 'system' && (
               <div className="space-y-6 animate-slide-in-right">
                   <div className="flex justify-between items-center">
-                      <h2 className="text-2xl font-bold text-white">Chẩn Đoán Hệ Thống</h2>
-                      <button onClick={() => runSystemChecks(apiKey)} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm font-bold text-white flex items-center gap-2">
-                          <Icons.Rocket className="w-4 h-4" /> Quét Ngay
+                      <h2 className="text-lg md:text-2xl font-bold text-white">Hệ Thống</h2>
+                      <button onClick={() => runSystemChecks(apiKey)} className="px-3 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-bold text-white flex items-center gap-2">
+                          <Icons.Rocket className="w-4 h-4" /> <span className="hidden md:inline">Quét Ngay</span>
                       </button>
                   </div>
 
@@ -1415,12 +1306,12 @@ using (true);`,
                                   />
                                   <button 
                                     onClick={() => setShowKey(!showKey)} 
-                                    className="absolute right-36 top-3 text-slate-500 hover:text-white"
+                                    className="absolute right-36 top-3 text-slate-500 hover:text-white hidden md:block"
                                     title="Hiện/Ẩn Key"
                                   >
                                       {showKey ? <Icons.Eye className="w-5 h-5" /> : <Icons.Lock className="w-5 h-5" />}
                                   </button>
-                                  <button onClick={handleSaveApiKey} disabled={keyStatus === 'checking'} className="px-6 py-3 bg-audi-pink text-white font-bold rounded-lg hover:bg-pink-600 disabled:opacity-50">
+                                  <button onClick={handleSaveApiKey} disabled={keyStatus === 'checking'} className="px-6 py-3 bg-audi-pink text-white font-bold rounded-lg hover:bg-pink-600 disabled:opacity-50 text-sm whitespace-nowrap">
                                       {keyStatus === 'checking' ? <Icons.Loader className="animate-spin w-5 h-5"/> : 'Lưu Key'}
                                   </button>
                               </div>
@@ -1437,7 +1328,9 @@ using (true);`,
                           <Icons.Database className="w-5 h-5 text-audi-cyan" />
                           Danh sách API Key trong Database
                       </h3>
-                      <div className="overflow-x-auto">
+                      
+                      {/* Desktop Table */}
+                      <div className="hidden md:block overflow-x-auto">
                           <table className="w-full text-left text-sm text-slate-400">
                               <thead className="bg-black/30 text-xs font-bold text-slate-300 uppercase">
                                   <tr>
@@ -1485,11 +1378,282 @@ using (true);`,
                               </tbody>
                           </table>
                       </div>
+
+                      {/* Mobile Cards */}
+                      <div className="md:hidden space-y-4">
+                          {dbKeys.length === 0 ? (
+                              <div className="text-center py-4 text-slate-500 text-sm">Chưa có key.</div>
+                          ) : dbKeys.map((k) => (
+                              <div key={k.id} className="bg-white/5 rounded-xl p-4 border border-white/5">
+                                  <div className="flex justify-between items-start mb-2">
+                                      <div>
+                                          <div className="font-bold text-white text-sm">{k.name || 'Unnamed'}</div>
+                                          <div className="font-mono text-[10px] text-slate-500">{k.id}</div>
+                                      </div>
+                                      <span className={`text-[10px] font-bold px-2 py-1 rounded border ${k.status === 'active' ? 'bg-green-500/20 text-green-500 border-green-500/50' : 'bg-slate-500/20 text-slate-500 border-slate-500/50'}`}>
+                                          {k.status?.toUpperCase()}
+                                      </span>
+                                  </div>
+                                  <div className="font-mono text-xs text-slate-300 break-all mb-3 bg-black/30 p-2 rounded">
+                                      {k.key_value ? `${k.key_value.substring(0, 15)}...` : 'N/A'}
+                                  </div>
+                                  <div className="flex justify-between items-center mt-3 border-t border-white/5 pt-3">
+                                      <span className="text-[10px] text-slate-500">{new Date(k.created_at).toLocaleDateString()}</span>
+                                      <div className="flex gap-2">
+                                          <button onClick={() => handleTestKey(k.key_value)} className="px-3 py-1.5 bg-audi-purple/20 text-audi-purple rounded text-xs font-bold border border-audi-purple/30">Test</button>
+                                          <button onClick={() => handleDeleteApiKey(k.id)} className="px-3 py-1.5 bg-red-500/10 text-red-500 rounded text-xs font-bold border border-red-500/30">Xóa</button>
+                                      </div>
+                                  </div>
+                              </div>
+                          ))}
+                      </div>
                   </div>
               </div>
            )}
 
       </div>
+
+      {/* --- MOVED MODALS (ROOT LEVEL) - UPDATED OVERLAYS TO TRANSPARENT --- */}
+      
+      {/* EDIT USER MODAL - TOP ALIGNED */}
+      {editingUser && (
+          <div className="fixed inset-0 z-[2000] flex justify-center items-start p-4 pt-24 animate-fade-in overflow-y-auto">
+              <div className="bg-[#12121a] w-full max-w-md p-6 rounded-2xl border border-white/20 shadow-2xl relative max-h-[90vh] overflow-y-auto custom-scrollbar">
+                  <h3 className="text-xl font-bold text-white mb-4">Sửa Người Dùng</h3>
+                  <div className="space-y-4 mb-6">
+                      <div>
+                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Tên hiển thị</label>
+                          <input 
+                              value={editingUser.username || ''} 
+                              onChange={e => setEditingUser({...editingUser, username: e.target.value})}
+                              className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white focus:border-audi-pink outline-none" 
+                          />
+                      </div>
+                      <div>
+                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Số dư Vcoin</label>
+                          <input 
+                              type="number" 
+                              value={editingUser.balance || 0} 
+                              onChange={e => setEditingUser({...editingUser, balance: Number(e.target.value)})}
+                              className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-audi-yellow font-bold focus:border-audi-pink outline-none" 
+                          />
+                      </div>
+                      <div>
+                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Ảnh đại diện URL</label>
+                          <input 
+                              value={editingUser.avatar || ''} 
+                              onChange={e => setEditingUser({...editingUser, avatar: e.target.value})}
+                              className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-slate-300 text-xs font-mono focus:border-audi-pink outline-none" 
+                          />
+                      </div>
+                  </div>
+                  <div className="flex gap-3">
+                      <button onClick={() => setEditingUser(null)} className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-bold">Hủy</button>
+                      <button onClick={handleSaveUser} className="flex-1 py-3 rounded-xl bg-audi-pink hover:bg-pink-600 text-white font-bold">Lưu</button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* EDIT PACKAGE MODAL - TOP ALIGNED */}
+      {editingPackage && (
+          <div className="fixed inset-0 z-[2000] flex justify-center items-start p-4 pt-24 overflow-y-auto">
+              <div className="bg-[#12121a] w-full max-w-lg p-6 rounded-2xl border border-white/20 shadow-2xl flex flex-col max-h-[90vh] overflow-y-auto custom-scrollbar">
+                  <h3 className="text-xl font-bold text-white mb-6">
+                      {editingPackage.id.startsWith('temp_') ? 'Thêm Gói Mới' : 'Sửa Gói Nạp'}
+                  </h3>
+                  <div className="space-y-4 mb-6">
+                      <div className="grid grid-cols-2 gap-4">
+                          <div>
+                              <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Tên gói</label>
+                              <input value={editingPackage.name} onChange={e => setEditingPackage({...editingPackage, name: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white" />
+                          </div>
+                          <div>
+                              <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Tag (VD: Mới)</label>
+                              <input value={editingPackage.bonusText} onChange={e => setEditingPackage({...editingPackage, bonusText: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white" />
+                          </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                          <div>
+                              <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Giá (VND)</label>
+                              <input type="number" value={editingPackage.price} onChange={e => setEditingPackage({...editingPackage, price: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-green-400 font-bold" />
+                          </div>
+                          <div>
+                              <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Vcoin nhận</label>
+                              <input type="number" value={editingPackage.coin} onChange={e => setEditingPackage({...editingPackage, coin: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-audi-yellow font-bold" />
+                          </div>
+                      </div>
+                      <div>
+                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">% Bonus thêm (Mặc định)</label>
+                          <div className="relative">
+                              <input type="number" value={editingPackage.bonusPercent} onChange={e => setEditingPackage({...editingPackage, bonusPercent: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-audi-pink font-bold pl-3" />
+                              <span className="absolute right-3 top-3.5 text-xs text-slate-500 font-bold">%</span>
+                          </div>
+                      </div>
+                      <div>
+                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Cú pháp chuyển khoản</label>
+                          <input value={editingPackage.transferContent} onChange={e => setEditingPackage({...editingPackage, transferContent: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-mono" />
+                      </div>
+                      <div className="flex gap-4 pt-2">
+                          <label className="flex items-center gap-2 cursor-pointer bg-white/5 p-3 rounded-xl border border-white/10 flex-1 hover:bg-white/10 transition-colors">
+                              <input type="checkbox" checked={editingPackage.isPopular} onChange={e => setEditingPackage({...editingPackage, isPopular: e.target.checked})} className="accent-audi-pink w-4 h-4" />
+                              <span className="text-sm font-bold text-white">Gói HOT (Nổi bật)</span>
+                          </label>
+                          <label className="flex items-center gap-2 cursor-pointer bg-white/5 p-3 rounded-xl border border-white/10 flex-1 hover:bg-white/10 transition-colors">
+                              <input type="checkbox" checked={editingPackage.isActive} onChange={e => setEditingPackage({...editingPackage, isActive: e.target.checked})} className="accent-green-500 w-4 h-4" />
+                              <span className="text-sm font-bold text-white">Đang bán (Active)</span>
+                          </label>
+                      </div>
+                  </div>
+                  <div className="flex gap-3">
+                      <button onClick={() => setEditingPackage(null)} className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-bold">Hủy</button>
+                      <button onClick={handleSavePackage} className="flex-1 py-3 rounded-xl bg-audi-pink hover:bg-pink-600 text-white font-bold">Lưu Thay Đổi</button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* EDIT PROMOTION MODAL - TOP ALIGNED */}
+      {editingPromotion && (
+          <div className="fixed inset-0 z-[2000] flex justify-center items-start p-4 pt-24 overflow-y-auto">
+              <div className="bg-[#12121a] w-full max-w-lg p-6 rounded-2xl border border-white/20 shadow-2xl flex flex-col max-h-[90vh]">
+                  <h3 className="text-xl font-bold text-white mb-6 sticky top-0 bg-[#12121a] z-10 py-2 border-b border-white/10 shrink-0">
+                      {editingPromotion.id.startsWith('temp_') ? 'Tạo Chiến Dịch Mới' : 'Sửa Chiến Dịch'}
+                  </h3>
+                  
+                  <div className="space-y-4 overflow-y-auto pr-2 custom-scrollbar">
+                      <div>
+                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Tên chiến dịch (Nội bộ)</label>
+                          <input 
+                            value={editingPromotion.name} 
+                            onChange={e => setEditingPromotion({...editingPromotion, name: e.target.value})}
+                            className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-bold" 
+                            placeholder="Ví dụ: Sale 8/3"
+                          />
+                      </div>
+
+                      <div>
+                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Thông báo chạy (Marquee)</label>
+                          <input 
+                            value={editingPromotion.marqueeText} 
+                            onChange={e => setEditingPromotion({...editingPromotion, marqueeText: e.target.value})}
+                            className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white" 
+                            placeholder="Khuyến mãi đặc biệt..."
+                          />
+                      </div>
+
+                      <div>
+                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">% Bonus Vcoin</label>
+                          <div className="relative">
+                              <input 
+                                type="number" 
+                                value={editingPromotion.bonusPercent} 
+                                onChange={e => setEditingPromotion({...editingPromotion, bonusPercent: Number(e.target.value)})}
+                                className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-audi-pink font-bold pl-3" 
+                              />
+                              <span className="absolute right-3 top-3.5 text-xs text-slate-500 font-bold">%</span>
+                          </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                          <div>
+                              <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Bắt đầu</label>
+                              <input 
+                                type="datetime-local" 
+                                value={editingPromotion.startTime ? new Date(editingPromotion.startTime).toISOString().slice(0, 16) : ''}
+                                onChange={e => setEditingPromotion({...editingPromotion, startTime: new Date(e.target.value).toISOString()})}
+                                className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-mono text-xs" 
+                              />
+                          </div>
+                          <div>
+                              <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Kết thúc</label>
+                              <input 
+                                type="datetime-local" 
+                                value={editingPromotion.endTime ? new Date(editingPromotion.endTime).toISOString().slice(0, 16) : ''}
+                                onChange={e => setEditingPromotion({...editingPromotion, endTime: new Date(e.target.value).toISOString()})}
+                                className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-mono text-xs" 
+                              />
+                          </div>
+                      </div>
+
+                      <div className="bg-white/5 rounded-xl p-3 flex items-center gap-3 border border-white/10 cursor-pointer hover:bg-white/10 transition-colors" onClick={() => setEditingPromotion({...editingPromotion, isActive: !editingPromotion.isActive})}>
+                          <div className={`w-5 h-5 rounded border flex items-center justify-center transition-all ${editingPromotion.isActive ? 'bg-audi-lime border-audi-lime' : 'border-slate-500'}`}>
+                              {editingPromotion.isActive && <Icons.Check className="w-3 h-3 text-black" />}
+                          </div>
+                          <label className="text-sm font-bold text-white cursor-pointer select-none">Kích hoạt (Manual Switch)</label>
+                      </div>
+                      <p className="text-[10px] text-slate-500 italic">Chiến dịch chỉ chạy khi BẬT và trong khoảng thời gian quy định.</p>
+                  </div>
+
+                  <div className="flex gap-3 pt-6 mt-2 border-t border-white/10 shrink-0">
+                      <button onClick={() => setEditingPromotion(null)} className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-bold transition-colors">Hủy</button>
+                      <button onClick={handleSavePromotion} className="flex-1 py-3 rounded-xl bg-audi-pink hover:bg-pink-600 text-white font-bold shadow-lg transition-all">
+                          Lưu Chiến Dịch
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* EDIT GIFTCODE MODAL - TOP ALIGNED */}
+      {editingGiftcode && (
+          <div className="fixed inset-0 z-[2000] flex justify-center items-start p-4 pt-24 overflow-y-auto">
+              <div className="bg-[#12121a] w-full max-w-md p-6 rounded-2xl border border-white/20 shadow-2xl">
+                  <h3 className="text-xl font-bold text-white mb-6">
+                      {editingGiftcode.id.startsWith('temp_') ? 'Tạo Giftcode' : 'Sửa Giftcode'}
+                  </h3>
+                  <div className="space-y-4 mb-6">
+                      <div>
+                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Mã Code (Tự động in hoa)</label>
+                          <input 
+                              value={editingGiftcode.code} 
+                              onChange={e => setEditingGiftcode({...editingGiftcode, code: e.target.value.toUpperCase()})}
+                              className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-mono font-bold" 
+                              placeholder="Vd: CHAOMUNG"
+                          />
+                      </div>
+                      <div>
+                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Phần thưởng (Vcoin)</label>
+                          <input 
+                              type="number" 
+                              value={editingGiftcode.reward} 
+                              onChange={e => setEditingGiftcode({...editingGiftcode, reward: Number(e.target.value)})}
+                              className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-audi-yellow font-bold" 
+                          />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                          <div>
+                              <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Giới hạn tổng</label>
+                              <input 
+                                  type="number" 
+                                  value={editingGiftcode.totalLimit} 
+                                  onChange={e => setEditingGiftcode({...editingGiftcode, totalLimit: Number(e.target.value)})}
+                                  className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white" 
+                              />
+                          </div>
+                          <div>
+                              <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Max/Người</label>
+                              <input 
+                                  type="number" 
+                                  value={editingGiftcode.maxPerUser} 
+                                  onChange={e => setEditingGiftcode({...editingGiftcode, maxPerUser: Number(e.target.value)})}
+                                  className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white" 
+                              />
+                          </div>
+                      </div>
+                      <label className="flex items-center gap-2 cursor-pointer bg-white/5 p-3 rounded-xl border border-white/10 hover:bg-white/10 transition-colors mt-2">
+                          <input type="checkbox" checked={editingGiftcode.isActive} onChange={e => setEditingGiftcode({...editingGiftcode, isActive: e.target.checked})} className="accent-green-500 w-4 h-4" />
+                          <span className="text-sm font-bold text-white">Kích hoạt ngay</span>
+                      </label>
+                  </div>
+                  <div className="flex gap-3">
+                      <button onClick={() => setEditingGiftcode(null)} className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-bold">Hủy</button>
+                      <button onClick={handleSaveGiftcode} className="flex-1 py-3 rounded-xl bg-audi-pink hover:bg-pink-600 text-white font-bold">Lưu Code</button>
+                  </div>
+              </div>
+          </div>
+      )}
+
     </div>
   );
 };

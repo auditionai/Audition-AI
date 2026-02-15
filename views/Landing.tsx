@@ -1,21 +1,32 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Icons } from '../components/Icons';
-import { signInWithGoogle } from '../services/supabaseClient';
+import { signInWithGoogle, signInWithEmail, signUpWithEmail } from '../services/supabaseClient';
 import { getPackages, getActivePromotion } from '../services/economyService';
-import { getShowcaseImages } from '../services/storageService'; // Import storage service
+import { getShowcaseImages } from '../services/storageService'; 
 import { CreditPackage, PromotionCampaign } from '../types';
+import { useNotification } from '../components/NotificationSystem'; // Import Notification Hook
 
 interface LandingProps {
   onEnter: () => void;
 }
 
 export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
+  const { notify } = useNotification(); // Use Notification Hook
   const [showLogin, setShowLogin] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [beat, setBeat] = useState(false);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+
+  // Auth Inputs
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isAuthLoading, setIsAuthLoading] = useState(false);
+  
+  // ERROR FIXING STATE
+  const [showSqlFix, setShowSqlFix] = useState(false);
 
   // Data from Admin Settings
   const [packages, setPackages] = useState<CreditPackage[]>([]);
@@ -49,25 +60,21 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
   // Load Data
   useEffect(() => {
       const fetchData = async () => {
-          // 1. Get packages & promo
           const pkgs = await getPackages();
           const promo = await getActivePromotion();
           setPackages(pkgs); 
           setActivePromo(promo);
 
-          // 2. Get Shared Images for Showcase
           const sharedImages = await getShowcaseImages();
           
           if (sharedImages && sharedImages.length > 0) {
               const borderColors = ["border-audi-pink", "border-audi-purple", "border-audi-cyan", "border-audi-lime"];
-              
               const mappedImages = sharedImages.map((img, index) => ({
                   author: `@${img.userName || 'Artist'}`,
                   img: img.url,
                   border: borderColors[index % borderColors.length]
               }));
 
-              // If less than 5 images, mix with default to fill the marquee
               if (mappedImages.length < 5) {
                   setDisplayShowcase([...mappedImages, ...defaultShowcaseItems.slice(0, 8 - mappedImages.length)]);
               } else {
@@ -80,7 +87,7 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
       fetchData();
   }, [defaultShowcaseItems]);
 
-  // Update Countdown Timer based on Campaign End Time
+  // Update Countdown Timer
   useEffect(() => {
     if (!activePromo) return;
 
@@ -141,7 +148,69 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
   const handleGoogleLogin = async () => {
       const { error } = await signInWithGoogle();
       if (error) {
-          alert(error.message || "Không thể kết nối với Google.");
+          notify(error.message || "Không thể kết nối với Google.", 'error');
+      }
+  };
+
+  // --- VALIDATION LOGIC ---
+  const isValidEmail = (email: string) => {
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  };
+
+  const handleEmailAuth = async () => {
+      if (!email.trim() || !password.trim()) {
+          notify("Vui lòng nhập đầy đủ Email và Mật khẩu", 'warning');
+          return;
+      }
+
+      if (!isValidEmail(email)) {
+          notify("Địa chỉ Email không đúng định dạng", 'warning');
+          return;
+      }
+
+      if (password.length < 6) {
+          notify("Mật khẩu quá ngắn! Tối thiểu 6 ký tự.", 'warning');
+          return;
+      }
+      
+      setIsAuthLoading(true);
+      try {
+          if (authMode === 'login') {
+              const { error } = await signInWithEmail(email, password);
+              if (error) {
+                  if (error.message.includes('Invalid login credentials')) {
+                      notify("Sai email hoặc mật khẩu.", 'error');
+                  } else {
+                      notify("Đăng nhập thất bại: " + error.message, 'error');
+                  }
+              }
+              // Success handled by App.tsx
+          } else {
+              // Register
+              if (password !== confirmPassword) {
+                  notify("Mật khẩu xác nhận không khớp!", 'error');
+                  setIsAuthLoading(false);
+                  return;
+              }
+
+              const { error } = await signUpWithEmail(email, password);
+              if (error) {
+                  if (error.message.includes('Database error') || error.message.includes('saving new user')) {
+                      setShowSqlFix(true); 
+                  } else if (error.message.includes('User already registered')) {
+                      notify("Email này đã được đăng ký. Vui lòng đăng nhập.", 'info');
+                  } else {
+                      notify("Đăng ký thất bại: " + error.message, 'error');
+                  }
+              } else {
+                  notify("Đăng ký thành công! Đang tự động đăng nhập...", 'success');
+              }
+          }
+      } catch (e: any) {
+          console.error(e);
+          notify("Có lỗi hệ thống: " + e.message, 'error');
+      } finally {
+          setIsAuthLoading(false);
       }
   };
 
@@ -153,7 +222,6 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
     return new Intl.NumberFormat('de-DE').format(num);
   };
 
-  // Smart Description for Banner
   const smartDescription = useMemo(() => {
       if (!activePromo) return "";
       const { name, bonusPercent } = activePromo;
@@ -165,13 +233,35 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
       return `✨ Chào mừng sự kiện "${name}". Tận hưởng ưu đãi nạp +${bonusPercent}% Vcoin ngay hôm nay. Nạp càng nhiều, ưu đãi càng lớn. Sẵn sàng bùng nổ cùng các tính năng AI mới nhất!`;
   }, [activePromo]);
 
-  // Marquee Content Logic
   const getMarqueeText = () => {
       if (activePromo) {
           return `🔥 Sự kiện ${activePromo.name}: Khuyến mãi +${activePromo.bonusPercent}% Vcoin cho mọi giao dịch! 💎 Cơ hội nạp 1 nhận 2 đang diễn ra!`;
       }
       return "🎉 Sự kiện Khai Trương: Miễn phí 50 lượt tạo ảnh cho thành viên mới! 💎 Nạp Vcoin lần đầu x2 giá trị";
   };
+
+  const sqlFixCode = `-- CHẠY MÃ NÀY TRONG SQL EDITOR ĐỂ SỬA LỖI ĐĂNG KÝ
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+DROP FUNCTION IF EXISTS public.handle_new_user();
+
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS diamonds numeric default 0;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS photo_url text;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS is_admin boolean default false;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS display_name text;
+
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can insert own profile" ON public.users;
+CREATE POLICY "Users can insert own profile" ON public.users FOR INSERT WITH CHECK (auth.uid() = id);
+
+DROP POLICY IF EXISTS "Users can update own profile" ON public.users;
+CREATE POLICY "Users can update own profile" ON public.users FOR UPDATE USING (auth.uid() = id);
+
+DROP POLICY IF EXISTS "Users can read own profile" ON public.users;
+CREATE POLICY "Users can read own profile" ON public.users FOR SELECT USING (auth.uid() = id);
+
+DROP POLICY IF EXISTS "Public read access" ON public.users;
+CREATE POLICY "Public read access" ON public.users FOR SELECT TO anon USING (true);`;
 
   return (
     <div 
@@ -275,7 +365,7 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
           </div>
       </div>
 
-      {/* --- STATS --- */}
+      {/* ... STATS SECTION ... */}
       <div className="relative z-20 max-w-6xl mx-auto px-4 -mt-10 md:-mt-20 mb-20 perspective-1000">
          <div className="relative grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="group relative bg-[#13131f] border-b-4 border-audi-pink rounded-2xl p-6 shadow-[0_10px_30px_rgba(0,0,0,0.5)] transform hover:scale-105 transition-all duration-300 overflow-hidden">
@@ -293,7 +383,7 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
                     </div>
                 </div>
             </div>
-            {/* ... other stats cards ... */}
+            {/* ... other stats ... */}
             <div className="group relative bg-[#13131f] border-b-4 border-audi-cyan rounded-2xl p-6 shadow-[0_10px_30px_rgba(0,0,0,0.5)] transform hover:scale-105 transition-all duration-300 overflow-hidden">
                 <div className="absolute inset-0 bg-gradient-to-b from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
                 <div className="absolute -right-4 -top-4 w-24 h-24 bg-audi-cyan/20 blur-[40px] rounded-full group-hover:bg-audi-cyan/40 transition-colors"></div>
@@ -327,7 +417,7 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
          </div>
       </div>
 
-      {/* --- OUTSTANDING FEATURES --- */}
+      {/* ... OTHER SECTIONS (Features, Steps, Showcase, Shop, Footer) ... */}
       <div className="py-16 md:py-20 relative z-20 px-4">
           <div className="max-w-7xl mx-auto md:px-6">
               <div className="text-center mb-10 md:mb-16">
@@ -357,7 +447,6 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
           </div>
       </div>
 
-      {/* --- 4 SIMPLE STEPS --- */}
       <div className="py-16 md:py-24 relative z-20 px-4 bg-white/[0.02]">
          <div className="max-w-7xl mx-auto md:px-6">
             <div className="text-center mb-10 md:mb-16">
@@ -389,7 +478,6 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
          </div>
       </div>
 
-      {/* --- AI SHOWCASE (SYNCED) --- */}
       <div className="py-16 md:py-24 relative z-20 bg-gradient-to-b from-[#090014] to-[#120024] overflow-hidden">
           <div className="max-w-7xl mx-auto px-6 mb-8 md:mb-12">
               <div className="flex flex-col md:flex-row items-end justify-between gap-4">
@@ -412,7 +500,6 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
           </div>
       </div>
 
-      {/* --- VCOIN SHOP (UPDATED TO MATCH TOPUP) --- */}
       <div className="py-16 md:py-24 px-4 relative z-20">
           <div className="max-w-6xl mx-auto">
               
@@ -430,7 +517,6 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
                         <div className="absolute bottom-[-50%] right-[-20%] w-[500px] h-[500px] bg-audi-cyan/20 rounded-full blur-[100px] animate-pulse delay-1000"></div>
 
                         <div className="relative z-10 p-8 md:p-12 flex flex-col md:flex-row items-center justify-between gap-8">
-                            {/* Left Content */}
                             <div className="flex-1 text-center md:text-left space-y-4">
                                 <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-black/40 border border-audi-yellow/50 backdrop-blur-md shadow-[0_0_15px_rgba(251,218,97,0.4)] animate-bounce-slow">
                                     <Icons.Zap className="w-4 h-4 text-audi-yellow fill-current" />
@@ -445,7 +531,6 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
                                 </p>
                             </div>
 
-                            {/* Right Timer */}
                             <div className="flex gap-2 md:gap-4 p-4 md:p-6 bg-black/20 rounded-3xl border border-white/10 backdrop-blur-sm shadow-xl transform group-hover:scale-105 transition-transform duration-500">
                                 {['d', 'h', 'm', 's'].map((unit) => (
                                     <div key={unit} className="flex flex-col items-center gap-2">
@@ -465,7 +550,7 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
                   </div>
               )}
 
-              {/* --- PACKAGE GRID (SYNCED WITH TOPUP DESIGN) --- */}
+              {/* --- PACKAGE GRID --- */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 relative z-10">
                   {packages.map((pkg) => {
                       const activeBonusPercent = activePromo ? activePromo.bonusPercent : pkg.bonusPercent;
@@ -474,8 +559,6 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
 
                       return (
                       <div key={pkg.id} onClick={handleStart} className={`group relative bg-[#12121a] rounded-[2rem] p-6 border transition-all duration-300 hover:-translate-y-2 hover:shadow-[0_10px_40px_rgba(0,0,0,0.5)] flex flex-col cursor-pointer ${pkg.isPopular ? 'border-audi-pink shadow-[0_0_20px_rgba(255,0,153,0.1)]' : 'border-white/10 hover:border-white/30'}`}>
-                          
-                          {/* Badges */}
                           {pkg.isPopular && (
                               <div className="absolute top-0 right-0 bg-gradient-to-bl from-audi-pink to-audi-purple text-white text-[10px] font-bold px-4 py-1.5 rounded-tr-[1.8rem] rounded-bl-xl shadow-lg z-10 flex items-center gap-1">
                                   <Icons.Flame className="w-3 h-3 fill-white" /> HOT
@@ -487,7 +570,6 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
                               </div>
                           )}
                           
-                          {/* Icon & Coin */}
                           <div className="flex flex-col items-center justify-center py-6 border-b border-white/5 border-dashed relative">
                               <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-4 transition-transform group-hover:scale-110 duration-500 bg-gradient-to-b ${pkg.isPopular ? 'from-audi-pink/20 to-transparent' : 'from-audi-cyan/20 to-transparent'}`}>
                                   <Icons.Gem className={`w-10 h-10 ${pkg.isPopular ? 'text-audi-pink' : 'text-audi-cyan'} drop-shadow-[0_0_10px_currentColor]`} />
@@ -499,7 +581,6 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
                               </div>
                           </div>
                           
-                          {/* Details */}
                           <div className="flex-1 py-6 space-y-3">
                               <div className="flex justify-between items-center text-sm">
                                   <span className="text-slate-400">Giá trị thực</span>
@@ -516,7 +597,6 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
                               </div>
                           </div>
                           
-                          {/* Button */}
                           <button className={`w-full py-4 rounded-xl font-bold text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all relative overflow-hidden ${pkg.isPopular ? 'bg-gradient-to-r from-audi-pink to-audi-purple text-white shadow-[0_5px_20px_rgba(255,0,153,0.3)] hover:shadow-[0_5px_30px_rgba(255,0,153,0.5)]' : 'bg-white text-black hover:bg-slate-200'}`}>
                               <span className="relative z-10">MUA NGAY</span>
                               <Icons.ChevronRight className="w-4 h-4 relative z-10 group-hover:translate-x-1 transition-transform" />
@@ -527,39 +607,6 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
           </div>
       </div>
 
-      {/* --- FAQ SECTION --- */}
-      <div className="py-16 md:py-20 relative z-20 px-4">
-          <div className="max-w-4xl mx-auto">
-              <h2 className="font-game text-3xl md:text-5xl font-bold text-center text-white mb-8 md:mb-12">
-                  CÂU HỎI <span className="text-audi-purple">THƯỜNG GẶP</span>
-              </h2>
-              <div className="space-y-4">
-                  {[
-                      { q: "Audition AI Studio là gì?", a: "Là nền tảng tạo ảnh nghệ thuật sử dụng trí tuệ nhân tạo, cho phép bạn tạo ra các bức ảnh đẹp như game Audition, anime hoặc ảnh thực tế chỉ bằng mô tả văn bản." },
-                      { q: "Tôi có mất phí khi sử dụng không?", a: "Bạn được miễn phí 10 lượt tạo ảnh đầu tiên mỗi ngày. Để tạo nhiều hơn và sử dụng tính năng cao cấp, bạn có thể mua thêm Vcoin." },
-                      { q: "Ảnh tạo ra có bản quyền không?", a: "Bạn có toàn quyền sử dụng thương mại đối với các hình ảnh được tạo ra từ tài khoản của bạn." },
-                      { q: "Làm sao để nạp Vcoin?", a: "Bạn có thể nạp qua chuyển khoản ngân hàng hoặc ví điện tử trong phần Shop sau khi đăng nhập." }
-                  ].map((item, idx) => (
-                      <div key={idx} className="glass-panel border border-white/10 rounded-2xl overflow-hidden">
-                          <button 
-                             onClick={() => toggleFaq(idx)}
-                             className="w-full flex justify-between items-center p-4 md:p-6 text-left font-bold text-sm md:text-lg hover:bg-white/5 transition-colors"
-                          >
-                              <span className="text-white pr-4">{item.q}</span>
-                              <Icons.ChevronRight className={`w-4 h-4 md:w-5 md:h-5 text-audi-cyan transition-transform shrink-0 ${openFaq === idx ? 'rotate-90' : ''}`} />
-                          </button>
-                          {openFaq === idx && (
-                              <div className="p-4 md:p-6 pt-0 text-xs md:text-sm text-slate-400 leading-relaxed border-t border-white/5 bg-black/20">
-                                  {item.a}
-                              </div>
-                          )}
-                      </div>
-                  ))}
-              </div>
-          </div>
-      </div>
-
-      {/* --- REDESIGNED FOOTER --- */}
       <footer className="relative z-20 bg-[#020005] border-t border-white/10 pt-16 pb-8">
            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-audi-pink to-transparent opacity-50"></div>
            <div className="max-w-7xl mx-auto px-6">
@@ -601,7 +648,7 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
            </div>
       </footer>
 
-      {/* --- LOGIN MODAL --- */}
+      {/* --- LOGIN MODAL (UPDATED) --- */}
       {showLogin && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
               <div className="w-full max-w-md bg-[#090014] border-2 border-audi-pink rounded-3xl p-8 relative shadow-[0_0_50px_rgba(255,0,153,0.3)]">
@@ -619,25 +666,45 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
 
                   <div className="space-y-4">
                       <div>
-                          <label className="text-xs font-bold text-audi-cyan uppercase mb-1 block">Tên tài khoản</label>
-                          <input type="text" className="w-full bg-white/5 border border-white/20 rounded-xl p-3 text-white focus:border-audi-pink outline-none transition-colors" placeholder="Nhập tên đăng nhập..." />
+                          <label className="text-xs font-bold text-audi-cyan uppercase mb-1 block">Email</label>
+                          <input 
+                            type="email" 
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            className="w-full bg-white/5 border border-white/20 rounded-xl p-3 text-white focus:border-audi-pink outline-none transition-colors" 
+                            placeholder="Nhập email..." 
+                          />
                       </div>
                       <div>
                           <label className="text-xs font-bold text-audi-cyan uppercase mb-1 block">Mật khẩu</label>
-                          <input type="password" className="w-full bg-white/5 border border-white/20 rounded-xl p-3 text-white focus:border-audi-pink outline-none transition-colors" placeholder="Nhập mật khẩu..." />
+                          <input 
+                            type="password" 
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            className="w-full bg-white/5 border border-white/20 rounded-xl p-3 text-white focus:border-audi-pink outline-none transition-colors" 
+                            placeholder="Nhập mật khẩu (tối thiểu 6 ký tự)..." 
+                          />
                       </div>
                       
                       {authMode === 'register' && (
                          <div>
                             <label className="text-xs font-bold text-audi-cyan uppercase mb-1 block">Nhập lại Mật khẩu</label>
-                            <input type="password" className="w-full bg-white/5 border border-white/20 rounded-xl p-3 text-white focus:border-audi-pink outline-none transition-colors" placeholder="Xác nhận mật khẩu..." />
+                            <input 
+                                type="password" 
+                                value={confirmPassword}
+                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                className="w-full bg-white/5 border border-white/20 rounded-xl p-3 text-white focus:border-audi-pink outline-none transition-colors" 
+                                placeholder="Xác nhận mật khẩu..." 
+                            />
                         </div>
                       )}
                       
                       <button 
-                        onClick={onEnter}
-                        className="w-full py-4 mt-4 bg-gradient-to-r from-audi-pink to-audi-purple rounded-xl font-bold text-white shadow-lg hover:shadow-audi-pink/50 transition-all transform hover:scale-[1.02]"
+                        onClick={handleEmailAuth}
+                        disabled={isAuthLoading}
+                        className="w-full py-4 mt-4 bg-gradient-to-r from-audi-pink to-audi-purple rounded-xl font-bold text-white shadow-lg hover:shadow-audi-pink/50 transition-all transform hover:scale-[1.02] disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                       >
+                          {isAuthLoading && <Icons.Loader className="w-4 h-4 animate-spin" />}
                           {authMode === 'login' ? 'ĐĂNG NHẬP NGAY' : 'ĐĂNG KÝ NGAY'}
                       </button>
 
@@ -660,15 +727,80 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
                           <span>Tiếp tục với Google</span>
                       </button>
 
-                      <div className="text-center mt-4">
-                          <span className="text-slate-500 text-xs">{authMode === 'login' ? 'Chưa có tài khoản? ' : 'Đã có tài khoản? '}</span>
+                      <div className="text-center mt-4 flex flex-col gap-2">
+                          <div>
+                              <span className="text-slate-500 text-xs">{authMode === 'login' ? 'Chưa có tài khoản? ' : 'Đã có tài khoản? '}</span>
+                              <button 
+                                onClick={() => setAuthMode(authMode === 'login' ? 'register' : 'login')}
+                                className="text-audi-lime font-bold text-xs cursor-pointer hover:underline bg-transparent border-none p-0 inline"
+                              >
+                                {authMode === 'login' ? 'Đăng ký mới' : 'Đăng nhập'}
+                              </button>
+                          </div>
+                          
                           <button 
-                            onClick={() => setAuthMode(authMode === 'login' ? 'register' : 'login')}
-                            className="text-audi-lime font-bold text-xs cursor-pointer hover:underline bg-transparent border-none p-0 inline"
+                            onClick={onEnter}
+                            className="text-slate-500 text-xs hover:text-white underline decoration-dashed"
                           >
-                            {authMode === 'login' ? 'Đăng ký mới' : 'Đăng nhập'}
+                              Bỏ qua & Dùng thử (Chế độ Khách)
                           </button>
                       </div>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* --- SQL FIX MODAL (NEW) --- */}
+      {showSqlFix && (
+          <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-fade-in">
+              <div className="bg-[#12121a] w-full max-w-2xl p-6 rounded-2xl border border-red-500/50 shadow-[0_0_50px_rgba(255,0,0,0.2)] flex flex-col max-h-[90vh]">
+                  <div className="flex items-center gap-4 mb-4">
+                      <div className="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center text-red-500 animate-pulse">
+                          <Icons.Database className="w-6 h-6" />
+                      </div>
+                      <div>
+                          <h3 className="text-xl font-bold text-white">LỖI DATABASE NGHIÊM TRỌNG</h3>
+                          <p className="text-slate-400 text-xs">Phát hiện xung đột Schema hoặc Trigger bị hỏng</p>
+                      </div>
+                  </div>
+                  
+                  <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-xl mb-4">
+                      <p className="text-sm text-red-300 font-bold mb-1">Nguyên nhân:</p>
+                      <p className="text-xs text-slate-300 leading-relaxed">
+                          Trigger <code>handle_new_user</code> đang cố gắng ghi vào các cột không tồn tại (balance, role, avatar_url) thay vì (diamonds, is_admin, photo_url). Điều này làm hỏng quá trình đăng ký.
+                      </p>
+                  </div>
+
+                  <div className="flex-1 overflow-hidden flex flex-col">
+                      <p className="text-sm font-bold text-green-400 mb-2 uppercase">Giải pháp: Copy đoạn mã SQL dưới đây và chạy trong Supabase SQL Editor</p>
+                      <div className="relative h-64 bg-black/50 border border-white/10 rounded-xl overflow-hidden">
+                          <pre className="absolute inset-0 p-4 text-[10px] md:text-xs font-mono text-slate-300 overflow-auto whitespace-pre-wrap selection:bg-audi-pink selection:text-white">
+                              {sqlFixCode}
+                          </pre>
+                          <button 
+                            onClick={() => {
+                                navigator.clipboard.writeText(sqlFixCode);
+                                notify("Đã sao chép SQL!", 'info');
+                            }}
+                            className="absolute top-2 right-2 p-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors flex items-center gap-2 text-xs font-bold"
+                          >
+                              <Icons.Copy className="w-4 h-4" /> Sao chép
+                          </button>
+                      </div>
+                  </div>
+
+                  <div className="flex gap-3 mt-6">
+                      <a 
+                        href="https://supabase.com/dashboard/project/_/sql" 
+                        target="_blank" 
+                        rel="noreferrer"
+                        className="flex-1 py-3 bg-audi-purple hover:bg-purple-600 text-white rounded-xl font-bold text-center transition-colors flex items-center justify-center gap-2"
+                      >
+                          <Icons.Database className="w-4 h-4" /> Mở SQL Editor
+                      </a>
+                      <button onClick={() => setShowSqlFix(false)} className="flex-1 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold transition-colors">
+                          Đóng
+                      </button>
                   </div>
               </div>
           </div>
@@ -678,7 +810,6 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
   );
 };
 
-// Subcomponent for Showcase Card
 const ShowcaseCard = ({ item }: { item: any }) => (
     <div className="group relative w-64 h-96 md:w-80 md:h-[500px] shrink-0 cursor-pointer overflow-hidden rounded-[2rem] border-2 border-transparent hover:border-white/50 transition-all duration-300">
         <div className={`absolute inset-0 bg-black rounded-[2rem] border-2 ${item.border} transition-transform duration-500 z-10 overflow-hidden`}>
@@ -686,7 +817,6 @@ const ShowcaseCard = ({ item }: { item: any }) => (
             <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-90"></div>
             
             <div className="absolute bottom-0 left-0 right-0 p-6 transform translate-y-2 group-hover:translate-y-0 transition-transform duration-300">
-                {/* Modified Author Section to stand out more since title is gone */}
                 <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-slate-800 to-slate-900 border border-white/20 flex items-center justify-center shadow-lg">
                          <Icons.User className="w-4 h-4 text-slate-400" />
@@ -697,8 +827,6 @@ const ShowcaseCard = ({ item }: { item: any }) => (
                     </div>
                 </div>
             </div>
-
-             {/* Hover overlay sheen */}
              <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
         </div>
     </div>

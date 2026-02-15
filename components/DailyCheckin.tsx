@@ -15,6 +15,7 @@ export const DailyCheckin: React.FC<DailyCheckinProps> = ({ onClose, onSuccess, 
   const [checkedIn, setCheckedIn] = useState(false);
   const [loading, setLoading] = useState(false);
   const [history, setHistory] = useState<string[]>([]);
+  const [message, setMessage] = useState<string | null>(null);
   
   // Calendar State
   const today = new Date();
@@ -33,18 +34,29 @@ export const DailyCheckin: React.FC<DailyCheckinProps> = ({ onClose, onSuccess, 
 
   const handleClaim = async () => {
       setLoading(true);
+      setMessage(null);
       try {
           const res = await performCheckin();
           if (res.success) {
               setStreak(res.newStreak);
               setCheckedIn(true);
-              setHistory(prev => [...prev, new Date().toISOString().split('T')[0]]);
+              setHistory(prev => [...prev, new Date().toLocaleDateString('sv-SE')]);
+              
+              if (res.reward > 5) {
+                  setMessage(lang === 'vi' ? `Nhận ${res.reward} Vcoin (Có thưởng mốc!)` : `Received ${res.reward} Vcoin (Bonus!)`);
+              } else {
+                  setMessage(lang === 'vi' ? `Điểm danh thành công! +${res.reward} Vcoin` : `Check-in success! +${res.reward} Vcoin`);
+              }
+
               setTimeout(() => {
                   onSuccess();
-              }, 1000); // Wait a bit then refresh user data in BG, keep modal open or close depending on UX
+              }, 1500); 
+          } else {
+              setMessage(res.message || (lang === 'vi' ? 'Lỗi điểm danh' : 'Error checking in'));
           }
       } catch (e) {
           console.error(e);
+          setMessage('System Error');
       } finally {
           setLoading(false);
       }
@@ -65,7 +77,9 @@ export const DailyCheckin: React.FC<DailyCheckinProps> = ({ onClose, onSuccess, 
 
       // Days
       for (let d = 1; d <= daysCount; d++) {
+          // Format date as YYYY-MM-DD
           const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+          
           const isToday = d === today.getDate() && currentMonth === today.getMonth() && currentYear === today.getFullYear();
           const isChecked = history.includes(dateStr);
           const isPast = new Date(currentYear, currentMonth, d) < new Date(today.getFullYear(), today.getMonth(), today.getDate());
@@ -116,6 +130,10 @@ export const DailyCheckin: React.FC<DailyCheckinProps> = ({ onClose, onSuccess, 
                     <p className="text-xs text-slate-400 font-bold uppercase">{lang === 'vi' ? 'Chuỗi điểm danh' : 'Current Streak'}</p>
                     <p className="text-2xl font-black text-white">{streak} {lang === 'vi' ? 'ngày' : 'days'}</p>
                 </div>
+                <div className="ml-auto text-right">
+                    <div className="text-[10px] text-slate-500 uppercase font-bold">Quà hôm nay</div>
+                    <div className="text-audi-yellow font-bold">+5 Vcoin</div>
+                </div>
             </div>
 
             {/* Calendar Controls */}
@@ -149,7 +167,7 @@ export const DailyCheckin: React.FC<DailyCheckinProps> = ({ onClose, onSuccess, 
             <div className="mb-6">
                 <h3 className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase mb-3">
                     <Icons.Trophy className="w-3 h-3" />
-                    {lang === 'vi' ? 'Mốc thưởng lớn' : 'Big Milestones'}
+                    {lang === 'vi' ? 'Mốc thưởng lớn (Cộng thêm)' : 'Big Milestones (Bonus)'}
                 </h3>
                 <div className="grid grid-cols-3 gap-3">
                     {[
@@ -157,15 +175,24 @@ export const DailyCheckin: React.FC<DailyCheckinProps> = ({ onClose, onSuccess, 
                         { days: 14, reward: 50 },
                         { days: 30, reward: 100 },
                     ].map((m) => (
-                        <div key={m.days} className={`bg-[#1a1a24] rounded-xl p-3 flex flex-col items-center border border-white/5 ${streak >= m.days ? 'border-audi-lime/50' : ''}`}>
-                            <Icons.Gift className={`w-5 h-5 mb-2 ${streak >= m.days ? 'text-audi-lime' : 'text-slate-600'}`} />
+                        <div key={m.days} className={`bg-[#1a1a24] rounded-xl p-3 flex flex-col items-center border border-white/5 transition-all ${streak >= m.days ? 'border-audi-lime shadow-[0_0_10px_rgba(204,255,0,0.2)]' : ''}`}>
+                            <div className="relative">
+                                <Icons.Gift className={`w-5 h-5 mb-2 ${streak >= m.days ? 'text-audi-lime' : 'text-slate-600'}`} />
+                                {streak >= m.days && <div className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full animate-ping"></div>}
+                            </div>
                             <span className="text-[9px] text-slate-500 uppercase">{lang === 'vi' ? `Mốc ${m.days}` : `Day ${m.days}`}</span>
-                            <span className="text-xs font-bold text-white">{m.reward} Vcoin</span>
+                            <span className={`text-xs font-bold ${streak >= m.days ? 'text-white' : 'text-slate-500'}`}>{m.reward} Vcoin</span>
                             {streak < m.days && <Icons.Lock className="w-3 h-3 text-slate-700 mt-1" />}
                         </div>
                     ))}
                 </div>
             </div>
+            
+            {message && (
+                <div className={`mb-4 p-3 rounded-xl text-center text-sm font-bold animate-fade-in ${message.includes('thành công') || message.includes('success') ? 'bg-green-500/20 text-green-400 border border-green-500/50' : 'bg-red-500/20 text-red-400 border border-red-500/50'}`}>
+                    {message}
+                </div>
+            )}
 
             {/* Action Button */}
             <button 

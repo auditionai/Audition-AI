@@ -13,6 +13,12 @@ const isValidUUID = (id: string) => {
     return regex.test(id);
 };
 
+// --- HELPER: DATE FORMATTING (LOCAL TIME YYYY-MM-DD) ---
+const getLocalDateStr = (date = new Date()) => {
+    // Sử dụng sv-SE để có format YYYY-MM-DD mà vẫn giữ local time
+    return date.toLocaleDateString('sv-SE');
+};
+
 // --- MOCK DATA (Fallback) ---
 const MOCK_USER: UserProfile = {
   id: 'u_local_001',
@@ -585,61 +591,132 @@ export const deletePromotion = async (id: string): Promise<void> => {
     }
 };
 
-// --- ATTENDANCE SERVICES ---
+// --- ATTENDANCE SERVICES (UPDATED) ---
 
 export const getCheckinStatus = async () => {
     const user = await getUserProfile();
-    const today = new Date().toDateString();
+    const today = getLocalDateStr(); // YYYY-MM-DD in local time
     
-    let lastCheckinDate = null;
-    if (user.lastCheckin) {
-        lastCheckinDate = new Date(user.lastCheckin).toDateString();
+    // Default values from user profile
+    let streak = user.streak;
+    let isCheckedInToday = false;
+    let history: string[] = [];
+
+    // If connected, sync actual history from daily_check_ins table
+    if (supabase && user.id.length > 20) {
+        const { data, error } = await supabase
+            .from('daily_check_ins')
+            .select('check_in_date')
+            .eq('user_id', user.id);
+        
+        if (data) {
+            history = data.map(d => d.check_in_date); // Should be YYYY-MM-DD
+            isCheckedInToday = history.includes(today);
+            
+            // Recalculate streak based on last_check_in from DB profile vs today
+            if (user.lastCheckin) {
+                 const lastDate = new Date(user.lastCheckin).toLocaleDateString('sv-SE');
+                 // If last checkin was today, user is checked in
+                 if (lastDate === today) isCheckedInToday = true;
+            }
+        }
     }
-    
+
     return {
-        streak: user.streak,
-        isCheckedInToday: lastCheckinDate === today,
-        history: user.checkinHistory || [] 
+        streak,
+        isCheckedInToday,
+        history
     };
 };
 
-export const performCheckin = async (): Promise<{ success: boolean; reward: number; newStreak: number }> => {
+export const performCheckin = async (): Promise<{ success: boolean; reward: number; newStreak: number; message?: string }> => {
     const user = await getUserProfile();
-    let newStreak = user.streak + 1;
-    let reward = 5; 
+    const today = getLocalDateStr(); // YYYY-MM-DD
     
     if (supabase && user.id.length > 20) {
-        const todayISO = new Date().toISOString();
-        const dateOnly = todayISO.split('T')[0]; 
-        
-        const { data: rewardRule } = await supabase
-            .from('check_in_rewards')
-            .select('diamond_reward')
-            .eq('consecutive_days', newStreak)
-            .single();
+        // 1. Double check if already checked in today in DB
+        const { data: existing } = await supabase
+            .from('daily_check_ins')
+            .select('id')
+            .eq('user_id', user.id)
+            .eq('check_in_date', today)
+            .maybeSingle();
             
-        if (rewardRule) {
-            reward = rewardRule.diamond_reward;
+        if (existing) {
+            return { success: false, reward: 0, newStreak: user.streak, message: 'Đã điểm danh hôm nay!' };
         }
 
+        // 2. Calculate Streak
+        let newStreak = 1;
+        let lastCheckinDate = null;
+        
+        // Retrieve latest accurate check-in date
+        if (user.lastCheckin) {
+            // Ensure we treat the stored timestamp as local date for calculation
+            const lastDateObj = new Date(user.lastCheckin); 
+            const lastDateStr = getLocalDateStr(lastDateObj);
+            
+            const diffTime = new Date(today).getTime() - new Date(lastDateStr).getTime();
+            const diffDays = diffTime / (1000 * 3600 * 24);
+            
+            if (diffDays === 1) {
+                newStreak = user.streak + 1;
+            } else if (diffDays === 0) {
+                return { success: false, reward: 0, newStreak: user.streak, message: 'Đã điểm danh hôm nay!' };
+            } else {
+                newStreak = 1; // Reset streak if missed a day
+            }
+        }
+
+        // 3. Calculate Reward (Base + Milestone)
+        const baseReward = 5;
+        let bonusReward = 0;
+        
+        // Milestone Logic
+        if (newStreak === 7) bonusReward = 20;
+        else if (newStreak === 14) bonusReward = 50;
+        else if (newStreak === 30) bonusReward = 100;
+        
+        const totalReward = baseReward + bonusReward;
+        const description = bonusReward > 0 
+            ? `Check-in Day ${newStreak} (Bonus +${bonusReward})` 
+            : `Check-in Day ${newStreak}`;
+
+        // 4. Update Database (Sequential)
+        
+        // A. Insert into daily_check_ins
+        const { error: insertError } = await supabase.from('daily_check_ins').insert({
+            user_id: user.id,
+            check_in_date: today,
+            reward_amount: totalReward
+        });
+        
+        if (insertError) {
+             console.error("Checkin Insert Error", insertError);
+             return { success: false, reward: 0, newStreak: user.streak };
+        }
+
+        // B. Update User Profile (Streak + Balance)
         await supabase.from('users').update({ 
             consecutive_check_ins: newStreak, 
-            last_check_in: todayISO
+            last_check_in: new Date().toISOString(), // Save full ISO for timestamp precision
+            diamonds: (user.balance || 0) + totalReward
         }).eq('id', user.id);
 
-        await supabase.from('daily_check_ins').insert({
+        // C. Log Transaction
+        await supabase.from('diamond_transactions_log').insert({
             user_id: user.id,
-            check_in_date: dateOnly
-        }).catch(e => console.warn("Log checkin failed", e));
+            amount: totalReward, 
+            description: description, 
+            transaction_type: 'reward',
+            created_at: new Date().toISOString()
+        });
         
-        await supabase.from('daily_active_users').upsert({
-            user_id: user.id,
-            activity_date: dateOnly
-        }).catch(e => console.warn("Log DAU failed", e));
+        return { success: true, reward: totalReward, newStreak };
     }
     
-    await updateUserBalance(reward, `Checkin Day ${newStreak}`, 'reward');
-    return { success: true, reward, newStreak };
+    // Local fallback
+    return { success: true, reward: 5, newStreak: (user.streak || 0) + 1 };
 };
 
 // --- TRANSACTION SERVICES ---

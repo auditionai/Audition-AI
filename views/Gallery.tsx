@@ -60,8 +60,8 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
           
           if (success) {
               const msg = newStatus 
-                ? (lang === 'vi' ? 'Đã chia sẻ lên Trang chủ!' : 'Shared to Homepage!')
-                : (lang === 'vi' ? 'Đã gỡ khỏi Trang chủ!' : 'Removed from Homepage!');
+                ? (lang === 'vi' ? 'Đã chia sẻ (Lưu vĩnh viễn)!' : 'Shared (Saved Forever)!')
+                : (lang === 'vi' ? 'Đã gỡ (Sẽ bị xóa sau 7 ngày)!' : 'Unshared (Will expire)!');
               
               notify(msg, 'success');
               
@@ -140,40 +140,91 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
     });
   };
 
+  // --- EXPIRATION CALCULATION HELPERS ---
+  const getExpirationStatus = (timestamp: number, isShared: boolean | undefined) => {
+      if (isShared) return { type: 'saved', label: 'Vĩnh viễn', color: 'bg-green-500' };
+      
+      const EXPIRATION_DAYS = 7;
+      const msPerDay = 1000 * 60 * 60 * 24;
+      const diffTime = Math.abs(Date.now() - timestamp);
+      const diffDays = Math.ceil(diffTime / msPerDay);
+      const daysLeft = EXPIRATION_DAYS - diffDays; // Use diffDays which is approximate days passed.
+      
+      // More precise: 
+      const expiryDate = timestamp + (EXPIRATION_DAYS * msPerDay);
+      const timeLeft = expiryDate - Date.now();
+      const preciseDaysLeft = Math.ceil(timeLeft / msPerDay);
+
+      if (preciseDaysLeft <= 0) {
+          return { type: 'expired', label: 'Sắp xóa', color: 'bg-red-500 animate-pulse' };
+      }
+      
+      if (preciseDaysLeft <= 2) {
+          return { type: 'warning', label: `${preciseDaysLeft} ngày`, color: 'bg-orange-500' };
+      }
+
+      return { type: 'normal', label: `${preciseDaysLeft} ngày`, color: 'bg-slate-600' };
+  };
+
   const renderedImages = useMemo(() => {
-      return images.map((img) => (
-            <div 
-              key={img.id} 
-              onClick={() => setSelectedImage(img)}
-              className="group relative aspect-square rounded-2xl overflow-hidden cursor-pointer border border-slate-200 dark:border-white/10 shadow-sm hover:shadow-xl transition-all hover:scale-[1.02]"
-            >
-              <img 
-                src={img.url} 
-                alt={img.toolName} 
-                className="w-full h-full object-cover" 
-                loading="lazy"
-              />
-              {img.isShared && (
-                  <div className="absolute top-2 left-2 z-10 px-2 py-0.5 bg-audi-pink text-white text-[9px] font-bold rounded-full shadow-lg">
-                      SHARED
-                  </div>
-              )}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity p-4 flex flex-col justify-end">
-                <span className="text-white text-xs font-bold truncate">{img.toolName}</span>
-                <span className="text-white/70 text-[10px]">{formatDate(img.timestamp)}</span>
-                <button 
-                  onClick={(e) => handleDelete(e, img.id)}
-                  className="absolute top-2 right-2 p-2 bg-red-500/80 text-white rounded-full hover:bg-red-600 transition-colors"
+      return images.map((img) => {
+            const status = getExpirationStatus(img.timestamp, img.isShared);
+            
+            return (
+                <div 
+                  key={img.id} 
+                  onClick={() => setSelectedImage(img)}
+                  className="group relative aspect-square rounded-2xl overflow-hidden cursor-pointer border border-slate-200 dark:border-white/10 shadow-sm hover:shadow-xl transition-all hover:scale-[1.02]"
                 >
-                   <Icons.X className="w-3 h-3" />
-                </button>
-              </div>
-            </div>
-          ));
+                  <img 
+                    src={img.url} 
+                    alt={img.toolName} 
+                    className="w-full h-full object-cover" 
+                    loading="lazy"
+                  />
+                  
+                  {/* EXPIRATION / SHARED BADGE */}
+                  <div className={`absolute top-2 right-2 z-10 px-2 py-1 text-[9px] font-bold text-white rounded-md shadow-md flex items-center gap-1 ${status.color}`}>
+                      {status.type === 'saved' ? <Icons.Lock className="w-3 h-3" /> : <Icons.Clock className="w-3 h-3" />}
+                      {status.label}
+                  </div>
+
+                  {img.isShared && (
+                      <div className="absolute top-2 left-2 z-10 px-2 py-0.5 bg-audi-pink text-white text-[9px] font-bold rounded-full shadow-lg border border-white/20">
+                          SHARED
+                      </div>
+                  )}
+
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity p-4 flex flex-col justify-end">
+                    <span className="text-white text-xs font-bold truncate">{img.toolName}</span>
+                    <span className="text-white/70 text-[10px]">{formatDate(img.timestamp)}</span>
+                    <button 
+                      onClick={(e) => handleDelete(e, img.id)}
+                      className="absolute top-2 right-2 p-2 bg-red-500/80 text-white rounded-full hover:bg-red-600 transition-colors"
+                    >
+                       <Icons.X className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+            );
+      });
   }, [images, lang]);
 
   return (
     <div className="space-y-6 animate-fade-in pb-20">
+      
+      {/* STORAGE POLICY WARNING BANNER */}
+      <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 flex items-start gap-3">
+          <Icons.Info className="w-5 h-5 text-yellow-500 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+              <h4 className="text-sm font-bold text-white">Chính sách lưu trữ ảnh</h4>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                  Ảnh trong thư viện sẽ tự động bị xóa sau <b className="text-yellow-500">7 ngày</b> để tối ưu bộ nhớ hệ thống. 
+                  Vui lòng tải ảnh về máy hoặc bấm <b>"Chia sẻ lên Trang chủ"</b> để lưu trữ vĩnh viễn trên Cloud.
+              </p>
+          </div>
+      </div>
+
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-3xl font-bold text-slate-900 dark:text-white">
@@ -234,6 +285,29 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                  <h3 className="text-xl font-bold text-white mb-1">{selectedImage.toolName}</h3>
                  <span className="text-xs text-brand-400 font-mono mb-6">{selectedImage.engine}</span>
                  
+                 {/* Expiration Info in Detail View */}
+                 {!selectedImage.isShared && (
+                     <div className="bg-orange-500/10 border border-orange-500/30 p-3 rounded-xl mb-4 flex items-center gap-3">
+                         <Icons.Clock className="w-5 h-5 text-orange-500" />
+                         <div>
+                             <p className="text-[10px] text-slate-400 font-bold uppercase">Tự động xóa sau</p>
+                             <p className="text-orange-400 font-bold">
+                                 {getExpirationStatus(selectedImage.timestamp, false).label} nữa
+                             </p>
+                         </div>
+                     </div>
+                 )}
+
+                 {selectedImage.isShared && (
+                     <div className="bg-green-500/10 border border-green-500/30 p-3 rounded-xl mb-4 flex items-center gap-3">
+                         <Icons.Lock className="w-5 h-5 text-green-500" />
+                         <div>
+                             <p className="text-[10px] text-slate-400 font-bold uppercase">Trạng thái</p>
+                             <p className="text-green-400 font-bold">Đã lưu trữ vĩnh viễn</p>
+                         </div>
+                     </div>
+                 )}
+
                  <div className="space-y-4 flex-1">
                     <div>
                         <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">{lang === 'vi' ? 'Thời gian' : 'Date Created'}</label>
@@ -261,7 +335,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                         {sharing ? <Icons.Loader className="w-4 h-4 animate-spin" /> : <Icons.Share className="w-4 h-4" />}
                         {selectedImage.isShared 
                             ? (lang === 'vi' ? 'Gỡ khỏi Trang chủ' : 'Unshare') 
-                            : (lang === 'vi' ? 'Chia sẻ lên Trang chủ' : 'Share to Homepage')
+                            : (lang === 'vi' ? 'Chia sẻ lên Trang chủ (Lưu)' : 'Share to Homepage')
                         }
                     </button>
 

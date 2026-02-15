@@ -225,8 +225,8 @@ export const getUserProfile = async (): Promise<UserProfile> => {
                     
                     const { error: insertError } = await supabase.from('users').insert(newProfile);
                     
+                    // IF INSERT SUCCEEDS OR DUPLICATE, USE THE NEW DATA
                     if (!insertError || insertError.code === '23505') {
-                         // Return valid profile immediately
                          return { 
                             id: user.id,
                             username: newProfile.display_name,

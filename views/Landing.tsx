@@ -12,7 +12,7 @@ interface LandingProps {
 }
 
 export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
-  const { notify } = useNotification(); // Use Notification
+  const { notify } = useNotification(); // Use Notification Hook
   const [showLogin, setShowLogin] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [beat, setBeat] = useState(false);
@@ -87,7 +87,7 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
       fetchData();
   }, [defaultShowcaseItems]);
 
-  // Update Countdown Timer based on Campaign End Time
+  // Update Countdown Timer
   useEffect(() => {
     if (!activePromo) return;
 
@@ -365,7 +365,7 @@ CREATE POLICY "Public read access" ON public.users FOR SELECT TO anon USING (tru
           </div>
       </div>
 
-      {/* ... STATS SECTION (Unchanged) ... */}
+      {/* ... STATS SECTION ... */}
       <div className="relative z-20 max-w-6xl mx-auto px-4 -mt-10 md:-mt-20 mb-20 perspective-1000">
          <div className="relative grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="group relative bg-[#13131f] border-b-4 border-audi-pink rounded-2xl p-6 shadow-[0_10px_30px_rgba(0,0,0,0.5)] transform hover:scale-105 transition-all duration-300 overflow-hidden">
@@ -780,7 +780,7 @@ CREATE POLICY "Public read access" ON public.users FOR SELECT TO anon USING (tru
                           <button 
                             onClick={() => {
                                 navigator.clipboard.writeText(sqlFixCode);
-                                alert("Đã sao chép SQL!");
+                                notify("Đã sao chép SQL!", 'info');
                             }}
                             className="absolute top-2 right-2 p-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors flex items-center gap-2 text-xs font-bold"
                           >

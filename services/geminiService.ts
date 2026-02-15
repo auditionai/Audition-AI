@@ -80,7 +80,7 @@ export const checkConnection = async (key?: string): Promise<boolean> => {
     }
 };
 
-// --- INTELLIGENCE CORE: LOGIC XỬ LÝ PROMPT ĐA TẦNG ---
+// --- INTELLIGENCE CORE: LOGIC XỬ LÝ PROMPT ĐA TẦNG (UPGRADED V2) ---
 const processDigitalTwinMode = (
     prompt: string, 
     refImagePart: any | null, 
@@ -92,49 +92,66 @@ const processDigitalTwinMode = (
     const parts = [];
     
     // --- CHIẾN LƯỢC ĐỒNG BỘ: ÁP DỤNG QUY TRÌNH STRICT (NHÓM) CHO CẢ SINGLE MODE ---
-    // Không còn phân biệt Single/Group. Mọi Input đều được xử lý theo mô hình:
-    // Input A: Khung xương (Wireframe/Structure)
-    // Input B: Danh tính (Identity/Texture)
     
     if (refImagePart) {
         // INPUT A: STRUCTURE (Cấu trúc/Pose)
-        // Explicitly label this for Gemini to ignore pixels
-        parts.push({ text: "INPUT A [STRUCTURE ONLY]: Use this image purely for POSE ESTIMATION and CAMERA ANGLE. IGNORE all colors, faces, and clothes in this image. It is a wireframe reference." });
+        parts.push({ text: "INPUT A [STRUCTURE ONLY]: Use this image purely for POSE ESTIMATION and CAMERA ANGLE. IGNORE the face in this image." });
         parts.push(refImagePart);
     }
     
     if (charParts.length > 0) {
-        // INPUT B: IDENTITY (Định danh)
-        parts.push({ text: "INPUT B [IDENTITY REFERENCE]: This texture sheet defines the CHARACTER APPEARANCE (Face, Outfit, Body Type). You MUST use this character." });
+        // INPUT B: IDENTITY (Định danh) - SUPER PRO SCAN MODE
+        parts.push({ text: `
+        INPUT B [DEEP FACE SCAN DATA]: 
+        This is the MASTER SOURCE for the character's identity. 
+        
+        ** SCANNING PROTOCOL (EXECUTE IMMEDIATELY): **
+        1.  **ACCESSORIES SCAN**: Detect ALL piercings (nose rings, bridge piercings, lip rings, brow bars), ear accessories, and eyewear. YOU MUST RENDER THESE EXACTLY.
+        2.  **MAKEUP ANALYSIS**: Map the exact makeup style. Look for:
+            - Eyeliner wings (sharp, smoked out, graphic).
+            - Eyeshadow gradients and colors.
+            - Lipstick texture (matte vs glossy) and color.
+            - Face paint, decals, or stickers on cheeks/forehead.
+        3.  **FEATURES TOPOGRAPHY**: Analyze the unique eye shape (anime/stylized), iris color, eyebrow slant, and jawline.
+        4.  **EXPRESSION**: Capture the micro-expression (smirk, glare, pout) from the face reference.
+
+        CRITICAL: The character in the output MUST have this exact face. Do not humanize if the input is a stylized 3D doll. Keep the "Game Character" aesthetic.
+        ` });
         parts.push(...charParts);
     }
 
-    // --- SYSTEM INSTRUCTION ---
-    // Viết lại hoàn toàn để ép buộc model tuân thủ quy trình RE-RENDER
+    // --- SYSTEM INSTRUCTION (V2 - AGGRESSIVE FACE COPY) ---
     
     let systemPrompt = "";
 
     if (refImagePart) {
-        // TRƯỜNG HỢP CÓ ẢNH MẪU (Bất kể Single hay Group)
-        // Bắt buộc AI phải RE-RENDER, cấm copy ảnh mẫu
-        systemPrompt = `** MISSION: 3D CHARACTER RENDERING (STRICT MODE) **
+        // TRƯỜNG HỢP CÓ ẢNH MẪU POSE
+        systemPrompt = `** MISSION: 3D CHARACTER RECONSTRUCTION (VIP FACE LOCK) **
         
-        [RULES - DO NOT IGNORE]:
-        1. DO NOT return Input A. Input A is only for POSE/COMPOSITION.
-        2. YOU MUST RENDER A NEW IMAGE from scratch.
-        3. IDENTITY SOURCE: The character appearance comes ONLY from Input B.
-        4. If Input A contains a human, REPLACE them completely with the character from Input B.
-        5. STYLE: 8K, Unreal Engine 5, Highly Detailed, 3D Game Render.
+        [STRICT EXECUTION RULES]:
+        1. POSE: Taken strictly from Input A.
+        2. FACE & IDENTITY: Taken strictly from Input B (The Scan Data).
+        3. FUSION STRATEGY: You are a 3D Modeler using "Texture Projection". You must project the face details from Input B onto the 3D model in the pose of Input A.
+        4. DETAIL RETENTION:
+           - If Input B has a nose ring, the output MUST have a nose ring.
+           - If Input B has heavy gothic makeup, the output MUST have heavy gothic makeup.
+           - Do not simplify the design.
+        5. STYLE: 8K, Unreal Engine 5, Octane Render, High Fidelity Game Asset.
         
         [CONTEXT]: ${prompt}
         `;
     } else {
-        // TRƯỜNG HỢP CHUẨN (Không ảnh mẫu)
-        systemPrompt = `** MISSION: 3D CHARACTER GENERATION **
-        Create a stunning 3D game character (Audition Online style).
-        - Detail: 8K, Unreal Engine 5, Raytracing.
+        // TRƯỜNG HỢP CHUẨN (Không ảnh mẫu Pose)
+        systemPrompt = `** MISSION: 3D CHARACTER GENERATION (VIP FACE LOCK) **
+        Create a high-end 3D game character.
+        
+        [IDENTITY ENFORCEMENT]:
+        - The face MUST be a perfect replica of the character provided in Input B.
+        - Pay extreme attention to: Piercings, Makeup Layers, Face Tattoos/Markings, and Eye Design.
+        - The goal is 95-100% likeness retention for facial features.
+        
+        - Style: Unreal Engine 5, Raytracing, Audition Online Style (Updated).
         - Context: "${prompt}"
-        ${charParts.length > 0 ? '- IDENTITY: Strictly follow the character sheet provided in Input B.' : ''}
         `;
     }
 
@@ -158,7 +175,7 @@ export const generateImage = async (
     // FORCE PRO MODEL - Deprecated Flash for Image Generation
     const model = 'gemini-3-pro-image-preview';
     
-    if (onProgress) onProgress(`Engine: ${model} | Mode: STRICT COMPOSITING`);
+    if (onProgress) onProgress(`Engine: ${model} | Mode: DEEP FACE SCAN`);
 
     // 1. Process Pose Reference (Input A)
     let refImagePart = null;
@@ -175,9 +192,10 @@ export const generateImage = async (
 
     for (const char of characterDataList) {
         if (char.image) {
-            if (onProgress) onProgress(`Building Identity Sheet (Player ${char.id})...`);
+            if (onProgress) onProgress(`Scanning Identity Features (Player ${char.id})...`);
             
             // Tạo Texture Sheet: Ghép Body + Face vào 1 ảnh duy nhất để Flash 2.5 không bị loạn
+            // Vẫn dùng hàm này vì nó đã tách biệt Face sang một bên, giúp AI dễ "Scan" hơn
             const textureSheet = await createTextureSheet(
                 char.image, 
                 char.faceImage, 
@@ -188,7 +206,7 @@ export const generateImage = async (
 
             if (useCloudRef) {
                 try {
-                    if (onProgress) onProgress(`Uploading Identity (Player ${char.id})...`);
+                    if (onProgress) onProgress(`Uploading High-Res Identity (Player ${char.id})...`);
                     const fileUri = await uploadToGemini(textureSheet, 'image/jpeg');
                     finalPart = {
                         fileData: { mimeType: 'image/jpeg', fileUri: fileUri }
@@ -223,7 +241,7 @@ export const generateImage = async (
             imageSize: resolution // Always available in Pro
         },
         // Simple but forceful system instruction for the Config object
-        systemInstruction: "You are an advanced 3D Rendering AI. You strictly separate STRUCTURE (Pose) from IDENTITY (Appearance). Never confuse the two inputs.",
+        systemInstruction: "You are an advanced 3D Character Artist. You specialize in replicating complex facial features, makeup, and piercings from reference images. Pixel-perfect accuracy for face details is required.",
         safetySettings: [
             { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
             { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
@@ -237,7 +255,7 @@ export const generateImage = async (
         config.tools = [{ googleSearch: {} }];
     }
 
-    if (onProgress) onProgress("Rendering (This may take 10-15s)...");
+    if (onProgress) onProgress("Reconstructing 3D Model...");
 
     const response = await ai.models.generateContent({
       model: model,

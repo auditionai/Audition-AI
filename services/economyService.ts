@@ -16,8 +16,18 @@ const isValidUUID = (id: string) => {
 // --- HELPER: DATE FORMATTING (LOCAL TIME YYYY-MM-DD) ---
 const getLocalDateStr = (date = new Date()) => {
     // Sử dụng sv-SE để có format YYYY-MM-DD mà vẫn giữ local time
-    // Đảm bảo không có time component gây lệch
     return date.toLocaleDateString('sv-SE');
+};
+
+const getMonthRange = (date = new Date()) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const start = new Date(year, month, 1);
+    const end = new Date(year, month + 1, 0); // Last day of current month
+    return {
+        start: getLocalDateStr(start),
+        end: getLocalDateStr(end)
+    };
 };
 
 // --- MOCK DATA (Fallback) ---
@@ -657,7 +667,7 @@ export const getCheckinStatus = async () => {
 export const performCheckin = async (): Promise<{ success: boolean; reward: number; newStreak: number; message?: string }> => {
     const user = await getUserProfile();
     const today = getLocalDateStr(); // YYYY-MM-DD
-    const currentMonthPrefix = today.substring(0, 7); // "YYYY-MM"
+    const { start: monthStart, end: monthEnd } = getMonthRange();
     
     if (supabase && user.id.length > 20) {
         // 1. Double check if already checked in today in DB
@@ -669,7 +679,16 @@ export const performCheckin = async (): Promise<{ success: boolean; reward: numb
             .maybeSingle();
             
         if (existing) {
-            return { success: false, reward: 0, newStreak: user.streak, message: 'Hôm nay bạn đã điểm danh rồi!' };
+            // Recalculate streak even if checked in to ensure UI consistency
+            const { count } = await supabase
+                .from('daily_check_ins')
+                .select('*', { count: 'exact', head: true })
+                .eq('user_id', user.id)
+                .gte('check_in_date', monthStart)
+                .lte('check_in_date', monthEnd);
+            
+            const currentCount = count || user.streak || 1;
+            return { success: false, reward: 0, newStreak: currentCount, message: 'Hôm nay bạn đã điểm danh rồi!' };
         }
 
         // 2. Insert into daily_check_ins (Base Reward Only)
@@ -683,20 +702,27 @@ export const performCheckin = async (): Promise<{ success: boolean; reward: numb
         
         if (insertError) {
              console.error("Checkin Insert Error", insertError);
-             // Handle Unique Violation Gracefully
+             // Handle Unique Violation Gracefully (23505)
              if (insertError.code === '23505') {
-                 return { success: true, reward: 0, newStreak: user.streak, message: 'Hôm nay bạn đã điểm danh rồi!' };
+                 // Try getting count again
+                 const { count } = await supabase
+                    .from('daily_check_ins')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('user_id', user.id)
+                    .gte('check_in_date', monthStart)
+                    .lte('check_in_date', monthEnd);
+                 return { success: true, reward: 0, newStreak: count || 1, message: 'Hôm nay bạn đã điểm danh rồi!' };
              }
              return { success: false, reward: 0, newStreak: user.streak, message: `Lỗi DB: ${insertError.message}` };
         }
 
-        // 3. Recalculate Monthly Count
+        // 3. Recalculate Monthly Count using calculated range
         const { count } = await supabase
             .from('daily_check_ins')
             .select('*', { count: 'exact', head: true })
             .eq('user_id', user.id)
-            .gte('check_in_date', `${currentMonthPrefix}-01`)
-            .lte('check_in_date', `${currentMonthPrefix}-31`);
+            .gte('check_in_date', monthStart)
+            .lte('check_in_date', monthEnd);
 
         const monthlyCount = count || 1;
 
@@ -726,6 +752,7 @@ export const claimMilestoneReward = async (day: number): Promise<{ success: bool
     const user = await getUserProfile();
     const today = getLocalDateStr();
     const currentMonthPrefix = today.substring(0, 7);
+    const { start: monthStart, end: monthEnd } = getMonthRange();
 
     if (!supabase || user.id.length < 20) {
         return { success: false, reward: 0, message: 'Chưa đăng nhập' };
@@ -736,8 +763,8 @@ export const claimMilestoneReward = async (day: number): Promise<{ success: bool
         .from('daily_check_ins')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', user.id)
-        .gte('check_in_date', `${currentMonthPrefix}-01`)
-        .lte('check_in_date', `${currentMonthPrefix}-31`);
+        .gte('check_in_date', monthStart)
+        .lte('check_in_date', monthEnd);
     
     const monthlyCount = count || 0;
     if (monthlyCount < day) {

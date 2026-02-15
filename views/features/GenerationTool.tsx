@@ -121,36 +121,38 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
 
   const fetchSamplePrompts = async () => {
       if (!caulenhauClient) {
-          notify("Chưa kết nối database mẫu.", "error");
+          notify("Chưa kết nối database mẫu. Vui lòng kiểm tra cấu hình.", "error");
           return;
       }
       setLoadingSamples(true);
       
       try {
           // Changed table 'prompts' to 'images' based on your database screenshot
+          // Assuming 'image_url' contains the link and 'prompt' contains text
           let query = caulenhauClient
               .from('images')
-              .select('*')
+              .select('id, image_url, prompt')
               .order('created_at', { ascending: false })
               .limit(50);
           
-          // NOTE: Category filter removed temporarily as 'category' column 
-          // was not visible in the provided 'images' table screenshot.
-          // This ensures images will show up regardless of category structure.
-          
           const { data, error } = await query;
 
-          if (error) throw error;
+          if (error) {
+              console.error("Supabase Error:", error);
+              throw error;
+          }
+          
           if (data) {
               setSamplePrompts(data.map((item: any) => ({
                   id: item.id,
                   image_url: item.image_url,
                   prompt: item.prompt,
-                  category: 'general' // Default category
+                  category: 'general'
               })));
           }
-      } catch (e) {
+      } catch (e: any) {
           console.error("Fetch samples error", e);
+          notify(`Lỗi tải dữ liệu: ${e.message}`, 'error');
           setSamplePrompts([]);
       } finally {
           setLoadingSamples(false);
@@ -163,9 +165,13 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
   };
 
   const handleSelectSample = (sample: SamplePrompt) => {
-      setPrompt(sample.prompt);
-      setShowSampleModal(false);
-      notify("Đã áp dụng Prompt mẫu!", "success");
+      if (sample.prompt) {
+          setPrompt(sample.prompt);
+          setShowSampleModal(false);
+          notify("Đã áp dụng Prompt mẫu!", "success");
+      } else {
+          notify("Mẫu này không có prompt.", "warning");
+      }
   };
 
   const handleUploadClick = (charId: number, type: 'body' | 'face') => {
@@ -491,8 +497,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
         {/* --- SAMPLE PROMPTS MODAL (CAULENHAU) --- */}
         {showSampleModal && (
             <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/50 backdrop-blur-md p-4 animate-fade-in" onClick={() => setShowSampleModal(false)}>
-                {/* Updated Size: max-w-2xl and h-[60vh] */}
-                <div className="bg-[#12121a] w-full max-w-2xl h-[60vh] rounded-[2rem] border border-audi-purple/50 shadow-[0_0_50px_rgba(183,33,255,0.2)] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+                {/* Updated Size: max-w-xl (was 2xl) and h-[500px] (was 60vh) for tighter fit */}
+                <div className="bg-[#12121a] w-full max-w-xl h-[500px] rounded-[2rem] border border-audi-purple/50 shadow-[0_0_50px_rgba(183,33,255,0.2)] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
                     <div className="p-4 border-b border-white/10 flex justify-between items-center bg-black/20">
                         <div className="flex items-center gap-2">
                             <Icons.Image className="w-5 h-5 text-audi-purple" />
@@ -513,9 +519,17 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                                 <span className="text-slate-400 text-sm">Đang tải dữ liệu từ caulenhau.io.vn...</span>
                             </div>
                         ) : samplePrompts.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center h-full text-slate-500">
-                                <Icons.Image className="w-16 h-16 mb-4 opacity-20" />
+                            <div className="flex flex-col items-center justify-center h-full text-slate-500 gap-4">
+                                <div className="p-4 bg-white/5 rounded-full">
+                                    <Icons.Image className="w-12 h-12 opacity-30" />
+                                </div>
                                 <p>Chưa có mẫu nào cho chế độ này.</p>
+                                <button 
+                                    onClick={fetchSamplePrompts}
+                                    className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-full text-xs font-bold text-white transition-colors"
+                                >
+                                    Thử lại
+                                </button>
                             </div>
                         ) : (
                             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">

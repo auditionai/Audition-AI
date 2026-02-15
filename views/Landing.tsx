@@ -829,7 +829,7 @@ CREATE POLICY "Public read access" ON public.users FOR SELECT TO anon USING (tru
 
                   <div className="flex-1 overflow-hidden flex flex-col">
                       <p className="text-sm font-bold text-green-400 mb-2 uppercase">Giải pháp: Copy đoạn mã SQL dưới đây và chạy trong Supabase SQL Editor</p>
-                      <div className="relative flex-1 bg-black/50 border border-white/10 rounded-xl overflow-hidden">
+                      <div className="relative h-64 bg-black/50 border border-white/10 rounded-xl overflow-hidden">
                           <pre className="absolute inset-0 p-4 text-[10px] md:text-xs font-mono text-slate-300 overflow-auto whitespace-pre-wrap selection:bg-audi-pink selection:text-white">
                               {sqlFixCode}
                           </pre>

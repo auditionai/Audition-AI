@@ -78,7 +78,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
       }
   };
 
-  // --- FORCE DOWNLOAD LOGIC (UPDATED) ---
+  // --- ROBUST DOWNLOAD LOGIC (V3 - PROXY SUPPORTED) ---
   const handleDownload = async (imageUrl: string, filename: string) => {
       notify(lang === 'vi' ? 'Đang xử lý tải xuống...' : 'Processing download...', 'info');
       
@@ -97,9 +97,19 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
           } 
           // 2. Remote URL Case (Fetch & Blob)
           else {
-              const response = await fetch(imageUrl, { mode: 'cors' });
-              if (!response.ok) throw new Error('Network response failed');
-              blob = await response.blob();
+              try {
+                  // Attempt 1: Direct Fetch (Fastest)
+                  const response = await fetch(imageUrl, { mode: 'cors' });
+                  if (!response.ok) throw new Error('Direct fetch failed');
+                  blob = await response.blob();
+              } catch (directError) {
+                  console.warn("Direct download failed (CORS), switching to Proxy...", directError);
+                  // Attempt 2: Proxy Fetch (Reliable)
+                  const proxyUrl = `/.netlify/functions/download_proxy?url=${encodeURIComponent(imageUrl)}`;
+                  const proxyResponse = await fetch(proxyUrl);
+                  if (!proxyResponse.ok) throw new Error('Proxy download failed');
+                  blob = await proxyResponse.blob();
+              }
           }
 
           // Create Object URL & Trigger Download
@@ -117,10 +127,10 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
           notify(lang === 'vi' ? 'Đã lưu ảnh thành công!' : 'Download successful!', 'success');
 
       } catch (e) {
-          console.error("Download failed", e);
-          // Fallback only if fetch fails (e.g. CORS blockage on server side)
+          console.error("Download failed completely", e);
+          // Absolute last resort: Open in new tab so user doesn't lose the image
           window.open(imageUrl, '_blank');
-          notify(lang === 'vi' ? 'Lỗi tải trực tiếp (Server chặn), đã mở tab mới.' : 'Direct download blocked, opened new tab.', 'warning');
+          notify(lang === 'vi' ? 'Lỗi tải file. Đã mở ảnh trong tab mới.' : 'Download failed. Image opened in new tab.', 'warning');
       }
   };
 

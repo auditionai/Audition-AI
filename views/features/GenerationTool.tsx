@@ -227,6 +227,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
 
   const handleForceDownload = async (url: string, filename: string) => {
       if (!url) return;
+      notify(lang === 'vi' ? 'Đang tải xuống...' : 'Downloading...', 'info');
       
       try {
           let blob: Blob;
@@ -243,11 +244,19 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
               }
               blob = new Blob([u8arr], { type: mime });
           } 
-          // 2. URL
+          // 2. Remote URL with Proxy Fallback
           else {
-              const response = await fetch(url, { mode: 'cors' });
-              if (!response.ok) throw new Error("Fetch failed");
-              blob = await response.blob();
+              try {
+                  const response = await fetch(url, { mode: 'cors' });
+                  if (!response.ok) throw new Error("Direct fetch failed");
+                  blob = await response.blob();
+              } catch (directError) {
+                  // Fallback to Proxy
+                  const proxyUrl = `/.netlify/functions/download_proxy?url=${encodeURIComponent(url)}`;
+                  const proxyResponse = await fetch(proxyUrl);
+                  if (!proxyResponse.ok) throw new Error("Proxy download failed");
+                  blob = await proxyResponse.blob();
+              }
           }
 
           const blobUrl = window.URL.createObjectURL(blob);
@@ -261,7 +270,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
           notify('Đã lưu ảnh về máy!', 'success');
       } catch (e) {
           console.error("Download failed", e);
-          window.open(url, '_blank'); // Fallback
+          window.open(url, '_blank'); // Last resort
       }
   };
 

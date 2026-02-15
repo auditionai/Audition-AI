@@ -322,7 +322,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                           </li>
                           <li className="flex gap-2">
                               <span className="text-audi-pink font-bold">HQ Cloud Link:</span>
-                              Khi BẬT, ảnh gốc của bạn sẽ được gửi lên Cloud để AI phân tích kỹ hơn -> Kết quả giống thật hơn 30%. (Tốn thêm Vcoin).
+                              Khi BẬT, ảnh gốc của bạn sẽ được gửi lên Cloud để AI phân tích kỹ hơn &rarr; Kết quả giống thật hơn 30%. (Tốn thêm Vcoin).
                           </li>
                           <li className="flex gap-2">
                               <span className="text-white font-bold">Độ phân giải:</span>

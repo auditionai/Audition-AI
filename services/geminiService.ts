@@ -147,7 +147,7 @@ export const generateImage = async (
     styleRefBase64?: string, 
     characterDataList: CharacterData[] = [], 
     resolution: string = '2K',
-    modelTier: 'flash' | 'pro' = 'pro', 
+    _modelTier: 'flash' | 'pro' = 'pro', // Deprecated param, kept for signature compatibility
     useSearch: boolean = false,
     useCloudRef: boolean = false, 
     onProgress?: (msg: string) => void
@@ -155,7 +155,8 @@ export const generateImage = async (
   
   try {
     const ai = await getAiClient();
-    const model = modelTier === 'pro' ? 'gemini-3-pro-image-preview' : 'gemini-2.5-flash-image';
+    // FORCE PRO MODEL - Deprecated Flash for Image Generation
+    const model = 'gemini-3-pro-image-preview';
     
     if (onProgress) onProgress(`Engine: ${model} | Mode: STRICT COMPOSITING`);
 
@@ -210,14 +211,17 @@ export const generateImage = async (
     }
 
     // 3. Construct Payload
-    // FORCE SINGLE MODE TO USE THE EXACT SAME LOGIC AS GROUP MODE
-    const payload = processDigitalTwinMode(prompt, refImagePart, allParts, charDescriptions, modelTier);
+    // Always use 'pro' logic
+    const payload = processDigitalTwinMode(prompt, refImagePart, allParts, charDescriptions, 'pro');
     
     // Đảo ngược thứ tự: Instruction cuối cùng để AI nhớ rõ nhất (Recency Bias)
     const finalParts = [...payload.parts, { text: payload.systemPrompt }];
 
     const config: any = {
-        imageConfig: { aspectRatio: aspectRatio },
+        imageConfig: { 
+            aspectRatio: aspectRatio,
+            imageSize: resolution // Always available in Pro
+        },
         // Simple but forceful system instruction for the Config object
         systemInstruction: "You are an advanced 3D Rendering AI. You strictly separate STRUCTURE (Pose) from IDENTITY (Appearance). Never confuse the two inputs.",
         safetySettings: [
@@ -228,12 +232,9 @@ export const generateImage = async (
         ]
     };
 
-    if (modelTier === 'pro') {
-        config.imageConfig.imageSize = resolution;
-        // Chỉ dùng Google Search khi KHÔNG CÓ ảnh mẫu, để tránh nhiễu
-        if (useSearch && !refImagePart) {
-            config.tools = [{ googleSearch: {} }];
-        }
+    // Chỉ dùng Google Search khi KHÔNG CÓ ảnh mẫu, để tránh nhiễu
+    if (useSearch && !refImagePart) {
+        config.tools = [{ googleSearch: {} }];
     }
 
     if (onProgress) onProgress("Rendering (This may take 10-15s)...");

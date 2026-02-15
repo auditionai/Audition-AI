@@ -29,7 +29,7 @@ interface CharacterInput {
 const SMART_TIPS = [
     { icon: Icons.Sparkles, text: "✨ Mẹo: Để ảnh đẹp nhất, hãy tải lên ảnh nhân vật đã tách nền (PNG trong suốt)." },
     { icon: Icons.Zap, text: "⚡ Tip: Để khuôn mặt sắc nét, hãy dùng ảnh chụp cận mặt từ Patch hoặc đã qua làm nét (Remini)." },
-    { icon: Icons.Crown, text: "👑 Lưu ý: Model Pro tốn nhiều Vcoin hơn nhưng độ chi tiết trang phục gấp đôi Flash." },
+    { icon: Icons.Crown, text: "👑 Lưu ý: Model Pro 4K mang lại độ chi tiết trang phục chân thực nhất." },
     { icon: Icons.Palette, text: "🎨 Mẹo: Nhập mô tả màu sắc trang phục cụ thể (ví dụ: váy đỏ, giày trắng) để AI vẽ đúng ý." },
     { icon: Icons.Unlock, text: "🔓 Tip: Tắt 'Khóa Mặt' nếu bạn muốn AI tự sáng tạo khuôn mặt mới ngẫu nhiên." },
     { icon: Icons.Image, text: "📸 Mẹo: Ảnh mẫu (Ref) nên có góc chụp tương đồng với ý tưởng bạn muốn tạo." },
@@ -65,7 +65,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
   const [loadingSamples, setLoadingSamples] = useState(false);
   const [currentCategoryName, setCurrentCategoryName] = useState('');
 
-  const [modelType, setModelType] = useState<'flash' | 'pro'>('pro'); 
+  // Removed modelType state - defaulting to Pro
   const [aspectRatio, setAspectRatio] = useState('3:4'); 
   const [selectedStyle, setSelectedStyle] = useState('3d');
   const [resolution, setResolution] = useState<Resolution>('2K'); 
@@ -254,17 +254,22 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
   };
 
   const calculateCost = () => {
-      let cost = modelType === 'pro' ? 2 : 1;
-      if (modelType === 'pro') {
-          if (resolution === '1K') cost += 2;
-          if (resolution === '2K') cost += 5;
-          if (resolution === '4K') cost += 10;
-          if (useSearch) cost += 3; 
-          if (useCloudRef) cost += 2;
-      }
+      let cost = 0;
+      
+      // Resolution Based Pricing (High Quality 3.0 Pro)
+      if (resolution === '1K') cost = 5;
+      if (resolution === '2K') cost = 10;
+      if (resolution === '4K') cost = 15;
+
+      // Add-ons
+      if (useSearch) cost += 3; 
+      if (useCloudRef) cost += 2;
+      
+      // Mode Multipliers (More characters = more processing)
       if (activeMode === 'couple') cost += 2;
       if (activeMode === 'group3') cost += 4;
       if (activeMode === 'group4') cost += 6;
+      
       return cost;
   };
 
@@ -341,9 +346,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
           aspectRatio, 
           structureRefData, 
           characterDataList, 
-          modelType === 'pro' ? resolution : '1K',
-          modelType, 
-          modelType === 'pro' ? useSearch : false,
+          resolution,
+          'pro', // ALWAYS PRO
+          useSearch,
           useCloudRef, 
           (msg) => addLog(msg)
       );
@@ -359,7 +364,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
           timestamp: Date.now(),
           toolId: feature.id,
           toolName: feature.name['en'],
-          engine: modelType === 'pro' ? `Gemini 3.0 Pro ${resolution}` : 'Gemini 2.5 Flash'
+          engine: `Gemini 3.0 Pro ${resolution}`
         };
         setGeneratedData(newImage);
         
@@ -426,9 +431,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                       </h3>
                       <ul className="space-y-3 text-sm text-slate-300">
                           <li className="flex gap-2">
-                              <span className="text-audi-cyan font-bold">Model Flash vs Pro:</span>
-                              <br/>- <b className="text-white">Flash:</b> Nhanh, rẻ, phù hợp thử nghiệm.
-                              <br/>- <b className="text-white">Pro:</b> Chất lượng cao nhất, chi tiết tốt hơn, hiểu lệnh tốt hơn (Khuyên dùng).
+                              <span className="text-audi-cyan font-bold">Model 3.0 Pro:</span>
+                              Chất lượng cao nhất (Nano Banana Pro), chi tiết tốt hơn, hiểu lệnh tốt hơn.
                           </li>
                           <li className="flex gap-2">
                               <span className="text-audi-pink font-bold">HQ Cloud Link:</span>
@@ -480,7 +484,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                   <div className="flex justify-between items-center p-3 border-b border-white/10 bg-white/5">
                       <div className="flex items-center gap-2">
                           <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                          <span className="font-bold text-xs text-white">Result</span>
+                          <span className="font-bold text-xs text-white">Result (3.0 Pro)</span>
                       </div>
                       <button onClick={() => setStage('input')} className="text-[10px] font-bold text-slate-400 hover:text-white px-2 py-1 rounded bg-white/5 hover:bg-white/10">X</button>
                   </div>
@@ -786,6 +790,15 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
             </div>
 
             <div className="lg:col-span-1 space-y-6">
+                
+                {/* NOTIFICATION BANNER: FLASH DEPRECATED */}
+                <div className="bg-yellow-500/10 border border-yellow-500/30 p-3 rounded-xl flex items-start gap-3 animate-fade-in shadow-[0_0_20px_rgba(234,179,8,0.1)]">
+                    <Icons.Flame className="w-5 h-5 text-yellow-500 shrink-0 mt-0.5 animate-pulse" />
+                    <p className="text-xs text-yellow-200 font-medium leading-relaxed">
+                        Mô hình tạo ảnh AI từ Gemini 2.5 Flash đã lỗi thời, để đảm bảo chất lượng ảnh đầu ra, ứng dụng sẽ chuyển toàn bộ sang sử dụng Gemni 3.0 Pro (Nano Banana Pro) để tạo ảnh.
+                    </p>
+                </div>
+
                 <div className="bg-[#12121a] border border-white/10 rounded-2xl p-5 space-y-5 shadow-lg h-full">
                     <div className="flex items-center justify-between border-b border-white/10 pb-3">
                         <h3 className="font-bold text-white flex items-center gap-2">
@@ -798,26 +811,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                         >
                             <Icons.Info className="w-4 h-4" />
                         </button>
-                    </div>
-
-                    <div className="space-y-2">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase">Chất lượng AI (Model)</label>
-                        <div className="grid grid-cols-2 gap-2">
-                            <button 
-                                onClick={() => setModelType('flash')}
-                                className={`p-3 rounded-xl border text-left transition-all ${modelType === 'flash' ? 'bg-white/10 border-white text-white' : 'border-white/10 text-slate-500 hover:border-white/30'}`}
-                            >
-                                <div className="font-bold text-xs">Flash (Tiết kiệm)</div>
-                                <div className="text-[9px] opacity-70">Tốc độ cao</div>
-                            </button>
-                            <button 
-                                onClick={() => setModelType('pro')}
-                                className={`p-3 rounded-xl border text-left transition-all relative overflow-hidden ${modelType === 'pro' ? 'bg-audi-purple/20 border-audi-purple text-white shadow-[0_0_10px_rgba(183,33,255,0.2)]' : 'border-white/10 text-slate-500 hover:border-white/30'}`}
-                            >
-                                <div className="font-bold text-xs flex items-center gap-1">Pro (Cao cấp) <Icons.Crown className="w-3 h-3 text-audi-yellow"/></div>
-                                <div className="text-[9px] opacity-70">Chi tiết 4K</div>
-                            </button>
-                        </div>
                     </div>
 
                     <div className="space-y-2">
@@ -850,22 +843,23 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                         </div>
                     </div>
 
-                    {modelType === 'pro' && (
-                        <div className="space-y-2 animate-fade-in">
-                            <label className="text-[10px] font-bold text-slate-400 uppercase">Độ phân giải</label>
-                            <div className="flex gap-2 bg-black/30 p-1 rounded-lg">
-                                {['1K', '2K', '4K'].map(r => (
-                                    <button 
-                                        key={r} 
-                                        onClick={() => setResolution(r as any)} 
-                                        className={`flex-1 py-1.5 rounded text-[10px] font-bold transition-all ${resolution === r ? 'bg-audi-purple text-white shadow' : 'text-slate-500 hover:text-white'}`}
-                                    >
-                                        {r}
-                                    </button>
-                                ))}
-                            </div>
+                    <div className="space-y-2 animate-fade-in">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase">Độ phân giải (3.0 Pro)</label>
+                        <div className="flex gap-2 bg-black/30 p-1 rounded-lg">
+                            {['1K', '2K', '4K'].map(r => (
+                                <button 
+                                    key={r} 
+                                    onClick={() => setResolution(r as any)} 
+                                    className={`flex-1 py-2 rounded text-[10px] font-bold transition-all ${resolution === r ? 'bg-audi-purple text-white shadow' : 'text-slate-500 hover:text-white'}`}
+                                >
+                                    {r}
+                                </button>
+                            ))}
                         </div>
-                    )}
+                        <div className="text-[9px] text-center text-slate-500 mt-1">
+                            1K: 5 VC • 2K: 10 VC • 4K: 15 VC
+                        </div>
+                    </div>
 
                     <div className="pt-2 border-t border-white/10 space-y-2">
                         <div 

@@ -223,14 +223,10 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       setCharacters(prev => prev.map(c => c.id === charId ? { ...c, isFaceLocked: !c.isFaceLocked } : c));
   }
 
-  // --- ROBUST BASE64 DOWNLOAD (Fixes "Open in Tab" bug) ---
   const handleForceDownload = (dataUri: string, filename: string) => {
       if (!dataUri) return;
-
-      // 1. If Base64, convert to Blob and download directly
       if (dataUri.startsWith('data:')) {
           try {
-              // Split metadata and data
               const arr = dataUri.split(',');
               const mime = arr[0].match(/:(.*?);/)?.[1];
               const bstr = atob(arr[1]);
@@ -240,28 +236,20 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                   u8arr[n] = bstr.charCodeAt(n);
               }
               const blob = new Blob([u8arr], { type: mime });
-              
-              // Create Object URL
               const url = window.URL.createObjectURL(blob);
-              
               const link = document.createElement('a');
               link.href = url;
               link.download = filename;
               document.body.appendChild(link);
               link.click();
-              
-              // Cleanup
               document.body.removeChild(link);
               window.URL.revokeObjectURL(url);
-              
               notify('Đã lưu ảnh về máy!', 'success');
               return;
           } catch (e) {
               console.error("Blob download failed", e);
           }
       }
-
-      // 2. Fallback for remote URLs
       window.open(dataUri, '_blank');
   };
 
@@ -277,7 +265,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       if (activeMode === 'couple') cost += 2;
       if (activeMode === 'group3') cost += 4;
       if (activeMode === 'group4') cost += 6;
-      
       return cost;
   };
 
@@ -302,7 +289,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
     
     setStage('processing');
     setProgressLogs([]);
-    addLog(lang === 'vi' ? 'Đang khởi tạo...' : 'Initializing...');
+    addLog(lang === 'vi' ? 'Đang khởi tạo Engine...' : 'Initializing Engine...');
 
     try {
       await new Promise(r => setTimeout(r, 500));
@@ -310,18 +297,20 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       
       let structureRefData: string | undefined = undefined;
       let sourceForStructure = refImage || feature.preview_image;
+      
+      // Convert HTTP URL to Base64 if needed
       if (sourceForStructure.startsWith('http')) {
+          addLog("Pre-processing Reference Image...");
           const b64 = await urlToBase64(sourceForStructure);
           if (b64) sourceForStructure = b64;
       }
       
+      // --- CRITICAL UPDATE: ALWAYS PROCESS REF IMAGE FOR STRUCTURE ---
       if (sourceForStructure) {
+          addLog("Locking Structure & Composition...");
           const optimizedStructure = await optimizePayload(sourceForStructure);
-          
-          // --- CRITICAL FIX FOR SINGLE MODE ---
-          // Always use Solid Fence (Grey Box) for Pose Reference.
-          // This forces the AI to regenerate the scene instead of lazy copying the input image.
-          // It works perfectly for Couple mode, now applying to Single mode.
+          // Pass TRUE to isPoseRef to activate the "Pose Extractor" overlay logic if needed, 
+          // but mainly to resize/pad correctly.
           structureRefData = await createSolidFence(optimizedStructure, aspectRatio, true);
       }
       
@@ -340,6 +329,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       if (selectedStyle) finalPrompt += `, style: ${selectedStyle}`;
       if (negativePrompt) finalPrompt += ` --no ${negativePrompt}`;
       
+      addLog("Sending to Gemini Intelligence Grid...");
+
       const result = await generateImage(
           finalPrompt, 
           aspectRatio, 
@@ -354,7 +345,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
 
       if (result) {
         addLog(lang === 'vi' ? 'Hoàn tất!' : 'Finalizing...');
-        
         setResultImage(result); 
         
         const newImage: GeneratedImage = {
@@ -369,7 +359,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
         setGeneratedData(newImage);
         
         saveImageToStorage(newImage).catch(console.error);
-        
         setStage('result');
         notify(lang === 'vi' ? 'Tạo ảnh thành công!' : 'Generation successful!', 'success');
       } else {
@@ -399,119 +388,46 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       { id: '4:3', label: '4:3', desc: 'Ngang' },
   ];
 
-  const renderGuideContent = () => {
-      switch(guideTopic) {
-          case 'chars':
-              return (
-                  <>
-                      <h3 className="text-xl font-bold text-audi-yellow mb-4 flex items-center gap-2">
-                          <Icons.User className="w-6 h-6" /> Hướng dẫn Upload Nhân vật
-                      </h3>
-                      <ul className="space-y-3 text-sm text-slate-300">
-                          <li className="flex gap-2">
-                              <span className="text-audi-cyan font-bold">1. Ảnh Toàn Thân (Body):</span>
-                              Dùng để AI học trang phục, dáng đứng và cấu trúc cơ thể. Nên dùng ảnh rõ ràng, ít chi tiết thừa.
-                          </li>
-                          <li className="flex gap-2">
-                              <span className="text-audi-pink font-bold">2. Ảnh Mặt (Face):</span>
-                              <span className="bg-red-500/20 text-red-400 px-1 rounded text-xs font-bold h-fit mt-0.5">QUAN TRỌNG</span>
-                              Dùng để ghép mặt (Face Swap). Hãy chọn ảnh cận mặt, chính diện, rõ nét, không bị che khuất.
-                          </li>
-                          <li className="flex gap-2">
-                              <span className="text-white font-bold">3. Khóa/Mở Khóa:</span>
-                              Nút <Icons.Lock className="w-3 h-3 inline text-audi-cyan"/> dùng để BẬT tính năng ghép mặt. Nếu TẮT <Icons.Unlock className="w-3 h-3 inline text-red-500"/>, AI sẽ tự sáng tạo khuôn mặt mới.
-                          </li>
-                      </ul>
-                  </>
-              );
-          case 'settings':
-              return (
-                  <>
-                      <h3 className="text-xl font-bold text-audi-yellow mb-4 flex items-center gap-2">
-                          <Icons.Settings className="w-6 h-6" /> Cấu hình Nâng cao
-                      </h3>
-                      <ul className="space-y-3 text-sm text-slate-300">
-                          <li className="flex gap-2">
-                              <span className="text-audi-cyan font-bold">Model Flash vs Pro:</span>
-                              <br/>- <b className="text-white">Flash:</b> Nhanh, rẻ, phù hợp thử nghiệm.
-                              <br/>- <b className="text-white">Pro:</b> Chất lượng cao nhất, chi tiết tốt hơn, hiểu lệnh tốt hơn (Khuyên dùng).
-                          </li>
-                          <li className="flex gap-2">
-                              <span className="text-audi-pink font-bold">HQ Cloud Link:</span>
-                              Khi BẬT, ảnh gốc của bạn sẽ được gửi lên Cloud để AI phân tích kỹ hơn &rarr; Kết quả giống thật hơn 30%. (Tốn thêm Vcoin).
-                          </li>
-                          <li className="flex gap-2">
-                              <span className="text-white font-bold">Độ phân giải:</span>
-                              2K là chuẩn đẹp nhất. 4K dành cho in ấn hoặc màn hình lớn (tốn nhiều Vcoin hơn).
-                          </li>
-                      </ul>
-                  </>
-              );
-          default: return null;
-      }
-  }
-
-  if (stage === 'processing') {
-      return (
-          <div className="flex flex-col items-center justify-center min-h-[60vh] text-center animate-fade-in w-full max-w-md mx-auto">
-              <div className="relative w-24 h-24 mb-8">
-                  <div className="absolute inset-0 rounded-full border-4 border-slate-800"></div>
-                  <div className="absolute inset-0 rounded-full border-4 border-t-audi-pink border-r-audi-purple border-b-transparent border-l-transparent animate-spin"></div>
-                  <div className="absolute inset-4 rounded-full bg-white/5 flex items-center justify-center animate-pulse">
-                      <Icons.Sparkles className="w-10 h-10 text-white" />
-                  </div>
-              </div>
-              <h2 className="font-game text-2xl font-bold text-white mb-2 tracking-widest animate-neon-flash">
-                  {lang === 'vi' ? 'AI ĐANG VẼ...' : 'GENERATING...'}
-              </h2>
-              <p className="text-audi-cyan font-mono text-sm max-w-xs mx-auto mb-8 animate-pulse font-bold">
-                  {progressMsg}
-              </p>
-              <div className="w-full bg-[#12121a] border border-white/10 rounded-2xl p-4 space-y-2 shadow-2xl text-left h-48 overflow-y-auto custom-scrollbar">
-                  {progressLogs.map((log, idx) => (
-                      <div key={idx} className="flex items-start gap-2 text-xs font-mono border-b border-white/5 pb-1 last:border-0 animate-fade-in">
-                          <span className="text-audi-pink"> &gt; </span>
-                          <span className={idx === progressLogs.length - 1 ? 'text-white font-bold' : 'text-slate-400'}>{log}</span>
-                      </div>
-                  ))}
-              </div>
-          </div>
-      );
-  }
-
-  if (stage === 'result' && resultImage) {
-      return (
-          <div className="flex flex-col items-center animate-fade-in pb-20 w-full">
-              <div className="w-full max-w-xl bg-[#090014] border border-white/10 rounded-3xl overflow-hidden shadow-2xl mx-auto">
-                  <div className="flex justify-between items-center p-3 border-b border-white/10 bg-white/5">
-                      <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                          <span className="font-bold text-xs text-white">Result</span>
-                      </div>
-                      <button onClick={() => setStage('input')} className="text-[10px] font-bold text-slate-400 hover:text-white px-2 py-1 rounded bg-white/5 hover:bg-white/10">X</button>
-                  </div>
-                  <div className="relative bg-black/50 min-h-[300px] flex items-center justify-center p-4">
-                      <img src={resultImage} alt="Result" className="max-w-full max-h-[50vh] object-contain rounded-lg shadow-[0_0_30px_rgba(0,0,0,0.5)] border border-white/5" />
-                  </div>
-                  <div className="p-4 bg-[#12121a] flex flex-col gap-3">
-                      <div className="flex gap-2">
-                          <button 
-                            onClick={() => handleForceDownload(resultImage, `auditionai-image-${Date.now()}.png`)}
-                            className="flex-1 px-4 py-2.5 bg-white text-black rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-audi-cyan transition-colors text-sm"
-                          >
-                              <Icons.Download className="w-4 h-4" /> Tải Về
-                          </button>
-                          <button onClick={() => setStage('input')} className="flex-1 px-4 py-2.5 bg-audi-pink text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-pink-600 transition-colors shadow-[0_0_15px_#FF0099] text-sm">
-                              <Icons.Wand className="w-4 h-4" /> Tạo Tiếp
-                          </button>
-                      </div>
-                  </div>
-              </div>
-          </div>
-      );
-  }
-
   const TipIcon = SMART_TIPS[currentTipIdx].icon;
+
+  const renderGuideContent = () => {
+    if (guideTopic === 'chars') {
+        return (
+            <div className="space-y-4">
+                <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                    <Icons.User className="w-6 h-6 text-audi-pink" /> 
+                    {lang === 'vi' ? 'Hướng dẫn Upload Nhân Vật' : 'Character Upload Guide'}
+                </h3>
+                <p className="text-sm text-slate-300">
+                    {lang === 'vi' ? 'Để AI nhận diện tốt nhất nhân vật của bạn, hãy tuân thủ các quy tắc sau:' : 'For best results, follow these rules:'}
+                </p>
+                <ul className="space-y-2 text-sm text-slate-400">
+                    <li className="flex gap-2"><Icons.Check className="w-4 h-4 text-green-500 shrink-0"/> {lang === 'vi' ? 'Ảnh rõ nét, đủ ánh sáng.' : 'Clear, well-lit photos.'}</li>
+                    <li className="flex gap-2"><Icons.Check className="w-4 h-4 text-green-500 shrink-0"/> {lang === 'vi' ? 'Nên dùng ảnh toàn thân cho mục "Ảnh Body".' : 'Use full-body shot for "Body Image".'}</li>
+                    <li className="flex gap-2"><Icons.Check className="w-4 h-4 text-green-500 shrink-0"/> {lang === 'vi' ? 'Ảnh mặt nên chụp chính diện, không bị che khuất.' : 'Face photo should be front-facing, unobstructed.'}</li>
+                    <li className="flex gap-2"><Icons.X className="w-4 h-4 text-red-500 shrink-0"/> {lang === 'vi' ? 'Tránh ảnh quá tối, bị mờ hoặc quá xa.' : 'Avoid dark, blurry, or distant photos.'}</li>
+                </ul>
+            </div>
+        );
+    }
+    if (guideTopic === 'settings') {
+        return (
+            <div className="space-y-4">
+                <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                    <Icons.Settings className="w-6 h-6 text-audi-cyan" /> 
+                    {lang === 'vi' ? 'Cấu hình Nâng cao' : 'Advanced Settings'}
+                </h3>
+                 <ul className="space-y-3 text-sm text-slate-400">
+                    <li><strong className="text-white">Model Flash:</strong> {lang === 'vi' ? 'Tốc độ nhanh, giá rẻ (1 Vcoin), phù hợp thử nghiệm.' : 'Fast speed, cheap (1 Vcoin), good for testing.'}</li>
+                    <li><strong className="text-white">Model Pro:</strong> {lang === 'vi' ? 'Chất lượng 4K, chi tiết cao (2 Vcoin), phù hợp in ấn.' : '4K Quality, high detail (2 Vcoin), good for printing.'}</li>
+                    <li><strong className="text-white">{lang === 'vi' ? 'Tỉ lệ khung hình' : 'Aspect Ratio'}:</strong> 9:16 (Story), 16:9 (PC), 1:1 (Avatar).</li>
+                    <li><strong className="text-white">HQ Cloud Link:</strong> {lang === 'vi' ? 'Bật để lưu ảnh gốc chất lượng cao nhất lên Cloud (R2).' : 'Enable to save highest quality raw image to Cloud (R2).'}</li>
+                </ul>
+            </div>
+        );
+    }
+    return null;
+  };
 
   return (
     <div className="flex flex-col items-center w-full max-w-5xl mx-auto pb-48 animate-fade-in relative">
@@ -767,6 +683,10 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                                     <img src={refImage} className="w-full h-full object-cover opacity-80" alt="Ref" />
                                     <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                                         <Icons.X className="w-6 h-6 text-white" onClick={(e) => { e.stopPropagation(); setRefImage(null); }} />
+                                    </div>
+                                    {/* VISUAL INDICATOR FOR STRUCTURE MODE */}
+                                    <div className="absolute bottom-0 left-0 right-0 bg-audi-purple/80 text-white text-[9px] font-bold text-center py-1">
+                                        POSE REF
                                     </div>
                                 </>
                             ) : (

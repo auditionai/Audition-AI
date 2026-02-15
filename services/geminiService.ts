@@ -89,8 +89,36 @@ const processDigitalTwinMode = (
 ): { systemPrompt: string, parts: any[] } => {
     
     const parts = [];
+    const isSingle = charDescriptions.length === 1;
+
+    // --- REFINED PROMPT STRATEGY FOR SINGLE MODE WITH REF ---
+    if (isSingle && refImagePart) {
+        // PRIORITY 1: CHARACTER REFERENCE (Identity)
+        if (charParts.length > 0) {
+            parts.push({ text: "INPUT A - CHARACTER REFERENCE (SOURCE OF IDENTITY & OUTFIT): Use the face, hair, and clothing from this image." });
+            parts.push(...charParts);
+        }
+
+        // PRIORITY 2: POSE REFERENCE (Structure)
+        parts.push({ text: "INPUT B - POSE REFERENCE (SOURCE OF STRUCTURE): Use the pose, camera angle, and composition from this image. IGNORE the character details, clothes, and colors." });
+        parts.push(refImagePart);
+
+        const systemPrompt = `** SYSTEM: CHARACTER RE-POSING TASK **
+        [OBJECTIVE]: Render the character from [INPUT A] into the exact pose and composition of [INPUT B].
+
+        [CRITICAL INSTRUCTIONS]:
+        1. IDENTITY LOCK: The output character MUST have the exact face, hairstyle, and OUTFIT of [INPUT A].
+        2. STRUCTURE LOCK: The output MUST have the exact pose, body proportions, and camera angle of [INPUT B].
+        3. CLOTHING RULE: Do NOT mix the clothes. You must strictly use the outfit from [INPUT A]. Ignore the outfit in [INPUT B].
+        4. SCENE CONTEXT: "${prompt}"
+        5. RENDER QUALITY: 8K, Unreal Engine 5, detailed textures.
+        `;
+        
+        return { systemPrompt, parts };
+    }
+
+    // --- STANDARD LOGIC FOR OTHER MODES ---
     
-    // STRUCTURE THE PAYLOAD CAREFULLY
     if (refImagePart) {
         parts.push({ text: "POSE REFERENCE (USE FOR STRUCTURE ONLY):" });
         parts.push(refImagePart);
@@ -101,37 +129,13 @@ const processDigitalTwinMode = (
         parts.push(...charParts);
     }
 
-    const isSingle = charDescriptions.length === 1;
     let systemPrompt = "";
 
     if (isSingle) {
-        if (refImagePart) {
-            // ALIGNED WITH COUPLE LOGIC FOR BETTER CONSISTENCY
-            systemPrompt = `** SYSTEM: 3D CHARACTER RECONSTRUCTION **
-
-            [TASK]: Recreate the character based on the provided Pose Reference.
-
-            [INPUTS]:
-            1. POSE REFERENCE: Use ONLY the Pose, Camera Angle, and Composition from this image.
-            2. CHARACTER REFERENCE: The target identity (Face/Outfit) to render.
-
-            [MANDATE]:
-            - You act as a 3D Rendering Engine (Unreal Engine 5).
-            - DO NOT simply copy the Pose Reference image. You must REDRAW the scene.
-            - SWAP the character identity completely to match the Character Reference.
-            - If no Character Reference image is provided, generate based on text description: "${prompt}"
-
-            [OUTPUT SPEC]:
-            - High Fidelity 3D Render
-            - Sharp focus
-            - Detailed texture
-            `;
-        } else {
-            systemPrompt = `** SYSTEM: 3D CHARACTER CREATOR **
-            Create a stunning 3D game character (Audition Online/Sims style).
-            - Detail: 8K, Unreal Engine 5, Raytracing.
-            - Context: "${prompt}"`;
-        }
+        systemPrompt = `** SYSTEM: 3D CHARACTER CREATOR **
+        Create a stunning 3D game character (Audition Online/Sims style).
+        - Detail: 8K, Unreal Engine 5, Raytracing.
+        - Context: "${prompt}"`;
     } else {
         systemPrompt = `** SYSTEM: 3D CHARACTER RECONSTRUCTION **
     
@@ -223,11 +227,15 @@ export const generateImage = async (
     const payload = processDigitalTwinMode(prompt, refImagePart, allParts, charDescriptions, modelTier);
     const finalParts = [...payload.parts, { text: payload.systemPrompt }];
 
+    // Strict system instruction for single mode with ref
+    let systemInstruction = "Create high quality 3D character render. Follow the reference image structure.";
+    if (characterDataList.length === 1 && styleRefBase64) {
+        systemInstruction = "STRICT INSTRUCTION: You are an Image Composition Engine. You MUST combine the IDENTITY (Face, Clothes) of Input A with the POSE/STRUCTURE of Input B. Do not mix them up. The output must strictly follow the pose of Input B.";
+    }
+
     const config: any = {
         imageConfig: { aspectRatio: aspectRatio },
-        systemInstruction: characterDataList.length === 1 && styleRefBase64
-            ? "CRITICAL: RECONSTRUCT THE SCENE WITH THE NEW CHARACTER. DO NOT COPY THE INPUT PIXELS."
-            : "Create high quality 3D character render. Follow the reference image structure.", 
+        systemInstruction: systemInstruction,
         safetySettings: [
             { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
             { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },

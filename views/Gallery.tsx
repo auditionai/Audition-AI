@@ -161,7 +161,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
 
       {/* Lightbox / Details Modal (UPDATED OVERLAY) */}
       {selectedImage && createPortal(
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4 animate-fade-in">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fade-in">
            <div className="relative w-full max-w-4xl max-h-[90vh] flex flex-col md:flex-row bg-slate-900 rounded-3xl overflow-hidden border border-white/10 shadow-2xl">
               
               <button 

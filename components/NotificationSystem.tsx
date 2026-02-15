@@ -112,7 +112,7 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
 
       {/* --- CONFIRM MODAL OVERLAY (TRANSPARENT GLASS) --- */}
       {confirmModal && confirmModal.isOpen && (
-        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/80 p-4 animate-fade-in">
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/50 backdrop-blur-md p-4 animate-fade-in">
           <div className="bg-[#12121a] border border-white/20 p-6 rounded-3xl max-w-sm w-full shadow-2xl transform scale-100 transition-all">
             
             <div className="w-16 h-16 mx-auto bg-white/5 rounded-full flex items-center justify-center mb-4 border border-white/10">

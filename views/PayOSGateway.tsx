@@ -56,7 +56,7 @@ export const PayOSGateway: React.FC<PayOSGatewayProps> = ({ transaction, onSucce
   const qrUrl = `https://img.vietqr.io/image/${BANK_INFO.bankId}-${BANK_INFO.accountNo}-${BANK_INFO.template}.png?amount=${transaction.amount}&addInfo=${transaction.code}&accountName=${encodeURIComponent(BANK_INFO.accountName)}`;
 
   return (
-    <div className="fixed inset-0 z-[200] bg-black/80 flex items-center justify-center font-sans text-slate-800 animate-fade-in overflow-y-auto">
+    <div className="fixed inset-0 z-[200] bg-black/50 backdrop-blur-md flex items-center justify-center font-sans text-slate-800 animate-fade-in overflow-y-auto">
         <div className="w-full max-w-5xl bg-white shadow-2xl rounded-xl overflow-hidden flex flex-col md:flex-row min-h-[600px] m-4">
             
             {/* LEFT: Order Info */}

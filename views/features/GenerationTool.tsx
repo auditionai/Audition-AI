@@ -25,6 +25,21 @@ interface CharacterInput {
   isFaceLocked: boolean; // New: Toggle for Face Swap
 }
 
+// --- SMART TIPS DATA ---
+const SMART_TIPS = [
+    { icon: Icons.Sparkles, text: "✨ Mẹo: Để ảnh đẹp nhất, hãy tải lên ảnh nhân vật đã tách nền (PNG trong suốt)." },
+    { icon: Icons.Zap, text: "⚡ Tip: Để khuôn mặt sắc nét, hãy dùng ảnh chụp cận mặt từ Patch hoặc đã qua làm nét (Remini)." },
+    { icon: Icons.Crown, text: "👑 Lưu ý: Model Pro tốn nhiều Vcoin hơn nhưng độ chi tiết trang phục gấp đôi Flash." },
+    { icon: Icons.Palette, text: "🎨 Mẹo: Nhập mô tả màu sắc trang phục cụ thể (ví dụ: váy đỏ, giày trắng) để AI vẽ đúng ý." },
+    { icon: Icons.Unlock, text: "🔓 Tip: Tắt 'Khóa Mặt' nếu bạn muốn AI tự sáng tạo khuôn mặt mới ngẫu nhiên." },
+    { icon: Icons.Image, text: "📸 Mẹo: Ảnh mẫu (Ref) nên có góc chụp tương đồng với ý tưởng bạn muốn tạo." },
+    { icon: Icons.MessageCircle, text: "✍️ Tip: Bí ý tưởng? Dùng nút 'AI Viết Hộ' để có prompt chuẩn style Audition." },
+    { icon: Icons.Monitor, text: "🖥️ Lưu ý: Độ phân giải 4K rất nét, thích hợp in ấn nhưng sẽ tốn thời gian xử lý hơn." }
+];
+
+// --- TUTORIAL VIDEO ID (Youtube) ---
+const TUTORIAL_VIDEO_ID = "dQw4w9WgXcQ"; // Thay thế ID này bằng ID video hướng dẫn thực tế của bạn
+
 export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang }) => {
   const { notify } = useNotification();
   const [stage, setStage] = useState<Stage>('input');
@@ -48,14 +63,24 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
   const [useSearch, setUseSearch] = useState(false); 
   const [useCloudRef, setUseCloudRef] = useState(true);
 
-  // --- GUIDE STATE ---
+  // --- GUIDE & TIPS STATE ---
   const [guideTopic, setGuideTopic] = useState<'chars' | 'prompt' | 'settings' | null>(null);
+  const [currentTipIdx, setCurrentTipIdx] = useState(0);
+  const [showVideo, setShowVideo] = useState(false);
 
   const [resultImage, setResultImage] = useState<string | null>(null);
   const [generatedData, setGeneratedData] = useState<GeneratedImage | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const activeUploadType = useRef<{ charId?: number, type: 'body' | 'face' | 'ref' } | null>(null);
+
+  // Rotate Tips Effect
+  useEffect(() => {
+      const interval = setInterval(() => {
+          setCurrentTipIdx(prev => (prev + 1) % SMART_TIPS.length);
+      }, 5000); // 5 seconds rotation
+      return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     if (feature.id.includes('couple')) handleModeChange('couple');
@@ -392,11 +417,34 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       );
   }
 
+  const TipIcon = SMART_TIPS[currentTipIdx].icon;
+
   return (
     <div className="flex flex-col items-center w-full max-w-5xl mx-auto pb-48 animate-fade-in relative">
         <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/*" />
 
-        {/* --- GUIDE MODAL --- */}
+        {/* --- VIDEO TUTORIAL MODAL --- */}
+        {showVideo && (
+            <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-fade-in" onClick={() => setShowVideo(false)}>
+                <div className="relative w-full max-w-4xl aspect-video bg-black rounded-2xl overflow-hidden border border-white/20 shadow-[0_0_50px_rgba(255,255,255,0.1)]" onClick={e => e.stopPropagation()}>
+                    <button 
+                        onClick={() => setShowVideo(false)} 
+                        className="absolute -top-10 right-0 md:top-4 md:right-4 bg-white/10 hover:bg-red-600 text-white p-2 rounded-full transition-colors z-50 backdrop-blur-md"
+                    >
+                        <Icons.X className="w-6 h-6" />
+                    </button>
+                    <iframe 
+                        className="w-full h-full"
+                        src={`https://www.youtube.com/embed/${TUTORIAL_VIDEO_ID}?autoplay=1`}
+                        title="Hướng dẫn sử dụng"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                    ></iframe>
+                </div>
+            </div>
+        )}
+
+        {/* --- GUIDE MODAL (Existing) --- */}
         {guideTopic && (
             <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fade-in" onClick={() => setGuideTopic(null)}>
                 <div className="bg-[#12121a] w-full max-w-md p-6 rounded-2xl border border-audi-yellow/50 shadow-[0_0_30px_rgba(251,218,97,0.2)] relative" onClick={e => e.stopPropagation()}>
@@ -414,7 +462,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
         )}
 
         {/* Mode Selector */}
-        <div className="w-full flex justify-center mb-6">
+        <div className="w-full flex justify-center mb-4">
             <div className="bg-[#12121a] p-1.5 rounded-2xl border border-white/10 flex gap-1 shadow-lg overflow-x-auto no-scrollbar max-w-full">
                 {[
                     { id: 'single', label: { vi: 'Đơn', en: 'Single' }, icon: Icons.User },
@@ -434,22 +482,49 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
             </div>
         </div>
 
-        <div className="w-full grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* --- SMART TIPS BANNER (NEW) --- */}
+        <div className="w-full bg-gradient-to-r from-orange-500/10 via-yellow-500/10 to-orange-500/10 border-y border-white/5 md:border md:rounded-xl md:mb-6 p-2 md:p-3 flex items-center justify-center gap-3 backdrop-blur-md overflow-hidden relative min-h-[40px]">
+            <div key={currentTipIdx} className="flex items-center gap-2 animate-fade-in transition-all duration-500">
+                <TipIcon className="w-4 h-4 md:w-5 md:h-5 text-audi-yellow shrink-0 animate-bounce-slow" />
+                <span className="text-[10px] md:text-xs font-medium text-slate-200 line-clamp-2 md:line-clamp-1 text-center md:text-left">
+                    {SMART_TIPS[currentTipIdx].text}
+                </span>
+            </div>
+            {/* Progress Dots */}
+            <div className="absolute bottom-1 md:right-3 flex gap-1 justify-center w-full md:w-auto">
+                {SMART_TIPS.map((_, i) => (
+                    <div key={i} className={`w-1 h-1 rounded-full transition-all ${i === currentTipIdx ? 'bg-audi-yellow w-3' : 'bg-white/10'}`}></div>
+                ))}
+            </div>
+        </div>
+
+        <div className="w-full grid grid-cols-1 lg:grid-cols-3 gap-6 mt-4 md:mt-0">
             
             {/* LEFT: CHARACTER INPUT SECTION */}
             <div className="lg:col-span-2 space-y-4">
                 
-                {/* Header with Help Button */}
+                {/* Header with Help & Video Button */}
                 <div className="flex items-center justify-between px-2">
                     <h3 className="font-bold text-white text-sm uppercase flex items-center gap-2">
                         <Icons.User className="w-4 h-4 text-audi-pink" /> 1. Upload Nhân Vật
                     </h3>
-                    <button 
-                        onClick={() => setGuideTopic('chars')}
-                        className="flex items-center gap-1 text-[10px] font-bold text-audi-yellow hover:text-white transition-colors bg-audi-yellow/10 px-2 py-1 rounded-full border border-audi-yellow/30 animate-pulse"
-                    >
-                        <Icons.Info className="w-3 h-3" /> Hướng dẫn
-                    </button>
+                    <div className="flex gap-2">
+                        {/* Video Button */}
+                        <button 
+                            onClick={() => setShowVideo(true)}
+                            className="flex items-center gap-1 text-[10px] font-bold text-white hover:scale-105 transition-transform bg-red-600 px-3 py-1 rounded-full shadow-[0_0_10px_rgba(220,38,38,0.5)] border border-red-400 group"
+                        >
+                            <Icons.Play className="w-3 h-3 fill-white group-hover:animate-pulse" />
+                            Video HD
+                        </button>
+                        {/* Guide Button */}
+                        <button 
+                            onClick={() => setGuideTopic('chars')}
+                            className="flex items-center gap-1 text-[10px] font-bold text-audi-yellow hover:text-white transition-colors bg-audi-yellow/10 px-2 py-1 rounded-full border border-audi-yellow/30"
+                        >
+                            <Icons.Info className="w-3 h-3" /> Hướng dẫn
+                        </button>
+                    </div>
                 </div>
 
                 {/* Mobile Tab Navigation */}

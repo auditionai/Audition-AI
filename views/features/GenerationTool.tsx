@@ -38,7 +38,7 @@ const SMART_TIPS = [
 ];
 
 // --- TUTORIAL VIDEO ID (Youtube) ---
-const TUTORIAL_VIDEO_ID = "dQw4w9WgXcQ"; // Thay thế ID này bằng ID video hướng dẫn thực tế của bạn
+const TUTORIAL_VIDEO_ID = "ba2WR8txe_c"; 
 
 export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang }) => {
   const { notify } = useNotification();

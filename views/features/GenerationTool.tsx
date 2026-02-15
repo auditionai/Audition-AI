@@ -386,7 +386,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
 
   const styles = [
       { id: '3d', name: '3D Game', icon: Icons.MessageCircle }, 
-      { id: 'blindbox', name: 'Blind Box', icon: Icons.Gift },
       { id: 'anime', name: 'Anime 3D', icon: Icons.Zap },
       { id: 'cinematic', name: 'Cinematic', icon: Icons.Play },
       { id: 'fashion', name: 'Fashion', icon: Icons.ShoppingBag },

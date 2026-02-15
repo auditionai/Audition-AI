@@ -200,95 +200,82 @@ export const saveGiftcodePromoConfig = async (text: string, isActive: boolean): 
     return { success: false, error: "No DB" };
 }
 
-// --- USER SERVICES (RETRY LOGIC) ---
-
-// Helper function to wait
-const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+// --- USER SERVICES (FIXED: ENSURE PROFILE EXISTS) ---
 
 export const getUserProfile = async (): Promise<UserProfile> => {
     if (supabase) {
-        // 1. Get Auth User
         const { data: { user } } = await supabase.auth.getUser();
         
         if (user) {
             try {
-                // 2. RETRY LOGIC: Try fetching Profile from DB multiple times
-                // This accounts for the delay between Auth creation and DB Trigger completion
-                let finalProfile = null;
-                let attempts = 0;
-                
-                while (attempts < 3 && !finalProfile) {
-                    const { data, error } = await supabase
-                        .from('users')
-                        .select('*')
-                        .eq('id', user.id) // Correct: users.id
-                        .maybeSingle();
-                    
-                    if (data) {
-                        finalProfile = data;
-                        break;
-                    }
-                    
-                    // If not found, wait and try again
-                    attempts++;
-                    if (attempts < 3) {
-                        console.log(`Profile not found in DB yet. Retrying (${attempts}/3)...`);
-                        await wait(1000); // Wait 1 second
-                    }
-                }
+                // 1. Fetch Profile
+                const { data: profile, error } = await supabase
+                    .from('users')
+                    .select('*')
+                    .eq('id', user.id)
+                    .maybeSingle();
 
-                // 3. FORCE CREATE IF STILL MISSING (Last Resort)
-                if (!finalProfile) {
-                    console.warn("Profile still missing after retries. Attempting Insert...");
+                // 2. If missing, return a special object that prompts creation on next action
+                // OR ideally, create it now.
+                if (!profile) {
+                    console.warn("Profile missing in DB. Attempting fast creation...");
                     
                     const metadata = user.user_metadata || {};
-                    const newProfilePayload = {
-                        id: user.id, // Correct: users.id
+                    const newProfile = {
+                        id: user.id,
                         email: user.email,
                         display_name: metadata.full_name || metadata.name || user.email?.split('@')[0] || 'Dancer',
-                        photo_url: metadata.avatar_url || metadata.picture || '',
+                        photo_url: metadata.avatar_url || '',
                         diamonds: 0,
                         is_admin: false,
                         consecutive_check_ins: 0,
                         created_at: new Date().toISOString()
                     };
 
-                    const { data: inserted, error: insertError } = await supabase
+                    const { error: insertError } = await supabase
                         .from('users')
-                        .upsert(newProfilePayload, { onConflict: 'id' })
-                        .select()
-                        .single();
+                        .insert(newProfile); // Try direct insert
 
-                    if (!insertError) {
-                        finalProfile = inserted;
+                    if (insertError) {
+                        console.error("Auto-create profile failed:", insertError);
+                        // If blocked by RLS, we can't do much from here except ask user to run SQL.
                     } else {
-                        console.error("Critical: Failed to create user profile.", insertError);
+                        // Return the new profile immediately
+                        return {
+                            id: user.id,
+                            username: newProfile.display_name,
+                            email: newProfile.email || '',
+                            avatar: newProfile.photo_url || MOCK_USER.avatar,
+                            balance: newProfile.diamonds,
+                            role: 'user',
+                            isVip: false,
+                            streak: 0,
+                            lastCheckin: null,
+                            checkinHistory: [], 
+                            usedGiftcodes: []
+                        };
                     }
                 }
 
-                // 4. Construct Return Object using whatever data we have
-                // Even if finalProfile is null, we return a fallback object with the CORRECT ID
-                // so that subsequent calls (like checkin) use the correct Auth ID.
-                const profileData = finalProfile || {};
+                const finalProfile = profile || {};
                 const metadata = user.user_metadata || {};
                 
                 return {
-                    id: user.id, // ALWAYS use Auth ID as the source of truth
-                    username: profileData.display_name || metadata.full_name || user.email?.split('@')[0] || 'Dancer',
-                    email: profileData.email || user.email || '',
-                    avatar: profileData.photo_url || metadata.avatar_url || MOCK_USER.avatar,
-                    balance: profileData.diamonds || 0,
-                    role: profileData.is_admin ? 'admin' : 'user',
+                    id: user.id,
+                    username: finalProfile.display_name || metadata.full_name || user.email?.split('@')[0] || 'Dancer',
+                    email: finalProfile.email || user.email || '',
+                    avatar: finalProfile.photo_url || metadata.avatar_url || MOCK_USER.avatar,
+                    balance: finalProfile.diamonds || 0,
+                    role: finalProfile.is_admin ? 'admin' : 'user',
                     isVip: false,
-                    streak: profileData.consecutive_check_ins || 0,
-                    lastCheckin: profileData.last_check_in,
+                    streak: finalProfile.consecutive_check_ins || 0,
+                    lastCheckin: finalProfile.last_check_in,
                     checkinHistory: [], 
                     usedGiftcodes: []
                 };
 
             } catch (e) {
                 console.error("Critical User Fetch Error:", e);
-                // Return basic auth info as fallback
                 return {
                     id: user.id,
                     username: user.email?.split('@')[0] || 'Unknown',
@@ -306,7 +293,6 @@ export const getUserProfile = async (): Promise<UserProfile> => {
         }
     }
 
-    // Only return MOCK_USER if NOT logged in at all
     let localUser = getStorage('dmp_user');
     if (!localUser) {
         localUser = MOCK_USER;
@@ -315,33 +301,60 @@ export const getUserProfile = async (): Promise<UserProfile> => {
     return localUser;
 };
 
-// UPDATED: Now returns boolean indicating success
-export const updateUserBalance = async (amount: number, reason: string, type: 'topup' | 'usage' | 'reward' | 'refund' | 'admin_adjustment' | 'giftcode' | 'milestone_reward'): Promise<{ success: boolean, newBalance: number }> => {
-    const user = await getUserProfile();
+// UPDATED: FORCE CHECK IF UPDATE ACTUALLY HAPPENED
+export const updateUserBalance = async (amount: number, reason: string, type: 'topup' | 'usage' | 'reward' | 'refund' | 'admin_adjustment' | 'giftcode' | 'milestone_reward'): Promise<{ success: boolean, newBalance: number, error?: string }> => {
+    const user = await getUserProfile(); // Gets Auth User ID primarily
     const newBalance = (user.balance || 0) + amount;
 
     if (supabase && user.id.length > 20) { 
-        // 1. Update Balance
-        const { error: updateError, count } = await supabase
+        // 1. Try Update AND Select to verify it worked
+        const { data, error: updateError } = await supabase
             .from('users')
             .update({ diamonds: newBalance })
-            .eq('id', user.id); // Correct: users.id
+            .eq('id', user.id)
+            .select(); // Critical: Returns the updated rows
         
-        if (updateError) {
-            console.error("Update Balance Error:", updateError);
-            return { success: false, newBalance: user.balance };
+        // 2. SUCCESS CASE
+        if (!updateError && data && data.length > 0) {
+            // Log Transaction
+            await supabase.from('diamond_transactions_log').insert({
+                user_id: user.id,
+                amount, 
+                description: reason, 
+                transaction_type: type || 'usage',
+                created_at: new Date().toISOString()
+            });
+            return { success: true, newBalance };
         }
 
-        // 2. Log Transaction (Only if update succeeded)
-        await supabase.from('diamond_transactions_log').insert({
-            user_id: user.id,
-            amount, 
-            description: reason, 
-            transaction_type: type || 'usage',
+        // 3. FAILURE CASE (User missing in DB) - SELF HEALING
+        console.warn("Update Balance: User row missing. Attempting healing insert...", updateError);
+        
+        // Try to insert the user record directly
+        const { error: insertError } = await supabase.from('users').insert({
+            id: user.id,
+            email: user.email,
+            display_name: user.username,
+            photo_url: user.avatar,
+            diamonds: newBalance, // Set directly to new balance (0 + amount)
+            is_admin: false,
             created_at: new Date().toISOString()
         });
-        
-        return { success: true, newBalance };
+
+        if (!insertError) {
+             // If insert worked, log the transaction too
+             await supabase.from('diamond_transactions_log').insert({
+                user_id: user.id,
+                amount, 
+                description: reason, 
+                transaction_type: type || 'usage',
+                created_at: new Date().toISOString()
+            });
+            return { success: true, newBalance };
+        }
+
+        console.error("Critical: Failed to heal user profile.", insertError);
+        return { success: false, newBalance: user.balance, error: "Lỗi đồng bộ tài khoản. Vui lòng chạy lệnh SQL sửa lỗi trong phần Cài đặt." };
     }
 
     // Local fallback
@@ -522,7 +535,7 @@ export const deleteGiftcode = async (id: string): Promise<void> => {
 export const redeemGiftcode = async (codeStr: string): Promise<{success: boolean, message: string, reward?: number}> => {
     const normalizedCode = codeStr.trim().toUpperCase();
     
-    // 1. Ensure user exists (Retry logic inside getUserProfile handles race condition)
+    // 1. Ensure user exists
     const user = await getUserProfile(); 
 
     if (supabase && user.id.length > 20) {
@@ -550,13 +563,13 @@ export const redeemGiftcode = async (codeStr: string): Promise<{success: boolean
             return { success: false, message: `Bạn đã dùng mã này rồi (${maxPerUser}/${maxPerUser})` };
         }
 
-        // 4. TRANSACTION START: Update Balance FIRST
-        // If this fails (e.g. user row still missing), we abort.
+        // 4. TRANSACTION START: Update Balance FIRST (with Strict Check)
         const reward = codeData.diamond_reward;
         const balanceUpdate = await updateUserBalance(reward, `Giftcode: ${normalizedCode}`, 'giftcode');
 
+        // CRITICAL FIX: If balance update failed (due to missing user row), we STOP.
         if (!balanceUpdate.success) {
-            return { success: false, message: 'Lỗi hệ thống: Không thể cộng tiền vào tài khoản. Vui lòng thử lại sau.' };
+            return { success: false, message: balanceUpdate.error || 'Lỗi: Tài khoản chưa được đồng bộ vào Database.' };
         }
 
         // 5. If balance updated, RECORD REDEMPTION
@@ -567,8 +580,6 @@ export const redeemGiftcode = async (codeStr: string): Promise<{success: boolean
         });
 
         if (insertError) {
-            // Edge case: Redemption record failed but money was added. 
-            // Ideally we should rollback money, but for simplicity we just log it.
             console.error("Giftcode Redemption Insert Error:", insertError);
             if (insertError.code === '23505') return { success: false, message: 'Bạn đã dùng mã này rồi!' };
         }
@@ -771,6 +782,10 @@ export const performCheckin = async (): Promise<{ success: boolean; reward: numb
                     .gte('check_in_date', monthStart)
                     .lte('check_in_date', monthEnd);
                  return { success: true, reward: 0, newStreak: count || 1, message: 'Hôm nay bạn đã điểm danh rồi!' };
+             }
+             // ERROR HANDLING FOR FK CONSTRAINT
+             if (insertError.code === '23503') {
+                 return { success: false, reward: 0, newStreak: user.streak, message: `Lỗi: Tài khoản chưa được đồng bộ (FK). Vui lòng dùng nút "Sửa Lỗi" bên dưới.` };
              }
              return { success: false, reward: 0, newStreak: user.streak, message: `Lỗi DB: ${insertError.message}` };
         }

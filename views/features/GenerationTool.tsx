@@ -223,50 +223,46 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       setCharacters(prev => prev.map(c => c.id === charId ? { ...c, isFaceLocked: !c.isFaceLocked } : c));
   }
 
-  // --- ROBUST DOWNLOAD HANDLER ---
+  // --- ROBUST BASE64 DOWNLOAD (Fixes "Open in Tab" bug) ---
   const handleForceDownload = (dataUri: string, filename: string) => {
       if (!dataUri) return;
 
-      // 1. Check if it's strictly a Base64 string
+      // 1. If Base64, convert to Blob and download directly
       if (dataUri.startsWith('data:')) {
           try {
+              // Split metadata and data
+              const arr = dataUri.split(',');
+              const mime = arr[0].match(/:(.*?);/)?.[1];
+              const bstr = atob(arr[1]);
+              let n = bstr.length;
+              const u8arr = new Uint8Array(n);
+              while (n--) {
+                  u8arr[n] = bstr.charCodeAt(n);
+              }
+              const blob = new Blob([u8arr], { type: mime });
+              
+              // Create Object URL
+              const url = window.URL.createObjectURL(blob);
+              
               const link = document.createElement('a');
-              link.href = dataUri;
+              link.href = url;
               link.download = filename;
               document.body.appendChild(link);
               link.click();
+              
+              // Cleanup
               document.body.removeChild(link);
+              window.URL.revokeObjectURL(url);
+              
               notify('Đã lưu ảnh về máy!', 'success');
               return;
           } catch (e) {
-              console.error("Base64 download failed", e);
+              console.error("Blob download failed", e);
           }
       }
 
-      // 2. Fallback for URLs (Network Fetch attempt)
-      // Note: This might trigger CORS if server doesn't allow it, triggering window.open
-      try {
-          fetch(dataUri)
-              .then(resp => resp.blob())
-              .then(blob => {
-                  const url = window.URL.createObjectURL(blob);
-                  const link = document.createElement('a');
-                  link.href = url;
-                  link.download = filename;
-                  document.body.appendChild(link);
-                  link.click();
-                  document.body.removeChild(link);
-                  window.URL.revokeObjectURL(url);
-                  notify('Đã tải ảnh về máy!', 'success');
-              })
-              .catch(() => {
-                  // Final Fallback: New Tab
-                  window.open(dataUri, '_blank');
-                  notify('Đang mở ảnh trong tab mới (Server chặn tải)', 'info');
-              });
-      } catch (e) {
-          window.open(dataUri, '_blank');
-      }
+      // 2. Fallback for remote URLs
+      window.open(dataUri, '_blank');
   };
 
   const calculateCost = () => {
@@ -321,11 +317,12 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       
       if (sourceForStructure) {
           const optimizedStructure = await optimizePayload(sourceForStructure);
-          if (activeMode === 'single') {
-              structureRefData = optimizedStructure; 
-          } else {
-              structureRefData = await createSolidFence(optimizedStructure, aspectRatio, true);
-          }
+          
+          // --- CRITICAL FIX FOR SINGLE MODE ---
+          // Always use Solid Fence (Grey Box) for Pose Reference.
+          // This forces the AI to regenerate the scene instead of lazy copying the input image.
+          // It works perfectly for Couple mode, now applying to Single mode.
+          structureRefData = await createSolidFence(optimizedStructure, aspectRatio, true);
       }
       
       const characterDataList = [];
@@ -358,7 +355,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       if (result) {
         addLog(lang === 'vi' ? 'Hoàn tất!' : 'Finalizing...');
         
-        // --- RESULT IS BASE64 HERE ---
         setResultImage(result); 
         
         const newImage: GeneratedImage = {

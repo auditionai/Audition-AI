@@ -92,13 +92,12 @@ const processDigitalTwinMode = (
     
     // STRUCTURE THE PAYLOAD CAREFULLY
     if (refImagePart) {
-        // Add strong text guard before the image
-        parts.push({ text: "REFERENCE IMAGE (POSE & CAMERA ONLY) - DO NOT COPY CHARACTER:" });
+        parts.push({ text: "POSE REFERENCE (USE FOR STRUCTURE ONLY):" });
         parts.push(refImagePart);
     }
     
     if (charParts.length > 0) {
-        parts.push({ text: "CHARACTER DESIGN TO INJECT:" });
+        parts.push({ text: "CHARACTER IDENTITY (FACE/OUTFIT):" });
         parts.push(...charParts);
     }
 
@@ -107,27 +106,26 @@ const processDigitalTwinMode = (
 
     if (isSingle) {
         if (refImagePart) {
-            systemPrompt = `** SYSTEM: 3D CHARACTER REPLACEMENT ENGINE **
-            
+            // ALIGNED WITH COUPLE LOGIC FOR BETTER CONSISTENCY
+            systemPrompt = `** SYSTEM: 3D CHARACTER RECONSTRUCTION **
+
+            [TASK]: Recreate the character based on the provided Pose Reference.
+
             [INPUTS]:
-            1. POSE REFERENCE: The first image provided. Use ONLY its Pose, Camera Angle, and Lighting.
-            2. CHARACTER DESIGN: The text description or second image.
-            
-            [STRICT MANDATE]:
-            - IGNORE the person in the Pose Reference image. Treat them as a mannequin.
-            - GENERATE A NEW CHARACTER based on the Prompt.
-            - COMPOSITE the NEW character into the scene of the Pose Reference.
-            - IF MODEL IS 'FLASH': DO NOT OUTPUT THE REFERENCE IMAGE UNCHANGED. YOU MUST CHANGE THE FACE AND CLOTHES.
-            
-            [OUTPUT STYLE]: Unreal Engine 5, 3D Game Render, Semi-Realistic.
-            
-            [TARGET DESCRIPTION]: "${prompt}"
+            1. POSE REFERENCE: Use ONLY the Pose, Camera Angle, and Composition from this image.
+            2. CHARACTER REFERENCE: The target identity (Face/Outfit) to render.
+
+            [MANDATE]:
+            - You act as a 3D Rendering Engine (Unreal Engine 5).
+            - DO NOT simply copy the Pose Reference image. You must REDRAW the scene.
+            - SWAP the character identity completely to match the Character Reference.
+            - If no Character Reference image is provided, generate based on text description: "${prompt}"
+
+            [OUTPUT SPEC]:
+            - High Fidelity 3D Render
+            - Sharp focus
+            - Detailed texture
             `;
-            
-            // Add extra noise to prompt for Flash to force generation
-            if (modelTier === 'flash') {
-                systemPrompt += "\n[FLASH OVERRIDE]: RENDER NEW PIXELS. DO NOT COPY.";
-            }
         } else {
             systemPrompt = `** SYSTEM: 3D CHARACTER CREATOR **
             Create a stunning 3D game character (Audition Online/Sims style).
@@ -228,7 +226,7 @@ export const generateImage = async (
     const config: any = {
         imageConfig: { aspectRatio: aspectRatio },
         systemInstruction: characterDataList.length === 1 && styleRefBase64
-            ? "CRITICAL: REPLACE CHARACTER IN REFERENCE. GENERATE NEW 3D RENDER."
+            ? "CRITICAL: RECONSTRUCT THE SCENE WITH THE NEW CHARACTER. DO NOT COPY THE INPUT PIXELS."
             : "Create high quality 3D character render. Follow the reference image structure.", 
         safetySettings: [
             { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },

@@ -183,7 +183,7 @@ export const deleteApiKey = async (id: string): Promise<boolean> => {
     return false;
 };
 
-// --- GIFTCODE ANNOUNCEMENT SYSTEM ---
+// --- GIFTCODE ANNOUNCEMENT SYSTEM (NEW) ---
 
 export const getGiftcodePromoConfig = async (): Promise<{ text: string, isActive: boolean }> => {
     if (supabase) {
@@ -327,26 +327,63 @@ export const getUserProfile = async (): Promise<UserProfile> => {
 };
 
 export const updateUserBalance = async (amount: number, reason: string, type: 'topup' | 'usage' | 'reward' | 'refund' | 'admin_adjustment' | 'giftcode' | 'milestone_reward'): Promise<UserProfile> => {
+    // Re-fetch user to ensure we have the latest balance before adding
     const user = await getUserProfile();
     const newBalance = (user.balance || 0) + amount;
 
     if (supabase && user.id.length > 20) { 
-        // Update 'diamonds' column in 'users'
-        const { error } = await supabase.from('users').update({ diamonds: newBalance }).eq('id', user.id);
+        // 1. Try UPDATE first (Standard path)
+        // Added .select() to verify if the update actually hit a row
+        const { data: updatedRows, error: updateError } = await supabase
+            .from('users')
+            .update({ diamonds: newBalance })
+            .eq('id', user.id)
+            .select();
         
-        if (!error) {
-             // Log transaction in 'diamond_transactions_log'
+        // 2. CHECK RESULT
+        // If update succeeded and returned a row, we are good.
+        if (!updateError && updatedRows && updatedRows.length > 0) {
+            // Log transaction
             await supabase.from('diamond_transactions_log').insert({
                 user_id: user.id,
-                amount, // Negative for usage, positive for reward
+                amount, 
                 description: reason, 
                 transaction_type: type || 'usage',
                 created_at: new Date().toISOString()
             });
             return { ...user, balance: newBalance };
         }
+
+        // 3. HEALING PATH (UPSERT)
+        // If update failed (likely no row found for new users), force create/update via UPSERT
+        console.warn("Update Balance: Row missing or Update failed. Attempting Healing UPSERT...", updateError);
+        
+        const { error: upsertError } = await supabase.from('users').upsert({
+            id: user.id,
+            email: user.email,
+            display_name: user.username,
+            photo_url: user.avatar,
+            diamonds: newBalance,
+            is_admin: user.role === 'admin',
+            consecutive_check_ins: user.streak || 0,
+            created_at: new Date().toISOString() // Fallback creation time
+        });
+
+        if (!upsertError) {
+             await supabase.from('diamond_transactions_log').insert({
+                user_id: user.id,
+                amount, 
+                description: reason, 
+                transaction_type: type || 'usage',
+                created_at: new Date().toISOString()
+            });
+            return { ...user, balance: newBalance };
+        }
+        
+        console.error("Update Balance Critical Error (Upsert Failed):", upsertError);
     }
 
+    // Local fallback
     user.balance = newBalance;
     setStorage('dmp_user', user);
     return user;
@@ -800,21 +837,16 @@ export const performCheckin = async (): Promise<{ success: boolean; reward: numb
 
         const monthlyCount = count || 1;
 
-        // 4. Update User Profile
+        // 4. Update User Profile (Streak & Date Only)
+        // CRITICAL FIX: Do NOT update diamonds manually here. Use updateUserBalance below.
         await supabase.from('users').update({ 
             consecutive_check_ins: monthlyCount, 
-            last_check_in: new Date().toISOString(),
-            diamonds: (user.balance || 0) + baseReward
+            last_check_in: new Date().toISOString()
         }).eq('id', user.id);
 
-        // 5. Log Transaction
-        await supabase.from('diamond_transactions_log').insert({
-            user_id: user.id,
-            amount: baseReward, 
-            description: `Check-in Day ${monthlyCount}`, 
-            transaction_type: 'reward',
-            created_at: new Date().toISOString()
-        });
+        // 5. Add Reward via Centralized Function
+        // This ensures the balance is re-fetched and updated correctly + transaction log created.
+        await updateUserBalance(baseReward, `Check-in Day ${monthlyCount}`, 'reward');
         
         return { success: true, reward: baseReward, newStreak: monthlyCount };
     }

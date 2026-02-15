@@ -129,10 +129,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       
       try {
           // 1. DETERMINE CATEGORY ID BASED ON MODE
-          // Based on user provided DB screenshot:
-          // ID 2: Ảnh Nam Nữ (Single)
-          // ID 3: Ảnh Couple
-          // ID 4: Ảnh Nhóm
           let targetCategoryId = 2; // Default Single
           let catName = "Ảnh Nam Nữ";
 
@@ -149,7 +145,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
           setCurrentCategoryName(catName);
 
           // 2. QUERY WITH INNER JOIN ON image_categories
-          // Select images WHERE image_categories.category_id == targetCategoryId
           const { data, error } = await caulenhauClient
               .from('images')
               .select(`
@@ -164,10 +159,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
               .order('created_at', { ascending: false })
               .limit(50);
 
-          if (error) {
-              console.error("Supabase Error:", error);
-              throw error;
-          }
+          if (error) throw error;
           
           if (data) {
               setSamplePrompts(data.map((item: any) => ({
@@ -246,24 +238,42 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       setCharacters(prev => prev.map(c => c.id === charId ? { ...c, isFaceLocked: !c.isFaceLocked } : c));
   }
 
-  // --- FORCE DOWNLOAD FUNCTION (FIXED) ---
-  const handleForceDownload = async (imageUrl: string, filename: string) => {
+  // --- FIXED DOWNLOAD FUNCTION FOR BASE64 ---
+  const handleForceDownload = (imageUrl: string, filename: string) => {
       try {
-          const response = await fetch(imageUrl);
-          const blob = await response.blob();
-          const url = window.URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.href = url;
-          link.download = filename; // Sets the filename correctly
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          window.URL.revokeObjectURL(url);
-          notify('Đã tải ảnh về máy!', 'success');
+          // If it's Base64 (Data URI), download directly using Anchor
+          if (imageUrl.startsWith('data:')) {
+              const link = document.createElement('a');
+              link.href = imageUrl;
+              link.download = filename;
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+              notify('Đã tải ảnh về máy!', 'success');
+          } else {
+              // If URL, Try Fetch Blob
+              fetch(imageUrl)
+                  .then(response => response.blob())
+                  .then(blob => {
+                      const url = window.URL.createObjectURL(blob);
+                      const link = document.createElement('a');
+                      link.href = url;
+                      link.download = filename;
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                      window.URL.revokeObjectURL(url);
+                      notify('Đã tải ảnh về máy!', 'success');
+                  })
+                  .catch(() => {
+                      // CORS Fallback: Open in New Tab
+                      window.open(imageUrl, '_blank');
+                      notify('Không thể tự động tải (Lỗi CORS), đang mở tab mới.', 'warning');
+                  });
+          }
       } catch (error) {
           console.error("Download failed:", error);
-          window.open(imageUrl, '_blank'); // Fallback
-          notify('Tự động tải thất bại, đang mở tab mới.', 'warning');
+          window.open(imageUrl, '_blank');
       }
   };
 
@@ -321,8 +331,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
           const optimizedStructure = await optimizePayload(sourceForStructure);
           
           // --- CRITICAL FIX FOR SINGLE MODE ---
-          // If Single Mode: Send the raw optimized image to preserve Background & Camera Framing.
-          // If Group Mode: Use createSolidFence to isolate poses (preventing background chaos).
+          // Use Raw Optimized Image to preserve background context
           if (activeMode === 'single') {
               structureRefData = optimizedStructure; 
           } else {
@@ -336,8 +345,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
               id: char.id,
               gender: char.gender,
               image: char.bodyImage, 
-              faceImage: char.isFaceLocked ? char.faceImage : null, // Respect Lock State
-              shoesImage: null // Removed per user request
+              faceImage: char.isFaceLocked ? char.faceImage : null, 
+              shoesImage: null
           });
       }
       
@@ -351,7 +360,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
           structureRefData, 
           characterDataList, 
           modelType === 'pro' ? resolution : '1K',
-          modelType, // PASSED EXPLICITLY HERE
+          modelType, 
           modelType === 'pro' ? useSearch : false,
           useCloudRef, 
           (msg) => addLog(msg)
@@ -361,7 +370,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
         addLog(lang === 'vi' ? 'Hoàn tất!' : 'Finalizing...');
         const newImage: GeneratedImage = {
           id: crypto.randomUUID(),
-          url: result,
+          url: result, // This is Base64 data directly from Gemini
           prompt: finalPrompt,
           timestamp: Date.now(),
           toolId: feature.id,
@@ -369,7 +378,10 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
           engine: modelType === 'pro' ? `Gemini 3.0 Pro ${resolution}` : 'Gemini 2.5 Flash'
         };
         setGeneratedData(newImage);
-        await saveImageToStorage(newImage);
+        
+        // Save to Storage (Async, don't wait for UI)
+        saveImageToStorage(newImage).catch(console.error);
+        
         setResultImage(result);
         setStage('result');
         notify(lang === 'vi' ? 'Tạo ảnh thành công!' : 'Generation successful!', 'success');

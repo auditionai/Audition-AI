@@ -95,39 +95,46 @@ const processDigitalTwinMode = (
     charDescriptions: string[]
 ): { systemPrompt: string, parts: any[] } => {
     
-    const parts = [...charParts]; 
+    // NOTE: Order matters for Flash model understanding
+    // We put Reference Image (Scene/Pose) FIRST, then Character Images.
+    const parts = [];
     if (refImagePart) parts.push(refImagePart);
+    parts.push(...charParts);
 
     const isSingle = charDescriptions.length === 1;
 
     let systemPrompt = "";
 
     if (isSingle) {
-        // --- UPGRADED LOGIC FOR SINGLE IMAGE (FLASH & PRO) ---
-        systemPrompt = `** SYSTEM: ELITE 3D SCENE RECONSTRUCTOR **
-        
-        [OBJECTIVE]: Recreate the input photo as a high-end 3D Render (Unreal Engine 5 style) while preserving the EXACT scene composition.
-        
-        [MANDATORY ANALYSIS STEP]:
-        1. Look at the Reference Image Background. Is it a room? A street? A dark bar? 
-        2. YOU MUST REPAINT THIS EXACT BACKGROUND IN 3D.
-        3. Look at the Camera Distance. Is it a Close-up (Face only)? Half-body? Full-body?
-        4. YOU MUST MATCH THIS CAMERA FRAMING EXACTLY.
-        
-        [STRICT CONSTRAINTS FOR FLASH MODEL]:
-        - DO NOT generate a plain color background.
-        - DO NOT generate a studio grey/white background.
-        - DO NOT zoom out if the reference is a close-up.
-        - DO NOT crop the head if the reference shows the full head.
-        - IF the reference implies a dark atmosphere, output a DARK image.
-        
-        [CHARACTER STYLING]:
-        - Style: 3D Game Character (Audition/Sims Alpha CC), Semi-realistic anime eyes.
-        - Skin: Smooth, glowing, no realistic pores.
-        - Outfit: Match the reference design.
-        
-        [SCENE DESCRIPTION]: "${prompt}"
-        `;
+        // --- UPGRADED LOGIC FOR SINGLE IMAGE (CHARACTER REPLACEMENT) ---
+        // If there is a reference image, we treat this as a "Replacement" task, not just reconstruction.
+        if (refImagePart) {
+            systemPrompt = `** SYSTEM: 3D CHARACTER REPLACEMENT & SCENE INTEGRATION **
+            
+            [INPUTS]:
+            - IMAGE 1 (First Image): This is the TARGET SCENE and POSE. It contains the background and camera angle you MUST keep.
+            - IMAGE 2 (Second Image): This is the SOURCE CHARACTER. It contains the identity, face, and outfit you MUST use.
+            
+            [MISSION]:
+            1. TAKE the Background, Lighting, and Camera Angle from IMAGE 1.
+            2. TAKE the Identity, Face, and Outfit from IMAGE 2.
+            3. REPLACE the person in Image 1 with the Character from Image 2.
+            4. The Character from Image 2 MUST adopt the EXACT POSE of the person in Image 1.
+            
+            [STRICT RULES]:
+            - DO NOT simply copy Image 1. You MUST change the character to match Image 2.
+            - DO NOT change the background or camera angle of Image 1.
+            - Render Style: Unreal Engine 5, 3D Game Character, Semi-realistic.
+            
+            [SCENE DETAILS]: "${prompt}"
+            `;
+        } else {
+            // No Reference Image -> Standard Text-to-Image
+            systemPrompt = `** SYSTEM: 3D CHARACTER CREATION **
+            Create a high-quality 3D character based on the input description.
+            - Style: Unreal Engine 5, Audition Online style.
+            - Scene: "${prompt}"`;
+        }
     } else {
         // --- LOGIC FOR COUPLE / GROUP (KEPT STABLE) ---
         systemPrompt = `** SYSTEM: 3D CHARACTER RECONSTRUCTION **
@@ -235,8 +242,8 @@ export const generateImage = async (
     const config: any = {
         imageConfig: { aspectRatio: aspectRatio },
         // Enhanced system instruction for the API config
-        systemInstruction: characterDataList.length === 1 
-            ? "CRITICAL: OUTPUT A 3D RENDER MATCHING THE INPUT COMPOSITION EXACTLY. IF INPUT IS PORTRAIT, OUTPUT PORTRAIT. IF INPUT HAS BACKGROUND, RECREATE IT. DO NOT USE PLAIN BACKGROUND."
+        systemInstruction: characterDataList.length === 1 && styleRefBase64
+            ? "CRITICAL TASK: REPLACE THE PERSON IN IMAGE 1 WITH THE CHARACTER IN IMAGE 2. KEEP BACKGROUND OF IMAGE 1."
             : "Create high quality 3D character render. Follow the reference image structure.", 
         safetySettings: [
             { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },

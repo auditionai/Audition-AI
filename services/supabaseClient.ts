@@ -27,6 +27,12 @@ if (supabaseUrl && supabaseAnonKey) {
 
 export const supabase = client;
 
+// --- SECONDARY CLIENT: CAULENHAU.IO.VN ---
+const clhUrl = metaEnv.VITE_CAULENHAU_SUPABASE_URL || process.env.CAULENHAU_SUPABASE_URL;
+const clhKey = metaEnv.VITE_CAULENHAU_SUPABASE_ANON_KEY || process.env.CAULENHAU_SUPABASE_ANON_KEY;
+
+export const caulenhauClient = (clhUrl && clhKey) ? createClient(clhUrl, clhKey) : null;
+
 export const checkSupabaseConnection = async (): Promise<{ db: boolean; storage: boolean; latency: number }> => {
     if (!supabase) return { db: false, storage: false, latency: 0 };
     

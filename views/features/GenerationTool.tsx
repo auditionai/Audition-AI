@@ -2,11 +2,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Feature, Language, GeneratedImage } from '../../types';
 import { Icons } from '../../components/Icons';
-import { generateImage, suggestPrompt } from '../../services/geminiService';
+import { generateImage } from '../../services/geminiService';
 import { saveImageToStorage } from '../../services/storageService';
 import { createSolidFence, optimizePayload, urlToBase64 } from '../../utils/imageProcessor';
 import { getUserProfile, updateUserBalance } from '../../services/economyService';
 import { useNotification } from '../../components/NotificationSystem';
+import { caulenhauClient } from '../../services/supabaseClient';
 
 interface GenerationToolProps {
   feature: Feature;
@@ -33,12 +34,19 @@ const SMART_TIPS = [
     { icon: Icons.Palette, text: "🎨 Mẹo: Nhập mô tả màu sắc trang phục cụ thể (ví dụ: váy đỏ, giày trắng) để AI vẽ đúng ý." },
     { icon: Icons.Unlock, text: "🔓 Tip: Tắt 'Khóa Mặt' nếu bạn muốn AI tự sáng tạo khuôn mặt mới ngẫu nhiên." },
     { icon: Icons.Image, text: "📸 Mẹo: Ảnh mẫu (Ref) nên có góc chụp tương đồng với ý tưởng bạn muốn tạo." },
-    { icon: Icons.MessageCircle, text: "✍️ Tip: Bí ý tưởng? Dùng nút 'AI Viết Hộ' để có prompt chuẩn style Audition." },
+    { icon: Icons.MessageCircle, text: "✍️ Tip: Bí ý tưởng? Dùng nút 'Sử dụng Prompt Mẫu' để lấy ý tưởng từ cộng đồng." },
     { icon: Icons.Monitor, text: "🖥️ Lưu ý: Độ phân giải 4K rất nét, thích hợp in ấn nhưng sẽ tốn thời gian xử lý hơn." }
 ];
 
 // --- TUTORIAL VIDEO ID (Youtube) ---
 const TUTORIAL_VIDEO_ID = "ba2WR8txe_c"; 
+
+interface SamplePrompt {
+    id: string;
+    image_url: string;
+    prompt: string;
+    category: string;
+}
 
 export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang }) => {
   const { notify } = useNotification();
@@ -53,7 +61,11 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
   const [refImage, setRefImage] = useState<string | null>(null);
   const [prompt, setPrompt] = useState('');
   const [negativePrompt, setNegativePrompt] = useState('crowd, extra people, audience, bystanders, deformed, bad anatomy, disfigured, poorly drawn face, mutation, mutated, extra limb, ugly, disgusting, poorly drawn hands, missing limb, floating limbs, disconnected limbs, malformed hands, blur, out of focus, long neck, long body, mutated hands and fingers, out of frame, blender, doll, cropped, low-res, close-up, poorly-drawn face, out of frame double, two heads, blurred, ugly, disfigured, too many fingers, deformed, repetitive, black and white, grainy, extra limbs, bad anatomy, duplicate, photorealistic, realistic photo, sketch, cartoon, drawing, art, 2d');
-  const [isSuggesting, setIsSuggesting] = useState(false);
+  
+  // Sample Prompt Modal
+  const [showSampleModal, setShowSampleModal] = useState(false);
+  const [samplePrompts, setSamplePrompts] = useState<SamplePrompt[]>([]);
+  const [loadingSamples, setLoadingSamples] = useState(false);
 
   // --- SETTINGS RESTORED ---
   const [modelType, setModelType] = useState<'flash' | 'pro'>('pro'); 
@@ -64,7 +76,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
   const [useCloudRef, setUseCloudRef] = useState(true);
 
   // --- GUIDE & TIPS STATE ---
-  const [guideTopic, setGuideTopic] = useState<'chars' | 'prompt' | 'settings' | null>(null);
+  const [guideTopic, setGuideTopic] = useState<'chars' | 'settings' | null>(null);
   const [currentTipIdx, setCurrentTipIdx] = useState(0);
   const [showVideo, setShowVideo] = useState(false);
 
@@ -105,6 +117,63 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
           }
           return newChars;
       });
+  };
+
+  const fetchSamplePrompts = async () => {
+      if (!caulenhauClient) {
+          notify("Chưa kết nối database mẫu.", "error");
+          return;
+      }
+      setLoadingSamples(true);
+      
+      // Map activeMode to caulenhau categories
+      // Assume categories: 'single', 'couple', 'group'
+      let category = 'single';
+      if (activeMode === 'couple') category = 'couple';
+      if (activeMode === 'group3' || activeMode === 'group4') category = 'group';
+
+      try {
+          // Assuming table 'prompts' has columns 'image_url', 'prompt', 'category'
+          // We try to fetch matching category or just grab latest
+          let query = caulenhauClient
+              .from('prompts')
+              .select('*')
+              .order('created_at', { ascending: false })
+              .limit(50);
+          
+          if (category) {
+              query = query.eq('category', category);
+          }
+
+          const { data, error } = await query;
+
+          if (error) throw error;
+          if (data) {
+              setSamplePrompts(data.map((item: any) => ({
+                  id: item.id,
+                  image_url: item.image_url || item.url, // Handle variations
+                  prompt: item.prompt || item.prompt_text,
+                  category: item.category
+              })));
+          }
+      } catch (e) {
+          console.error("Fetch samples error", e);
+          // Fallback if table doesn't exist or error, showing nothing is better than crash
+          setSamplePrompts([]);
+      } finally {
+          setLoadingSamples(false);
+      }
+  };
+
+  const handleOpenSamples = () => {
+      setShowSampleModal(true);
+      fetchSamplePrompts();
+  };
+
+  const handleSelectSample = (sample: SamplePrompt) => {
+      setPrompt(sample.prompt);
+      setShowSampleModal(false);
+      notify("Đã áp dụng Prompt mẫu!", "success");
   };
 
   const handleUploadClick = (charId: number, type: 'body' | 'face') => {
@@ -257,15 +326,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
     }
   };
 
-  const handleSuggestPrompt = async () => {
-    setIsSuggesting(true);
-    try {
-        const enhancedPrompt = await suggestPrompt(prompt, lang, feature.name[lang]);
-        if (enhancedPrompt) setPrompt(enhancedPrompt);
-    } catch (error) { console.error(error); } 
-    finally { setIsSuggesting(false); }
-  };
-
   const styles = [
       { id: '3d', name: '3D Game', icon: Icons.MessageCircle }, 
       { id: 'blindbox', name: 'Blind Box', icon: Icons.Gift },
@@ -304,31 +364,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                           <li className="flex gap-2">
                               <span className="text-white font-bold">3. Khóa/Mở Khóa:</span>
                               Nút <Icons.Lock className="w-3 h-3 inline text-audi-cyan"/> dùng để BẬT tính năng ghép mặt. Nếu TẮT <Icons.Unlock className="w-3 h-3 inline text-red-500"/>, AI sẽ tự sáng tạo khuôn mặt mới.
-                          </li>
-                      </ul>
-                  </>
-              );
-          case 'prompt':
-              return (
-                  <>
-                      <h3 className="text-xl font-bold text-audi-yellow mb-4 flex items-center gap-2">
-                          <Icons.MessageCircle className="w-6 h-6" /> Cách viết Prompt & Ảnh mẫu
-                      </h3>
-                      <ul className="space-y-3 text-sm text-slate-300">
-                          <li className="flex gap-2">
-                              <span className="text-audi-cyan font-bold">Mô tả (Prompt):</span>
-                              Viết càng chi tiết càng tốt.
-                              <br/>- <b className="text-white">Chủ thể:</b> Cô gái tóc vàng, mắt xanh...
-                              <br/>- <b className="text-white">Trang phục:</b> Váy dạ hội đỏ, cánh thiên thần...
-                              <br/>- <b className="text-white">Bối cảnh:</b> Sân khấu, thành phố tương lai...
-                          </li>
-                          <li className="flex gap-2">
-                              <span className="text-audi-pink font-bold">Ảnh mẫu (Pose Ref):</span>
-                              Upload một bức ảnh có dáng đứng hoặc bố cục bạn thích. AI sẽ cố gắng "bắt chước" tư thế của ảnh này.
-                          </li>
-                          <li className="flex gap-2">
-                              <span className="text-audi-purple font-bold">AI Viết Hộ:</span>
-                              Bí ý tưởng? Nhập vài từ khóa đơn giản rồi bấm nút này để AI tự viết thành một đoạn văn mô tả chuyên nghiệp.
                           </li>
                       </ul>
                   </>
@@ -423,9 +458,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
     <div className="flex flex-col items-center w-full max-w-5xl mx-auto pb-48 animate-fade-in relative">
         <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/*" />
 
-        {/* --- VIDEO TUTORIAL MODAL (RESIZED & CLEANER BG) --- */}
+        {/* --- VIDEO TUTORIAL MODAL --- */}
         {showVideo && (
-            <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 animate-fade-in" onClick={() => setShowVideo(false)}>
+            <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-md p-4 animate-fade-in" onClick={() => setShowVideo(false)}>
                 <div className="relative w-full max-w-2xl aspect-video bg-black rounded-2xl overflow-hidden border border-white/20 shadow-[0_0_50px_rgba(255,255,255,0.1)]" onClick={e => e.stopPropagation()}>
                     <button 
                         onClick={() => setShowVideo(false)} 
@@ -446,7 +481,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
 
         {/* --- GUIDE MODAL (UPDATED BG) --- */}
         {guideTopic && (
-            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-fade-in" onClick={() => setGuideTopic(null)}>
+            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-md p-4 animate-fade-in" onClick={() => setGuideTopic(null)}>
                 <div className="bg-[#12121a] w-full max-w-md p-6 rounded-2xl border border-audi-yellow/50 shadow-[0_0_30px_rgba(251,218,97,0.2)] relative" onClick={e => e.stopPropagation()}>
                     <button onClick={() => setGuideTopic(null)} className="absolute top-4 right-4 text-slate-500 hover:text-white">
                         <Icons.X className="w-6 h-6" />
@@ -456,6 +491,60 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                         <button onClick={() => setGuideTopic(null)} className="px-6 py-2 bg-white/10 hover:bg-white/20 rounded-full text-xs font-bold text-white transition-colors">
                             Đã Hiểu
                         </button>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* --- SAMPLE PROMPTS MODAL (CAULENHAU) --- */}
+        {showSampleModal && (
+            <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/50 backdrop-blur-md p-4 animate-fade-in" onClick={() => setShowSampleModal(false)}>
+                <div className="bg-[#12121a] w-full max-w-4xl h-[80vh] rounded-[2rem] border border-audi-purple/50 shadow-[0_0_50px_rgba(183,33,255,0.2)] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+                    <div className="p-4 border-b border-white/10 flex justify-between items-center bg-black/20">
+                        <div className="flex items-center gap-2">
+                            <Icons.Image className="w-5 h-5 text-audi-purple" />
+                            <h3 className="font-bold text-white text-lg">Thư viện Prompt Mẫu</h3>
+                            <span className="text-xs bg-audi-purple/20 text-audi-purple px-2 py-0.5 rounded border border-audi-purple/30">
+                                Mode: {activeMode.toUpperCase()}
+                            </span>
+                        </div>
+                        <button onClick={() => setShowSampleModal(false)} className="p-2 hover:bg-white/10 rounded-full text-white">
+                            <Icons.X className="w-6 h-6" />
+                        </button>
+                    </div>
+                    
+                    <div className="flex-1 overflow-y-auto p-4 custom-scrollbar bg-black/10">
+                        {loadingSamples ? (
+                            <div className="flex flex-col items-center justify-center h-full gap-4">
+                                <Icons.Loader className="w-10 h-10 text-audi-purple animate-spin" />
+                                <span className="text-slate-400 text-sm">Đang tải dữ liệu từ caulenhau.io.vn...</span>
+                            </div>
+                        ) : samplePrompts.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center h-full text-slate-500">
+                                <Icons.Image className="w-16 h-16 mb-4 opacity-20" />
+                                <p>Chưa có mẫu nào cho chế độ này.</p>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                                {samplePrompts.map((sample) => (
+                                    <div 
+                                        key={sample.id} 
+                                        onClick={() => handleSelectSample(sample)}
+                                        className="group relative aspect-[3/4] rounded-xl overflow-hidden cursor-pointer border border-white/10 hover:border-audi-purple transition-all hover:scale-[1.02]"
+                                    >
+                                        <img src={sample.image_url} alt="Sample" className="w-full h-full object-cover" loading="lazy" />
+                                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center p-2">
+                                            <span className="text-xs font-bold text-white text-center bg-audi-purple px-3 py-1 rounded-full shadow-lg">
+                                                Sử dụng
+                                            </span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                    <div className="p-3 border-t border-white/10 bg-black/20 text-center text-[10px] text-slate-500">
+                        Dữ liệu được cung cấp bởi caulenhau.io.vn
                     </div>
                 </div>
             </div>
@@ -612,15 +701,14 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                             <Icons.MessageCircle className="w-4 h-4" /> 2. Mô tả & Ảnh mẫu
                         </label>
                         <div className="flex gap-2">
+                            {/* UPDATED BUTTON: SAMPLE PROMPTS */}
                             <button 
-                                onClick={() => setGuideTopic('prompt')}
-                                className="text-[10px] font-bold text-audi-yellow hover:text-white flex items-center gap-1 bg-audi-yellow/10 px-2 py-1 rounded-full border border-audi-yellow/30 animate-pulse"
+                                onClick={handleOpenSamples}
+                                className="text-[10px] font-bold text-audi-yellow hover:text-white flex items-center gap-1 bg-audi-yellow/10 px-3 py-1.5 rounded-full border border-audi-yellow/30 animate-pulse transition-all hover:bg-audi-yellow/20"
                             >
-                                <Icons.Info className="w-3 h-3" /> Cách viết Prompt
+                                <Icons.Image className="w-3 h-3" /> Sử dụng Prompt Mẫu
                             </button>
-                            <button onClick={handleSuggestPrompt} disabled={isSuggesting} className="text-xs font-bold text-audi-purple flex items-center gap-1 hover:text-white transition-colors border border-audi-purple/30 px-2 py-1 rounded-full bg-audi-purple/10">
-                                <Icons.Sparkles className={`w-3 h-3 ${isSuggesting ? 'animate-spin' : ''}`} /> AI Viết Hộ
-                            </button>
+                            {/* REMOVED AI SUGGEST BUTTON AS REQUESTED */}
                         </div>
                     </div>
                     
@@ -769,7 +857,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
             </div>
             <button 
                 onClick={handleGenerate}
-                disabled={isSuggesting}
                 className="px-8 py-3 bg-gradient-to-r from-audi-pink to-audi-purple rounded-xl font-bold text-white shadow-[0_0_20px_rgba(255,0,153,0.4)] hover:scale-105 transition-all flex items-center gap-2"
             >
                 <Icons.Wand className="w-5 h-5" />

@@ -648,6 +648,16 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
             </div>
         </div>
 
+        {/* MOVED NOTIFICATION BANNER */}
+        <div className="w-full mb-4 md:mb-6 bg-yellow-500/5 border border-yellow-500/20 rounded-xl p-3 flex items-center gap-3 animate-fade-in hover:bg-yellow-500/10 transition-colors">
+            <div className="shrink-0 p-1.5 bg-yellow-500/10 rounded-full">
+                <Icons.Flame className="w-4 h-4 text-yellow-500 animate-pulse" />
+            </div>
+            <p className="text-[10px] md:text-xs text-yellow-200/80 font-medium leading-relaxed">
+                <strong className="text-yellow-500">Lưu ý quan trọng:</strong> Mô hình tạo ảnh AI từ Gemini 2.5 Flash đã lỗi thời. Để đảm bảo chất lượng ảnh đầu ra, ứng dụng sẽ chuyển toàn bộ sang sử dụng <span className="text-white font-bold">Gemini 3.0 Pro (Nano Banana Pro)</span> để tạo ảnh.
+            </p>
+        </div>
+
         <div className="w-full grid grid-cols-1 lg:grid-cols-3 gap-6 mt-4 md:mt-0">
             <div className="lg:col-span-2 space-y-4">
                 <div className="flex items-center justify-between px-2">
@@ -793,14 +803,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
 
             <div className="lg:col-span-1 space-y-6">
                 
-                {/* NOTIFICATION BANNER: FLASH DEPRECATED */}
-                <div className="bg-yellow-500/10 border border-yellow-500/30 p-3 rounded-xl flex items-start gap-3 animate-fade-in shadow-[0_0_20px_rgba(234,179,8,0.1)]">
-                    <Icons.Flame className="w-5 h-5 text-yellow-500 shrink-0 mt-0.5 animate-pulse" />
-                    <p className="text-xs text-yellow-200 font-medium leading-relaxed">
-                        Mô hình tạo ảnh AI từ Gemini 2.5 Flash đã lỗi thời, để đảm bảo chất lượng ảnh đầu ra, ứng dụng sẽ chuyển toàn bộ sang sử dụng Gemni 3.0 Pro (Nano Banana Pro) để tạo ảnh.
-                    </p>
-                </div>
-
                 <div className="bg-[#12121a] border border-white/10 rounded-2xl p-5 space-y-5 shadow-lg h-full">
                     <div className="flex items-center justify-between border-b border-white/10 pb-3">
                         <h3 className="font-bold text-white flex items-center gap-2">

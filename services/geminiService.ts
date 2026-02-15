@@ -21,20 +21,55 @@ const cleanBase64 = (data: string) => {
     return data;
 };
 
+// Cấu hình timeout cao hơn cho Client (mặc định fetch là ngắn)
 const getAiClient = async (specificKey?: string) => {
     const key = specificKey || await getSystemApiKey();
     if (!key) throw new Error("API Key missing or invalid");
-    return new GoogleGenAI({ apiKey: key });
+    return new GoogleGenAI({ 
+        apiKey: key,
+    });
 };
 
+// --- ERROR HANDLER & EXTRACTOR (FIXED CRASH) ---
 const extractImage = (response: any): string | null => {
-    if (!response || !response.candidates || response.candidates.length === 0) return null;
-    const parts = response.candidates[0].content.parts;
-    for (const part of parts) {
-        if (part.inlineData) {
-            return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+    // 1. Kiểm tra cấu trúc cơ bản
+    if (!response) {
+        console.error("Empty response from Gemini");
+        return null;
+    }
+
+    // 2. Kiểm tra Safety Block (Lỗi phổ biến nhất)
+    if (response.promptFeedback?.blockReason) {
+        console.warn("Blocked by Safety:", response.promptFeedback);
+        throw new Error(`Safety Block: ${response.promptFeedback.blockReason}`);
+    }
+
+    // 3. Kiểm tra Candidates
+    if (!response.candidates || response.candidates.length === 0) {
+        console.warn("No candidates returned.");
+        return null;
+    }
+
+    const candidate = response.candidates[0];
+
+    // 4. Kiểm tra Finish Reason của Candidate
+    if (candidate.finishReason !== "STOP" && candidate.finishReason !== "MAX_TOKENS") {
+        // Nếu bị chặn ở mức candidate
+        if (candidate.finishReason === "SAFETY") {
+             throw new Error("Safety Block (Content violation)");
+        }
+        console.warn("Abnormal finish reason:", candidate.finishReason);
+    }
+
+    // 5. Trích xuất ảnh an toàn
+    if (candidate.content && candidate.content.parts) {
+        for (const part of candidate.content.parts) {
+            if (part.inlineData) {
+                return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+            }
         }
     }
+
     return null;
 };
 
@@ -80,42 +115,41 @@ export const checkConnection = async (key?: string): Promise<boolean> => {
     }
 };
 
-// --- PROMPT REASONING ENGINE V2: THE "SUPREME COMMAND" ---
-// AI này có nhiệm vụ "Chuyển hóa" ý tưởng người dùng thành ngôn ngữ 3D Game
+// --- PROMPT REASONING ENGINE V3: THE "SANITIZER & ARCHITECT" ---
 const optimizePromptWithThinking = async (rawPrompt: string): Promise<string> => {
     try {
         const ai = await getAiClient();
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
-            contents: `You are the Lead Art Director for a 3D Game Character Creation System (like Audition, Pop Mart, Blind Box).
+            contents: `You are a Technical Prompt Engineer for a 3D Game Asset Generator.
             
             USER INPUT: "${rawPrompt}"
             
-            YOUR MISSION:
-            1.  **Analyze**: Understand the user's scene description (pose, objects, lighting, background, specific numbers/items).
-            2.  **Enforce 3D Style**: Even if the user says "Photo", "Realism", or "Human", you MUST interpret this as "High-end 3D Render imitating that style". NEVER output a prompt for a real human.
-            3.  **Construct Prompt**: Write a detailed prompt for the Image Generator.
+            TASK:
+            1.  **Translate & Enhance**: Convert the user's description into professional English 3D art keywords.
+            2.  **SANITIZE (IMPORTANT)**: If the prompt contains potentially NSFW, violent, or policy-violating terms (e.g., specific body parts, nudity terms), YOU MUST REWRITE them into safe, artistic terms (e.g., "fitted bodysuit", "sculpted physique"). Do not refuse the prompt, just clean it.
+            3.  **Structure**: [Subject] + [Action/Pose] + [Outfit] + [Environment] + [Lighting] + [Style: 3D Game Render].
+            4.  **Preserve Details**: Keep numbers (e.g., "22"), colors, and specific items (e.g., "Shark plushie").
             
-            MANDATORY KEYWORDS TO INCLUDE:
-            - "3D Game Character Render", "CGI", "Unreal Engine 5", "Octane Render".
-            - "Stylized 3D proportions", "Smooth skin texture", "Clay material" or "3D Anime style".
-            - IF user asks for "Flash Photo": Use "3D render with direct flash lighting, harsh shadows, digital camera aesthetic".
-            
-            SCENE PRESERVATION:
-            - You MUST keep specific details: "Blue shark plushie", "Digital number 22 on AC", "Messy aesthetic room".
-            - Describe the POSE exactly as requested.
+            MANDATORY STYLE TAGS:
+            "3D Game Character, Unreal Engine 5, Octane Render, Blind Box Style, Clean Textures".
             
             OUTPUT:
-            Return ONLY the optimized English prompt.`,
+            Return ONLY the final prompt string. No conversational text.`,
         });
-        return response.text?.trim() || rawPrompt;
+        
+        // Safety check on the reasoning output itself
+        const result = response.text?.trim();
+        if (!result) throw new Error("Empty reasoning response");
+        return result;
+
     } catch (e) {
         console.warn("Prompt Optimization Failed, using raw prompt", e);
         return rawPrompt;
     }
 }
 
-// --- INTELLIGENCE CORE: LOGIC XỬ LÝ PROMPT ĐA TẦNG (UPGRADED V4) ---
+// --- INTELLIGENCE CORE ---
 const processDigitalTwinMode = (
     prompt: string, 
     refImagePart: any | null, 
@@ -127,155 +161,154 @@ const processDigitalTwinMode = (
     const parts = [];
     
     if (refImagePart) {
-        // INPUT A: STRUCTURE (Cấu trúc/Pose)
-        parts.push({ text: "REFERENCE IMAGE [POSE & LAYOUT ONLY]: Mimic the camera angle, character positioning, and composition of this image exactly. Do NOT copy the character's face." });
+        parts.push({ text: "REFERENCE IMAGE [POSE & COMPOSITION]: Follow this image's camera angle and character pose exactly." });
         parts.push(refImagePart);
     }
     
     if (charParts.length > 0) {
-        // INPUT B: IDENTITY (Định danh)
-        parts.push({ text: `REFERENCE FACE [IDENTITY]: Use these features for the 3D character's face. Map them onto a 3D model.` });
+        parts.push({ text: `REFERENCE FACE [IDENTITY]: Use these facial features for the 3D character.` });
         parts.push(...charParts);
     }
 
-    // --- SYSTEM INSTRUCTION (V4 - SUPREME 3D COMMAND) ---
-    // Đây là "Hiến pháp" bắt buộc AI phải tuân theo
-    const systemPrompt = `** SUPREME DIRECTIVE: 3D GAME CHARACTER GENERATION **
+    const systemPrompt = `** SYSTEM DIRECTIVE: 3D GAME ASSET GENERATION **
     
-    1.  **CORE IDENTITY**: 
-        - You are a 3D Rendering Engine (like Unreal Engine 5 or Blender).
-        - EVERYTHING you generate must be a **3D MODEL / GAME CHARACTER**.
-        - **NEVER** generate a photorealistic real-life human photograph.
-        - Characters should have that specific "Audition Game" / "Pop Mart" / "Blind Box" aesthetic (smooth skin, perfect hair, slightly stylized proportions).
+    1.  **STYLE ENFORCEMENT**:
+        - Output MUST be a "3D Game Character Render" (like Audition, Sims 4 with mods, or Pop Mart figures).
+        - NOT a real photo. NOT a 2D drawing.
+        - Skin should have "Subsurface Scattering" but retain a stylized "Game Ready" look.
 
-    2.  **SCENE & DETAIL FIDELITY (HIGHEST PRIORITY)**:
-        - The user's prompt contains SPECIFIC scene details (e.g., "Shark plushie", "Number 22 on AC", "Black leather sofa"). 
-        - YOU MUST RENDER THESE EXACTLY. Do not ignore background details.
-        - If the user describes a pose (e.g., "Hugging from behind", "Legs intertwined"), render that EXACT pose.
+    2.  **SCENE ACCURACY**:
+        - Render exactly what is described in the prompt: objects, background details, lighting.
+        - If the prompt specifies a "Shark plushie" or "Number 22", it MUST appear.
 
-    3.  **STYLE INTERPRETATION**:
-        - If prompt says "Flash Photography" -> Render a 3D Character with direct, harsh lighting and high contrast shading.
-        - If prompt says "Vintage" -> Apply a noise/grain filter to the 3D Render.
-        - The "Vibe" is the photographic style, but the "Subject" remains a 3D Character.
+    3.  **SAFETY & COMPLIANCE**:
+        - If the prompt implies nudity, AUTOMATICALY clothe the character in generic game underwear or a bodysuit. DO NOT BLOCK THE GENERATION.
+        - Focus on the "Artistic" and "Digital" aspect.
 
-    [FINAL PROMPT EXECUTION]: ${prompt}
+    [EXECUTE PROMPT]: ${prompt}
     `;
 
     return { systemPrompt, parts };
 };
 
+// --- MAIN GENERATION FUNCTION WITH SMART RETRY ---
 export const generateImage = async (
     prompt: string, 
     aspectRatio: string = "1:1", 
     styleRefBase64?: string, 
     characterDataList: CharacterData[] = [], 
     resolution: string = '2K',
-    _modelTier: 'flash' | 'pro' = 'pro', // Deprecated param
-    useSearch: boolean = true, // Default ON
-    useCloudRef: boolean = true, // Default ON
+    _modelTier: 'flash' | 'pro' = 'pro', 
+    useSearch: boolean = true, 
+    useCloudRef: boolean = true, 
     onProgress?: (msg: string) => void
 ): Promise<string | null> => {
   
-  try {
-    const ai = await getAiClient();
-    const model = 'gemini-3-pro-image-preview';
-    
-    // STEP 1: THINKING & OPTIMIZATION (Reasoning Layer)
-    if (onProgress) onProgress("Analyzing Scene Layout & 3D Conversion...");
-    
-    // Force "3D Game Character" context into the prompt optimizer
-    let optimizedPrompt = await optimizePromptWithThinking(prompt);
-    
-    // Safety Net: Append 3D keywords one last time just in case the optimizer missed it
-    if (!optimizedPrompt.toLowerCase().includes("3d")) {
-        optimizedPrompt = "3D Game Character Render, " + optimizedPrompt;
-    }
+  const ai = await getAiClient();
+  const model = 'gemini-3-pro-image-preview'; // Only this model supports high quality generation
 
-    if (onProgress) onProgress(`Engine: ${model} | Rendering 3D Scene...`);
-
-    // STEP 2: PREPARE INPUTS
-    let refImagePart = null;
-    if (styleRefBase64) {
-        refImagePart = {
-            inlineData: { data: cleanBase64(styleRefBase64), mimeType: 'image/jpeg' }
-        };
-    }
-
-    const allParts: any[] = [];
-    const charDescriptions: string[] = [];
-
-    for (const char of characterDataList) {
-        if (char.image) {
-            if (onProgress) onProgress(`Mapping 3D Texture (Player ${char.id})...`);
-            
-            const textureSheet = await createTextureSheet(
-                char.image, 
-                char.faceImage, 
-                char.shoesImage 
-            );
-            
-            let finalPart;
-
-            if (useCloudRef) {
-                try {
-                    const fileUri = await uploadToGemini(textureSheet, 'image/jpeg');
-                    finalPart = {
-                        fileData: { mimeType: 'image/jpeg', fileUri: fileUri }
-                    };
-                } catch (e) {
-                     finalPart = {
-                        inlineData: { data: cleanBase64(textureSheet), mimeType: 'image/jpeg' }
-                    };
-                }
-            } else {
-                finalPart = {
-                    inlineData: { data: cleanBase64(textureSheet), mimeType: 'image/jpeg' }
-                };
-            }
-
-            allParts.push(finalPart);
-            charDescriptions.push(char.gender);
+  // --- INTERNAL HELPER: EXECUTE RUN ---
+  const executeRun = async (currentPrompt: string, isRetry: boolean = false): Promise<string | null> => {
+        
+        // Prepare Inputs
+        let refImagePart = null;
+        if (styleRefBase64) {
+            refImagePart = {
+                inlineData: { data: cleanBase64(styleRefBase64), mimeType: 'image/jpeg' }
+            };
         }
+
+        const allParts: any[] = [];
+        const charDescriptions: string[] = [];
+
+        for (const char of characterDataList) {
+            if (char.image) {
+                // Chỉ log scan lần đầu
+                if (!isRetry && onProgress) onProgress(`Scanning Identity Features (Player ${char.id})...`);
+                
+                const textureSheet = await createTextureSheet(char.image, char.faceImage, char.shoesImage);
+                let finalPart;
+
+                // Cloud upload for better quality, fallback to inline
+                if (useCloudRef) {
+                    try {
+                        const fileUri = await uploadToGemini(textureSheet, 'image/jpeg');
+                        finalPart = { fileData: { mimeType: 'image/jpeg', fileUri: fileUri } };
+                    } catch (e) {
+                        finalPart = { inlineData: { data: cleanBase64(textureSheet), mimeType: 'image/jpeg' } };
+                    }
+                } else {
+                    finalPart = { inlineData: { data: cleanBase64(textureSheet), mimeType: 'image/jpeg' } };
+                }
+                allParts.push(finalPart);
+                charDescriptions.push(char.gender);
+            }
+        }
+
+        const payload = processDigitalTwinMode(currentPrompt, refImagePart, allParts, charDescriptions, 'pro');
+        const finalParts = [...payload.parts, { text: payload.systemPrompt }];
+
+        const config: any = {
+            imageConfig: { aspectRatio: aspectRatio, imageSize: resolution },
+            // Safety Settings: BLOCK_ONLY_HIGH to allow artistic freedom but prevent illegal content
+            safetySettings: [
+                { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_ONLY_HIGH" },
+                { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" },
+                { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_ONLY_HIGH" }, // Relaxed to allow "sexy" but not "porn"
+                { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_ONLY_HIGH" }
+            ]
+        };
+
+        if (useSearch && !refImagePart && currentPrompt.length < 50) {
+            config.tools = [{ googleSearch: {} }];
+        }
+
+        if (onProgress) onProgress(isRetry ? "Retrying with Safety Filters..." : "Rendering Final Image (This may take 2-3 mins)...");
+
+        // Gọi API
+        const response = await ai.models.generateContent({
+            model: model,
+            contents: { parts: finalParts },
+            config: config
+        });
+
+        return extractImage(response);
+  };
+
+  // --- MAIN FLOW ---
+  try {
+    // 1. OPTIMIZATION PHASE
+    if (onProgress) onProgress("Analyzing Prompt & Safety Check...");
+    const optimizedPrompt = await optimizePromptWithThinking(prompt);
+    let finalPromptToUse = optimizedPrompt;
+
+    // Safety Net: Ensure 3D context
+    if (!finalPromptToUse.toLowerCase().includes("3d")) {
+        finalPromptToUse = "3D Game Character Render, " + finalPromptToUse;
     }
 
-    // STEP 3: EXECUTE GENERATION WITH SUPREME COMMAND
-    const payload = processDigitalTwinMode(optimizedPrompt, refImagePart, allParts, charDescriptions, 'pro');
-    
-    const finalParts = [...payload.parts, { text: payload.systemPrompt }];
+    // 2. EXECUTION PHASE (ATTEMPT 1)
+    if (onProgress) onProgress(`Engine: ${model} | Scene Construction...`);
+    try {
+        return await executeRun(finalPromptToUse);
+    } catch (firstError: any) {
+        // 3. RETRY PHASE (ATTEMPT 2 - FALLBACK)
+        console.warn("Attempt 1 Failed:", firstError.message);
+        
+        // Nếu lỗi là do Safety hoặc Model không hiểu Prompt tối ưu, thử lại với Prompt gốc
+        // Prompt gốc thường ngắn hơn và ít gây hiểu lầm cho bộ lọc Safety
+        if (onProgress) onProgress("⚠️ Attempt 1 failed. Re-calibrating for Safety & Stability...");
+        
+        // Thêm delay nhẹ để tránh rate limit
+        await new Promise(r => setTimeout(r, 2000));
 
-    const config: any = {
-        imageConfig: { 
-            aspectRatio: aspectRatio,
-            imageSize: resolution
-        },
-        // Direct Safety Settings to allow creative freedom while blocking harmful content
-        safetySettings: [
-            { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-            { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-            { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-            { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
-        ]
-    };
-
-    // Use Google Search only if we need to understand specific real-world objects (like "Air Conditioner model X")
-    // But keep the pose reference priority if it exists.
-    if (useSearch && !refImagePart && prompt.length < 50) {
-        config.tools = [{ googleSearch: {} }];
+        const safeFallbackPrompt = `3D Game Character, ${prompt} --safe --no nudity`;
+        return await executeRun(safeFallbackPrompt, true);
     }
-
-    if (onProgress) onProgress("Finalizing Octane Render...");
-
-    const response = await ai.models.generateContent({
-      model: model,
-      contents: { parts: finalParts },
-      config: config
-    });
-
-    return extractImage(response);
 
   } catch (error) {
-    console.error("Gemini Pipeline Error:", error);
-    throw error;
+    console.error("Gemini Pipeline Final Error:", error);
+    throw error; // Ném lỗi ra để UI hoàn tiền
   }
 };
 

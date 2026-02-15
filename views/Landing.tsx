@@ -3,14 +3,16 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Icons } from '../components/Icons';
 import { signInWithGoogle, signInWithEmail, signUpWithEmail } from '../services/supabaseClient';
 import { getPackages, getActivePromotion } from '../services/economyService';
-import { getShowcaseImages } from '../services/storageService'; // Import storage service
+import { getShowcaseImages } from '../services/storageService'; 
 import { CreditPackage, PromotionCampaign } from '../types';
+import { useNotification } from '../components/NotificationSystem'; // Import Notification Hook
 
 interface LandingProps {
   onEnter: () => void;
 }
 
 export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
+  const { notify } = useNotification(); // Use Notification
   const [showLogin, setShowLogin] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [beat, setBeat] = useState(false);
@@ -58,25 +60,21 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
   // Load Data
   useEffect(() => {
       const fetchData = async () => {
-          // 1. Get packages & promo
           const pkgs = await getPackages();
           const promo = await getActivePromotion();
           setPackages(pkgs); 
           setActivePromo(promo);
 
-          // 2. Get Shared Images for Showcase
           const sharedImages = await getShowcaseImages();
           
           if (sharedImages && sharedImages.length > 0) {
               const borderColors = ["border-audi-pink", "border-audi-purple", "border-audi-cyan", "border-audi-lime"];
-              
               const mappedImages = sharedImages.map((img, index) => ({
                   author: `@${img.userName || 'Artist'}`,
                   img: img.url,
                   border: borderColors[index % borderColors.length]
               }));
 
-              // If less than 5 images, mix with default to fill the marquee
               if (mappedImages.length < 5) {
                   setDisplayShowcase([...mappedImages, ...defaultShowcaseItems.slice(0, 8 - mappedImages.length)]);
               } else {
@@ -150,31 +148,28 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
   const handleGoogleLogin = async () => {
       const { error } = await signInWithGoogle();
       if (error) {
-          alert(error.message || "Không thể kết nối với Google.");
+          notify(error.message || "Không thể kết nối với Google.", 'error');
       }
   };
 
-  // --- VALIDATION LOGIC ADDED HERE ---
+  // --- VALIDATION LOGIC ---
   const isValidEmail = (email: string) => {
       return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   };
 
   const handleEmailAuth = async () => {
-      // 1. Basic Empty Check
       if (!email.trim() || !password.trim()) {
-          alert("Vui lòng nhập đầy đủ Email và Mật khẩu");
+          notify("Vui lòng nhập đầy đủ Email và Mật khẩu", 'warning');
           return;
       }
 
-      // 2. Email Format Check
       if (!isValidEmail(email)) {
-          alert("Địa chỉ Email không đúng định dạng (ví dụ: user@example.com)");
+          notify("Địa chỉ Email không đúng định dạng", 'warning');
           return;
       }
 
-      // 3. Password Length Check
       if (password.length < 6) {
-          alert("Mật khẩu quá ngắn! Vui lòng nhập ít nhất 6 ký tự.");
+          notify("Mật khẩu quá ngắn! Tối thiểu 6 ký tự.", 'warning');
           return;
       }
       
@@ -183,40 +178,37 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
           if (authMode === 'login') {
               const { error } = await signInWithEmail(email, password);
               if (error) {
-                  // Translate Common Errors
                   if (error.message.includes('Invalid login credentials')) {
-                      alert("Sai email hoặc mật khẩu.");
+                      notify("Sai email hoặc mật khẩu.", 'error');
                   } else {
-                      alert("Đăng nhập thất bại: " + error.message);
+                      notify("Đăng nhập thất bại: " + error.message, 'error');
                   }
-              } else {
-                  // Success: App.tsx will handle redirect
               }
+              // Success handled by App.tsx
           } else {
-              // Register Mode Validations
+              // Register
               if (password !== confirmPassword) {
-                  alert("Mật khẩu xác nhận không khớp!");
+                  notify("Mật khẩu xác nhận không khớp!", 'error');
                   setIsAuthLoading(false);
                   return;
               }
 
               const { error } = await signUpWithEmail(email, password);
               if (error) {
-                  // DETECT DATABASE TRIGGER ERROR
                   if (error.message.includes('Database error') || error.message.includes('saving new user')) {
-                      setShowSqlFix(true); // Show SQL Fix Modal
+                      setShowSqlFix(true); 
                   } else if (error.message.includes('User already registered')) {
-                      alert("Email này đã được đăng ký. Vui lòng đăng nhập.");
+                      notify("Email này đã được đăng ký. Vui lòng đăng nhập.", 'info');
                   } else {
-                      alert("Đăng ký thất bại: " + error.message);
+                      notify("Đăng ký thất bại: " + error.message, 'error');
                   }
               } else {
-                  alert("Đăng ký thành công! Hệ thống đang tự động đăng nhập...");
+                  notify("Đăng ký thành công! Đang tự động đăng nhập...", 'success');
               }
           }
       } catch (e: any) {
           console.error(e);
-          alert("Có lỗi hệ thống: " + e.message);
+          notify("Có lỗi hệ thống: " + e.message, 'error');
       } finally {
           setIsAuthLoading(false);
       }
@@ -230,7 +222,6 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
     return new Intl.NumberFormat('de-DE').format(num);
   };
 
-  // Smart Description for Banner
   const smartDescription = useMemo(() => {
       if (!activePromo) return "";
       const { name, bonusPercent } = activePromo;
@@ -242,7 +233,6 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
       return `✨ Chào mừng sự kiện "${name}". Tận hưởng ưu đãi nạp +${bonusPercent}% Vcoin ngay hôm nay. Nạp càng nhiều, ưu đãi càng lớn. Sẵn sàng bùng nổ cùng các tính năng AI mới nhất!`;
   }, [activePromo]);
 
-  // Marquee Content Logic
   const getMarqueeText = () => {
       if (activePromo) {
           return `🔥 Sự kiện ${activePromo.name}: Khuyến mãi +${activePromo.bonusPercent}% Vcoin cho mọi giao dịch! 💎 Cơ hội nạp 1 nhận 2 đang diễn ra!`;
@@ -251,17 +241,14 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
   };
 
   const sqlFixCode = `-- CHẠY MÃ NÀY TRONG SQL EDITOR ĐỂ SỬA LỖI ĐĂNG KÝ
--- 1. Xóa Trigger lỗi (nguyên nhân chính gây lỗi Database Error)
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 DROP FUNCTION IF EXISTS public.handle_new_user();
 
--- 2. Đảm bảo bảng users có đủ cột (theo đúng code App)
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS diamonds numeric default 0;
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS photo_url text;
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS is_admin boolean default false;
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS display_name text;
 
--- 3. Cấp quyền cho App tự ghi dữ liệu (Thay thế Trigger)
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Users can insert own profile" ON public.users;
@@ -378,7 +365,7 @@ CREATE POLICY "Public read access" ON public.users FOR SELECT TO anon USING (tru
           </div>
       </div>
 
-      {/* --- STATS --- */}
+      {/* ... STATS SECTION (Unchanged) ... */}
       <div className="relative z-20 max-w-6xl mx-auto px-4 -mt-10 md:-mt-20 mb-20 perspective-1000">
          <div className="relative grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="group relative bg-[#13131f] border-b-4 border-audi-pink rounded-2xl p-6 shadow-[0_10px_30px_rgba(0,0,0,0.5)] transform hover:scale-105 transition-all duration-300 overflow-hidden">
@@ -396,7 +383,7 @@ CREATE POLICY "Public read access" ON public.users FOR SELECT TO anon USING (tru
                     </div>
                 </div>
             </div>
-            {/* ... other stats cards ... */}
+            {/* ... other stats ... */}
             <div className="group relative bg-[#13131f] border-b-4 border-audi-cyan rounded-2xl p-6 shadow-[0_10px_30px_rgba(0,0,0,0.5)] transform hover:scale-105 transition-all duration-300 overflow-hidden">
                 <div className="absolute inset-0 bg-gradient-to-b from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
                 <div className="absolute -right-4 -top-4 w-24 h-24 bg-audi-cyan/20 blur-[40px] rounded-full group-hover:bg-audi-cyan/40 transition-colors"></div>
@@ -430,7 +417,7 @@ CREATE POLICY "Public read access" ON public.users FOR SELECT TO anon USING (tru
          </div>
       </div>
 
-      {/* --- OUTSTANDING FEATURES --- */}
+      {/* ... OTHER SECTIONS (Features, Steps, Showcase, Shop, Footer) ... */}
       <div className="py-16 md:py-20 relative z-20 px-4">
           <div className="max-w-7xl mx-auto md:px-6">
               <div className="text-center mb-10 md:mb-16">
@@ -460,7 +447,6 @@ CREATE POLICY "Public read access" ON public.users FOR SELECT TO anon USING (tru
           </div>
       </div>
 
-      {/* --- 4 SIMPLE STEPS --- */}
       <div className="py-16 md:py-24 relative z-20 px-4 bg-white/[0.02]">
          <div className="max-w-7xl mx-auto md:px-6">
             <div className="text-center mb-10 md:mb-16">
@@ -492,7 +478,6 @@ CREATE POLICY "Public read access" ON public.users FOR SELECT TO anon USING (tru
          </div>
       </div>
 
-      {/* --- AI SHOWCASE (SYNCED) --- */}
       <div className="py-16 md:py-24 relative z-20 bg-gradient-to-b from-[#090014] to-[#120024] overflow-hidden">
           <div className="max-w-7xl mx-auto px-6 mb-8 md:mb-12">
               <div className="flex flex-col md:flex-row items-end justify-between gap-4">
@@ -515,7 +500,6 @@ CREATE POLICY "Public read access" ON public.users FOR SELECT TO anon USING (tru
           </div>
       </div>
 
-      {/* --- VCOIN SHOP (UPDATED TO MATCH TOPUP) --- */}
       <div className="py-16 md:py-24 px-4 relative z-20">
           <div className="max-w-6xl mx-auto">
               
@@ -533,7 +517,6 @@ CREATE POLICY "Public read access" ON public.users FOR SELECT TO anon USING (tru
                         <div className="absolute bottom-[-50%] right-[-20%] w-[500px] h-[500px] bg-audi-cyan/20 rounded-full blur-[100px] animate-pulse delay-1000"></div>
 
                         <div className="relative z-10 p-8 md:p-12 flex flex-col md:flex-row items-center justify-between gap-8">
-                            {/* Left Content */}
                             <div className="flex-1 text-center md:text-left space-y-4">
                                 <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-black/40 border border-audi-yellow/50 backdrop-blur-md shadow-[0_0_15px_rgba(251,218,97,0.4)] animate-bounce-slow">
                                     <Icons.Zap className="w-4 h-4 text-audi-yellow fill-current" />
@@ -548,7 +531,6 @@ CREATE POLICY "Public read access" ON public.users FOR SELECT TO anon USING (tru
                                 </p>
                             </div>
 
-                            {/* Right Timer */}
                             <div className="flex gap-2 md:gap-4 p-4 md:p-6 bg-black/20 rounded-3xl border border-white/10 backdrop-blur-sm shadow-xl transform group-hover:scale-105 transition-transform duration-500">
                                 {['d', 'h', 'm', 's'].map((unit) => (
                                     <div key={unit} className="flex flex-col items-center gap-2">
@@ -568,7 +550,7 @@ CREATE POLICY "Public read access" ON public.users FOR SELECT TO anon USING (tru
                   </div>
               )}
 
-              {/* --- PACKAGE GRID (SYNCED WITH TOPUP DESIGN) --- */}
+              {/* --- PACKAGE GRID --- */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 relative z-10">
                   {packages.map((pkg) => {
                       const activeBonusPercent = activePromo ? activePromo.bonusPercent : pkg.bonusPercent;
@@ -577,8 +559,6 @@ CREATE POLICY "Public read access" ON public.users FOR SELECT TO anon USING (tru
 
                       return (
                       <div key={pkg.id} onClick={handleStart} className={`group relative bg-[#12121a] rounded-[2rem] p-6 border transition-all duration-300 hover:-translate-y-2 hover:shadow-[0_10px_40px_rgba(0,0,0,0.5)] flex flex-col cursor-pointer ${pkg.isPopular ? 'border-audi-pink shadow-[0_0_20px_rgba(255,0,153,0.1)]' : 'border-white/10 hover:border-white/30'}`}>
-                          
-                          {/* Badges */}
                           {pkg.isPopular && (
                               <div className="absolute top-0 right-0 bg-gradient-to-bl from-audi-pink to-audi-purple text-white text-[10px] font-bold px-4 py-1.5 rounded-tr-[1.8rem] rounded-bl-xl shadow-lg z-10 flex items-center gap-1">
                                   <Icons.Flame className="w-3 h-3 fill-white" /> HOT
@@ -590,7 +570,6 @@ CREATE POLICY "Public read access" ON public.users FOR SELECT TO anon USING (tru
                               </div>
                           )}
                           
-                          {/* Icon & Coin */}
                           <div className="flex flex-col items-center justify-center py-6 border-b border-white/5 border-dashed relative">
                               <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-4 transition-transform group-hover:scale-110 duration-500 bg-gradient-to-b ${pkg.isPopular ? 'from-audi-pink/20 to-transparent' : 'from-audi-cyan/20 to-transparent'}`}>
                                   <Icons.Gem className={`w-10 h-10 ${pkg.isPopular ? 'text-audi-pink' : 'text-audi-cyan'} drop-shadow-[0_0_10px_currentColor]`} />
@@ -602,7 +581,6 @@ CREATE POLICY "Public read access" ON public.users FOR SELECT TO anon USING (tru
                               </div>
                           </div>
                           
-                          {/* Details */}
                           <div className="flex-1 py-6 space-y-3">
                               <div className="flex justify-between items-center text-sm">
                                   <span className="text-slate-400">Giá trị thực</span>
@@ -619,7 +597,6 @@ CREATE POLICY "Public read access" ON public.users FOR SELECT TO anon USING (tru
                               </div>
                           </div>
                           
-                          {/* Button */}
                           <button className={`w-full py-4 rounded-xl font-bold text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all relative overflow-hidden ${pkg.isPopular ? 'bg-gradient-to-r from-audi-pink to-audi-purple text-white shadow-[0_5px_20px_rgba(255,0,153,0.3)] hover:shadow-[0_5px_30px_rgba(255,0,153,0.5)]' : 'bg-white text-black hover:bg-slate-200'}`}>
                               <span className="relative z-10">MUA NGAY</span>
                               <Icons.ChevronRight className="w-4 h-4 relative z-10 group-hover:translate-x-1 transition-transform" />
@@ -630,39 +607,6 @@ CREATE POLICY "Public read access" ON public.users FOR SELECT TO anon USING (tru
           </div>
       </div>
 
-      {/* --- FAQ SECTION --- */}
-      <div className="py-16 md:py-20 relative z-20 px-4">
-          <div className="max-w-4xl mx-auto">
-              <h2 className="font-game text-3xl md:text-5xl font-bold text-center text-white mb-8 md:mb-12">
-                  CÂU HỎI <span className="text-audi-purple">THƯỜNG GẶP</span>
-              </h2>
-              <div className="space-y-4">
-                  {[
-                      { q: "Audition AI Studio là gì?", a: "Là nền tảng tạo ảnh nghệ thuật sử dụng trí tuệ nhân tạo, cho phép bạn tạo ra các bức ảnh đẹp như game Audition, anime hoặc ảnh thực tế chỉ bằng mô tả văn bản." },
-                      { q: "Tôi có mất phí khi sử dụng không?", a: "Bạn được miễn phí 10 lượt tạo ảnh đầu tiên mỗi ngày. Để tạo nhiều hơn và sử dụng tính năng cao cấp, bạn có thể mua thêm Vcoin." },
-                      { q: "Ảnh tạo ra có bản quyền không?", a: "Bạn có toàn quyền sử dụng thương mại đối với các hình ảnh được tạo ra từ tài khoản của bạn." },
-                      { q: "Làm sao để nạp Vcoin?", a: "Bạn có thể nạp qua chuyển khoản ngân hàng hoặc ví điện tử trong phần Shop sau khi đăng nhập." }
-                  ].map((item, idx) => (
-                      <div key={idx} className="glass-panel border border-white/10 rounded-2xl overflow-hidden">
-                          <button 
-                             onClick={() => toggleFaq(idx)}
-                             className="w-full flex justify-between items-center p-4 md:p-6 text-left font-bold text-sm md:text-lg hover:bg-white/5 transition-colors"
-                          >
-                              <span className="text-white pr-4">{item.q}</span>
-                              <Icons.ChevronRight className={`w-4 h-4 md:w-5 md:h-5 text-audi-cyan transition-transform shrink-0 ${openFaq === idx ? 'rotate-90' : ''}`} />
-                          </button>
-                          {openFaq === idx && (
-                              <div className="p-4 md:p-6 pt-0 text-xs md:text-sm text-slate-400 leading-relaxed border-t border-white/5 bg-black/20">
-                                  {item.a}
-                              </div>
-                          )}
-                      </div>
-                  ))}
-              </div>
-          </div>
-      </div>
-
-      {/* --- REDESIGNED FOOTER --- */}
       <footer className="relative z-20 bg-[#020005] border-t border-white/10 pt-16 pb-8">
            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-audi-pink to-transparent opacity-50"></div>
            <div className="max-w-7xl mx-auto px-6">
@@ -866,7 +810,6 @@ CREATE POLICY "Public read access" ON public.users FOR SELECT TO anon USING (tru
   );
 };
 
-// Subcomponent for Showcase Card
 const ShowcaseCard = ({ item }: { item: any }) => (
     <div className="group relative w-64 h-96 md:w-80 md:h-[500px] shrink-0 cursor-pointer overflow-hidden rounded-[2rem] border-2 border-transparent hover:border-white/50 transition-all duration-300">
         <div className={`absolute inset-0 bg-black rounded-[2rem] border-2 ${item.border} transition-transform duration-500 z-10 overflow-hidden`}>

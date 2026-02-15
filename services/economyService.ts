@@ -207,14 +207,16 @@ export const getUserProfile = async (): Promise<UserProfile> => {
                     profile = retry.data;
                 }
 
-                // SELF-HEALING: If still missing, create it manually
+                // SELF-HEALING: If still missing, create it manually (Google Login Fallback)
                 if (!profile) {
-                    console.warn("Profile missing after retry. Executing Self-Healing...");
+                    console.warn("Profile missing after retry. Executing Self-Healing for Google Login...");
+                    const metadata = user.user_metadata || {};
+                    
                     const newProfile = {
                         id: user.id,
                         email: user.email,
-                        display_name: user.user_metadata.full_name || user.email?.split('@')[0],
-                        photo_url: user.user_metadata.avatar_url,
+                        display_name: metadata.full_name || metadata.name || user.email?.split('@')[0],
+                        photo_url: metadata.avatar_url || metadata.picture, // Google typically uses 'avatar_url' or 'picture'
                         diamonds: 0,
                         is_admin: false,
                         consecutive_check_ins: 0,
@@ -224,14 +226,22 @@ export const getUserProfile = async (): Promise<UserProfile> => {
                     const { error: insertError } = await supabase.from('users').insert(newProfile);
                     
                     if (!insertError || insertError.code === '23505') {
+                         // Return valid profile immediately
                          return { 
-                            ...MOCK_USER, 
                             id: user.id,
                             username: newProfile.display_name,
                             email: newProfile.email || '',
                             avatar: newProfile.photo_url || MOCK_USER.avatar,
-                            balance: 0
-                        } as UserProfile;
+                            balance: 0,
+                            role: 'user',
+                            isVip: false,
+                            streak: 0,
+                            lastCheckin: null,
+                            checkinHistory: [],
+                            usedGiftcodes: []
+                        };
+                    } else {
+                        console.error("Self-Healing Failed:", insertError);
                     }
                 }
 

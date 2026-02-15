@@ -45,7 +45,7 @@ interface SamplePrompt {
     id: string;
     image_url: string;
     prompt: string;
-    category: string;
+    category?: string;
 }
 
 export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang }) => {
@@ -126,39 +126,31 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       }
       setLoadingSamples(true);
       
-      // Map activeMode to caulenhau categories
-      // Assume categories: 'single', 'couple', 'group'
-      let category = 'single';
-      if (activeMode === 'couple') category = 'couple';
-      if (activeMode === 'group3' || activeMode === 'group4') category = 'group';
-
       try {
-          // Assuming table 'prompts' has columns 'image_url', 'prompt', 'category'
-          // We try to fetch matching category or just grab latest
+          // Changed table 'prompts' to 'images' based on your database screenshot
           let query = caulenhauClient
-              .from('prompts')
+              .from('images')
               .select('*')
               .order('created_at', { ascending: false })
               .limit(50);
           
-          if (category) {
-              query = query.eq('category', category);
-          }
-
+          // NOTE: Category filter removed temporarily as 'category' column 
+          // was not visible in the provided 'images' table screenshot.
+          // This ensures images will show up regardless of category structure.
+          
           const { data, error } = await query;
 
           if (error) throw error;
           if (data) {
               setSamplePrompts(data.map((item: any) => ({
                   id: item.id,
-                  image_url: item.image_url || item.url, // Handle variations
-                  prompt: item.prompt || item.prompt_text,
-                  category: item.category
+                  image_url: item.image_url,
+                  prompt: item.prompt,
+                  category: 'general' // Default category
               })));
           }
       } catch (e) {
           console.error("Fetch samples error", e);
-          // Fallback if table doesn't exist or error, showing nothing is better than crash
           setSamplePrompts([]);
       } finally {
           setLoadingSamples(false);
@@ -499,7 +491,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
         {/* --- SAMPLE PROMPTS MODAL (CAULENHAU) --- */}
         {showSampleModal && (
             <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/50 backdrop-blur-md p-4 animate-fade-in" onClick={() => setShowSampleModal(false)}>
-                <div className="bg-[#12121a] w-full max-w-4xl h-[80vh] rounded-[2rem] border border-audi-purple/50 shadow-[0_0_50px_rgba(183,33,255,0.2)] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+                {/* Updated Size: max-w-2xl and h-[60vh] */}
+                <div className="bg-[#12121a] w-full max-w-2xl h-[60vh] rounded-[2rem] border border-audi-purple/50 shadow-[0_0_50px_rgba(183,33,255,0.2)] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
                     <div className="p-4 border-b border-white/10 flex justify-between items-center bg-black/20">
                         <div className="flex items-center gap-2">
                             <Icons.Image className="w-5 h-5 text-audi-purple" />
@@ -525,7 +518,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                                 <p>Chưa có mẫu nào cho chế độ này.</p>
                             </div>
                         ) : (
-                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                                 {samplePrompts.map((sample) => (
                                     <div 
                                         key={sample.id} 
@@ -708,7 +701,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                             >
                                 <Icons.Image className="w-3 h-3" /> Sử dụng Prompt Mẫu
                             </button>
-                            {/* REMOVED AI SUGGEST BUTTON AS REQUESTED */}
                         </div>
                     </div>
                     

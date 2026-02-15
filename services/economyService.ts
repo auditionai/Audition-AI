@@ -187,85 +187,96 @@ export const deleteApiKey = async (id: string): Promise<boolean> => {
 
 export const getUserProfile = async (): Promise<UserProfile> => {
     if (supabase) {
+        // 1. Get Auth User (The Single Source of Truth for "Logged In" status)
         const { data: { user } } = await supabase.auth.getUser();
         
         if (user) {
             try {
-                // Define fetch function for reuse
-                const fetchProfile = async () => await supabase
+                // 2. Try fetching Profile from DB
+                const { data: profile, error } = await supabase
                     .from('users')
                     .select('*')
                     .eq('id', user.id)
-                    .single();
+                    .maybeSingle();
 
-                let { data: profile, error } = await fetchProfile();
+                let finalProfile = profile;
 
-                // RETRY LOGIC: If profile not found, wait 500ms and try again (Wait for Trigger)
-                if (!profile) {
-                    await new Promise(r => setTimeout(r, 500));
-                    const retry = await fetchProfile();
-                    profile = retry.data;
-                }
-
-                // SELF-HEALING: If still missing, create it manually (Google Login Fallback)
-                if (!profile) {
-                    console.warn("Profile missing after retry. Executing Self-Healing for Google Login...");
-                    const metadata = user.user_metadata || {};
+                // 3. FORCE CREATE IF MISSING (BLOCKING)
+                // This ensures the row exists before we proceed.
+                if (!finalProfile) {
+                    console.warn("Profile missing in DB. Executing FORCED CREATION...");
                     
-                    const newProfile = {
+                    const metadata = user.user_metadata || {};
+                    const newProfilePayload = {
                         id: user.id,
                         email: user.email,
-                        display_name: metadata.full_name || metadata.name || user.email?.split('@')[0],
-                        photo_url: metadata.avatar_url || metadata.picture, // Google typically uses 'avatar_url' or 'picture'
+                        display_name: metadata.full_name || metadata.name || user.email?.split('@')[0] || 'Dancer',
+                        photo_url: metadata.avatar_url || metadata.picture || '',
                         diamonds: 0,
                         is_admin: false,
                         consecutive_check_ins: 0,
                         created_at: new Date().toISOString()
                     };
-                    
-                    const { error: insertError } = await supabase.from('users').insert(newProfile);
-                    
-                    // IF INSERT SUCCEEDS OR DUPLICATE, USE THE NEW DATA
-                    if (!insertError || insertError.code === '23505') {
-                         return { 
-                            id: user.id,
-                            username: newProfile.display_name,
-                            email: newProfile.email || '',
-                            avatar: newProfile.photo_url || MOCK_USER.avatar,
-                            balance: 0,
-                            role: 'user',
-                            isVip: false,
-                            streak: 0,
-                            lastCheckin: null,
-                            checkinHistory: [],
-                            usedGiftcodes: []
-                        };
+
+                    // Use UPSERT to handle race conditions (if trigger ran but was slow)
+                    const { data: inserted, error: insertError } = await supabase
+                        .from('users')
+                        .upsert(newProfilePayload, { onConflict: 'id' })
+                        .select()
+                        .single();
+
+                    if (insertError) {
+                        console.error("Critical: Failed to create user profile in DB.", insertError);
+                        // If DB write fails, we fall back to Auth Metadata for display, 
+                        // but features dependent on DB (balance, checkin) will fail.
                     } else {
-                        console.error("Self-Healing Failed:", insertError);
+                        finalProfile = inserted;
+                        console.log("User Profile Created/Synced Successfully.");
                     }
                 }
 
-                if (profile) {
-                    return {
-                        id: user.id,
-                        username: profile.display_name || user.email?.split('@')[0] || 'Dancer',
-                        email: profile.email || user.email || '',
-                        avatar: profile.photo_url || user.user_metadata.avatar_url || MOCK_USER.avatar,
-                        balance: profile.diamonds || 0,
-                        role: profile.is_admin ? 'admin' : 'user',
-                        isVip: false,
-                        streak: profile.consecutive_check_ins || 0,
-                        lastCheckin: profile.last_check_in,
-                        checkinHistory: [], 
-                        usedGiftcodes: []
-                    };
-                }
+                // 4. Construct Return Object
+                const metadata = user.user_metadata || {};
+                
+                // Prioritize DB data, fallback to Auth data
+                const displayName = finalProfile?.display_name || metadata.full_name || metadata.name || user.email?.split('@')[0] || 'Dancer';
+                const avatar = finalProfile?.photo_url || metadata.avatar_url || metadata.picture || MOCK_USER.avatar;
+                
+                return {
+                    id: user.id,
+                    username: displayName,
+                    email: finalProfile?.email || user.email || '',
+                    avatar: avatar,
+                    balance: finalProfile?.diamonds || 0,
+                    role: finalProfile?.is_admin ? 'admin' : 'user',
+                    isVip: false,
+                    streak: finalProfile?.consecutive_check_ins || 0,
+                    lastCheckin: finalProfile?.last_check_in,
+                    checkinHistory: [], 
+                    usedGiftcodes: []
+                };
+
             } catch (e) {
                 console.error("Critical User Fetch Error:", e);
+                // Even on error, try to return basic auth info if possible to avoid "Guest"
+                return {
+                    id: user.id,
+                    username: user.email?.split('@')[0] || 'Unknown',
+                    email: user.email || '',
+                    avatar: MOCK_USER.avatar,
+                    balance: 0,
+                    role: 'user',
+                    isVip: false,
+                    streak: 0,
+                    lastCheckin: null,
+                    checkinHistory: [],
+                    usedGiftcodes: []
+                };
             }
         }
     }
 
+    // Only return MOCK_USER if NOT logged in at all
     let localUser = getStorage('dmp_user');
     if (!localUser) {
         localUser = MOCK_USER;

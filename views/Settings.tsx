@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Language, ViewId, UserProfile } from '../types';
 import { Icons } from '../components/Icons';
-import { redeemGiftcode, getUserProfile, updateAdminUserProfile } from '../services/economyService';
+import { redeemGiftcode, getUserProfile, updateAdminUserProfile, getGiftcodePromoConfig } from '../services/economyService';
 import { useNotification } from '../components/NotificationSystem';
 
 interface SettingsProps {
@@ -25,6 +25,9 @@ export const Settings: React.FC<SettingsProps> = ({ lang, onLogout, onNavigate, 
   const [formAvatar, setFormAvatar] = useState('');
 
   const [giftcode, setGiftcode] = useState('');
+  
+  // Announcement State
+  const [promoConfig, setPromoConfig] = useState({ text: '', isActive: false });
 
   useEffect(() => {
       const loadUser = async () => {
@@ -33,6 +36,10 @@ export const Settings: React.FC<SettingsProps> = ({ lang, onLogout, onNavigate, 
           setUserProfile(profile);
           setFormName(profile.username);
           setFormAvatar(profile.avatar);
+          
+          const promo = await getGiftcodePromoConfig();
+          setPromoConfig(promo);
+          
           setIsLoading(false);
       };
       loadUser();
@@ -65,6 +72,10 @@ export const Settings: React.FC<SettingsProps> = ({ lang, onLogout, onNavigate, 
       if (result.success) {
           notify(`Thành công! Bạn nhận được ${result.reward} Vcoin.`, 'success');
           setGiftcode('');
+          
+          // Refresh user profile to show new balance
+          const updated = await getUserProfile();
+          setUserProfile(updated);
       } else {
           notify(`Lỗi: ${result.message}`, 'error');
       }
@@ -221,28 +232,47 @@ export const Settings: React.FC<SettingsProps> = ({ lang, onLogout, onNavigate, 
                             {lang === 'vi' ? 'Nhập Giftcode' : 'Redeem Giftcode'}
                         </h2>
                         
-                        <div className="bg-gradient-to-r from-audi-pink/20 to-audi-purple/20 p-6 rounded-2xl border border-white/10 text-center space-y-4">
-                            <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mx-auto text-audi-yellow animate-bounce">
-                                <Icons.Gem className="w-8 h-8" />
+                        {/* PROMOTIONAL ANNOUNCEMENT BANNER */}
+                        {promoConfig.isActive && promoConfig.text && (
+                            <div className="w-full p-4 mb-4 rounded-xl bg-gradient-to-r from-audi-purple to-audi-pink flex items-center justify-center gap-3 animate-pulse shadow-[0_0_20px_rgba(183,33,255,0.4)] border border-white/20">
+                                <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center shrink-0">
+                                    <Icons.Gem className="w-5 h-5 text-audi-purple" />
+                                </div>
+                                <span className="font-bold text-white text-sm md:text-base text-center">
+                                    {promoConfig.text}
+                                </span>
                             </div>
-                            <h3 className="font-bold text-lg text-white">
-                                {lang === 'vi' ? 'Nhận Vcoin & Quà tặng' : 'Get Vcoin & Gifts'}
-                            </h3>
-                            <p className="text-sm text-slate-400">
-                                {lang === 'vi' ? 'Nhập mã quà tặng từ các sự kiện để nhận thưởng ngay.' : 'Enter gift codes from events to get rewards instantly.'}
-                            </p>
+                        )}
+
+                        <div className="bg-gradient-to-r from-audi-pink/20 to-audi-purple/20 p-6 rounded-2xl border border-white/10 text-center space-y-4 relative overflow-hidden group">
+                            {/* Decorative Background Elements */}
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-audi-purple/20 rounded-full blur-3xl group-hover:bg-audi-purple/30 transition-all duration-1000"></div>
+                            <div className="absolute bottom-0 left-0 w-32 h-32 bg-audi-pink/20 rounded-full blur-3xl group-hover:bg-audi-pink/30 transition-all duration-1000"></div>
+
+                            <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mx-auto text-audi-yellow animate-bounce relative z-10 border border-white/10 backdrop-blur-sm">
+                                <Icons.Gem className="w-8 h-8 drop-shadow-[0_0_10px_rgba(251,218,97,0.8)]" />
+                            </div>
                             
-                            <div className="flex gap-2 max-w-sm mx-auto">
+                            <div className="relative z-10">
+                                <h3 className="font-bold text-lg text-white">
+                                    {lang === 'vi' ? 'Nhận Vcoin & Quà tặng' : 'Get Vcoin & Gifts'}
+                                </h3>
+                                <p className="text-sm text-slate-400 mt-1">
+                                    {lang === 'vi' ? 'Nhập mã quà tặng từ các sự kiện để nhận thưởng ngay.' : 'Enter gift codes from events to get rewards instantly.'}
+                                </p>
+                            </div>
+                            
+                            <div className="flex gap-2 max-w-sm mx-auto relative z-10">
                                 <input 
                                     type="text" 
                                     value={giftcode}
                                     onChange={(e) => setGiftcode(e.target.value.toUpperCase())}
                                     placeholder="CODE..."
-                                    className="flex-1 bg-black/50 border border-audi-yellow/30 rounded-xl p-3 text-white font-game text-center uppercase tracking-widest focus:border-audi-yellow outline-none placeholder:text-slate-600" 
+                                    className="flex-1 bg-black/50 border border-audi-yellow/30 rounded-xl p-3 text-white font-game text-center uppercase tracking-widest focus:border-audi-yellow outline-none placeholder:text-slate-600 focus:shadow-[0_0_15px_rgba(251,218,97,0.2)] transition-all" 
                                 />
                                 <button 
                                     onClick={handleRedeemCode}
-                                    className="px-6 py-3 bg-audi-yellow text-black font-bold rounded-xl hover:bg-yellow-300 transition-colors"
+                                    className="px-6 py-3 bg-audi-yellow text-black font-bold rounded-xl hover:bg-yellow-300 transition-all shadow-[0_0_15px_rgba(251,218,97,0.4)] hover:scale-105 active:scale-95"
                                 >
                                     <Icons.Zap className="w-5 h-5" />
                                 </button>

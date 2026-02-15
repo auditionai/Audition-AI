@@ -13,6 +13,23 @@ const isValidUUID = (id: string) => {
     return regex.test(id);
 };
 
+// --- HELPER: DATE FORMATTING (LOCAL TIME YYYY-MM-DD) ---
+const getLocalDateStr = (date = new Date()) => {
+    // Sử dụng sv-SE để có format YYYY-MM-DD mà vẫn giữ local time
+    return date.toLocaleDateString('sv-SE');
+};
+
+const getMonthRange = (date = new Date()) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const start = new Date(year, month, 1);
+    const end = new Date(year, month + 1, 0); // Last day of current month
+    return {
+        start: getLocalDateStr(start),
+        end: getLocalDateStr(end)
+    };
+};
+
 // --- MOCK DATA (Fallback) ---
 const MOCK_USER: UserProfile = {
   id: 'u_local_001',
@@ -116,7 +133,7 @@ export const saveSystemApiKey = async (apiKey: string): Promise<{ success: boole
                 .from('api_keys')
                 .select('id')
                 .eq('key_value', cleanKey)
-                .maybeSingle(); // Use maybeSingle to avoid error on 0 rows
+                .maybeSingle();
 
             if (selectError) throw selectError;
 
@@ -166,67 +183,141 @@ export const deleteApiKey = async (id: string): Promise<boolean> => {
     return false;
 };
 
-// --- USER SERVICES ---
+// --- GIFTCODE ANNOUNCEMENT SYSTEM ---
+
+export const getGiftcodePromoConfig = async (): Promise<{ text: string, isActive: boolean }> => {
+    if (supabase) {
+        const { data, error } = await supabase
+            .from('system_settings')
+            .select('value')
+            .eq('key', 'giftcode_promo')
+            .maybeSingle();
+        
+        if (data && data.value) {
+            // Value is stored as JSON: { text: "...", isActive: true }
+            const config = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
+            return {
+                text: config.text || '',
+                isActive: config.isActive || false
+            };
+        }
+    }
+    return { text: '', isActive: false };
+}
+
+export const saveGiftcodePromoConfig = async (text: string, isActive: boolean): Promise<{ success: boolean, error?: string }> => {
+    if (supabase) {
+        try {
+            const { error } = await supabase
+                .from('system_settings')
+                .upsert({ 
+                    key: 'giftcode_promo', 
+                    value: { text, isActive } // Store as JSON
+                }, { onConflict: 'key' });
+
+            if (error) throw error;
+            return { success: true };
+        } catch (e: any) {
+            return { success: false, error: e.message };
+        }
+    }
+    return { success: false, error: "No DB" };
+}
+
+// --- USER SERVICES (UPDATED WITH SELF-HEALING) ---
 
 export const getUserProfile = async (): Promise<UserProfile> => {
     if (supabase) {
+        // 1. Get Auth User (The Single Source of Truth for "Logged In" status)
         const { data: { user } } = await supabase.auth.getUser();
         
         if (user) {
             try {
+                // 2. Try fetching Profile from DB
                 const { data: profile, error } = await supabase
                     .from('users')
                     .select('*')
                     .eq('id', user.id)
-                    .single();
+                    .maybeSingle();
 
-                if (profile) {
-                    return {
+                let finalProfile = profile;
+
+                // 3. FORCE CREATE IF MISSING (BLOCKING)
+                // This ensures the row exists before we proceed.
+                if (!finalProfile) {
+                    console.warn("Profile missing in DB. Executing FORCED CREATION...");
+                    
+                    const metadata = user.user_metadata || {};
+                    const newProfilePayload = {
                         id: user.id,
-                        username: profile.display_name || user.email?.split('@')[0] || 'Dancer',
-                        email: profile.email || user.email || '',
-                        avatar: profile.photo_url || user.user_metadata.avatar_url || MOCK_USER.avatar,
-                        balance: profile.diamonds || 0,
-                        role: profile.is_admin ? 'admin' : 'user',
-                        isVip: false,
-                        streak: profile.consecutive_check_ins || 0,
-                        lastCheckin: profile.last_check_in,
-                        checkinHistory: [], 
-                        usedGiftcodes: []
+                        email: user.email,
+                        display_name: metadata.full_name || metadata.name || user.email?.split('@')[0] || 'Dancer',
+                        photo_url: metadata.avatar_url || metadata.picture || '',
+                        diamonds: 0,
+                        is_admin: false,
+                        consecutive_check_ins: 0,
+                        created_at: new Date().toISOString()
                     };
-                } 
-                
-                // Profile missing -> Create new with conflict handling
-                const newProfile = {
-                    id: user.id,
-                    email: user.email,
-                    display_name: user.user_metadata.full_name || user.email?.split('@')[0],
-                    photo_url: user.user_metadata.avatar_url,
-                    diamonds: 10,
-                    is_admin: false,
-                    consecutive_check_ins: 0,
-                    created_at: new Date().toISOString()
-                };
-                
-                const { error: insertError } = await supabase.from('users').insert(newProfile);
-                
-                if (!insertError || insertError.code === '23505') { // 23505 = Unique Violation
-                    return { 
-                        ...MOCK_USER, 
-                        id: user.id,
-                        username: newProfile.display_name,
-                        email: newProfile.email || '',
-                        avatar: newProfile.photo_url || MOCK_USER.avatar,
-                        balance: newProfile.diamonds
-                    } as UserProfile;
+
+                    // Use UPSERT to handle race conditions (if trigger ran but was slow)
+                    const { data: inserted, error: insertError } = await supabase
+                        .from('users')
+                        .upsert(newProfilePayload, { onConflict: 'id' })
+                        .select()
+                        .single();
+
+                    if (insertError) {
+                        console.error("Critical: Failed to create user profile in DB.", insertError);
+                        // If DB write fails, we fall back to Auth Metadata for display, 
+                        // but features dependent on DB (balance, checkin) will fail.
+                    } else {
+                        finalProfile = inserted;
+                        console.log("User Profile Created/Synced Successfully.");
+                    }
                 }
+
+                // 4. Construct Return Object
+                const metadata = user.user_metadata || {};
+                
+                // Prioritize DB data, fallback to Auth data
+                const displayName = finalProfile?.display_name || metadata.full_name || metadata.name || user.email?.split('@')[0] || 'Dancer';
+                const avatar = finalProfile?.photo_url || metadata.avatar_url || metadata.picture || MOCK_USER.avatar;
+                
+                return {
+                    id: user.id,
+                    username: displayName,
+                    email: finalProfile?.email || user.email || '',
+                    avatar: avatar,
+                    balance: finalProfile?.diamonds || 0,
+                    role: finalProfile?.is_admin ? 'admin' : 'user',
+                    isVip: false,
+                    streak: finalProfile?.consecutive_check_ins || 0,
+                    lastCheckin: finalProfile?.last_check_in,
+                    checkinHistory: [], 
+                    usedGiftcodes: []
+                };
 
             } catch (e) {
                 console.error("Critical User Fetch Error:", e);
+                // Even on error, try to return basic auth info if possible to avoid "Guest"
+                return {
+                    id: user.id,
+                    username: user.email?.split('@')[0] || 'Unknown',
+                    email: user.email || '',
+                    avatar: MOCK_USER.avatar,
+                    balance: 0,
+                    role: 'user',
+                    isVip: false,
+                    streak: 0,
+                    lastCheckin: null,
+                    checkinHistory: [],
+                    usedGiftcodes: []
+                };
             }
         }
     }
 
+    // Only return MOCK_USER if NOT logged in at all
     let localUser = getStorage('dmp_user');
     if (!localUser) {
         localUser = MOCK_USER;
@@ -235,7 +326,7 @@ export const getUserProfile = async (): Promise<UserProfile> => {
     return localUser;
 };
 
-export const updateUserBalance = async (amount: number, reason: string, type: 'topup' | 'usage' | 'reward' | 'refund' | 'admin_adjustment' | 'giftcode'): Promise<UserProfile> => {
+export const updateUserBalance = async (amount: number, reason: string, type: 'topup' | 'usage' | 'reward' | 'refund' | 'admin_adjustment' | 'giftcode' | 'milestone_reward'): Promise<UserProfile> => {
     const user = await getUserProfile();
     const newBalance = (user.balance || 0) + amount;
 
@@ -585,62 +676,199 @@ export const deletePromotion = async (id: string): Promise<void> => {
     }
 };
 
-// --- ATTENDANCE SERVICES ---
+// --- ATTENDANCE SERVICES (UPDATED: MANUAL CLAIM) ---
 
 export const getCheckinStatus = async () => {
     const user = await getUserProfile();
-    const today = new Date().toDateString();
+    const today = getLocalDateStr(); // YYYY-MM-DD
     
-    let lastCheckinDate = null;
-    if (user.lastCheckin) {
-        lastCheckinDate = new Date(user.lastCheckin).toDateString();
+    // Default values
+    let cumulativeStreak = 0;
+    let isCheckedInToday = false;
+    let history: string[] = [];
+    let claimedMilestones: number[] = [];
+
+    // If connected, sync actual history from daily_check_ins table
+    if (supabase && user.id.length > 20) {
+        const { data, error } = await supabase
+            .from('daily_check_ins')
+            .select('check_in_date')
+            .eq('user_id', user.id);
+        
+        if (data) {
+            history = data.map(d => d.check_in_date); // YYYY-MM-DD
+            isCheckedInToday = history.includes(today);
+            
+            // Calculate Cumulative Checkins for Current Month
+            const currentMonthPrefix = today.substring(0, 7); // "YYYY-MM"
+            cumulativeStreak = history.filter(d => d.startsWith(currentMonthPrefix)).length;
+
+            // Check Claimed Milestones by scanning Transaction Logs
+            // We look for 'transaction_type' = 'milestone_reward' and distinct description for this month
+            // Example Description: "Milestone Reward: Day 7 - [YYYY-MM]"
+            const { data: logs } = await supabase
+                .from('diamond_transactions_log')
+                .select('description')
+                .eq('user_id', user.id)
+                .eq('transaction_type', 'milestone_reward')
+                .ilike('description', `%${currentMonthPrefix}%`);
+            
+            if (logs) {
+                logs.forEach((log: any) => {
+                    if (log.description.includes('Day 7')) claimedMilestones.push(7);
+                    if (log.description.includes('Day 14')) claimedMilestones.push(14);
+                    if (log.description.includes('Day 30')) claimedMilestones.push(30);
+                });
+            }
+        }
+    } else {
+        // Fallback for mock user
+        cumulativeStreak = user.streak; 
+        if (user.lastCheckin) {
+             const lastDate = new Date(user.lastCheckin).toLocaleDateString('sv-SE');
+             if (lastDate === today) isCheckedInToday = true;
+        }
     }
-    
+
     return {
-        streak: user.streak,
-        isCheckedInToday: lastCheckinDate === today,
-        history: user.checkinHistory || [] 
+        streak: cumulativeStreak,
+        isCheckedInToday,
+        history,
+        claimedMilestones
     };
 };
 
-export const performCheckin = async (): Promise<{ success: boolean; reward: number; newStreak: number }> => {
+export const performCheckin = async (): Promise<{ success: boolean; reward: number; newStreak: number; message?: string }> => {
     const user = await getUserProfile();
-    let newStreak = user.streak + 1;
-    let reward = 5; 
+    const today = getLocalDateStr(); // YYYY-MM-DD
+    const { start: monthStart, end: monthEnd } = getMonthRange();
     
     if (supabase && user.id.length > 20) {
-        const todayISO = new Date().toISOString();
-        const dateOnly = todayISO.split('T')[0]; 
-        
-        const { data: rewardRule } = await supabase
-            .from('check_in_rewards')
-            .select('diamond_reward')
-            .eq('consecutive_days', newStreak)
-            .single();
+        // 1. Double check if already checked in today in DB
+        const { data: existing } = await supabase
+            .from('daily_check_ins')
+            .select('id')
+            .eq('user_id', user.id)
+            .eq('check_in_date', today)
+            .maybeSingle();
             
-        if (rewardRule) {
-            reward = rewardRule.diamond_reward;
+        if (existing) {
+            // Recalculate streak even if checked in to ensure UI consistency
+            const { count } = await supabase
+                .from('daily_check_ins')
+                .select('*', { count: 'exact', head: true })
+                .eq('user_id', user.id)
+                .gte('check_in_date', monthStart)
+                .lte('check_in_date', monthEnd);
+            
+            const currentCount = count || user.streak || 1;
+            return { success: false, reward: 0, newStreak: currentCount, message: 'Hôm nay bạn đã điểm danh rồi!' };
         }
 
+        // 2. Insert into daily_check_ins (Base Reward Only)
+        const baseReward = 5;
+        
+        // MODIFIED: Removed 'reward_amount' to prevent schema error if column is missing
+        const { error: insertError } = await supabase.from('daily_check_ins').insert({
+            user_id: user.id,
+            check_in_date: today
+        });
+        
+        if (insertError) {
+             console.error("Checkin Insert Error", insertError);
+             // Handle Unique Violation Gracefully (23505)
+             if (insertError.code === '23505') {
+                 // Try getting count again
+                 const { count } = await supabase
+                    .from('daily_check_ins')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('user_id', user.id)
+                    .gte('check_in_date', monthStart)
+                    .lte('check_in_date', monthEnd);
+                 return { success: true, reward: 0, newStreak: count || 1, message: 'Hôm nay bạn đã điểm danh rồi!' };
+             }
+             return { success: false, reward: 0, newStreak: user.streak, message: `Lỗi DB: ${insertError.message}` };
+        }
+
+        // 3. Recalculate Monthly Count using calculated range
+        const { count } = await supabase
+            .from('daily_check_ins')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', user.id)
+            .gte('check_in_date', monthStart)
+            .lte('check_in_date', monthEnd);
+
+        const monthlyCount = count || 1;
+
+        // 4. Update User Profile
         await supabase.from('users').update({ 
-            consecutive_check_ins: newStreak, 
-            last_check_in: todayISO
+            consecutive_check_ins: monthlyCount, 
+            last_check_in: new Date().toISOString(),
+            diamonds: (user.balance || 0) + baseReward
         }).eq('id', user.id);
 
-        await supabase.from('daily_check_ins').insert({
+        // 5. Log Transaction
+        await supabase.from('diamond_transactions_log').insert({
             user_id: user.id,
-            check_in_date: dateOnly
-        }).catch(e => console.warn("Log checkin failed", e));
+            amount: baseReward, 
+            description: `Check-in Day ${monthlyCount}`, 
+            transaction_type: 'reward',
+            created_at: new Date().toISOString()
+        });
         
-        await supabase.from('daily_active_users').upsert({
-            user_id: user.id,
-            activity_date: dateOnly
-        }).catch(e => console.warn("Log DAU failed", e));
+        return { success: true, reward: baseReward, newStreak: monthlyCount };
     }
     
-    await updateUserBalance(reward, `Checkin Day ${newStreak}`, 'reward');
-    return { success: true, reward, newStreak };
+    return { success: true, reward: 5, newStreak: (user.streak || 0) + 1 };
 };
+
+export const claimMilestoneReward = async (day: number): Promise<{ success: boolean; reward: number; message: string }> => {
+    const user = await getUserProfile();
+    const today = getLocalDateStr();
+    const currentMonthPrefix = today.substring(0, 7);
+    const { start: monthStart, end: monthEnd } = getMonthRange();
+
+    if (!supabase || user.id.length < 20) {
+        return { success: false, reward: 0, message: 'Chưa đăng nhập' };
+    }
+
+    // 1. Verify Eligibility (Monthly Count)
+    const { count } = await supabase
+        .from('daily_check_ins')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .gte('check_in_date', monthStart)
+        .lte('check_in_date', monthEnd);
+    
+    const monthlyCount = count || 0;
+    if (monthlyCount < day) {
+        return { success: false, reward: 0, message: `Chưa đủ ${day} ngày điểm danh!` };
+    }
+
+    // 2. Check if already claimed this month
+    const descriptionKey = `Milestone Reward: Day ${day} - [${currentMonthPrefix}]`;
+    const { data: existingLog } = await supabase
+        .from('diamond_transactions_log')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('description', descriptionKey)
+        .maybeSingle();
+
+    if (existingLog) {
+        return { success: false, reward: 0, message: 'Đã nhận thưởng mốc này rồi!' };
+    }
+
+    // 3. Determine Reward
+    let reward = 0;
+    if (day === 7) reward = 20;
+    else if (day === 14) reward = 50;
+    else if (day === 30) reward = 100;
+
+    // 4. Distribute Reward
+    await updateUserBalance(reward, descriptionKey, 'milestone_reward');
+
+    return { success: true, reward, message: `Nhận thành công ${reward} Vcoin!` };
+}
 
 // --- TRANSACTION SERVICES ---
 
@@ -967,14 +1195,20 @@ export const getAdminStats = async () => {
             }));
         }
 
+        // Updated Query: Join with Users Table
         const { data: t } = await supabase
             .from('transactions')
-            .select('*')
-            .order('created_at', { ascending: false }); // Explicitly sort by date desc
+            .select('*, users (display_name, email, photo_url)')
+            .order('created_at', { ascending: false });
 
         if(t) txs = t.map((row:any) => ({
             id: row.id,
             userId: row.user_id,
+            // Map User Details
+            userName: row.users?.display_name || 'Unknown',
+            userEmail: row.users?.email || 'No Email',
+            userAvatar: row.users?.photo_url || 'https://picsum.photos/100/100',
+            
             packageId: row.package_id,
             amount: row.amount_vnd,
             coins: row.diamonds_received,

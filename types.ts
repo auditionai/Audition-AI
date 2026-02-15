@@ -1,5 +1,4 @@
 
-
 export type Language = 'vi' | 'en';
 export type Theme = 'light' | 'dark';
 export type ViewId = 'home' | 'tools' | 'gallery' | 'admin' | 'guide' | 'about' | 'tool_workspace' | 'support' | 'settings' | 'topup' | 'payment_gateway';
@@ -108,6 +107,11 @@ export type TransactionStatus = 'pending' | 'paid' | 'cancelled' | 'failed';
 export interface Transaction {
   id: string;
   userId: string;
+  // --- New User Details for Admin UI ---
+  userName?: string;
+  userEmail?: string;
+  userAvatar?: string;
+  // -------------------------------------
   packageId: string;
   amount: number;
   coins: number;

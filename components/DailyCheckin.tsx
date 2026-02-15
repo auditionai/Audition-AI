@@ -10,6 +10,66 @@ interface DailyCheckinProps {
   lang: 'vi' | 'en';
 }
 
+const DB_FIX_SQL = `-- 1. Clean up old triggers and functions
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+DROP FUNCTION IF EXISTS public.handle_new_user();
+
+-- 2. Drop existing policies to avoid "already exists" errors
+DO $$ 
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'users' AND policyname = 'Public read users') THEN
+        DROP POLICY "Public read users" ON public.users;
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'users' AND policyname = 'Users can update own profile') THEN
+        DROP POLICY "Users can update own profile" ON public.users;
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'users' AND policyname = 'Users can insert own profile') THEN
+        DROP POLICY "Users can insert own profile" ON public.users;
+    END IF;
+END $$;
+
+-- 3. Re-create Function
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.users (
+    id, 
+    email, 
+    display_name, 
+    photo_url, 
+    diamonds, 
+    is_admin, 
+    created_at,
+    updated_at
+  )
+  VALUES (
+    new.id,
+    new.email,
+    COALESCE(new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'name', split_part(new.email, '@', 1)),
+    COALESCE(new.raw_user_meta_data->>'avatar_url', ''),
+    25, -- 25 Vcoin Bonus
+    false,
+    now(),
+    now()
+  )
+  ON CONFLICT (id) DO NOTHING;
+  RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 4. Activate Trigger
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
+
+-- 5. Enable RLS and Create Policies
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Public read users" ON public.users FOR SELECT USING (true);
+CREATE POLICY "Users can update own profile" ON public.users FOR UPDATE USING (auth.uid() = id);
+CREATE POLICY "Users can insert own profile" ON public.users FOR INSERT WITH CHECK (auth.uid() = id);
+`;
+
 export const DailyCheckin: React.FC<DailyCheckinProps> = ({ onClose, onSuccess, lang }) => {
   const [streak, setStreak] = useState(0);
   const [checkedIn, setCheckedIn] = useState(false);
@@ -17,6 +77,7 @@ export const DailyCheckin: React.FC<DailyCheckinProps> = ({ onClose, onSuccess, 
   const [history, setHistory] = useState<string[]>([]);
   const [claimedMilestones, setClaimedMilestones] = useState<number[]>([]);
   const [message, setMessage] = useState<string | null>(null);
+  const [showSqlFix, setShowSqlFix] = useState(false);
   
   // Calendar State
   const today = new Date();
@@ -37,6 +98,7 @@ export const DailyCheckin: React.FC<DailyCheckinProps> = ({ onClose, onSuccess, 
   const handleClaim = async () => {
       setLoading(true);
       setMessage(null);
+      setShowSqlFix(false);
       try {
           const res = await performCheckin();
           if (res.success) {
@@ -51,6 +113,10 @@ export const DailyCheckin: React.FC<DailyCheckinProps> = ({ onClose, onSuccess, 
               }, 1500); 
           } else {
               setMessage(res.message || (lang === 'vi' ? 'Lỗi điểm danh' : 'Error checking in'));
+              // Detect FK error signal from service
+              if (res.message?.includes('FK') || res.message?.includes('foreign key')) {
+                  setShowSqlFix(true);
+              }
           }
       } catch (e) {
           console.error(e);
@@ -230,6 +296,22 @@ export const DailyCheckin: React.FC<DailyCheckinProps> = ({ onClose, onSuccess, 
             {message && (
                 <div className={`mb-4 p-3 rounded-xl text-center text-sm font-bold animate-fade-in ${message.includes('thành công') || message.includes('success') ? 'bg-green-500/20 text-green-400 border border-green-500/50' : 'bg-red-500/20 text-red-400 border border-red-500/50'}`}>
                     {message}
+                </div>
+            )}
+
+            {/* SQL Fix Helper */}
+            {showSqlFix && (
+                <div className="mb-4 bg-red-500/10 border border-red-500/50 p-3 rounded-xl">
+                    <p className="text-xs text-red-300 font-bold mb-2">⚠ Tài khoản chưa được đồng bộ Database (Trigger Lỗi)</p>
+                    <button 
+                        onClick={() => {
+                            navigator.clipboard.writeText(DB_FIX_SQL);
+                            alert("Đã copy mã SQL! Hãy chạy mã này trong Supabase SQL Editor.");
+                        }}
+                        className="w-full py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2"
+                    >
+                        <Icons.Database className="w-3 h-3" /> COPY MÃ SỬA LỖI SQL
+                    </button>
                 </div>
             )}
 

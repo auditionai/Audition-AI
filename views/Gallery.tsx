@@ -60,8 +60,8 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
           
           if (success) {
               const msg = newStatus 
-                ? (lang === 'vi' ? 'Đã chia sẻ lên Trang chủ!' : 'Shared to Homepage!')
-                : (lang === 'vi' ? 'Đã gỡ khỏi Trang chủ!' : 'Removed from Homepage!');
+                ? (lang === 'vi' ? 'Đã chia sẻ (Lưu vĩnh viễn)!' : 'Shared (Saved Forever)!')
+                : (lang === 'vi' ? 'Đã gỡ (Sẽ bị xóa sau 7 ngày)!' : 'Unshared (Will expire)!');
               
               notify(msg, 'success');
               
@@ -78,46 +78,153 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
       }
   };
 
+  // --- ROBUST DOWNLOAD LOGIC (V3 - PROXY SUPPORTED) ---
+  const handleDownload = async (imageUrl: string, filename: string) => {
+      notify(lang === 'vi' ? 'Đang xử lý tải xuống...' : 'Processing download...', 'info');
+      
+      try {
+          let blob: Blob;
+
+          // 1. Local Base64 Case
+          if (imageUrl.startsWith('data:')) {
+              const arr = imageUrl.split(',');
+              const mime = arr[0].match(/:(.*?);/)?.[1];
+              const bstr = atob(arr[1]);
+              let n = bstr.length;
+              const u8arr = new Uint8Array(n);
+              while (n--) u8arr[n] = bstr.charCodeAt(n);
+              blob = new Blob([u8arr], { type: mime });
+          } 
+          // 2. Remote URL Case (Fetch & Blob)
+          else {
+              try {
+                  // Attempt 1: Direct Fetch (Fastest)
+                  const response = await fetch(imageUrl, { mode: 'cors' });
+                  if (!response.ok) throw new Error('Direct fetch failed');
+                  blob = await response.blob();
+              } catch (directError) {
+                  console.warn("Direct download failed (CORS), switching to Proxy...", directError);
+                  // Attempt 2: Proxy Fetch (Reliable)
+                  const proxyUrl = `/.netlify/functions/download_proxy?url=${encodeURIComponent(imageUrl)}`;
+                  const proxyResponse = await fetch(proxyUrl);
+                  if (!proxyResponse.ok) throw new Error('Proxy download failed');
+                  blob = await proxyResponse.blob();
+              }
+          }
+
+          // Create Object URL & Trigger Download
+          const url = window.URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = filename;
+          document.body.appendChild(link);
+          link.click();
+          
+          // Cleanup
+          document.body.removeChild(link);
+          window.URL.revokeObjectURL(url);
+          
+          notify(lang === 'vi' ? 'Đã lưu ảnh thành công!' : 'Download successful!', 'success');
+
+      } catch (e) {
+          console.error("Download failed completely", e);
+          // Absolute last resort: Open in new tab so user doesn't lose the image
+          window.open(imageUrl, '_blank');
+          notify(lang === 'vi' ? 'Lỗi tải file. Đã mở ảnh trong tab mới.' : 'Download failed. Image opened in new tab.', 'warning');
+      }
+  };
+
   const formatDate = (timestamp: number) => {
     return new Date(timestamp).toLocaleDateString(lang === 'vi' ? 'vi-VN' : 'en-US', {
       month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
     });
   };
 
+  // --- EXPIRATION CALCULATION HELPERS ---
+  const getExpirationStatus = (timestamp: number, isShared: boolean | undefined) => {
+      if (isShared) return { type: 'saved', label: 'Vĩnh viễn', color: 'bg-green-500' };
+      
+      const EXPIRATION_DAYS = 7;
+      const msPerDay = 1000 * 60 * 60 * 24;
+      const diffTime = Math.abs(Date.now() - timestamp);
+      const diffDays = Math.ceil(diffTime / msPerDay);
+      const daysLeft = EXPIRATION_DAYS - diffDays; // Use diffDays which is approximate days passed.
+      
+      // More precise: 
+      const expiryDate = timestamp + (EXPIRATION_DAYS * msPerDay);
+      const timeLeft = expiryDate - Date.now();
+      const preciseDaysLeft = Math.ceil(timeLeft / msPerDay);
+
+      if (preciseDaysLeft <= 0) {
+          return { type: 'expired', label: 'Sắp xóa', color: 'bg-red-500 animate-pulse' };
+      }
+      
+      if (preciseDaysLeft <= 2) {
+          return { type: 'warning', label: `${preciseDaysLeft} ngày`, color: 'bg-orange-500' };
+      }
+
+      return { type: 'normal', label: `${preciseDaysLeft} ngày`, color: 'bg-slate-600' };
+  };
+
   const renderedImages = useMemo(() => {
-      return images.map((img) => (
-            <div 
-              key={img.id} 
-              onClick={() => setSelectedImage(img)}
-              className="group relative aspect-square rounded-2xl overflow-hidden cursor-pointer border border-slate-200 dark:border-white/10 shadow-sm hover:shadow-xl transition-all hover:scale-[1.02]"
-            >
-              <img 
-                src={img.url} 
-                alt={img.toolName} 
-                className="w-full h-full object-cover" 
-                loading="lazy"
-              />
-              {img.isShared && (
-                  <div className="absolute top-2 left-2 z-10 px-2 py-0.5 bg-audi-pink text-white text-[9px] font-bold rounded-full shadow-lg">
-                      SHARED
-                  </div>
-              )}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity p-4 flex flex-col justify-end">
-                <span className="text-white text-xs font-bold truncate">{img.toolName}</span>
-                <span className="text-white/70 text-[10px]">{formatDate(img.timestamp)}</span>
-                <button 
-                  onClick={(e) => handleDelete(e, img.id)}
-                  className="absolute top-2 right-2 p-2 bg-red-500/80 text-white rounded-full hover:bg-red-600 transition-colors"
+      return images.map((img) => {
+            const status = getExpirationStatus(img.timestamp, img.isShared);
+            
+            return (
+                <div 
+                  key={img.id} 
+                  onClick={() => setSelectedImage(img)}
+                  className="group relative aspect-square rounded-2xl overflow-hidden cursor-pointer border border-slate-200 dark:border-white/10 shadow-sm hover:shadow-xl transition-all hover:scale-[1.02]"
                 >
-                   <Icons.X className="w-3 h-3" />
-                </button>
-              </div>
-            </div>
-          ));
+                  <img 
+                    src={img.url} 
+                    alt={img.toolName} 
+                    className="w-full h-full object-cover" 
+                    loading="lazy"
+                  />
+                  
+                  {/* EXPIRATION / SHARED BADGE */}
+                  <div className={`absolute top-2 right-2 z-10 px-2 py-1 text-[9px] font-bold text-white rounded-md shadow-md flex items-center gap-1 ${status.color}`}>
+                      {status.type === 'saved' ? <Icons.Lock className="w-3 h-3" /> : <Icons.Clock className="w-3 h-3" />}
+                      {status.label}
+                  </div>
+
+                  {img.isShared && (
+                      <div className="absolute top-2 left-2 z-10 px-2 py-0.5 bg-audi-pink text-white text-[9px] font-bold rounded-full shadow-lg border border-white/20">
+                          SHARED
+                      </div>
+                  )}
+
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity p-4 flex flex-col justify-end">
+                    <span className="text-white text-xs font-bold truncate">{img.toolName}</span>
+                    <span className="text-white/70 text-[10px]">{formatDate(img.timestamp)}</span>
+                    <button 
+                      onClick={(e) => handleDelete(e, img.id)}
+                      className="absolute top-2 right-2 p-2 bg-red-500/80 text-white rounded-full hover:bg-red-600 transition-colors"
+                    >
+                       <Icons.X className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+            );
+      });
   }, [images, lang]);
 
   return (
     <div className="space-y-6 animate-fade-in pb-20">
+      
+      {/* STORAGE POLICY WARNING BANNER */}
+      <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 flex items-start gap-3">
+          <Icons.Info className="w-5 h-5 text-yellow-500 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+              <h4 className="text-sm font-bold text-white">Chính sách lưu trữ ảnh</h4>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                  Ảnh trong thư viện sẽ tự động bị xóa sau <b className="text-yellow-500">7 ngày</b> để tối ưu bộ nhớ hệ thống. 
+                  Vui lòng tải ảnh về máy để lưu trữ.
+              </p>
+          </div>
+      </div>
+
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-3xl font-bold text-slate-900 dark:text-white">
@@ -159,7 +266,6 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
         </div>
       )}
 
-      {/* Lightbox / Details Modal (UPDATED OVERLAY) */}
       {selectedImage && createPortal(
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-fade-in">
            <div className="relative w-full max-w-4xl max-h-[90vh] flex flex-col md:flex-row bg-slate-900 rounded-3xl overflow-hidden border border-white/10 shadow-2xl">
@@ -179,6 +285,29 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                  <h3 className="text-xl font-bold text-white mb-1">{selectedImage.toolName}</h3>
                  <span className="text-xs text-brand-400 font-mono mb-6">{selectedImage.engine}</span>
                  
+                 {/* Expiration Info in Detail View */}
+                 {!selectedImage.isShared && (
+                     <div className="bg-orange-500/10 border border-orange-500/30 p-3 rounded-xl mb-4 flex items-center gap-3">
+                         <Icons.Clock className="w-5 h-5 text-orange-500" />
+                         <div>
+                             <p className="text-[10px] text-slate-400 font-bold uppercase">Tự động xóa sau</p>
+                             <p className="text-orange-400 font-bold">
+                                 {getExpirationStatus(selectedImage.timestamp, false).label} nữa
+                             </p>
+                         </div>
+                     </div>
+                 )}
+
+                 {selectedImage.isShared && (
+                     <div className="bg-green-500/10 border border-green-500/30 p-3 rounded-xl mb-4 flex items-center gap-3">
+                         <Icons.Lock className="w-5 h-5 text-green-500" />
+                         <div>
+                             <p className="text-[10px] text-slate-400 font-bold uppercase">Trạng thái</p>
+                             <p className="text-green-400 font-bold">Đã lưu trữ vĩnh viễn</p>
+                         </div>
+                     </div>
+                 )}
+
                  <div className="space-y-4 flex-1">
                     <div>
                         <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">{lang === 'vi' ? 'Thời gian' : 'Date Created'}</label>
@@ -192,10 +321,8 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                     </div>
                  </div>
 
-                 {/* Action Buttons Area */}
                  <div className="pt-6 mt-6 border-t border-white/10 flex flex-col gap-3">
                     
-                    {/* Share Button (New) */}
                     <button 
                         onClick={handleShare}
                         disabled={sharing}
@@ -208,19 +335,18 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                         {sharing ? <Icons.Loader className="w-4 h-4 animate-spin" /> : <Icons.Share className="w-4 h-4" />}
                         {selectedImage.isShared 
                             ? (lang === 'vi' ? 'Gỡ khỏi Trang chủ' : 'Unshare') 
-                            : (lang === 'vi' ? 'Chia sẻ lên Trang chủ' : 'Share to Homepage')
+                            : (lang === 'vi' ? 'Chia sẻ lên Trang chủ (Lưu)' : 'Share to Homepage')
                         }
                     </button>
 
                     <div className="flex gap-3">
-                        <a 
-                          href={selectedImage.url} 
-                          download={`dmp-ai-${selectedImage.id}.png`}
+                        <button 
+                          onClick={() => handleDownload(selectedImage.url, `auditionai-image-${selectedImage.id}.png`)}
                           className="flex-1 py-3 bg-slate-700 hover:bg-brand-500 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-colors border border-white/5"
                         >
                             <Icons.Download className="w-4 h-4" />
                             {lang === 'vi' ? 'Tải về' : 'Download'}
-                        </a>
+                        </button>
                         <button 
                            onClick={(e) => handleDelete(e, selectedImage.id)}
                            className="p-3 bg-slate-700 hover:bg-red-500/20 hover:text-red-500 text-slate-300 rounded-xl transition-colors border border-white/5"

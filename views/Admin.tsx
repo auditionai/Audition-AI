@@ -30,9 +30,77 @@ interface ConfirmState {
     title?: string;
     msg: string;
     onConfirm: () => void;
-    isAlertOnly?: boolean; // Just an OK button
-    sqlHelp?: string; // Optional SQL code to copy
+    isAlertOnly?: boolean; 
+    sqlHelp?: string; 
 }
+
+const TRIGGER_FIX_SQL = `-- 1. Clean up old triggers and functions
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+DROP FUNCTION IF EXISTS public.handle_new_user();
+
+-- 2. Drop existing policies to avoid "already exists" errors
+DO $$ 
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'users' AND policyname = 'Public read users') THEN
+        DROP POLICY "Public read users" ON public.users;
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'users' AND policyname = 'Users can update own profile') THEN
+        DROP POLICY "Users can update own profile" ON public.users;
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'users' AND policyname = 'Users can insert own profile') THEN
+        DROP POLICY "Users can insert own profile" ON public.users;
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'users' AND policyname = 'Admins can update any profile') THEN
+        DROP POLICY "Admins can update any profile" ON public.users;
+    END IF;
+END $$;
+
+-- 3. Re-create Function
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.users (
+    id, 
+    email, 
+    display_name, 
+    photo_url, 
+    diamonds, 
+    is_admin, 
+    created_at,
+    updated_at
+  )
+  VALUES (
+    new.id,
+    new.email,
+    COALESCE(new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'name', split_part(new.email, '@', 1)),
+    COALESCE(new.raw_user_meta_data->>'avatar_url', ''),
+    25, -- 25 Vcoin Bonus
+    false,
+    now(),
+    now()
+  )
+  ON CONFLICT (id) DO NOTHING;
+  RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 4. Activate Trigger
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
+
+-- 5. Enable RLS and Create Policies
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Public read users" ON public.users FOR SELECT USING (true);
+CREATE POLICY "Users can update own profile" ON public.users FOR UPDATE USING (auth.uid() = id);
+CREATE POLICY "Users can insert own profile" ON public.users FOR INSERT WITH CHECK (auth.uid() = id);
+
+-- 6. ADMIN POLICY: Allow Admins to UPDATE ANY PROFILE
+CREATE POLICY "Admins can update any profile" ON public.users FOR UPDATE USING (
+  (SELECT is_admin FROM public.users WHERE id = auth.uid()) = true
+);
+`;
 
 export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [activeView, setActiveView] = useState<'overview' | 'transactions' | 'users' | 'packages' | 'promotion' | 'giftcodes' | 'system'>('overview');
@@ -129,17 +197,14 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           setPackages(s.packages || []);
           setPromotions(s.promotions || []);
           setGiftcodes(s.giftcodes || []);
-          // Transactions are already sorted by DESC in getAdminStats now
           setTransactions(s.transactions || []); 
           const imgs = await getAllImagesFromStorage();
           setAllImages(imgs);
       }
       
-      // Fetch DB Keys list
       const keys = await getApiKeysList();
       setDbKeys(keys);
 
-      // Fetch Giftcode Config
       const promoConfig = await getGiftcodePromoConfig();
       setGiftcodePromo(promoConfig);
   };
@@ -148,17 +213,11 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       const startGemini = Date.now();
       const keyToUse = specificKey !== undefined ? specificKey : (apiKey || undefined);
       
-      // 1. Check Gemini
       const geminiOk = await checkConnection(keyToUse);
       const geminiLatency = Date.now() - startGemini;
-      
-      // 2. Check Supabase DB
       const sbCheck = await checkSupabaseConnection();
-
-      // 3. Check R2 Storage
       const r2Ok = await checkR2Connection();
       
-      // Determine Storage Status
       let storageStatus: 'connected' | 'disconnected' = 'disconnected';
       let storageType: 'R2' | 'Supabase' | 'None' = 'None';
 
@@ -194,7 +253,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           if (result.success) {
               setKeyStatus('valid');
               showToast('Đã lưu API Key vào Database thành công!');
-              await refreshData(); // Refresh list
+              await refreshData(); 
               runSystemChecks(apiKey);
           } else {
               setKeyStatus('unknown');
@@ -241,10 +300,24 @@ CREATE POLICY "Enable delete for authenticated users only" ON public.api_keys FO
 
   const handleSaveUser = async () => {
       if (editingUser) {
-          await updateAdminUserProfile(editingUser);
-          setEditingUser(null);
-          await refreshData(); // Await to ensure UI updates
-          showToast('Cập nhật người dùng thành công!');
+          const result = await updateAdminUserProfile(editingUser);
+          
+          if (result.success) {
+              setEditingUser(null);
+              await refreshData();
+              showToast('Cập nhật người dùng thành công!');
+          } else {
+              showToast(`Lỗi: ${result.error}`, 'error');
+              if (result.error?.includes('RLS') || result.error?.includes('permission')) {
+                  setConfirmDialog({
+                      show: true,
+                      title: '⚠️ Cần Cấp Quyền Admin',
+                      msg: 'Database đang chặn Admin sửa thông tin User khác. Vui lòng vào tab "Hệ Thống" -> "Sửa Lỗi Trigger" và chạy mã SQL mới.',
+                      isAlertOnly: true,
+                      onConfirm: () => {}
+                  });
+              }
+          }
       }
   };
 
@@ -256,7 +329,6 @@ CREATE POLICY "Enable delete for authenticated users only" ON public.api_keys FO
               refreshData();
               showToast('Cập nhật gói nạp thành công!');
           } else {
-              // 1. Check for RLS Errors
               if (result.error?.includes('RLS') || result.error?.includes('permission') || result.error?.includes('policy')) {
                   setConfirmDialog({
                       show: true,
@@ -268,7 +340,6 @@ CREATE POLICY "Enable all access for credit packages" ON public.credit_packages 
                       onConfirm: () => {}
                   });
               } 
-              // 2. Check for Missing Column Errors (transfer_syntax)
               else if (result.error?.includes('transfer_syntax') || result.error?.includes('column')) {
                   setConfirmDialog({
                       show: true,
@@ -310,17 +381,12 @@ ADD COLUMN IF NOT EXISTS bonus_credits int8 DEFAULT 0;`,
 
       if (newIndex < 0 || newIndex >= newPackages.length) return;
 
-      // Swap elements
       [newPackages[index], newPackages[newIndex]] = [newPackages[newIndex], newPackages[index]];
-      
-      // Update local state immediately for UI response
       setPackages(newPackages);
 
-      // Call service to update order in DB
       const result = await updatePackageOrder(newPackages);
       if (!result.success) {
           showToast('Lỗi khi lưu thứ tự: ' + result.error, 'error');
-          // Revert if needed, but for now we let it stay locally
       }
   };
 
@@ -362,7 +428,6 @@ CREATE POLICY "Enable all access for gift codes" ON public.gift_codes FOR ALL US
       if (result.success) {
           showToast('Đã lưu thông báo thành công!');
       } else {
-          // Check for RLS
           if (result.error?.includes('permission') || result.error?.includes('policy')) {
               setConfirmDialog({
                   show: true,
@@ -387,7 +452,6 @@ CREATE POLICY "Enable all access" ON public.system_settings FOR ALL USING (true)
               refreshData();
               showToast('Lưu chiến dịch thành công!');
           } else {
-              // DETECT MISSING COLUMN ERROR AND SHOW SQL HELP
               if (result.error?.includes('column') || result.error?.includes('bonus_percent') || result.error?.includes('title')) {
                   setConfirmDialog({
                       show: true,
@@ -437,13 +501,10 @@ CREATE POLICY "Enable access" ON public.promotions FOR ALL USING (true) WITH CHE
           setProcessingTxId(txId);
           const result = await adminApproveTransaction(txId);
           if (result.success) {
-              // Optimistic update for UI smoothness
               setTransactions(prev => prev.map(t => 
                   t.id === txId ? { ...t, status: 'paid' } : t
               ));
               showToast('Đã duyệt thành công!');
-              
-              // Force Refresh Data to verify persistence
               await refreshData();
           } else {
               if (result.error?.includes('RLS') || result.error?.includes('permission') || result.error?.includes('policy')) {
@@ -458,7 +519,6 @@ CREATE POLICY "Enable all access for transactions" ON public.transactions FOR AL
                   });
               } else {
                   showToast('Lỗi: ' + result.error, 'error');
-                  // Revert if failed
                   await refreshData();
               }
           }
@@ -473,13 +533,10 @@ CREATE POLICY "Enable all access for transactions" ON public.transactions FOR AL
           setProcessingTxId(txId);
           const result = await adminRejectTransaction(txId);
           if (result.success) {
-              // Optimistic update
               setTransactions(prev => prev.map(t => 
                   t.id === txId ? { ...t, status: 'failed' } : t
               ));
               showToast('Đã từ chối giao dịch', 'info');
-              
-              // Force refresh to verify
               await refreshData();
           } else {
               if (result.error?.includes('RLS') || result.error?.includes('permission') || result.error?.includes('policy')) {
@@ -507,11 +564,9 @@ CREATE POLICY "Enable all access for transactions" ON public.transactions FOR AL
           setProcessingTxId(txId);
           const res = await deleteTransaction(txId);
           if (res.success) {
-              // Optimistic update
               setTransactions(prev => prev.filter(t => t.id !== txId));
               showToast('Đã xóa giao dịch vĩnh viễn', 'info');
           } else {
-              // Handle known errors (RLS or not found)
               if (res.error?.includes('policy') || res.error?.includes('phân quyền') || res.error?.includes('RLS')) {
                    setConfirmDialog({
                       show: true,
@@ -552,6 +607,17 @@ using (true);`,
       });
   };
 
+  const handleFixTrigger = () => {
+      setConfirmDialog({
+          show: true,
+          title: '🔧 Sửa lỗi Trigger (Tạo User Mới)',
+          msg: 'Lỗi này xảy ra khi User mới đăng ký nhưng không được tạo Profile tự động trong bảng public.users.',
+          sqlHelp: TRIGGER_FIX_SQL,
+          isAlertOnly: true,
+          onConfirm: () => {}
+      });
+  }
+
   // --- ACCESS DENIED ---
   if (!isAdmin) {
       return (
@@ -580,7 +646,6 @@ using (true);`,
 
   return (
     <div className="min-h-screen pb-24 animate-fade-in bg-[#05050A]">
-      
       {/* --- TOASTS CONTAINER --- */}
       <div className="fixed top-24 right-4 z-[9999] flex flex-col gap-2 pointer-events-none w-full max-w-sm px-4 md:px-0">
           {toasts.map(t => (
@@ -1251,7 +1316,7 @@ using (true);`,
                   <div className="bg-[#12121a] p-6 rounded-2xl border border-white/10">
                       <h3 className="font-bold text-lg text-white mb-4 flex items-center gap-2">
                           <Icons.Wand className="w-5 h-5 text-audi-yellow" />
-                          Công Cụ Sửa Lỗi Nhanh (Database Fixer)
+                          Công Cụ Sửa Lỗi Nhanh
                       </h3>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div className="p-4 bg-white/5 rounded-xl border border-white/10">
@@ -1266,7 +1331,20 @@ using (true);`,
                                   Lấy Mã SQL Sửa Lỗi
                               </button>
                           </div>
-                          {/* Future tools can go here */}
+                          
+                          {/* NEW: TRIGGER FIXER */}
+                          <div className="p-4 bg-white/5 rounded-xl border border-white/10">
+                              <h4 className="font-bold text-white mb-2">Sửa Lỗi Trigger (Tạo User Mới)</h4>
+                              <p className="text-xs text-slate-400 mb-4">
+                                  Dùng khi tài khoản mới đăng ký bị lỗi không nhận Giftcode, không điểm danh được hoặc <b>Admin không sửa được số dư User khác</b>.
+                              </p>
+                              <button 
+                                onClick={handleFixTrigger}
+                                className="w-full py-2 bg-red-500/20 border border-red-500 text-red-500 hover:bg-red-500 hover:text-white rounded-lg font-bold transition-all text-sm"
+                              >
+                                  Lấy Mã SQL Sửa Trigger
+                              </button>
+                          </div>
                       </div>
                   </div>
 

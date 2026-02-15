@@ -1,6 +1,7 @@
 
 /**
- * CORE SOLUTION: "Structural Image Conditioning" (The Solid Fence)
+ * CORE SOLUTION: "Structural Image Conditioning" & "Identity Texture Sheets"
+ * Giúp Flash 2.5/Pro 3.0 phân biệt rõ đâu là Cấu trúc (Pose/BG), đâu là Giao diện (Skin/Clothes)
  */
 
 export const urlToBase64 = async (url: string): Promise<string | null> => {
@@ -18,6 +19,8 @@ export const urlToBase64 = async (url: string): Promise<string | null> => {
     }
 };
 
+// Chế độ Solid Fence: Chuẩn hóa ảnh Pose/Background để AI dễ hiểu bố cục
+// Quan trọng: Giữ nguyên Pixel ảnh gốc để AI có thể copy background và ánh sáng
 export const createSolidFence = async (base64Str: string, targetAspectRatio: string = "1:1", isPoseRef: boolean = false): Promise<string> => {
     return new Promise((resolve) => {
       let src = base64Str;
@@ -32,44 +35,41 @@ export const createSolidFence = async (base64Str: string, targetAspectRatio: str
         const ctx = canvas.getContext('2d');
         if (!ctx) return resolve(base64Str);
   
-        const BASE_DIM = 1024; 
-        let canvasW = BASE_DIM;
-        let canvasH = BASE_DIM;
+        // Standardize dimensions based on Aspect Ratio
+        let canvasW = 1024;
+        let canvasH = 1024;
 
-        if (!isPoseRef) {
-            const ratio = img.width / img.height;
-            if (ratio < 0.8) {
-                canvasW = 1024; canvasH = 1536; 
-            } else if (ratio > 1.2) {
-                canvasW = 1536; canvasH = 1024;
-            } else {
-                canvasW = 1024; canvasH = 1024;
-            }
-        } else {
-            if (targetAspectRatio === '9:16') { canvasW = 768; canvasH = 1344; }
-            else if (targetAspectRatio === '16:9') { canvasW = 1344; canvasH = 768; }
-            else if (targetAspectRatio === '3:4') { canvasW = 768; canvasH = 1024; }
-            else { canvasW = 1024; canvasH = 1024; }
-        }
+        if (targetAspectRatio === '9:16') { canvasW = 768; canvasH = 1344; }
+        else if (targetAspectRatio === '16:9') { canvasW = 1344; canvasH = 768; }
+        else if (targetAspectRatio === '3:4') { canvasW = 896; canvasH = 1152; } 
+        else if (targetAspectRatio === '4:3') { canvasW = 1152; canvasH = 896; }
         
         canvas.width = canvasW;
         canvas.height = canvasH;
   
-        ctx.fillStyle = '#808080'; 
+        // 1. Fill Background (Neutral Grey) - Padding color
+        ctx.fillStyle = '#202020'; 
         ctx.fillRect(0, 0, canvas.width, canvas.height);
   
-        const scale = Math.min((canvasW - 40) / img.width, (canvasH - 40) / img.height);
-        const drawW = Math.round(img.width * scale);
-        const drawH = Math.round(img.height * scale);
-        const x = Math.round((canvasW - drawW) / 2);
-        const y = Math.round((canvasH - drawH) / 2);
+        // 2. Draw Image (Contain Mode - Giữ nguyên toàn bộ chi tiết ảnh gốc)
+        const scale = Math.min(canvasW / img.width, canvasH / img.height);
+        const drawW = img.width * scale;
+        const drawH = img.height * scale;
+        const x = (canvasW - drawW) / 2;
+        const y = (canvasH - drawH) / 2;
         
         ctx.drawImage(img, x, y, drawW, drawH);
         
-        if (!isPoseRef) {
-            ctx.strokeStyle = '#000000'; 
-            ctx.lineWidth = 4; 
+        // 3. Structure Guide Overlay (Optional)
+        // Vẽ khung viền để đánh dấu vùng không gian, nhưng KHÔNG che lấp ảnh
+        if (isPoseRef) {
+            ctx.strokeStyle = 'rgba(0, 255, 0, 0.3)'; // Mờ để không làm hỏng ảnh
+            ctx.lineWidth = 2; 
             ctx.strokeRect(x, y, drawW, drawH); 
+            
+            // Marker nhỏ ở góc để AI nhận biết đây là Reference Frame
+            ctx.fillStyle = '#00FF00';
+            ctx.fillRect(0, 0, 20, 20);
         }
   
         resolve(canvas.toDataURL('image/jpeg', 0.95));
@@ -91,12 +91,11 @@ export const createSolidFence = async (base64Str: string, targetAspectRatio: str
           img.crossOrigin = "Anonymous";
           img.onload = () => {
               if (img.width <= maxWidth && img.height <= maxWidth) {
-                  resolve(base64Str);
+                  resolve(base64Str); 
                   return;
               }
               let width = img.width;
               let height = img.height;
-  
               if (width > height) {
                   if (width > maxWidth) {
                       height *= maxWidth / width;
@@ -108,12 +107,10 @@ export const createSolidFence = async (base64Str: string, targetAspectRatio: str
                       height = maxWidth;
                   }
               }
-  
               const canvas = document.createElement('canvas');
               canvas.width = width;
               canvas.height = height;
               const ctx = canvas.getContext('2d');
-              
               if (ctx) {
                   ctx.imageSmoothingEnabled = true;
                   ctx.imageSmoothingQuality = 'high';
@@ -126,12 +123,13 @@ export const createSolidFence = async (base64Str: string, targetAspectRatio: str
       });
   }
 
-  // --- RESTORED & SIMPLIFIED: TEXTURE SHEET GENERATOR ---
-  // Just Body + Face. No more shoes logic.
+  // --- NEW INTELLIGENCE: TEXTURE SHEET GENERATOR ---
+  // Ghép Body + Face vào một ảnh duy nhất trên nền đen
+  // Ép buộc AI coi đây là "Texture Map" cần ốp lên model 3D
   export const createTextureSheet = async (
       bodyBase64: string, 
       faceBase64?: string | null,
-      shoesBase64?: string | null // Kept arg for compatibility but ignored
+      _shoesBase64?: string | null 
   ): Promise<string> => {
     return new Promise(async (resolve) => {
         const loadImg = (src: string): Promise<HTMLImageElement> => {
@@ -149,67 +147,87 @@ export const createSolidFence = async (base64Str: string, targetAspectRatio: str
         try {
             const bodyImg = await loadImg(bodyBase64);
             
-            // CLASSIC LAYOUT: Side by Side (Body Left 70%, Face Right 30%)
-            // Or if no face, just Body.
-            
+            // Nếu không có Face, chỉ tối ưu ảnh Body nhưng vẫn đặt trên nền đen để nhất quán logic
             if (!faceBase64) {
-                // If only body, just optimize it
-                const optimizedBody = await optimizePayload(bodyBase64, 1500);
-                return resolve(optimizedBody);
+                const canvas = document.createElement('canvas');
+                canvas.width = 1024;
+                canvas.height = 1024;
+                const ctx = canvas.getContext('2d');
+                if(ctx) {
+                    ctx.fillStyle = '#000000';
+                    ctx.fillRect(0,0,1024,1024);
+                    
+                    const scale = Math.min(1000/bodyImg.width, 1000/bodyImg.height);
+                    const w = bodyImg.width * scale;
+                    const h = bodyImg.height * scale;
+                    ctx.drawImage(bodyImg, (1024-w)/2, (1024-h)/2, w, h);
+                    
+                    // Metadata Label
+                    ctx.fillStyle = '#00FF00';
+                    ctx.font = 'bold 20px monospace';
+                    ctx.fillText("TARGET_CHARACTER_APPEARANCE", 20, 30);
+                    
+                    return resolve(canvas.toDataURL('image/jpeg', 0.90));
+                }
+                return resolve(bodyBase64);
             }
 
             const faceImg = await loadImg(faceBase64);
 
-            const SHEET_H = 1500;
-            const TOTAL_W = 1500;
-            const SPLIT_X = 1000; // Body gets 1000px width
+            // Tạo layout: Trái (Body 60%) | Phải (Face 40%) - Tách biệt rõ ràng
+            const SHEET_W = 1280;
+            const SHEET_H = 1024;
+            const SPLIT_X = Math.floor(SHEET_W * 0.60); 
 
             const canvas = document.createElement('canvas');
-            canvas.width = TOTAL_W;
+            canvas.width = SHEET_W;
             canvas.height = SHEET_H;
             const ctx = canvas.getContext('2d');
             if (!ctx) return resolve(bodyBase64);
 
-            // Background
-            ctx.fillStyle = '#101010';
-            ctx.fillRect(0, 0, TOTAL_W, SHEET_H);
+            // 1. Nền Đen Tuyệt Đối (Tách biệt ngữ cảnh)
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, SHEET_W, SHEET_H);
 
-            // Draw Body (Main)
-            const bodyScale = Math.min((SPLIT_X - 20) / bodyImg.width, (SHEET_H - 20) / bodyImg.height);
+            // 2. Draw Body (Main Identity) - Left Side
+            // Scale để fit vào vùng bên trái
+            const bodyScale = Math.min((SPLIT_X - 40) / bodyImg.width, (SHEET_H - 100) / bodyImg.height);
             const bW = bodyImg.width * bodyScale;
             const bH = bodyImg.height * bodyScale;
             const bX = (SPLIT_X - bW) / 2;
-            const bY = (SHEET_H - bH) / 2;
+            const bY = (SHEET_H - bH) / 2 + 40;
             
             ctx.drawImage(bodyImg, bX, bY, bW, bH);
-            drawLabel(ctx, "MAIN_BODY", 20, 40, '#00FF00');
-
-            // Draw Face (Side Panel)
-            const fW_Zone = TOTAL_W - SPLIT_X;
-            const fH_Zone = SHEET_H / 2; // Face takes top half of side panel
             
-            const fScale = Math.min((fW_Zone - 20) / faceImg.width, (fH_Zone - 20) / faceImg.height);
+            // Label cho AI đọc
+            ctx.fillStyle = '#00FF00'; // Green Text
+            ctx.font = 'bold 24px monospace';
+            ctx.fillText("SOURCE_FULLBODY_OUTFIT", 20, 40);
+
+            // 3. Draw Face (Detail Reference) - Right Side
+            const fW_Zone = SHEET_W - SPLIT_X;
+            const fH_Zone = SHEET_H; 
+            
+            // Vẽ vạch ngăn cách
+            ctx.strokeStyle = '#333333';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(SPLIT_X, 0);
+            ctx.lineTo(SPLIT_X, SHEET_H);
+            ctx.stroke();
+
+            const fScale = Math.min((fW_Zone - 40) / faceImg.width, (fH_Zone - 100) / faceImg.height);
             const fW = faceImg.width * fScale;
             const fH = faceImg.height * fScale;
             const fX = SPLIT_X + (fW_Zone - fW) / 2;
-            const fY = (fH_Zone - fH) / 2;
+            const fY = (fH_Zone - fH) / 2 + 40;
 
-            ctx.strokeStyle = '#FFFFFF';
-            ctx.strokeRect(SPLIT_X, 0, fW_Zone, fH_Zone);
             ctx.drawImage(faceImg, fX, fY, fW, fH);
             
-            drawLabel(ctx, "TARGET_FACE", SPLIT_X + 10, 30, '#00FF00');
+            ctx.fillStyle = '#00FF00';
+            ctx.fillText("SOURCE_FACE_DETAIL", SPLIT_X + 20, 40);
             
-            // Visual Anchor Line
-            ctx.beginPath();
-            ctx.moveTo(fX, fY + fH/2);
-            ctx.lineTo(bX + bW/2, bY + bH*0.1); // Connect to approx head position
-            ctx.strokeStyle = '#00FF00';
-            ctx.lineWidth = 2;
-            ctx.setLineDash([10, 10]);
-            ctx.stroke();
-
-            resolve(canvas.toDataURL('image/jpeg', 0.95));
+            resolve(canvas.toDataURL('image/jpeg', 0.90));
 
         } catch (e) {
             console.error("Sheet Gen Error", e);
@@ -217,9 +235,3 @@ export const createSolidFence = async (base64Str: string, targetAspectRatio: str
         }
     });
   };
-
-  function drawLabel(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, color: string) {
-      ctx.font = 'bold 24px Arial';
-      ctx.fillStyle = color;
-      ctx.fillText(text, x, y);
-  }

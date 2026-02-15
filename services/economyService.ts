@@ -16,6 +16,7 @@ const isValidUUID = (id: string) => {
 // --- HELPER: DATE FORMATTING (LOCAL TIME YYYY-MM-DD) ---
 const getLocalDateStr = (date = new Date()) => {
     // Sử dụng sv-SE để có format YYYY-MM-DD mà vẫn giữ local time
+    // Đảm bảo không có time component gây lệch
     return date.toLocaleDateString('sv-SE');
 };
 
@@ -668,7 +669,7 @@ export const performCheckin = async (): Promise<{ success: boolean; reward: numb
             .maybeSingle();
             
         if (existing) {
-            return { success: false, reward: 0, newStreak: user.streak, message: 'Đã điểm danh hôm nay!' };
+            return { success: false, reward: 0, newStreak: user.streak, message: 'Hôm nay bạn đã điểm danh rồi!' };
         }
 
         // 2. Insert into daily_check_ins (Base Reward Only)
@@ -682,7 +683,11 @@ export const performCheckin = async (): Promise<{ success: boolean; reward: numb
         
         if (insertError) {
              console.error("Checkin Insert Error", insertError);
-             return { success: false, reward: 0, newStreak: user.streak };
+             // Handle Unique Violation Gracefully
+             if (insertError.code === '23505') {
+                 return { success: true, reward: 0, newStreak: user.streak, message: 'Hôm nay bạn đã điểm danh rồi!' };
+             }
+             return { success: false, reward: 0, newStreak: user.streak, message: `Lỗi DB: ${insertError.message}` };
         }
 
         // 3. Recalculate Monthly Count

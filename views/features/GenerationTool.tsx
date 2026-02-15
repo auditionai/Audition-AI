@@ -225,11 +225,15 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       setCharacters(prev => prev.map(c => c.id === charId ? { ...c, isFaceLocked: !c.isFaceLocked } : c));
   }
 
-  const handleForceDownload = (dataUri: string, filename: string) => {
-      if (!dataUri) return;
-      if (dataUri.startsWith('data:')) {
-          try {
-              const arr = dataUri.split(',');
+  const handleForceDownload = async (url: string, filename: string) => {
+      if (!url) return;
+      
+      try {
+          let blob: Blob;
+
+          // 1. Base64
+          if (url.startsWith('data:')) {
+              const arr = url.split(',');
               const mime = arr[0].match(/:(.*?);/)?.[1];
               const bstr = atob(arr[1]);
               let n = bstr.length;
@@ -237,22 +241,28 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
               while (n--) {
                   u8arr[n] = bstr.charCodeAt(n);
               }
-              const blob = new Blob([u8arr], { type: mime });
-              const url = window.URL.createObjectURL(blob);
-              const link = document.createElement('a');
-              link.href = url;
-              link.download = filename;
-              document.body.appendChild(link);
-              link.click();
-              document.body.removeChild(link);
-              window.URL.revokeObjectURL(url);
-              notify('Đã lưu ảnh về máy!', 'success');
-              return;
-          } catch (e) {
-              console.error("Blob download failed", e);
+              blob = new Blob([u8arr], { type: mime });
+          } 
+          // 2. URL
+          else {
+              const response = await fetch(url, { mode: 'cors' });
+              if (!response.ok) throw new Error("Fetch failed");
+              blob = await response.blob();
           }
+
+          const blobUrl = window.URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = blobUrl;
+          link.download = filename;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          window.URL.revokeObjectURL(blobUrl);
+          notify('Đã lưu ảnh về máy!', 'success');
+      } catch (e) {
+          console.error("Download failed", e);
+          window.open(url, '_blank'); // Fallback
       }
-      window.open(dataUri, '_blank');
   };
 
   const calculateCost = () => {

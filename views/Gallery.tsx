@@ -78,27 +78,49 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
       }
   };
 
+  // --- FORCE DOWNLOAD LOGIC (UPDATED) ---
   const handleDownload = async (imageUrl: string, filename: string) => {
+      notify(lang === 'vi' ? 'Đang xử lý tải xuống...' : 'Processing download...', 'info');
+      
       try {
-          // Attempt Direct Fetch (Works if Same Origin or CORS enabled)
-          const response = await fetch(imageUrl);
-          if (!response.ok) throw new Error("Fetch failed");
-          
-          const blob = await response.blob();
+          let blob: Blob;
+
+          // 1. Local Base64 Case
+          if (imageUrl.startsWith('data:')) {
+              const arr = imageUrl.split(',');
+              const mime = arr[0].match(/:(.*?);/)?.[1];
+              const bstr = atob(arr[1]);
+              let n = bstr.length;
+              const u8arr = new Uint8Array(n);
+              while (n--) u8arr[n] = bstr.charCodeAt(n);
+              blob = new Blob([u8arr], { type: mime });
+          } 
+          // 2. Remote URL Case (Fetch & Blob)
+          else {
+              const response = await fetch(imageUrl, { mode: 'cors' });
+              if (!response.ok) throw new Error('Network response failed');
+              blob = await response.blob();
+          }
+
+          // Create Object URL & Trigger Download
           const url = window.URL.createObjectURL(blob);
           const link = document.createElement('a');
           link.href = url;
           link.download = filename;
           document.body.appendChild(link);
           link.click();
+          
+          // Cleanup
           document.body.removeChild(link);
           window.URL.revokeObjectURL(url);
-          notify(lang === 'vi' ? 'Đã tải ảnh xuống!' : 'Image downloaded!', 'success');
-      } catch (error) {
-          // If Direct Fetch fails (CORS), just open in new tab.
-          // We removed the Canvas proxy because it throws a second red error in console if CORS is blocked.
+          
+          notify(lang === 'vi' ? 'Đã lưu ảnh thành công!' : 'Download successful!', 'success');
+
+      } catch (e) {
+          console.error("Download failed", e);
+          // Fallback only if fetch fails (e.g. CORS blockage on server side)
           window.open(imageUrl, '_blank');
-          notify(lang === 'vi' ? 'Đã mở ảnh trong tab mới (Server chặn tải)' : 'Opened in new tab (Server blocked download)', 'info');
+          notify(lang === 'vi' ? 'Lỗi tải trực tiếp (Server chặn), đã mở tab mới.' : 'Direct download blocked, opened new tab.', 'warning');
       }
   };
 
@@ -120,7 +142,6 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                 alt={img.toolName} 
                 className="w-full h-full object-cover" 
                 loading="lazy"
-                // Removed crossOrigin="anonymous" to fix broken thumbnail display
               />
               {img.isShared && (
                   <div className="absolute top-2 left-2 z-10 px-2 py-0.5 bg-audi-pink text-white text-[9px] font-bold rounded-full shadow-lg">

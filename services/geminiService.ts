@@ -80,7 +80,7 @@ export const checkConnection = async (key?: string): Promise<boolean> => {
     }
 };
 
-// --- INTELLIGENCE CORE: LOGIC XỬ LÝ PROMPT ĐA TẦNG (DIGITAL TWIN) ---
+// --- INTELLIGENCE CORE: LOGIC XỬ LÝ PROMPT ĐA TẦNG ---
 const processDigitalTwinMode = (
     prompt: string, 
     refImagePart: any | null, 
@@ -90,55 +90,52 @@ const processDigitalTwinMode = (
 ): { systemPrompt: string, parts: any[] } => {
     
     const parts = [];
-
-    // --- CHIẾN LƯỢC: PHÂN TÁCH "SCENE CONTAINER" VÀ "CONTENT FILLER" ---
+    
+    // --- CHIẾN LƯỢC ĐỒNG BỘ: ÁP DỤNG QUY TRÌNH STRICT (NHÓM) CHO CẢ SINGLE MODE ---
+    // Không còn phân biệt Single/Group. Mọi Input đều được xử lý theo mô hình:
+    // Input A: Khung xương (Wireframe/Structure)
+    // Input B: Danh tính (Identity/Texture)
     
     if (refImagePart) {
-        // INPUT A: SCENE CONTAINER
-        parts.push({ text: ">>> INPUT A [SCENE_CONTAINER]: Contains the Background, Lighting, Camera Angle, and Pose. DO NOT CHANGE THE BACKGROUND." });
+        // INPUT A: STRUCTURE (Cấu trúc/Pose)
+        // Explicitly label this for Gemini to ignore pixels
+        parts.push({ text: "INPUT A [STRUCTURE ONLY]: Use this image purely for POSE ESTIMATION and CAMERA ANGLE. IGNORE all colors, faces, and clothes in this image. It is a wireframe reference." });
         parts.push(refImagePart);
     }
     
     if (charParts.length > 0) {
-        // INPUT B: CONTENT FILLER
-        parts.push({ text: ">>> INPUT B [CHARACTER_ID_SHEET]: Contains the visual identity (Face, Outfit, Body Shape) to be inserted." });
+        // INPUT B: IDENTITY (Định danh)
+        parts.push({ text: "INPUT B [IDENTITY REFERENCE]: This texture sheet defines the CHARACTER APPEARANCE (Face, Outfit, Body Type). You MUST use this character." });
         parts.push(...charParts);
     }
 
     // --- SYSTEM INSTRUCTION ---
-    // Ra lệnh cực mạnh để ép model thực hiện thao tác "Swap" thay vì "Generate"
+    // Viết lại hoàn toàn để ép buộc model tuân thủ quy trình RE-RENDER
     
     let systemPrompt = "";
 
-    if (refImagePart && charParts.length > 0) {
-        // TRƯỜNG HỢP: CÓ CẢ ẢNH MẪU VÀ NHÂN VẬT (SWAP MODE)
-        systemPrompt = `** MISSION: DEEP CHARACTER SWAP & RENDER **
+    if (refImagePart) {
+        // TRƯỜNG HỢP CÓ ẢNH MẪU (Bất kể Single hay Group)
+        // Bắt buộc AI phải RE-RENDER, cấm copy ảnh mẫu
+        systemPrompt = `** MISSION: 3D CHARACTER RENDERING (STRICT MODE) **
         
-        [STRICT EXECUTION PROTOCOL]:
-        1. ANALYZE Input A: Lock the Background, Lighting, Shadows, and the Pose of the subject.
-        2. ERASE: Mentally remove the person and clothes currently in Input A.
-        3. INSERT: Take the character from Input B (Face + Outfit) and place them into the scene of Input A.
-        4. MATCH: The character from Input B must adopt the EXACT pose from Input A.
-        5. BLEND: Apply the lighting and shadows from Input A onto the character from Input B.
-        
-        [CONSTRAINTS]:
-        - DO NOT change the Background or Lighting of Input A.
-        - DO NOT invent new clothes. You MUST copy the outfit from Input B exactly (100% Copy).
-        - DO NOT mix the faces. Use the face from Input B.
+        [RULES - DO NOT IGNORE]:
+        1. DO NOT return Input A. Input A is only for POSE/COMPOSITION.
+        2. YOU MUST RENDER A NEW IMAGE from scratch.
+        3. IDENTITY SOURCE: The character appearance comes ONLY from Input B.
+        4. If Input A contains a human, REPLACE them completely with the character from Input B.
+        5. STYLE: 8K, Unreal Engine 5, Highly Detailed, 3D Game Render.
         
         [CONTEXT]: ${prompt}
         `;
-    } else if (!refImagePart && charParts.length > 0) {
-        // TRƯỜNG HỢP: CHỈ CÓ NHÂN VẬT (GENERATION MODE)
-        systemPrompt = `** MISSION: 3D CHARACTER RENDER **
-        Generate a high-fidelity 3D character based on Input B.
-        - OUTFIT & FACE: 100% Copy from Input B.
-        - STYLE: 8K, Unreal Engine 5, Raytracing, Audition Online Style.
-        - Context: "${prompt}"
-        `;
     } else {
-        // TRƯỜNG HỢP: TEXT ONLY
-        systemPrompt = `Create a stunning 3D game character (Audition Online style). Context: ${prompt}`;
+        // TRƯỜNG HỢP CHUẨN (Không ảnh mẫu)
+        systemPrompt = `** MISSION: 3D CHARACTER GENERATION **
+        Create a stunning 3D game character (Audition Online style).
+        - Detail: 8K, Unreal Engine 5, Raytracing.
+        - Context: "${prompt}"
+        ${charParts.length > 0 ? '- IDENTITY: Strictly follow the character sheet provided in Input B.' : ''}
+        `;
     }
 
     return { systemPrompt, parts };
@@ -160,12 +157,12 @@ export const generateImage = async (
     const ai = await getAiClient();
     const model = modelTier === 'pro' ? 'gemini-3-pro-image-preview' : 'gemini-2.5-flash-image';
     
-    if (onProgress) onProgress(`Engine: ${model} | Mode: DEEP SWAP`);
+    if (onProgress) onProgress(`Engine: ${model} | Mode: STRICT COMPOSITING`);
 
     // 1. Process Pose Reference (Input A)
     let refImagePart = null;
     if (styleRefBase64) {
-        // styleRefBase64 đã được xử lý qua createSolidFence (resize/padding)
+        // NOTE: styleRefBase64 should already be the "Solid Fence" processed version from UI
         refImagePart = {
             inlineData: { data: cleanBase64(styleRefBase64), mimeType: 'image/jpeg' }
         };
@@ -179,7 +176,7 @@ export const generateImage = async (
         if (char.image) {
             if (onProgress) onProgress(`Building Identity Sheet (Player ${char.id})...`);
             
-            // Tạo Texture Sheet: Ghép Body + Face
+            // Tạo Texture Sheet: Ghép Body + Face vào 1 ảnh duy nhất để Flash 2.5 không bị loạn
             const textureSheet = await createTextureSheet(
                 char.image, 
                 char.faceImage, 
@@ -196,6 +193,7 @@ export const generateImage = async (
                         fileData: { mimeType: 'image/jpeg', fileUri: fileUri }
                     };
                 } catch (e) {
+                     // Fallback to inline if upload fails
                      finalPart = {
                         inlineData: { data: cleanBase64(textureSheet), mimeType: 'image/jpeg' }
                     };
@@ -212,14 +210,16 @@ export const generateImage = async (
     }
 
     // 3. Construct Payload
+    // FORCE SINGLE MODE TO USE THE EXACT SAME LOGIC AS GROUP MODE
     const payload = processDigitalTwinMode(prompt, refImagePart, allParts, charDescriptions, modelTier);
     
-    // Đảo ngược thứ tự: Instruction cuối cùng để AI nhớ rõ nhất
+    // Đảo ngược thứ tự: Instruction cuối cùng để AI nhớ rõ nhất (Recency Bias)
     const finalParts = [...payload.parts, { text: payload.systemPrompt }];
 
     const config: any = {
         imageConfig: { aspectRatio: aspectRatio },
-        systemInstruction: "You are a specialized Image Compositor AI. Your only goal is to swap the character from Input B into the scene of Input A while maintaining 100% fidelity to the Source Identity (B) and the Source Scene (A).",
+        // Simple but forceful system instruction for the Config object
+        systemInstruction: "You are an advanced 3D Rendering AI. You strictly separate STRUCTURE (Pose) from IDENTITY (Appearance). Never confuse the two inputs.",
         safetySettings: [
             { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
             { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
@@ -230,7 +230,7 @@ export const generateImage = async (
 
     if (modelTier === 'pro') {
         config.imageConfig.imageSize = resolution;
-        // Chỉ dùng Google Search khi KHÔNG CÓ ảnh mẫu
+        // Chỉ dùng Google Search khi KHÔNG CÓ ảnh mẫu, để tránh nhiễu
         if (useSearch && !refImagePart) {
             config.tools = [{ googleSearch: {} }];
         }

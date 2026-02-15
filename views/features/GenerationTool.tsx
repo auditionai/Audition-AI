@@ -48,6 +48,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
   const [useSearch, setUseSearch] = useState(false); 
   const [useCloudRef, setUseCloudRef] = useState(true);
 
+  // --- GUIDE STATE ---
+  const [guideTopic, setGuideTopic] = useState<'chars' | 'prompt' | 'settings' | null>(null);
+
   const [resultImage, setResultImage] = useState<string | null>(null);
   const [generatedData, setGeneratedData] = useState<GeneratedImage | null>(null);
 
@@ -254,6 +257,84 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       { id: '4:3', label: '4:3', desc: 'Ngang' },
   ];
 
+  // --- GUIDE CONTENT RENDERER ---
+  const renderGuideContent = () => {
+      switch(guideTopic) {
+          case 'chars':
+              return (
+                  <>
+                      <h3 className="text-xl font-bold text-audi-yellow mb-4 flex items-center gap-2">
+                          <Icons.User className="w-6 h-6" /> Hướng dẫn Upload Nhân vật
+                      </h3>
+                      <ul className="space-y-3 text-sm text-slate-300">
+                          <li className="flex gap-2">
+                              <span className="text-audi-cyan font-bold">1. Ảnh Toàn Thân (Body):</span>
+                              Dùng để AI học trang phục, dáng đứng và cấu trúc cơ thể. Nên dùng ảnh rõ ràng, ít chi tiết thừa.
+                          </li>
+                          <li className="flex gap-2">
+                              <span className="text-audi-pink font-bold">2. Ảnh Mặt (Face):</span>
+                              <span className="bg-red-500/20 text-red-400 px-1 rounded text-xs font-bold h-fit mt-0.5">QUAN TRỌNG</span>
+                              Dùng để ghép mặt (Face Swap). Hãy chọn ảnh cận mặt, chính diện, rõ nét, không bị che khuất.
+                          </li>
+                          <li className="flex gap-2">
+                              <span className="text-white font-bold">3. Khóa/Mở Khóa:</span>
+                              Nút <Icons.Lock className="w-3 h-3 inline text-audi-cyan"/> dùng để BẬT tính năng ghép mặt. Nếu TẮT <Icons.Unlock className="w-3 h-3 inline text-red-500"/>, AI sẽ tự sáng tạo khuôn mặt mới.
+                          </li>
+                      </ul>
+                  </>
+              );
+          case 'prompt':
+              return (
+                  <>
+                      <h3 className="text-xl font-bold text-audi-yellow mb-4 flex items-center gap-2">
+                          <Icons.MessageCircle className="w-6 h-6" /> Cách viết Prompt & Ảnh mẫu
+                      </h3>
+                      <ul className="space-y-3 text-sm text-slate-300">
+                          <li className="flex gap-2">
+                              <span className="text-audi-cyan font-bold">Mô tả (Prompt):</span>
+                              Viết càng chi tiết càng tốt.
+                              <br/>- <b className="text-white">Chủ thể:</b> Cô gái tóc vàng, mắt xanh...
+                              <br/>- <b className="text-white">Trang phục:</b> Váy dạ hội đỏ, cánh thiên thần...
+                              <br/>- <b className="text-white">Bối cảnh:</b> Sân khấu, thành phố tương lai...
+                          </li>
+                          <li className="flex gap-2">
+                              <span className="text-audi-pink font-bold">Ảnh mẫu (Pose Ref):</span>
+                              Upload một bức ảnh có dáng đứng hoặc bố cục bạn thích. AI sẽ cố gắng "bắt chước" tư thế của ảnh này.
+                          </li>
+                          <li className="flex gap-2">
+                              <span className="text-audi-purple font-bold">AI Viết Hộ:</span>
+                              Bí ý tưởng? Nhập vài từ khóa đơn giản rồi bấm nút này để AI tự viết thành một đoạn văn mô tả chuyên nghiệp.
+                          </li>
+                      </ul>
+                  </>
+              );
+          case 'settings':
+              return (
+                  <>
+                      <h3 className="text-xl font-bold text-audi-yellow mb-4 flex items-center gap-2">
+                          <Icons.Settings className="w-6 h-6" /> Cấu hình Nâng cao
+                      </h3>
+                      <ul className="space-y-3 text-sm text-slate-300">
+                          <li className="flex gap-2">
+                              <span className="text-audi-cyan font-bold">Model Flash vs Pro:</span>
+                              <br/>- <b className="text-white">Flash:</b> Nhanh, rẻ, phù hợp thử nghiệm.
+                              <br/>- <b className="text-white">Pro:</b> Chất lượng cao nhất, chi tiết tốt hơn, hiểu lệnh tốt hơn (Khuyên dùng).
+                          </li>
+                          <li className="flex gap-2">
+                              <span className="text-audi-pink font-bold">HQ Cloud Link:</span>
+                              Khi BẬT, ảnh gốc của bạn sẽ được gửi lên Cloud để AI phân tích kỹ hơn -> Kết quả giống thật hơn 30%. (Tốn thêm Vcoin).
+                          </li>
+                          <li className="flex gap-2">
+                              <span className="text-white font-bold">Độ phân giải:</span>
+                              2K là chuẩn đẹp nhất. 4K dành cho in ấn hoặc màn hình lớn (tốn nhiều Vcoin hơn).
+                          </li>
+                      </ul>
+                  </>
+              );
+          default: return null;
+      }
+  }
+
   if (stage === 'processing') {
       return (
           <div className="flex flex-col items-center justify-center min-h-[60vh] text-center animate-fade-in w-full max-w-md mx-auto">
@@ -315,6 +396,23 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
     <div className="flex flex-col items-center w-full max-w-5xl mx-auto pb-48 animate-fade-in relative">
         <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/*" />
 
+        {/* --- GUIDE MODAL --- */}
+        {guideTopic && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fade-in" onClick={() => setGuideTopic(null)}>
+                <div className="bg-[#12121a] w-full max-w-md p-6 rounded-2xl border border-audi-yellow/50 shadow-[0_0_30px_rgba(251,218,97,0.2)] relative" onClick={e => e.stopPropagation()}>
+                    <button onClick={() => setGuideTopic(null)} className="absolute top-4 right-4 text-slate-500 hover:text-white">
+                        <Icons.X className="w-6 h-6" />
+                    </button>
+                    {renderGuideContent()}
+                    <div className="mt-6 pt-4 border-t border-white/10 text-center">
+                        <button onClick={() => setGuideTopic(null)} className="px-6 py-2 bg-white/10 hover:bg-white/20 rounded-full text-xs font-bold text-white transition-colors">
+                            Đã Hiểu
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+
         {/* Mode Selector */}
         <div className="w-full flex justify-center mb-6">
             <div className="bg-[#12121a] p-1.5 rounded-2xl border border-white/10 flex gap-1 shadow-lg overflow-x-auto no-scrollbar max-w-full">
@@ -341,6 +439,19 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
             {/* LEFT: CHARACTER INPUT SECTION */}
             <div className="lg:col-span-2 space-y-4">
                 
+                {/* Header with Help Button */}
+                <div className="flex items-center justify-between px-2">
+                    <h3 className="font-bold text-white text-sm uppercase flex items-center gap-2">
+                        <Icons.User className="w-4 h-4 text-audi-pink" /> 1. Upload Nhân Vật
+                    </h3>
+                    <button 
+                        onClick={() => setGuideTopic('chars')}
+                        className="flex items-center gap-1 text-[10px] font-bold text-audi-yellow hover:text-white transition-colors bg-audi-yellow/10 px-2 py-1 rounded-full border border-audi-yellow/30 animate-pulse"
+                    >
+                        <Icons.Info className="w-3 h-3" /> Hướng dẫn
+                    </button>
+                </div>
+
                 {/* Mobile Tab Navigation */}
                 {characters.length > 1 && (
                     <div className="flex md:hidden overflow-x-auto gap-2 pb-2 no-scrollbar">
@@ -423,11 +534,19 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                 <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4 shadow-lg">
                     <div className="flex justify-between items-center mb-3">
                         <label className="text-xs font-bold text-slate-400 uppercase flex items-center gap-2">
-                            <Icons.MessageCircle className="w-4 h-4" /> Mô tả & Ảnh mẫu
+                            <Icons.MessageCircle className="w-4 h-4" /> 2. Mô tả & Ảnh mẫu
                         </label>
-                        <button onClick={handleSuggestPrompt} disabled={isSuggesting} className="text-xs font-bold text-audi-purple flex items-center gap-1 hover:text-white transition-colors">
-                            <Icons.Sparkles className={`w-3 h-3 ${isSuggesting ? 'animate-spin' : ''}`} /> AI Viết Hộ
-                        </button>
+                        <div className="flex gap-2">
+                            <button 
+                                onClick={() => setGuideTopic('prompt')}
+                                className="text-[10px] font-bold text-audi-yellow hover:text-white flex items-center gap-1 bg-audi-yellow/10 px-2 py-1 rounded-full border border-audi-yellow/30 animate-pulse"
+                            >
+                                <Icons.Info className="w-3 h-3" /> Cách viết Prompt
+                            </button>
+                            <button onClick={handleSuggestPrompt} disabled={isSuggesting} className="text-xs font-bold text-audi-purple flex items-center gap-1 hover:text-white transition-colors border border-audi-purple/30 px-2 py-1 rounded-full bg-audi-purple/10">
+                                <Icons.Sparkles className={`w-3 h-3 ${isSuggesting ? 'animate-spin' : ''}`} /> AI Viết Hộ
+                            </button>
+                        </div>
                     </div>
                     
                     <div className="flex flex-col md:flex-row gap-4">
@@ -455,7 +574,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                         <textarea 
                             value={prompt}
                             onChange={(e) => setPrompt(e.target.value)}
-                            placeholder={lang === 'vi' ? "Mô tả chi tiết: trang phục, bối cảnh..." : "Detailed prompt: clothes, scene..."}
+                            placeholder={lang === 'vi' ? "Mô tả chi tiết: trang phục, bối cảnh, ánh sáng..." : "Detailed prompt: clothes, scene, lighting..."}
                             className="flex-1 bg-black/20 border border-white/5 rounded-xl p-3 text-sm text-white focus:border-audi-purple outline-none resize-none min-h-[100px]"
                         />
                     </div>
@@ -465,10 +584,18 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
             {/* RIGHT: SETTINGS PANEL */}
             <div className="lg:col-span-1 space-y-6">
                 <div className="bg-[#12121a] border border-white/10 rounded-2xl p-5 space-y-5 shadow-lg h-full">
-                    <h3 className="font-bold text-white flex items-center gap-2 border-b border-white/10 pb-3">
-                        <Icons.Settings className="w-5 h-5 text-slate-400" />
-                        Cấu Hình Ảnh
-                    </h3>
+                    <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                        <h3 className="font-bold text-white flex items-center gap-2">
+                            <Icons.Settings className="w-5 h-5 text-slate-400" />
+                            3. Cấu Hình
+                        </h3>
+                        <button 
+                            onClick={() => setGuideTopic('settings')}
+                            className="text-audi-yellow hover:text-white transition-colors animate-pulse"
+                        >
+                            <Icons.Info className="w-4 h-4" />
+                        </button>
+                    </div>
 
                     {/* MODEL SELECTION */}
                     <div className="space-y-2">

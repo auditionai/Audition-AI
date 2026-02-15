@@ -91,22 +91,55 @@ const processDigitalTwinMode = (
     const parts = [...charParts]; 
     if (refImagePart) parts.push(refImagePart);
 
-    // Simplified System Prompt for Classic Mode
-    let systemPrompt = `** SYSTEM: 3D CHARACTER RECONSTRUCTION **
+    const isSingle = charDescriptions.length === 1;
+
+    let systemPrompt = "";
+
+    if (isSingle) {
+        // --- FIXED LOGIC FOR SINGLE IMAGE ---
+        systemPrompt = `** SYSTEM: PROFESSIONAL 3D CHARACTER ARTIST **
+        
+        [TASK]: Create a high-quality 3D render of the character provided in the input reference.
+        
+        [INPUT ANALYSIS]:
+        - The input image is a REFERENCE SHEET containing the character's design.
+        - DO NOT output the reference sheet. DO NOT output a collage.
+        - Treat the input image purely as information about outfit and face.
+        
+        [OUTPUT REQUIREMENTS]:
+        - Generate EXACTLY ONE single image of the character.
+        - Style: Semi-realistic 3D, Blind Box aesthetics, Audition Online style, Unreal Engine 5 render.
+        - Skin: Smooth, glowing, no realistic human pores.
+        - Eyes: Large, expressive, anime-styled 3D.
+        - Composition: Full body or 3/4 view based on the prompt.
+        
+        [SCENE]: "${prompt}"
+        
+        [STRICT NEGATIVE CONSTRAINTS]:
+        - NO real humans, NO photorealism.
+        - NO split screens, NO grids, NO text, NO UI elements.
+        - NO blurry faces, NO distorted limbs.
+        `;
+    } else {
+        // --- LOGIC FOR COUPLE / GROUP (KEPT STABLE) ---
+        systemPrompt = `** SYSTEM: 3D CHARACTER RECONSTRUCTION **
     
-    [TASK]: Recreate the character(s) based on the provided Reference Sheets.
-    
-    [INPUT FORMAT]:
-    - Each input image contains the MAIN BODY (Left) and optionally TARGET FACE (Right).
-    - If a specific Face is provided, you MUST Swap/Map that face onto the character.
-    - If no specific shoes are provided, infer appropriate footwear based on the outfit style.
-    
-    [MAPPING]:
-    - Image 1 -> Character 1 (Left).
-    - Image 2 -> Character 2 (Right/Center).
-    
-    [SCENE]: "${prompt}"
-    [RENDER]: Unreal Engine 5, 8K, Raytracing, Detailed Texture.`;
+        [TASK]: Recreate the character(s) based on the provided Reference Sheets.
+        
+        [INPUT FORMAT]:
+        - Each input image contains the MAIN BODY (Left) and optionally TARGET FACE (Right).
+        - If a specific Face is provided, you MUST Swap/Map that face onto the character.
+        - If no specific shoes are provided, infer appropriate footwear based on the outfit style.
+        
+        [MAPPING]:
+        - Image 1 -> Character 1 (Left).
+        - Image 2 -> Character 2 (Right/Center).
+        ${charDescriptions.length > 2 ? '- Image 3 -> Character 3.' : ''}
+        ${charDescriptions.length > 3 ? '- Image 4 -> Character 4.' : ''}
+        
+        [SCENE]: "${prompt}"
+        [RENDER]: Unreal Engine 5, 8K, Raytracing, Detailed Texture.`;
+    }
 
     return { systemPrompt, parts };
 };
@@ -117,6 +150,7 @@ export const generateImage = async (
     styleRefBase64?: string, 
     characterDataList: CharacterData[] = [], 
     resolution: string = '2K',
+    modelTier: 'flash' | 'pro' = 'pro', // NEW ARGUMENT
     useSearch: boolean = false,
     useCloudRef: boolean = false, 
     onProgress?: (msg: string) => void
@@ -124,14 +158,18 @@ export const generateImage = async (
   
   try {
     const ai = await getAiClient();
-    const isPro = resolution === '2K' || resolution === '4K';
-    const model = isPro ? 'gemini-3-pro-image-preview' : 'gemini-2.5-flash-image';
+    
+    // --- FIXED MODEL SELECTION LOGIC ---
+    // Flash always uses 'gemini-2.5-flash-image'
+    // Pro always uses 'gemini-3-pro-image-preview' (even at 1K)
+    const model = modelTier === 'pro' ? 'gemini-3-pro-image-preview' : 'gemini-2.5-flash-image';
     
     if (onProgress) onProgress(`Engine: ${model} | Mode: ${useCloudRef ? 'CLOUD NEURAL LINK' : 'STANDARD'}`);
 
-    // 1. PREPARE STYLE REF
+    // 1. PREPARE STYLE REF (POSE)
     let refImagePart = null;
     if (styleRefBase64) {
+        // For single image, ensure the pose ref doesn't confuse the layout
         const fencedData = await createSolidFence(styleRefBase64, aspectRatio, true);
         const optData = await optimizePayload(fencedData, 1024);
         refImagePart = {
@@ -147,11 +185,11 @@ export const generateImage = async (
         if (char.image) {
             if (onProgress) onProgress(`Processing Player ${char.id}...`);
             
-            // Create the Texture Sheet (Now simpler)
+            // Create the Texture Sheet
             const textureSheet = await createTextureSheet(
                 char.image, 
                 char.faceImage, 
-                char.shoesImage // Optional/Null
+                char.shoesImage 
             );
             
             let finalPart;
@@ -183,7 +221,10 @@ export const generateImage = async (
 
     const config: any = {
         imageConfig: { aspectRatio: aspectRatio },
-        systemInstruction: "Create high quality 3D character render. Follow the reference image structure.", 
+        // Use a clearer system instruction for the API config as well
+        systemInstruction: characterDataList.length === 1 
+            ? "You are a professional 3D Character Designer. Generate a single, high-quality 3D render. No collages."
+            : "Create high quality 3D character render. Follow the reference image structure.", 
         safetySettings: [
             { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
             { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
@@ -192,8 +233,12 @@ export const generateImage = async (
         ]
     };
 
-    if (isPro) {
+    // Apply Pro features if model is Pro
+    if (modelTier === 'pro') {
+        // Only set imageSize for Pro model
         config.imageConfig.imageSize = resolution;
+        
+        // Add Search tool if requested and NO style ref (to avoid conflicts)
         if (useSearch && !refImagePart) {
             config.tools = [{ googleSearch: {} }];
         }

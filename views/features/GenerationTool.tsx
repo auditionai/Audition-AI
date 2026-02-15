@@ -320,7 +320,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
           aspectRatio, 
           structureRefData, 
           characterDataList, 
-          modelType === 'pro' ? resolution : '1K', 
+          modelType === 'pro' ? resolution : '1K',
+          modelType, // PASSED EXPLICITLY HERE
           modelType === 'pro' ? useSearch : false,
           useCloudRef, 
           (msg) => addLog(msg)

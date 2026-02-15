@@ -10,11 +10,25 @@ interface DailyCheckinProps {
   lang: 'vi' | 'en';
 }
 
-const DB_FIX_SQL = `-- 1. Xóa Trigger cũ để tránh xung đột
+const DB_FIX_SQL = `-- 1. Clean up old triggers and functions
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 DROP FUNCTION IF EXISTS public.handle_new_user();
 
--- 2. Tạo Function xử lý người dùng mới (Cập nhật logic)
+-- 2. Drop existing policies to avoid "already exists" errors
+DO $$ 
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'users' AND policyname = 'Public read users') THEN
+        DROP POLICY "Public read users" ON public.users;
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'users' AND policyname = 'Users can update own profile') THEN
+        DROP POLICY "Users can update own profile" ON public.users;
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'users' AND policyname = 'Users can insert own profile') THEN
+        DROP POLICY "Users can insert own profile" ON public.users;
+    END IF;
+END $$;
+
+-- 3. Re-create Function
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -33,7 +47,7 @@ BEGIN
     new.email,
     COALESCE(new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'name', split_part(new.email, '@', 1)),
     COALESCE(new.raw_user_meta_data->>'avatar_url', ''),
-    25, -- Tặng 25 Vcoin mặc định
+    25, -- 25 Vcoin Bonus
     false,
     now(),
     now()
@@ -43,21 +57,16 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- 3. Kích hoạt Trigger
+-- 4. Activate Trigger
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
 
--- 4. Cấp quyền (RLS Policies) - Xóa cũ trước khi tạo mới
+-- 5. Enable RLS and Create Policies
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "Public read users" ON public.users;
 CREATE POLICY "Public read users" ON public.users FOR SELECT USING (true);
-
-DROP POLICY IF EXISTS "Users can update own profile" ON public.users;
 CREATE POLICY "Users can update own profile" ON public.users FOR UPDATE USING (auth.uid() = id);
-
-DROP POLICY IF EXISTS "Users can insert own profile" ON public.users;
 CREATE POLICY "Users can insert own profile" ON public.users FOR INSERT WITH CHECK (auth.uid() = id);
 `;
 

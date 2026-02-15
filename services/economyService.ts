@@ -215,48 +215,6 @@ export const getUserProfile = async (): Promise<UserProfile> => {
                     .eq('id', user.id)
                     .maybeSingle();
 
-                // 2. If missing, return a special object that prompts creation on next action
-                // OR ideally, create it now.
-                if (!profile) {
-                    console.warn("Profile missing in DB. Attempting fast creation...");
-                    
-                    const metadata = user.user_metadata || {};
-                    const newProfile = {
-                        id: user.id,
-                        email: user.email,
-                        display_name: metadata.full_name || metadata.name || user.email?.split('@')[0] || 'Dancer',
-                        photo_url: metadata.avatar_url || '',
-                        diamonds: 0,
-                        is_admin: false,
-                        consecutive_check_ins: 0,
-                        created_at: new Date().toISOString()
-                    };
-
-                    const { error: insertError } = await supabase
-                        .from('users')
-                        .insert(newProfile); // Try direct insert
-
-                    if (insertError) {
-                        console.error("Auto-create profile failed:", insertError);
-                        // If blocked by RLS, we can't do much from here except ask user to run SQL.
-                    } else {
-                        // Return the new profile immediately
-                        return {
-                            id: user.id,
-                            username: newProfile.display_name,
-                            email: newProfile.email || '',
-                            avatar: newProfile.photo_url || MOCK_USER.avatar,
-                            balance: newProfile.diamonds,
-                            role: 'user',
-                            isVip: false,
-                            streak: 0,
-                            lastCheckin: null,
-                            checkinHistory: [], 
-                            usedGiftcodes: []
-                        };
-                    }
-                }
-
                 const finalProfile = profile || {};
                 const metadata = user.user_metadata || {};
                 
@@ -301,18 +259,42 @@ export const getUserProfile = async (): Promise<UserProfile> => {
     return localUser;
 };
 
+// NEW HELPER: Force sync user to public table
+// This is called before critical actions (like checkin) to prevent FK errors
+const ensureUserSync = async (user: UserProfile) => {
+    if (!supabase || user.id.length < 20) return;
+    
+    // Attempt to Insert/Update the user record to ensure it exists
+    // We use the data we have from Auth (via getUserProfile)
+    const { error } = await supabase.from('users').upsert({
+        id: user.id,
+        email: user.email,
+        display_name: user.username,
+        photo_url: user.avatar,
+        // We do NOT overwrite diamonds here to avoid resetting balance
+        updated_at: new Date().toISOString()
+    }, { onConflict: 'id', ignoreDuplicates: false }); // ignoreDuplicates: false means we update if exists
+
+    if (error) {
+        console.warn("Ensure User Sync Failed (likely RLS or connection):", error);
+    }
+};
+
 // UPDATED: FORCE CHECK IF UPDATE ACTUALLY HAPPENED
 export const updateUserBalance = async (amount: number, reason: string, type: 'topup' | 'usage' | 'reward' | 'refund' | 'admin_adjustment' | 'giftcode' | 'milestone_reward'): Promise<{ success: boolean, newBalance: number, error?: string }> => {
     const user = await getUserProfile(); // Gets Auth User ID primarily
     const newBalance = (user.balance || 0) + amount;
 
     if (supabase && user.id.length > 20) { 
-        // 1. Try Update AND Select to verify it worked
+        // 0. Ensure user exists first!
+        await ensureUserSync(user);
+
+        // 1. Update Balance
         const { data, error: updateError } = await supabase
             .from('users')
             .update({ diamonds: newBalance })
             .eq('id', user.id)
-            .select(); // Critical: Returns the updated rows
+            .select(); 
         
         // 2. SUCCESS CASE
         if (!updateError && data && data.length > 0) {
@@ -327,33 +309,6 @@ export const updateUserBalance = async (amount: number, reason: string, type: 't
             return { success: true, newBalance };
         }
 
-        // 3. FAILURE CASE (User missing in DB) - SELF HEALING
-        console.warn("Update Balance: User row missing. Attempting healing insert...", updateError);
-        
-        // Try to insert the user record directly
-        const { error: insertError } = await supabase.from('users').insert({
-            id: user.id,
-            email: user.email,
-            display_name: user.username,
-            photo_url: user.avatar,
-            diamonds: newBalance, // Set directly to new balance (0 + amount)
-            is_admin: false,
-            created_at: new Date().toISOString()
-        });
-
-        if (!insertError) {
-             // If insert worked, log the transaction too
-             await supabase.from('diamond_transactions_log').insert({
-                user_id: user.id,
-                amount, 
-                description: reason, 
-                transaction_type: type || 'usage',
-                created_at: new Date().toISOString()
-            });
-            return { success: true, newBalance };
-        }
-
-        console.error("Critical: Failed to heal user profile.", insertError);
         return { success: false, newBalance: user.balance, error: "Lỗi đồng bộ tài khoản. Vui lòng chạy lệnh SQL sửa lỗi trong phần Cài đặt." };
     }
 
@@ -565,9 +520,12 @@ export const redeemGiftcode = async (codeStr: string): Promise<{success: boolean
 
         // 4. TRANSACTION START: Update Balance FIRST (with Strict Check)
         const reward = codeData.diamond_reward;
+        
+        // ** FORCE SYNC USER BEFORE UPDATE **
+        await ensureUserSync(user);
+
         const balanceUpdate = await updateUserBalance(reward, `Giftcode: ${normalizedCode}`, 'giftcode');
 
-        // CRITICAL FIX: If balance update failed (due to missing user row), we STOP.
         if (!balanceUpdate.success) {
             return { success: false, message: balanceUpdate.error || 'Lỗi: Tài khoản chưa được đồng bộ vào Database.' };
         }
@@ -743,6 +701,11 @@ export const performCheckin = async (): Promise<{ success: boolean; reward: numb
     const { start: monthStart, end: monthEnd } = getMonthRange();
     
     if (supabase && user.id.length > 20) {
+        
+        // ** CRITICAL FIX: ENSURE USER EXISTS IN PUBLIC.USERS BEFORE CHECKIN **
+        // This solves the FK constraint error.
+        await ensureUserSync(user);
+
         // 2. Double check if already checked in today
         const { data: existing } = await supabase
             .from('daily_check_ins')

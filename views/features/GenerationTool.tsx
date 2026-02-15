@@ -403,48 +403,107 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       switch(guideTopic) {
           case 'chars':
               return (
-                  <>
-                      <h3 className="text-xl font-bold text-audi-yellow mb-4 flex items-center gap-2">
+                  <div className="space-y-4">
+                      <h3 className="text-xl font-bold text-audi-yellow flex items-center gap-2 border-b border-white/10 pb-2">
                           <Icons.User className="w-6 h-6" /> Hướng dẫn Upload Nhân vật
                       </h3>
-                      <ul className="space-y-3 text-sm text-slate-300">
-                          <li className="flex gap-2">
-                              <span className="text-audi-cyan font-bold">1. Ảnh Toàn Thân (Body):</span>
-                              Dùng để AI học trang phục, dáng đứng và cấu trúc cơ thể. Nên dùng ảnh rõ ràng, ít chi tiết thừa.
-                          </li>
-                          <li className="flex gap-2">
-                              <span className="text-audi-pink font-bold">2. Ảnh Mặt (Face):</span>
-                              <span className="bg-red-500/20 text-red-400 px-1 rounded text-xs font-bold h-fit mt-0.5">QUAN TRỌNG</span>
-                              Dùng để ghép mặt (Face Swap). Hãy chọn ảnh cận mặt, chính diện, rõ nét, không bị che khuất.
-                          </li>
-                          <li className="flex gap-2">
-                              <span className="text-white font-bold">3. Khóa/Mở Khóa:</span>
-                              Nút <Icons.Lock className="w-3 h-3 inline text-audi-cyan"/> dùng để BẬT tính năng ghép mặt. Nếu TẮT <Icons.Unlock className="w-3 h-3 inline text-red-500"/>, AI sẽ tự sáng tạo khuôn mặt mới.
-                          </li>
-                      </ul>
-                  </>
+                      
+                      {/* Step 1: Body */}
+                      <div className="bg-white/5 p-3 rounded-xl border border-white/5">
+                          <div className="flex items-center gap-2 mb-1">
+                              <span className="bg-audi-cyan text-black text-[10px] font-bold px-1.5 rounded">BƯỚC 1</span>
+                              <span className="text-sm font-bold text-audi-cyan">Ảnh Toàn Thân (Body)</span>
+                          </div>
+                          <p className="text-xs text-slate-300 leading-relaxed pl-1">
+                              Dùng để AI học <b>trang phục</b>, <b>dáng đứng</b> và <b>cấu trúc cơ thể</b>.
+                              <br/>
+                              <span className="text-slate-500 italic">Khuyên dùng: Ảnh toàn thân rõ ràng, phông nền đơn giản hoặc đã tách nền.</span>
+                          </p>
+                      </div>
+
+                      {/* Step 2: Face */}
+                      <div className="bg-white/5 p-3 rounded-xl border border-white/5">
+                          <div className="flex items-center gap-2 mb-1">
+                              <span className="bg-audi-pink text-white text-[10px] font-bold px-1.5 rounded">BƯỚC 2</span>
+                              <span className="text-sm font-bold text-audi-pink">Ảnh Khuôn Mặt (Face)</span>
+                              <span className="ml-auto text-[9px] bg-red-500/20 text-red-400 px-1.5 rounded border border-red-500/30">QUAN TRỌNG</span>
+                          </div>
+                          <p className="text-xs text-slate-300 leading-relaxed pl-1 mb-2">
+                              Dùng để <b>ghép mặt (Face Swap)</b> vào nhân vật.
+                          </p>
+                          <div className="grid grid-cols-2 gap-2 text-[10px]">
+                              <div className="bg-green-500/10 border border-green-500/30 p-2 rounded text-green-400 flex items-center gap-1">
+                                  <Icons.Check className="w-3 h-3"/> Cận mặt, chính diện
+                              </div>
+                              <div className="bg-red-500/10 border border-red-500/30 p-2 rounded text-red-400 flex items-center gap-1">
+                                  <Icons.X className="w-3 h-3"/> Bị che, nghiêng, mờ
+                              </div>
+                          </div>
+                      </div>
+
+                      {/* Step 3: Lock */}
+                      <div className="bg-white/5 p-3 rounded-xl border border-white/5">
+                          <div className="flex items-center gap-2 mb-1">
+                              <span className="bg-white text-black text-[10px] font-bold px-1.5 rounded">TÙY CHỌN</span>
+                              <span className="text-sm font-bold text-white">Chế độ Khóa Mặt</span>
+                          </div>
+                          <div className="flex gap-2 mt-2">
+                              <div className="flex-1 bg-black/30 p-2 rounded border border-audi-cyan/30 text-center">
+                                  <Icons.Lock className="w-4 h-4 text-audi-cyan mx-auto mb-1"/>
+                                  <div className="text-[10px] font-bold text-audi-cyan">ĐANG BẬT</div>
+                                  <div className="text-[9px] text-slate-400">Giữ nguyên khuôn mặt gốc</div>
+                              </div>
+                              <div className="flex-1 bg-black/30 p-2 rounded border border-red-500/30 text-center">
+                                  <Icons.Unlock className="w-4 h-4 text-red-500 mx-auto mb-1"/>
+                                  <div className="text-[10px] font-bold text-red-500">ĐANG TẮT</div>
+                                  <div className="text-[9px] text-slate-400">AI tự vẽ mặt mới</div>
+                              </div>
+                          </div>
+                      </div>
+                  </div>
               );
           case 'settings':
               return (
-                  <>
-                      <h3 className="text-xl font-bold text-audi-yellow mb-4 flex items-center gap-2">
+                  <div className="space-y-4">
+                      <h3 className="text-xl font-bold text-audi-yellow flex items-center gap-2 border-b border-white/10 pb-2">
                           <Icons.Settings className="w-6 h-6" /> Cấu hình Nâng cao
                       </h3>
-                      <ul className="space-y-3 text-sm text-slate-300">
-                          <li className="flex gap-2">
-                              <span className="text-audi-cyan font-bold">Model 3.0 Pro:</span>
-                              Chất lượng cao nhất (Nano Banana Pro), chi tiết tốt hơn, hiểu lệnh tốt hơn.
-                          </li>
-                          <li className="flex gap-2">
-                              <span className="text-audi-pink font-bold">HQ Cloud Link:</span>
-                              Khi BẬT, ảnh gốc của bạn sẽ được gửi lên Cloud để AI phân tích kỹ hơn &rarr; Kết quả giống thật hơn 30%. (Tốn thêm Vcoin).
-                          </li>
-                          <li className="flex gap-2">
-                              <span className="text-white font-bold">Độ phân giải:</span>
-                              2K là chuẩn đẹp nhất. 4K dành cho in ấn hoặc màn hình lớn (tốn nhiều Vcoin hơn).
-                          </li>
-                      </ul>
-                  </>
+                      
+                      <div className="space-y-3">
+                          <div className="flex items-start gap-3 p-3 bg-white/5 rounded-xl border border-white/5">
+                              <div className="p-2 bg-audi-cyan/20 rounded-lg text-audi-cyan">
+                                  <Icons.Cpu className="w-5 h-5" />
+                              </div>
+                              <div>
+                                  <h4 className="text-sm font-bold text-white">Model 3.0 Pro</h4>
+                                  <p className="text-xs text-slate-400 mt-1">Sử dụng mô hình Nano Banana Pro mới nhất. Hiểu lệnh tốt hơn, chi tiết trang phục sắc nét hơn bản Flash cũ.</p>
+                              </div>
+                          </div>
+
+                          <div className="flex items-start gap-3 p-3 bg-white/5 rounded-xl border border-white/5">
+                              <div className="p-2 bg-audi-pink/20 rounded-lg text-audi-pink">
+                                  <Icons.Cloud className="w-5 h-5" />
+                              </div>
+                              <div>
+                                  <h4 className="text-sm font-bold text-white">HQ Cloud Link</h4>
+                                  <p className="text-xs text-slate-400 mt-1">Ảnh gốc được upload lên Cloud để phân tích sâu (Deep Analysis). Giúp kết quả giống ảnh mẫu hơn 30%.</p>
+                              </div>
+                          </div>
+
+                          <div className="flex items-start gap-3 p-3 bg-white/5 rounded-xl border border-white/5">
+                              <div className="p-2 bg-white/10 rounded-lg text-white">
+                                  <Icons.Monitor className="w-5 h-5" />
+                              </div>
+                              <div>
+                                  <h4 className="text-sm font-bold text-white">Độ phân giải (Resolution)</h4>
+                                  <div className="flex gap-2 mt-2">
+                                      <span className="text-[10px] px-2 py-1 bg-black rounded border border-slate-600 text-slate-300">2K (Khuyên dùng)</span>
+                                      <span className="text-[10px] px-2 py-1 bg-black rounded border border-audi-purple text-audi-purple">4K (In ấn)</span>
+                                  </div>
+                              </div>
+                          </div>
+                      </div>
+                  </div>
               );
           default: return null;
       }
@@ -517,8 +576,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
         <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/*" />
 
         {showVideo && (
-            <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 animate-fade-in" onClick={() => setShowVideo(false)}>
-                <div className="relative w-full max-w-2xl aspect-video bg-black rounded-2xl overflow-hidden border border-white/20 shadow-[0_0_50px_rgba(255,255,255,0.1)] mb-20" onClick={e => e.stopPropagation()}>
+            <div className="fixed inset-0 z-[200] flex items-start justify-center p-4 pt-24 animate-fade-in" onClick={() => setShowVideo(false)}>
+                <div className="relative w-full max-w-2xl aspect-video bg-black rounded-2xl overflow-hidden border border-white/20 shadow-[0_0_50px_rgba(255,255,255,0.1)]" onClick={e => e.stopPropagation()}>
                     <button 
                         onClick={() => setShowVideo(false)} 
                         className="absolute -top-10 right-0 md:top-4 md:right-4 bg-white/10 hover:bg-red-600 text-white p-2 rounded-full transition-colors z-50 backdrop-blur-md"
@@ -537,8 +596,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
         )}
 
         {guideTopic && (
-            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-fade-in" onClick={() => setGuideTopic(null)}>
-                <div className="bg-[#12121a] w-full max-w-md p-6 rounded-2xl border border-audi-yellow/50 shadow-[0_0_30px_rgba(251,218,97,0.2)] relative mb-20" onClick={e => e.stopPropagation()}>
+            <div className="fixed inset-0 z-[100] flex items-start justify-center p-4 pt-32 animate-fade-in" onClick={() => setGuideTopic(null)}>
+                <div className="bg-[#12121a] w-full max-w-md p-6 rounded-2xl border border-audi-yellow/50 shadow-[0_0_30px_rgba(251,218,97,0.2)] relative" onClick={e => e.stopPropagation()}>
                     <button onClick={() => setGuideTopic(null)} className="absolute top-4 right-4 text-slate-500 hover:text-white">
                         <Icons.X className="w-6 h-6" />
                     </button>

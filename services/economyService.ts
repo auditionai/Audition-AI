@@ -975,15 +975,24 @@ export const createPaymentLink = async (packageId: string): Promise<Transaction>
 
 // --- ADMIN SERVICES ---
 
-export const updateAdminUserProfile = async (updatedUser: UserProfile): Promise<UserProfile> => {
+// Updated: now checks if any rows were actually modified (RLS Check)
+export const updateAdminUserProfile = async (updatedUser: UserProfile): Promise<{ success: boolean, error?: string }> => {
     if(supabase) {
-        await supabase.from('users').update({
+        const { data, error } = await supabase.from('users').update({
             diamonds: updatedUser.balance,
             display_name: updatedUser.username,
             photo_url: updatedUser.avatar
-        }).eq('id', updatedUser.id);
+        }).eq('id', updatedUser.id).select(); // Added .select()
+
+        if (error) return { success: false, error: error.message };
+        
+        // RLS BLOCK CHECK
+        if (!data || data.length === 0) {
+            return { success: false, error: "Không có quyền (RLS Blocked). Hãy chạy mã sửa lỗi trong tab Hệ Thống." };
+        }
+        return { success: true };
     }
-    return updatedUser;
+    return { success: true }; // Local mode fallback
 };
 
 export const adminApproveTransaction = async (txId: string): Promise<{ success: boolean; error?: string }> => {

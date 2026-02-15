@@ -1154,14 +1154,20 @@ export const getAdminStats = async () => {
             }));
         }
 
+        // Updated Query: Join with Users Table
         const { data: t } = await supabase
             .from('transactions')
-            .select('*')
-            .order('created_at', { ascending: false }); // Explicitly sort by date desc
+            .select('*, users (display_name, email, photo_url)')
+            .order('created_at', { ascending: false });
 
         if(t) txs = t.map((row:any) => ({
             id: row.id,
             userId: row.user_id,
+            // Map User Details
+            userName: row.users?.display_name || 'Unknown',
+            userEmail: row.users?.email || 'No Email',
+            userAvatar: row.users?.photo_url || 'https://picsum.photos/100/100',
+            
             packageId: row.package_id,
             amount: row.amount_vnd,
             coins: row.diamonds_received,

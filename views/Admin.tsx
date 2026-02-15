@@ -764,7 +764,7 @@ using (true);`,
                               <tr>
                                   <th className="px-6 py-4">Thời gian</th>
                                   <th className="px-6 py-4">Mã đơn</th>
-                                  <th className="px-6 py-4">User ID</th>
+                                  <th className="px-6 py-4">Người dùng</th> {/* Replaces User ID */}
                                   <th className="px-6 py-4">Gói nạp</th>
                                   <th className="px-6 py-4 text-right">Số tiền</th>
                                   <th className="px-6 py-4">Trạng thái</th>
@@ -778,7 +778,15 @@ using (true);`,
                                   <tr key={tx.id} className={`hover:bg-white/5 transition-colors ${processingTxId === tx.id ? 'opacity-50 pointer-events-none' : ''}`}>
                                       <td className="px-6 py-4 text-xs font-mono">{new Date(tx.createdAt).toLocaleString()}</td>
                                       <td className="px-6 py-4 font-mono font-bold text-white">{tx.code}</td>
-                                      <td className="px-6 py-4 text-xs font-mono text-slate-500" title={tx.userId}>{tx.userId.substring(0,8)}...</td>
+                                      <td className="px-6 py-4">
+                                          <div className="flex items-center gap-3">
+                                              <img src={tx.userAvatar || 'https://picsum.photos/100/100'} className="w-8 h-8 rounded-full border border-white/10 object-cover" />
+                                              <div className="flex flex-col">
+                                                  <span className="font-bold text-white text-xs">{tx.userName || 'Unknown'}</span>
+                                                  <span className="text-[10px] text-slate-500">{tx.userEmail || 'No Email'}</span>
+                                              </div>
+                                          </div>
+                                      </td>
                                       <td className="px-6 py-4 text-audi-pink font-bold">+{tx.coins} Vcoin</td>
                                       <td className="px-6 py-4 text-right font-bold text-white">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(tx.amount)}</td>
                                       <td className="px-6 py-4">

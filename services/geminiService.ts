@@ -80,7 +80,42 @@ export const checkConnection = async (key?: string): Promise<boolean> => {
     }
 };
 
-// --- INTELLIGENCE CORE: LOGIC XỬ LÝ PROMPT ĐA TẦNG (UPGRADED V2) ---
+// --- PROMPT REASONING ENGINE V2: THE "SUPREME COMMAND" ---
+// AI này có nhiệm vụ "Chuyển hóa" ý tưởng người dùng thành ngôn ngữ 3D Game
+const optimizePromptWithThinking = async (rawPrompt: string): Promise<string> => {
+    try {
+        const ai = await getAiClient();
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: `You are the Lead Art Director for a 3D Game Character Creation System (like Audition, Pop Mart, Blind Box).
+            
+            USER INPUT: "${rawPrompt}"
+            
+            YOUR MISSION:
+            1.  **Analyze**: Understand the user's scene description (pose, objects, lighting, background, specific numbers/items).
+            2.  **Enforce 3D Style**: Even if the user says "Photo", "Realism", or "Human", you MUST interpret this as "High-end 3D Render imitating that style". NEVER output a prompt for a real human.
+            3.  **Construct Prompt**: Write a detailed prompt for the Image Generator.
+            
+            MANDATORY KEYWORDS TO INCLUDE:
+            - "3D Game Character Render", "CGI", "Unreal Engine 5", "Octane Render".
+            - "Stylized 3D proportions", "Smooth skin texture", "Clay material" or "3D Anime style".
+            - IF user asks for "Flash Photo": Use "3D render with direct flash lighting, harsh shadows, digital camera aesthetic".
+            
+            SCENE PRESERVATION:
+            - You MUST keep specific details: "Blue shark plushie", "Digital number 22 on AC", "Messy aesthetic room".
+            - Describe the POSE exactly as requested.
+            
+            OUTPUT:
+            Return ONLY the optimized English prompt.`,
+        });
+        return response.text?.trim() || rawPrompt;
+    } catch (e) {
+        console.warn("Prompt Optimization Failed, using raw prompt", e);
+        return rawPrompt;
+    }
+}
+
+// --- INTELLIGENCE CORE: LOGIC XỬ LÝ PROMPT ĐA TẦNG (UPGRADED V4) ---
 const processDigitalTwinMode = (
     prompt: string, 
     refImagePart: any | null, 
@@ -91,69 +126,40 @@ const processDigitalTwinMode = (
     
     const parts = [];
     
-    // --- CHIẾN LƯỢC ĐỒNG BỘ: ÁP DỤNG QUY TRÌNH STRICT (NHÓM) CHO CẢ SINGLE MODE ---
-    
     if (refImagePart) {
         // INPUT A: STRUCTURE (Cấu trúc/Pose)
-        parts.push({ text: "INPUT A [STRUCTURE ONLY]: Use this image purely for POSE ESTIMATION and CAMERA ANGLE. IGNORE the face in this image." });
+        parts.push({ text: "REFERENCE IMAGE [POSE & LAYOUT ONLY]: Mimic the camera angle, character positioning, and composition of this image exactly. Do NOT copy the character's face." });
         parts.push(refImagePart);
     }
     
     if (charParts.length > 0) {
-        // INPUT B: IDENTITY (Định danh) - SUPER PRO SCAN MODE
-        parts.push({ text: `
-        INPUT B [DEEP FACE SCAN DATA]: 
-        This is the MASTER SOURCE for the character's identity. 
-        
-        ** SCANNING PROTOCOL (EXECUTE IMMEDIATELY): **
-        1.  **ACCESSORIES SCAN**: Detect ALL piercings (nose rings, bridge piercings, lip rings, brow bars), ear accessories, and eyewear. YOU MUST RENDER THESE EXACTLY.
-        2.  **MAKEUP ANALYSIS**: Map the exact makeup style. Look for:
-            - Eyeliner wings (sharp, smoked out, graphic).
-            - Eyeshadow gradients and colors.
-            - Lipstick texture (matte vs glossy) and color.
-            - Face paint, decals, or stickers on cheeks/forehead.
-        3.  **FEATURES TOPOGRAPHY**: Analyze the unique eye shape (anime/stylized), iris color, eyebrow slant, and jawline.
-        4.  **EXPRESSION**: Capture the micro-expression (smirk, glare, pout) from the face reference.
-
-        CRITICAL: The character in the output MUST have this exact face. Do not humanize if the input is a stylized 3D doll. Keep the "Game Character" aesthetic.
-        ` });
+        // INPUT B: IDENTITY (Định danh)
+        parts.push({ text: `REFERENCE FACE [IDENTITY]: Use these features for the 3D character's face. Map them onto a 3D model.` });
         parts.push(...charParts);
     }
 
-    // --- SYSTEM INSTRUCTION (V2 - AGGRESSIVE FACE COPY) ---
+    // --- SYSTEM INSTRUCTION (V4 - SUPREME 3D COMMAND) ---
+    // Đây là "Hiến pháp" bắt buộc AI phải tuân theo
+    const systemPrompt = `** SUPREME DIRECTIVE: 3D GAME CHARACTER GENERATION **
     
-    let systemPrompt = "";
+    1.  **CORE IDENTITY**: 
+        - You are a 3D Rendering Engine (like Unreal Engine 5 or Blender).
+        - EVERYTHING you generate must be a **3D MODEL / GAME CHARACTER**.
+        - **NEVER** generate a photorealistic real-life human photograph.
+        - Characters should have that specific "Audition Game" / "Pop Mart" / "Blind Box" aesthetic (smooth skin, perfect hair, slightly stylized proportions).
 
-    if (refImagePart) {
-        // TRƯỜNG HỢP CÓ ẢNH MẪU POSE
-        systemPrompt = `** MISSION: 3D CHARACTER RECONSTRUCTION (VIP FACE LOCK) **
-        
-        [STRICT EXECUTION RULES]:
-        1. POSE: Taken strictly from Input A.
-        2. FACE & IDENTITY: Taken strictly from Input B (The Scan Data).
-        3. FUSION STRATEGY: You are a 3D Modeler using "Texture Projection". You must project the face details from Input B onto the 3D model in the pose of Input A.
-        4. DETAIL RETENTION:
-           - If Input B has a nose ring, the output MUST have a nose ring.
-           - If Input B has heavy gothic makeup, the output MUST have heavy gothic makeup.
-           - Do not simplify the design.
-        5. STYLE: 8K, Unreal Engine 5, Octane Render, High Fidelity Game Asset.
-        
-        [CONTEXT]: ${prompt}
-        `;
-    } else {
-        // TRƯỜNG HỢP CHUẨN (Không ảnh mẫu Pose)
-        systemPrompt = `** MISSION: 3D CHARACTER GENERATION (VIP FACE LOCK) **
-        Create a high-end 3D game character.
-        
-        [IDENTITY ENFORCEMENT]:
-        - The face MUST be a perfect replica of the character provided in Input B.
-        - Pay extreme attention to: Piercings, Makeup Layers, Face Tattoos/Markings, and Eye Design.
-        - The goal is 95-100% likeness retention for facial features.
-        
-        - Style: Unreal Engine 5, Raytracing, Audition Online Style (Updated).
-        - Context: "${prompt}"
-        `;
-    }
+    2.  **SCENE & DETAIL FIDELITY (HIGHEST PRIORITY)**:
+        - The user's prompt contains SPECIFIC scene details (e.g., "Shark plushie", "Number 22 on AC", "Black leather sofa"). 
+        - YOU MUST RENDER THESE EXACTLY. Do not ignore background details.
+        - If the user describes a pose (e.g., "Hugging from behind", "Legs intertwined"), render that EXACT pose.
+
+    3.  **STYLE INTERPRETATION**:
+        - If prompt says "Flash Photography" -> Render a 3D Character with direct, harsh lighting and high contrast shading.
+        - If prompt says "Vintage" -> Apply a noise/grain filter to the 3D Render.
+        - The "Vibe" is the photographic style, but the "Subject" remains a 3D Character.
+
+    [FINAL PROMPT EXECUTION]: ${prompt}
+    `;
 
     return { systemPrompt, parts };
 };
@@ -172,30 +178,36 @@ export const generateImage = async (
   
   try {
     const ai = await getAiClient();
-    // FORCE PRO MODEL - Deprecated Flash for Image Generation
     const model = 'gemini-3-pro-image-preview';
     
-    if (onProgress) onProgress(`Engine: ${model} | Mode: DEEP FACE SCAN`);
+    // STEP 1: THINKING & OPTIMIZATION (Reasoning Layer)
+    if (onProgress) onProgress("Analyzing Scene Layout & 3D Conversion...");
+    
+    // Force "3D Game Character" context into the prompt optimizer
+    let optimizedPrompt = await optimizePromptWithThinking(prompt);
+    
+    // Safety Net: Append 3D keywords one last time just in case the optimizer missed it
+    if (!optimizedPrompt.toLowerCase().includes("3d")) {
+        optimizedPrompt = "3D Game Character Render, " + optimizedPrompt;
+    }
 
-    // 1. Process Pose Reference (Input A)
+    if (onProgress) onProgress(`Engine: ${model} | Rendering 3D Scene...`);
+
+    // STEP 2: PREPARE INPUTS
     let refImagePart = null;
     if (styleRefBase64) {
-        // NOTE: styleRefBase64 should already be the "Solid Fence" processed version from UI
         refImagePart = {
             inlineData: { data: cleanBase64(styleRefBase64), mimeType: 'image/jpeg' }
         };
     }
 
-    // 2. Process Character Identity (Input B)
     const allParts: any[] = [];
     const charDescriptions: string[] = [];
 
     for (const char of characterDataList) {
         if (char.image) {
-            if (onProgress) onProgress(`Scanning Identity Features (Player ${char.id})...`);
+            if (onProgress) onProgress(`Mapping 3D Texture (Player ${char.id})...`);
             
-            // Tạo Texture Sheet: Ghép Body + Face vào 1 ảnh duy nhất để Flash 2.5 không bị loạn
-            // Vẫn dùng hàm này vì nó đã tách biệt Face sang một bên, giúp AI dễ "Scan" hơn
             const textureSheet = await createTextureSheet(
                 char.image, 
                 char.faceImage, 
@@ -206,13 +218,11 @@ export const generateImage = async (
 
             if (useCloudRef) {
                 try {
-                    if (onProgress) onProgress(`Uploading High-Res Identity (Player ${char.id})...`);
                     const fileUri = await uploadToGemini(textureSheet, 'image/jpeg');
                     finalPart = {
                         fileData: { mimeType: 'image/jpeg', fileUri: fileUri }
                     };
                 } catch (e) {
-                     // Fallback to inline if upload fails
                      finalPart = {
                         inlineData: { data: cleanBase64(textureSheet), mimeType: 'image/jpeg' }
                     };
@@ -228,20 +238,17 @@ export const generateImage = async (
         }
     }
 
-    // 3. Construct Payload
-    // Always use 'pro' logic
-    const payload = processDigitalTwinMode(prompt, refImagePart, allParts, charDescriptions, 'pro');
+    // STEP 3: EXECUTE GENERATION WITH SUPREME COMMAND
+    const payload = processDigitalTwinMode(optimizedPrompt, refImagePart, allParts, charDescriptions, 'pro');
     
-    // Đảo ngược thứ tự: Instruction cuối cùng để AI nhớ rõ nhất (Recency Bias)
     const finalParts = [...payload.parts, { text: payload.systemPrompt }];
 
     const config: any = {
         imageConfig: { 
             aspectRatio: aspectRatio,
-            imageSize: resolution // Always available in Pro
+            imageSize: resolution
         },
-        // Simple but forceful system instruction for the Config object
-        systemInstruction: "You are an advanced 3D Character Artist. You specialize in replicating complex facial features, makeup, and piercings from reference images. Pixel-perfect accuracy for face details is required.",
+        // Direct Safety Settings to allow creative freedom while blocking harmful content
         safetySettings: [
             { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
             { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
@@ -250,12 +257,13 @@ export const generateImage = async (
         ]
     };
 
-    // Chỉ dùng Google Search khi KHÔNG CÓ ảnh mẫu, để tránh nhiễu
-    if (useSearch && !refImagePart) {
+    // Use Google Search only if we need to understand specific real-world objects (like "Air Conditioner model X")
+    // But keep the pose reference priority if it exists.
+    if (useSearch && !refImagePart && prompt.length < 50) {
         config.tools = [{ googleSearch: {} }];
     }
 
-    if (onProgress) onProgress("Reconstructing 3D Model...");
+    if (onProgress) onProgress("Finalizing Octane Render...");
 
     const response = await ai.models.generateContent({
       model: model,
@@ -297,7 +305,7 @@ export const suggestPrompt = async (currentInput: string, lang: string, featureN
             model: 'gemini-2.5-flash', 
             contents: currentInput || `Create a 3D character concept for ${featureName}`,
             config: {
-                systemInstruction: `You are an AI Prompt Expert. Output ONLY the refined prompt.`,
+                systemInstruction: `You are an AI Prompt Expert for 3D Game Assets. Output ONLY the refined 3D-centric prompt.`,
                 temperature: 0.7,
             }
         });

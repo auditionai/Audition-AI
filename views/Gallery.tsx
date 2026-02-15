@@ -78,11 +78,12 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
       }
   };
 
-  // --- SMART DOWNLOAD (CORS BYPASS VIA CANVAS) ---
   const handleDownload = async (imageUrl: string, filename: string) => {
       try {
-          // Attempt 1: Direct Fetch
+          // Attempt Direct Fetch (Works if Same Origin or CORS enabled)
           const response = await fetch(imageUrl);
+          if (!response.ok) throw new Error("Fetch failed");
+          
           const blob = await response.blob();
           const url = window.URL.createObjectURL(blob);
           const link = document.createElement('a');
@@ -94,33 +95,10 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
           window.URL.revokeObjectURL(url);
           notify(lang === 'vi' ? 'Đã tải ảnh xuống!' : 'Image downloaded!', 'success');
       } catch (error) {
-          console.warn("Direct fetch failed, trying canvas proxy...", error);
-          
-          // Attempt 2: Canvas Proxy (Slower but bypasses basic CORs if image is readable)
-          const img = new Image();
-          img.crossOrigin = "Anonymous";
-          img.src = imageUrl;
-          img.onload = () => {
-              const canvas = document.createElement('canvas');
-              canvas.width = img.width;
-              canvas.height = img.height;
-              const ctx = canvas.getContext('2d');
-              if(ctx) {
-                  ctx.drawImage(img, 0, 0);
-                  const dataURL = canvas.toDataURL('image/png');
-                  const link = document.createElement('a');
-                  link.href = dataURL;
-                  link.download = filename;
-                  document.body.appendChild(link);
-                  link.click();
-                  document.body.removeChild(link);
-                  notify(lang === 'vi' ? 'Đã tải ảnh xuống!' : 'Image downloaded!', 'success');
-              }
-          };
-          img.onerror = () => {
-              window.open(imageUrl, '_blank');
-              notify(lang === 'vi' ? 'Mở tab mới (Server chặn tải trực tiếp)' : 'Opened in new tab (Download blocked by server)', 'warning');
-          };
+          // If Direct Fetch fails (CORS), just open in new tab.
+          // We removed the Canvas proxy because it throws a second red error in console if CORS is blocked.
+          window.open(imageUrl, '_blank');
+          notify(lang === 'vi' ? 'Đã mở ảnh trong tab mới (Server chặn tải)' : 'Opened in new tab (Server blocked download)', 'info');
       }
   };
 
@@ -142,6 +120,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                 alt={img.toolName} 
                 className="w-full h-full object-cover" 
                 loading="lazy"
+                crossOrigin="anonymous" // Hint to browser to try CORS if possible
               />
               {img.isShared && (
                   <div className="absolute top-2 left-2 z-10 px-2 py-0.5 bg-audi-pink text-white text-[9px] font-bold rounded-full shadow-lg">
@@ -205,7 +184,6 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
         </div>
       )}
 
-      {/* Lightbox / Details Modal (UPDATED OVERLAY) */}
       {selectedImage && createPortal(
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-fade-in">
            <div className="relative w-full max-w-4xl max-h-[90vh] flex flex-col md:flex-row bg-slate-900 rounded-3xl overflow-hidden border border-white/10 shadow-2xl">
@@ -238,10 +216,8 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                     </div>
                  </div>
 
-                 {/* Action Buttons Area */}
                  <div className="pt-6 mt-6 border-t border-white/10 flex flex-col gap-3">
                     
-                    {/* Share Button (New) */}
                     <button 
                         onClick={handleShare}
                         disabled={sharing}

@@ -3,9 +3,8 @@ import { GoogleGenAI } from "@google/genai";
 import { getSystemApiKey } from "./economyService";
 import { createTextureSheet, optimizePayload, createSolidFence } from "../utils/imageProcessor";
 
-// Define CharacterData interface
 export interface CharacterData {
-  id: number; // Changed to number to match View
+  id: number;
   gender: 'male' | 'female';
   image: string | null;
   faceImage?: string | null;
@@ -13,7 +12,6 @@ export interface CharacterData {
   description?: string;
 }
 
-// Helper to clean base64 string
 const cleanBase64 = (data: string) => {
     if (!data) return '';
     const index = data.indexOf(';base64,');
@@ -23,14 +21,12 @@ const cleanBase64 = (data: string) => {
     return data;
 };
 
-// Helper to get AI Client
 const getAiClient = async (specificKey?: string) => {
     const key = specificKey || await getSystemApiKey();
     if (!key) throw new Error("API Key missing or invalid");
     return new GoogleGenAI({ apiKey: key });
 };
 
-// Extract image from response
 const extractImage = (response: any): string | null => {
     if (!response || !response.candidates || response.candidates.length === 0) return null;
     const parts = response.candidates[0].content.parts;
@@ -42,12 +38,9 @@ const extractImage = (response: any): string | null => {
     return null;
 };
 
-// Stub for uploadToGemini (Browser implementation limited, fallback to inline)
 const uploadToGemini = async (base64Data: string, mimeType: string): Promise<string> => {
     try {
         const ai = await getAiClient();
-        
-        // 1. Convert Base64 to Blob
         const byteCharacters = atob(cleanBase64(base64Data));
         const byteNumbers = new Array(byteCharacters.length);
         for (let i = 0; i < byteCharacters.length; i++) {
@@ -56,7 +49,6 @@ const uploadToGemini = async (base64Data: string, mimeType: string): Promise<str
         const byteArray = new Uint8Array(byteNumbers);
         const blob = new Blob([byteArray], { type: mimeType });
 
-        // 2. Upload using SDK
         const uploadResult = await ai.files.upload({
             file: blob,
             config: { 
@@ -92,51 +84,57 @@ const processDigitalTwinMode = (
     prompt: string, 
     refImagePart: any | null, 
     charParts: any[], 
-    charDescriptions: string[]
+    charDescriptions: string[],
+    modelTier: 'flash' | 'pro'
 ): { systemPrompt: string, parts: any[] } => {
     
-    // NOTE: Order matters for Flash model understanding
-    // We put Reference Image (Scene/Pose) FIRST, then Character Images.
     const parts = [];
-    if (refImagePart) parts.push(refImagePart);
-    parts.push(...charParts);
+    
+    // STRUCTURE THE PAYLOAD CAREFULLY
+    if (refImagePart) {
+        // Add strong text guard before the image
+        parts.push({ text: "REFERENCE IMAGE (POSE & CAMERA ONLY) - DO NOT COPY CHARACTER:" });
+        parts.push(refImagePart);
+    }
+    
+    if (charParts.length > 0) {
+        parts.push({ text: "CHARACTER DESIGN TO INJECT:" });
+        parts.push(...charParts);
+    }
 
     const isSingle = charDescriptions.length === 1;
-
     let systemPrompt = "";
 
     if (isSingle) {
-        // --- UPGRADED LOGIC FOR SINGLE IMAGE (STRICT CHARACTER SWAP) ---
         if (refImagePart) {
             systemPrompt = `** SYSTEM: 3D CHARACTER REPLACEMENT ENGINE **
             
-            [INPUT ANALYSIS]
-            - IMAGE 1 (The Reference): A photo showing a specific POSE and BACKGROUND.
-            - IMAGE 2 (The Character): A photo showing the IDENTITY (Face/Outfit) to insert.
+            [INPUTS]:
+            1. POSE REFERENCE: The first image provided. Use ONLY its Pose, Camera Angle, and Lighting.
+            2. CHARACTER DESIGN: The text description or second image.
             
-            [YOUR MISSION]
-            1. IGNORE the person in IMAGE 1. Treat them as a placeholder.
-            2. EXTRACT the POSE and CAMERA ANGLE from IMAGE 1.
-            3. RENDER the Character from IMAGE 2 into that exact pose.
-            4. COMPOSITE the new character back into the environment of IMAGE 1.
+            [STRICT MANDATE]:
+            - IGNORE the person in the Pose Reference image. Treat them as a mannequin.
+            - GENERATE A NEW CHARACTER based on the Prompt.
+            - COMPOSITE the NEW character into the scene of the Pose Reference.
+            - IF MODEL IS 'FLASH': DO NOT OUTPUT THE REFERENCE IMAGE UNCHANGED. YOU MUST CHANGE THE FACE AND CLOTHES.
             
-            [CRITICAL CONSTRAINTS FOR FLASH MODEL]
-            - DO NOT OUTPUT IMAGE 1 UNCHANGED. You MUST replace the person.
-            - If Image 2 has a specific face, the result MUST look like Image 2, not Image 1.
-            - Style: High-fidelity 3D Game Render (Unreal Engine 5).
-            - NO 2D flat cartoon style. Keep the lighting realistic.
+            [OUTPUT STYLE]: Unreal Engine 5, 3D Game Render, Semi-Realistic.
             
-            [CONTEXT]: "${prompt}"
+            [TARGET DESCRIPTION]: "${prompt}"
             `;
+            
+            // Add extra noise to prompt for Flash to force generation
+            if (modelTier === 'flash') {
+                systemPrompt += "\n[FLASH OVERRIDE]: RENDER NEW PIXELS. DO NOT COPY.";
+            }
         } else {
-            // No Reference Image -> Standard Text-to-Image
             systemPrompt = `** SYSTEM: 3D CHARACTER CREATOR **
             Create a stunning 3D game character (Audition Online/Sims style).
             - Detail: 8K, Unreal Engine 5, Raytracing.
             - Context: "${prompt}"`;
         }
     } else {
-        // --- LOGIC FOR COUPLE / GROUP (KEPT STABLE) ---
         systemPrompt = `** SYSTEM: 3D CHARACTER RECONSTRUCTION **
     
         [TASK]: Recreate the character(s) based on the provided Reference Sheets.
@@ -173,13 +171,10 @@ export const generateImage = async (
   
   try {
     const ai = await getAiClient();
-    
-    // --- FIXED MODEL SELECTION LOGIC ---
     const model = modelTier === 'pro' ? 'gemini-3-pro-image-preview' : 'gemini-2.5-flash-image';
     
     if (onProgress) onProgress(`Engine: ${model} | Mode: ${useCloudRef ? 'CLOUD NEURAL LINK' : 'STANDARD'}`);
 
-    // 1. PREPARE STYLE REF (POSE/SCENE)
     let refImagePart = null;
     if (styleRefBase64) {
         refImagePart = {
@@ -190,12 +185,10 @@ export const generateImage = async (
     const allParts: any[] = [];
     const charDescriptions: string[] = [];
 
-    // 2. PREPARE CHARACTERS
     for (const char of characterDataList) {
         if (char.image) {
             if (onProgress) onProgress(`Processing Player ${char.id}...`);
             
-            // Create the Texture Sheet
             const textureSheet = await createTextureSheet(
                 char.image, 
                 char.faceImage, 
@@ -205,23 +198,19 @@ export const generateImage = async (
             let finalPart;
 
             if (useCloudRef) {
-                // STRATEGY A: CLOUD UPLOAD (FILE API)
                 try {
                     if (onProgress) onProgress(`Uploading Reference (Player ${char.id})...`);
                     const fileUri = await uploadToGemini(textureSheet, 'image/jpeg');
-                    console.log("File URI received:", fileUri);
                     finalPart = {
                         fileData: { mimeType: 'image/jpeg', fileUri: fileUri }
                     };
                 } catch (e) {
-                    // Fallback to inline if upload fails
                      const optimizedSheet = await optimizePayload(textureSheet, 1280); 
                     finalPart = {
                         inlineData: { data: cleanBase64(optimizedSheet), mimeType: 'image/jpeg' }
                     };
                 }
             } else {
-                // STRATEGY B: INLINE BASE64
                 const optimizedSheet = await optimizePayload(textureSheet, 1280); 
                 finalPart = {
                     inlineData: { data: cleanBase64(optimizedSheet), mimeType: 'image/jpeg' }
@@ -233,15 +222,13 @@ export const generateImage = async (
         }
     }
 
-    // 3. BUILD PAYLOAD
-    const payload = processDigitalTwinMode(prompt, refImagePart, allParts, charDescriptions);
+    const payload = processDigitalTwinMode(prompt, refImagePart, allParts, charDescriptions, modelTier);
     const finalParts = [...payload.parts, { text: payload.systemPrompt }];
 
     const config: any = {
         imageConfig: { aspectRatio: aspectRatio },
-        // ENHANCED INSTRUCTION FOR API LEVEL
         systemInstruction: characterDataList.length === 1 && styleRefBase64
-            ? "CRITICAL: YOU ARE REPLACING THE PERSON IN IMAGE 1 WITH THE CHARACTER IN IMAGE 2. DO NOT OUTPUT IMAGE 1 AS IS."
+            ? "CRITICAL: REPLACE CHARACTER IN REFERENCE. GENERATE NEW 3D RENDER."
             : "Create high quality 3D character render. Follow the reference image structure.", 
         safetySettings: [
             { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
@@ -251,7 +238,6 @@ export const generateImage = async (
         ]
     };
 
-    // Apply Pro features if model is Pro
     if (modelTier === 'pro') {
         config.imageConfig.imageSize = resolution;
         if (useSearch && !refImagePart) {
@@ -278,9 +264,8 @@ export const generateImage = async (
 export const editImageWithInstructions = async (base64Data: string, instruction: string, mimeType: string): Promise<string | null> => {
     try {
         const ai = await getAiClient();
-        
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash-image', // Guidelines: Use gemini-2.5-flash-image for editing
+            model: 'gemini-2.5-flash-image', 
             contents: {
                 parts: [
                     { inlineData: { data: cleanBase64(base64Data), mimeType: mimeType } },

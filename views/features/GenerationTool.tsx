@@ -23,10 +23,9 @@ interface CharacterInput {
   bodyImage: string | null;
   faceImage: string | null; 
   gender: 'female' | 'male';
-  isFaceLocked: boolean; // New: Toggle for Face Swap
+  isFaceLocked: boolean;
 }
 
-// --- SMART TIPS DATA ---
 const SMART_TIPS = [
     { icon: Icons.Sparkles, text: "✨ Mẹo: Để ảnh đẹp nhất, hãy tải lên ảnh nhân vật đã tách nền (PNG trong suốt)." },
     { icon: Icons.Zap, text: "⚡ Tip: Để khuôn mặt sắc nét, hãy dùng ảnh chụp cận mặt từ Patch hoặc đã qua làm nét (Remini)." },
@@ -38,7 +37,6 @@ const SMART_TIPS = [
     { icon: Icons.Monitor, text: "🖥️ Lưu ý: Độ phân giải 4K rất nét, thích hợp in ấn nhưng sẽ tốn thời gian xử lý hơn." }
 ];
 
-// --- TUTORIAL VIDEO ID (Youtube) ---
 const TUTORIAL_VIDEO_ID = "ba2WR8txe_c"; 
 
 interface SamplePrompt {
@@ -56,19 +54,17 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
 
   const [activeMode, setActiveMode] = useState<GenMode>('single');
   const [characters, setCharacters] = useState<CharacterInput[]>([{ id: 1, bodyImage: null, faceImage: null, gender: 'female', isFaceLocked: true }]);
-  const [activeCharTab, setActiveCharTab] = useState<number>(1); // Mobile Tab State
+  const [activeCharTab, setActiveCharTab] = useState<number>(1);
   
   const [refImage, setRefImage] = useState<string | null>(null);
   const [prompt, setPrompt] = useState('');
   const [negativePrompt, setNegativePrompt] = useState('crowd, extra people, audience, bystanders, deformed, bad anatomy, disfigured, poorly drawn face, mutation, mutated, extra limb, ugly, disgusting, poorly drawn hands, missing limb, floating limbs, disconnected limbs, malformed hands, blur, out of focus, long neck, long body, mutated hands and fingers, out of frame, blender, doll, cropped, low-res, close-up, poorly-drawn face, out of frame double, two heads, blurred, ugly, disfigured, too many fingers, deformed, repetitive, black and white, grainy, extra limbs, bad anatomy, duplicate, photorealistic, realistic photo, sketch, cartoon, drawing, art, 2d');
   
-  // Sample Prompt Modal
   const [showSampleModal, setShowSampleModal] = useState(false);
   const [samplePrompts, setSamplePrompts] = useState<SamplePrompt[]>([]);
   const [loadingSamples, setLoadingSamples] = useState(false);
   const [currentCategoryName, setCurrentCategoryName] = useState('');
 
-  // --- SETTINGS RESTORED ---
   const [modelType, setModelType] = useState<'flash' | 'pro'>('pro'); 
   const [aspectRatio, setAspectRatio] = useState('3:4'); 
   const [selectedStyle, setSelectedStyle] = useState('3d');
@@ -76,7 +72,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
   const [useSearch, setUseSearch] = useState(false); 
   const [useCloudRef, setUseCloudRef] = useState(true);
 
-  // --- GUIDE & TIPS STATE ---
   const [guideTopic, setGuideTopic] = useState<'chars' | 'settings' | null>(null);
   const [currentTipIdx, setCurrentTipIdx] = useState(0);
   const [showVideo, setShowVideo] = useState(false);
@@ -87,11 +82,10 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
   const fileInputRef = useRef<HTMLInputElement>(null);
   const activeUploadType = useRef<{ charId?: number, type: 'body' | 'face' | 'ref' } | null>(null);
 
-  // Rotate Tips Effect
   useEffect(() => {
       const interval = setInterval(() => {
           setCurrentTipIdx(prev => (prev + 1) % SMART_TIPS.length);
-      }, 5000); // 5 seconds rotation
+      }, 5000);
       return () => clearInterval(interval);
   }, []);
 
@@ -104,7 +98,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
 
   const handleModeChange = (mode: GenMode) => {
       setActiveMode(mode);
-      setActiveCharTab(1); // Reset to first tab
+      setActiveCharTab(1);
       let count = 1;
       if (mode === 'couple') count = 2;
       if (mode === 'group3') count = 3;
@@ -122,14 +116,13 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
 
   const fetchSamplePrompts = async () => {
       if (!caulenhauClient) {
-          notify("Chưa kết nối database mẫu. Vui lòng kiểm tra cấu hình.", "error");
+          notify("Chưa kết nối database mẫu.", "error");
           return;
       }
       setLoadingSamples(true);
       
       try {
-          // 1. DETERMINE CATEGORY ID BASED ON MODE
-          let targetCategoryId = 2; // Default Single
+          let targetCategoryId = 2;
           let catName = "Ảnh Nam Nữ";
 
           if (activeMode === 'single') {
@@ -144,17 +137,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
           }
           setCurrentCategoryName(catName);
 
-          // 2. QUERY WITH INNER JOIN ON image_categories
           const { data, error } = await caulenhauClient
               .from('images')
-              .select(`
-                  id, 
-                  image_url, 
-                  prompt, 
-                  image_categories!inner (
-                      category_id
-                  )
-              `)
+              .select(`id, image_url, prompt, image_categories!inner(category_id)`)
               .eq('image_categories.category_id', targetCategoryId)
               .order('created_at', { ascending: false })
               .limit(50);
@@ -220,7 +205,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
               setCharacters(prev => prev.map(c => {
                   if (c.id === currentType.charId) {
                       if (currentType.type === 'body') return { ...c, bodyImage: result };
-                      if (currentType.type === 'face') return { ...c, faceImage: result, isFaceLocked: true }; // Auto lock on new upload
+                      if (currentType.type === 'face') return { ...c, faceImage: result, isFaceLocked: true };
                   }
                   return c;
               }));
@@ -238,37 +223,48 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       setCharacters(prev => prev.map(c => c.id === charId ? { ...c, isFaceLocked: !c.isFaceLocked } : c));
   }
 
-  // --- FORCE DOWNLOAD FROM BLOB ---
+  // --- ROBUST DOWNLOAD HANDLER ---
   const handleForceDownload = (dataUri: string, filename: string) => {
-      try {
-          if (!dataUri) return;
-          
-          // Direct Blob conversion for Base64 (Robust)
-          if (dataUri.startsWith('data:')) {
-              const byteString = atob(dataUri.split(',')[1]);
-              const mimeString = dataUri.split(',')[0].split(':')[1].split(';')[0];
-              const ab = new ArrayBuffer(byteString.length);
-              const ia = new Uint8Array(ab);
-              for (let i = 0; i < byteString.length; i++) {
-                  ia[i] = byteString.charCodeAt(i);
-              }
-              const blob = new Blob([ab], { type: mimeString });
-              const url = window.URL.createObjectURL(blob);
-              
+      if (!dataUri) return;
+
+      // 1. Check if it's strictly a Base64 string
+      if (dataUri.startsWith('data:')) {
+          try {
               const link = document.createElement('a');
-              link.href = url;
+              link.href = dataUri;
               link.download = filename;
               document.body.appendChild(link);
               link.click();
               document.body.removeChild(link);
-              window.URL.revokeObjectURL(url); // Clean up memory
-              notify('Đã tải ảnh về máy!', 'success');
-          } else {
-              // Fallback just in case (should not happen in this view for new results)
-              window.open(dataUri, '_blank');
+              notify('Đã lưu ảnh về máy!', 'success');
+              return;
+          } catch (e) {
+              console.error("Base64 download failed", e);
           }
-      } catch (error) {
-          console.error("Download error:", error);
+      }
+
+      // 2. Fallback for URLs (Network Fetch attempt)
+      // Note: This might trigger CORS if server doesn't allow it, triggering window.open
+      try {
+          fetch(dataUri)
+              .then(resp => resp.blob())
+              .then(blob => {
+                  const url = window.URL.createObjectURL(blob);
+                  const link = document.createElement('a');
+                  link.href = url;
+                  link.download = filename;
+                  document.body.appendChild(link);
+                  link.click();
+                  document.body.removeChild(link);
+                  window.URL.revokeObjectURL(url);
+                  notify('Đã tải ảnh về máy!', 'success');
+              })
+              .catch(() => {
+                  // Final Fallback: New Tab
+                  window.open(dataUri, '_blank');
+                  notify('Đang mở ảnh trong tab mới (Server chặn tải)', 'info');
+              });
+      } catch (e) {
           window.open(dataUri, '_blank');
       }
   };
@@ -325,9 +321,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       
       if (sourceForStructure) {
           const optimizedStructure = await optimizePayload(sourceForStructure);
-          
-          // --- CRITICAL FIX FOR SINGLE MODE ---
-          // Use Raw Optimized Image to preserve background context
           if (activeMode === 'single') {
               structureRefData = optimizedStructure; 
           } else {
@@ -364,9 +357,13 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
 
       if (result) {
         addLog(lang === 'vi' ? 'Hoàn tất!' : 'Finalizing...');
+        
+        // --- RESULT IS BASE64 HERE ---
+        setResultImage(result); 
+        
         const newImage: GeneratedImage = {
           id: crypto.randomUUID(),
-          url: result, // This is Base64 data directly from Gemini
+          url: result,
           prompt: finalPrompt,
           timestamp: Date.now(),
           toolId: feature.id,
@@ -374,9 +371,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
           engine: modelType === 'pro' ? `Gemini 3.0 Pro ${resolution}` : 'Gemini 2.5 Flash'
         };
         setGeneratedData(newImage);
-        setResultImage(result); // result is guaranteed Base64 here
         
-        // Save to Storage (Async, don't wait for UI)
         saveImageToStorage(newImage).catch(console.error);
         
         setStage('result');
@@ -408,7 +403,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       { id: '4:3', label: '4:3', desc: 'Ngang' },
   ];
 
-  // --- GUIDE CONTENT RENDERER ---
   const renderGuideContent = () => {
       switch(guideTopic) {
           case 'chars':
@@ -527,7 +521,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
     <div className="flex flex-col items-center w-full max-w-5xl mx-auto pb-48 animate-fade-in relative">
         <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/*" />
 
-        {/* --- VIDEO TUTORIAL MODAL --- */}
         {showVideo && (
             <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 animate-fade-in" onClick={() => setShowVideo(false)}>
                 <div className="relative w-full max-w-2xl aspect-video bg-black rounded-2xl overflow-hidden border border-white/20 shadow-[0_0_50px_rgba(255,255,255,0.1)]" onClick={e => e.stopPropagation()}>
@@ -548,7 +541,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
             </div>
         )}
 
-        {/* --- GUIDE MODAL (UPDATED BG) --- */}
         {guideTopic && (
             <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-fade-in" onClick={() => setGuideTopic(null)}>
                 <div className="bg-[#12121a] w-full max-w-md p-6 rounded-2xl border border-audi-yellow/50 shadow-[0_0_30px_rgba(251,218,97,0.2)] relative" onClick={e => e.stopPropagation()}>
@@ -565,10 +557,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
             </div>
         )}
 
-        {/* --- SAMPLE PROMPTS MODAL (CAULENHAU) --- */}
         {showSampleModal && (
             <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 animate-fade-in" onClick={() => setShowSampleModal(false)}>
-                {/* Updated Size: max-w-xl (was 2xl) and h-[500px] (was 60vh) for tighter fit */}
                 <div className="bg-[#12121a] w-full max-w-xl h-[500px] rounded-[2rem] border border-audi-purple/50 shadow-[0_0_50px_rgba(183,33,255,0.2)] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
                     <div className="p-4 border-b border-white/10 flex justify-between items-center bg-black/20">
                         <div className="flex items-center gap-2">
@@ -628,7 +618,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
             </div>
         )}
 
-        {/* Mode Selector */}
         <div className="w-full flex justify-center mb-4">
             <div className="bg-[#12121a] p-1.5 rounded-2xl border border-white/10 flex gap-1 shadow-lg overflow-x-auto no-scrollbar max-w-full">
                 {[
@@ -649,7 +638,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
             </div>
         </div>
 
-        {/* --- SMART TIPS BANNER --- */}
         <div className="w-full bg-gradient-to-r from-orange-500/10 via-yellow-500/10 to-orange-500/10 border-y border-white/5 md:border md:rounded-xl md:mb-6 p-2 md:p-3 flex items-center justify-center gap-3 backdrop-blur-md overflow-hidden relative min-h-[40px]">
             <div key={currentTipIdx} className="flex items-center gap-2 animate-fade-in transition-all duration-500">
                 <TipIcon className="w-4 h-4 md:w-5 md:h-5 text-audi-yellow shrink-0 animate-bounce-slow" />
@@ -657,7 +645,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                     {SMART_TIPS[currentTipIdx].text}
                 </span>
             </div>
-            {/* Progress Dots */}
             <div className="absolute bottom-1 md:right-3 flex gap-1 justify-center w-full md:w-auto">
                 {SMART_TIPS.map((_, i) => (
                     <div key={i} className={`w-1 h-1 rounded-full transition-all ${i === currentTipIdx ? 'bg-audi-yellow w-3' : 'bg-white/10'}`}></div>
@@ -666,17 +653,12 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
         </div>
 
         <div className="w-full grid grid-cols-1 lg:grid-cols-3 gap-6 mt-4 md:mt-0">
-            
-            {/* LEFT: CHARACTER INPUT SECTION */}
             <div className="lg:col-span-2 space-y-4">
-                
-                {/* Header with Help & Video Button */}
                 <div className="flex items-center justify-between px-2">
                     <h3 className="font-bold text-white text-sm uppercase flex items-center gap-2">
                         <Icons.User className="w-4 h-4 text-audi-pink" /> 1. Upload Nhân Vật
                     </h3>
                     <div className="flex gap-2">
-                        {/* Video Button */}
                         <button 
                             onClick={() => setShowVideo(true)}
                             className="flex items-center gap-1 text-[10px] font-bold text-white hover:scale-105 transition-transform bg-red-600 px-3 py-1 rounded-full shadow-[0_0_10px_rgba(220,38,38,0.5)] border border-red-400 group"
@@ -684,7 +666,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                             <Icons.Play className="w-3 h-3 fill-white group-hover:animate-pulse" />
                             Video HD
                         </button>
-                        {/* Guide Button */}
                         <button 
                             onClick={() => setGuideTopic('chars')}
                             className="flex items-center gap-1 text-[10px] font-bold text-audi-yellow hover:text-white transition-colors bg-audi-yellow/10 px-2 py-1 rounded-full border border-audi-yellow/30"
@@ -694,7 +675,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                     </div>
                 </div>
 
-                {/* Mobile Tab Navigation */}
                 {characters.length > 1 && (
                     <div className="flex md:hidden overflow-x-auto gap-2 pb-2 no-scrollbar">
                         {characters.map((char) => (
@@ -718,7 +698,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                     {characters.map((char) => (
                         <div 
                             key={char.id} 
-                            // Mobile Logic: Only show the active tab. Desktop Logic: Show all (md:block).
                             className={`w-full md:w-[220px] bg-[#12121a] border border-white/10 rounded-2xl p-4 hover:border-white/20 transition-colors relative group shrink-0 shadow-lg ${
                                 char.id === activeCharTab ? 'block' : 'hidden md:block'
                             }`}
@@ -731,9 +710,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                                 </div>
                             </div>
                             
-                            {/* UPDATED: EQUAL SIZE BOXES + LOCK TOGGLE */}
                             <div className="space-y-3">
-                                {/* BODY SLOT (Main Image) */}
                                 <div onClick={() => handleUploadClick(char.id, 'body')} className="w-full h-40 bg-black/40 rounded-xl border-2 border-dashed border-slate-700 hover:border-audi-pink cursor-pointer relative overflow-hidden group/item transition-all flex flex-col items-center justify-center">
                                     {char.bodyImage ? (
                                         <img src={char.bodyImage} className="w-full h-full object-contain" alt="Body" />
@@ -745,13 +722,10 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                                     )}
                                 </div>
 
-                                {/* FACE SLOT (Equal Size) + LOCK BUTTON */}
                                 <div onClick={() => handleUploadClick(char.id, 'face')} className="w-full h-40 bg-black/40 rounded-xl border-2 border-dashed border-slate-700 hover:border-audi-cyan cursor-pointer relative overflow-hidden group/item transition-all flex flex-col items-center justify-center">
                                     {char.faceImage ? (
                                         <>
                                             <img src={char.faceImage} className={`w-full h-full object-cover transition-all ${char.isFaceLocked ? '' : 'grayscale opacity-50'}`} alt="Face" />
-                                            
-                                            {/* LOCK TOGGLE OVERLAY */}
                                             <div 
                                                 onClick={(e) => { e.stopPropagation(); toggleFaceLock(char.id); }}
                                                 className={`absolute bottom-2 right-2 px-2 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-1.5 shadow-xl transition-all cursor-pointer z-10 border ${char.isFaceLocked ? 'bg-audi-cyan text-black border-white' : 'bg-red-500/90 text-white border-red-400'}`}
@@ -772,14 +746,12 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                     ))}
                 </div>
 
-                {/* PROMPT BOX & REF IMAGE */}
                 <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4 shadow-lg">
                     <div className="flex justify-between items-center mb-3">
                         <label className="text-xs font-bold text-slate-400 uppercase flex items-center gap-2">
                             <Icons.MessageCircle className="w-4 h-4" /> 2. Mô tả & Ảnh mẫu
                         </label>
                         <div className="flex gap-2">
-                            {/* UPDATED BUTTON: SAMPLE PROMPTS */}
                             <button 
                                 onClick={handleOpenSamples}
                                 className="text-[10px] font-bold text-audi-yellow hover:text-white flex items-center gap-1 bg-audi-yellow/10 px-3 py-1.5 rounded-full border border-audi-yellow/30 animate-pulse transition-all hover:bg-audi-yellow/20"
@@ -790,7 +762,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                     </div>
                     
                     <div className="flex flex-col md:flex-row gap-4">
-                        {/* REF IMAGE UPLOAD */}
                         <div 
                             onClick={handleRefUploadClick}
                             className="w-full md:w-32 aspect-[3/4] md:aspect-square bg-black/40 rounded-xl border-2 border-dashed border-slate-700 hover:border-audi-purple cursor-pointer relative overflow-hidden group shrink-0 flex items-center justify-center transition-all"
@@ -810,7 +781,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                             )}
                         </div>
 
-                        {/* TEXT AREA */}
                         <textarea 
                             value={prompt}
                             onChange={(e) => setPrompt(e.target.value)}
@@ -821,7 +791,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                 </div>
             </div>
 
-            {/* RIGHT: SETTINGS PANEL */}
             <div className="lg:col-span-1 space-y-6">
                 <div className="bg-[#12121a] border border-white/10 rounded-2xl p-5 space-y-5 shadow-lg h-full">
                     <div className="flex items-center justify-between border-b border-white/10 pb-3">
@@ -837,7 +806,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                         </button>
                     </div>
 
-                    {/* MODEL SELECTION */}
                     <div className="space-y-2">
                         <label className="text-[10px] font-bold text-slate-400 uppercase">Chất lượng AI (Model)</label>
                         <div className="grid grid-cols-2 gap-2">
@@ -858,7 +826,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                         </div>
                     </div>
 
-                    {/* RATIO */}
                     <div className="space-y-2">
                         <label className="text-[10px] font-bold text-slate-400 uppercase">Tỉ lệ khung hình</label>
                         <div className="flex flex-wrap gap-2">
@@ -874,7 +841,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                         </div>
                     </div>
 
-                    {/* STYLES */}
                     <div className="space-y-2">
                         <label className="text-[10px] font-bold text-slate-400 uppercase">Phong cách (Style)</label>
                         <div className="grid grid-cols-2 gap-2">
@@ -890,7 +856,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                         </div>
                     </div>
 
-                    {/* RESOLUTION */}
                     {modelType === 'pro' && (
                         <div className="space-y-2 animate-fade-in">
                             <label className="text-[10px] font-bold text-slate-400 uppercase">Độ phân giải</label>
@@ -908,7 +873,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                         </div>
                     )}
 
-                    {/* ADVANCED TOGGLES */}
                     <div className="pt-2 border-t border-white/10 space-y-2">
                         <div 
                             onClick={() => setUseCloudRef(!useCloudRef)}
@@ -926,7 +890,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
 
         </div>
 
-        {/* FOOTER */}
         <div className="fixed bottom-24 left-4 right-4 md:left-[50%] md:-translate-x-1/2 md:w-[900px] p-4 bg-[#090014]/90 backdrop-blur-md border border-white/10 rounded-2xl z-50 shadow-2xl flex items-center justify-between">
             <div className="flex flex-col">
                 <span className="text-[10px] text-slate-400 font-bold uppercase">Chi phí ước tính</span>

@@ -120,7 +120,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                 alt={img.toolName} 
                 className="w-full h-full object-cover" 
                 loading="lazy"
-                crossOrigin="anonymous" // Hint to browser to try CORS if possible
+                // Removed crossOrigin="anonymous" to fix broken thumbnail display
               />
               {img.isShared && (
                   <div className="absolute top-2 left-2 z-10 px-2 py-0.5 bg-audi-pink text-white text-[9px] font-bold rounded-full shadow-lg">

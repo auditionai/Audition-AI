@@ -675,10 +675,10 @@ export const performCheckin = async (): Promise<{ success: boolean; reward: numb
         // 2. Insert into daily_check_ins (Base Reward Only)
         const baseReward = 5;
         
+        // MODIFIED: Removed 'reward_amount' to prevent schema error if column is missing
         const { error: insertError } = await supabase.from('daily_check_ins').insert({
             user_id: user.id,
-            check_in_date: today,
-            reward_amount: baseReward
+            check_in_date: today
         });
         
         if (insertError) {

@@ -133,7 +133,7 @@ export const saveSystemApiKey = async (apiKey: string): Promise<{ success: boole
                 .from('api_keys')
                 .select('id')
                 .eq('key_value', cleanKey)
-                .maybeSingle(); // Use maybeSingle to avoid error on 0 rows
+                .maybeSingle();
 
             if (selectError) throw selectError;
 
@@ -182,6 +182,47 @@ export const deleteApiKey = async (id: string): Promise<boolean> => {
     }
     return false;
 };
+
+// --- GIFTCODE ANNOUNCEMENT SYSTEM ---
+
+export const getGiftcodePromoConfig = async (): Promise<{ text: string, isActive: boolean }> => {
+    if (supabase) {
+        const { data, error } = await supabase
+            .from('system_settings')
+            .select('value')
+            .eq('key', 'giftcode_promo')
+            .maybeSingle();
+        
+        if (data && data.value) {
+            // Value is stored as JSON: { text: "...", isActive: true }
+            const config = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
+            return {
+                text: config.text || '',
+                isActive: config.isActive || false
+            };
+        }
+    }
+    return { text: '', isActive: false };
+}
+
+export const saveGiftcodePromoConfig = async (text: string, isActive: boolean): Promise<{ success: boolean, error?: string }> => {
+    if (supabase) {
+        try {
+            const { error } = await supabase
+                .from('system_settings')
+                .upsert({ 
+                    key: 'giftcode_promo', 
+                    value: { text, isActive } // Store as JSON
+                }, { onConflict: 'key' });
+
+            if (error) throw error;
+            return { success: true };
+        } catch (e: any) {
+            return { success: false, error: e.message };
+        }
+    }
+    return { success: false, error: "No DB" };
+}
 
 // --- USER SERVICES (UPDATED WITH SELF-HEALING) ---
 

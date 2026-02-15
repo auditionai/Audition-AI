@@ -4,7 +4,7 @@ import { Language, Transaction, UserProfile, CreditPackage, PromotionCampaign, G
 import { Icons } from '../components/Icons';
 import { checkConnection } from '../services/geminiService';
 import { checkSupabaseConnection } from '../services/supabaseClient';
-import { getAdminStats, savePackage, deletePackage, updateAdminUserProfile, savePromotion, deletePromotion, saveGiftcode, deleteGiftcode, adminApproveTransaction, adminRejectTransaction, saveSystemApiKey, deleteApiKey, deleteTransaction, getSystemApiKey, getApiKeysList, updatePackageOrder } from '../services/economyService';
+import { getAdminStats, savePackage, deletePackage, updateAdminUserProfile, savePromotion, deletePromotion, saveGiftcode, deleteGiftcode, adminApproveTransaction, adminRejectTransaction, saveSystemApiKey, deleteApiKey, deleteTransaction, getSystemApiKey, getApiKeysList, updatePackageOrder, getGiftcodePromoConfig, saveGiftcodePromoConfig } from '../services/economyService';
 import { getAllImagesFromStorage, deleteImageFromStorage, checkR2Connection } from '../services/storageService';
 
 interface AdminProps {
@@ -49,6 +49,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [keyStatus, setKeyStatus] = useState<'valid' | 'invalid' | 'unknown' | 'checking'>('unknown');
   const [dbKeys, setDbKeys] = useState<any[]>([]); // List of keys from DB
   
+  // Giftcode Promo Config
+  const [giftcodePromo, setGiftcodePromo] = useState({ text: '', isActive: false });
+
   // Search States
   const [userSearchEmail, setUserSearchEmail] = useState('');
 
@@ -135,6 +138,10 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       // Fetch DB Keys list
       const keys = await getApiKeysList();
       setDbKeys(keys);
+
+      // Fetch Giftcode Config
+      const promoConfig = await getGiftcodePromoConfig();
+      setGiftcodePromo(promoConfig);
   };
 
   const runSystemChecks = async (specificKey?: string) => {
@@ -349,6 +356,28 @@ CREATE POLICY "Enable all access for gift codes" ON public.gift_codes FOR ALL US
           showToast('Đã xóa Giftcode');
       });
   };
+
+  const handleSaveGiftcodePromo = async () => {
+      const result = await saveGiftcodePromoConfig(giftcodePromo.text, giftcodePromo.isActive);
+      if (result.success) {
+          showToast('Đã lưu thông báo thành công!');
+      } else {
+          // Check for RLS
+          if (result.error?.includes('permission') || result.error?.includes('policy')) {
+              setConfirmDialog({
+                  show: true,
+                  title: '⚠️ Cần Cấp Quyền Settings',
+                  msg: 'Cần mở quyền ghi cho bảng system_settings.',
+                  sqlHelp: `ALTER TABLE public.system_settings ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable all access" ON public.system_settings FOR ALL USING (true) WITH CHECK (true);`,
+                  isAlertOnly: true,
+                  onConfirm: () => {}
+              });
+          } else {
+              showToast('Lỗi lưu: ' + result.error, 'error');
+          }
+      }
+  }
 
   const handleSavePromotion = async () => {
       if (editingPromotion) {
@@ -1106,6 +1135,41 @@ using (true);`,
                       </button>
                   </div>
 
+                  {/* GIFTCODE ANNOUNCEMENT CONFIG - NEWLY ADDED */}
+                  <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4 md:p-6 mb-6">
+                      <h3 className="font-bold text-white mb-4 flex items-center gap-2">
+                          <Icons.Bell className="w-5 h-5 text-audi-yellow" />
+                          Cấu Hình Thông Báo Sự Kiện (Nổi bật)
+                      </h3>
+                      <div className="space-y-4">
+                          <input 
+                              type="text" 
+                              value={giftcodePromo.text}
+                              onChange={(e) => setGiftcodePromo({...giftcodePromo, text: e.target.value})}
+                              placeholder="Ví dụ: Nhập CODE 'HELLO2026' để nhận 20Vcoin miễn phí"
+                              className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white focus:border-audi-cyan outline-none"
+                          />
+                          <div className="flex items-center justify-between">
+                              <label className="flex items-center gap-2 cursor-pointer bg-white/5 px-4 py-2 rounded-lg border border-white/5 hover:bg-white/10 transition-colors">
+                                  <input 
+                                      type="checkbox" 
+                                      checked={giftcodePromo.isActive} 
+                                      onChange={(e) => setGiftcodePromo({...giftcodePromo, isActive: e.target.checked})}
+                                      className="accent-audi-cyan w-4 h-4"
+                                  />
+                                  <span className="text-sm font-bold text-white">Hiển thị thông báo này</span>
+                              </label>
+                              <button 
+                                  onClick={handleSaveGiftcodePromo}
+                                  className="px-4 py-2 bg-audi-cyan/20 text-audi-cyan hover:bg-audi-cyan hover:text-black font-bold rounded-lg transition-colors border border-audi-cyan/30 text-xs md:text-sm"
+                              >
+                                  Lưu Cấu Hình
+                              </button>
+                          </div>
+                          <p className="text-[10px] text-slate-500">Thông báo này sẽ xuất hiện nổi bật phía trên ô nhập Giftcode của người dùng.</p>
+                      </div>
+                  </div>
+
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                       {giftcodes.length === 0 ? (
                           <div className="text-center py-8 text-slate-500 col-span-full">Chưa có Giftcode nào.</div>
@@ -1146,7 +1210,7 @@ using (true);`,
               </div>
           )}
 
-           {/* ... System ... */}
+           {/* ================= VIEW: SYSTEM ================= */}
            {activeView === 'system' && (
               <div className="space-y-6 animate-slide-in-right">
                   <div className="flex justify-between items-center">

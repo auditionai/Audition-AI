@@ -66,6 +66,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
   const [showSampleModal, setShowSampleModal] = useState(false);
   const [samplePrompts, setSamplePrompts] = useState<SamplePrompt[]>([]);
   const [loadingSamples, setLoadingSamples] = useState(false);
+  const [currentCategoryName, setCurrentCategoryName] = useState('');
 
   // --- SETTINGS RESTORED ---
   const [modelType, setModelType] = useState<'flash' | 'pro'>('pro'); 
@@ -127,49 +128,44 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       setLoadingSamples(true);
       
       try {
-          // Define category filters based on activeMode
-          // Note: Database needs a 'category' column with values like 'male', 'female', 'couple', 'group'
-          let filterCategories: string[] = [];
+          // 1. DETERMINE CATEGORY ID BASED ON MODE
+          // Based on user provided DB screenshot:
+          // ID 2: Ảnh Nam Nữ (Single)
+          // ID 3: Ảnh Couple
+          // ID 4: Ảnh Nhóm
+          let targetCategoryId = 2; // Default Single
+          let catName = "Ảnh Nam Nữ";
+
           if (activeMode === 'single') {
-              filterCategories = ['single', 'male', 'female', 'boy', 'girl', 'nam', 'nu', 'don'];
+              targetCategoryId = 2;
+              catName = "Ảnh Nam Nữ";
           } else if (activeMode === 'couple') {
-              filterCategories = ['couple', 'doi', 'couple_mode', 'love'];
+              targetCategoryId = 3;
+              catName = "Ảnh Couple";
           } else if (activeMode.startsWith('group')) {
-              filterCategories = ['group', 'group3', 'group4', 'nhom', 'team', 'squad', 'clan'];
+              targetCategoryId = 4;
+              catName = "Ảnh Nhóm";
           }
+          setCurrentCategoryName(catName);
 
-          let query = caulenhauClient
+          // 2. QUERY WITH INNER JOIN ON image_categories
+          // Select images WHERE image_categories.category_id == targetCategoryId
+          const { data, error } = await caulenhauClient
               .from('images')
-              .select('id, image_url, prompt, category');
-          
-          if (filterCategories.length > 0) {
-              query = query.in('category', filterCategories);
-          }
-
-          query = query.order('created_at', { ascending: false }).limit(50);
-          
-          const { data, error } = await query;
+              .select(`
+                  id, 
+                  image_url, 
+                  prompt, 
+                  image_categories!inner (
+                      category_id
+                  )
+              `)
+              .eq('image_categories.category_id', targetCategoryId)
+              .order('created_at', { ascending: false })
+              .limit(50);
 
           if (error) {
-              // Fallback if 'category' column missing (Error 42703 is undefined_column)
-              if (error.code === '42703') {
-                  console.warn("Column 'category' missing in DB. Fetching all images as fallback.");
-                  const { data: fallbackData, error: fallbackError } = await caulenhauClient
-                      .from('images')
-                      .select('id, image_url, prompt')
-                      .order('created_at', { ascending: false })
-                      .limit(50);
-                  
-                  if (fallbackError) throw fallbackError;
-                  
-                  setSamplePrompts(fallbackData?.map((item: any) => ({
-                      id: item.id,
-                      image_url: item.image_url,
-                      prompt: item.prompt,
-                      category: 'uncategorized'
-                  })) || []);
-                  return;
-              }
+              console.error("Supabase Error:", error);
               throw error;
           }
           
@@ -178,14 +174,14 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                   id: item.id,
                   image_url: item.image_url,
                   prompt: item.prompt,
-                  category: item.category
+                  category: catName
               })));
           } else {
               setSamplePrompts([]);
           }
       } catch (e: any) {
           console.error("Fetch samples error", e);
-          // Silent fail or minimal notify to avoid spamming
+          notify(`Lỗi tải dữ liệu: ${e.message}`, 'error');
           setSamplePrompts([]);
       } finally {
           setLoadingSamples(false);
@@ -536,8 +532,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                         <div className="flex items-center gap-2">
                             <Icons.Image className="w-5 h-5 text-audi-purple" />
                             <h3 className="font-bold text-white text-lg">Thư viện Prompt Mẫu</h3>
-                            <span className="text-xs bg-audi-purple/20 text-audi-purple px-2 py-0.5 rounded border border-audi-purple/30">
-                                Mode: {activeMode.toUpperCase()}
+                            <span className="text-xs bg-audi-purple/20 text-audi-purple px-2 py-0.5 rounded border border-audi-purple/30 truncate max-w-[150px]">
+                                {currentCategoryName || activeMode.toUpperCase()}
                             </span>
                         </div>
                         <button onClick={() => setShowSampleModal(false)} className="p-2 hover:bg-white/10 rounded-full text-white">

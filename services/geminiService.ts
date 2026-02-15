@@ -1,49 +1,49 @@
 
 import { GoogleGenAI } from "@google/genai";
 import { getSystemApiKey } from "./economyService";
-import { createSolidFence, optimizePayload, createTextureSheet } from "../utils/imageProcessor";
+import { createTextureSheet, optimizePayload, createSolidFence } from "../utils/imageProcessor";
 
-const getDynamicApiKey = async (): Promise<string> => {
-    const dbKey = await getSystemApiKey();
-    if (dbKey && dbKey.trim().length > 0) return dbKey.trim();
-    return process.env.API_KEY || "";
-};
+// Define CharacterData interface
+export interface CharacterData {
+  id: number; // Changed to number to match View
+  gender: 'male' | 'female';
+  image: string | null;
+  faceImage?: string | null;
+  shoesImage?: string | null;
+  description?: string;
+}
 
-const getAiClient = async () => {
-    const key = await getDynamicApiKey();
-    if (!key) throw new Error("Hệ thống chưa có API Key.");
-    return new GoogleGenAI({ apiKey: key });
-};
-
-const cleanBase64 = (data: string): string => {
-    if (!data) return "";
-    if (data.includes(',')) {
-        return data.split(',')[1];
+// Helper to clean base64 string
+const cleanBase64 = (data: string) => {
+    if (!data) return '';
+    const index = data.indexOf(';base64,');
+    if (index !== -1) {
+        return data.substring(index + 8);
     }
     return data;
 };
 
+// Helper to get AI Client
+const getAiClient = async (specificKey?: string) => {
+    const key = specificKey || await getSystemApiKey();
+    if (!key) throw new Error("API Key missing or invalid");
+    return new GoogleGenAI({ apiKey: key });
+};
+
+// Extract image from response
 const extractImage = (response: any): string | null => {
-  if (response.candidates && response.candidates[0].content.parts) {
-    for (const part of response.candidates[0].content.parts) {
-      if (part.inlineData) return `data:image/png;base64,${part.inlineData.data}`;
+    if (!response || !response.candidates || response.candidates.length === 0) return null;
+    const parts = response.candidates[0].content.parts;
+    for (const part of parts) {
+        if (part.inlineData) {
+            return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+        }
     }
-  }
-  return null;
-}
+    return null;
+};
 
-interface CharacterData {
-    id: number;
-    gender: 'male' | 'female';
-    image: string | null; 
-    faceImage?: string | null;
-    shoesImage?: string | null; // Made optional again
-    description?: string;
-}
-
-// --- NEW: GOOGLE FILE API UPLOADER ---
-// Converts Base64 to Blob and uploads to Google GenAI Files
-const uploadToGemini = async (base64Data: string, mimeType: string = 'image/jpeg'): Promise<string> => {
+// Stub for uploadToGemini (Browser implementation limited, fallback to inline)
+const uploadToGemini = async (base64Data: string, mimeType: string): Promise<string> => {
     try {
         const ai = await getAiClient();
         
@@ -57,27 +57,34 @@ const uploadToGemini = async (base64Data: string, mimeType: string = 'image/jpeg
         const blob = new Blob([byteArray], { type: mimeType });
 
         // 2. Upload using SDK
-        // NOTE: The SDK supports `ai.files.upload` in newer versions.
         const uploadResult = await ai.files.upload({
             file: blob,
             config: { 
-                displayName: `texture_sheet_${Date.now()}` 
+                displayName: `ref_img_${Date.now()}` 
             }
         });
 
-        // SAFE ACCESS TO URI: Handle SDK response variations
-        // Some versions return { file: { uri: ... } }, others return { uri: ... } directly
         const fileUri = (uploadResult as any).file?.uri || (uploadResult as any).uri;
+        if (!fileUri) throw new Error("No URI returned");
         
-        if (!fileUri) {
-            console.error("Upload Result Structure:", uploadResult);
-            throw new Error("Không lấy được File URI từ Google Cloud.");
-        }
-
         return fileUri;
     } catch (e) {
-        console.error("Gemini File Upload Failed", e);
-        throw new Error("Failed to upload reference image to Google Cloud.");
+        console.warn("Cloud upload failed, falling back to inline", e);
+        throw e;
+    }
+};
+
+export const checkConnection = async (key?: string): Promise<boolean> => {
+    try {
+        const ai = await getAiClient(key);
+        await ai.models.generateContent({
+             model: 'gemini-2.5-flash-latest',
+             contents: 'ping'
+        });
+        return true;
+    } catch (e) {
+        console.error("Gemini Connection Check Failed", e);
+        return false;
     }
 };
 
@@ -96,29 +103,35 @@ const processDigitalTwinMode = (
     let systemPrompt = "";
 
     if (isSingle) {
-        // --- FIXED LOGIC FOR SINGLE IMAGE ---
-        systemPrompt = `** SYSTEM: PROFESSIONAL 3D CHARACTER ARTIST **
+        // --- FIXED LOGIC FOR SINGLE IMAGE (SCENE RECONSTRUCTION) ---
+        systemPrompt = `** SYSTEM: 3D SCENE RECONSTRUCTION & CHARACTER ARTIST **
         
-        [TASK]: Create a high-quality 3D render of the character provided in the input reference.
+        [TASK]: You are an expert 3D Artist. Recreate the input image as a high-end 3D Game Render (Unreal Engine 5 Style).
         
-        [INPUT ANALYSIS]:
-        - The input image is a REFERENCE SHEET containing the character's design.
-        - DO NOT output the reference sheet. DO NOT output a collage.
-        - Treat the input image purely as information about outfit and face.
+        [CRITICAL INSTRUCTION - COMPOSITION & CAMERA]:
+        - COPY the Camera Angle, Field of View, and Framing from the Reference Image EXACTLY.
+        - If Reference is Portrait/Close-up -> Output Portrait/Close-up.
+        - If Reference is Full Body -> Output Full Body.
+        - If Reference is Dutch Angle/Low Angle -> Copy it.
         
-        [OUTPUT REQUIREMENTS]:
-        - Generate EXACTLY ONE single image of the character.
-        - Style: Semi-realistic 3D, Blind Box aesthetics, Audition Online style, Unreal Engine 5 render.
+        [CRITICAL INSTRUCTION - BACKGROUND]:
+        - Analyze the background in the Reference Image (lights, furniture, atmosphere, darkness).
+        - RECONSTRUCT the same environment in 3D.
+        - DO NOT use a plain or studio background unless the reference has one.
+        - Match the lighting mood (e.g., dark bar, neon lights, sunny park, bedroom).
+        
+        [CHARACTER]:
+        - Style: Stylized 3D, semi-realistic anime features (Audition Online / Sims 4 Alpha CC style).
         - Skin: Smooth, glowing, no realistic human pores.
-        - Eyes: Large, expressive, anime-styled 3D.
-        - Composition: Full body or 3/4 view based on the prompt.
+        - Outfit: Match the reference outfit exactly based on the texture sheet provided.
         
         [SCENE]: "${prompt}"
         
         [STRICT NEGATIVE CONSTRAINTS]:
         - NO real humans, NO photorealism.
-        - NO split screens, NO grids, NO text, NO UI elements.
-        - NO blurry faces, NO distorted limbs.
+        - NO collage, NO grid, NO split-screen.
+        - NO text, NO UI elements.
+        - NO plain background (unless reference is plain).
         `;
     } else {
         // --- LOGIC FOR COUPLE / GROUP (KEPT STABLE) ---
@@ -150,7 +163,7 @@ export const generateImage = async (
     styleRefBase64?: string, 
     characterDataList: CharacterData[] = [], 
     resolution: string = '2K',
-    modelTier: 'flash' | 'pro' = 'pro', // NEW ARGUMENT
+    modelTier: 'flash' | 'pro' = 'pro', 
     useSearch: boolean = false,
     useCloudRef: boolean = false, 
     onProgress?: (msg: string) => void
@@ -166,14 +179,14 @@ export const generateImage = async (
     
     if (onProgress) onProgress(`Engine: ${model} | Mode: ${useCloudRef ? 'CLOUD NEURAL LINK' : 'STANDARD'}`);
 
-    // 1. PREPARE STYLE REF (POSE)
+    // 1. PREPARE STYLE REF (POSE/SCENE)
     let refImagePart = null;
     if (styleRefBase64) {
-        // For single image, ensure the pose ref doesn't confuse the layout
-        const fencedData = await createSolidFence(styleRefBase64, aspectRatio, true);
-        const optData = await optimizePayload(fencedData, 1024);
+        // Note: For Single Mode, styleRefBase64 is passed RAW (optimized) from the view to preserve background.
+        // For Group Mode, it is passed FENCED (gray bg).
+        // We just wrap it here.
         refImagePart = {
-            inlineData: { data: cleanBase64(optData), mimeType: 'image/jpeg' }
+            inlineData: { data: cleanBase64(styleRefBase64), mimeType: 'image/jpeg' }
         };
     }
 
@@ -196,12 +209,20 @@ export const generateImage = async (
 
             if (useCloudRef) {
                 // STRATEGY A: CLOUD UPLOAD (FILE API)
-                if (onProgress) onProgress(`Uploading Reference (Player ${char.id})...`);
-                const fileUri = await uploadToGemini(textureSheet, 'image/jpeg');
-                console.log("File URI received:", fileUri);
-                finalPart = {
-                    fileData: { mimeType: 'image/jpeg', fileUri: fileUri }
-                };
+                try {
+                    if (onProgress) onProgress(`Uploading Reference (Player ${char.id})...`);
+                    const fileUri = await uploadToGemini(textureSheet, 'image/jpeg');
+                    console.log("File URI received:", fileUri);
+                    finalPart = {
+                        fileData: { mimeType: 'image/jpeg', fileUri: fileUri }
+                    };
+                } catch (e) {
+                    // Fallback to inline if upload fails
+                     const optimizedSheet = await optimizePayload(textureSheet, 1280); 
+                    finalPart = {
+                        inlineData: { data: cleanBase64(optimizedSheet), mimeType: 'image/jpeg' }
+                    };
+                }
             } else {
                 // STRATEGY B: INLINE BASE64
                 const optimizedSheet = await optimizePayload(textureSheet, 1280); 
@@ -223,7 +244,7 @@ export const generateImage = async (
         imageConfig: { aspectRatio: aspectRatio },
         // Use a clearer system instruction for the API config as well
         systemInstruction: characterDataList.length === 1 
-            ? "You are a professional 3D Character Designer. Generate a single, high-quality 3D render. No collages."
+            ? "You are a professional 3D Scene Artist. Recreate the photo in 3D style. Match Composition and Background."
             : "Create high quality 3D character render. Follow the reference image structure.", 
         safetySettings: [
             { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
@@ -260,36 +281,24 @@ export const generateImage = async (
   }
 };
 
-// ... existing utils (editImageWithInstructions, etc.) remain unchanged ...
-export const editImageWithInstructions = async (
-  imageBase64: string,
-  prompt: string,
-  mimeType: string = "image/jpeg",
-  styleRefBase64?: string
-): Promise<string | null> => {
-  try {
-    const ai = await getAiClient();
-    const model = 'gemini-2.5-flash-image'; 
-    
-    const cleanMain = cleanBase64(imageBase64);
-    const parts: any[] = [{ inlineData: { data: cleanMain, mimeType: mimeType } }];
-    
-    let instructionText = `TASK: EDIT IMAGE. INSTRUCTION: ${prompt}. CONSTRAINT: Keep all other details unchanged.`;
-    
-    if (styleRefBase64) {
-        const cleanStyle = cleanBase64(styleRefBase64);
-        parts.push({ inlineData: { data: cleanStyle, mimeType: 'image/jpeg' } });
-        instructionText += ` STYLE SOURCE: Image 2. Apply style from Image 2 to Image 1.`;
+export const editImageWithInstructions = async (base64Data: string, instruction: string, mimeType: string): Promise<string | null> => {
+    try {
+        const ai = await getAiClient();
+        
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash-image', // Guidelines: Use gemini-2.5-flash-image for editing
+            contents: {
+                parts: [
+                    { inlineData: { data: cleanBase64(base64Data), mimeType: mimeType } },
+                    { text: instruction }
+                ]
+            }
+        });
+        return extractImage(response);
+    } catch (e) {
+        console.error(e);
+        return null;
     }
-    parts.push({ text: instructionText });
-
-    const response = await ai.models.generateContent({
-      model: model,
-      contents: { parts: parts }
-    });
-
-    return extractImage(response);
-  } catch (error) { throw error; }
 };
 
 export const suggestPrompt = async (currentInput: string, lang: string, featureName: string): Promise<string> => {
@@ -305,18 +314,4 @@ export const suggestPrompt = async (currentInput: string, lang: string, featureN
         });
         return response.text?.trim() || currentInput;
     } catch (error) { return currentInput; }
-}
-
-export const checkConnection = async (testKey?: string): Promise<boolean> => {
-  try {
-    const key = testKey ? testKey.trim() : (await getDynamicApiKey()).trim();
-    if (!key) return false;
-    const ai = new GoogleGenAI({ apiKey: key });
-    await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: { parts: [{ text: 'ping' }] },
-      config: { maxOutputTokens: 1 }
-    });
-    return true;
-  } catch (error) { return false; }
 }

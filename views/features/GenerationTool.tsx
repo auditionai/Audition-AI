@@ -295,9 +295,18 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
           const b64 = await urlToBase64(sourceForStructure);
           if (b64) sourceForStructure = b64;
       }
+      
       if (sourceForStructure) {
           const optimizedStructure = await optimizePayload(sourceForStructure);
-          structureRefData = await createSolidFence(optimizedStructure, aspectRatio, true);
+          
+          // --- CRITICAL FIX FOR SINGLE MODE ---
+          // If Single Mode: Send the raw optimized image to preserve Background & Camera Framing.
+          // If Group Mode: Use createSolidFence to isolate poses (preventing background chaos).
+          if (activeMode === 'single') {
+              structureRefData = optimizedStructure; 
+          } else {
+              structureRefData = await createSolidFence(optimizedStructure, aspectRatio, true);
+          }
       }
       
       const characterDataList = [];

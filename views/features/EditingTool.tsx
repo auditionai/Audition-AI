@@ -12,7 +12,17 @@ interface EditingToolProps {
   lang: Language;
 }
 
-// Removed unnecessary types for Upscale options as we enforce single mode
+// Suggestions for Magic Editor
+const SUGGESTIONS = [
+    { label: { vi: 'Thay đổi background sang biển', en: 'Change background to beach' }, icon: Icons.Image },
+    { label: { vi: 'Mặc vest đen sang trọng', en: 'Wear luxury black suit' }, icon: Icons.User },
+    { label: { vi: 'Thêm hiệu ứng tuyết rơi', en: 'Add snowing effect' }, icon: Icons.Cloud },
+    { label: { vi: 'Biến thành tranh sơn dầu', en: 'Turn into oil painting' }, icon: Icons.Palette },
+    { label: { vi: 'Đổi màu tóc sang đỏ', en: 'Change hair color to red' }, icon: Icons.Scissors },
+    { label: { vi: 'Thêm kính râm cool ngầu', en: 'Add cool sunglasses' }, icon: Icons.Monitor },
+    { label: { vi: 'Chuyển sang phong cách Cyberpunk', en: 'Make it Cyberpunk style' }, icon: Icons.Zap },
+    { label: { vi: 'Xóa người thừa phía sau', en: 'Remove background people' }, icon: Icons.Trash },
+];
 
 export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
   const { notify } = useNotification();
@@ -25,6 +35,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
   // Specific States
   const isUpscaler = feature.id === 'sharpen_upscale';
   const isRemover = feature.id === 'remove_bg_pro';
+  const isMagicEditor = feature.id === 'magic_editor_pro';
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -50,19 +61,24 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
   };
 
   const constructPrompt = () => {
-      // 1. Manual Prompt Mode (Generic Tools)
-      if (!isUpscaler && !isRemover) {
-          let instruction = feature.defaultPrompt || "";
-          if (prompt) instruction += " " + prompt;
-          return instruction;
+      // 1. Magic Editor Logic (Professional Instructions)
+      if (isMagicEditor) {
+          if (!prompt.trim()) return "";
+          return `Act as a professional photo editor. Perform the following edit on the image: "${prompt}". 
+          CRITICAL RULES:
+          1. Maintain the original identity, face, and high resolution of the subject unless explicitly asked to change.
+          2. Ensure realistic lighting, shadows, and perspective blending.
+          3. If changing background, ensure the subject is perfectly integrated.
+          4. If changing clothes, fit them naturally to the body pose.
+          5. Output highly detailed, photorealistic result.`;
       }
 
-      // 2. Upscaler Logic (UPDATED: High Fidelity 4K, No Distortion)
+      // 2. Upscaler Logic (High Fidelity 4K)
       if (isUpscaler) {
           return `Upscale this image to 4K resolution. CRITICAL: Do NOT alter facial features, eyes, or clothing details. Maintain exact fidelity to the original. Apply intelligent sharpening, de-blurring, and texture restoration only. Do NOT reimagine or hallucinate new elements. Goal: Pure Image Restoration.`;
       }
 
-      // 3. Background Remover Logic (UPDATED: Force Black & High Quality)
+      // 3. Background Remover Logic (Force Black & High Quality)
       if (isRemover) {
           return "Remove the background completely and place the subject on a pure BLACK background (#000000). CRITICAL: Maintain the original image resolution (4K) and subject details exactly. Do NOT downscale, do NOT blur edges, do NOT alter the subject's lighting.";
       }
@@ -76,7 +92,13 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
          return;
      }
 
-     const cost = isUpscaler ? 2 : 1; 
+     if (isMagicEditor && !prompt.trim()) {
+         notify(lang === 'vi' ? 'Vui lòng nhập câu lệnh chỉnh sửa' : 'Please enter edit prompt', 'warning');
+         return;
+     }
+
+     // Cost Calculation: Magic Editor is more expensive (Premium)
+     const cost = isMagicEditor ? 3 : (isUpscaler ? 2 : 1); 
      const user = await getUserProfile();
      
      if ((user.balance || 0) < cost) {
@@ -124,12 +146,26 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
      }
   };
 
+  const getBorderColor = () => {
+      if (isMagicEditor) return 'border-audi-purple';
+      if (isUpscaler) return 'border-audi-cyan';
+      if (isRemover) return 'border-audi-pink';
+      return 'border-purple-500';
+  };
+
+  const getGradient = () => {
+      if (isMagicEditor) return 'from-audi-purple to-pink-500';
+      if (isUpscaler) return 'from-audi-cyan to-blue-500';
+      if (isRemover) return 'from-audi-pink to-purple-600';
+      return 'from-purple-500 to-pink-600';
+  };
+
   return (
-    <div className="flex flex-col md:flex-row gap-6 h-full">
+    <div className="flex flex-col md:flex-row gap-6 h-full pb-20 md:pb-0">
       <div className="w-full md:w-1/3 flex flex-col gap-6">
-          <div className={`glass-panel p-6 rounded-3xl border-l-4 ${isUpscaler ? 'border-audi-cyan' : isRemover ? 'border-audi-pink' : 'border-purple-500'}`}>
+          <div className={`glass-panel p-6 rounded-3xl border-l-4 ${getBorderColor()}`}>
              <h2 className={`text-xl font-bold mb-1 text-slate-800 dark:text-white flex items-center gap-2`}>
-                 {isUpscaler ? <Icons.Zap className="w-5 h-5 text-audi-cyan" /> : isRemover ? <Icons.Scissors className="w-5 h-5 text-audi-pink" /> : <Icons.Wand className="w-5 h-5 text-purple-500" />}
+                 {isMagicEditor ? <Icons.Wand className="w-5 h-5 text-audi-purple" /> : isUpscaler ? <Icons.Zap className="w-5 h-5 text-audi-cyan" /> : isRemover ? <Icons.Scissors className="w-5 h-5 text-audi-pink" /> : <Icons.Wand className="w-5 h-5 text-purple-500" />}
                  {feature.name[lang]}
              </h2>
              <p className="text-sm text-slate-500 dark:text-slate-400">{feature.description[lang]}</p>
@@ -140,7 +176,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
             onClick={() => fileInputRef.current?.click()}
             className={`border-2 border-dashed rounded-2xl h-48 flex flex-col items-center justify-center cursor-pointer transition-all overflow-hidden relative group
                 ${uploadedImage 
-                    ? (isUpscaler ? 'border-audi-cyan' : isRemover ? 'border-audi-pink' : 'border-purple-500') 
+                    ? getBorderColor()
                     : 'border-slate-300 dark:border-slate-700 hover:border-white hover:bg-white/5'}`}
          >
              {uploadedImage ? (
@@ -152,7 +188,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
                  </>
              ) : (
                  <div className="text-center p-4">
-                     <div className={`w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-2 ${isUpscaler ? 'bg-audi-cyan/20 text-audi-cyan' : 'bg-audi-pink/20 text-audi-pink'}`}>
+                     <div className={`w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-2 ${isMagicEditor ? 'bg-audi-purple/20 text-audi-purple' : isUpscaler ? 'bg-audi-cyan/20 text-audi-cyan' : 'bg-audi-pink/20 text-audi-pink'}`}>
                          <Icons.Upload className="w-6 h-6" />
                      </div>
                      <span className="text-sm font-bold text-slate-600 dark:text-slate-300">{lang === 'vi' ? 'Tải ảnh gốc lên' : 'Upload Source Image'}</span>
@@ -164,7 +200,45 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
          {/* --- CONTROLS SECTION --- */}
          <div className="space-y-4">
              
-             {/* 1. UPSCALER CONTROLS (SIMPLIFIED) */}
+             {/* 1. MAGIC EDITOR (NEW) */}
+             {isMagicEditor && (
+                 <div className="animate-fade-in space-y-4">
+                     <div className="relative">
+                         <div className="absolute top-0 right-0 -mt-2 -mr-2 w-3 h-3 bg-red-500 rounded-full animate-ping"></div>
+                         <div className="bg-[#1a1a24] p-4 rounded-2xl border border-audi-purple/30 shadow-[0_0_15px_rgba(183,33,255,0.1)]">
+                             <label className="text-xs font-bold text-audi-purple uppercase mb-2 flex items-center gap-2">
+                                 <Icons.Sparkles className="w-3 h-3" />
+                                 {lang === 'vi' ? 'Nhập câu lệnh phép thuật' : 'Enter Magic Prompt'}
+                             </label>
+                             <textarea 
+                                value={prompt}
+                                onChange={(e) => setPrompt(e.target.value)}
+                                className="w-full bg-black/30 border border-white/10 rounded-xl p-3 text-white text-sm focus:border-audi-purple outline-none min-h-[80px] resize-none placeholder:text-slate-600"
+                                placeholder={lang === 'vi' ? "Ví dụ: Thêm nơ hồng vào tóc, đổi background sang rừng rậm..." : "Ex: Add pink bow to hair, change background to jungle..."}
+                             />
+                         </div>
+                     </div>
+
+                     {/* Suggestion Chips */}
+                     <div className="space-y-2">
+                         <span className="text-[10px] font-bold text-slate-500 uppercase">Gợi ý nhanh</span>
+                         <div className="flex flex-wrap gap-2 max-h-[100px] overflow-y-auto custom-scrollbar">
+                             {SUGGESTIONS.map((s, idx) => (
+                                 <button
+                                    key={idx}
+                                    onClick={() => setPrompt(s.label[lang === 'vi' ? 'vi' : 'en'])}
+                                    className="flex items-center gap-1 bg-white/5 hover:bg-white/10 border border-white/5 rounded-lg px-2 py-1.5 text-[10px] text-slate-300 transition-colors"
+                                 >
+                                     <s.icon className="w-3 h-3 text-audi-purple" />
+                                     {s.label[lang === 'vi' ? 'vi' : 'en']}
+                                 </button>
+                             ))}
+                         </div>
+                     </div>
+                 </div>
+             )}
+
+             {/* 2. UPSCALER CONTROLS */}
              {isUpscaler && (
                  <div className="animate-fade-in space-y-4 bg-white/5 p-4 rounded-2xl border border-white/10">
                      <div className="flex items-center gap-3">
@@ -183,7 +257,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
                  </div>
              )}
 
-             {/* 2. REMOVER CONTROLS (SIMPLIFIED & HQ) */}
+             {/* 3. REMOVER CONTROLS */}
              {isRemover && (
                  <div className="animate-fade-in space-y-4 bg-white/5 p-4 rounded-2xl border border-white/10">
                      <div className="flex items-center gap-3">
@@ -202,8 +276,8 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
                  </div>
              )}
 
-             {/* 3. GENERIC PROMPT (Fallback) */}
-             {!isUpscaler && !isRemover && (
+             {/* 4. GENERIC PROMPT (Legacy Fallback) */}
+             {!isUpscaler && !isRemover && !isMagicEditor && (
                  <div className="space-y-2">
                      <label className="text-sm font-bold text-slate-700 dark:text-slate-300">{lang === 'vi' ? 'Yêu cầu thêm' : 'Extra Instructions'}</label>
                      <input 
@@ -220,32 +294,32 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
          {/* COST & ACTION */}
          <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/10">
              <span className="text-xs text-slate-400 font-bold uppercase">{lang === 'vi' ? 'Chi phí' : 'Cost'}</span>
-             <span className="text-sm font-bold text-audi-yellow">{isUpscaler ? 2 : 1} Vcoin</span>
+             <span className="text-sm font-bold text-audi-yellow">{isMagicEditor ? 3 : (isUpscaler ? 2 : 1)} Vcoin</span>
          </div>
 
          <button 
             onClick={handleExecute}
             disabled={loading || !uploadedImage}
-            className={`w-full py-4 bg-gradient-to-r ${isUpscaler ? 'from-audi-cyan to-blue-500 shadow-audi-cyan/30' : isRemover ? 'from-audi-pink to-purple-600 shadow-audi-pink/30' : 'from-purple-500 to-pink-600'} text-white rounded-xl font-bold shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed hover:scale-[1.02]`}
+            className={`w-full py-4 bg-gradient-to-r ${getGradient()} text-white rounded-xl font-bold shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed hover:scale-[1.02] shadow-[0_5px_20px_rgba(0,0,0,0.3)]`}
          >
-             {loading ? <Icons.Loader className="animate-spin" /> : <Icons.Zap />}
-             {loading ? (lang === 'vi' ? 'Đang xử lý...' : 'Processing...') : (lang === 'vi' ? 'BẮT ĐẦU NGAY' : 'EXECUTE')}
+             {loading ? <Icons.Loader className="animate-spin" /> : <Icons.Wand />}
+             {loading ? (lang === 'vi' ? 'Đang xử lý...' : 'Processing...') : (lang === 'vi' ? 'THỰC HIỆN NGAY' : 'EXECUTE')}
          </button>
       </div>
 
       {/* RESULT AREA */}
-      <div className="flex-1 glass-panel rounded-3xl p-6 flex flex-col items-center justify-center bg-slate-100/50 dark:bg-black/20 min-h-[400px] relative">
+      <div className="flex-1 glass-panel rounded-3xl p-6 flex flex-col items-center justify-center bg-slate-100/50 dark:bg-black/20 min-h-[400px] relative overflow-hidden">
           {loading ? (
-               <div className="text-center animate-pulse">
-                   <div className="relative w-20 h-20 mx-auto mb-6">
-                       <div className={`absolute inset-0 rounded-full border-4 border-t-transparent animate-spin ${isUpscaler ? 'border-audi-cyan' : 'border-audi-pink'}`}></div>
-                       <Icons.Sparkles className={`w-8 h-8 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 ${isUpscaler ? 'text-audi-cyan' : 'text-audi-pink'}`} />
+               <div className="text-center animate-pulse z-10">
+                   <div className="relative w-24 h-24 mx-auto mb-6">
+                       <div className={`absolute inset-0 rounded-full border-4 border-t-transparent animate-spin ${isUpscaler ? 'border-audi-cyan' : isMagicEditor ? 'border-audi-purple' : 'border-audi-pink'}`}></div>
+                       <Icons.Sparkles className={`w-10 h-10 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 ${isUpscaler ? 'text-audi-cyan' : isMagicEditor ? 'text-audi-purple' : 'text-audi-pink'}`} />
                    </div>
-                   <p className="text-white font-bold text-lg">{lang === 'vi' ? 'AI đang làm việc...' : 'AI is working...'}</p>
-                   <p className="text-slate-500 text-sm mt-1">{isUpscaler ? 'Đang nâng cấp độ phân giải 4K...' : 'Đang xử lý...'}</p>
+                   <p className="text-white font-bold text-lg font-game tracking-widest">{lang === 'vi' ? 'AI ĐANG SUY NGHĨ...' : 'AI THINKING...'}</p>
+                   <p className="text-slate-500 text-sm mt-2">{isMagicEditor ? 'Đang thực hiện phép thuật...' : 'Đang xử lý...'}</p>
                </div>
           ) : resultImage ? (
-              <div className="w-full h-full flex flex-col items-center justify-center gap-4">
+              <div className="w-full h-full flex flex-col items-center justify-center gap-4 z-10">
                    <div className="relative w-full h-full max-h-[60vh] flex items-center justify-center group select-none">
                        {/* Result Image */}
                        <img 
@@ -279,13 +353,16 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
                    </div>
               </div>
           ) : (
-              <div className="text-center text-slate-500">
-                  <div className="w-20 h-20 bg-white/5 rounded-3xl flex items-center justify-center mx-auto mb-4 border border-white/5">
-                      <Icons.Image className="w-8 h-8 opacity-30" />
+              <div className="text-center text-slate-500 z-10">
+                  <div className="w-24 h-24 bg-white/5 rounded-[2rem] flex items-center justify-center mx-auto mb-4 border border-white/5 shadow-inner">
+                      <Icons.Image className="w-10 h-10 opacity-30" />
                   </div>
                   <p className="text-sm font-bold uppercase tracking-widest opacity-50">{lang === 'vi' ? 'KẾT QUẢ SẼ HIỆN Ở ĐÂY' : 'RESULT WILL APPEAR HERE'}</p>
               </div>
           )}
+          
+          {/* Decorative Grid Background */}
+          <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:40px_40px] pointer-events-none"></div>
       </div>
     </div>
   );

@@ -89,6 +89,21 @@ export const APP_CONFIG: AppConfig = {
 
     // --- EDITING TOOLS (Chỉnh sửa) ---
     {
+      id: "magic_editor_pro",
+      name: {vi: "Chỉnh Sửa Phép Thuật (Magic)", en: "Magic Editor AI"},
+      description: {
+        vi: "Thay đổi trang phục, bối cảnh, tư thế hoặc thêm chi tiết vào ảnh bằng câu lệnh.",
+        en: "Change outfits, background, pose or add details using text prompts."
+      },
+      engine: "Gemini 2.5 Flash Image",
+      preview_image: "https://picsum.photos/400/307?grayscale",
+      toolType: 'editing',
+      defaultPrompt: "", // Dynamic prompt
+      category: 'editing',
+      tag: "NEW",
+      isPremium: true
+    },
+    {
       id: "remove_bg_pro",
       name: {vi: "Tách Nền Ảnh", en: "Remove Background"},
       description: {

@@ -102,10 +102,18 @@ CREATE POLICY "Admins can update any profile" ON public.users FOR UPDATE USING (
 );
 `;
 
-const CONSTRAINT_FIX_SQL = `-- Fix Transaction Status Constraint Error
--- This error happens when the DB constraint doesn't allow 'paid' or 'failed' status
+const CONSTRAINT_FIX_SQL = `-- Fix Transaction Status Constraint Error (Safe Mode)
+
+-- 1. Drop existing constraint
 ALTER TABLE public.transactions DROP CONSTRAINT IF EXISTS transactions_status_check;
 
+-- 2. IMPORTANT: Fix any existing bad data that might block the new constraint
+-- This ensures all rows match the allowed values before we lock it down.
+UPDATE public.transactions 
+SET status = 'pending' 
+WHERE status IS NULL OR status NOT IN ('pending', 'paid', 'failed', 'cancelled', 'success');
+
+-- 3. Add the new flexible constraint
 ALTER TABLE public.transactions 
 ADD CONSTRAINT transactions_status_check 
 CHECK (status IN ('pending', 'paid', 'failed', 'cancelled', 'success'));`;

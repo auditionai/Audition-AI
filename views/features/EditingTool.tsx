@@ -1,369 +1,358 @@
 
-import React, { useState, useRef, useEffect } from 'react';
-import { Feature, Language, GeneratedImage } from '../../types';
-import { Icons } from '../../components/Icons';
-import { editImageWithInstructions } from '../../services/geminiService';
-import { saveImageToStorage } from '../../services/storageService';
-import { getUserProfile, updateUserBalance } from '../../services/economyService';
-import { useNotification } from '../../components/NotificationSystem';
+import { GoogleGenAI } from "@google/genai";
+import { getSystemApiKey } from "./economyService";
+import { createTextureSheet, optimizePayload, createSolidFence } from "../utils/imageProcessor";
 
-interface EditingToolProps {
-  feature: Feature;
-  lang: Language;
+export interface CharacterData {
+  id: number;
+  gender: 'male' | 'female';
+  image: string | null;
+  faceImage?: string | null;
+  shoesImage?: string | null;
+  description?: string;
 }
 
-// Suggestions for Photo Editor
-const SUGGESTIONS = [
-    { label: { vi: 'Thay đổi background sang biển', en: 'Change background to beach' }, icon: Icons.Image },
-    { label: { vi: 'Mặc vest đen sang trọng', en: 'Wear luxury black suit' }, icon: Icons.User },
-    { label: { vi: 'Thêm hiệu ứng tuyết rơi', en: 'Add snowing effect' }, icon: Icons.Cloud },
-    { label: { vi: 'Biến thành tranh sơn dầu', en: 'Turn into oil painting' }, icon: Icons.Palette },
-    { label: { vi: 'Đổi màu tóc sang đỏ', en: 'Change hair color to red' }, icon: Icons.Scissors },
-    { label: { vi: 'Thêm kính râm cool ngầu', en: 'Add cool sunglasses' }, icon: Icons.Monitor },
-    { label: { vi: 'Chuyển sang phong cách Cyberpunk', en: 'Make it Cyberpunk style' }, icon: Icons.Zap },
-    { label: { vi: 'Xóa người thừa phía sau', en: 'Remove background people' }, icon: Icons.Trash },
-];
-
-export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
-  const { notify } = useNotification();
-  const [prompt, setPrompt] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [uploadedImage, setUploadedImage] = useState<string | null>(null);
-  const [resultImage, setResultImage] = useState<string | null>(null);
-  const [isComparing, setIsComparing] = useState(false);
-  
-  // Specific States
-  const isUpscaler = feature.id === 'sharpen_upscale';
-  const isRemover = feature.id === 'remove_bg_pro';
-  const isMagicEditor = feature.id === 'magic_editor_pro';
-  
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Reset state when feature changes
-  useEffect(() => {
-      setResultImage(null);
-      setUploadedImage(null);
-      setPrompt('');
-  }, [feature.id]);
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-          setUploadedImage(reader.result as string);
-          setResultImage(null); // Clear previous result
-      };
-      reader.readAsDataURL(file);
+const cleanBase64 = (data: string) => {
+    if (!data) return '';
+    const index = data.indexOf(';base64,');
+    if (index !== -1) {
+        return data.substring(index + 8);
     }
-    // Reset value to allow re-uploading same file
-    e.target.value = '';
-  };
-
-  const constructPrompt = () => {
-      // 1. Photo Editor Logic (Professional Instructions)
-      if (isMagicEditor) {
-          if (!prompt.trim()) return "";
-          return `Act as a professional photo editor. Perform the following edit on the image: "${prompt}". 
-          CRITICAL RULES:
-          1. KEEP ORIGINAL IMAGE QUALITY AND SIZE. DO NOT DOWNSCALE.
-          2. Maintain the original identity, face, and high resolution of the subject unless explicitly asked to change.
-          3. Ensure realistic lighting, shadows, and perspective blending.
-          4. If changing background, ensure the subject is perfectly integrated.
-          5. Output highly detailed, photorealistic result with high fidelity.`;
-      }
-
-      // 2. Upscaler Logic (High Fidelity 4K)
-      if (isUpscaler) {
-          return `Upscale this image to 4K resolution. CRITICAL: Do NOT alter facial features, eyes, or clothing details. Maintain exact fidelity to the original. Apply intelligent sharpening, de-blurring, and texture restoration only. Do NOT reimagine or hallucinate new elements. Goal: Pure Image Restoration.`;
-      }
-
-      // 3. Background Remover Logic (Force Black & High Quality)
-      if (isRemover) {
-          return "Remove the background completely and place the subject on a pure BLACK background (#000000). CRITICAL: Maintain the original image resolution (4K) and subject details exactly. Do NOT downscale, do NOT blur edges, do NOT alter the subject's lighting.";
-      }
-
-      return feature.defaultPrompt || "";
-  };
-
-  const handleExecute = async () => {
-     if (!uploadedImage) {
-         notify(lang === 'vi' ? 'Vui lòng tải ảnh lên' : 'Please upload an image', 'warning');
-         return;
-     }
-
-     if (isMagicEditor && !prompt.trim()) {
-         notify(lang === 'vi' ? 'Vui lòng nhập yêu cầu chỉnh sửa' : 'Please enter edit prompt', 'warning');
-         return;
-     }
-
-     // Cost Calculation: Photo Editor is more expensive (Premium)
-     const cost = isMagicEditor ? 3 : (isUpscaler ? 2 : 1); 
-     const user = await getUserProfile();
-     
-     if ((user.balance || 0) < cost) {
-         notify(lang === 'vi' ? `Số dư không đủ (Cần ${cost} Vcoin)` : `Insufficient balance (Need ${cost} Vcoin)`, 'error');
-         return;
-     }
-
-     setLoading(true);
-     setResultImage(null);
-
-     try {
-         // Deduct cost and log usage
-         await updateUserBalance(-cost, `Edit: ${feature.name['en']}`, 'usage');
-
-         const instruction = constructPrompt();
-         
-         const base64Data = uploadedImage.split(',')[1];
-         const mimeType = uploadedImage.substring(uploadedImage.indexOf(':') + 1, uploadedImage.indexOf(';'));
-
-         const result = await editImageWithInstructions(base64Data, instruction, mimeType);
-
-         if (result) {
-            setResultImage(result);
-            const newImage: GeneratedImage = {
-                id: crypto.randomUUID(),
-                url: result,
-                prompt: instruction,
-                timestamp: Date.now(),
-                toolId: feature.id,
-                toolName: feature.name['en'],
-                engine: feature.engine
-            };
-            await saveImageToStorage(newImage);
-            notify(lang === 'vi' ? 'Xử lý thành công!' : 'Processing successful!', 'success');
-         } else {
-             throw new Error("Processing failed");
-         }
-     } catch (error) {
-         console.error(error);
-         // Refund on fail
-         await updateUserBalance(cost, `Refund: ${feature.name['en']} Failed`, 'refund');
-         notify(lang === 'vi' ? 'Xử lý thất bại' : 'Processing failed', 'error');
-     } finally {
-         setLoading(false);
-     }
-  };
-
-  const getBorderColor = () => {
-      if (isMagicEditor) return 'border-audi-purple';
-      if (isUpscaler) return 'border-audi-cyan';
-      if (isRemover) return 'border-audi-pink';
-      return 'border-purple-500';
-  };
-
-  const getGradient = () => {
-      if (isMagicEditor) return 'from-audi-purple to-pink-500';
-      if (isUpscaler) return 'from-audi-cyan to-blue-500';
-      if (isRemover) return 'from-audi-pink to-purple-600';
-      return 'from-purple-500 to-pink-600';
-  };
-
-  return (
-    <div className="flex flex-col md:flex-row gap-6 h-full pb-20 md:pb-0">
-      <div className="w-full md:w-1/3 flex flex-col gap-6">
-          <div className={`glass-panel p-6 rounded-3xl border-l-4 ${getBorderColor()}`}>
-             <h2 className={`text-xl font-bold mb-1 text-slate-800 dark:text-white flex items-center gap-2`}>
-                 {isMagicEditor ? <Icons.Wand className="w-5 h-5 text-audi-purple" /> : isUpscaler ? <Icons.Zap className="w-5 h-5 text-audi-cyan" /> : isRemover ? <Icons.Scissors className="w-5 h-5 text-audi-pink" /> : <Icons.Wand className="w-5 h-5 text-purple-500" />}
-                 {feature.name[lang]}
-             </h2>
-             <p className="text-sm text-slate-500 dark:text-slate-400">{feature.description[lang]}</p>
-         </div>
-
-         {/* Upload Area */}
-         <div 
-            onClick={() => fileInputRef.current?.click()}
-            className={`border-2 border-dashed rounded-2xl h-48 flex flex-col items-center justify-center cursor-pointer transition-all overflow-hidden relative group
-                ${uploadedImage 
-                    ? getBorderColor()
-                    : 'border-slate-300 dark:border-slate-700 hover:border-white hover:bg-white/5'}`}
-         >
-             {uploadedImage ? (
-                 <>
-                    <img src={uploadedImage} alt="Source" className="w-full h-full object-contain p-2 opacity-80 group-hover:opacity-100 transition-opacity" />
-                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                        <span className="text-xs font-bold text-white uppercase"><Icons.Upload className="w-6 h-6 mb-1 mx-auto"/>Đổi Ảnh</span>
-                    </div>
-                 </>
-             ) : (
-                 <div className="text-center p-4">
-                     <div className={`w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-2 ${isMagicEditor ? 'bg-audi-purple/20 text-audi-purple' : isUpscaler ? 'bg-audi-cyan/20 text-audi-cyan' : 'bg-audi-pink/20 text-audi-pink'}`}>
-                         <Icons.Upload className="w-6 h-6" />
-                     </div>
-                     <span className="text-sm font-bold text-slate-600 dark:text-slate-300">{lang === 'vi' ? 'Tải ảnh gốc lên' : 'Upload Source Image'}</span>
-                 </div>
-             )}
-             <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept="image/*" />
-         </div>
-
-         {/* --- CONTROLS SECTION --- */}
-         <div className="space-y-4">
-             
-             {/* 1. PHOTO EDITOR (FORMERLY MAGIC) */}
-             {isMagicEditor && (
-                 <div className="animate-fade-in space-y-4">
-                     <div className="relative">
-                         <div className="absolute top-0 right-0 -mt-2 -mr-2 w-3 h-3 bg-red-500 rounded-full animate-ping"></div>
-                         <div className="bg-[#1a1a24] p-4 rounded-2xl border border-audi-purple/30 shadow-[0_0_15px_rgba(183,33,255,0.1)]">
-                             <label className="text-xs font-bold text-audi-purple uppercase mb-2 flex items-center gap-2">
-                                 <Icons.Sparkles className="w-3 h-3" />
-                                 {lang === 'vi' ? 'Nhập yêu cầu chỉnh sửa' : 'Enter Edit Request'}
-                             </label>
-                             <textarea 
-                                value={prompt}
-                                onChange={(e) => setPrompt(e.target.value)}
-                                className="w-full bg-black/30 border border-white/10 rounded-xl p-3 text-white text-sm focus:border-audi-purple outline-none min-h-[80px] resize-none placeholder:text-slate-600"
-                                placeholder={lang === 'vi' ? "Ví dụ: Thêm nơ hồng vào tóc, đổi background sang rừng rậm..." : "Ex: Add pink bow to hair, change background to jungle..."}
-                             />
-                         </div>
-                     </div>
-
-                     {/* Suggestion Chips */}
-                     <div className="space-y-2">
-                         <span className="text-[10px] font-bold text-slate-500 uppercase">Gợi ý nhanh</span>
-                         <div className="flex flex-wrap gap-2 max-h-[100px] overflow-y-auto custom-scrollbar">
-                             {SUGGESTIONS.map((s, idx) => (
-                                 <button
-                                    key={idx}
-                                    onClick={() => setPrompt(s.label[lang === 'vi' ? 'vi' : 'en'])}
-                                    className="flex items-center gap-1 bg-white/5 hover:bg-white/10 border border-white/5 rounded-lg px-2 py-1.5 text-[10px] text-slate-300 transition-colors"
-                                 >
-                                     <s.icon className="w-3 h-3 text-audi-purple" />
-                                     {s.label[lang === 'vi' ? 'vi' : 'en']}
-                                 </button>
-                             ))}
-                         </div>
-                     </div>
-                 </div>
-             )}
-
-             {/* 2. UPSCALER CONTROLS */}
-             {isUpscaler && (
-                 <div className="animate-fade-in space-y-4 bg-white/5 p-4 rounded-2xl border border-white/10">
-                     <div className="flex items-center gap-3">
-                         <div className="p-2 bg-audi-cyan/20 rounded-lg text-audi-cyan">
-                             <Icons.Zap className="w-5 h-5" />
-                         </div>
-                         <div>
-                             <h4 className="text-sm font-bold text-white">Làm Nét 4K (High Fidelity)</h4>
-                             <p className="text-xs text-slate-400 mt-1">
-                                 Tự động khôi phục chi tiết, làm nét ảnh.
-                                 <br/>
-                                 <span className="text-audi-cyan">Cam kết không biến dạng mặt & trang phục.</span>
-                             </p>
-                         </div>
-                     </div>
-                 </div>
-             )}
-
-             {/* 3. REMOVER CONTROLS */}
-             {isRemover && (
-                 <div className="animate-fade-in space-y-4 bg-white/5 p-4 rounded-2xl border border-white/10">
-                     <div className="flex items-center gap-3">
-                         <div className="p-2 bg-audi-pink/20 rounded-lg text-audi-pink">
-                             <Icons.Scissors className="w-5 h-5" />
-                         </div>
-                         <div>
-                             <h4 className="text-sm font-bold text-white">Chế độ Tách Nền (HQ)</h4>
-                             <p className="text-xs text-slate-400 mt-1">
-                                 Tự động tách nền và chuyển sang nền đen (Black).
-                                 <br/>
-                                 <span className="text-audi-cyan">Giữ nguyên độ phân giải gốc (4K Supported).</span>
-                             </p>
-                         </div>
-                     </div>
-                 </div>
-             )}
-
-             {/* 4. GENERIC PROMPT (Legacy Fallback) */}
-             {!isUpscaler && !isRemover && !isMagicEditor && (
-                 <div className="space-y-2">
-                     <label className="text-sm font-bold text-slate-700 dark:text-slate-300">{lang === 'vi' ? 'Yêu cầu thêm' : 'Extra Instructions'}</label>
-                     <input 
-                        type="text" 
-                        value={prompt}
-                        onChange={(e) => setPrompt(e.target.value)}
-                        className="w-full p-3 rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-sm focus:ring-2 focus:ring-purple-500 outline-none dark:text-white"
-                        placeholder={lang === 'vi' ? 'Ví dụ: Làm sáng hơn...' : 'Ex: Make it brighter...'}
-                     />
-                 </div>
-             )}
-         </div>
-
-         {/* COST & ACTION */}
-         <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/10">
-             <span className="text-xs text-slate-400 font-bold uppercase">{lang === 'vi' ? 'Chi phí' : 'Cost'}</span>
-             <span className="text-sm font-bold text-audi-yellow">{isMagicEditor ? 3 : (isUpscaler ? 2 : 1)} Vcoin</span>
-         </div>
-
-         <button 
-            onClick={handleExecute}
-            disabled={loading || !uploadedImage}
-            className={`w-full py-4 bg-gradient-to-r ${getGradient()} text-white rounded-xl font-bold shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed hover:scale-[1.02] shadow-[0_5px_20px_rgba(0,0,0,0.3)]`}
-         >
-             {loading ? <Icons.Loader className="animate-spin" /> : <Icons.Wand />}
-             {loading ? (lang === 'vi' ? 'Đang xử lý...' : 'Processing...') : (lang === 'vi' ? 'THỰC HIỆN NGAY' : 'EXECUTE')}
-         </button>
-      </div>
-
-      {/* RESULT AREA */}
-      <div className="flex-1 glass-panel rounded-3xl p-6 flex flex-col items-center justify-center bg-slate-100/50 dark:bg-black/20 min-h-[400px] relative overflow-hidden">
-          {loading ? (
-               <div className="text-center animate-pulse z-10">
-                   <div className="relative w-24 h-24 mx-auto mb-6">
-                       <div className={`absolute inset-0 rounded-full border-4 border-t-transparent animate-spin ${isUpscaler ? 'border-audi-cyan' : isMagicEditor ? 'border-audi-purple' : 'border-audi-pink'}`}></div>
-                       <Icons.Sparkles className={`w-10 h-10 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 ${isUpscaler ? 'text-audi-cyan' : isMagicEditor ? 'text-audi-purple' : 'text-audi-pink'}`} />
-                   </div>
-                   <p className="text-white font-bold text-lg font-game tracking-widest">{lang === 'vi' ? 'AI ĐANG SUY NGHĨ...' : 'AI THINKING...'}</p>
-                   <p className="text-slate-500 text-sm mt-2">{isMagicEditor ? (lang === 'vi' ? 'Đang thực hiện chỉnh sửa...' : 'Editing...') : (lang === 'vi' ? 'Đang xử lý...' : 'Processing...')}</p>
-               </div>
-          ) : resultImage ? (
-              <div className="w-full h-full flex flex-col items-center justify-center gap-4 z-10">
-                   <div className="relative w-full h-full max-h-[60vh] flex items-center justify-center group select-none">
-                       {/* Result Image */}
-                       <img 
-                            src={isComparing ? uploadedImage! : resultImage} 
-                            alt="Result" 
-                            className="max-w-full max-h-full object-contain rounded-lg shadow-2xl border border-white/10"
-                            onMouseDown={() => setIsComparing(true)}
-                            onMouseUp={() => setIsComparing(false)}
-                            onTouchStart={() => setIsComparing(true)}
-                            onTouchEnd={() => setIsComparing(false)}
-                        />
-                       
-                       {/* Compare Badge */}
-                       <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur-md text-white text-[10px] font-bold px-3 py-1 rounded-full border border-white/20 pointer-events-none">
-                           {isComparing ? 'ORIGINAL' : 'RESULT (Hold to Compare)'}
-                       </div>
-                   </div>
-
-                   <div className="flex gap-3">
-                       <a 
-                        href={resultImage} 
-                        download={`dmp-edit-${feature.id}-${Date.now()}.png`}
-                        className="px-6 py-3 bg-white text-black hover:bg-audi-cyan transition-colors rounded-xl font-bold flex items-center gap-2 shadow-lg"
-                      >
-                          <Icons.Download className="w-4 h-4" />
-                          {lang === 'vi' ? 'Tải Về' : 'Download'}
-                      </a>
-                      <button onClick={() => setIsComparing(!isComparing)} className="px-6 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold border border-white/10">
-                          {isComparing ? 'Xem Kết Quả' : 'Xem Ảnh Gốc'}
-                      </button>
-                   </div>
-              </div>
-          ) : (
-              <div className="text-center text-slate-500 z-10">
-                  <div className="w-24 h-24 bg-white/5 rounded-[2rem] flex items-center justify-center mx-auto mb-4 border border-white/5 shadow-inner">
-                      <Icons.Image className="w-10 h-10 opacity-30" />
-                  </div>
-                  <p className="text-sm font-bold uppercase tracking-widest opacity-50">{lang === 'vi' ? 'KẾT QUẢ SẼ HIỆN Ở ĐÂY' : 'RESULT WILL APPEAR HERE'}</p>
-              </div>
-          )}
-          
-          {/* Decorative Grid Background */}
-          <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:40px_40px] pointer-events-none"></div>
-      </div>
-    </div>
-  );
+    return data;
 };
+
+// Cấu hình timeout cao hơn cho Client (mặc định fetch là ngắn)
+const getAiClient = async (specificKey?: string) => {
+    const key = specificKey || await getSystemApiKey();
+    if (!key) throw new Error("API Key missing or invalid");
+    return new GoogleGenAI({ 
+        apiKey: key,
+    });
+};
+
+// --- ERROR HANDLER & EXTRACTOR (FIXED CRASH) ---
+const extractImage = (response: any): string | null => {
+    // 1. Kiểm tra cấu trúc cơ bản
+    if (!response) {
+        console.error("Empty response from Gemini");
+        return null;
+    }
+
+    // 2. Kiểm tra Safety Block (Lỗi phổ biến nhất)
+    if (response.promptFeedback?.blockReason) {
+        console.warn("Blocked by Safety:", response.promptFeedback);
+        throw new Error(`Safety Block: ${response.promptFeedback.blockReason}`);
+    }
+
+    // 3. Kiểm tra Candidates
+    if (!response.candidates || response.candidates.length === 0) {
+        console.warn("No candidates returned.");
+        return null;
+    }
+
+    const candidate = response.candidates[0];
+
+    // 4. Kiểm tra Finish Reason của Candidate
+    if (candidate.finishReason !== "STOP" && candidate.finishReason !== "MAX_TOKENS") {
+        // Nếu bị chặn ở mức candidate
+        if (candidate.finishReason === "SAFETY") {
+             throw new Error("Safety Block (Content violation)");
+        }
+        console.warn("Abnormal finish reason:", candidate.finishReason);
+    }
+
+    // 5. Trích xuất ảnh an toàn
+    if (candidate.content && candidate.content.parts) {
+        for (const part of candidate.content.parts) {
+            if (part.inlineData) {
+                return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+            }
+        }
+    }
+
+    return null;
+};
+
+const uploadToGemini = async (base64Data: string, mimeType: string): Promise<string> => {
+    try {
+        const ai = await getAiClient();
+        const byteCharacters = atob(cleanBase64(base64Data));
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: mimeType });
+
+        const uploadResult = await ai.files.upload({
+            file: blob,
+            config: { 
+                displayName: `ref_img_${Date.now()}` 
+            }
+        });
+
+        const fileUri = (uploadResult as any).file?.uri || (uploadResult as any).uri;
+        if (!fileUri) throw new Error("No URI returned");
+        
+        return fileUri;
+    } catch (e) {
+        console.warn("Cloud upload failed, falling back to inline", e);
+        throw e;
+    }
+};
+
+export const checkConnection = async (key?: string): Promise<boolean> => {
+    try {
+        const ai = await getAiClient(key);
+        // UPDATED: Use gemini-3-flash-preview for a reliable ping (Flash 2.5 deprecated)
+        await ai.models.generateContent({
+             model: 'gemini-3-flash-preview',
+             contents: 'ping'
+        });
+        return true;
+    } catch (e) {
+        console.error("Gemini Connection Check Failed", e);
+        return false;
+    }
+};
+
+// --- PROMPT REASONING ENGINE V3: THE "SANITIZER & ARCHITECT" ---
+const optimizePromptWithThinking = async (rawPrompt: string): Promise<string> => {
+    try {
+        const ai = await getAiClient();
+        // UPDATED: Use gemini-3-flash-preview
+        const response = await ai.models.generateContent({
+            model: 'gemini-3-flash-preview',
+            contents: `You are a Technical Prompt Engineer for a 3D Game Asset Generator.
+            
+            USER INPUT: "${rawPrompt}"
+            
+            TASK:
+            1.  **Translate & Enhance**: Convert the user's description into professional English 3D art keywords.
+            2.  **STYLE ENFORCEMENT**: The user wants a "Korean MMO Game Character" (Audition/Blade & Soul style).
+            3.  **PROPORTIONS**: MUST BE TALL, SLENDER, ADULT PROPORTIONS. NO CHIBI.
+            4.  **Structure**: [Subject] + [Action/Pose] + [Outfit] + [Environment] + [Lighting] + [Style Tags].
+            
+            MANDATORY STYLE TAGS TO ADD:
+            "3D Game Character, Korean MMO Style, Tall Slender Body, Long Legs, Small Head, Fashion Model Ratio, 8-head tall, Smooth Texture, Non-Photorealistic Rendering, Octane Render".
+            
+            OUTPUT:
+            Return ONLY the final prompt string. No conversational text.`,
+        });
+        
+        // Safety check on the reasoning output itself
+        const result = response.text?.trim();
+        if (!result) throw new Error("Empty reasoning response");
+        return result;
+
+    } catch (e) {
+        console.warn("Prompt Optimization Failed, using raw prompt", e);
+        return rawPrompt;
+    }
+}
+
+// --- INTELLIGENCE CORE ---
+const processDigitalTwinMode = (
+    prompt: string, 
+    refImagePart: any | null, 
+    charParts: any[], 
+    charDescriptions: string[],
+    modelTier: 'flash' | 'pro'
+): { systemPrompt: string, parts: any[] } => {
+    
+    const parts = [];
+    
+    if (refImagePart) {
+        parts.push({ text: "REFERENCE IMAGE [POSE & COMPOSITION]: Follow this image's camera angle and character pose exactly." });
+        parts.push(refImagePart);
+    }
+    
+    if (charParts.length > 0) {
+        parts.push({ text: `REFERENCE FACE [IDENTITY]: Use these facial features for the 3D character.` });
+        parts.push(...charParts);
+    }
+
+    // UPDATED SYSTEM PROMPT TO PREVENT REALISM AND CHIBI
+    const systemPrompt = `** SYSTEM DIRECTIVE: KOREAN MMO GAME CHARACTER GENERATION **
+    
+    1.  **STRICT BODY PROPORTIONS (CRITICAL)**:
+        - The character MUST have **TALL, SLENDER, ADULT** proportions (like K-Pop Idols or Fashion Models).
+        - **Body Ratio**: 1:8 (Head to Body). LEGS MUST BE LONG.
+        - **ABSOLUTELY NO**: Chibi, Nendoroid, Big Head, Short Legs, Child-like body, Baby face.
+        - Treat this as a "High-End Fashion Game" asset.
+
+    2.  **RENDERING STYLE (NON-REALISTIC)**:
+        - Output MUST look like a PC Game Render (Audition Online, Sims 4 CC).
+        - Skin: Smooth, flawless, "porcelain" texture. NO realistic pores/wrinkles.
+        - Eyes: Stylized Anime/Game eyes (expressive but not creepy).
+        - Hair: 3D Mesh style, thick strands, perfectly styled.
+
+    3.  **SCENE ACCURACY**:
+        - Render exactly what is described in the prompt.
+        - If reference images are provided, MATCH THE BODY SCALE of the reference images.
+
+    4.  **SAFETY & COMPLIANCE**:
+        - If the prompt implies nudity, clothe the character in generic game underwear/bodysuit.
+
+    [EXECUTE PROMPT]: ${prompt}
+    `;
+
+    return { systemPrompt, parts };
+};
+
+// --- MAIN GENERATION FUNCTION WITH SMART RETRY ---
+export const generateImage = async (
+    prompt: string, 
+    aspectRatio: string = "1:1", 
+    styleRefBase64?: string, 
+    characterDataList: CharacterData[] = [], 
+    resolution: string = '2K',
+    _modelTier: 'flash' | 'pro' = 'pro', 
+    useSearch: boolean = true, 
+    useCloudRef: boolean = true, 
+    onProgress?: (msg: string) => void
+): Promise<string | null> => {
+  
+  const ai = await getAiClient();
+  const model = 'gemini-3-pro-image-preview'; // Only this model supports high quality generation
+
+  // --- INTERNAL HELPER: EXECUTE RUN ---
+  const executeRun = async (currentPrompt: string, isRetry: boolean = false): Promise<string | null> => {
+        
+        // Prepare Inputs
+        let refImagePart = null;
+        if (styleRefBase64) {
+            refImagePart = {
+                inlineData: { data: cleanBase64(styleRefBase64), mimeType: 'image/jpeg' }
+            };
+        }
+
+        const allParts: any[] = [];
+        const charDescriptions: string[] = [];
+
+        for (const char of characterDataList) {
+            if (char.image) {
+                // Chỉ log scan lần đầu
+                if (!isRetry && onProgress) onProgress(`Scanning Identity Features (Player ${char.id})...`);
+                
+                const textureSheet = await createTextureSheet(char.image, char.faceImage, char.shoesImage);
+                let finalPart;
+
+                // Cloud upload for better quality, fallback to inline
+                if (useCloudRef) {
+                    try {
+                        const fileUri = await uploadToGemini(textureSheet, 'image/jpeg');
+                        finalPart = { fileData: { mimeType: 'image/jpeg', fileUri: fileUri } };
+                    } catch (e) {
+                        finalPart = { inlineData: { data: cleanBase64(textureSheet), mimeType: 'image/jpeg' } };
+                    }
+                } else {
+                    finalPart = { inlineData: { data: cleanBase64(textureSheet), mimeType: 'image/jpeg' } };
+                }
+                allParts.push(finalPart);
+                charDescriptions.push(char.gender);
+            }
+        }
+
+        const payload = processDigitalTwinMode(currentPrompt, refImagePart, allParts, charDescriptions, 'pro');
+        const finalParts = [...payload.parts, { text: payload.systemPrompt }];
+
+        const config: any = {
+            imageConfig: { aspectRatio: aspectRatio, imageSize: resolution },
+            // Safety Settings: BLOCK_ONLY_HIGH to allow artistic freedom but prevent illegal content
+            safetySettings: [
+                { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_ONLY_HIGH" },
+                { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" },
+                { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_ONLY_HIGH" }, // Relaxed to allow "sexy" but not "porn"
+                { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_ONLY_HIGH" }
+            ]
+        };
+
+        if (useSearch && !refImagePart && currentPrompt.length < 50) {
+            config.tools = [{ googleSearch: {} }];
+        }
+
+        if (onProgress) onProgress(isRetry ? "Retrying with Safety Filters..." : "Rendering Final Image (This may take 2-3 mins)...");
+
+        // Gọi API
+        const response = await ai.models.generateContent({
+            model: model,
+            contents: { parts: finalParts },
+            config: config
+        });
+
+        return extractImage(response);
+  };
+
+  // --- MAIN FLOW ---
+  try {
+    // 1. OPTIMIZATION PHASE
+    if (onProgress) onProgress("Analyzing Prompt & Safety Check...");
+    const optimizedPrompt = await optimizePromptWithThinking(prompt);
+    let finalPromptToUse = optimizedPrompt;
+
+    // Safety Net: Ensure 3D context is STYLIZED & TALL
+    if (!finalPromptToUse.toLowerCase().includes("tall")) {
+        finalPromptToUse = "Tall Slender 3D Game Character, Adult Proportions, " + finalPromptToUse + " --no chibi --no photorealistic";
+    }
+
+    // 2. EXECUTION PHASE (ATTEMPT 1)
+    if (onProgress) onProgress(`Engine: ${model} | Scene Construction...`);
+    try {
+        return await executeRun(finalPromptToUse);
+    } catch (firstError: any) {
+        // 3. RETRY PHASE (ATTEMPT 2 - FALLBACK)
+        console.warn("Attempt 1 Failed:", firstError.message);
+        
+        // Nếu lỗi là do Safety hoặc Model không hiểu Prompt tối ưu, thử lại với Prompt gốc
+        // Prompt gốc thường ngắn hơn và ít gây hiểu lầm cho bộ lọc Safety
+        if (onProgress) onProgress("⚠️ Attempt 1 failed. Re-calibrating for Safety & Stability...");
+        
+        // Thêm delay nhẹ để tránh rate limit
+        await new Promise(r => setTimeout(r, 2000));
+
+        const safeFallbackPrompt = `Tall 3D Game Character, Fashion Model Body, ${prompt} --safe --no nudity --no chibi`;
+        return await executeRun(safeFallbackPrompt, true);
+    }
+
+  } catch (error) {
+    console.error("Gemini Pipeline Final Error:", error);
+    throw error; // Ném lỗi ra để UI hoàn tiền
+  }
+};
+
+export const editImageWithInstructions = async (base64Data: string, instruction: string, mimeType: string): Promise<string | null> => {
+    try {
+        const ai = await getAiClient();
+        // UPDATED: Use Gemini 3.0 Pro for better editing quality (Flash 2.5 deprecated for high quality)
+        const response = await ai.models.generateContent({
+            model: 'gemini-3-pro-image-preview', 
+            contents: {
+                parts: [
+                    { inlineData: { data: cleanBase64(base64Data), mimeType: mimeType } },
+                    { text: instruction }
+                ]
+            }
+        });
+        return extractImage(response);
+    } catch (e) {
+        console.error(e);
+        return null;
+    }
+};
+
+export const suggestPrompt = async (currentInput: string, lang: string, featureName: string): Promise<string> => {
+    try {
+        const ai = await getAiClient();
+        // UPDATED: Use gemini-3-flash-preview
+        const response = await ai.models.generateContent({
+            model: 'gemini-3-flash-preview', 
+            contents: currentInput || `Create a 3D character concept for ${featureName}`,
+            config: {
+                systemInstruction: `You are an AI Prompt Expert for 3D Game Assets. Output ONLY the refined 3D-centric prompt. Keep it stylized/anime but with TALL/ADULT proportions.`,
+                temperature: 0.7,
+            }
+        });
+        return response.text?.trim() || currentInput;
+    } catch (error) { return currentInput; }
+}

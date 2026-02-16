@@ -95,7 +95,7 @@ export const APP_CONFIG: AppConfig = {
         vi: "Thay đổi trang phục, bối cảnh, tư thế hoặc thêm chi tiết vào ảnh theo yêu cầu.",
         en: "Change outfits, background, pose or add details using text prompts."
       },
-      engine: "Gemini 2.5 Flash Image",
+      engine: "Gemini 3.0 Pro Image",
       preview_image: "https://picsum.photos/400/307?grayscale",
       toolType: 'editing',
       defaultPrompt: "", // Dynamic prompt

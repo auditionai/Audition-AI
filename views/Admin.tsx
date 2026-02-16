@@ -74,7 +74,7 @@ BEGIN
     new.email,
     COALESCE(new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'name', split_part(new.email, '@', 1)),
     COALESCE(new.raw_user_meta_data->>'avatar_url', ''),
-    25, -- 25 Vcoin Bonus
+    0, -- 0 Vcoin Default
     false,
     now(),
     now()
@@ -101,6 +101,14 @@ CREATE POLICY "Admins can update any profile" ON public.users FOR UPDATE USING (
   (SELECT is_admin FROM public.users WHERE id = auth.uid()) = true
 );
 `;
+
+const CONSTRAINT_FIX_SQL = `-- Fix Transaction Status Constraint Error
+-- This error happens when the DB constraint doesn't allow 'paid' or 'failed' status
+ALTER TABLE public.transactions DROP CONSTRAINT IF EXISTS transactions_status_check;
+
+ALTER TABLE public.transactions 
+ADD CONSTRAINT transactions_status_check 
+CHECK (status IN ('pending', 'paid', 'failed', 'cancelled', 'success'));`;
 
 export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [activeView, setActiveView] = useState<'overview' | 'transactions' | 'users' | 'packages' | 'promotion' | 'giftcodes' | 'system'>('overview');
@@ -507,7 +515,17 @@ CREATE POLICY "Enable access" ON public.promotions FOR ALL USING (true) WITH CHE
               showToast('Đã duyệt thành công!');
               await refreshData();
           } else {
-              if (result.error?.includes('RLS') || result.error?.includes('permission') || result.error?.includes('policy')) {
+              // --- AUTO DETECT SQL ERRORS ---
+              if (result.error?.includes('transactions_status_check')) {
+                  setConfirmDialog({
+                      show: true,
+                      title: '⚠️ Lỗi Constraint (Trạng thái)',
+                      msg: 'Bảng transactions có ràng buộc giá trị (Check Constraint) không cho phép trạng thái "paid". Hãy chạy lệnh SQL sau để sửa:',
+                      sqlHelp: CONSTRAINT_FIX_SQL,
+                      isAlertOnly: true,
+                      onConfirm: () => {}
+                  });
+              } else if (result.error?.includes('RLS') || result.error?.includes('permission') || result.error?.includes('policy')) {
                   setConfirmDialog({
                       show: true,
                       title: '⚠️ Cần Cấp Quyền Duyệt Giao Dịch',
@@ -613,6 +631,17 @@ using (true);`,
           title: '🔧 Sửa lỗi Trigger (Tạo User Mới)',
           msg: 'Lỗi này xảy ra khi User mới đăng ký nhưng không được tạo Profile tự động trong bảng public.users.',
           sqlHelp: TRIGGER_FIX_SQL,
+          isAlertOnly: true,
+          onConfirm: () => {}
+      });
+  }
+
+  const handleFixTransactionConstraint = () => {
+      setConfirmDialog({
+          show: true,
+          title: '🔧 Sửa lỗi Duyệt Đơn (Constraint)',
+          msg: 'Lỗi "violates check constraint" xuất hiện khi Database không cho phép update trạng thái thành "paid" hoặc "failed".',
+          sqlHelp: CONSTRAINT_FIX_SQL,
           isAlertOnly: true,
           onConfirm: () => {}
       });
@@ -1343,6 +1372,20 @@ using (true);`,
                                 className="w-full py-2 bg-red-500/20 border border-red-500 text-red-500 hover:bg-red-500 hover:text-white rounded-lg font-bold transition-all text-sm"
                               >
                                   Lấy Mã SQL Sửa Trigger
+                              </button>
+                          </div>
+
+                          {/* NEW: TRANSACTION FIXER */}
+                          <div className="p-4 bg-white/5 rounded-xl border border-white/10">
+                              <h4 className="font-bold text-white mb-2">Sửa Lỗi Duyệt Đơn (Constraint)</h4>
+                              <p className="text-xs text-slate-400 mb-4">
+                                  Dùng khi duyệt đơn báo lỗi "violates check constraint". Do Database chặn trạng thái "paid".
+                              </p>
+                              <button 
+                                onClick={handleFixTransactionConstraint}
+                                className="w-full py-2 bg-yellow-500/20 border border-yellow-500 text-yellow-500 hover:bg-yellow-500 hover:text-white rounded-lg font-bold transition-all text-sm"
+                              >
+                                  Lấy Mã SQL Sửa Lỗi
                               </button>
                           </div>
                       </div>

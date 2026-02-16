@@ -12,8 +12,7 @@ interface EditingToolProps {
   lang: Language;
 }
 
-type UpscaleLevel = '2K' | '4K';
-type UpscaleMode = 'general' | 'portrait';
+// Removed unnecessary types for Upscale options as we enforce single mode
 
 export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
   const { notify } = useNotification();
@@ -27,9 +26,6 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
   const isUpscaler = feature.id === 'sharpen_upscale';
   const isRemover = feature.id === 'remove_bg_pro';
   
-  const [upscaleLevel, setUpscaleLevel] = useState<UpscaleLevel>('2K');
-  const [upscaleMode, setUpscaleMode] = useState<UpscaleMode>('general');
-
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Reset state when feature changes
@@ -61,15 +57,9 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
           return instruction;
       }
 
-      // 2. Upscaler Logic
+      // 2. Upscaler Logic (UPDATED: High Fidelity 4K, No Distortion)
       if (isUpscaler) {
-          let base = `Upscale this image to ${upscaleLevel} resolution. Sharpen details, denoise, improve clarity.`;
-          if (upscaleMode === 'portrait') {
-              base += ` FOCUS: Enhance facial details, eyes, skin texture. Keep it realistic.`;
-          } else {
-              base += ` FOCUS: General texture enhancement, clean edges.`;
-          }
-          return base;
+          return `Upscale this image to 4K resolution. CRITICAL: Do NOT alter facial features, eyes, or clothing details. Maintain exact fidelity to the original. Apply intelligent sharpening, de-blurring, and texture restoration only. Do NOT reimagine or hallucinate new elements. Goal: Pure Image Restoration.`;
       }
 
       // 3. Background Remover Logic (UPDATED: Force Black & High Quality)
@@ -174,32 +164,20 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
          {/* --- CONTROLS SECTION --- */}
          <div className="space-y-4">
              
-             {/* 1. UPSCALER CONTROLS */}
+             {/* 1. UPSCALER CONTROLS (SIMPLIFIED) */}
              {isUpscaler && (
                  <div className="animate-fade-in space-y-4 bg-white/5 p-4 rounded-2xl border border-white/10">
-                     <div>
-                         <label className="text-xs font-bold text-slate-400 uppercase mb-2 block">Chất lượng (Resolution)</label>
-                         <div className="flex gap-2">
-                             {(['2K', '4K'] as UpscaleLevel[]).map(lvl => (
-                                 <button
-                                    key={lvl}
-                                    onClick={() => setUpscaleLevel(lvl)}
-                                    className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all border ${upscaleLevel === lvl ? 'bg-audi-cyan text-black border-audi-cyan' : 'bg-transparent text-slate-400 border-slate-600 hover:border-white'}`}
-                                 >
-                                     {lvl} (Siêu nét)
-                                 </button>
-                             ))}
+                     <div className="flex items-center gap-3">
+                         <div className="p-2 bg-audi-cyan/20 rounded-lg text-audi-cyan">
+                             <Icons.Zap className="w-5 h-5" />
                          </div>
-                     </div>
-                     <div>
-                         <label className="text-xs font-bold text-slate-400 uppercase mb-2 block">Chế độ xử lý</label>
-                         <div className="flex gap-2">
-                             <button onClick={() => setUpscaleMode('general')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all border ${upscaleMode === 'general' ? 'bg-white text-black' : 'bg-transparent text-slate-400 border-slate-600'}`}>
-                                 Cảnh vật
-                             </button>
-                             <button onClick={() => setUpscaleMode('portrait')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all border ${upscaleMode === 'portrait' ? 'bg-audi-pink text-white border-audi-pink' : 'bg-transparent text-slate-400 border-slate-600'}`}>
-                                 Chân dung (Face Fix)
-                             </button>
+                         <div>
+                             <h4 className="text-sm font-bold text-white">Làm Nét 4K (High Fidelity)</h4>
+                             <p className="text-xs text-slate-400 mt-1">
+                                 Tự động khôi phục chi tiết, làm nét ảnh.
+                                 <br/>
+                                 <span className="text-audi-cyan">Cam kết không biến dạng mặt & trang phục.</span>
+                             </p>
                          </div>
                      </div>
                  </div>
@@ -264,7 +242,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
                        <Icons.Sparkles className={`w-8 h-8 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 ${isUpscaler ? 'text-audi-cyan' : 'text-audi-pink'}`} />
                    </div>
                    <p className="text-white font-bold text-lg">{lang === 'vi' ? 'AI đang làm việc...' : 'AI is working...'}</p>
-                   <p className="text-slate-500 text-sm mt-1">{isUpscaler ? 'Đang nâng cấp độ phân giải...' : 'Đang tách nền & giữ nét 4K...'}</p>
+                   <p className="text-slate-500 text-sm mt-1">{isUpscaler ? 'Đang nâng cấp độ phân giải 4K...' : 'Đang xử lý...'}</p>
                </div>
           ) : resultImage ? (
               <div className="w-full h-full flex flex-col items-center justify-center gap-4">

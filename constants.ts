@@ -90,9 +90,9 @@ export const APP_CONFIG: AppConfig = {
     // --- EDITING TOOLS (Chỉnh sửa) ---
     {
       id: "magic_editor_pro",
-      name: {vi: "Chỉnh Sửa Phép Thuật (Magic)", en: "Magic Editor AI"},
+      name: {vi: "Chỉnh Sửa Ảnh (AI)", en: "Photo Editor AI"},
       description: {
-        vi: "Thay đổi trang phục, bối cảnh, tư thế hoặc thêm chi tiết vào ảnh bằng câu lệnh.",
+        vi: "Thay đổi trang phục, bối cảnh, tư thế hoặc thêm chi tiết vào ảnh theo yêu cầu.",
         en: "Change outfits, background, pose or add details using text prompts."
       },
       engine: "Gemini 2.5 Flash Image",

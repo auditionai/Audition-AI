@@ -12,7 +12,7 @@ interface EditingToolProps {
   lang: Language;
 }
 
-// Suggestions for Magic Editor
+// Suggestions for Photo Editor
 const SUGGESTIONS = [
     { label: { vi: 'Thay đổi background sang biển', en: 'Change background to beach' }, icon: Icons.Image },
     { label: { vi: 'Mặc vest đen sang trọng', en: 'Wear luxury black suit' }, icon: Icons.User },
@@ -61,16 +61,16 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
   };
 
   const constructPrompt = () => {
-      // 1. Magic Editor Logic (Professional Instructions)
+      // 1. Photo Editor Logic (Professional Instructions)
       if (isMagicEditor) {
           if (!prompt.trim()) return "";
           return `Act as a professional photo editor. Perform the following edit on the image: "${prompt}". 
           CRITICAL RULES:
-          1. Maintain the original identity, face, and high resolution of the subject unless explicitly asked to change.
-          2. Ensure realistic lighting, shadows, and perspective blending.
-          3. If changing background, ensure the subject is perfectly integrated.
-          4. If changing clothes, fit them naturally to the body pose.
-          5. Output highly detailed, photorealistic result.`;
+          1. KEEP ORIGINAL IMAGE QUALITY AND SIZE. DO NOT DOWNSCALE.
+          2. Maintain the original identity, face, and high resolution of the subject unless explicitly asked to change.
+          3. Ensure realistic lighting, shadows, and perspective blending.
+          4. If changing background, ensure the subject is perfectly integrated.
+          5. Output highly detailed, photorealistic result with high fidelity.`;
       }
 
       // 2. Upscaler Logic (High Fidelity 4K)
@@ -93,11 +93,11 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
      }
 
      if (isMagicEditor && !prompt.trim()) {
-         notify(lang === 'vi' ? 'Vui lòng nhập câu lệnh chỉnh sửa' : 'Please enter edit prompt', 'warning');
+         notify(lang === 'vi' ? 'Vui lòng nhập yêu cầu chỉnh sửa' : 'Please enter edit prompt', 'warning');
          return;
      }
 
-     // Cost Calculation: Magic Editor is more expensive (Premium)
+     // Cost Calculation: Photo Editor is more expensive (Premium)
      const cost = isMagicEditor ? 3 : (isUpscaler ? 2 : 1); 
      const user = await getUserProfile();
      
@@ -200,7 +200,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
          {/* --- CONTROLS SECTION --- */}
          <div className="space-y-4">
              
-             {/* 1. MAGIC EDITOR (NEW) */}
+             {/* 1. PHOTO EDITOR (FORMERLY MAGIC) */}
              {isMagicEditor && (
                  <div className="animate-fade-in space-y-4">
                      <div className="relative">
@@ -208,7 +208,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
                          <div className="bg-[#1a1a24] p-4 rounded-2xl border border-audi-purple/30 shadow-[0_0_15px_rgba(183,33,255,0.1)]">
                              <label className="text-xs font-bold text-audi-purple uppercase mb-2 flex items-center gap-2">
                                  <Icons.Sparkles className="w-3 h-3" />
-                                 {lang === 'vi' ? 'Nhập câu lệnh phép thuật' : 'Enter Magic Prompt'}
+                                 {lang === 'vi' ? 'Nhập yêu cầu chỉnh sửa' : 'Enter Edit Request'}
                              </label>
                              <textarea 
                                 value={prompt}
@@ -316,7 +316,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
                        <Icons.Sparkles className={`w-10 h-10 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 ${isUpscaler ? 'text-audi-cyan' : isMagicEditor ? 'text-audi-purple' : 'text-audi-pink'}`} />
                    </div>
                    <p className="text-white font-bold text-lg font-game tracking-widest">{lang === 'vi' ? 'AI ĐANG SUY NGHĨ...' : 'AI THINKING...'}</p>
-                   <p className="text-slate-500 text-sm mt-2">{isMagicEditor ? 'Đang thực hiện phép thuật...' : 'Đang xử lý...'}</p>
+                   <p className="text-slate-500 text-sm mt-2">{isMagicEditor ? (lang === 'vi' ? 'Đang thực hiện chỉnh sửa...' : 'Editing...') : (lang === 'vi' ? 'Đang xử lý...' : 'Processing...')}</p>
                </div>
           ) : resultImage ? (
               <div className="w-full h-full flex flex-col items-center justify-center gap-4 z-10">

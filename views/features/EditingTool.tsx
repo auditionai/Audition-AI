@@ -14,7 +14,6 @@ interface EditingToolProps {
 
 type UpscaleLevel = '2K' | '4K';
 type UpscaleMode = 'general' | 'portrait';
-type BgMode = 'white' | 'green' | 'mask';
 
 export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
   const { notify } = useNotification();
@@ -30,7 +29,6 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
   
   const [upscaleLevel, setUpscaleLevel] = useState<UpscaleLevel>('2K');
   const [upscaleMode, setUpscaleMode] = useState<UpscaleMode>('general');
-  const [bgMode, setBgMode] = useState<BgMode>('white');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -74,11 +72,9 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
           return base;
       }
 
-      // 3. Background Remover Logic
+      // 3. Background Remover Logic (UPDATED: Force Black & High Quality)
       if (isRemover) {
-          if (bgMode === 'white') return "Remove the background completely. Place the subject on a pure WHITE background. Clean edges.";
-          if (bgMode === 'green') return "Remove the background. Place the subject on a pure GREEN screen (#00FF00) background.";
-          if (bgMode === 'mask') return "Generate a black and white silhouette mask. Subject is white, background is black.";
+          return "Remove the background completely and place the subject on a pure BLACK background (#000000). CRITICAL: Maintain the original image resolution (4K) and subject details exactly. Do NOT downscale, do NOT blur edges, do NOT alter the subject's lighting.";
       }
 
       return feature.defaultPrompt || "";
@@ -209,23 +205,21 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
                  </div>
              )}
 
-             {/* 2. REMOVER CONTROLS */}
+             {/* 2. REMOVER CONTROLS (SIMPLIFIED & HQ) */}
              {isRemover && (
                  <div className="animate-fade-in space-y-4 bg-white/5 p-4 rounded-2xl border border-white/10">
-                     <label className="text-xs font-bold text-slate-400 uppercase mb-2 block">Tùy chọn nền (Output)</label>
-                     <div className="grid grid-cols-1 gap-2">
-                         <button onClick={() => setBgMode('white')} className={`flex items-center gap-3 p-2 rounded-lg border transition-all ${bgMode === 'white' ? 'bg-white text-black border-white' : 'hover:bg-white/10 border-transparent'}`}>
-                             <div className="w-4 h-4 rounded-full border border-slate-300 bg-white"></div>
-                             <span className="text-xs font-bold">Nền Trắng (White)</span>
-                         </button>
-                         <button onClick={() => setBgMode('green')} className={`flex items-center gap-3 p-2 rounded-lg border transition-all ${bgMode === 'green' ? 'bg-[#00FF00]/20 text-green-400 border-green-500' : 'hover:bg-white/10 border-transparent'}`}>
-                             <div className="w-4 h-4 rounded-full border border-green-500 bg-[#00FF00]"></div>
-                             <span className="text-xs font-bold">Phông Xanh (Green Screen)</span>
-                         </button>
-                         <button onClick={() => setBgMode('mask')} className={`flex items-center gap-3 p-2 rounded-lg border transition-all ${bgMode === 'mask' ? 'bg-slate-700 text-white border-slate-500' : 'hover:bg-white/10 border-transparent'}`}>
-                             <div className="w-4 h-4 rounded-full border border-white bg-gradient-to-r from-white to-black"></div>
-                             <span className="text-xs font-bold">Tạo Mask (Đen/Trắng)</span>
-                         </button>
+                     <div className="flex items-center gap-3">
+                         <div className="p-2 bg-audi-pink/20 rounded-lg text-audi-pink">
+                             <Icons.Scissors className="w-5 h-5" />
+                         </div>
+                         <div>
+                             <h4 className="text-sm font-bold text-white">Chế độ Tách Nền (HQ)</h4>
+                             <p className="text-xs text-slate-400 mt-1">
+                                 Tự động tách nền và chuyển sang nền đen (Black).
+                                 <br/>
+                                 <span className="text-audi-cyan">Giữ nguyên độ phân giải gốc (4K Supported).</span>
+                             </p>
+                         </div>
                      </div>
                  </div>
              )}
@@ -270,7 +264,7 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
                        <Icons.Sparkles className={`w-8 h-8 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 ${isUpscaler ? 'text-audi-cyan' : 'text-audi-pink'}`} />
                    </div>
                    <p className="text-white font-bold text-lg">{lang === 'vi' ? 'AI đang làm việc...' : 'AI is working...'}</p>
-                   <p className="text-slate-500 text-sm mt-1">{isUpscaler ? 'Đang nâng cấp độ phân giải...' : 'Đang tách nền...'}</p>
+                   <p className="text-slate-500 text-sm mt-1">{isUpscaler ? 'Đang nâng cấp độ phân giải...' : 'Đang tách nền & giữ nét 4K...'}</p>
                </div>
           ) : resultImage ? (
               <div className="w-full h-full flex flex-col items-center justify-center gap-4">

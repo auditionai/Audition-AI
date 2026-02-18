@@ -1,4 +1,3 @@
-
 import { GoogleGenAI } from "@google/genai";
 import { getSystemApiKey } from "./economyService";
 import { createTextureSheet, optimizePayload, createSolidFence } from "../utils/imageProcessor";
@@ -35,11 +34,17 @@ const runWithTimeout = <T>(promise: Promise<T>, ms: number, label: string): Prom
 
 // Cấu hình timeout cao hơn cho Client (mặc định fetch là ngắn)
 const getAiClient = async (specificKey?: string) => {
-    const key = specificKey || await getSystemApiKey();
-    if (!key) throw new Error("API Key missing or invalid");
-    return new GoogleGenAI({ 
-        apiKey: key,
-    });
+    // 1. Specific key (testing)
+    if (specificKey) return new GoogleGenAI({ apiKey: specificKey });
+
+    // 2. Env Key (Priority per guidelines)
+    if (process.env.API_KEY) return new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+    // 3. DB Key (Legacy/App specific feature)
+    const dbKey = await getSystemApiKey();
+    if (dbKey) return new GoogleGenAI({ apiKey: dbKey });
+
+    throw new Error("API Key missing. Set process.env.API_KEY or configure in Admin.");
 };
 
 // --- ERROR HANDLER & EXTRACTOR ---
@@ -118,13 +123,13 @@ const uploadToGemini = async (base64Data: string, mimeType: string): Promise<str
 export const checkConnection = async (key?: string): Promise<boolean> => {
     try {
         const ai = await getAiClient(key);
-        // Add Timeout to Ping
+        // Add Timeout to Ping - INCREASED TO 15s
         await runWithTimeout(
             ai.models.generateContent({
-                model: 'gemini-3-pro-preview',
+                model: 'gemini-3-flash-preview',
                 contents: 'ping'
             }),
-            5000,
+            15000,
             "Ping Connection"
         );
         return true;
@@ -141,7 +146,7 @@ const optimizePromptWithThinking = async (rawPrompt: string): Promise<string> =>
         // Add Timeout to Thinking
         const response = await runWithTimeout(
             ai.models.generateContent({
-                model: 'gemini-3-pro-preview',
+                model: 'gemini-3-flash-preview',
                 contents: `You are a Technical Prompt Engineer. Convert user input into professional 3D art keywords.
                 USER INPUT: "${rawPrompt}"
                 OUTPUT: [Subject] + [Action] + [Outfit] + [Environment] + [Lighting] + [Style Tags].
@@ -180,177 +185,142 @@ const processDigitalTwinMode = (
         parts.push({ text: `REFERENCE FACE [IDENTITY]: Use these facial features for the 3D character.` });
         parts.push(...charParts);
     }
+    
+    parts.push({ text: `GENERATE: ${prompt}` });
 
     const systemPrompt = `** SYSTEM DIRECTIVE: KOREAN MMO GAME CHARACTER GENERATION (GEMINI 3.0 PRO) **
     
     1.  **STRICT BODY PROPORTIONS (CRITICAL)**:
         - The character MUST have **TALL, SLENDER, ADULT** proportions (like K-Pop Idols or Fashion Models).
         - **Body Ratio**: 1:8 (Head to Body). LEGS MUST BE LONG.
-        - **ABSOLUTELY NO**: Chibi, Nendoroid, Big Head, Short Legs, Child-like body, Baby face.
-        - Treat this as a "High-End Fashion Game" asset.
+        - **ABSOLUTELY NO**: Chibi, Child-like, Big Head, Short Legs, Cartoonish proportions.
 
-    2.  **RENDERING STYLE (NON-REALISTIC)**:
-        - Output MUST look like a PC Game Render (Audition Online, Sims 4 CC).
-        - Skin: Smooth, flawless, "porcelain" texture. NO realistic pores/wrinkles.
-        - Eyes: Stylized Anime/Game eyes (expressive but not creepy).
-        - Hair: 3D Mesh style, thick strands, perfectly styled.
-
-    3.  **SCENE ACCURACY**:
-        - Render exactly what is described in the prompt.
-        - If reference images are provided, MATCH THE BODY SCALE of the reference images.
-
-    4.  **SAFETY & COMPLIANCE**:
-        - If the prompt implies nudity, clothe the character in generic game underwear/bodysuit.
-
-    [EXECUTE PROMPT]: ${prompt}
+    2.  **STYLE**:
+        - Semi-realistic Anime / Korean MMO Style (Lost Ark, Black Desert).
+        - Octane Render, Unreal Engine 5, Ray Tracing.
+        - Detailed textures (skin pores, fabric weaving).
     `;
 
     return { systemPrompt, parts };
 };
 
-// --- MAIN GENERATION FUNCTION ---
 export const generateImage = async (
-    prompt: string, 
-    aspectRatio: string = "1:1", 
-    styleRefBase64?: string, 
-    characterDataList: CharacterData[] = [], 
-    resolution: string = '2K',
-    _modelTier: 'pro' = 'pro',
-    useSearch: boolean = true, 
-    useCloudRef: boolean = true, 
-    onProgress?: (msg: string) => void
-): Promise<string | null> => {
-  
-  const ai = await getAiClient();
-  const MODEL_NAME = 'gemini-3-pro-image-preview';
-
-  try {
-    // 1. OPTIMIZATION PHASE
-    if (onProgress) onProgress("Analyzing Prompt (Gemini 3.0 Pro)...");
-    const optimizedPrompt = await optimizePromptWithThinking(prompt);
+    prompt: string,
+    aspectRatio: string,
+    refImageBase64: string | undefined,
+    characters: any[],
+    resolution: '1K' | '2K' | '4K' = '1K',
+    modelType: 'flash' | 'pro' = 'pro',
+    useSearch: boolean = false,
+    useCloudRef: boolean = false,
+    onLog: (msg: string) => void = () => {}
+): Promise<string> => {
+    onLog("Initializing Gemini 3.0 Pro...");
+    const ai = await getAiClient();
     
-    let finalPromptToUse = optimizedPrompt;
-    if (!finalPromptToUse.toLowerCase().includes("tall")) {
-        finalPromptToUse = "Tall Slender 3D Game Character, Adult Proportions, " + finalPromptToUse + " --no chibi --no photorealistic";
-    }
-
-    // 2. PREPARE ASSETS
+    const model = 'gemini-3-pro-image-preview'; // Only this model supports image generation size and search
+    
     let refImagePart = null;
-    if (styleRefBase64) {
-        refImagePart = {
-            inlineData: { data: cleanBase64(styleRefBase64), mimeType: 'image/jpeg' }
-        };
-    }
-
-    const allParts: any[] = [];
-    const charDescriptions: string[] = [];
-
-    // Process Characters with Timeouts
-    for (const char of characterDataList) {
-        if (char.image) {
-            if (onProgress) onProgress(`Scanning Identity Features (Player ${char.id})...`);
-            
-            // Texture Sheet Generation could hang if not careful, but it's local canvas logic usually.
-            // We assume createTextureSheet is safe or handled in its own module.
-            const textureSheet = await createTextureSheet(char.image, char.faceImage, char.shoesImage);
-            let finalPart;
-
-            if (useCloudRef) {
-                try {
-                    const fileUri = await uploadToGemini(textureSheet, 'image/jpeg');
-                    finalPart = { fileData: { mimeType: 'image/jpeg', fileUri: fileUri } };
-                } catch (e) {
-                    finalPart = { inlineData: { data: cleanBase64(textureSheet), mimeType: 'image/jpeg' } };
+    if (refImageBase64) {
+        onLog("Processing Reference Image...");
+        if (refImageBase64.startsWith('data:') || refImageBase64.length > 100) {
+             refImagePart = {
+                inlineData: {
+                    mimeType: 'image/png',
+                    data: cleanBase64(refImageBase64)
                 }
-            } else {
-                finalPart = { inlineData: { data: cleanBase64(textureSheet), mimeType: 'image/jpeg' } };
-            }
-            allParts.push(finalPart);
-            charDescriptions.push(char.gender);
+            };
         }
     }
 
-    // 3. CONSTRUCT PAYLOAD
-    const payload = processDigitalTwinMode(finalPromptToUse, refImagePart, allParts, charDescriptions);
-    const finalParts = [...payload.parts, { text: payload.systemPrompt }];
+    const charParts: any[] = [];
+    for (const char of characters) {
+        if (char.faceImage) {
+            onLog(`Processing Face ID for Character ${char.id}...`);
+            charParts.push({
+                inlineData: {
+                    mimeType: 'image/png',
+                    data: cleanBase64(char.faceImage)
+                }
+            });
+        }
+        if (char.image && !char.faceImage) { 
+             charParts.push({
+                inlineData: {
+                    mimeType: 'image/png',
+                    data: cleanBase64(char.image)
+                }
+            });
+        }
+    }
+
+    onLog("Reasoning Prompt...");
+    const optimizedPrompt = await optimizePromptWithThinking(prompt);
+    
+    const { systemPrompt, parts } = processDigitalTwinMode(optimizedPrompt, refImagePart, charParts, []);
+    
+    onLog("Sending to Generation Grid...");
 
     const config: any = {
-        imageConfig: { 
+        imageConfig: {
             aspectRatio: aspectRatio,
             imageSize: resolution
         },
-        safetySettings: [
-            { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_ONLY_HIGH" },
-            { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" },
-            { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_ONLY_HIGH" },
-            { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_ONLY_HIGH" }
-        ]
+        systemInstruction: systemPrompt
     };
 
-    if (useSearch && !refImagePart && finalPromptToUse.length < 50) {
+    if (useSearch) {
         config.tools = [{ googleSearch: {} }];
     }
 
-    if (onProgress) onProgress(`Engine: ${MODEL_NAME} | Rendering...`);
-
-    // 4. EXECUTE GENERATION WITH TIMEOUT
     const response = await runWithTimeout(
         ai.models.generateContent({
-            model: MODEL_NAME,
-            contents: { parts: finalParts },
+            model: model,
+            contents: { parts },
             config: config
         }),
-        60000, // 60s hard limit for the API call itself
+        60000, 
         "Image Generation"
     );
 
-    return extractImage(response);
-
-  } catch (error: any) {
-    console.error("Gemini Pipeline Final Error:", error);
-    throw error;
-  }
+    onLog("Downloading result...");
+    const result = extractImage(response);
+    if (!result) throw new Error("Generation failed: No image output");
+    return result;
 };
 
-export const editImageWithInstructions = async (base64Data: string, instruction: string, mimeType: string): Promise<string | null> => {
-    try {
-        const ai = await getAiClient();
-        
-        const response = await runWithTimeout(
-            ai.models.generateContent({
-                model: 'gemini-3-pro-image-preview', 
-                contents: {
-                    parts: [
-                        { inlineData: { data: cleanBase64(base64Data), mimeType: mimeType } },
-                        { text: instruction }
-                    ]
-                }
-            }),
-            60000,
-            "Edit Image"
-        );
-        return extractImage(response);
-    } catch (e) {
-        console.error(e);
-        throw e;
-    }
-};
+export const editImageWithInstructions = async (
+    base64Data: string, 
+    instruction: string, 
+    mimeType: string
+): Promise<string> => {
+    const ai = await getAiClient();
+    
+    // gemini-2.5-flash-image for standard editing per guidelines
+    const model = 'gemini-2.5-flash-image'; 
 
-export const suggestPrompt = async (currentInput: string, lang: string, featureName: string): Promise<string> => {
-    try {
-        const ai = await getAiClient();
-        const response = await runWithTimeout(
-            ai.models.generateContent({
-                model: 'gemini-3-pro-preview', 
-                contents: currentInput || `Create a 3D character concept for ${featureName}`,
-                config: {
-                    systemInstruction: `You are an AI Prompt Expert. Output refined 3D prompt.`,
-                    temperature: 0.7,
-                }
-            }),
-            8000,
-            "Suggest Prompt"
-        );
-        return response.text?.trim() || currentInput;
-    } catch (error) { return currentInput; }
+    const response = await runWithTimeout(
+        ai.models.generateContent({
+            model: model,
+            contents: {
+                parts: [
+                    {
+                        inlineData: {
+                            mimeType: mimeType || 'image/png',
+                            data: cleanBase64(base64Data)
+                        }
+                    },
+                    {
+                        text: instruction
+                    }
+                ]
+            }
+        }),
+        45000,
+        "Image Editing"
+    );
+
+    const result = extractImage(response);
+    if (!result) throw new Error("Editing failed: No image output");
+    return result;
 }

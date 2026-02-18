@@ -4,7 +4,7 @@ import { APP_CONFIG } from '../constants';
 import { Language, Theme, ViewId, UserProfile, PromotionConfig } from '../types';
 import { Icons } from './Icons';
 import { DailyCheckin } from './DailyCheckin';
-import { getUserProfile, getPromotionConfig } from '../services/economyService';
+import { getUserProfile, getActivePromotion } from '../services/economyService';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -34,7 +34,7 @@ export const Layout: React.FC<LayoutProps> = ({
     refreshUser();
     
     // Load Marquee
-    getPromotionConfig().then(config => {
+    getActivePromotion().then(config => {
         setPromoConfig(config);
     });
     

@@ -30,20 +30,23 @@ export const Layout: React.FC<LayoutProps> = ({
     window.addEventListener('scroll', handleScroll);
     
     // Initial User Load
-    getUserProfile().then(setUser);
+    const refreshUser = () => getUserProfile().then(setUser);
+    refreshUser();
     
     // Load Marquee
     getPromotionConfig().then(config => {
         setPromoConfig(config);
     });
     
-    // Interval to refresh user balance
-    const interval = setInterval(() => {
-        getUserProfile().then(setUser);
-    }, 2000);
+    // Listen for instant balance updates
+    window.addEventListener('balance_updated', refreshUser);
+
+    // Interval to refresh user balance (fallback)
+    const interval = setInterval(refreshUser, 5000); // Relaxed to 5s since we have events
 
     return () => {
         window.removeEventListener('scroll', handleScroll);
+        window.removeEventListener('balance_updated', refreshUser);
         clearInterval(interval);
     };
   }, []);

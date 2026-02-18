@@ -393,12 +393,18 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
         setStage('result');
         notify(lang === 'vi' ? 'Tạo ảnh thành công!' : 'Generation successful!', 'success');
       } else {
-          throw new Error("No result returned");
+          throw new Error("No result returned (Empty)");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
+      const errorMsg = error.message || (lang === 'vi' ? 'Lỗi không xác định' : 'Unknown Error');
+      addLog(`❌ LỖI: ${errorMsg}`);
+      
+      // Delay so user can see the error log
+      await new Promise(r => setTimeout(r, 1500));
+
       await updateUserBalance(cost, `Refund: ${feature.name['en']} Failed`, 'refund');
-      notify(lang === 'vi' ? 'Lỗi. Đã hoàn tiền.' : 'Error. Refunded.', 'error');
+      notify(lang === 'vi' ? `Lỗi: ${errorMsg}. Đã hoàn tiền.` : `Error: ${errorMsg}. Refunded.`, 'error');
       setStage('input'); 
     }
   };

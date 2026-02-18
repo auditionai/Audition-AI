@@ -34,8 +34,7 @@ const getAiClient = async (specificKey?: string) => {
 const extractImage = (response: any): string | null => {
     // 1. Kiểm tra cấu trúc cơ bản
     if (!response) {
-        console.error("Empty response from Gemini");
-        return null;
+        throw new Error("No response from server");
     }
 
     // 2. Kiểm tra Safety Block (Lỗi phổ biến nhất)
@@ -47,7 +46,7 @@ const extractImage = (response: any): string | null => {
     // 3. Kiểm tra Candidates
     if (!response.candidates || response.candidates.length === 0) {
         console.warn("No candidates returned.");
-        return null;
+        throw new Error("No candidates returned (Safety or Server Error)");
     }
 
     const candidate = response.candidates[0];
@@ -56,7 +55,7 @@ const extractImage = (response: any): string | null => {
     if (candidate.finishReason !== "STOP" && candidate.finishReason !== "MAX_TOKENS") {
         // Nếu bị chặn ở mức candidate
         if (candidate.finishReason === "SAFETY") {
-             throw new Error("Safety Block (Content violation)");
+             throw new Error("Safety Block: Content Violation");
         }
         console.warn("Abnormal finish reason:", candidate.finishReason);
     }
@@ -70,7 +69,7 @@ const extractImage = (response: any): string | null => {
         }
     }
 
-    return null;
+    throw new Error("No image data found in response");
 };
 
 const uploadToGemini = async (base64Data: string, mimeType: string): Promise<string> => {
@@ -281,12 +280,19 @@ export const generateImage = async (
 
     if (onProgress) onProgress(`Engine: ${MODEL_NAME} | Rendering...`);
 
-    // 4. EXECUTE GENERATION
-    const response = await ai.models.generateContent({
+    // 4. EXECUTE GENERATION WITH TIMEOUT
+    // Timeout set to 60s
+    const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error("Timeout: Gemini API took too long")), 60000)
+    );
+
+    const apiPromise = ai.models.generateContent({
         model: MODEL_NAME,
         contents: { parts: finalParts },
         config: config
     });
+
+    const response: any = await Promise.race([apiPromise, timeoutPromise]);
 
     return extractImage(response);
 
@@ -312,7 +318,7 @@ export const editImageWithInstructions = async (base64Data: string, instruction:
         return extractImage(response);
     } catch (e) {
         console.error(e);
-        return null;
+        throw e; // Throw so UI handles refund
     }
 };
 

@@ -306,6 +306,11 @@ export const updateUserBalance = async (amount: number, reason: string, type: 't
                 transaction_type: type || 'usage',
                 created_at: new Date().toISOString()
             });
+            
+            // --- CRITICAL: DISPATCH EVENT FOR UI UPDATE ---
+            window.dispatchEvent(new Event('balance_updated'));
+            // ---------------------------------------------
+
             return { success: true, newBalance };
         }
 
@@ -315,6 +320,7 @@ export const updateUserBalance = async (amount: number, reason: string, type: 't
     // Local fallback
     user.balance = newBalance;
     setStorage('dmp_user', user);
+    window.dispatchEvent(new Event('balance_updated'));
     return { success: true, newBalance };
 };
 

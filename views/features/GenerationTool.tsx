@@ -337,10 +337,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       }
       
       // 4. STRUCTURE PROCESSING (Heavy Operation)
-      // Apply STRICT logic: always use createSolidFence with isPoseRef=true to force structure only
       if (sourceForStructure) {
           addLog("Đang trích xuất cấu trúc (Wireframe)...");
-          // Use 'createSolidFence' to mask the image or overlay grid, ensuring AI doesn't copy pixels
           const optimizedStructure = await optimizePayload(sourceForStructure);
           structureRefData = await createSolidFence(optimizedStructure, aspectRatio, true);
       }
@@ -362,17 +360,21 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       
       addLog("Gửi lệnh đến Gemini Intelligence Grid...");
 
-      const result = await generateImage(
-          finalPrompt, 
-          aspectRatio, 
-          structureRefData, 
-          characterDataList, 
-          resolution,
-          'pro', // ALWAYS PRO
-          useSearch,
-          useCloudRef, 
-          (msg) => addLog(msg)
-      );
+      // 5. EXECUTE WITH UI-LEVEL TIMEOUT (90s Safety)
+      const result = await Promise.race([
+          generateImage(
+              finalPrompt, 
+              aspectRatio, 
+              structureRefData, 
+              characterDataList, 
+              resolution,
+              'pro', // ALWAYS PRO
+              useSearch,
+              useCloudRef, 
+              (msg) => addLog(msg)
+          ),
+          new Promise<null>((_, reject) => setTimeout(() => reject(new Error("Timeout: UI limit reached (90s)")), 90000))
+      ]);
 
       if (result) {
         addLog(lang === 'vi' ? 'Hoàn tất!' : 'Finalizing...');
@@ -399,13 +401,18 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       console.error(error);
       const errorMsg = error.message || (lang === 'vi' ? 'Lỗi không xác định' : 'Unknown Error');
       addLog(`❌ LỖI: ${errorMsg}`);
+      addLog(`💸 Đang thực hiện hoàn tiền...`);
       
-      // Delay so user can see the error log
-      await new Promise(r => setTimeout(r, 1500));
-
-      await updateUserBalance(cost, `Refund: ${feature.name['en']} Failed`, 'refund');
-      notify(lang === 'vi' ? `Lỗi: ${errorMsg}. Đã hoàn tiền.` : `Error: ${errorMsg}. Refunded.`, 'error');
-      setStage('input'); 
+      try {
+          await updateUserBalance(cost, `Refund: ${feature.name['en']} Failed`, 'refund');
+          notify(lang === 'vi' ? `Lỗi: ${errorMsg}. Đã hoàn tiền.` : `Error: ${errorMsg}. Refunded.`, 'error');
+      } catch (refundError) {
+          console.error("Refund failed", refundError);
+          notify("Lỗi hoàn tiền! Vui lòng liên hệ Admin.", "error");
+      } finally {
+          // ALWAYS RESET UI
+          setTimeout(() => setStage('input'), 2000);
+      }
     }
   };
 

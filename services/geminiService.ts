@@ -21,6 +21,18 @@ const cleanBase64 = (data: string) => {
     return data;
 };
 
+// --- TIMEOUT HELPER ---
+const runWithTimeout = <T>(promise: Promise<T>, ms: number, label: string): Promise<T> => {
+    let timer: any;
+    const timeoutPromise = new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label} timed out (${ms/1000}s)`)), ms);
+    });
+    return Promise.race([
+        promise.then(val => { clearTimeout(timer); return val; }),
+        timeoutPromise
+    ]);
+};
+
 // Cấu hình timeout cao hơn cho Client (mặc định fetch là ngắn)
 const getAiClient = async (specificKey?: string) => {
     const key = specificKey || await getSystemApiKey();
@@ -83,12 +95,15 @@ const uploadToGemini = async (base64Data: string, mimeType: string): Promise<str
         const byteArray = new Uint8Array(byteNumbers);
         const blob = new Blob([byteArray], { type: mimeType });
 
-        const uploadResult = await ai.files.upload({
-            file: blob,
-            config: { 
-                displayName: `ref_img_${Date.now()}` 
-            }
-        });
+        // Add Timeout to Upload
+        const uploadResult = await runWithTimeout(
+            ai.files.upload({
+                file: blob,
+                config: { displayName: `ref_img_${Date.now()}` }
+            }),
+            20000, // 20s
+            "File Upload"
+        );
 
         const fileUri = (uploadResult as any).file?.uri || (uploadResult as any).uri;
         if (!fileUri) throw new Error("No URI returned");
@@ -103,11 +118,15 @@ const uploadToGemini = async (base64Data: string, mimeType: string): Promise<str
 export const checkConnection = async (key?: string): Promise<boolean> => {
     try {
         const ai = await getAiClient(key);
-        // STRICTLY USE GEMINI 3.0 PRO FOR PING
-        await ai.models.generateContent({
-             model: 'gemini-3-pro-preview',
-             contents: 'ping'
-        });
+        // Add Timeout to Ping
+        await runWithTimeout(
+            ai.models.generateContent({
+                model: 'gemini-3-pro-preview',
+                contents: 'ping'
+            }),
+            5000,
+            "Ping Connection"
+        );
         return true;
     } catch (e) {
         console.error("Gemini Connection Check Failed", e);
@@ -115,36 +134,29 @@ export const checkConnection = async (key?: string): Promise<boolean> => {
     }
 };
 
-// --- PROMPT REASONING ENGINE: STRICT PRO 3.0 ---
+// --- PROMPT REASONING ENGINE ---
 const optimizePromptWithThinking = async (rawPrompt: string): Promise<string> => {
     try {
         const ai = await getAiClient();
-        // STRICTLY USE GEMINI 3.0 PRO
-        const response = await ai.models.generateContent({
-            model: 'gemini-3-pro-preview',
-            contents: `You are a Technical Prompt Engineer for a High-End 3D Game Asset Generator.
-            
-            USER INPUT: "${rawPrompt}"
-            
-            TASK:
-            1.  **Translate & Enhance**: Convert the user's description into professional English 3D art keywords.
-            2.  **STYLE ENFORCEMENT**: The user wants a "Korean MMO Game Character" (Audition/Blade & Soul style).
-            3.  **PROPORTIONS**: MUST BE TALL, SLENDER, ADULT PROPORTIONS. NO CHIBI.
-            4.  **Structure**: [Subject] + [Action/Pose] + [Outfit] + [Environment] + [Lighting] + [Style Tags].
-            
-            MANDATORY STYLE TAGS TO ADD:
-            "3D Game Character, Korean MMO Style, Tall Slender Body, Long Legs, Small Head, Fashion Model Ratio, 8-head tall, Smooth Texture, Non-Photorealistic Rendering, Octane Render, 8K Resolution".
-            
-            OUTPUT:
-            Return ONLY the final prompt string. No conversational text.`,
-        });
+        // Add Timeout to Thinking
+        const response = await runWithTimeout(
+            ai.models.generateContent({
+                model: 'gemini-3-pro-preview',
+                contents: `You are a Technical Prompt Engineer. Convert user input into professional 3D art keywords.
+                USER INPUT: "${rawPrompt}"
+                OUTPUT: [Subject] + [Action] + [Outfit] + [Environment] + [Lighting] + [Style Tags].
+                MANDATORY: "3D Game Character, Korean MMO Style, Tall Slender Body, Long Legs, Small Head, Fashion Model Ratio, 8-head tall, Smooth Texture, Octane Render, 8K".`,
+            }),
+            10000, // 10s
+            "Prompt Optimization"
+        );
         
         const result = response.text?.trim();
         if (!result) throw new Error("Empty reasoning response");
         return result;
 
     } catch (e) {
-        console.warn("Prompt Optimization Failed, using raw prompt", e);
+        console.warn("Prompt Optimization Failed/Timed out, using raw prompt", e);
         return rawPrompt;
     }
 }
@@ -196,27 +208,25 @@ const processDigitalTwinMode = (
     return { systemPrompt, parts };
 };
 
-// --- MAIN GENERATION FUNCTION: STRICT PRO 3.0 ONLY ---
+// --- MAIN GENERATION FUNCTION ---
 export const generateImage = async (
     prompt: string, 
     aspectRatio: string = "1:1", 
     styleRefBase64?: string, 
     characterDataList: CharacterData[] = [], 
     resolution: string = '2K',
-    _modelTier: 'pro' = 'pro', // Parameter ignored, enforced internally
+    _modelTier: 'pro' = 'pro',
     useSearch: boolean = true, 
     useCloudRef: boolean = true, 
     onProgress?: (msg: string) => void
 ): Promise<string | null> => {
   
   const ai = await getAiClient();
-  
-  // STRICTLY ENFORCE GEMINI 3.0 PRO IMAGE MODEL
   const MODEL_NAME = 'gemini-3-pro-image-preview';
 
   try {
-    // 1. OPTIMIZATION PHASE (Using Gemini 3.0 Pro Text)
-    if (onProgress) onProgress("Analyzing Prompt with Gemini 3.0 Pro...");
+    // 1. OPTIMIZATION PHASE
+    if (onProgress) onProgress("Analyzing Prompt (Gemini 3.0 Pro)...");
     const optimizedPrompt = await optimizePromptWithThinking(prompt);
     
     let finalPromptToUse = optimizedPrompt;
@@ -235,10 +245,13 @@ export const generateImage = async (
     const allParts: any[] = [];
     const charDescriptions: string[] = [];
 
+    // Process Characters with Timeouts
     for (const char of characterDataList) {
         if (char.image) {
             if (onProgress) onProgress(`Scanning Identity Features (Player ${char.id})...`);
             
+            // Texture Sheet Generation could hang if not careful, but it's local canvas logic usually.
+            // We assume createTextureSheet is safe or handled in its own module.
             const textureSheet = await createTextureSheet(char.image, char.faceImage, char.shoesImage);
             let finalPart;
 
@@ -264,7 +277,7 @@ export const generateImage = async (
     const config: any = {
         imageConfig: { 
             aspectRatio: aspectRatio,
-            imageSize: resolution // Only Pro supports this
+            imageSize: resolution
         },
         safetySettings: [
             { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_ONLY_HIGH" },
@@ -281,18 +294,15 @@ export const generateImage = async (
     if (onProgress) onProgress(`Engine: ${MODEL_NAME} | Rendering...`);
 
     // 4. EXECUTE GENERATION WITH TIMEOUT
-    // Timeout set to 60s
-    const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error("Timeout: Gemini API took too long")), 60000)
+    const response = await runWithTimeout(
+        ai.models.generateContent({
+            model: MODEL_NAME,
+            contents: { parts: finalParts },
+            config: config
+        }),
+        60000, // 60s hard limit for the API call itself
+        "Image Generation"
     );
-
-    const apiPromise = ai.models.generateContent({
-        model: MODEL_NAME,
-        contents: { parts: finalParts },
-        config: config
-    });
-
-    const response: any = await Promise.race([apiPromise, timeoutPromise]);
 
     return extractImage(response);
 
@@ -305,35 +315,42 @@ export const generateImage = async (
 export const editImageWithInstructions = async (base64Data: string, instruction: string, mimeType: string): Promise<string | null> => {
     try {
         const ai = await getAiClient();
-        // STRICTLY USE GEMINI 3.0 PRO IMAGE
-        const response = await ai.models.generateContent({
-            model: 'gemini-3-pro-image-preview', 
-            contents: {
-                parts: [
-                    { inlineData: { data: cleanBase64(base64Data), mimeType: mimeType } },
-                    { text: instruction }
-                ]
-            }
-        });
+        
+        const response = await runWithTimeout(
+            ai.models.generateContent({
+                model: 'gemini-3-pro-image-preview', 
+                contents: {
+                    parts: [
+                        { inlineData: { data: cleanBase64(base64Data), mimeType: mimeType } },
+                        { text: instruction }
+                    ]
+                }
+            }),
+            60000,
+            "Edit Image"
+        );
         return extractImage(response);
     } catch (e) {
         console.error(e);
-        throw e; // Throw so UI handles refund
+        throw e;
     }
 };
 
 export const suggestPrompt = async (currentInput: string, lang: string, featureName: string): Promise<string> => {
     try {
         const ai = await getAiClient();
-        // STRICTLY USE GEMINI 3.0 PRO
-        const response = await ai.models.generateContent({
-            model: 'gemini-3-pro-preview', 
-            contents: currentInput || `Create a 3D character concept for ${featureName}`,
-            config: {
-                systemInstruction: `You are an AI Prompt Expert for 3D Game Assets. Output ONLY the refined 3D-centric prompt. Keep it stylized/anime but with TALL/ADULT proportions.`,
-                temperature: 0.7,
-            }
-        });
+        const response = await runWithTimeout(
+            ai.models.generateContent({
+                model: 'gemini-3-pro-preview', 
+                contents: currentInput || `Create a 3D character concept for ${featureName}`,
+                config: {
+                    systemInstruction: `You are an AI Prompt Expert. Output refined 3D prompt.`,
+                    temperature: 0.7,
+                }
+            }),
+            8000,
+            "Suggest Prompt"
+        );
         return response.text?.trim() || currentInput;
     } catch (error) { return currentInput; }
 }

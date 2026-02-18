@@ -54,7 +54,9 @@ interface ConfirmState {
 }
 
 // SQL Code for fixing Giftcode table issues
-const GIFTCODE_FIX_SQL = `-- FIX GIFTCODE TABLE STRUCTURE
+const GIFTCODE_FIX_SQL = `-- FIX DATABASE STRUCTURE (GIFTCODES & SETTINGS)
+
+-- 1. GIFT CODES TABLE
 CREATE TABLE IF NOT EXISTS public.gift_codes (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     code text NOT NULL,
@@ -66,7 +68,7 @@ CREATE TABLE IF NOT EXISTS public.gift_codes (
     created_at timestamptz DEFAULT now()
 );
 
--- Add columns if missing
+-- Ensure columns exist
 DO $$
 BEGIN
     ALTER TABLE public.gift_codes ADD COLUMN IF NOT EXISTS reward numeric DEFAULT 0;
@@ -76,7 +78,7 @@ BEGIN
     ALTER TABLE public.gift_codes ADD COLUMN IF NOT EXISTS is_active boolean DEFAULT true;
 END $$;
 
--- Usage Tracking Table
+-- 2. USAGE TRACKING TABLE
 CREATE TABLE IF NOT EXISTS public.gift_code_usages (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     user_id uuid REFERENCES public.users(id),
@@ -84,10 +86,29 @@ CREATE TABLE IF NOT EXISTS public.gift_code_usages (
     created_at timestamptz DEFAULT now()
 );
 
--- Enable RLS
+-- 3. SYSTEM SETTINGS (For Promo Banners)
+CREATE TABLE IF NOT EXISTS public.system_settings (
+    key text PRIMARY KEY,
+    value jsonb
+);
+
+-- 4. ENABLE RLS & POLICIES
 ALTER TABLE public.gift_codes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.system_settings ENABLE ROW LEVEL SECURITY;
+
+-- Policies for Giftcodes
+DROP POLICY IF EXISTS "Public read giftcodes" ON public.gift_codes;
 CREATE POLICY "Public read giftcodes" ON public.gift_codes FOR SELECT TO anon, authenticated USING (true);
-CREATE POLICY "Admin manage giftcodes" ON public.gift_codes FOR ALL TO authenticated USING (true); -- Simplified for demo
+
+DROP POLICY IF EXISTS "Admin manage giftcodes" ON public.gift_codes;
+CREATE POLICY "Admin manage giftcodes" ON public.gift_codes FOR ALL TO authenticated USING (true);
+
+-- Policies for System Settings
+DROP POLICY IF EXISTS "Public read settings" ON public.system_settings;
+CREATE POLICY "Public read settings" ON public.system_settings FOR SELECT TO anon, authenticated USING (true);
+
+DROP POLICY IF EXISTS "Admin manage settings" ON public.system_settings;
+CREATE POLICY "Admin manage settings" ON public.system_settings FOR ALL TO authenticated USING (true);
 `;
 
 export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
@@ -348,6 +369,10 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           showToast('Đã lưu thông báo thành công!');
       } else {
           showToast('Lỗi lưu: ' + result.error, 'error');
+          // If table system_settings is missing, trigger fix modal
+          if (result.error?.includes('relation "public.system_settings" does not exist')) {
+              setShowGiftcodeFix(true);
+          }
       }
   }
 
@@ -1051,15 +1076,15 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           <Icons.Database className="w-6 h-6" />
                       </div>
                       <div>
-                          <h3 className="text-xl font-bold text-white">LỖI DATABASE: BẢNG GIFTCODE</h3>
-                          <p className="text-slate-400 text-xs">Phát hiện thiếu cột 'reward' hoặc bảng chưa được tạo</p>
+                          <h3 className="text-xl font-bold text-white">LỖI DATABASE: BẢNG DỮ LIỆU</h3>
+                          <p className="text-slate-400 text-xs">Phát hiện thiếu bảng Giftcode hoặc System Settings</p>
                       </div>
                   </div>
                   
                   <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-xl mb-4">
                       <p className="text-sm text-red-300 font-bold mb-1">Nguyên nhân:</p>
                       <p className="text-xs text-slate-300 leading-relaxed">
-                          Supabase báo lỗi thiếu cột <code>reward</code> hoặc bảng <code>gift_codes</code> chưa tồn tại. Đây là lỗi phổ biến khi tạo bảng lần đầu.
+                          Supabase báo lỗi thiếu bảng <code>gift_codes</code> hoặc <code>system_settings</code>. Đây là lỗi phổ biến khi tạo dự án mới chưa chạy script khởi tạo.
                       </p>
                   </div>
 

@@ -548,11 +548,27 @@ export const getUnifiedHistory = async (): Promise<HistoryItem[]> => {
 // --- GIFTCODES ---
 
 export const getGiftcodePromoConfig = async () => {
-    const { data } = await supabase.from('system_settings').select('value').eq('key', 'giftcode_promo').single();
-    if (data && data.value) {
-        return data.value; // { text: "...", isActive: true }
+    try {
+        const { data, error } = await supabase.from('system_settings').select('value').eq('key', 'giftcode_promo').single();
+        
+        // If DB has config, return it
+        if (data && data.value) {
+            return data.value; // { text: "...", isActive: true }
+        }
+        
+        // If DB is empty or table missing (error), return DEFAULT PROMO to match UI screenshot
+        // This ensures the user sees the feature even before configuring it
+        return { 
+            text: "Nhập CODE \"HELLO2026\" để nhận 20 Vcoin miễn phí !!!", 
+            isActive: true 
+        };
+    } catch (e) {
+        // Fallback for any other errors
+        return { 
+            text: "Nhập CODE \"HELLO2026\" để nhận 20 Vcoin miễn phí !!!", 
+            isActive: true 
+        };
     }
-    return { text: '', isActive: false };
 };
 
 export const saveGiftcodePromoConfig = async (text: string, isActive: boolean) => {

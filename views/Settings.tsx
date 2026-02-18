@@ -232,25 +232,25 @@ export const Settings: React.FC<SettingsProps> = ({ lang, onLogout, onNavigate, 
                             {lang === 'vi' ? 'Nhập Giftcode' : 'Redeem Giftcode'}
                         </h2>
                         
-                        {/* PROMOTIONAL ANNOUNCEMENT BANNER */}
+                        {/* PROMOTIONAL ANNOUNCEMENT BANNER - FIXED & ENHANCED */}
                         {promoConfig.isActive && promoConfig.text && (
-                            <div className="w-full p-4 mb-4 rounded-xl bg-gradient-to-r from-audi-purple to-audi-pink flex items-center justify-center gap-3 animate-pulse shadow-[0_0_20px_rgba(183,33,255,0.4)] border border-white/20">
-                                <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center shrink-0">
-                                    <Icons.Gem className="w-5 h-5 text-audi-purple" />
+                            <div className="w-full p-4 mb-4 rounded-xl bg-gradient-to-r from-[#9d00ff] to-[#ff0099] flex items-center justify-center gap-3 animate-pulse shadow-[0_0_25px_rgba(255,0,153,0.5)] border border-white/20">
+                                <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center shrink-0 backdrop-blur-md">
+                                    <Icons.Gem className="w-5 h-5 text-white" />
                                 </div>
-                                <span className="font-bold text-white text-sm md:text-base text-center">
+                                <span className="font-bold text-white text-sm md:text-base text-center leading-tight drop-shadow-md">
                                     {promoConfig.text}
                                 </span>
                             </div>
                         )}
 
-                        <div className="bg-gradient-to-r from-audi-pink/20 to-audi-purple/20 p-6 rounded-2xl border border-white/10 text-center space-y-4 relative overflow-hidden group">
+                        <div className="bg-gradient-to-br from-[#1a0b2e] to-[#240046] p-6 rounded-2xl border border-white/10 text-center space-y-4 relative overflow-hidden group shadow-lg">
                             {/* Decorative Background Elements */}
-                            <div className="absolute top-0 right-0 w-32 h-32 bg-audi-purple/20 rounded-full blur-3xl group-hover:bg-audi-purple/30 transition-all duration-1000"></div>
-                            <div className="absolute bottom-0 left-0 w-32 h-32 bg-audi-pink/20 rounded-full blur-3xl group-hover:bg-audi-pink/30 transition-all duration-1000"></div>
+                            <div className="absolute top-0 right-0 w-40 h-40 bg-audi-purple/20 rounded-full blur-[60px] group-hover:bg-audi-purple/30 transition-all duration-1000"></div>
+                            <div className="absolute bottom-0 left-0 w-40 h-40 bg-audi-pink/20 rounded-full blur-[60px] group-hover:bg-audi-pink/30 transition-all duration-1000"></div>
 
-                            <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mx-auto text-audi-yellow animate-bounce relative z-10 border border-white/10 backdrop-blur-sm">
-                                <Icons.Gem className="w-8 h-8 drop-shadow-[0_0_10px_rgba(251,218,97,0.8)]" />
+                            <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto text-audi-yellow animate-bounce relative z-10 border border-white/10 backdrop-blur-sm shadow-[0_0_15px_rgba(251,218,97,0.3)]">
+                                <Icons.Gem className="w-8 h-8 drop-shadow-[0_0_5px_rgba(251,218,97,0.8)]" />
                             </div>
                             
                             <div className="relative z-10">
@@ -262,19 +262,19 @@ export const Settings: React.FC<SettingsProps> = ({ lang, onLogout, onNavigate, 
                                 </p>
                             </div>
                             
-                            <div className="flex gap-2 max-w-sm mx-auto relative z-10">
+                            <div className="flex gap-2 max-w-sm mx-auto relative z-10 pt-2">
                                 <input 
                                     type="text" 
                                     value={giftcode}
                                     onChange={(e) => setGiftcode(e.target.value.toUpperCase())}
                                     placeholder="CODE..."
-                                    className="flex-1 bg-black/50 border border-audi-yellow/30 rounded-xl p-3 text-white font-game text-center uppercase tracking-widest focus:border-audi-yellow outline-none placeholder:text-slate-600 focus:shadow-[0_0_15px_rgba(251,218,97,0.2)] transition-all" 
+                                    className="flex-1 bg-black/60 border border-audi-yellow/30 rounded-xl p-3 text-white font-game text-center uppercase tracking-widest focus:border-audi-yellow outline-none placeholder:text-slate-600 focus:shadow-[0_0_15px_rgba(251,218,97,0.2)] transition-all h-12" 
                                 />
                                 <button 
                                     onClick={handleRedeemCode}
-                                    className="px-6 py-3 bg-audi-yellow text-black font-bold rounded-xl hover:bg-yellow-300 transition-all shadow-[0_0_15px_rgba(251,218,97,0.4)] hover:scale-105 active:scale-95"
+                                    className="w-12 h-12 bg-audi-yellow text-black font-bold rounded-xl hover:bg-yellow-300 transition-all shadow-[0_0_15px_rgba(251,218,97,0.4)] hover:scale-105 active:scale-95 flex items-center justify-center"
                                 >
-                                    <Icons.Zap className="w-5 h-5" />
+                                    <Icons.Zap className="w-6 h-6" />
                                 </button>
                             </div>
                         </div>

@@ -621,7 +621,7 @@ export const redeemGiftcode = async (codeStr: string): Promise<{success: boolean
 
         // 5. Increment Count & Add Balance
         await supabase.rpc('increment_giftcode_usage', { code_id: code.id });
-        await updateUserBalance(code.reward, `Giftcode: ${cleanCode}`, 'giftcode');
+        await updateUserBalance(code.reward || 0, `Giftcode: ${cleanCode}`, 'giftcode');
 
         return { success: true, reward: code.reward, message: 'Success' };
     } catch (e: any) {

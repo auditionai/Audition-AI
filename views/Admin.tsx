@@ -53,6 +53,43 @@ interface ConfirmState {
     onConfirm: () => void;
 }
 
+// SQL Code for fixing Giftcode table issues
+const GIFTCODE_FIX_SQL = `-- FIX GIFTCODE TABLE STRUCTURE
+CREATE TABLE IF NOT EXISTS public.gift_codes (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    code text NOT NULL,
+    reward numeric DEFAULT 0,
+    total_limit numeric DEFAULT 100,
+    used_count numeric DEFAULT 0,
+    max_per_user numeric DEFAULT 1,
+    is_active boolean DEFAULT true,
+    created_at timestamptz DEFAULT now()
+);
+
+-- Add columns if missing
+DO $$
+BEGIN
+    ALTER TABLE public.gift_codes ADD COLUMN IF NOT EXISTS reward numeric DEFAULT 0;
+    ALTER TABLE public.gift_codes ADD COLUMN IF NOT EXISTS total_limit numeric DEFAULT 100;
+    ALTER TABLE public.gift_codes ADD COLUMN IF NOT EXISTS used_count numeric DEFAULT 0;
+    ALTER TABLE public.gift_codes ADD COLUMN IF NOT EXISTS max_per_user numeric DEFAULT 1;
+    ALTER TABLE public.gift_codes ADD COLUMN IF NOT EXISTS is_active boolean DEFAULT true;
+END $$;
+
+-- Usage Tracking Table
+CREATE TABLE IF NOT EXISTS public.gift_code_usages (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id uuid REFERENCES public.users(id),
+    gift_code_id uuid REFERENCES public.gift_codes(id),
+    created_at timestamptz DEFAULT now()
+);
+
+-- Enable RLS
+ALTER TABLE public.gift_codes ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Public read giftcodes" ON public.gift_codes FOR SELECT TO anon, authenticated USING (true);
+CREATE POLICY "Admin manage giftcodes" ON public.gift_codes FOR ALL TO authenticated USING (true); -- Simplified for demo
+`;
+
 export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [activeView, setActiveView] = useState<'overview' | 'transactions' | 'users' | 'packages' | 'promotion' | 'giftcodes' | 'system'>('overview');
   const [stats, setStats] = useState<any>(null);
@@ -66,7 +103,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [apiKey, setApiKey] = useState('');
   const [showKey, setShowKey] = useState(false);
   const [keyStatus, setKeyStatus] = useState<'valid' | 'invalid' | 'unknown' | 'checking'>('unknown');
-  const [dbKeys, setDbKeys] = useState<any[]>([]); // List of keys from DB
+  const [dbKeys, setDbKeys] = useState<any[]>([]); 
   
   // Giftcode Promo Config
   const [giftcodePromo, setGiftcodePromo] = useState({ text: '', isActive: false });
@@ -86,6 +123,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [editingPackage, setEditingPackage] = useState<CreditPackage | null>(null);
   const [editingGiftcode, setEditingGiftcode] = useState<Giftcode | null>(null);
   const [editingPromotion, setEditingPromotion] = useState<PromotionCampaign | null>(null);
+
+  // Error Recovery States
+  const [showGiftcodeFix, setShowGiftcodeFix] = useState(false);
 
   // UX States
   const [processingTxId, setProcessingTxId] = useState<string | null>(null);
@@ -118,10 +158,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   useEffect(() => {
     if (isAdmin) {
         const init = async () => {
-            // 1. Load Data
             await refreshData();
-            
-            // 2. Run Checks 
             await runSystemChecks(undefined);
         };
         init();
@@ -289,6 +326,10 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               showToast('Lưu Giftcode thành công!');
           } else {
               showToast(`Lỗi: ${result.error}`, 'error');
+              // Detect specific DB Error for missing column
+              if (result.error?.includes('column') || result.error?.includes('schema cache')) {
+                  setShowGiftcodeFix(true);
+              }
           }
       }
   };
@@ -1000,6 +1041,63 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       </div>
 
       {/* --- MOVED MODALS (ROOT LEVEL) --- */}
+      
+      {/* GIFTCODE ERROR FIX MODAL (NEW) */}
+      {showGiftcodeFix && (
+          <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 animate-fade-in">
+              <div className="bg-[#12121a] w-full max-w-2xl p-6 rounded-2xl border border-red-500/50 shadow-[0_0_50px_rgba(255,0,0,0.2)] flex flex-col max-h-[90vh]">
+                  <div className="flex items-center gap-4 mb-4">
+                      <div className="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center text-red-500 animate-pulse">
+                          <Icons.Database className="w-6 h-6" />
+                      </div>
+                      <div>
+                          <h3 className="text-xl font-bold text-white">LỖI DATABASE: BẢNG GIFTCODE</h3>
+                          <p className="text-slate-400 text-xs">Phát hiện thiếu cột 'reward' hoặc bảng chưa được tạo</p>
+                      </div>
+                  </div>
+                  
+                  <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-xl mb-4">
+                      <p className="text-sm text-red-300 font-bold mb-1">Nguyên nhân:</p>
+                      <p className="text-xs text-slate-300 leading-relaxed">
+                          Supabase báo lỗi thiếu cột <code>reward</code> hoặc bảng <code>gift_codes</code> chưa tồn tại. Đây là lỗi phổ biến khi tạo bảng lần đầu.
+                      </p>
+                  </div>
+
+                  <div className="flex-1 overflow-hidden flex flex-col">
+                      <p className="text-sm font-bold text-green-400 mb-2 uppercase">Giải pháp: Copy mã SQL này và chạy trong Supabase SQL Editor</p>
+                      <div className="relative h-64 bg-black/50 border border-white/10 rounded-xl overflow-hidden">
+                          <pre className="absolute inset-0 p-4 text-[10px] md:text-xs font-mono text-slate-300 overflow-auto whitespace-pre-wrap selection:bg-audi-pink selection:text-white">
+                              {GIFTCODE_FIX_SQL}
+                          </pre>
+                          <button 
+                            onClick={() => {
+                                navigator.clipboard.writeText(GIFTCODE_FIX_SQL);
+                                showToast("Đã sao chép SQL!", 'info');
+                            }}
+                            className="absolute top-2 right-2 p-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors flex items-center gap-2 text-xs font-bold"
+                          >
+                              <Icons.Copy className="w-4 h-4" /> Sao chép
+                          </button>
+                      </div>
+                  </div>
+
+                  <div className="flex gap-3 mt-6">
+                      <a 
+                        href="https://supabase.com/dashboard/project/_/sql" 
+                        target="_blank" 
+                        rel="noreferrer"
+                        className="flex-1 py-3 bg-audi-purple hover:bg-purple-600 text-white rounded-xl font-bold text-center transition-colors flex items-center justify-center gap-2"
+                      >
+                          <Icons.Database className="w-4 h-4" /> Mở SQL Editor
+                      </a>
+                      <button onClick={() => setShowGiftcodeFix(false)} className="flex-1 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold transition-colors">
+                          Đóng
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
+
       {editingUser && (
           <div className="fixed inset-0 z-[2000] flex justify-center items-start p-4 pt-24 animate-fade-in overflow-y-auto">
               <div className="bg-[#12121a] w-full max-w-md p-6 rounded-2xl border border-white/20 shadow-2xl relative max-h-[90vh] overflow-y-auto custom-scrollbar">

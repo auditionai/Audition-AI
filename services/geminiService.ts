@@ -30,7 +30,7 @@ const getAiClient = async (specificKey?: string) => {
     });
 };
 
-// --- ERROR HANDLER & EXTRACTOR (FIXED CRASH) ---
+// --- ERROR HANDLER & EXTRACTOR ---
 const extractImage = (response: any): string | null => {
     // 1. Kiểm tra cấu trúc cơ bản
     if (!response) {
@@ -104,9 +104,9 @@ const uploadToGemini = async (base64Data: string, mimeType: string): Promise<str
 export const checkConnection = async (key?: string): Promise<boolean> => {
     try {
         const ai = await getAiClient(key);
-        // UPDATED: Use gemini-3-flash-preview for a reliable ping (Flash 2.5 deprecated)
+        // STRICTLY USE GEMINI 3.0 PRO FOR PING
         await ai.models.generateContent({
-             model: 'gemini-3-flash-preview',
+             model: 'gemini-3-pro-preview',
              contents: 'ping'
         });
         return true;
@@ -116,14 +116,14 @@ export const checkConnection = async (key?: string): Promise<boolean> => {
     }
 };
 
-// --- PROMPT REASONING ENGINE V3: THE "SANITIZER & ARCHITECT" ---
+// --- PROMPT REASONING ENGINE: STRICT PRO 3.0 ---
 const optimizePromptWithThinking = async (rawPrompt: string): Promise<string> => {
     try {
         const ai = await getAiClient();
-        // UPDATED: Use gemini-3-flash-preview
+        // STRICTLY USE GEMINI 3.0 PRO
         const response = await ai.models.generateContent({
-            model: 'gemini-3-flash-preview',
-            contents: `You are a Technical Prompt Engineer for a 3D Game Asset Generator.
+            model: 'gemini-3-pro-preview',
+            contents: `You are a Technical Prompt Engineer for a High-End 3D Game Asset Generator.
             
             USER INPUT: "${rawPrompt}"
             
@@ -134,13 +134,12 @@ const optimizePromptWithThinking = async (rawPrompt: string): Promise<string> =>
             4.  **Structure**: [Subject] + [Action/Pose] + [Outfit] + [Environment] + [Lighting] + [Style Tags].
             
             MANDATORY STYLE TAGS TO ADD:
-            "3D Game Character, Korean MMO Style, Tall Slender Body, Long Legs, Small Head, Fashion Model Ratio, 8-head tall, Smooth Texture, Non-Photorealistic Rendering, Octane Render".
+            "3D Game Character, Korean MMO Style, Tall Slender Body, Long Legs, Small Head, Fashion Model Ratio, 8-head tall, Smooth Texture, Non-Photorealistic Rendering, Octane Render, 8K Resolution".
             
             OUTPUT:
             Return ONLY the final prompt string. No conversational text.`,
         });
         
-        // Safety check on the reasoning output itself
         const result = response.text?.trim();
         if (!result) throw new Error("Empty reasoning response");
         return result;
@@ -156,8 +155,7 @@ const processDigitalTwinMode = (
     prompt: string, 
     refImagePart: any | null, 
     charParts: any[], 
-    charDescriptions: string[],
-    modelTier: 'flash' | 'pro'
+    charDescriptions: string[]
 ): { systemPrompt: string, parts: any[] } => {
     
     const parts = [];
@@ -172,8 +170,7 @@ const processDigitalTwinMode = (
         parts.push(...charParts);
     }
 
-    // UPDATED SYSTEM PROMPT TO PREVENT REALISM AND CHIBI
-    const systemPrompt = `** SYSTEM DIRECTIVE: KOREAN MMO GAME CHARACTER GENERATION **
+    const systemPrompt = `** SYSTEM DIRECTIVE: KOREAN MMO GAME CHARACTER GENERATION (GEMINI 3.0 PRO) **
     
     1.  **STRICT BODY PROPORTIONS (CRITICAL)**:
         - The character MUST have **TALL, SLENDER, ADULT** proportions (like K-Pop Idols or Fashion Models).
@@ -200,132 +197,111 @@ const processDigitalTwinMode = (
     return { systemPrompt, parts };
 };
 
-// --- MAIN GENERATION FUNCTION WITH SMART RETRY ---
+// --- MAIN GENERATION FUNCTION: STRICT PRO 3.0 ONLY ---
 export const generateImage = async (
     prompt: string, 
     aspectRatio: string = "1:1", 
     styleRefBase64?: string, 
     characterDataList: CharacterData[] = [], 
     resolution: string = '2K',
-    _modelTier: 'flash' | 'pro' = 'pro', 
+    _modelTier: 'pro' = 'pro', // Parameter ignored, enforced internally
     useSearch: boolean = true, 
     useCloudRef: boolean = true, 
     onProgress?: (msg: string) => void
 ): Promise<string | null> => {
   
   const ai = await getAiClient();
-  const model = 'gemini-3-pro-image-preview'; // Only this model supports high quality generation
+  
+  // STRICTLY ENFORCE GEMINI 3.0 PRO IMAGE MODEL
+  const MODEL_NAME = 'gemini-3-pro-image-preview';
 
-  // --- INTERNAL HELPER: EXECUTE RUN ---
-  const executeRun = async (currentPrompt: string, isRetry: boolean = false): Promise<string | null> => {
-        
-        // Prepare Inputs
-        let refImagePart = null;
-        if (styleRefBase64) {
-            refImagePart = {
-                inlineData: { data: cleanBase64(styleRefBase64), mimeType: 'image/jpeg' }
-            };
-        }
-
-        const allParts: any[] = [];
-        const charDescriptions: string[] = [];
-
-        for (const char of characterDataList) {
-            if (char.image) {
-                // Chỉ log scan lần đầu
-                if (!isRetry && onProgress) onProgress(`Scanning Identity Features (Player ${char.id})...`);
-                
-                const textureSheet = await createTextureSheet(char.image, char.faceImage, char.shoesImage);
-                let finalPart;
-
-                // Cloud upload for better quality, fallback to inline
-                if (useCloudRef) {
-                    try {
-                        const fileUri = await uploadToGemini(textureSheet, 'image/jpeg');
-                        finalPart = { fileData: { mimeType: 'image/jpeg', fileUri: fileUri } };
-                    } catch (e) {
-                        finalPart = { inlineData: { data: cleanBase64(textureSheet), mimeType: 'image/jpeg' } };
-                    }
-                } else {
-                    finalPart = { inlineData: { data: cleanBase64(textureSheet), mimeType: 'image/jpeg' } };
-                }
-                allParts.push(finalPart);
-                charDescriptions.push(char.gender);
-            }
-        }
-
-        const payload = processDigitalTwinMode(currentPrompt, refImagePart, allParts, charDescriptions, 'pro');
-        const finalParts = [...payload.parts, { text: payload.systemPrompt }];
-
-        const config: any = {
-            imageConfig: { aspectRatio: aspectRatio, imageSize: resolution },
-            // Safety Settings: BLOCK_ONLY_HIGH to allow artistic freedom but prevent illegal content
-            safetySettings: [
-                { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_ONLY_HIGH" },
-                { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" },
-                { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_ONLY_HIGH" }, // Relaxed to allow "sexy" but not "porn"
-                { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_ONLY_HIGH" }
-            ]
-        };
-
-        if (useSearch && !refImagePart && currentPrompt.length < 50) {
-            config.tools = [{ googleSearch: {} }];
-        }
-
-        if (onProgress) onProgress(isRetry ? "Retrying with Safety Filters..." : "Rendering Final Image (This may take 2-3 mins)...");
-
-        // Gọi API
-        const response = await ai.models.generateContent({
-            model: model,
-            contents: { parts: finalParts },
-            config: config
-        });
-
-        return extractImage(response);
-  };
-
-  // --- MAIN FLOW ---
   try {
-    // 1. OPTIMIZATION PHASE
-    if (onProgress) onProgress("Analyzing Prompt & Safety Check...");
+    // 1. OPTIMIZATION PHASE (Using Gemini 3.0 Pro Text)
+    if (onProgress) onProgress("Analyzing Prompt with Gemini 3.0 Pro...");
     const optimizedPrompt = await optimizePromptWithThinking(prompt);
+    
     let finalPromptToUse = optimizedPrompt;
-
-    // Safety Net: Ensure 3D context is STYLIZED & TALL
     if (!finalPromptToUse.toLowerCase().includes("tall")) {
         finalPromptToUse = "Tall Slender 3D Game Character, Adult Proportions, " + finalPromptToUse + " --no chibi --no photorealistic";
     }
 
-    // 2. EXECUTION PHASE (ATTEMPT 1)
-    if (onProgress) onProgress(`Engine: ${model} | Scene Construction...`);
-    try {
-        return await executeRun(finalPromptToUse);
-    } catch (firstError: any) {
-        // 3. RETRY PHASE (ATTEMPT 2 - FALLBACK)
-        console.warn("Attempt 1 Failed:", firstError.message);
-        
-        // Nếu lỗi là do Safety hoặc Model không hiểu Prompt tối ưu, thử lại với Prompt gốc
-        // Prompt gốc thường ngắn hơn và ít gây hiểu lầm cho bộ lọc Safety
-        if (onProgress) onProgress("⚠️ Attempt 1 failed. Re-calibrating for Safety & Stability...");
-        
-        // Thêm delay nhẹ để tránh rate limit
-        await new Promise(r => setTimeout(r, 2000));
-
-        const safeFallbackPrompt = `Tall 3D Game Character, Fashion Model Body, ${prompt} --safe --no nudity --no chibi`;
-        return await executeRun(safeFallbackPrompt, true);
+    // 2. PREPARE ASSETS
+    let refImagePart = null;
+    if (styleRefBase64) {
+        refImagePart = {
+            inlineData: { data: cleanBase64(styleRefBase64), mimeType: 'image/jpeg' }
+        };
     }
 
-  } catch (error) {
+    const allParts: any[] = [];
+    const charDescriptions: string[] = [];
+
+    for (const char of characterDataList) {
+        if (char.image) {
+            if (onProgress) onProgress(`Scanning Identity Features (Player ${char.id})...`);
+            
+            const textureSheet = await createTextureSheet(char.image, char.faceImage, char.shoesImage);
+            let finalPart;
+
+            if (useCloudRef) {
+                try {
+                    const fileUri = await uploadToGemini(textureSheet, 'image/jpeg');
+                    finalPart = { fileData: { mimeType: 'image/jpeg', fileUri: fileUri } };
+                } catch (e) {
+                    finalPart = { inlineData: { data: cleanBase64(textureSheet), mimeType: 'image/jpeg' } };
+                }
+            } else {
+                finalPart = { inlineData: { data: cleanBase64(textureSheet), mimeType: 'image/jpeg' } };
+            }
+            allParts.push(finalPart);
+            charDescriptions.push(char.gender);
+        }
+    }
+
+    // 3. CONSTRUCT PAYLOAD
+    const payload = processDigitalTwinMode(finalPromptToUse, refImagePart, allParts, charDescriptions);
+    const finalParts = [...payload.parts, { text: payload.systemPrompt }];
+
+    const config: any = {
+        imageConfig: { 
+            aspectRatio: aspectRatio,
+            imageSize: resolution // Only Pro supports this
+        },
+        safetySettings: [
+            { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_ONLY_HIGH" },
+            { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" },
+            { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_ONLY_HIGH" },
+            { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_ONLY_HIGH" }
+        ]
+    };
+
+    if (useSearch && !refImagePart && finalPromptToUse.length < 50) {
+        config.tools = [{ googleSearch: {} }];
+    }
+
+    if (onProgress) onProgress(`Engine: ${MODEL_NAME} | Rendering...`);
+
+    // 4. EXECUTE GENERATION
+    const response = await ai.models.generateContent({
+        model: MODEL_NAME,
+        contents: { parts: finalParts },
+        config: config
+    });
+
+    return extractImage(response);
+
+  } catch (error: any) {
     console.error("Gemini Pipeline Final Error:", error);
-    throw error; // Ném lỗi ra để UI hoàn tiền
+    throw error;
   }
 };
 
 export const editImageWithInstructions = async (base64Data: string, instruction: string, mimeType: string): Promise<string | null> => {
     try {
         const ai = await getAiClient();
+        // STRICTLY USE GEMINI 3.0 PRO IMAGE
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash-image', 
+            model: 'gemini-3-pro-image-preview', 
             contents: {
                 parts: [
                     { inlineData: { data: cleanBase64(base64Data), mimeType: mimeType } },
@@ -343,9 +319,9 @@ export const editImageWithInstructions = async (base64Data: string, instruction:
 export const suggestPrompt = async (currentInput: string, lang: string, featureName: string): Promise<string> => {
     try {
         const ai = await getAiClient();
-        // UPDATED: Use gemini-3-flash-preview
+        // STRICTLY USE GEMINI 3.0 PRO
         const response = await ai.models.generateContent({
-            model: 'gemini-3-flash-preview', 
+            model: 'gemini-3-pro-preview', 
             contents: currentInput || `Create a 3D character concept for ${featureName}`,
             config: {
                 systemInstruction: `You are an AI Prompt Expert for 3D Game Assets. Output ONLY the refined 3D-centric prompt. Keep it stylized/anime but with TALL/ADULT proportions.`,

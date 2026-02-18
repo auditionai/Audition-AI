@@ -317,19 +317,26 @@ export const claimMilestoneReward = async (day: number): Promise<{success: boole
     }
 };
 
-// --- API KEYS ---
+// --- API KEYS (WITH ROTATION) ---
 
 export const getSystemApiKey = async (): Promise<string | null> => {
     try {
+        // Fetch ALL active keys for Load Balancing
         const { data, error } = await supabase
             .from('api_keys')
             .select('key_value')
-            .eq('status', 'active')
-            .limit(1)
-            .single();
+            .eq('status', 'active');
         
-        if (error || !data) return null;
-        return data.key_value;
+        if (error || !data || data.length === 0) return null;
+
+        // Random Selection (Rotation)
+        // This distributes the load across all available keys in the DB
+        const randomIndex = Math.floor(Math.random() * data.length);
+        const selectedKey = data[randomIndex].key_value;
+        
+        console.log(`[System] Load Balancing: Selected API Key Index ${randomIndex} of ${data.length}`);
+        
+        return selectedKey;
     } catch (e) {
         return null;
     }

@@ -49,134 +49,9 @@ interface ConfirmState {
     show: boolean;
     msg: string;
     title?: string;
-    sqlHelp?: string;
     isAlertOnly?: boolean;
     onConfirm: () => void;
 }
-
-const TRIGGER_FIX_SQL = `-- 1. Clean up old triggers and functions
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-DROP FUNCTION IF EXISTS public.handle_new_user();
-
--- 2. Drop existing policies to avoid "already exists" errors
-DO $$ 
-BEGIN
-    IF EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'users' AND policyname = 'Public read users') THEN
-        DROP POLICY "Public read users" ON public.users;
-    END IF;
-    IF EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'users' AND policyname = 'Users can update own profile') THEN
-        DROP POLICY "Users can update own profile" ON public.users;
-    END IF;
-    IF EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'users' AND policyname = 'Users can insert own profile') THEN
-        DROP POLICY "Users can insert own profile" ON public.users;
-    END IF;
-    IF EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'users' AND policyname = 'Admins can update any profile') THEN
-        DROP POLICY "Admins can update any profile" ON public.users;
-    END IF;
-END $$;
-
--- 3. Re-create Function
-CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS TRIGGER AS $$
-BEGIN
-  INSERT INTO public.users (
-    id, 
-    email, 
-    display_name, 
-    photo_url, 
-    diamonds, 
-    is_admin, 
-    created_at,
-    updated_at
-  )
-  VALUES (
-    new.id,
-    new.email,
-    COALESCE(new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'name', split_part(new.email, '@', 1)),
-    COALESCE(new.raw_user_meta_data->>'avatar_url', ''),
-    0, -- 0 Vcoin Default
-    false,
-    now(),
-    now()
-  )
-  ON CONFLICT (id) DO NOTHING;
-  RETURN new;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- 4. Activate Trigger
-CREATE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
-
--- 5. Enable RLS and Create Policies
-ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Public read users" ON public.users FOR SELECT USING (true);
-CREATE POLICY "Users can update own profile" ON public.users FOR UPDATE USING (auth.uid() = id);
-CREATE POLICY "Users can insert own profile" ON public.users FOR INSERT WITH CHECK (auth.uid() = id);
-
--- 6. ADMIN POLICY: Allow Admins to UPDATE ANY PROFILE
-CREATE POLICY "Admins can update any profile" ON public.users FOR UPDATE USING (
-  (SELECT is_admin FROM public.users WHERE id = auth.uid()) = true
-);
-`;
-
-const API_KEY_FIX_SQL = `-- Fix API Keys Table Structure
--- 1. Create table if not exists
-CREATE TABLE IF NOT EXISTS public.api_keys (
-    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    created_at timestamptz DEFAULT now(),
-    updated_at timestamptz DEFAULT now(),
-    name text,
-    key_value text UNIQUE,
-    status text DEFAULT 'active',
-    usage_count bigint DEFAULT 0
-);
-
--- 2. Add columns if missing (Safe Mode)
-DO $$ 
-BEGIN 
-    BEGIN
-        ALTER TABLE public.api_keys ADD COLUMN updated_at timestamptz DEFAULT now();
-    EXCEPTION
-        WHEN duplicate_column THEN NULL;
-    END;
-    BEGIN
-        ALTER TABLE public.api_keys ADD COLUMN name text;
-    EXCEPTION
-        WHEN duplicate_column THEN NULL;
-    END;
-    BEGIN
-        ALTER TABLE public.api_keys ADD COLUMN status text DEFAULT 'active';
-    EXCEPTION
-        WHEN duplicate_column THEN NULL;
-    END;
-END $$;
-
--- 3. Enable RLS
-ALTER TABLE public.api_keys ENABLE ROW LEVEL SECURITY;
-
--- 4. Create Policies (Drop first to avoid conflicts)
-DROP POLICY IF EXISTS "Enable all access for api_keys" ON public.api_keys;
-CREATE POLICY "Enable all access for api_keys" ON public.api_keys FOR ALL USING (true) WITH CHECK (true);
-`;
-
-const CONSTRAINT_FIX_SQL = `-- Fix Transaction Status Constraint Error (Safe Mode)
-
--- 1. Drop existing constraint
-ALTER TABLE public.transactions DROP CONSTRAINT IF EXISTS transactions_status_check;
-
--- 2. IMPORTANT: Fix any existing bad data that might block the new constraint
--- This ensures all rows match the allowed values before we lock it down.
-UPDATE public.transactions 
-SET status = 'pending' 
-WHERE status IS NULL OR status NOT IN ('pending', 'paid', 'failed', 'cancelled', 'success');
-
--- 3. Add the new flexible constraint
-ALTER TABLE public.transactions 
-ADD CONSTRAINT transactions_status_check 
-CHECK (status IN ('pending', 'paid', 'failed', 'cancelled', 'success'));`;
 
 export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [activeView, setActiveView] = useState<'overview' | 'transactions' | 'users' | 'packages' | 'promotion' | 'giftcodes' | 'system'>('overview');
@@ -239,11 +114,6 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       });
   };
 
-  const copySql = (sql: string) => {
-      navigator.clipboard.writeText(sql);
-      showToast('Đã sao chép mã SQL!', 'info');
-  }
-
   // Load Data Sequence
   useEffect(() => {
     if (isAdmin) {
@@ -251,16 +121,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
             // 1. Load Data
             await refreshData();
             
-            // 2. Load Key
-            const key = await getSystemApiKey();
-            if (key) {
-                setApiKey(key);
-                setKeyStatus('checking'); // Set to checking visibly
-                // 3. Run Checks with the loaded key
-                await runSystemChecks(key);
-            } else {
-                await runSystemChecks(undefined);
-            }
+            // 2. Run Checks 
+            await runSystemChecks(undefined);
         };
         init();
     }
@@ -329,31 +191,12 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           if (result.success) {
               setKeyStatus('valid');
               showToast('Đã lưu API Key vào Database thành công!');
+              setApiKey(''); // Clear input for security
               await refreshData(); 
-              runSystemChecks(apiKey);
+              runSystemChecks();
           } else {
               setKeyStatus('unknown');
-              if (result.error?.includes('permission') || result.error?.includes('policy') || result.error?.includes('RLS')) {
-                  setConfirmDialog({
-                      show: true,
-                      title: '⚠️ Cần Cấp Quyền Database cho API Key',
-                      msg: 'Database chưa cho phép lưu API Key mới. Vui lòng chạy lệnh SQL sau để cấp quyền:',
-                      sqlHelp: API_KEY_FIX_SQL,
-                      isAlertOnly: true,
-                      onConfirm: () => {}
-                  });
-              } else if (result.error?.includes('column')) {
-                  setConfirmDialog({
-                      show: true,
-                      title: '⚠️ Lỗi Cấu Trúc Bảng (Thiếu Cột)',
-                      msg: 'Bảng api_keys thiếu cột cần thiết (updated_at hoặc status). Chạy lệnh sau để sửa:',
-                      sqlHelp: API_KEY_FIX_SQL,
-                      isAlertOnly: true,
-                      onConfirm: () => {}
-                  });
-              } else {
-                  showToast(`Lỗi Database: ${result.error}`, 'error');
-              }
+              showToast(`Lỗi Database: ${result.error}`, 'error');
           }
       } else {
           setKeyStatus('invalid');
@@ -389,15 +232,6 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               showToast('Cập nhật người dùng thành công!');
           } else {
               showToast(`Lỗi: ${result.error}`, 'error');
-              if (result.error?.includes('RLS') || result.error?.includes('permission')) {
-                  setConfirmDialog({
-                      show: true,
-                      title: '⚠️ Cần Cấp Quyền Admin',
-                      msg: 'Database đang chặn Admin sửa thông tin User khác. Vui lòng vào tab "Hệ Thống" -> "Sửa Lỗi Trigger" và chạy mã SQL mới.',
-                      isAlertOnly: true,
-                      onConfirm: () => {}
-                  });
-              }
           }
       }
   };
@@ -410,32 +244,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               refreshData();
               showToast('Cập nhật gói nạp thành công!');
           } else {
-              if (result.error?.includes('RLS') || result.error?.includes('permission') || result.error?.includes('policy')) {
-                  setConfirmDialog({
-                      show: true,
-                      title: '⚠️ Cần Cấp Quyền Database (RLS)',
-                      msg: 'Database đang chặn việc lưu Gói Nạp. Hãy copy đoạn mã dưới đây và chạy trong SQL Editor của Supabase:',
-                      sqlHelp: `ALTER TABLE public.credit_packages ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Enable all access for credit packages" ON public.credit_packages FOR ALL USING (true) WITH CHECK (true);`,
-                      isAlertOnly: true,
-                      onConfirm: () => {}
-                  });
-              } 
-              else if (result.error?.includes('transfer_syntax') || result.error?.includes('column')) {
-                  setConfirmDialog({
-                      show: true,
-                      title: '⚠️ Cần Cập Nhật Database (Thiếu Cột)',
-                      msg: 'Database thiếu cột "transfer_syntax" hoặc "bonus_credits". Hãy chạy lệnh SQL sau để sửa:',
-                      sqlHelp: `ALTER TABLE public.credit_packages 
-ADD COLUMN IF NOT EXISTS transfer_syntax text DEFAULT '',
-ADD COLUMN IF NOT EXISTS bonus_credits int8 DEFAULT 0;`,
-                      isAlertOnly: true,
-                      onConfirm: () => {}
-                  });
-              }
-              else {
-                  showToast(`Lỗi: ${result.error}`, 'error');
-              }
+              showToast(`Lỗi: ${result.error}`, 'error');
           }
       }
   };
@@ -479,19 +288,7 @@ ADD COLUMN IF NOT EXISTS bonus_credits int8 DEFAULT 0;`,
               refreshData();
               showToast('Lưu Giftcode thành công!');
           } else {
-              if (result.error?.includes('RLS') || result.error?.includes('permission') || result.error?.includes('policy')) {
-                  setConfirmDialog({
-                      show: true,
-                      title: '⚠️ Cần Cấp Quyền Database',
-                      msg: 'Database đang chặn việc tạo Giftcode mới. Hãy copy đoạn mã dưới đây và chạy trong SQL Editor của Supabase để mở khóa:',
-                      sqlHelp: `ALTER TABLE public.gift_codes ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Enable all access for gift codes" ON public.gift_codes FOR ALL USING (true) WITH CHECK (true);`,
-                      isAlertOnly: true,
-                      onConfirm: () => {}
-                  });
-              } else {
-                  showToast(`Lỗi: ${result.error}`, 'error');
-              }
+              showToast(`Lỗi: ${result.error}`, 'error');
           }
       }
   };
@@ -509,19 +306,7 @@ CREATE POLICY "Enable all access for gift codes" ON public.gift_codes FOR ALL US
       if (result.success) {
           showToast('Đã lưu thông báo thành công!');
       } else {
-          if (result.error?.includes('permission') || result.error?.includes('policy')) {
-              setConfirmDialog({
-                  show: true,
-                  title: '⚠️ Cần Cấp Quyền Settings',
-                  msg: 'Cần mở quyền ghi cho bảng system_settings.',
-                  sqlHelp: `ALTER TABLE public.system_settings ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Enable all access" ON public.system_settings FOR ALL USING (true) WITH CHECK (true);`,
-                  isAlertOnly: true,
-                  onConfirm: () => {}
-              });
-          } else {
-              showToast('Lỗi lưu: ' + result.error, 'error');
-          }
+          showToast('Lỗi lưu: ' + result.error, 'error');
       }
   }
 
@@ -533,28 +318,7 @@ CREATE POLICY "Enable all access" ON public.system_settings FOR ALL USING (true)
               refreshData();
               showToast('Lưu chiến dịch thành công!');
           } else {
-              if (result.error?.includes('column') || result.error?.includes('bonus_percent') || result.error?.includes('title')) {
-                  setConfirmDialog({
-                      show: true,
-                      title: '⚠️ Cấu trúc Database chưa đồng bộ',
-                      msg: 'Bảng "promotions" thiếu các cột quan trọng. Vui lòng chạy lệnh SQL sau trong Supabase Editor:',
-                      sqlHelp: `ALTER TABLE public.promotions 
-ADD COLUMN IF NOT EXISTS title text,
-ADD COLUMN IF NOT EXISTS description text,
-ADD COLUMN IF NOT EXISTS bonus_percent int8 DEFAULT 0,
-ADD COLUMN IF NOT EXISTS start_time timestamptz DEFAULT now(),
-ADD COLUMN IF NOT EXISTS end_time timestamptz DEFAULT now(),
-ADD COLUMN IF NOT EXISTS is_active boolean DEFAULT true;
-
--- Enable RLS just in case
-ALTER TABLE public.promotions ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Enable access" ON public.promotions FOR ALL USING (true) WITH CHECK (true);`,
-                      isAlertOnly: true,
-                      onConfirm: () => {}
-                  });
-              } else {
-                  showToast(`Lỗi: ${result.error}`, 'error');
-              }
+              showToast(`Lỗi: ${result.error}`, 'error');
           }
       }
   };
@@ -588,30 +352,8 @@ CREATE POLICY "Enable access" ON public.promotions FOR ALL USING (true) WITH CHE
               showToast('Đã duyệt thành công!');
               await refreshData();
           } else {
-              // --- AUTO DETECT SQL ERRORS ---
-              if (result.error?.includes('transactions_status_check')) {
-                  setConfirmDialog({
-                      show: true,
-                      title: '⚠️ Lỗi Constraint (Trạng thái)',
-                      msg: 'Bảng transactions có ràng buộc giá trị (Check Constraint) không cho phép trạng thái "paid". Hãy chạy lệnh SQL sau để sửa:',
-                      sqlHelp: CONSTRAINT_FIX_SQL,
-                      isAlertOnly: true,
-                      onConfirm: () => {}
-                  });
-              } else if (result.error?.includes('RLS') || result.error?.includes('permission') || result.error?.includes('policy')) {
-                  setConfirmDialog({
-                      show: true,
-                      title: '⚠️ Cần Cấp Quyền Duyệt Giao Dịch',
-                      msg: 'Database chưa cho phép tài khoản của bạn cập nhật trạng thái giao dịch. Chạy lệnh sau để sửa:',
-                      sqlHelp: `ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Enable all access for transactions" ON public.transactions FOR ALL USING (true) WITH CHECK (true);`,
-                      isAlertOnly: true,
-                      onConfirm: () => {}
-                  });
-              } else {
-                  showToast('Lỗi: ' + result.error, 'error');
-                  await refreshData();
-              }
+              showToast('Lỗi: ' + result.error, 'error');
+              await refreshData();
           }
           setProcessingTxId(null);
       });
@@ -630,19 +372,7 @@ CREATE POLICY "Enable all access for transactions" ON public.transactions FOR AL
               showToast('Đã từ chối giao dịch', 'info');
               await refreshData();
           } else {
-              if (result.error?.includes('RLS') || result.error?.includes('permission') || result.error?.includes('policy')) {
-                  setConfirmDialog({
-                      show: true,
-                      title: '⚠️ Cần Cấp Quyền Duyệt Giao Dịch',
-                      msg: 'Database chưa cho phép tài khoản của bạn cập nhật trạng thái giao dịch. Chạy lệnh sau để sửa:',
-                      sqlHelp: `ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Enable all access for transactions" ON public.transactions FOR ALL USING (true) WITH CHECK (true);`,
-                      isAlertOnly: true,
-                      onConfirm: () => {}
-                  });
-              } else {
-                  showToast('Lỗi: ' + result.error, 'error');
-              }
+              showToast('Lỗi: ' + result.error, 'error');
           }
           setProcessingTxId(null);
       });
@@ -658,76 +388,9 @@ CREATE POLICY "Enable all access for transactions" ON public.transactions FOR AL
               setTransactions(prev => prev.filter(t => t.id !== txId));
               showToast('Đã xóa giao dịch vĩnh viễn', 'info');
           } else {
-              if (res.error?.includes('policy') || res.error?.includes('phân quyền') || res.error?.includes('RLS')) {
-                   setConfirmDialog({
-                      show: true,
-                      title: '⚠️ Cần Cấp Quyền Xóa Giao Dịch',
-                      msg: 'Database chưa cho phép xóa giao dịch. Chạy lệnh sau trong Supabase:',
-                      sqlHelp: `CREATE POLICY "Enable delete for admin" ON public.transactions FOR DELETE USING (true);`,
-                      isAlertOnly: true,
-                      onConfirm: () => {}
-                   });
-              } else {
-                   showToast('Lỗi xóa: ' + res.error, 'error');
-              }
+               showToast('Lỗi xóa: ' + res.error, 'error');
           }
           setProcessingTxId(null);
-      });
-  }
-
-  const handleFixShowcasePermissions = () => {
-      setConfirmDialog({
-          show: true,
-          title: '🔧 Sửa lỗi Showcase (Ảnh không hiện)',
-          msg: 'Lỗi này xảy ra do Database chưa cấp quyền "Công Khai" cho các ảnh được chia sẻ (is_public = true). Hãy chạy lệnh SQL dưới đây trong Supabase Editor:',
-          sqlHelp: `-- 1. Cho phép mọi người (anon) xem ảnh đã public
-create policy "Allow public viewing of shared images"
-on public.generated_images
-for select
-to anon
-using (is_public = true);
-
--- 2. (Tùy chọn) Cho phép lấy tên tác giả
-create policy "Allow public reading of basic user info"
-on public.users
-for select
-to anon
-using (true);`,
-          isAlertOnly: true,
-          onConfirm: () => {}
-      });
-  };
-
-  const handleFixTrigger = () => {
-      setConfirmDialog({
-          show: true,
-          title: '🔧 Sửa lỗi Trigger (Tạo User Mới)',
-          msg: 'Lỗi này xảy ra khi User mới đăng ký nhưng không được tạo Profile tự động trong bảng public.users.',
-          sqlHelp: TRIGGER_FIX_SQL,
-          isAlertOnly: true,
-          onConfirm: () => {}
-      });
-  }
-
-  const handleFixTransactionConstraint = () => {
-      setConfirmDialog({
-          show: true,
-          title: '🔧 Sửa lỗi Duyệt Đơn (Constraint)',
-          msg: 'Lỗi "violates check constraint" xuất hiện khi Database không cho phép update trạng thái thành "paid" hoặc "failed".',
-          sqlHelp: CONSTRAINT_FIX_SQL,
-          isAlertOnly: true,
-          onConfirm: () => {}
-      });
-  }
-
-  const handleFixApiKeyTable = () => {
-      setConfirmDialog({
-          show: true,
-          title: '🔧 Sửa lỗi Bảng API Key',
-          msg: 'Lỗi này xảy ra khi bảng api_keys thiếu cột cần thiết (updated_at) hoặc chưa được tạo.',
-          sqlHelp: API_KEY_FIX_SQL,
-          isAlertOnly: true,
-          onConfirm: () => {}
       });
   }
 
@@ -784,21 +447,6 @@ using (true);`,
                   <h3 className="text-lg font-bold text-white text-center mb-2">{confirmDialog.title || 'Thông báo'}</h3>
                   <p className="text-slate-400 text-center text-sm mb-6 leading-relaxed">{confirmDialog.msg}</p>
                   
-                  {confirmDialog.sqlHelp && (
-                      <div className="mb-6 relative">
-                          <pre className="bg-black/50 p-4 rounded-lg border border-red-500/30 text-xs text-green-400 font-mono overflow-x-auto whitespace-pre-wrap max-h-40">
-                              {confirmDialog.sqlHelp}
-                          </pre>
-                          <button 
-                            onClick={() => copySql(confirmDialog.sqlHelp!)}
-                            className="absolute top-2 right-2 p-1.5 bg-white/10 hover:bg-white/20 rounded text-white"
-                            title="Copy Code"
-                          >
-                              <Icons.Share className="w-3 h-3" />
-                          </button>
-                      </div>
-                  )}
-
                   <div className="flex gap-3">
                       {!confirmDialog.isAlertOnly && (
                           <button onClick={() => setConfirmDialog(prev => ({...prev, show: false}))} className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-bold transition-colors">
@@ -1189,7 +837,7 @@ using (true);`,
               <div className="space-y-6 animate-slide-in-right">
                   <div className="flex justify-between items-center">
                       <h2 className="text-lg md:text-2xl font-bold text-white">Hệ Thống</h2>
-                      <button onClick={() => runSystemChecks(apiKey)} className="px-3 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-bold text-white flex items-center gap-2">
+                      <button onClick={() => runSystemChecks(undefined)} className="px-3 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-bold text-white flex items-center gap-2">
                           <Icons.Rocket className="w-4 h-4" /> <span className="hidden md:inline">Quét Ngay</span>
                       </button>
                   </div>
@@ -1221,75 +869,12 @@ using (true);`,
                       </div>
                   </div>
 
-                  {/* SQL Helper Tools */}
-                  <div className="bg-[#12121a] p-6 rounded-2xl border border-white/10">
-                      <h3 className="font-bold text-lg text-white mb-4 flex items-center gap-2">
-                          <Icons.Wand className="w-5 h-5 text-audi-yellow" />
-                          Công Cụ Sửa Lỗi Nhanh
-                      </h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="p-4 bg-white/5 rounded-xl border border-white/10">
-                              <h4 className="font-bold text-white mb-2">Sửa Lỗi Showcase (Ảnh không hiện)</h4>
-                              <p className="text-xs text-slate-400 mb-4">
-                                  Dùng khi khách vào trang chủ không thấy ảnh mặc dù đã share. Do Supabase chặn quyền xem public.
-                              </p>
-                              <button 
-                                onClick={handleFixShowcasePermissions}
-                                className="w-full py-2 bg-audi-purple/20 border border-audi-purple text-audi-purple hover:bg-audi-purple hover:text-white rounded-lg font-bold transition-all text-sm"
-                              >
-                                  Lấy Mã SQL Sửa Lỗi
-                              </button>
-                          </div>
-                          
-                          <div className="p-4 bg-white/5 rounded-xl border border-white/10">
-                              <h4 className="font-bold text-white mb-2">Sửa Lỗi Trigger (Tạo User Mới)</h4>
-                              <p className="text-xs text-slate-400 mb-4">
-                                  Dùng khi tài khoản mới đăng ký bị lỗi không nhận Giftcode, không điểm danh được hoặc <b>Admin không sửa được số dư User khác</b>.
-                              </p>
-                              <button 
-                                onClick={handleFixTrigger}
-                                className="w-full py-2 bg-red-500/20 border border-red-500 text-red-500 hover:bg-red-500 hover:text-white rounded-lg font-bold transition-all text-sm"
-                              >
-                                  Lấy Mã SQL Sửa Trigger
-                              </button>
-                          </div>
-
-                          <div className="p-4 bg-white/5 rounded-xl border border-white/10">
-                              <h4 className="font-bold text-white mb-2">Sửa Lỗi Duyệt Đơn (Constraint)</h4>
-                              <p className="text-xs text-slate-400 mb-4">
-                                  Dùng khi duyệt đơn báo lỗi "violates check constraint". Do Database chặn trạng thái "paid".
-                              </p>
-                              <button 
-                                onClick={handleFixTransactionConstraint}
-                                className="w-full py-2 bg-yellow-500/20 border border-yellow-500 text-yellow-500 hover:bg-yellow-500 hover:text-white rounded-lg font-bold transition-all text-sm"
-                              >
-                                  Lấy Mã SQL Sửa Lỗi
-                              </button>
-                          </div>
-
-                          {/* NEW: API KEY TABLE FIXER */}
-                          <div className="p-4 bg-white/5 rounded-xl border border-white/10">
-                              <h4 className="font-bold text-white mb-2">Sửa Lỗi Bảng API Key</h4>
-                              <p className="text-xs text-slate-400 mb-4">
-                                  Dùng khi thêm API Key báo lỗi "missing column updated_at" hoặc bảng chưa được tạo đúng.
-                              </p>
-                              <button 
-                                onClick={handleFixApiKeyTable}
-                                className="w-full py-2 bg-blue-500/20 border border-blue-500 text-blue-500 hover:bg-blue-500 hover:text-white rounded-lg font-bold transition-all text-sm"
-                              >
-                                  Lấy Mã SQL Sửa Lỗi API Key
-                              </button>
-                          </div>
-                      </div>
-                  </div>
-
                   {/* API Key Configuration */}
                   <div className="bg-[#12121a] p-6 rounded-2xl border border-white/10">
                       <h3 className="font-bold text-lg text-white mb-4 flex items-center gap-2">
                           <Icons.Lock className="w-5 h-5 text-audi-pink" />
-                          Cấu hình Gemini API Key (System Active)
+                          Thêm mới Gemini API Key (System)
                       </h3>
-                      {/* ... rest of api key config ... */}
                       <div className="space-y-4">
                           <div>
                               <div className="flex justify-between items-end mb-2">
@@ -1301,9 +886,9 @@ using (true);`,
                                           keyStatus === 'checking' ? 'bg-yellow-500/20 text-yellow-400' :
                                           'bg-white/10 text-slate-400'
                                       }`}>
-                                          {keyStatus === 'valid' ? 'ACTIVE & SAVED' :
-                                           keyStatus === 'invalid' ? 'INVALID KEY' :
-                                           keyStatus === 'checking' ? 'VERIFYING...' : 'STATUS UNKNOWN'}
+                                          {keyStatus === 'valid' ? 'VALID' :
+                                           keyStatus === 'invalid' ? 'INVALID' :
+                                           keyStatus === 'checking' ? 'CHECKING...' : 'IDLE'}
                                       </span>
                                   </div>
                               </div>
@@ -1326,11 +911,11 @@ using (true);`,
                                       {showKey ? <Icons.Eye className="w-5 h-5" /> : <Icons.Lock className="w-5 h-5" />}
                                   </button>
                                   <button onClick={handleSaveApiKey} disabled={keyStatus === 'checking'} className="px-6 py-3 bg-audi-pink text-white font-bold rounded-lg hover:bg-pink-600 disabled:opacity-50 text-sm whitespace-nowrap">
-                                      {keyStatus === 'checking' ? <Icons.Loader className="animate-spin w-5 h-5"/> : 'Lưu Key'}
+                                      {keyStatus === 'checking' ? <Icons.Loader className="animate-spin w-5 h-5"/> : 'Thêm Key'}
                                   </button>
                               </div>
                               <p className="text-xs text-slate-500 mt-2">
-                                  Key sẽ được lưu vào Database (Bảng api_keys) và sử dụng cho toàn hệ thống.
+                                  Key sẽ được lưu vào Database. Hệ thống sẽ tự động xoay vòng ngẫu nhiên giữa các key đang hoạt động để tránh quá tải.
                               </p>
                           </div>
                       </div>
@@ -1338,7 +923,6 @@ using (true);`,
 
                   {/* List of Keys in DB */}
                   <div className="bg-[#12121a] p-6 rounded-2xl border border-white/10">
-                      {/* ... existing keys list ... */}
                       <h3 className="font-bold text-lg text-white mb-4 flex items-center gap-2">
                           <Icons.Database className="w-5 h-5 text-audi-cyan" />
                           Danh sách API Key trong Database
@@ -1374,7 +958,7 @@ using (true);`,
                                           </td>
                                           <td className="px-4 py-3 text-xs">{new Date(k.created_at).toLocaleString()}</td>
                                           <td className="px-4 py-3 text-right flex justify-end gap-2">
-                                              <button onClick={() => handleTestKey(k.key_value)} className="px-3 py-1 bg-audi-purple/20 text-audi-purple hover:bg-audi-purple hover:text-white rounded border border-audi-purple/50 text-xs font-bold transition-colors">Test Nhanh</button>
+                                              <button onClick={() => handleTestKey(k.key_value)} className="px-3 py-1 bg-audi-purple/20 text-audi-purple hover:bg-audi-purple hover:text-white rounded border border-audi-purple/50 text-xs font-bold transition-colors">Test</button>
                                               <button onClick={() => handleDeleteApiKey(k.id)} className="p-1.5 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white rounded transition-colors"><Icons.Trash className="w-4 h-4" /></button>
                                           </td>
                                       </tr>

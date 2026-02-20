@@ -551,9 +551,12 @@ export const getGiftcodePromoConfig = async () => {
     try {
         const { data, error } = await supabase.from('system_settings').select('value').eq('key', 'giftcode_promo').single();
         
-        // If DB has config, return it
+        // If DB has config, return it, but ensure text is not empty
         if (data && data.value) {
-            return data.value; // { text: "...", isActive: true }
+            return {
+                text: data.value.text || "Nhập CODE \"HELLO2026\" để nhận 20 Vcoin miễn phí !!!",
+                isActive: data.value.isActive
+            };
         }
         
         // If DB is empty or table missing (error), return DEFAULT PROMO to match UI screenshot

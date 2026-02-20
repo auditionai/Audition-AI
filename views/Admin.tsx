@@ -364,6 +364,10 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   };
 
   const handleSaveGiftcodePromo = async () => {
+      if (giftcodePromo.isActive && !giftcodePromo.text.trim()) {
+          showToast('Vui lòng nhập nội dung thông báo!', 'error');
+          return;
+      }
       const result = await saveGiftcodePromoConfig(giftcodePromo.text, giftcodePromo.isActive);
       if (result.success) {
           showToast('Đã lưu thông báo thành công!');

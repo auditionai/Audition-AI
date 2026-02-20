@@ -134,7 +134,7 @@ export const savePackage = async (pkg: CreditPackage): Promise<{success: boolean
             coins: pkg.coin,
             price: pkg.price,
             tag: pkg.bonusText,
-            bonus_percent: pkg.bonusPercent,
+
             is_popular: pkg.isPopular,
             is_active: pkg.isActive,
             display_order: pkg.displayOrder,

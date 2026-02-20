@@ -245,14 +245,14 @@ export const getCheckinStatus = async () => {
     if (!user) return { streak: 0, isCheckedInToday: false, history: [], claimedMilestones: [] };
 
     // Get basic stats from user table or dedicated checkin table
-    // Simplified: check `checkins` table
+    // Simplified: check `daily_check_ins` table
     const today = new Date().toISOString().split('T')[0];
     const { data } = await supabase
-        .from('daily_checkins')
-        .select('date')
+        .from('daily_check_ins')
+        .select('check_in_date')
         .eq('user_id', user.id);
 
-    const history = data?.map((r: any) => r.date) || [];
+    const history = data?.map((r: any) => r.check_in_date) || [];
     const isCheckedInToday = history.includes(today);
     
     // Simple streak calculation (count of this month)
@@ -279,10 +279,9 @@ export const performCheckin = async (): Promise<{success: boolean, reward: numbe
     const reward = 5;
 
     try {
-        const { error } = await supabase.from('daily_checkins').insert({
+        const { error } = await supabase.from('daily_check_ins').insert({
             user_id: user.id,
-            date: today,
-            reward_amount: reward
+            check_in_date: today
         });
 
         if (error) throw error;

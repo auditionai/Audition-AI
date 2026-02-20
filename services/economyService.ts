@@ -261,15 +261,15 @@ export const getCheckinStatus = async () => {
 
     // Get milestones
     const { data: milestones } = await supabase
-        .from('milestone_claims')
-        .select('day_milestone')
+        .from('check_in_rewards')
+        .select('milestone_days')
         .eq('user_id', user.id);
         
     return {
         streak,
         isCheckedInToday,
         history,
-        claimedMilestones: milestones?.map((m: any) => m.day_milestone) || []
+        claimedMilestones: milestones?.map((m: any) => m.milestone_days) || []
     };
 };
 
@@ -286,9 +286,10 @@ export const performCheckin = async (): Promise<{success: boolean, reward: numbe
 
         if (error) throw error;
 
+        // Update balance directly
         await updateUserBalance(reward, 'Daily Checkin', 'reward');
-        const status = await getCheckinStatus();
         
+        const status = await getCheckinStatus();
         return { success: true, reward, newStreak: status.streak };
     } catch (e: any) {
         return { success: false, reward: 0, newStreak: 0, message: e.message };
@@ -301,9 +302,9 @@ export const claimMilestoneReward = async (day: number): Promise<{success: boole
     const amount = rewards[day] || 0;
 
     try {
-        const { error } = await supabase.from('milestone_claims').insert({
+        const { error } = await supabase.from('check_in_rewards').insert({
             user_id: user.id,
-            day_milestone: day,
+            milestone_days: day,
             reward_amount: amount
         });
 

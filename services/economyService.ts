@@ -555,7 +555,7 @@ export const getGiftcodePromoConfig = async () => {
         if (data && data.value) {
             return {
                 text: data.value.text || "Nhập CODE \"HELLO2026\" để nhận 20 Vcoin miễn phí !!!",
-                isActive: data.value.isActive
+                isActive: data.value.isActive !== undefined ? data.value.isActive : true
             };
         }
         

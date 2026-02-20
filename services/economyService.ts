@@ -1,4 +1,3 @@
-
 import { supabase } from './supabaseClient';
 import { UserProfile, CreditPackage, Giftcode, PromotionCampaign, Transaction, HistoryItem, DiamondLog } from '../types';
 
@@ -69,7 +68,7 @@ export const updateAdminUserProfile = async (profile: UserProfile): Promise<{suc
 export const updateUserBalance = async (amount: number, reason: string, type: string) => {
     const user = await getUserProfile();
     // 1. Log transaction
-    await supabase.from('diamond_logs').insert({
+    await supabase.from('diamond_transactions').insert({
         user_id: user.id,
         amount,
         reason,
@@ -261,15 +260,15 @@ export const getCheckinStatus = async () => {
 
     // Get milestones
     const { data: milestones } = await supabase
-        .from('check_in_rewards')
-        .select('milestone_days')
+        .from('milestone_claims')
+        .select('day_milestone')
         .eq('user_id', user.id);
         
     return {
         streak,
         isCheckedInToday,
         history,
-        claimedMilestones: milestones?.map((m: any) => m.milestone_days) || []
+        claimedMilestones: milestones?.map((m: any) => m.day_milestone) || []
     };
 };
 
@@ -302,9 +301,9 @@ export const claimMilestoneReward = async (day: number): Promise<{success: boole
     const amount = rewards[day] || 0;
 
     try {
-        const { error } = await supabase.from('check_in_rewards').insert({
+        const { error } = await supabase.from('milestone_claims').insert({
             user_id: user.id,
-            milestone_days: day,
+            day_milestone: day,
             reward_amount: amount
         });
 
@@ -511,7 +510,7 @@ export const getUnifiedHistory = async (): Promise<HistoryItem[]> => {
 
     // 2. Get Usage/Reward Logs
     const { data: logs } = await supabase
-        .from('diamond_logs')
+        .from('diamond_transactions')
         .select('*')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });

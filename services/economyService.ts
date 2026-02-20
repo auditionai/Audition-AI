@@ -258,11 +258,13 @@ export const getCheckinStatus = async () => {
     const currentMonthPrefix = today.substring(0, 7);
     const streak = history.filter((d: string) => d.startsWith(currentMonthPrefix)).length;
 
-    // Get milestones
+    // Get milestones for the current month ONLY
+    const startOfMonth = new Date(today.substring(0, 7) + '-01').toISOString();
     const { data: milestones } = await supabase
         .from('milestone_claims')
         .select('day_milestone')
-        .eq('user_id', user.id);
+        .eq('user_id', user.id)
+        .gte('created_at', startOfMonth);
         
     return {
         streak,
@@ -300,11 +302,28 @@ export const claimMilestoneReward = async (day: number): Promise<{success: boole
     const rewards: Record<number, number> = { 7: 20, 14: 50, 30: 100 };
     const amount = rewards[day] || 0;
 
+    const today = new Date().toISOString().split('T')[0];
+    const startOfMonth = new Date(today.substring(0, 7) + '-01').toISOString();
+
     try {
+        // Double check if already claimed THIS MONTH to prevent race conditions
+        const { data: existing } = await supabase
+            .from('milestone_claims')
+            .select('id')
+            .eq('user_id', user.id)
+            .eq('day_milestone', day)
+            .gte('created_at', startOfMonth)
+            .single();
+
+        if (existing) {
+            throw new Error(`Bạn đã nhận mốc ${day} ngày trong tháng này rồi!`);
+        }
+
         const { error } = await supabase.from('milestone_claims').insert({
             user_id: user.id,
             day_milestone: day,
-            reward_amount: amount
+            reward_amount: amount,
+            claim_month: today.substring(0, 7)
         });
 
         if (error) throw error;

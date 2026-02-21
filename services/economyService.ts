@@ -745,8 +745,18 @@ export const getAdminStats = async () => {
     // Calculate AI Usage Stats
     const usageStats: Record<string, { count: number, vcoins: number }> = {};
     usageLogs?.forEach((log: any) => {
-        // Use full reason as feature name to match production (e.g. "Gen: Couple 3D Mode")
-        let feature = log.reason || 'Khác';
+        // Try to find the reason field from various potential column names
+        let feature = log.reason || log.description || log.note || log.action || log.activity || log.details || 'Khác';
+        
+        // If still 'Khác', try to find any property that looks like a feature name
+        if (feature === 'Khác') {
+            for (const key in log) {
+                if (typeof log[key] === 'string' && (log[key].startsWith('Gen') || log[key].startsWith('Edit') || log[key].includes(':'))) {
+                    feature = log[key];
+                    break;
+                }
+            }
+        }
         
         if (!usageStats[feature]) {
             usageStats[feature] = { count: 0, vcoins: 0 };
@@ -764,17 +774,24 @@ export const getAdminStats = async () => {
     }));
     
     const transactions = txs?.map((t: any) => {
-         // Fallback for coins: Check DB columns -> Check Package Info
+         // Fallback for coins: Check DB columns -> Check Package Info -> Estimate from Amount
          let coins = t.coins_received ? Number(t.coins_received) : (t.coins ? Number(t.coins) : (t.diamonds ? Number(t.diamonds) : (t.credits ? Number(t.credits) : 0)));
          
-         if (coins === 0 && t.package_id) {
-             const pkg = pkgs?.find((p: any) => p.id === t.package_id);
-             if (pkg) {
-                 coins = pkg.credits_amount || 0;
-                 // Add estimated bonus if possible, but base is better than 0
-                 if (pkg.bonus_credits) {
-                     coins += Math.floor(coins * pkg.bonus_credits / 100);
+         if (coins === 0) {
+             // Try to get from Package
+             if (t.package_id) {
+                 const pkg = pkgs?.find((p: any) => p.id === t.package_id);
+                 if (pkg) {
+                     coins = pkg.credits_amount || 0;
+                     if (pkg.bonus_credits) {
+                         coins += Math.floor(coins * pkg.bonus_credits / 100);
+                     }
                  }
+             }
+             
+             // Last resort: Estimate from Amount (1000 VND = 1 Vcoin)
+             if (coins === 0 && t.amount) {
+                 coins = Math.floor(Number(t.amount) / 1000);
              }
          }
 

@@ -18,6 +18,8 @@ import {
     deletePromotion,
     adminApproveTransaction, 
     adminRejectTransaction, 
+    adminBulkApproveTransactions,
+    adminBulkRejectTransactions,
     deleteTransaction,
     getSystemApiKey,
     getUserProfile
@@ -150,6 +152,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
   // UX States
   const [processingTxId, setProcessingTxId] = useState<string | null>(null);
+  const [selectedTxIds, setSelectedTxIds] = useState<string[]>([]);
 
   // Notification State
   const [toasts, setToasts] = useState<ToastMsg[]>([]);
@@ -464,6 +467,49 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       });
   }
 
+  // --- BULK ACTIONS ---
+  const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (e.target.checked) {
+          setSelectedTxIds(transactions.map(t => t.id));
+      } else {
+          setSelectedTxIds([]);
+      }
+  };
+
+  const handleSelectTx = (id: string) => {
+      setSelectedTxIds(prev => 
+          prev.includes(id) ? prev.filter(pid => pid !== id) : [...prev, id]
+      );
+  };
+
+  const handleBulkApprove = async () => {
+      if (selectedTxIds.length === 0) return;
+      showConfirm(`Duyệt ${selectedTxIds.length} giao dịch đã chọn?`, async () => {
+          const res = await adminBulkApproveTransactions(selectedTxIds);
+          if (res.success) {
+              showToast(`Đã duyệt ${res.count} giao dịch thành công!`);
+              await refreshData();
+              setSelectedTxIds([]);
+          } else {
+              showToast('Lỗi: ' + res.error, 'error');
+          }
+      });
+  };
+
+  const handleBulkReject = async () => {
+      if (selectedTxIds.length === 0) return;
+      showConfirm(`Từ chối ${selectedTxIds.length} giao dịch đã chọn?`, async () => {
+          const res = await adminBulkRejectTransactions(selectedTxIds);
+          if (res.success) {
+              showToast(`Đã từ chối ${res.count} giao dịch!`, 'info');
+              await refreshData();
+              setSelectedTxIds([]);
+          } else {
+              showToast('Lỗi: ' + res.error, 'error');
+          }
+      });
+  };
+
   // --- ACCESS DENIED ---
   if (!isAdmin) {
       return (
@@ -677,15 +723,32 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               <div className="space-y-6 animate-slide-in-right">
                   <div className="flex justify-between items-center">
                       <h2 className="text-lg md:text-2xl font-bold text-white">Giao Dịch</h2>
-                      <button onClick={refreshData} className="px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-xs md:text-sm font-bold text-white flex items-center gap-2">
-                          <Icons.Clock className="w-3 h-3 md:w-4 md:h-4" /> Làm mới
-                      </button>
+                      <div className="flex gap-2">
+                          {selectedTxIds.length > 0 && (
+                              <div className="flex items-center gap-2 bg-white/10 px-3 py-1.5 rounded-lg animate-fade-in">
+                                  <span className="text-xs font-bold text-white">{selectedTxIds.length} đã chọn</span>
+                                  <button onClick={handleBulkApprove} className="p-1.5 bg-green-500/20 text-green-500 rounded hover:bg-green-500 hover:text-white" title="Duyệt tất cả"><Icons.Check className="w-4 h-4" /></button>
+                                  <button onClick={handleBulkReject} className="p-1.5 bg-red-500/20 text-red-500 rounded hover:bg-red-500 hover:text-white" title="Hủy tất cả"><Icons.X className="w-4 h-4" /></button>
+                              </div>
+                          )}
+                          <button onClick={refreshData} className="px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-xs md:text-sm font-bold text-white flex items-center gap-2">
+                              <Icons.Clock className="w-3 h-3 md:w-4 md:h-4" /> Làm mới
+                          </button>
+                      </div>
                   </div>
                   {/* ... same table content ... */}
                   <div className="hidden md:block bg-[#12121a] border border-white/10 rounded-2xl overflow-hidden">
                       <table className="w-full text-left text-sm text-slate-400">
                           <thead className="bg-black/30 text-xs font-bold text-slate-300 uppercase">
                               <tr>
+                                  <th className="px-6 py-4 w-10">
+                                      <input 
+                                          type="checkbox" 
+                                          className="rounded border-white/20 bg-white/5 checked:bg-audi-pink"
+                                          checked={transactions.length > 0 && selectedTxIds.length === transactions.length}
+                                          onChange={handleSelectAll}
+                                      />
+                                  </th>
                                   <th className="px-6 py-4">Thời gian</th>
                                   <th className="px-6 py-4">Mã đơn</th>
                                   <th className="px-6 py-4">Người dùng</th>
@@ -697,9 +760,17 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           </thead>
                           <tbody className="divide-y divide-white/5">
                               {transactions.length === 0 ? (
-                                  <tr><td colSpan={7} className="text-center py-8">Chưa có giao dịch nào.</td></tr>
+                                  <tr><td colSpan={8} className="text-center py-8">Chưa có giao dịch nào.</td></tr>
                               ) : transactions.map(tx => (
-                                  <tr key={tx.id} className={`hover:bg-white/5 transition-colors ${processingTxId === tx.id ? 'opacity-50 pointer-events-none' : ''}`}>
+                                  <tr key={tx.id} className={`hover:bg-white/5 transition-colors ${processingTxId === tx.id ? 'opacity-50 pointer-events-none' : ''} ${selectedTxIds.includes(tx.id) ? 'bg-white/5' : ''}`}>
+                                      <td className="px-6 py-4">
+                                          <input 
+                                              type="checkbox" 
+                                              className="rounded border-white/20 bg-white/5 checked:bg-audi-pink"
+                                              checked={selectedTxIds.includes(tx.id)}
+                                              onChange={() => handleSelectTx(tx.id)}
+                                          />
+                                      </td>
                                       <td className="px-6 py-4 text-xs font-mono">{new Date(tx.createdAt).toLocaleString()}</td>
                                       <td className="px-6 py-4 font-mono font-bold text-white">{tx.code}</td>
                                       <td className="px-6 py-4">

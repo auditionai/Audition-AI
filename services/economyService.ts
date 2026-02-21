@@ -507,6 +507,33 @@ export const adminRejectTransaction = async (txId: string): Promise<{success: bo
     }
 };
 
+export const adminBulkApproveTransactions = async (txIds: string[]): Promise<{success: boolean, error?: string, count?: number}> => {
+    try {
+        let successCount = 0;
+        for (const id of txIds) {
+            const res = await adminApproveTransaction(id);
+            if (res.success) successCount++;
+        }
+        return { success: true, count: successCount };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+};
+
+export const adminBulkRejectTransactions = async (txIds: string[]): Promise<{success: boolean, error?: string, count?: number}> => {
+    try {
+        const { error, count } = await supabase
+            .from('transactions')
+            .update({ status: 'failed' })
+            .in('id', txIds);
+            
+        if (error) throw error;
+        return { success: true, count: count || txIds.length };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+};
+
 export const deleteTransaction = async (txId: string): Promise<{success: boolean, error?: string}> => {
     try {
         const { error } = await supabase.from('transactions').delete().eq('id', txId);
@@ -674,10 +701,33 @@ export const getAdminStats = async () => {
     const { data: promos } = await supabase.from('promotions').select('*');
     const { data: codes } = await supabase.from('gift_codes').select('*');
     const { data: txs } = await supabase.from('transactions').select('*').order('created_at', { ascending: false });
+    const { data: usageLogs } = await supabase.from('diamond_transactions').select('*').eq('type', 'usage');
     
     // Calculate dashboard
     const today = new Date().toISOString().split('T')[0];
     const newUsersToday = users?.filter((u: any) => u.created_at.startsWith(today)).length || 0;
+
+    // Calculate AI Usage Stats
+    const usageStats: Record<string, { count: number, vcoins: number }> = {};
+    usageLogs?.forEach((log: any) => {
+        // Extract feature name from reason (e.g. "Tạo ảnh: ...")
+        let feature = log.reason.split(':')[0] || 'Khác';
+        if (feature.includes('Generate')) feature = 'Tạo Ảnh';
+        if (feature.includes('Upscale')) feature = 'Nâng Cấp Ảnh';
+        
+        if (!usageStats[feature]) {
+            usageStats[feature] = { count: 0, vcoins: 0 };
+        }
+        usageStats[feature].count += 1;
+        usageStats[feature].vcoins += log.amount;
+    });
+
+    const aiUsage = Object.keys(usageStats).map(key => ({
+        feature: key,
+        count: usageStats[key].count,
+        vcoins: usageStats[key].vcoins,
+        revenue: usageStats[key].vcoins * 1000 // Estimate 1 Vcoin = 1000 VND (example)
+    }));
     
     const transactions = txs?.map((t: any) => ({
          id: t.id,
@@ -713,7 +763,7 @@ export const getAdminStats = async () => {
             usersTotal: users?.length || 0,
             imagesToday: 45, // Need image count query
             imagesTotal: 1200, // Need image count query
-            aiUsage: [] // Need usage logs
+            aiUsage
         },
         usersList: userList,
         packages: pkgs?.map((p:any) => ({

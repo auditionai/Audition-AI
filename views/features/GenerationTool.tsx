@@ -290,11 +290,19 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                   if (!response.ok) throw new Error("Direct fetch failed");
                   blob = await response.blob();
               } catch (directError) {
-                  // Fallback to Proxy
-                  const proxyUrl = `/.netlify/functions/download_proxy?url=${encodeURIComponent(url)}`;
-                  const proxyResponse = await fetch(proxyUrl);
-                  if (!proxyResponse.ok) throw new Error("Proxy download failed");
-                  blob = await proxyResponse.blob();
+                  // Fallback to WSRV.NL Proxy (Adds CORS headers)
+                  try {
+                      const proxyUrl = `https://wsrv.nl/?url=${encodeURIComponent(url)}&output=png`;
+                      const proxyResponse = await fetch(proxyUrl);
+                      if (!proxyResponse.ok) throw new Error("Proxy download failed");
+                      blob = await proxyResponse.blob();
+                  } catch (proxyError) {
+                      // Fallback to CorsProxy.io
+                      const proxyUrl2 = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+                      const proxyResponse2 = await fetch(proxyUrl2);
+                      if (!proxyResponse2.ok) throw new Error("All proxies failed");
+                      blob = await proxyResponse2.blob();
+                  }
               }
           }
 

@@ -701,7 +701,17 @@ export const getAdminStats = async () => {
     const { data: promos } = await supabase.from('promotions').select('*');
     const { data: codes } = await supabase.from('gift_codes').select('*');
     const { data: txs } = await supabase.from('transactions').select('*').order('created_at', { ascending: false });
-    const { data: usageLogs } = await supabase.from('diamond_transactions_log').select('*').eq('type', 'usage');
+    
+    // Try to fetch logs from both potential table names
+    let usageLogs: any[] = [];
+    const { data: logs1 } = await supabase.from('diamond_transactions_log').select('*');
+    if (logs1) usageLogs = [...usageLogs, ...logs1];
+    
+    const { data: logs2 } = await supabase.from('diamond_transactions').select('*');
+    if (logs2) usageLogs = [...usageLogs, ...logs2];
+
+    // Filter for usage type
+    usageLogs = usageLogs.filter((l: any) => l.type === 'usage');
     
     // Debug logs
     if (txs && txs.length > 0) {
@@ -757,7 +767,7 @@ export const getAdminStats = async () => {
          userAvatar: users?.find((u: any) => u.id === t.user_id)?.photo_url,
          packageId: t.package_id,
          amount: t.amount ? Number(t.amount) : (t.price ? Number(t.price) : (t.amount_vnd ? Number(t.amount_vnd) : 0)),
-         coins: t.coins_received,
+         coins: t.coins_received ? Number(t.coins_received) : (t.coins ? Number(t.coins) : (t.diamonds ? Number(t.diamonds) : (t.credits ? Number(t.credits) : 0))),
          status: t.status,
          createdAt: t.created_at,
          code: t.code,

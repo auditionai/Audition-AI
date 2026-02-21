@@ -207,7 +207,7 @@ const analyzeReferenceImage = async (base64Data: string): Promise<string> => {
                     ]
                 }
             }),
-            15000,
+            60000, // Increased to 60s
             "Ref Analysis"
         );
         return result.text || "";
@@ -242,7 +242,7 @@ const optimizePromptWithThinking = async (rawPrompt: string, styleContext: strin
                 (Subject Description), (Action/Pose from Constraint), (Outfit Details), (Environment/Background), (Lighting Setup), (Render Engine: Octane/Unreal), (Texture Quality: 8K, Hyper-detailed), (Style Keywords from Mandate).
                 `,
             }),
-            15000, 
+            60000, // Increased to 60s
             "Prompt Optimization"
         );
         

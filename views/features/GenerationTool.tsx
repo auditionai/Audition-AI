@@ -51,6 +51,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
   const [stage, setStage] = useState<Stage>('input');
   const [progressMsg, setProgressMsg] = useState('');
   const [progressLogs, setProgressLogs] = useState<string[]>([]);
+  const [estimatedSeconds, setEstimatedSeconds] = useState(0);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   const [activeMode, setActiveMode] = useState<GenMode>('single');
   const [characters, setCharacters] = useState<CharacterInput[]>([{ id: 1, bodyImage: null, faceImage: null, gender: 'female', isFaceLocked: true }]);
@@ -116,6 +118,24 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
     else if (feature.id.includes('group_4')) handleModeChange('group4');
     else handleModeChange('single');
   }, [feature]);
+
+  useEffect(() => {
+      let interval: any;
+      if (stage === 'processing') {
+          interval = setInterval(() => {
+              setElapsedSeconds(prev => prev + 1);
+          }, 1000);
+      } else {
+          setElapsedSeconds(0);
+      }
+      return () => clearInterval(interval);
+  }, [stage]);
+
+  const formatTime = (seconds: number) => {
+      const mins = Math.floor(seconds / 60);
+      const secs = seconds % 60;
+      return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
 
   const handleModeChange = (mode: GenMode) => {
       setActiveMode(mode);
@@ -382,6 +402,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       let timeoutMs = 900000; // 15 mins (Single)
       if (activeMode === 'couple') timeoutMs = 1200000; // 20 mins
       if (activeMode.startsWith('group')) timeoutMs = 1800000; // 30 mins
+      
+      setEstimatedSeconds(timeoutMs / 1000);
 
       const result = await Promise.race([
           generateImage(
@@ -572,6 +594,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
               <h2 className="font-game text-2xl font-bold text-white mb-2 tracking-widest animate-neon-flash">
                   {lang === 'vi' ? 'AI ĐANG VẼ...' : 'GENERATING...'}
               </h2>
+              <div className="text-4xl font-mono font-bold text-audi-yellow mb-4 animate-pulse">
+                  {formatTime(elapsedSeconds)} <span className="text-sm text-slate-500">/ ~{formatTime(estimatedSeconds)}</span>
+              </div>
               <p className="text-audi-cyan font-mono text-sm max-w-xs mx-auto mb-8 animate-pulse font-bold">
                   {progressMsg}
               </p>

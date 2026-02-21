@@ -324,7 +324,8 @@ export const generateImage = async (
     useCloudRef: boolean = false,
     onLog: (msg: string) => void = () => {},
     styleReferenceUrl: string | null = null, // Manual override
-    availableStyles: any[] = [] // New: Pool of styles for auto-selection
+    availableStyles: any[] = [], // New: Pool of styles for auto-selection
+    timeoutMs: number = 900000 // Default 15 mins
 ): Promise<string> => {
     onLog("Initializing Gemini 3.0 Pro Pipeline...");
     const ai = await getAiClient();
@@ -444,7 +445,7 @@ export const generateImage = async (
             contents: { parts },
             config: config
         }),
-        90000, // 90s for final gen
+        timeoutMs, // Dynamic Timeout
         "Image Generation"
     );
 

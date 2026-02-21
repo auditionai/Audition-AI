@@ -378,7 +378,11 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       
       addLog("Gửi lệnh đến Gemini Intelligence Grid...");
 
-      // 5. EXECUTE WITH UI-LEVEL TIMEOUT (90s Safety)
+      // 5. EXECUTE WITH DYNAMIC TIMEOUT
+      let timeoutMs = 900000; // 15 mins (Single)
+      if (activeMode === 'couple') timeoutMs = 1200000; // 20 mins
+      if (activeMode.startsWith('group')) timeoutMs = 1800000; // 30 mins
+
       const result = await Promise.race([
           generateImage(
               finalPrompt, 
@@ -391,9 +395,10 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
               useCloudRef, 
               (msg) => addLog(msg),
               activeStylePreset, // Pass the style reference
-              availableStyles // Pass the pool for auto-selection
+              availableStyles, // Pass the pool for auto-selection
+              timeoutMs // Pass Dynamic Timeout
           ),
-          new Promise<null>((_, reject) => setTimeout(() => reject(new Error("Timeout: UI limit reached (90s)")), 90000))
+          new Promise<null>((_, reject) => setTimeout(() => reject(new Error(`Timeout: Limit reached (${timeoutMs/60000} mins)`)), timeoutMs))
       ]);
 
       if (result) {

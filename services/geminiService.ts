@@ -14,20 +14,52 @@ export interface CharacterData {
 // --- HELPER: CLEAN BASE64 ---
 const cleanBase64 = (b64: string) => b64.replace(/^data:image\/\w+;base64,/, "");
 
+// --- HELPER: RETRY WITH BACKOFF ---
+const retryWithBackoff = async <T>(
+    operation: () => Promise<T>,
+    retries: number = 3,
+    delay: number = 2000,
+    label: string = "Operation"
+): Promise<T> => {
+    try {
+        return await operation();
+    } catch (error: any) {
+        // Check for 503 (Service Unavailable) or 429 (Too Many Requests)
+        const isTransient = 
+            error?.status === 503 || 
+            error?.status === 429 || 
+            error?.message?.includes('503') || 
+            error?.message?.includes('429') ||
+            error?.message?.includes('Overloaded');
+
+        if (retries > 0 && isTransient) {
+            console.warn(`${label} failed with ${error.status || 'error'}. Retrying in ${delay}ms... (${retries} left)`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            return retryWithBackoff(operation, retries - 1, delay * 2, label);
+        }
+        throw error;
+    }
+};
+
 // --- NEW: ANALYZE STYLE IMAGE (For Admin) ---
 export const analyzeStyleImage = async (imageBase64: string): Promise<string> => {
     const ai = await getAiClient();
     const model = 'gemini-3-flash-preview'; // Fast & Cheap for analysis
 
-    const result = await ai.models.generateContent({
-        model: model,
-        contents: {
-            parts: [
-                { text: "Analyze this image's visual style for a 3D character generator. Describe the lighting, texture, rendering engine vibe (e.g. Octane, Unreal), and artistic mood. Keep it concise, comma-separated keywords." },
-                { inlineData: { mimeType: 'image/png', data: cleanBase64(imageBase64) } }
-            ]
-        }
-    });
+    const result = await retryWithBackoff(
+        () => ai.models.generateContent({
+            model: model,
+            contents: {
+                parts: [
+                    { text: "Analyze this image's visual style for a 3D character generator. Describe the lighting, texture, rendering engine vibe (e.g. Octane, Unreal), and artistic mood. Keep it concise, comma-separated keywords." },
+                    { inlineData: { mimeType: 'image/png', data: cleanBase64(imageBase64) } }
+                ]
+            }
+        }),
+        3,
+        2000,
+        "Style Analysis"
+    );
 
     return result.text || "";
 };
@@ -57,10 +89,15 @@ const selectBestStyle = async (prompt: string, styles: any[]): Promise<any | nul
     `;
 
     try {
-        const result = await ai.models.generateContent({
-            model: model,
-            contents: { parts: [{ text: routerPrompt }] }
-        });
+        const result = await retryWithBackoff(
+            () => ai.models.generateContent({
+                model: model,
+                contents: { parts: [{ text: routerPrompt }] }
+            }),
+            3,
+            1000,
+            "Style Selection"
+        );
         
         const selectedId = result.text?.trim();
         const match = styles.find(s => s.id === selectedId || selectedId.includes(s.id));
@@ -197,17 +234,22 @@ const analyzeReferenceImage = async (base64Data: string): Promise<string> => {
     const model = 'gemini-3-flash-preview'; 
 
     try {
-        const result = await runWithTimeout(
-            ai.models.generateContent({
-                model: model,
-                contents: {
-                    parts: [
-                        { text: "Analyze this image. Describe ONLY the 'Skeleton Pose', 'Camera Angle', and 'Composition'. IGNORE the character's clothes, hair, gender, face, and colors. Output ONLY the structural description (e.g. 'sitting cross-legged', 'low angle shot')." },
-                        { inlineData: { mimeType: 'image/png', data: cleanBase64(base64Data) } }
-                    ]
-                }
-            }),
-            60000, // Increased to 60s
+        const result = await retryWithBackoff(
+            () => runWithTimeout(
+                ai.models.generateContent({
+                    model: model,
+                    contents: {
+                        parts: [
+                            { text: "Analyze this image. Describe ONLY the 'Skeleton Pose', 'Camera Angle', and 'Composition'. IGNORE the character's clothes, hair, gender, face, and colors. Output ONLY the structural description (e.g. 'sitting cross-legged', 'low angle shot')." },
+                            { inlineData: { mimeType: 'image/png', data: cleanBase64(base64Data) } }
+                        ]
+                    }
+                }),
+                60000, // Increased to 60s
+                "Ref Analysis"
+            ),
+            3,
+            2000,
             "Ref Analysis"
         );
         return result.text || "";
@@ -221,28 +263,33 @@ const analyzeReferenceImage = async (base64Data: string): Promise<string> => {
 const optimizePromptWithThinking = async (rawPrompt: string, styleContext: string = "", poseContext: string = ""): Promise<string> => {
     try {
         const ai = await getAiClient();
-        const response = await runWithTimeout(
-            ai.models.generateContent({
-                model: 'gemini-3-flash-preview',
-                contents: `ROLE: EXECUTIONER PROMPT ENGINEER.
-                MISSION: CONVERT INPUTS INTO A RIGID, MACHINE-READABLE 3D RENDERING SCRIPT.
-                
-                INPUT DATA:
-                1. USER_COMMAND: "${rawPrompt}"
-                2. STYLE_MANDATE: "${styleContext}" (MUST BE APPLIED)
-                3. POSE_CONSTRAINT: "${poseContext}" (MUST BE FOLLOWED)
-
-                STRICT RULES:
-                - DO NOT HALLUCINATE. Use ONLY the provided inputs.
-                - IF STYLE_MANDATE conflicts with USER_COMMAND, STYLE_MANDATE WINS.
-                - OUTPUT FORMAT must be a comma-separated list of high-weight tokens.
-                - FORBIDDEN: "artistic", "creative interpretation", "maybe".
-                
-                REQUIRED OUTPUT STRUCTURE:
-                (Subject Description), (Action/Pose from Constraint), (Outfit Details), (Environment/Background), (Lighting Setup), (Render Engine: Octane/Unreal), (Texture Quality: 8K, Hyper-detailed), (Style Keywords from Mandate).
-                `,
-            }),
-            60000, // Increased to 60s
+        const response = await retryWithBackoff(
+            () => runWithTimeout(
+                ai.models.generateContent({
+                    model: 'gemini-3-flash-preview',
+                    contents: `ROLE: EXECUTIONER PROMPT ENGINEER.
+                    MISSION: CONVERT INPUTS INTO A RIGID, MACHINE-READABLE 3D RENDERING SCRIPT.
+                    
+                    INPUT DATA:
+                    1. USER_COMMAND: "${rawPrompt}"
+                    2. STYLE_MANDATE: "${styleContext}" (MUST BE APPLIED)
+                    3. POSE_CONSTRAINT: "${poseContext}" (MUST BE FOLLOWED)
+    
+                    STRICT RULES:
+                    - DO NOT HALLUCINATE. Use ONLY the provided inputs.
+                    - IF STYLE_MANDATE conflicts with USER_COMMAND, STYLE_MANDATE WINS.
+                    - OUTPUT FORMAT must be a comma-separated list of high-weight tokens.
+                    - FORBIDDEN: "artistic", "creative interpretation", "maybe".
+                    
+                    REQUIRED OUTPUT STRUCTURE:
+                    (Subject Description), (Action/Pose from Constraint), (Outfit Details), (Environment/Background), (Lighting Setup), (Render Engine: Octane/Unreal), (Texture Quality: 8K, Hyper-detailed), (Style Keywords from Mandate).
+                    `,
+                }),
+                60000, // Increased to 60s
+                "Prompt Optimization"
+            ),
+            3,
+            2000,
             "Prompt Optimization"
         );
         
@@ -446,13 +493,18 @@ export const generateImage = async (
         config.tools = [{ googleSearch: {} }];
     }
 
-    const response = await runWithTimeout(
-        ai.models.generateContent({
-            model: model,
-            contents: { parts },
-            config: config
-        }),
-        timeoutMs, // Dynamic Timeout
+    const response = await retryWithBackoff(
+        () => runWithTimeout(
+            ai.models.generateContent({
+                model: model,
+                contents: { parts },
+                config: config
+            }),
+            timeoutMs, // Dynamic Timeout
+            "Image Generation"
+        ),
+        3,
+        2000,
         "Image Generation"
     );
 
@@ -472,24 +524,29 @@ export const editImageWithInstructions = async (
     // gemini-2.5-flash-image for standard editing per guidelines
     const model = 'gemini-2.5-flash-image'; 
 
-    const response = await runWithTimeout(
-        ai.models.generateContent({
-            model: model,
-            contents: {
-                parts: [
-                    {
-                        inlineData: {
-                            mimeType: mimeType || 'image/png',
-                            data: cleanBase64(base64Data)
+    const response = await retryWithBackoff(
+        () => runWithTimeout(
+            ai.models.generateContent({
+                model: model,
+                contents: {
+                    parts: [
+                        {
+                            inlineData: {
+                                mimeType: mimeType || 'image/png',
+                                data: cleanBase64(base64Data)
+                            }
+                        },
+                        {
+                            text: instruction
                         }
-                    },
-                    {
-                        text: instruction
-                    }
-                ]
-            }
-        }),
-        45000,
+                    ]
+                }
+            }),
+            45000,
+            "Image Editing"
+        ),
+        3,
+        2000,
         "Image Editing"
     );
 

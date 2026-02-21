@@ -34,7 +34,7 @@ const retryWithBackoff = async <T>(
             error?.message?.includes('Overloaded');
 
         if (retries > 0 && isTransient) {
-            const msg = `${label} quá tải (503). Thử lại sau ${delay/1000}s... (${retries} lần)`;
+            const msg = `${label} quá tải (503). Đang đổi API Key khác và thử lại... (${retries} lần)`;
             console.warn(msg);
             if (onLog) onLog(`⚠️ ${msg}`);
             await new Promise(resolve => setTimeout(resolve, delay));
@@ -396,7 +396,6 @@ export const generateImage = async (
     timeoutMs: number = 900000 // Default 15 mins
 ): Promise<string> => {
     onLog("Initializing Gemini 3.0 Pro Pipeline...");
-    const ai = await getAiClient();
     
     const model = 'gemini-3-pro-image-preview'; 
     

@@ -728,25 +728,25 @@ export const getAdminStats = async () => {
     const { data: visits } = await supabase.from('app_visits').select('created_at');
 
     // Calculate dashboard
-    // Use local date string for comparison to match UI expectations
     const now = new Date();
-    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     
-    const newUsersToday = users?.filter((u: any) => u.created_at && u.created_at.startsWith(today)).length || 0;
+    // 1. Users
+    const newUsersToday = users?.filter((u: any) => u.created_at && u.created_at.startsWith(todayStr)).length || 0;
     
-    const imagesToday = generatedImages?.filter((img: any) => img.created_at && img.created_at.startsWith(today)).length || 0;
-    const imagesTotal = generatedImages?.length || 0;
+    // 2. Images (Use count for performance and to bypass limit)
+    const { count: imagesTotal } = await supabase.from('generated_images').select('*', { count: 'exact', head: true });
+    const { count: imagesToday } = await supabase.from('generated_images').select('*', { count: 'exact', head: true }).gte('created_at', todayStr);
 
-    const visitsToday = visits?.filter((v: any) => v.created_at && v.created_at.startsWith(today)).length || 0;
-    const visitsTotal = visits?.length || 0;
+    // 3. Visits (Use count for performance)
+    const { count: visitsTotal } = await supabase.from('app_visits').select('*', { count: 'exact', head: true });
+    const { count: visitsToday } = await supabase.from('app_visits').select('*', { count: 'exact', head: true }).gte('created_at', todayStr);
 
     // Calculate AI Usage Stats
     const usageStats: Record<string, { count: number, vcoins: number }> = {};
     usageLogs?.forEach((log: any) => {
-        // Extract feature name from reason (e.g. "Tạo ảnh: ...")
-        let feature = log.reason ? log.reason.split(':')[0] : 'Khác';
-        if (feature.includes('Generate') || feature.includes('Tạo ảnh')) feature = 'Tạo Ảnh';
-        if (feature.includes('Upscale') || feature.includes('Nâng cấp')) feature = 'Nâng Cấp Ảnh';
+        // Use full reason as feature name to match production (e.g. "Gen: Couple 3D Mode")
+        let feature = log.reason || 'Khác';
         
         if (!usageStats[feature]) {
             usageStats[feature] = { count: 0, vcoins: 0 };
@@ -807,12 +807,12 @@ export const getAdminStats = async () => {
 
     return {
         dashboard: {
-            visitsToday: visitsToday,
-            visitsTotal: visitsTotal,
+            visitsToday: visitsToday || 0,
+            visitsTotal: visitsTotal || 0,
             newUsersToday,
             usersTotal: users?.length || 0,
-            imagesToday: imagesToday,
-            imagesTotal: imagesTotal,
+            imagesToday: imagesToday || 0,
+            imagesTotal: imagesTotal || 0,
             aiUsage
         },
         usersList: userList,

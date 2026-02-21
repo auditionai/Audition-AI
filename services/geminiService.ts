@@ -50,15 +50,18 @@ export const analyzeStyleImage = async (imageBase64: string): Promise<string> =>
     const model = 'gemini-3-flash-preview'; // Fast & Cheap for analysis
 
     const result = await retryWithBackoff(
-        () => ai.models.generateContent({
-            model: model,
-            contents: {
-                parts: [
-                    { text: "Analyze this image's visual style for a 3D character generator. Describe the lighting, texture, rendering engine vibe (e.g. Octane, Unreal), and artistic mood. Keep it concise, comma-separated keywords." },
-                    { inlineData: { mimeType: 'image/png', data: cleanBase64(imageBase64) } }
-                ]
-            }
-        }),
+        async () => {
+            const freshAi = await getAiClient();
+            return freshAi.models.generateContent({
+                model: model,
+                contents: {
+                    parts: [
+                        { text: "Analyze this image's visual style for a 3D character generator. Describe the lighting, texture, rendering engine vibe (e.g. Octane, Unreal), and artistic mood. Keep it concise, comma-separated keywords." },
+                        { inlineData: { mimeType: 'image/png', data: cleanBase64(imageBase64) } }
+                    ]
+                }
+            });
+        },
         3,
         2000,
         "Style Analysis"
@@ -93,10 +96,13 @@ const selectBestStyle = async (prompt: string, styles: any[]): Promise<any | nul
 
     try {
         const result = await retryWithBackoff(
-            () => ai.models.generateContent({
-                model: model,
-                contents: { parts: [{ text: routerPrompt }] }
-            }),
+            async () => {
+                const freshAi = await getAiClient();
+                return freshAi.models.generateContent({
+                    model: model,
+                    contents: { parts: [{ text: routerPrompt }] }
+                });
+            },
             3,
             1000,
             "Style Selection"
@@ -238,19 +244,22 @@ const analyzeReferenceImage = async (base64Data: string): Promise<string> => {
 
     try {
         const result = await retryWithBackoff(
-            () => runWithTimeout(
-                ai.models.generateContent({
-                    model: model,
-                    contents: {
-                        parts: [
-                            { text: "Analyze this image. Describe ONLY the 'Skeleton Pose', 'Camera Angle', and 'Composition'. IGNORE the character's clothes, hair, gender, face, and colors. Output ONLY the structural description (e.g. 'sitting cross-legged', 'low angle shot')." },
-                            { inlineData: { mimeType: 'image/png', data: cleanBase64(base64Data) } }
-                        ]
-                    }
-                }),
-                60000, // Increased to 60s
-                "Ref Analysis"
-            ),
+            async () => {
+                const freshAi = await getAiClient();
+                return runWithTimeout(
+                    freshAi.models.generateContent({
+                        model: model,
+                        contents: {
+                            parts: [
+                                { text: "Analyze this image. Describe ONLY the 'Skeleton Pose', 'Camera Angle', and 'Composition'. IGNORE the character's clothes, hair, gender, face, and colors. Output ONLY the structural description (e.g. 'sitting cross-legged', 'low angle shot')." },
+                                { inlineData: { mimeType: 'image/png', data: cleanBase64(base64Data) } }
+                            ]
+                        }
+                    }),
+                    60000, // Increased to 60s
+                    "Ref Analysis"
+                );
+            },
             3,
             2000,
             "Ref Analysis"
@@ -265,32 +274,34 @@ const analyzeReferenceImage = async (base64Data: string): Promise<string> => {
 // --- PROMPT REASONING ENGINE (STEEL DISCIPLINE) ---
 const optimizePromptWithThinking = async (rawPrompt: string, styleContext: string = "", poseContext: string = ""): Promise<string> => {
     try {
-        const ai = await getAiClient();
         const response = await retryWithBackoff(
-            () => runWithTimeout(
-                ai.models.generateContent({
-                    model: 'gemini-3-flash-preview',
-                    contents: `ROLE: EXECUTIONER PROMPT ENGINEER.
-                    MISSION: CONVERT INPUTS INTO A RIGID, MACHINE-READABLE 3D RENDERING SCRIPT.
-                    
-                    INPUT DATA:
-                    1. USER_COMMAND: "${rawPrompt}"
-                    2. STYLE_MANDATE: "${styleContext}" (MUST BE APPLIED)
-                    3. POSE_CONSTRAINT: "${poseContext}" (MUST BE FOLLOWED)
-    
-                    STRICT RULES:
-                    - DO NOT HALLUCINATE. Use ONLY the provided inputs.
-                    - IF STYLE_MANDATE conflicts with USER_COMMAND, STYLE_MANDATE WINS.
-                    - OUTPUT FORMAT must be a comma-separated list of high-weight tokens.
-                    - FORBIDDEN: "artistic", "creative interpretation", "maybe".
-                    
-                    REQUIRED OUTPUT STRUCTURE:
-                    (Subject Description), (Action/Pose from Constraint), (Outfit Details), (Environment/Background), (Lighting Setup), (Render Engine: Octane/Unreal), (Texture Quality: 8K, Hyper-detailed), (Style Keywords from Mandate).
-                    `,
-                }),
-                60000, // Increased to 60s
-                "Prompt Optimization"
-            ),
+            async () => {
+                const freshAi = await getAiClient();
+                return runWithTimeout(
+                    freshAi.models.generateContent({
+                        model: 'gemini-3-flash-preview',
+                        contents: `ROLE: EXECUTIONER PROMPT ENGINEER.
+                        MISSION: CONVERT INPUTS INTO A RIGID, MACHINE-READABLE 3D RENDERING SCRIPT.
+                        
+                        INPUT DATA:
+                        1. USER_COMMAND: "${rawPrompt}"
+                        2. STYLE_MANDATE: "${styleContext}" (MUST BE APPLIED)
+                        3. POSE_CONSTRAINT: "${poseContext}" (MUST BE FOLLOWED)
+        
+                        STRICT RULES:
+                        - DO NOT HALLUCINATE. Use ONLY the provided inputs.
+                        - IF STYLE_MANDATE conflicts with USER_COMMAND, STYLE_MANDATE WINS.
+                        - OUTPUT FORMAT must be a comma-separated list of high-weight tokens.
+                        - FORBIDDEN: "artistic", "creative interpretation", "maybe".
+                        
+                        REQUIRED OUTPUT STRUCTURE:
+                        (Subject Description), (Action/Pose from Constraint), (Outfit Details), (Environment/Background), (Lighting Setup), (Render Engine: Octane/Unreal), (Texture Quality: 8K, Hyper-detailed), (Style Keywords from Mandate).
+                        `,
+                    }),
+                    60000, // Increased to 60s
+                    "Prompt Optimization"
+                );
+            },
             3,
             2000,
             "Prompt Optimization"
@@ -497,15 +508,18 @@ export const generateImage = async (
     }
 
     const response = await retryWithBackoff(
-        () => runWithTimeout(
-            ai.models.generateContent({
-                model: model,
-                contents: { parts },
-                config: config
-            }),
-            timeoutMs, // Dynamic Timeout
-            "Image Generation"
-        ),
+        async () => {
+            const freshAi = await getAiClient();
+            return runWithTimeout(
+                freshAi.models.generateContent({
+                    model: model,
+                    contents: { parts },
+                    config: config
+                }),
+                timeoutMs, // Dynamic Timeout
+                "Image Generation"
+            );
+        },
         3,
         2000,
         "Image Generation",
@@ -529,26 +543,29 @@ export const editImageWithInstructions = async (
     const model = 'gemini-2.5-flash-image'; 
 
     const response = await retryWithBackoff(
-        () => runWithTimeout(
-            ai.models.generateContent({
-                model: model,
-                contents: {
-                    parts: [
-                        {
-                            inlineData: {
-                                mimeType: mimeType || 'image/png',
-                                data: cleanBase64(base64Data)
+        async () => {
+            const freshAi = await getAiClient();
+            return runWithTimeout(
+                freshAi.models.generateContent({
+                    model: model,
+                    contents: {
+                        parts: [
+                            {
+                                inlineData: {
+                                    mimeType: mimeType || 'image/png',
+                                    data: cleanBase64(base64Data)
+                                }
+                            },
+                            {
+                                text: instruction
                             }
-                        },
-                        {
-                            text: instruction
-                        }
-                    ]
-                }
-            }),
-            45000,
-            "Image Editing"
-        ),
+                        ]
+                    }
+                }),
+                45000,
+                "Image Editing"
+            );
+        },
         3,
         2000,
         "Image Editing"

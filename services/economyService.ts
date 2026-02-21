@@ -703,6 +703,10 @@ export const getAdminStats = async () => {
     const { data: txs } = await supabase.from('transactions').select('*').order('created_at', { ascending: false });
     const { data: usageLogs } = await supabase.from('diamond_transactions').select('*').eq('type', 'usage');
     
+    // Debug logs
+    console.log("Usage Logs:", usageLogs);
+    console.log("Transactions:", txs);
+
     const { data: generatedImages } = await supabase.from('generated_images').select('created_at');
     const { data: visits } = await supabase.from('app_visits').select('created_at');
 
@@ -723,15 +727,16 @@ export const getAdminStats = async () => {
     const usageStats: Record<string, { count: number, vcoins: number }> = {};
     usageLogs?.forEach((log: any) => {
         // Extract feature name from reason (e.g. "Tạo ảnh: ...")
-        let feature = log.reason.split(':')[0] || 'Khác';
-        if (feature.includes('Generate')) feature = 'Tạo Ảnh';
-        if (feature.includes('Upscale')) feature = 'Nâng Cấp Ảnh';
+        let feature = log.reason ? log.reason.split(':')[0] : 'Khác';
+        if (feature.includes('Generate') || feature.includes('Tạo ảnh')) feature = 'Tạo Ảnh';
+        if (feature.includes('Upscale') || feature.includes('Nâng cấp')) feature = 'Nâng Cấp Ảnh';
         
         if (!usageStats[feature]) {
             usageStats[feature] = { count: 0, vcoins: 0 };
         }
         usageStats[feature].count += 1;
-        usageStats[feature].vcoins += log.amount;
+        // Ensure amount is positive for display
+        usageStats[feature].vcoins += Math.abs(Number(log.amount) || 0);
     });
 
     const aiUsage = Object.keys(usageStats).map(key => ({
@@ -748,7 +753,7 @@ export const getAdminStats = async () => {
          userEmail: users?.find((u: any) => u.id === t.user_id)?.email,
          userAvatar: users?.find((u: any) => u.id === t.user_id)?.photo_url,
          packageId: t.package_id,
-         amount: Number(t.amount) || 0,
+         amount: t.amount ? Number(t.amount) : 0, // Ensure amount is number, default to 0
          coins: t.coins_received,
          status: t.status,
          createdAt: t.created_at,

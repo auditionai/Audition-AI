@@ -68,7 +68,7 @@ export const updateAdminUserProfile = async (profile: UserProfile): Promise<{suc
 export const updateUserBalance = async (amount: number, reason: string, type: string) => {
     const user = await getUserProfile();
     // 1. Log transaction
-    await supabase.from('diamond_transactions').insert({
+    await supabase.from('diamond_transactions_log').insert({
         user_id: user.id,
         amount,
         reason,
@@ -556,7 +556,7 @@ export const getUnifiedHistory = async (): Promise<HistoryItem[]> => {
 
     // 2. Get Usage/Reward Logs
     const { data: logs } = await supabase
-        .from('diamond_transactions')
+        .from('diamond_transactions_log')
         .select('*')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
@@ -701,11 +701,14 @@ export const getAdminStats = async () => {
     const { data: promos } = await supabase.from('promotions').select('*');
     const { data: codes } = await supabase.from('gift_codes').select('*');
     const { data: txs } = await supabase.from('transactions').select('*').order('created_at', { ascending: false });
-    const { data: usageLogs } = await supabase.from('diamond_transactions').select('*').eq('type', 'usage');
+    const { data: usageLogs } = await supabase.from('diamond_transactions_log').select('*').eq('type', 'usage');
     
     // Debug logs
+    if (txs && txs.length > 0) {
+        console.log("First Transaction Keys:", Object.keys(txs[0]));
+        console.log("First Transaction Data:", txs[0]);
+    }
     console.log("Usage Logs:", usageLogs);
-    console.log("Transactions:", txs);
 
     const { data: generatedImages } = await supabase.from('generated_images').select('created_at');
     const { data: visits } = await supabase.from('app_visits').select('created_at');
@@ -753,7 +756,7 @@ export const getAdminStats = async () => {
          userEmail: users?.find((u: any) => u.id === t.user_id)?.email,
          userAvatar: users?.find((u: any) => u.id === t.user_id)?.photo_url,
          packageId: t.package_id,
-         amount: t.amount ? Number(t.amount) : 0, // Ensure amount is number, default to 0
+         amount: t.amount ? Number(t.amount) : (t.price ? Number(t.price) : (t.amount_vnd ? Number(t.amount_vnd) : 0)),
          coins: t.coins_received,
          status: t.status,
          createdAt: t.created_at,

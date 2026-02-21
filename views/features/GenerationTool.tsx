@@ -67,7 +67,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
 
   // Default Resolution 1K
   const [aspectRatio, setAspectRatio] = useState('3:4'); 
-  const [selectedStyle, setSelectedStyle] = useState('3d');
   const [resolution, setResolution] = useState<Resolution>('1K'); 
   
   // Features always ON
@@ -375,7 +374,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       }
       
       let finalPrompt = (feature.defaultPrompt || "") + prompt;
-      if (selectedStyle) finalPrompt += `, style: ${selectedStyle}`;
       if (negativePrompt) finalPrompt += ` --no ${negativePrompt}`;
       
       addLog("Gửi lệnh đến Gemini Intelligence Grid...");
@@ -437,13 +435,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       }
     }
   };
-
-  const styles = [
-      { id: '3d', name: '3D Game', icon: Icons.MessageCircle }, 
-      { id: 'anime', name: 'Anime 3D', icon: Icons.Zap },
-      { id: 'cinematic', name: 'Cinematic', icon: Icons.Play },
-      { id: 'fashion', name: 'Fashion', icon: Icons.ShoppingBag },
-  ];
 
   const ratios = [
       { id: '1:1', label: '1:1', desc: 'Vuông' },
@@ -939,21 +930,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                                     className={`flex-1 min-w-[50px] py-2 rounded-lg border text-[10px] font-bold transition-all ${aspectRatio === r.id ? 'bg-white text-black border-white' : 'border-white/10 text-slate-500 hover:bg-white/5'}`}
                                 >
                                     {r.label}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    <div className="space-y-2">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase">Phong cách (Style)</label>
-                        <div className="grid grid-cols-2 gap-2">
-                            {styles.map(s => (
-                                <button
-                                    key={s.id}
-                                    onClick={() => setSelectedStyle(s.id)}
-                                    className={`flex items-center gap-2 p-2 rounded-lg border text-xs font-bold transition-all ${selectedStyle === s.id ? 'bg-audi-pink text-white border-audi-pink' : 'border-white/10 text-slate-500 hover:bg-white/5'}`}
-                                >
-                                    <s.icon className="w-3 h-3" /> {s.name}
                                 </button>
                             ))}
                         </div>

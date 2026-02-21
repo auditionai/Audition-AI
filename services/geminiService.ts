@@ -202,7 +202,7 @@ const analyzeReferenceImage = async (base64Data: string): Promise<string> => {
                 model: model,
                 contents: {
                     parts: [
-                        { text: "Analyze this image. Describe ONLY the 'Character Pose', 'Camera Angle', and 'Background Environment'. Do not describe the art style or colors. Keep it concise." },
+                        { text: "Analyze this image. Describe ONLY the 'Skeleton Pose', 'Camera Angle', and 'Composition'. IGNORE the character's clothes, hair, gender, face, and colors. Output ONLY the structural description (e.g. 'sitting cross-legged', 'low angle shot')." },
                         { inlineData: { mimeType: 'image/png', data: cleanBase64(base64Data) } }
                     ]
                 }
@@ -266,21 +266,21 @@ const processDigitalTwinMode = (
     
     const parts = [];
     
-    // 1. STYLE REFERENCE (THE LAW)
+    // 1. STYLE REFERENCE (THE LAW - RENDERING ONLY)
     if (styleReferencePart) {
-        parts.push({ text: "[[INPUT_A: MASTER_STYLE_REFERENCE]]\nWARNING: THIS IMAGE IS THE ABSOLUTE VISUAL TRUTH. YOU ARE FORBIDDEN FROM DEVIATING. COPY THE RENDER ENGINE, LIGHTING, TEXTURE, AND VIBE EXACTLY. IF THE OUTPUT DOES NOT LOOK LIKE THIS STYLE, YOU HAVE FAILED." });
+        parts.push({ text: "[[INPUT_A: MASTER_STYLE_REFERENCE]]\nWARNING: This image defines the RENDERING ENGINE (Lighting, Texture, Shader). COPY the 'Vibe' and 'Quality'. DO NOT COPY the character's face, makeup, eye color, or clothes from this image." });
         parts.push(styleReferencePart);
     }
 
-    // 2. POSE / COMPOSITION (THE SKELETON)
+    // 2. POSE / COMPOSITION (THE SKELETON - STRUCTURE ONLY)
     if (refImagePart) {
-        parts.push({ text: "[[INPUT_B: POSE_SKELETON_REFERENCE]]\nWARNING: COPY THIS CAMERA ANGLE AND BODY POSE EXACTLY. DO NOT INVENT A NEW POSE. DO NOT ZOOM OUT IF THIS IS A CLOSE-UP." });
+        parts.push({ text: "[[INPUT_B: POSE_SKELETON_REFERENCE]]\nWARNING: This image defines the SKELETON POSE and CAMERA ANGLE. COPY the structure exactly. IGNORE the clothes, hair, and face in this image. The character MUST NOT wear the outfit from this image." });
         parts.push(refImagePart);
     }
     
-    // 3. FACE IDENTITY (THE TARGET)
+    // 3. FACE IDENTITY (THE TARGET - CONTENT SOURCE)
     if (charParts.length > 0) {
-        parts.push({ text: "[[INPUT_C: FACE_IDENTITY_TARGET]]\nWARNING: THIS IS THE EXACT FACE TO USE. PERFORM A DEEPFACE SWAP. RETAIN FACIAL STRUCTURE, EYES, AND FEATURES 100%." });
+        parts.push({ text: "[[INPUT_C: CHARACTER_APPEARANCE_SOURCE]]\nWARNING: This is the SOURCE OF TRUTH for the Character's Identity (Face, Hair, Outfit). You MUST use the facial features and outfit details from these images (unless the prompt specifies a different outfit)." });
         parts.push(...charParts);
     }
     
@@ -290,22 +290,29 @@ const processDigitalTwinMode = (
     
     YOU ARE A NON-CREATIVE RENDERING ENGINE. YOU DO NOT "IMAGINE". YOU "EXECUTE".
     
-    ** HIERARCHY OF ABSOLUTE AUTHORITY **
-    1. **[MASTER_STYLE_REFERENCE]**: This is your GOD. The output pixels MUST match this aesthetic. If the reference is 3D, output is 3D. If it is Anime, output is Anime. NO EXCEPTIONS.
-    2. **[FACE_IDENTITY_TARGET]**: The character's face MUST match the input face.
-    3. **[POSE_SKELETON_REFERENCE]**: The structure/composition is locked.
-    4. **[EXECUTION_COMMAND]**: The text details (clothes, bg) fill the gaps.
+    ** SEPARATION OF CONCERNS (STRICT COMPARTMENTALIZATION) **
+    1. **STYLE SOURCE ([INPUT_A])**: 
+       - TAKE: Lighting, Texture, Render Quality, Art Style.
+       - IGNORE: The subject, their clothes, their face, their makeup.
+    
+    2. **POSE SOURCE ([INPUT_B])**:
+       - TAKE: Bone structure, Camera Angle, Composition.
+       - IGNORE: The outfit, the hair, the face, the background colors.
+       
+    3. **CONTENT SOURCE ([INPUT_C] + [COMMAND])**:
+       - TAKE: The Character's Identity (Face), The Outfit (Clothes), The Hair, The Accessories.
+       - THIS IS THE ONLY SOURCE FOR "WHAT" IS IN THE IMAGE.
 
-    ** CRITICAL FAILURE CONDITIONS (AVOID AT ALL COSTS) **
-    - DO NOT create a "painting" or "drawing" if the style is "3D Render".
-    - DO NOT change the camera angle from the reference.
-    - DO NOT "beautify" the face if it changes the identity.
-    - DO NOT ignore the lighting of the Style Reference.
+    ** CRITICAL FAILURE CONDITIONS **
+    - FAILURE: If the output character wears the clothes from [INPUT_B] (Pose Ref).
+    - FAILURE: If the output character has the eye color/makeup of [INPUT_A] (Style Ref).
+    - FAILURE: If the output is a painting/drawing when Style Ref is 3D.
 
-    ** RENDERING PARAMETERS **
-    - QUALITY: 8K, RAW, UNCOMPRESSED.
-    - TEXTURE: Sub-surface scattering, ray-traced reflections.
-    - GEOMETRY: Perfect anatomy, 5 fingers, symmetrical eyes.
+    ** EXECUTION LOGIC **
+    - Step 1: Extract the SKELETON from [INPUT_B].
+    - Step 2: Skin the skeleton with the CHARACTER from [INPUT_C].
+    - Step 3: Dress the character according to [COMMAND] or [INPUT_C].
+    - Step 4: Render the scene using the ENGINE from [INPUT_A].
     
     ACKNOWLEDGE AND EXECUTE.
     `;

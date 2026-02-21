@@ -746,16 +746,38 @@ export const getAdminStats = async () => {
     const usageStats: Record<string, { count: number, vcoins: number }> = {};
     usageLogs?.forEach((log: any) => {
         // Try to find the reason field from various potential column names
-        let feature = log.reason || log.description || log.note || log.action || log.activity || log.details || 'Khác';
+        let rawFeature = log.reason || log.description || log.note || log.action || log.activity || log.details || 'Khác';
         
         // If still 'Khác', try to find any property that looks like a feature name
-        if (feature === 'Khác') {
+        if (rawFeature === 'Khác') {
             for (const key in log) {
                 if (typeof log[key] === 'string' && (log[key].startsWith('Gen') || log[key].startsWith('Edit') || log[key].includes(':'))) {
-                    feature = log[key];
+                    rawFeature = log[key];
                     break;
                 }
             }
+        }
+
+        // Grouping Logic
+        let feature = 'Khác';
+        const lower = rawFeature.toLowerCase();
+
+        if (lower.includes('nâng cấp') || lower.includes('upscale') || lower.includes('làm nét') || lower.includes('hd')) {
+            feature = 'Làm Nét Ảnh (Upscale)';
+        } else if (lower.includes('tách nền') || lower.includes('remove background') || lower.includes('background')) {
+            feature = 'Tách Nền (Remove BG)';
+        } else if (lower.includes('4 người') || lower.includes('group of 4') || lower.includes('squad of 4')) {
+            feature = 'Tạo Ảnh 4 Người';
+        } else if (lower.includes('3 người') || lower.includes('group of 3') || lower.includes('squad of 3')) {
+            feature = 'Tạo Ảnh 3 Người';
+        } else if (lower.includes('2 người') || lower.includes('couple') || lower.includes('đôi') || lower.includes('song ca')) {
+            feature = 'Tạo Ảnh Đôi (Couple)';
+        } else if (lower.includes('tạo ảnh') || lower.includes('gen:') || lower.includes('generate') || lower.includes('chân dung') || lower.includes('1 ảnh') || lower.includes('single')) {
+            feature = 'Tạo Ảnh Đơn (Single)';
+        } else if (lower.includes('xử lý') || lower.includes('edit') || lower.includes('face')) {
+             feature = 'Chỉnh Sửa / Xử Lý Ảnh';
+        } else {
+            feature = rawFeature.length > 50 ? rawFeature.substring(0, 50) + '...' : rawFeature;
         }
         
         if (!usageStats[feature]) {

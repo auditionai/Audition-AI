@@ -759,20 +759,36 @@ export const getAdminStats = async () => {
         revenue: usageStats[key].vcoins * 1000 // Estimate 1 Vcoin = 1000 VND (example)
     }));
     
-    const transactions = txs?.map((t: any) => ({
-         id: t.id,
-         userId: t.user_id,
-         userName: users?.find((u: any) => u.id === t.user_id)?.display_name,
-         userEmail: users?.find((u: any) => u.id === t.user_id)?.email,
-         userAvatar: users?.find((u: any) => u.id === t.user_id)?.photo_url,
-         packageId: t.package_id,
-         amount: t.amount ? Number(t.amount) : (t.price ? Number(t.price) : (t.amount_vnd ? Number(t.amount_vnd) : 0)),
-         coins: t.coins_received ? Number(t.coins_received) : (t.coins ? Number(t.coins) : (t.diamonds ? Number(t.diamonds) : (t.credits ? Number(t.credits) : 0))),
-         status: t.status,
-         createdAt: t.created_at,
-         code: t.code,
-         paymentMethod: t.payment_method
-    })) || [];
+    const transactions = txs?.map((t: any) => {
+         // Fallback for coins: Check DB columns -> Check Package Info
+         let coins = t.coins_received ? Number(t.coins_received) : (t.coins ? Number(t.coins) : (t.diamonds ? Number(t.diamonds) : (t.credits ? Number(t.credits) : 0)));
+         
+         if (coins === 0 && t.package_id) {
+             const pkg = pkgs?.find((p: any) => p.id === t.package_id);
+             if (pkg) {
+                 coins = pkg.credits_amount || 0;
+                 // Add estimated bonus if possible, but base is better than 0
+                 if (pkg.bonus_credits) {
+                     coins += Math.floor(coins * pkg.bonus_credits / 100);
+                 }
+             }
+         }
+
+         return {
+             id: t.id,
+             userId: t.user_id,
+             userName: users?.find((u: any) => u.id === t.user_id)?.display_name,
+             userEmail: users?.find((u: any) => u.id === t.user_id)?.email,
+             userAvatar: users?.find((u: any) => u.id === t.user_id)?.photo_url,
+             packageId: t.package_id,
+             amount: t.amount ? Number(t.amount) : (t.price ? Number(t.price) : (t.amount_vnd ? Number(t.amount_vnd) : 0)),
+             coins: coins,
+             status: t.status,
+             createdAt: t.created_at,
+             code: t.code,
+             paymentMethod: t.payment_method
+         };
+    }) || [];
 
     const userList = users?.map((u: any) => ({
         id: u.id,

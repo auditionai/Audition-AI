@@ -217,30 +217,32 @@ const analyzeReferenceImage = async (base64Data: string): Promise<string> => {
     }
 };
 
-// --- PROMPT REASONING ENGINE ---
+// --- PROMPT REASONING ENGINE (STEEL DISCIPLINE) ---
 const optimizePromptWithThinking = async (rawPrompt: string, styleContext: string = "", poseContext: string = ""): Promise<string> => {
     try {
         const ai = await getAiClient();
-        // Add Timeout to Thinking
         const response = await runWithTimeout(
             ai.models.generateContent({
                 model: 'gemini-3-flash-preview',
-                contents: `You are a Technical Prompt Engineer. Convert user input into professional 3D art keywords.
+                contents: `ROLE: EXECUTIONER PROMPT ENGINEER.
+                MISSION: CONVERT INPUTS INTO A RIGID, MACHINE-READABLE 3D RENDERING SCRIPT.
                 
-                INPUTS:
-                - User Prompt: "${rawPrompt}"
-                - Target Style: "${styleContext}"
-                - Reference Pose/BG: "${poseContext}"
+                INPUT DATA:
+                1. USER_COMMAND: "${rawPrompt}"
+                2. STYLE_MANDATE: "${styleContext}" (MUST BE APPLIED)
+                3. POSE_CONSTRAINT: "${poseContext}" (MUST BE FOLLOWED)
 
-                INSTRUCTIONS:
-                1. Merge User Prompt with the Reference Pose/BG (if any).
-                2. Apply the Target Style keywords.
-                3. Ensure the output describes the Subject, Action, Outfit, Environment, and Lighting clearly.
+                STRICT RULES:
+                - DO NOT HALLUCINATE. Use ONLY the provided inputs.
+                - IF STYLE_MANDATE conflicts with USER_COMMAND, STYLE_MANDATE WINS.
+                - OUTPUT FORMAT must be a comma-separated list of high-weight tokens.
+                - FORBIDDEN: "artistic", "creative interpretation", "maybe".
                 
-                OUTPUT: [Subject] + [Action] + [Outfit] + [Environment] + [Lighting] + [Style Tags].
+                REQUIRED OUTPUT STRUCTURE:
+                (Subject Description), (Action/Pose from Constraint), (Outfit Details), (Environment/Background), (Lighting Setup), (Render Engine: Octane/Unreal), (Texture Quality: 8K, Hyper-detailed), (Style Keywords from Mandate).
                 `,
             }),
-            15000, // 15s
+            15000, 
             "Prompt Optimization"
         );
         
@@ -249,56 +251,63 @@ const optimizePromptWithThinking = async (rawPrompt: string, styleContext: strin
         return result;
 
     } catch (e) {
-        console.warn("Prompt Optimization Failed/Timed out, using raw prompt", e);
+        console.warn("Prompt Optimization Failed, using raw fallback", e);
         return rawPrompt + (styleContext ? `, ${styleContext}` : "");
     }
 }
 
-// --- INTELLIGENCE CORE ---
+// --- INTELLIGENCE CORE (ABSOLUTE COMMAND) ---
 const processDigitalTwinMode = (
     prompt: string, 
     refImagePart: any | null, 
     charParts: any[], 
-    styleReferencePart: any | null = null // New: Style Anchor
+    styleReferencePart: any | null = null
 ): { systemPrompt: string, parts: any[] } => {
     
     const parts = [];
     
-    // 1. STYLE REFERENCE (HIGHEST PRIORITY)
+    // 1. STYLE REFERENCE (THE LAW)
     if (styleReferencePart) {
-        parts.push({ text: "INPUT 1: STYLE REFERENCE IMAGE (VISUAL STANDARD). You MUST replicate this image's rendering style, lighting, and texture exactly." });
+        parts.push({ text: "[[INPUT_A: MASTER_STYLE_REFERENCE]]\nWARNING: THIS IMAGE IS THE ABSOLUTE VISUAL TRUTH. YOU ARE FORBIDDEN FROM DEVIATING. COPY THE RENDER ENGINE, LIGHTING, TEXTURE, AND VIBE EXACTLY. IF THE OUTPUT DOES NOT LOOK LIKE THIS STYLE, YOU HAVE FAILED." });
         parts.push(styleReferencePart);
     }
 
-    // 2. POSE / COMPOSITION
+    // 2. POSE / COMPOSITION (THE SKELETON)
     if (refImagePart) {
-        parts.push({ text: "INPUT 2: POSE REFERENCE IMAGE. Follow this camera angle and character pose." });
+        parts.push({ text: "[[INPUT_B: POSE_SKELETON_REFERENCE]]\nWARNING: COPY THIS CAMERA ANGLE AND BODY POSE EXACTLY. DO NOT INVENT A NEW POSE. DO NOT ZOOM OUT IF THIS IS A CLOSE-UP." });
         parts.push(refImagePart);
     }
     
-    // 3. FACE IDENTITY
+    // 3. FACE IDENTITY (THE TARGET)
     if (charParts.length > 0) {
-        parts.push({ text: `INPUT 3: CHARACTER FACE IDENTITY. Use these facial features.` });
+        parts.push({ text: "[[INPUT_C: FACE_IDENTITY_TARGET]]\nWARNING: THIS IS THE EXACT FACE TO USE. PERFORM A DEEPFACE SWAP. RETAIN FACIAL STRUCTURE, EYES, AND FEATURES 100%." });
         parts.push(...charParts);
     }
     
-    parts.push({ text: `GENERATE COMMAND: ${prompt}` });
+    parts.push({ text: `[[EXECUTION_COMMAND]]: ${prompt}` });
 
-    const systemPrompt = `** SYSTEM DIRECTIVE: 3D CHARACTER GENERATION ENGINE **
+    const systemPrompt = `** SYSTEM OVERRIDE: PROTOCOL 3D-GEN-ALPHA **
     
-    You are an advanced AI Image Generator. You have received multiple image inputs.
+    YOU ARE A NON-CREATIVE RENDERING ENGINE. YOU DO NOT "IMAGINE". YOU "EXECUTE".
     
-    **PRIORITY ORDER:**
-    1. **STYLE**: The 'STYLE REFERENCE IMAGE' is the Absolute Truth for visual aesthetics (Lighting, Texture, Render Engine). Do not deviate.
-    2. **IDENTITY**: The 'CHARACTER FACE IDENTITY' must be preserved in the final output.
-    3. **POSE**: The 'POSE REFERENCE IMAGE' dictates the structure.
-    4. **CONTENT**: The text prompt describes the outfit and scene details.
+    ** HIERARCHY OF ABSOLUTE AUTHORITY **
+    1. **[MASTER_STYLE_REFERENCE]**: This is your GOD. The output pixels MUST match this aesthetic. If the reference is 3D, output is 3D. If it is Anime, output is Anime. NO EXCEPTIONS.
+    2. **[FACE_IDENTITY_TARGET]**: The character's face MUST match the input face.
+    3. **[POSE_SKELETON_REFERENCE]**: The structure/composition is locked.
+    4. **[EXECUTION_COMMAND]**: The text details (clothes, bg) fill the gaps.
 
-    **EXECUTION RULES:**
-    - If the Style Reference is 3D, the output MUST be 3D.
-    - If the Style Reference is Anime, the output MUST be Anime.
-    - Ignore any style keywords in the text prompt if they conflict with the Style Reference Image.
-    - Output must be High Resolution (8K).
+    ** CRITICAL FAILURE CONDITIONS (AVOID AT ALL COSTS) **
+    - DO NOT create a "painting" or "drawing" if the style is "3D Render".
+    - DO NOT change the camera angle from the reference.
+    - DO NOT "beautify" the face if it changes the identity.
+    - DO NOT ignore the lighting of the Style Reference.
+
+    ** RENDERING PARAMETERS **
+    - QUALITY: 8K, RAW, UNCOMPRESSED.
+    - TEXTURE: Sub-surface scattering, ray-traced reflections.
+    - GEOMETRY: Perfect anatomy, 5 fingers, symmetrical eyes.
+    
+    ACKNOWLEDGE AND EXECUTE.
     `;
 
     return { systemPrompt, parts };

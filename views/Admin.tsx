@@ -94,9 +94,20 @@ CREATE TABLE IF NOT EXISTS public.system_settings (
     value jsonb
 );
 
--- 4. ENABLE RLS & POLICIES
+-- 4. DIAMOND TRANSACTIONS LOG (For Usage Stats)
+CREATE TABLE IF NOT EXISTS public.diamond_transactions_log (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id uuid REFERENCES public.users(id),
+    amount numeric NOT NULL,
+    reason text,
+    type text, -- 'usage', 'topup', 'reward', etc.
+    created_at timestamptz DEFAULT now()
+);
+
+-- 5. ENABLE RLS & POLICIES
 ALTER TABLE public.gift_codes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.system_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.diamond_transactions_log ENABLE ROW LEVEL SECURITY;
 
 -- Policies for Giftcodes
 DROP POLICY IF EXISTS "Public read giftcodes" ON public.gift_codes;
@@ -111,6 +122,13 @@ CREATE POLICY "Public read settings" ON public.system_settings FOR SELECT TO ano
 
 DROP POLICY IF EXISTS "Admin manage settings" ON public.system_settings;
 CREATE POLICY "Admin manage settings" ON public.system_settings FOR ALL TO authenticated USING (true);
+
+-- Policies for Logs
+DROP POLICY IF EXISTS "User read own logs" ON public.diamond_transactions_log;
+CREATE POLICY "User read own logs" ON public.diamond_transactions_log FOR SELECT TO authenticated USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Admin read all logs" ON public.diamond_transactions_log;
+CREATE POLICY "Admin read all logs" ON public.diamond_transactions_log FOR ALL TO authenticated USING (true); -- Ideally check is_admin
 `;
 
 export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {

@@ -704,16 +704,20 @@ export const getAdminStats = async () => {
     
     // Try to fetch logs from both potential table names
     let usageLogs: any[] = [];
-    const { data: logs1 } = await supabase.from('diamond_transactions_log').select('*');
+    
+    // Attempt 1: diamond_transactions_log
+    const { data: logs1, error: err1 } = await supabase.from('diamond_transactions_log').select('*');
     if (logs1) usageLogs = [...usageLogs, ...logs1];
     
-    const { data: logs2 } = await supabase.from('diamond_transactions').select('*');
+    // Attempt 2: diamond_transactions
+    const { data: logs2, error: err2 } = await supabase.from('diamond_transactions').select('*');
     if (logs2) usageLogs = [...usageLogs, ...logs2];
 
-    // Filter for usage type
-    usageLogs = usageLogs.filter((l: any) => l.type === 'usage');
+    // Filter for usage: type 'usage' OR negative amount
+    usageLogs = usageLogs.filter((l: any) => l.type === 'usage' || (l.amount && Number(l.amount) < 0));
     
     // Debug logs
+    console.log("Admin Stats - Usage Logs Found:", usageLogs.length);
     if (txs && txs.length > 0) {
         console.log("First Transaction Keys:", Object.keys(txs[0]));
         console.log("First Transaction Data:", txs[0]);

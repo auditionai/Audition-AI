@@ -335,26 +335,40 @@ export const claimMilestoneReward = async (day: number): Promise<{success: boole
     }
 };
 
-// --- API KEYS (WITH ROTATION) ---
+// --- API KEYS (WITH INTELLIGENT ROTATION) ---
 
 export const getSystemApiKey = async (): Promise<string | null> => {
     try {
         // Fetch ALL active keys for Load Balancing
+        // Prioritize keys that haven't been used recently (Least Recently Used - LRU)
         const { data, error } = await supabase
             .from('api_keys')
-            .select('key_value')
-            .eq('status', 'active');
+            .select('id, key_value, last_used_at')
+            .eq('status', 'active')
+            .order('last_used_at', { ascending: true }) // Oldest usage first
+            .limit(1)
+            .single();
         
-        if (error || !data || data.length === 0) return null;
+        if (error || !data) {
+            // Fallback: Just get any active key if sorting fails (e.g. missing column)
+            const { data: fallbackData } = await supabase
+                .from('api_keys')
+                .select('key_value')
+                .eq('status', 'active')
+                .limit(1);
+            
+            if (fallbackData && fallbackData.length > 0) {
+                return fallbackData[0].key_value;
+            }
+            return null;
+        }
 
-        // Random Selection (Rotation)
-        // This distributes the load across all available keys in the DB
-        const randomIndex = Math.floor(Math.random() * data.length);
-        const selectedKey = data[randomIndex].key_value;
+        // Update the usage timestamp for this key (Async - don't await to block UI)
+        supabase.from('api_keys').update({ last_used_at: new Date().toISOString() }).eq('id', data.id).then(() => {});
         
-        console.log(`[System] Load Balancing: Selected API Key Index ${randomIndex} of ${data.length}`);
+        console.log(`[System] Smart Rotation: Selected API Key ID ${data.id} (Last used: ${data.last_used_at})`);
         
-        return selectedKey;
+        return data.key_value;
     } catch (e) {
         return null;
     }

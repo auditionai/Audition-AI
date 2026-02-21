@@ -123,6 +123,9 @@ CREATE POLICY "Public read settings" ON public.system_settings FOR SELECT TO ano
 DROP POLICY IF EXISTS "Admin manage settings" ON public.system_settings;
 CREATE POLICY "Admin manage settings" ON public.system_settings FOR ALL TO authenticated USING (true);
 
+-- 6. API KEYS ROTATION SUPPORT
+ALTER TABLE public.api_keys ADD COLUMN IF NOT EXISTS last_used_at timestamptz DEFAULT now();
+
 -- Policies for Logs
 DROP POLICY IF EXISTS "User read own logs" ON public.diamond_transactions_log;
 CREATE POLICY "User read own logs" ON public.diamond_transactions_log FOR SELECT TO authenticated USING (auth.uid() = user_id);

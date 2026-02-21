@@ -66,6 +66,11 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
   const [samplePrompts, setSamplePrompts] = useState<SamplePrompt[]>([]);
   const [loadingSamples, setLoadingSamples] = useState(false);
   const [currentCategoryName, setCurrentCategoryName] = useState('');
+  
+  // Pagination State
+  const SAMPLES_PER_PAGE = 20;
+  const [samplePage, setSamplePage] = useState(0);
+  const [hasMoreSamples, setHasMoreSamples] = useState(true);
 
   // Default Resolution 1K
   const [aspectRatio, setAspectRatio] = useState('3:4'); 
@@ -149,13 +154,13 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
           const newChars = [];
           for (let i = 1; i <= count; i++) {
               const existing = prev.find(p => p.id === i);
-              newChars.push(existing || { id: i, bodyImage: null, faceImage: null, gender: i % 2 === 0 ? 'male' : 'female', isFaceLocked: true });
+              newChars.push(existing || { id: i, bodyImage: null, faceImage: null, gender: (i % 2 === 0 ? 'male' : 'female') as 'male' | 'female', isFaceLocked: true });
           }
           return newChars;
       });
   };
 
-  const fetchSamplePrompts = async () => {
+  const fetchSamplePrompts = async (isLoadMore = false) => {
       if (!caulenhauClient) {
           notify("Chưa kết nối database mẫu.", "error");
           return;
@@ -178,29 +183,44 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
           }
           setCurrentCategoryName(catName);
 
+          const pageToFetch = isLoadMore ? samplePage + 1 : 0;
+          const from = pageToFetch * SAMPLES_PER_PAGE;
+          const to = from + SAMPLES_PER_PAGE - 1;
+
           const { data, error } = await caulenhauClient
               .from('images')
               .select(`id, image_url, prompt, image_categories!inner(category_id)`)
               .eq('image_categories.category_id', targetCategoryId)
               .order('created_at', { ascending: false })
-              .limit(50);
+              .range(from, to);
 
           if (error) throw error;
           
           if (data) {
-              setSamplePrompts(data.map((item: any) => ({
+              const newSamples = data.map((item: any) => ({
                   id: item.id,
                   image_url: item.image_url,
                   prompt: item.prompt,
                   category: catName
-              })));
+              }));
+
+              if (isLoadMore) {
+                  setSamplePrompts(prev => [...prev, ...newSamples]);
+                  setSamplePage(pageToFetch);
+              } else {
+                  setSamplePrompts(newSamples);
+                  setSamplePage(0);
+              }
+              
+              setHasMoreSamples(data.length === SAMPLES_PER_PAGE);
           } else {
-              setSamplePrompts([]);
+              if (!isLoadMore) setSamplePrompts([]);
+              setHasMoreSamples(false);
           }
       } catch (e: any) {
           console.error("Fetch samples error", e);
           notify(`Lỗi tải dữ liệu: ${e.message}`, 'error');
-          setSamplePrompts([]);
+          if (!isLoadMore) setSamplePrompts([]);
       } finally {
           setLoadingSamples(false);
       }
@@ -208,7 +228,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
 
   const handleOpenSamples = () => {
       setShowSampleModal(true);
-      fetchSamplePrompts();
+      fetchSamplePrompts(false);
   };
 
   const handleSelectSample = (sample: SamplePrompt) => {
@@ -723,7 +743,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                                 </div>
                                 <p>Chưa có mẫu nào cho chế độ này.</p>
                                 <button 
-                                    onClick={fetchSamplePrompts}
+                                    onClick={() => fetchSamplePrompts(false)}
                                     className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-full text-xs font-bold text-white transition-colors"
                                 >
                                     Thử lại
@@ -745,6 +765,27 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                                         </div>
                                     </div>
                                 ))}
+                            </div>
+                        )}
+                        
+                        {hasMoreSamples && !loadingSamples && samplePrompts.length > 0 && (
+                            <div className="w-full flex justify-center mt-6 pb-4">
+                                <button
+                                    onClick={() => fetchSamplePrompts(true)}
+                                    className="px-6 py-2 bg-audi-purple/20 hover:bg-audi-purple/40 border border-audi-purple/50 rounded-full text-sm font-bold text-white transition-all flex items-center gap-2"
+                                >
+                                    Xem thêm
+                                    <Icons.ArrowDown className="w-4 h-4" />
+                                </button>
+                            </div>
+                        )}
+                        
+                        {loadingSamples && samplePrompts.length > 0 && (
+                            <div className="w-full flex justify-center mt-6 pb-4">
+                                <div className="px-6 py-2 bg-audi-purple/20 border border-audi-purple/50 rounded-full text-sm font-bold text-white flex items-center gap-2 opacity-70">
+                                    <Icons.Loader className="w-4 h-4 animate-spin" />
+                                    Đang tải...
+                                </div>
                             </div>
                         )}
                     </div>

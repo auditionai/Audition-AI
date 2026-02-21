@@ -37,12 +37,13 @@ const getAiClient = async (specificKey?: string) => {
     // 1. Specific key (testing)
     if (specificKey) return new GoogleGenAI({ apiKey: specificKey });
 
-    // 2. Env Key (Priority per guidelines)
-    if (process.env.API_KEY) return new GoogleGenAI({ apiKey: process.env.API_KEY });
-
-    // 3. DB Key (Legacy/App specific feature)
+    // 2. DB Key (Rotation System - Priority)
+    // We prioritize the DB keys to enable the Load Balancing / Rotation mechanism
     const dbKey = await getSystemApiKey();
     if (dbKey) return new GoogleGenAI({ apiKey: dbKey });
+
+    // 3. Env Key (Fallback)
+    if (process.env.API_KEY) return new GoogleGenAI({ apiKey: process.env.API_KEY });
 
     throw new Error("API Key missing. Set process.env.API_KEY or configure in Admin.");
 };

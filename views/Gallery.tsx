@@ -104,11 +104,19 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                   blob = await response.blob();
               } catch (directError) {
                   console.warn("Direct download failed (CORS), switching to Proxy...", directError);
-                  // Attempt 2: Proxy Fetch (Reliable)
-                  const proxyUrl = `/.netlify/functions/download_proxy?url=${encodeURIComponent(imageUrl)}`;
-                  const proxyResponse = await fetch(proxyUrl);
-                  if (!proxyResponse.ok) throw new Error('Proxy download failed');
-                  blob = await proxyResponse.blob();
+                  // Attempt 2: WSRV.NL Proxy (Adds CORS headers)
+                  try {
+                      const proxyUrl = `https://wsrv.nl/?url=${encodeURIComponent(imageUrl)}&output=png`;
+                      const proxyResponse = await fetch(proxyUrl);
+                      if (!proxyResponse.ok) throw new Error('Proxy download failed');
+                      blob = await proxyResponse.blob();
+                  } catch (proxyError) {
+                      // Attempt 3: CorsProxy.io
+                      const proxyUrl2 = `https://corsproxy.io/?${encodeURIComponent(imageUrl)}`;
+                      const proxyResponse2 = await fetch(proxyUrl2);
+                      if (!proxyResponse2.ok) throw new Error('All proxies failed');
+                      blob = await proxyResponse2.blob();
+                  }
               }
           }
 

@@ -5,7 +5,7 @@ import { Icons } from '../../components/Icons';
 import { generateImage } from '../../services/geminiService';
 import { saveImageToStorage } from '../../services/storageService';
 import { createSolidFence, optimizePayload, urlToBase64 } from '../../utils/imageProcessor';
-import { getUserProfile, updateUserBalance } from '../../services/economyService';
+import { getUserProfile, updateUserBalance, getStylePresets } from '../../services/economyService';
 import { useNotification } from '../../components/NotificationSystem';
 import { caulenhauClient } from '../../services/supabaseClient';
 
@@ -51,6 +51,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
   const [stage, setStage] = useState<Stage>('input');
   const [progressMsg, setProgressMsg] = useState('');
   const [progressLogs, setProgressLogs] = useState<string[]>([]);
+  const [estimatedSeconds, setEstimatedSeconds] = useState(0);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   const [activeMode, setActiveMode] = useState<GenMode>('single');
   const [characters, setCharacters] = useState<CharacterInput[]>([{ id: 1, bodyImage: null, faceImage: null, gender: 'female', isFaceLocked: true }]);
@@ -64,10 +66,14 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
   const [samplePrompts, setSamplePrompts] = useState<SamplePrompt[]>([]);
   const [loadingSamples, setLoadingSamples] = useState(false);
   const [currentCategoryName, setCurrentCategoryName] = useState('');
+  
+  // Pagination State
+  const SAMPLES_PER_PAGE = 20;
+  const [samplePage, setSamplePage] = useState(0);
+  const [hasMoreSamples, setHasMoreSamples] = useState(true);
 
   // Default Resolution 1K
   const [aspectRatio, setAspectRatio] = useState('3:4'); 
-  const [selectedStyle, setSelectedStyle] = useState('3d');
   const [resolution, setResolution] = useState<Resolution>('1K'); 
   
   // Features always ON
@@ -84,6 +90,26 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
   const fileInputRef = useRef<HTMLInputElement>(null);
   const activeUploadType = useRef<{ charId?: number, type: 'body' | 'face' | 'ref' } | null>(null);
 
+  // --- NEW: STYLE PRESET STATE ---
+  const [activeStylePreset, setActiveStylePreset] = useState<string | null>(null);
+  const [availableStyles, setAvailableStyles] = useState<any[]>([]);
+
+  useEffect(() => {
+      // Load Default Style Preset
+      const loadStyle = async () => {
+          const presets = await getStylePresets();
+          setAvailableStyles(presets || []);
+          
+          const def = presets.find((p: any) => p.is_default);
+          if (def) {
+              setActiveStylePreset(def.image_url);
+              console.log("Loaded Master Style:", def.name);
+          }
+      };
+      loadStyle();
+  }, []);
+  // -------------------------------
+
   useEffect(() => {
       const interval = setInterval(() => {
           setCurrentTipIdx(prev => (prev + 1) % SMART_TIPS.length);
@@ -98,6 +124,24 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
     else handleModeChange('single');
   }, [feature]);
 
+  useEffect(() => {
+      let interval: any;
+      if (stage === 'processing') {
+          interval = setInterval(() => {
+              setElapsedSeconds(prev => prev + 1);
+          }, 1000);
+      } else {
+          setElapsedSeconds(0);
+      }
+      return () => clearInterval(interval);
+  }, [stage]);
+
+  const formatTime = (seconds: number) => {
+      const mins = Math.floor(seconds / 60);
+      const secs = seconds % 60;
+      return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
   const handleModeChange = (mode: GenMode) => {
       setActiveMode(mode);
       setActiveCharTab(1);
@@ -110,13 +154,13 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
           const newChars = [];
           for (let i = 1; i <= count; i++) {
               const existing = prev.find(p => p.id === i);
-              newChars.push(existing || { id: i, bodyImage: null, faceImage: null, gender: i % 2 === 0 ? 'male' : 'female', isFaceLocked: true });
+              newChars.push(existing || { id: i, bodyImage: null, faceImage: null, gender: (i % 2 === 0 ? 'male' : 'female') as 'male' | 'female', isFaceLocked: true });
           }
           return newChars;
       });
   };
 
-  const fetchSamplePrompts = async () => {
+  const fetchSamplePrompts = async (isLoadMore = false) => {
       if (!caulenhauClient) {
           notify("Chưa kết nối database mẫu.", "error");
           return;
@@ -139,29 +183,44 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
           }
           setCurrentCategoryName(catName);
 
+          const pageToFetch = isLoadMore ? samplePage + 1 : 0;
+          const from = pageToFetch * SAMPLES_PER_PAGE;
+          const to = from + SAMPLES_PER_PAGE - 1;
+
           const { data, error } = await caulenhauClient
               .from('images')
               .select(`id, image_url, prompt, image_categories!inner(category_id)`)
               .eq('image_categories.category_id', targetCategoryId)
               .order('created_at', { ascending: false })
-              .limit(50);
+              .range(from, to);
 
           if (error) throw error;
           
           if (data) {
-              setSamplePrompts(data.map((item: any) => ({
+              const newSamples = data.map((item: any) => ({
                   id: item.id,
                   image_url: item.image_url,
                   prompt: item.prompt,
                   category: catName
-              })));
+              }));
+
+              if (isLoadMore) {
+                  setSamplePrompts(prev => [...prev, ...newSamples]);
+                  setSamplePage(pageToFetch);
+              } else {
+                  setSamplePrompts(newSamples);
+                  setSamplePage(0);
+              }
+              
+              setHasMoreSamples(data.length === SAMPLES_PER_PAGE);
           } else {
-              setSamplePrompts([]);
+              if (!isLoadMore) setSamplePrompts([]);
+              setHasMoreSamples(false);
           }
       } catch (e: any) {
           console.error("Fetch samples error", e);
           notify(`Lỗi tải dữ liệu: ${e.message}`, 'error');
-          setSamplePrompts([]);
+          if (!isLoadMore) setSamplePrompts([]);
       } finally {
           setLoadingSamples(false);
       }
@@ -169,7 +228,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
 
   const handleOpenSamples = () => {
       setShowSampleModal(true);
-      fetchSamplePrompts();
+      fetchSamplePrompts(false);
   };
 
   const handleSelectSample = (sample: SamplePrompt) => {
@@ -251,11 +310,19 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                   if (!response.ok) throw new Error("Direct fetch failed");
                   blob = await response.blob();
               } catch (directError) {
-                  // Fallback to Proxy
-                  const proxyUrl = `/.netlify/functions/download_proxy?url=${encodeURIComponent(url)}`;
-                  const proxyResponse = await fetch(proxyUrl);
-                  if (!proxyResponse.ok) throw new Error("Proxy download failed");
-                  blob = await proxyResponse.blob();
+                  // Fallback to WSRV.NL Proxy (Adds CORS headers)
+                  try {
+                      const proxyUrl = `https://wsrv.nl/?url=${encodeURIComponent(url)}&output=png`;
+                      const proxyResponse = await fetch(proxyUrl);
+                      if (!proxyResponse.ok) throw new Error("Proxy download failed");
+                      blob = await proxyResponse.blob();
+                  } catch (proxyError) {
+                      // Fallback to CorsProxy.io
+                      const proxyUrl2 = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+                      const proxyResponse2 = await fetch(proxyUrl2);
+                      if (!proxyResponse2.ok) throw new Error("All proxies failed");
+                      blob = await proxyResponse2.blob();
+                  }
               }
           }
 
@@ -337,10 +404,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       }
       
       // 4. STRUCTURE PROCESSING (Heavy Operation)
-      // Apply STRICT logic: always use createSolidFence with isPoseRef=true to force structure only
       if (sourceForStructure) {
           addLog("Đang trích xuất cấu trúc (Wireframe)...");
-          // Use 'createSolidFence' to mask the image or overlay grid, ensuring AI doesn't copy pixels
           const optimizedStructure = await optimizePayload(sourceForStructure);
           structureRefData = await createSolidFence(optimizedStructure, aspectRatio, true);
       }
@@ -357,22 +422,34 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       }
       
       let finalPrompt = (feature.defaultPrompt || "") + prompt;
-      if (selectedStyle) finalPrompt += `, style: ${selectedStyle}`;
       if (negativePrompt) finalPrompt += ` --no ${negativePrompt}`;
       
       addLog("Gửi lệnh đến Gemini Intelligence Grid...");
 
-      const result = await generateImage(
-          finalPrompt, 
-          aspectRatio, 
-          structureRefData, 
-          characterDataList, 
-          resolution,
-          'pro', // ALWAYS PRO
-          useSearch,
-          useCloudRef, 
-          (msg) => addLog(msg)
-      );
+      // 5. EXECUTE WITH DYNAMIC TIMEOUT
+      let timeoutMs = 900000; // 15 mins (Single)
+      if (activeMode === 'couple') timeoutMs = 1200000; // 20 mins
+      if (activeMode.startsWith('group')) timeoutMs = 1800000; // 30 mins
+      
+      setEstimatedSeconds(timeoutMs / 1000);
+
+      const result = await Promise.race([
+          generateImage(
+              finalPrompt, 
+              aspectRatio, 
+              structureRefData, 
+              characterDataList, 
+              resolution,
+              'pro', // ALWAYS PRO
+              useSearch,
+              useCloudRef, 
+              (msg) => addLog(msg),
+              activeStylePreset, // Pass the style reference
+              availableStyles, // Pass the pool for auto-selection
+              timeoutMs // Pass Dynamic Timeout
+          ),
+          new Promise<null>((_, reject) => setTimeout(() => reject(new Error(`Timeout: Limit reached (${timeoutMs/60000} mins)`)), timeoutMs))
+      ]);
 
       if (result) {
         addLog(lang === 'vi' ? 'Hoàn tất!' : 'Finalizing...');
@@ -393,22 +470,26 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
         setStage('result');
         notify(lang === 'vi' ? 'Tạo ảnh thành công!' : 'Generation successful!', 'success');
       } else {
-          throw new Error("No result returned");
+          throw new Error("No result returned (Empty)");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      await updateUserBalance(cost, `Refund: ${feature.name['en']} Failed`, 'refund');
-      notify(lang === 'vi' ? 'Lỗi. Đã hoàn tiền.' : 'Error. Refunded.', 'error');
-      setStage('input'); 
+      const errorMsg = error.message || (lang === 'vi' ? 'Lỗi không xác định' : 'Unknown Error');
+      addLog(`❌ LỖI: ${errorMsg}`);
+      addLog(`💸 Đang thực hiện hoàn tiền...`);
+      
+      try {
+          await updateUserBalance(cost, `Refund: ${feature.name['en']} Failed`, 'refund');
+          notify(lang === 'vi' ? `Lỗi: ${errorMsg}. Đã hoàn tiền.` : `Error: ${errorMsg}. Refunded.`, 'error');
+      } catch (refundError) {
+          console.error("Refund failed", refundError);
+          notify("Lỗi hoàn tiền! Vui lòng liên hệ Admin.", "error");
+      } finally {
+          // ALWAYS RESET UI
+          setTimeout(() => setStage('input'), 2000);
+      }
     }
   };
-
-  const styles = [
-      { id: '3d', name: '3D Game', icon: Icons.MessageCircle }, 
-      { id: 'anime', name: 'Anime 3D', icon: Icons.Zap },
-      { id: 'cinematic', name: 'Cinematic', icon: Icons.Play },
-      { id: 'fashion', name: 'Fashion', icon: Icons.ShoppingBag },
-  ];
 
   const ratios = [
       { id: '1:1', label: '1:1', desc: 'Vuông' },
@@ -541,6 +622,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
               <h2 className="font-game text-2xl font-bold text-white mb-2 tracking-widest animate-neon-flash">
                   {lang === 'vi' ? 'AI ĐANG VẼ...' : 'GENERATING...'}
               </h2>
+              <div className="text-4xl font-mono font-bold text-audi-yellow mb-4 animate-pulse">
+                  {formatTime(elapsedSeconds)} <span className="text-sm text-slate-500">/ ~{formatTime(estimatedSeconds)}</span>
+              </div>
               <p className="text-audi-cyan font-mono text-sm max-w-xs mx-auto mb-8 animate-pulse font-bold">
                   {progressMsg}
               </p>
@@ -552,6 +636,15 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                       </div>
                   ))}
               </div>
+              <button 
+                  onClick={() => {
+                      setStage('input');
+                      notify("Đã hủy tạo ảnh.", "info");
+                  }}
+                  className="mt-4 px-6 py-2 bg-white/10 hover:bg-red-500/20 text-slate-400 hover:text-red-400 rounded-full text-xs font-bold transition-all border border-white/5 hover:border-red-500/30 flex items-center gap-2"
+              >
+                  <Icons.X className="w-4 h-4" /> Hủy bỏ (Cancel)
+              </button>
           </div>
       );
   }
@@ -659,7 +752,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                                 </div>
                                 <p>Chưa có mẫu nào cho chế độ này.</p>
                                 <button 
-                                    onClick={fetchSamplePrompts}
+                                    onClick={() => fetchSamplePrompts(false)}
                                     className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-full text-xs font-bold text-white transition-colors"
                                 >
                                     Thử lại
@@ -681,6 +774,27 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                                         </div>
                                     </div>
                                 ))}
+                            </div>
+                        )}
+                        
+                        {hasMoreSamples && !loadingSamples && samplePrompts.length > 0 && (
+                            <div className="w-full flex justify-center mt-6 pb-4">
+                                <button
+                                    onClick={() => fetchSamplePrompts(true)}
+                                    className="px-6 py-2 bg-audi-purple/20 hover:bg-audi-purple/40 border border-audi-purple/50 rounded-full text-sm font-bold text-white transition-all flex items-center gap-2"
+                                >
+                                    Xem thêm
+                                    <Icons.ArrowDown className="w-4 h-4" />
+                                </button>
+                            </div>
+                        )}
+                        
+                        {loadingSamples && samplePrompts.length > 0 && (
+                            <div className="w-full flex justify-center mt-6 pb-4">
+                                <div className="px-6 py-2 bg-audi-purple/20 border border-audi-purple/50 rounded-full text-sm font-bold text-white flex items-center gap-2 opacity-70">
+                                    <Icons.Loader className="w-4 h-4 animate-spin" />
+                                    Đang tải...
+                                </div>
                             </div>
                         )}
                     </div>
@@ -904,21 +1018,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                                     className={`flex-1 min-w-[50px] py-2 rounded-lg border text-[10px] font-bold transition-all ${aspectRatio === r.id ? 'bg-white text-black border-white' : 'border-white/10 text-slate-500 hover:bg-white/5'}`}
                                 >
                                     {r.label}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    <div className="space-y-2">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase">Phong cách (Style)</label>
-                        <div className="grid grid-cols-2 gap-2">
-                            {styles.map(s => (
-                                <button
-                                    key={s.id}
-                                    onClick={() => setSelectedStyle(s.id)}
-                                    className={`flex items-center gap-2 p-2 rounded-lg border text-xs font-bold transition-all ${selectedStyle === s.id ? 'bg-audi-pink text-white border-audi-pink' : 'border-white/10 text-slate-500 hover:bg-white/5'}`}
-                                >
-                                    <s.icon className="w-3 h-3" /> {s.name}
                                 </button>
                             ))}
                         </div>

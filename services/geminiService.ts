@@ -1,4 +1,3 @@
-
 import { GoogleGenAI } from "@google/genai";
 import { getSystemApiKey } from "./economyService";
 import { createTextureSheet, optimizePayload, createSolidFence } from "../utils/imageProcessor";
@@ -12,30 +11,145 @@ export interface CharacterData {
   description?: string;
 }
 
-const cleanBase64 = (data: string) => {
-    if (!data) return '';
-    const index = data.indexOf(';base64,');
-    if (index !== -1) {
-        return data.substring(index + 8);
+// --- HELPER: CLEAN BASE64 ---
+const cleanBase64 = (b64: string) => b64.replace(/^data:image\/\w+;base64,/, "");
+
+// --- HELPER: RETRY WITH BACKOFF ---
+const retryWithBackoff = async <T>(
+    operation: () => Promise<T>,
+    retries: number = 3,
+    delay: number = 2000,
+    label: string = "Operation",
+    onLog?: (msg: string) => void
+): Promise<T> => {
+    try {
+        return await operation();
+    } catch (error: any) {
+        // Check for 503 (Service Unavailable) or 429 (Too Many Requests)
+        const isTransient = 
+            error?.status === 503 || 
+            error?.status === 429 || 
+            error?.message?.includes('503') || 
+            error?.message?.includes('429') ||
+            error?.message?.includes('Overloaded');
+
+        if (retries > 0 && isTransient) {
+            const msg = `${label} quá tải (503). Đang đổi API Key khác và thử lại... (${retries} lần)`;
+            console.warn(msg);
+            if (onLog) onLog(`⚠️ ${msg}`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            return retryWithBackoff(operation, retries - 1, delay * 2, label, onLog);
+        }
+        throw error;
     }
-    return data;
+};
+
+// --- NEW: ANALYZE STYLE IMAGE (For Admin) ---
+export const analyzeStyleImage = async (imageBase64: string): Promise<string> => {
+    const ai = await getAiClient();
+    const model = 'gemini-3-flash-preview'; // Fast & Cheap for analysis
+
+    const result = await retryWithBackoff(
+        async () => {
+            const freshAi = await getAiClient();
+            return freshAi.models.generateContent({
+                model: model,
+                contents: {
+                    parts: [
+                        { text: "Analyze this image's visual style for a 3D character generator. Describe the lighting, texture, rendering engine vibe (e.g. Octane, Unreal), and artistic mood. Keep it concise, comma-separated keywords." },
+                        { inlineData: { mimeType: 'image/png', data: cleanBase64(imageBase64) } }
+                    ]
+                }
+            });
+        },
+        3,
+        2000,
+        "Style Analysis"
+    );
+
+    return result.text || "";
+};
+
+// --- NEW: SMART STYLE ROUTER ---
+const selectBestStyle = async (prompt: string, styles: any[]): Promise<any | null> => {
+    if (!styles || styles.length === 0) return null;
+    if (styles.length === 1) return styles[0]; // Only one choice
+
+    const ai = await getAiClient();
+    // Use Flash for fast routing
+    const model = 'gemini-3-flash-preview'; 
+
+    const styleList = styles.map(s => `- ID: ${s.id} | Name: ${s.name} | Keywords: ${s.trigger_prompt}`).join('\n');
+
+    const routerPrompt = `
+    User Prompt: "${prompt}"
+
+    Available Styles:
+    ${styleList}
+
+    Task: Select the ONE best matching style ID for this prompt. 
+    If the prompt asks for a specific vibe (e.g. "cute", "dark", "neon"), pick the closest match.
+    If unsure, pick the one marked "Default" or the most generic one.
+    
+    Return ONLY the ID.
+    `;
+
+    try {
+        const result = await retryWithBackoff(
+            async () => {
+                const freshAi = await getAiClient();
+                return freshAi.models.generateContent({
+                    model: model,
+                    contents: { parts: [{ text: routerPrompt }] }
+                });
+            },
+            3,
+            1000,
+            "Style Selection"
+        );
+        
+        const selectedId = result.text?.trim();
+        const match = styles.find(s => s.id === selectedId || selectedId.includes(s.id));
+        return match || styles[0]; // Fallback to first
+    } catch (e) {
+        console.warn("Style routing failed, using default", e);
+        return styles[0];
+    }
+};
+
+// --- INTELLIGENCE CORE ---
+const runWithTimeout = <T>(promise: Promise<T>, ms: number, label: string): Promise<T> => {
+    let timer: any;
+    const timeoutPromise = new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label} timed out (${ms/1000}s)`)), ms);
+    });
+    return Promise.race([
+        promise.then(val => { clearTimeout(timer); return val; }),
+        timeoutPromise
+    ]);
 };
 
 // Cấu hình timeout cao hơn cho Client (mặc định fetch là ngắn)
 const getAiClient = async (specificKey?: string) => {
-    const key = specificKey || await getSystemApiKey();
-    if (!key) throw new Error("API Key missing or invalid");
-    return new GoogleGenAI({ 
-        apiKey: key,
-    });
+    // 1. Specific key (testing)
+    if (specificKey) return new GoogleGenAI({ apiKey: specificKey });
+
+    // 2. DB Key (Rotation System - Priority)
+    // We prioritize the DB keys to enable the Load Balancing / Rotation mechanism
+    const dbKey = await getSystemApiKey();
+    if (dbKey) return new GoogleGenAI({ apiKey: dbKey });
+
+    // 3. Env Key (Fallback)
+    if (process.env.API_KEY) return new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+    throw new Error("API Key missing. Set process.env.API_KEY or configure in Admin.");
 };
 
-// --- ERROR HANDLER & EXTRACTOR (FIXED CRASH) ---
+// --- ERROR HANDLER & EXTRACTOR ---
 const extractImage = (response: any): string | null => {
     // 1. Kiểm tra cấu trúc cơ bản
     if (!response) {
-        console.error("Empty response from Gemini");
-        return null;
+        throw new Error("No response from server");
     }
 
     // 2. Kiểm tra Safety Block (Lỗi phổ biến nhất)
@@ -47,7 +161,7 @@ const extractImage = (response: any): string | null => {
     // 3. Kiểm tra Candidates
     if (!response.candidates || response.candidates.length === 0) {
         console.warn("No candidates returned.");
-        return null;
+        throw new Error("No candidates returned (Safety or Server Error)");
     }
 
     const candidate = response.candidates[0];
@@ -56,7 +170,7 @@ const extractImage = (response: any): string | null => {
     if (candidate.finishReason !== "STOP" && candidate.finishReason !== "MAX_TOKENS") {
         // Nếu bị chặn ở mức candidate
         if (candidate.finishReason === "SAFETY") {
-             throw new Error("Safety Block (Content violation)");
+             throw new Error("Safety Block: Content Violation");
         }
         console.warn("Abnormal finish reason:", candidate.finishReason);
     }
@@ -70,7 +184,7 @@ const extractImage = (response: any): string | null => {
         }
     }
 
-    return null;
+    throw new Error("No image data found in response");
 };
 
 const uploadToGemini = async (base64Data: string, mimeType: string): Promise<string> => {
@@ -84,12 +198,15 @@ const uploadToGemini = async (base64Data: string, mimeType: string): Promise<str
         const byteArray = new Uint8Array(byteNumbers);
         const blob = new Blob([byteArray], { type: mimeType });
 
-        const uploadResult = await ai.files.upload({
-            file: blob,
-            config: { 
-                displayName: `ref_img_${Date.now()}` 
-            }
-        });
+        // Add Timeout to Upload
+        const uploadResult = await runWithTimeout(
+            ai.files.upload({
+                file: blob,
+                config: { displayName: `ref_img_${Date.now()}` }
+            }),
+            20000, // 20s
+            "File Upload"
+        );
 
         const fileUri = (uploadResult as any).file?.uri || (uploadResult as any).uri;
         if (!fileUri) throw new Error("No URI returned");
@@ -104,11 +221,15 @@ const uploadToGemini = async (base64Data: string, mimeType: string): Promise<str
 export const checkConnection = async (key?: string): Promise<boolean> => {
     try {
         const ai = await getAiClient(key);
-        // UPDATED: Use gemini-3-flash-preview for a reliable ping (Flash 2.5 deprecated)
-        await ai.models.generateContent({
-             model: 'gemini-3-flash-preview',
-             contents: 'ping'
-        });
+        // Add Timeout to Ping - INCREASED TO 15s
+        await runWithTimeout(
+            ai.models.generateContent({
+                model: 'gemini-3-flash-preview',
+                contents: 'ping'
+            }),
+            15000,
+            "Ping Connection"
+        );
         return true;
     } catch (e) {
         console.error("Gemini Connection Check Failed", e);
@@ -116,242 +237,340 @@ export const checkConnection = async (key?: string): Promise<boolean> => {
     }
 };
 
-// --- PROMPT REASONING ENGINE V3: THE "SANITIZER & ARCHITECT" ---
-const optimizePromptWithThinking = async (rawPrompt: string): Promise<string> => {
+// --- NEW: ANALYZE REFERENCE IMAGE (POSE/BG) ---
+const analyzeReferenceImage = async (base64Data: string): Promise<string> => {
+    const ai = await getAiClient();
+    const model = 'gemini-3-flash-preview'; 
+
     try {
-        const ai = await getAiClient();
-        // UPDATED: Use gemini-3-flash-preview
-        const response = await ai.models.generateContent({
-            model: 'gemini-3-flash-preview',
-            contents: `You are a Technical Prompt Engineer for a 3D Game Asset Generator.
-            
-            USER INPUT: "${rawPrompt}"
-            
-            TASK:
-            1.  **Translate & Enhance**: Convert the user's description into professional English 3D art keywords.
-            2.  **STYLE ENFORCEMENT**: The user wants a "Korean MMO Game Character" (Audition/Blade & Soul style).
-            3.  **PROPORTIONS**: MUST BE TALL, SLENDER, ADULT PROPORTIONS. NO CHIBI.
-            4.  **Structure**: [Subject] + [Action/Pose] + [Outfit] + [Environment] + [Lighting] + [Style Tags].
-            
-            MANDATORY STYLE TAGS TO ADD:
-            "3D Game Character, Korean MMO Style, Tall Slender Body, Long Legs, Small Head, Fashion Model Ratio, 8-head tall, Smooth Texture, Non-Photorealistic Rendering, Octane Render".
-            
-            OUTPUT:
-            Return ONLY the final prompt string. No conversational text.`,
-        });
+        const result = await retryWithBackoff(
+            async () => {
+                const freshAi = await getAiClient();
+                return runWithTimeout(
+                    freshAi.models.generateContent({
+                        model: model,
+                        contents: {
+                            parts: [
+                                { text: "Analyze this image. Describe ONLY the 'Skeleton Pose', 'Camera Angle', and 'Composition'. IGNORE the character's clothes, hair, gender, face, and colors. Output ONLY the structural description (e.g. 'sitting cross-legged', 'low angle shot')." },
+                                { inlineData: { mimeType: 'image/png', data: cleanBase64(base64Data) } }
+                            ]
+                        }
+                    }),
+                    60000, // Increased to 60s
+                    "Ref Analysis"
+                );
+            },
+            3,
+            2000,
+            "Ref Analysis"
+        );
+        return result.text || "";
+    } catch (e) {
+        console.warn("Ref analysis failed", e);
+        return "";
+    }
+};
+
+// --- PROMPT REASONING ENGINE (STEEL DISCIPLINE) ---
+const optimizePromptWithThinking = async (rawPrompt: string, styleContext: string = "", poseContext: string = ""): Promise<string> => {
+    try {
+        const response = await retryWithBackoff(
+            async () => {
+                const freshAi = await getAiClient();
+                return runWithTimeout(
+                    freshAi.models.generateContent({
+                        model: 'gemini-3-flash-preview',
+                        contents: `ROLE: EXECUTIONER PROMPT ENGINEER.
+                        MISSION: CONVERT INPUTS INTO A RIGID, MACHINE-READABLE 3D RENDERING SCRIPT.
+                        
+                        INPUT DATA:
+                        1. USER_COMMAND: "${rawPrompt}"
+                        2. STYLE_MANDATE: "${styleContext}" (MUST BE APPLIED)
+                        3. POSE_CONSTRAINT: "${poseContext}" (MUST BE FOLLOWED)
         
-        // Safety check on the reasoning output itself
+                        STRICT RULES:
+                        - DO NOT HALLUCINATE. Use ONLY the provided inputs.
+                        - IF STYLE_MANDATE conflicts with USER_COMMAND, STYLE_MANDATE WINS.
+                        - OUTPUT FORMAT must be a comma-separated list of high-weight tokens.
+                        - FORBIDDEN: "artistic", "creative interpretation", "maybe".
+                        
+                        REQUIRED OUTPUT STRUCTURE:
+                        (Subject Description), (Action/Pose from Constraint), (Outfit Details), (Environment/Background), (Lighting Setup), (Render Engine: Octane/Unreal), (Texture Quality: 8K, Hyper-detailed), (Style Keywords from Mandate).
+                        `,
+                    }),
+                    60000, // Increased to 60s
+                    "Prompt Optimization"
+                );
+            },
+            3,
+            2000,
+            "Prompt Optimization"
+        );
+        
         const result = response.text?.trim();
         if (!result) throw new Error("Empty reasoning response");
         return result;
 
     } catch (e) {
-        console.warn("Prompt Optimization Failed, using raw prompt", e);
-        return rawPrompt;
+        console.warn("Prompt Optimization Failed, using raw fallback", e);
+        return rawPrompt + (styleContext ? `, ${styleContext}` : "");
     }
 }
 
-// --- INTELLIGENCE CORE ---
+// --- INTELLIGENCE CORE (ABSOLUTE COMMAND) ---
 const processDigitalTwinMode = (
     prompt: string, 
     refImagePart: any | null, 
     charParts: any[], 
-    charDescriptions: string[],
-    modelTier: 'flash' | 'pro'
+    styleReferencePart: any | null = null
 ): { systemPrompt: string, parts: any[] } => {
     
     const parts = [];
     
+    // 1. STYLE REFERENCE (THE LAW - RENDERING ONLY)
+    if (styleReferencePart) {
+        parts.push({ text: "[[INPUT_A: MASTER_STYLE_REFERENCE]]\nWARNING: This image defines the RENDERING ENGINE (Lighting, Texture, Shader). COPY the 'Vibe' and 'Quality'. DO NOT COPY the character's face, makeup, eye color, or clothes from this image." });
+        parts.push(styleReferencePart);
+    }
+
+    // 2. POSE / COMPOSITION (THE SKELETON - STRUCTURE ONLY)
     if (refImagePart) {
-        parts.push({ text: "REFERENCE IMAGE [POSE & COMPOSITION]: Follow this image's camera angle and character pose exactly." });
+        parts.push({ text: "[[INPUT_B: POSE_SKELETON_REFERENCE]]\nWARNING: This image defines the SKELETON POSE and CAMERA ANGLE. COPY the structure exactly. IGNORE the clothes, hair, and face in this image. The character MUST NOT wear the outfit from this image." });
         parts.push(refImagePart);
     }
     
+    // 3. FACE IDENTITY (THE TARGET - CONTENT SOURCE)
     if (charParts.length > 0) {
-        parts.push({ text: `REFERENCE FACE [IDENTITY]: Use these facial features for the 3D character.` });
+        parts.push({ text: "[[INPUT_C: CHARACTER_APPEARANCE_SOURCE]]\nWARNING: This is the SOURCE OF TRUTH for the Character's Identity (Face, Hair, Outfit). You MUST use the facial features and outfit details from these images (unless the prompt specifies a different outfit)." });
         parts.push(...charParts);
     }
-
-    // UPDATED SYSTEM PROMPT TO PREVENT REALISM AND CHIBI
-    const systemPrompt = `** SYSTEM DIRECTIVE: KOREAN MMO GAME CHARACTER GENERATION **
     
-    1.  **STRICT BODY PROPORTIONS (CRITICAL)**:
-        - The character MUST have **TALL, SLENDER, ADULT** proportions (like K-Pop Idols or Fashion Models).
-        - **Body Ratio**: 1:8 (Head to Body). LEGS MUST BE LONG.
-        - **ABSOLUTELY NO**: Chibi, Nendoroid, Big Head, Short Legs, Child-like body, Baby face.
-        - Treat this as a "High-End Fashion Game" asset.
+    parts.push({ text: `[[EXECUTION_COMMAND]]: ${prompt}` });
 
-    2.  **RENDERING STYLE (NON-REALISTIC)**:
-        - Output MUST look like a PC Game Render (Audition Online, Sims 4 CC).
-        - Skin: Smooth, flawless, "porcelain" texture. NO realistic pores/wrinkles.
-        - Eyes: Stylized Anime/Game eyes (expressive but not creepy).
-        - Hair: 3D Mesh style, thick strands, perfectly styled.
+    const systemPrompt = `** SYSTEM OVERRIDE: PROTOCOL 3D-GEN-ALPHA **
+    
+    YOU ARE A NON-CREATIVE RENDERING ENGINE. YOU DO NOT "IMAGINE". YOU "EXECUTE".
+    
+    ** SEPARATION OF CONCERNS (STRICT COMPARTMENTALIZATION) **
+    1. **STYLE SOURCE ([INPUT_A])**: 
+       - TAKE: Lighting, Texture, Render Quality, Art Style.
+       - IGNORE: The subject, their clothes, their face, their makeup.
+    
+    2. **POSE SOURCE ([INPUT_B])**:
+       - TAKE: Bone structure, Camera Angle, Composition.
+       - IGNORE: The outfit, the hair, the face, the background colors.
+       
+    3. **CONTENT SOURCE ([INPUT_C] + [COMMAND])**:
+       - TAKE: The Character's Identity (Face), The Outfit (Clothes), The Hair, The Accessories.
+       - THIS IS THE ONLY SOURCE FOR "WHAT" IS IN THE IMAGE.
 
-    3.  **SCENE ACCURACY**:
-        - Render exactly what is described in the prompt.
-        - If reference images are provided, MATCH THE BODY SCALE of the reference images.
+    ** CRITICAL FAILURE CONDITIONS **
+    - FAILURE: If the output character wears the clothes from [INPUT_B] (Pose Ref).
+    - FAILURE: If the output character has the eye color/makeup of [INPUT_A] (Style Ref).
+    - FAILURE: If the output is a painting/drawing when Style Ref is 3D.
 
-    4.  **SAFETY & COMPLIANCE**:
-        - If the prompt implies nudity, clothe the character in generic game underwear/bodysuit.
-
-    [EXECUTE PROMPT]: ${prompt}
+    ** EXECUTION LOGIC **
+    - Step 1: Extract the SKELETON from [INPUT_B].
+    - Step 2: Skin the skeleton with the CHARACTER from [INPUT_C].
+    - Step 3: Dress the character according to [COMMAND] or [INPUT_C].
+    - Step 4: Render the scene using the ENGINE from [INPUT_A].
+    
+    ACKNOWLEDGE AND EXECUTE.
     `;
 
     return { systemPrompt, parts };
 };
 
-// --- MAIN GENERATION FUNCTION WITH SMART RETRY ---
 export const generateImage = async (
-    prompt: string, 
-    aspectRatio: string = "1:1", 
-    styleRefBase64?: string, 
-    characterDataList: CharacterData[] = [], 
-    resolution: string = '2K',
-    _modelTier: 'flash' | 'pro' = 'pro', 
-    useSearch: boolean = true, 
-    useCloudRef: boolean = true, 
-    onProgress?: (msg: string) => void
-): Promise<string | null> => {
-  
-  const ai = await getAiClient();
-  const model = 'gemini-3-pro-image-preview'; // Only this model supports high quality generation
-
-  // --- INTERNAL HELPER: EXECUTE RUN ---
-  const executeRun = async (currentPrompt: string, isRetry: boolean = false): Promise<string | null> => {
-        
-        // Prepare Inputs
-        let refImagePart = null;
-        if (styleRefBase64) {
-            refImagePart = {
-                inlineData: { data: cleanBase64(styleRefBase64), mimeType: 'image/jpeg' }
-            };
-        }
-
-        const allParts: any[] = [];
-        const charDescriptions: string[] = [];
-
-        for (const char of characterDataList) {
-            if (char.image) {
-                // Chỉ log scan lần đầu
-                if (!isRetry && onProgress) onProgress(`Scanning Identity Features (Player ${char.id})...`);
-                
-                const textureSheet = await createTextureSheet(char.image, char.faceImage, char.shoesImage);
-                let finalPart;
-
-                // Cloud upload for better quality, fallback to inline
-                if (useCloudRef) {
-                    try {
-                        const fileUri = await uploadToGemini(textureSheet, 'image/jpeg');
-                        finalPart = { fileData: { mimeType: 'image/jpeg', fileUri: fileUri } };
-                    } catch (e) {
-                        finalPart = { inlineData: { data: cleanBase64(textureSheet), mimeType: 'image/jpeg' } };
-                    }
-                } else {
-                    finalPart = { inlineData: { data: cleanBase64(textureSheet), mimeType: 'image/jpeg' } };
+    prompt: string,
+    aspectRatio: string,
+    refImageBase64: string | undefined,
+    characters: any[],
+    resolution: '1K' | '2K' | '4K' = '1K',
+    modelType: 'flash' | 'pro' = 'pro',
+    useSearch: boolean = false,
+    useCloudRef: boolean = false,
+    onLog: (msg: string) => void = () => {},
+    styleReferenceUrl: string | null = null, // Manual override
+    availableStyles: any[] = [], // New: Pool of styles for auto-selection
+    timeoutMs: number = 900000 // Default 15 mins
+): Promise<string> => {
+    onLog("Initializing Gemini 3.0 Pro Pipeline...");
+    
+    const model = 'gemini-3-pro-image-preview'; 
+    
+    // 1. PROCESS REFERENCE IMAGE (VISUAL & TEXTUAL ANALYSIS)
+    let refImagePart = null;
+    let poseDescription = "";
+    
+    if (refImageBase64) {
+        onLog("Step 1: Analyzing Reference Image (Pose & BG)...");
+        if (refImageBase64.startsWith('data:') || refImageBase64.length > 100) {
+             const cleanRef = cleanBase64(refImageBase64);
+             refImagePart = {
+                inlineData: {
+                    mimeType: 'image/png',
+                    data: cleanRef
                 }
-                allParts.push(finalPart);
-                charDescriptions.push(char.gender);
+            };
+            // Call AI to analyze pose
+            poseDescription = await analyzeReferenceImage(cleanRef);
+            onLog(`> Pose Detected: ${poseDescription.substring(0, 50)}...`);
+        }
+    }
+
+    // 2. SMART STYLE SELECTION
+    let finalStyleUrl = styleReferenceUrl;
+    let styleKeywords = "";
+    
+    if (!finalStyleUrl && availableStyles && availableStyles.length > 0) {
+        onLog("Step 2: AI Selecting Best Style...");
+        const bestStyle = await selectBestStyle(prompt, availableStyles);
+        if (bestStyle) {
+            onLog(`> Selected Style: ${bestStyle.name}`);
+            finalStyleUrl = bestStyle.image_url;
+            styleKeywords = bestStyle.trigger_prompt || "";
+        }
+    } else if (finalStyleUrl) {
+        // If manual style, try to find keywords if possible, or just proceed
+        const match = availableStyles.find(s => s.image_url === finalStyleUrl);
+        if (match) styleKeywords = match.trigger_prompt || "";
+    }
+
+    // 3. LOAD STYLE IMAGE (VISUAL)
+    let styleReferencePart = null;
+    if (finalStyleUrl) {
+        onLog("Step 3: Loading Style Reference Image...");
+        try {
+            let styleData = finalStyleUrl;
+            if (finalStyleUrl.startsWith('http')) {
+                const resp = await fetch(finalStyleUrl);
+                const blob = await resp.blob();
+                const reader = new FileReader();
+                styleData = await new Promise((resolve) => {
+                    reader.onloadend = () => resolve(reader.result as string);
+                    reader.readAsDataURL(blob);
+                });
             }
+            
+            styleReferencePart = {
+                inlineData: {
+                    mimeType: 'image/png',
+                    data: cleanBase64(styleData)
+                }
+            };
+        } catch (e) {
+            console.warn("Failed to load style reference", e);
         }
-
-        const payload = processDigitalTwinMode(currentPrompt, refImagePart, allParts, charDescriptions, 'pro');
-        const finalParts = [...payload.parts, { text: payload.systemPrompt }];
-
-        const config: any = {
-            imageConfig: { aspectRatio: aspectRatio, imageSize: resolution },
-            // Safety Settings: BLOCK_ONLY_HIGH to allow artistic freedom but prevent illegal content
-            safetySettings: [
-                { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_ONLY_HIGH" },
-                { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" },
-                { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_ONLY_HIGH" }, // Relaxed to allow "sexy" but not "porn"
-                { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_ONLY_HIGH" }
-            ]
-        };
-
-        if (useSearch && !refImagePart && currentPrompt.length < 50) {
-            config.tools = [{ googleSearch: {} }];
-        }
-
-        if (onProgress) onProgress(isRetry ? "Retrying with Safety Filters..." : "Rendering Final Image (This may take 2-3 mins)...");
-
-        // Gọi API
-        const response = await ai.models.generateContent({
-            model: model,
-            contents: { parts: finalParts },
-            config: config
-        });
-
-        return extractImage(response);
-  };
-
-  // --- MAIN FLOW ---
-  try {
-    // 1. OPTIMIZATION PHASE
-    if (onProgress) onProgress("Analyzing Prompt & Safety Check...");
-    const optimizedPrompt = await optimizePromptWithThinking(prompt);
-    let finalPromptToUse = optimizedPrompt;
-
-    // Safety Net: Ensure 3D context is STYLIZED & TALL
-    if (!finalPromptToUse.toLowerCase().includes("tall")) {
-        finalPromptToUse = "Tall Slender 3D Game Character, Adult Proportions, " + finalPromptToUse + " --no chibi --no photorealistic";
     }
 
-    // 2. EXECUTION PHASE (ATTEMPT 1)
-    if (onProgress) onProgress(`Engine: ${model} | Scene Construction...`);
-    try {
-        return await executeRun(finalPromptToUse);
-    } catch (firstError: any) {
-        // 3. RETRY PHASE (ATTEMPT 2 - FALLBACK)
-        console.warn("Attempt 1 Failed:", firstError.message);
-        
-        // Nếu lỗi là do Safety hoặc Model không hiểu Prompt tối ưu, thử lại với Prompt gốc
-        // Prompt gốc thường ngắn hơn và ít gây hiểu lầm cho bộ lọc Safety
-        if (onProgress) onProgress("⚠️ Attempt 1 failed. Re-calibrating for Safety & Stability...");
-        
-        // Thêm delay nhẹ để tránh rate limit
-        await new Promise(r => setTimeout(r, 2000));
-
-        const safeFallbackPrompt = `Tall 3D Game Character, Fashion Model Body, ${prompt} --safe --no nudity --no chibi`;
-        return await executeRun(safeFallbackPrompt, true);
+    // 4. PREPARE CHARACTERS
+    const charParts: any[] = [];
+    for (const char of characters) {
+        if (char.faceImage) {
+            charParts.push({
+                inlineData: {
+                    mimeType: 'image/png',
+                    data: cleanBase64(char.faceImage)
+                }
+            });
+        }
+        if (char.image && !char.faceImage) { 
+             charParts.push({
+                inlineData: {
+                    mimeType: 'image/png',
+                    data: cleanBase64(char.image)
+                }
+            });
+        }
     }
 
-  } catch (error) {
-    console.error("Gemini Pipeline Final Error:", error);
-    throw error; // Ném lỗi ra để UI hoàn tiền
-  }
+    // 5. PROMPT OPTIMIZATION (MERGING ALL CONTEXTS)
+    onLog("Step 4: Optimizing Prompt with Style & Pose Context...");
+    const optimizedPrompt = await optimizePromptWithThinking(prompt, styleKeywords, poseDescription);
+    
+    // 6. FINAL ASSEMBLY
+    const { systemPrompt, parts } = processDigitalTwinMode(optimizedPrompt, refImagePart, charParts, styleReferencePart);
+    
+    onLog("Step 5: Sending to Generation Grid (Gemini 3.0 Pro)...");
+
+    const config: any = {
+        imageConfig: {
+            aspectRatio: aspectRatio,
+            imageSize: resolution
+        },
+        systemInstruction: systemPrompt
+    };
+
+    if (useSearch) {
+        config.tools = [{ googleSearch: {} }];
+    }
+
+    const response = await retryWithBackoff(
+        async () => {
+            const freshAi = await getAiClient();
+            return runWithTimeout(
+                freshAi.models.generateContent({
+                    model: model,
+                    contents: { parts },
+                    config: config
+                }),
+                timeoutMs, // Dynamic Timeout
+                "Image Generation"
+            );
+        },
+        3,
+        2000,
+        "Image Generation",
+        onLog
+    );
+
+    onLog("Downloading result...");
+    const result = extractImage(response);
+    if (!result) throw new Error("Generation failed: No image output");
+    return result;
 };
 
-export const editImageWithInstructions = async (base64Data: string, instruction: string, mimeType: string): Promise<string | null> => {
-    try {
-        const ai = await getAiClient();
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash-image', 
-            contents: {
-                parts: [
-                    { inlineData: { data: cleanBase64(base64Data), mimeType: mimeType } },
-                    { text: instruction }
-                ]
-            }
-        });
-        return extractImage(response);
-    } catch (e) {
-        console.error(e);
-        return null;
-    }
-};
+export const editImageWithInstructions = async (
+    base64Data: string, 
+    instruction: string, 
+    mimeType: string
+): Promise<string> => {
+    const ai = await getAiClient();
+    
+    // gemini-2.5-flash-image for standard editing per guidelines
+    const model = 'gemini-2.5-flash-image'; 
 
-export const suggestPrompt = async (currentInput: string, lang: string, featureName: string): Promise<string> => {
-    try {
-        const ai = await getAiClient();
-        // UPDATED: Use gemini-3-flash-preview
-        const response = await ai.models.generateContent({
-            model: 'gemini-3-flash-preview', 
-            contents: currentInput || `Create a 3D character concept for ${featureName}`,
-            config: {
-                systemInstruction: `You are an AI Prompt Expert for 3D Game Assets. Output ONLY the refined 3D-centric prompt. Keep it stylized/anime but with TALL/ADULT proportions.`,
-                temperature: 0.7,
-            }
-        });
-        return response.text?.trim() || currentInput;
-    } catch (error) { return currentInput; }
+    const response = await retryWithBackoff(
+        async () => {
+            const freshAi = await getAiClient();
+            return runWithTimeout(
+                freshAi.models.generateContent({
+                    model: model,
+                    contents: {
+                        parts: [
+                            {
+                                inlineData: {
+                                    mimeType: mimeType || 'image/png',
+                                    data: cleanBase64(base64Data)
+                                }
+                            },
+                            {
+                                text: instruction
+                            }
+                        ]
+                    }
+                }),
+                45000,
+                "Image Editing"
+            );
+        },
+        3,
+        2000,
+        "Image Editing"
+    );
+
+    const result = extractImage(response);
+    if (!result) throw new Error("Editing failed: No image output");
+    return result;
 }

@@ -11,16 +11,67 @@ export interface CharacterData {
   description?: string;
 }
 
-const cleanBase64 = (data: string) => {
-    if (!data) return '';
-    const index = data.indexOf(';base64,');
-    if (index !== -1) {
-        return data.substring(index + 8);
-    }
-    return data;
+// --- HELPER: CLEAN BASE64 ---
+const cleanBase64 = (b64: string) => b64.replace(/^data:image\/\w+;base64,/, "");
+
+// --- NEW: ANALYZE STYLE IMAGE (For Admin) ---
+export const analyzeStyleImage = async (imageBase64: string): Promise<string> => {
+    const ai = await getAiClient();
+    const model = 'gemini-3-flash-preview'; // Fast & Cheap for analysis
+
+    const result = await ai.models.generateContent({
+        model: model,
+        contents: {
+            parts: [
+                { text: "Analyze this image's visual style for a 3D character generator. Describe the lighting, texture, rendering engine vibe (e.g. Octane, Unreal), and artistic mood. Keep it concise, comma-separated keywords." },
+                { inlineData: { mimeType: 'image/png', data: cleanBase64(imageBase64) } }
+            ]
+        }
+    });
+
+    return result.text || "";
 };
 
-// --- TIMEOUT HELPER ---
+// --- NEW: SMART STYLE ROUTER ---
+const selectBestStyle = async (prompt: string, styles: any[]): Promise<any | null> => {
+    if (!styles || styles.length === 0) return null;
+    if (styles.length === 1) return styles[0]; // Only one choice
+
+    const ai = await getAiClient();
+    // Use Flash for fast routing
+    const model = 'gemini-3-flash-preview'; 
+
+    const styleList = styles.map(s => `- ID: ${s.id} | Name: ${s.name} | Keywords: ${s.trigger_prompt}`).join('\n');
+
+    const routerPrompt = `
+    User Prompt: "${prompt}"
+
+    Available Styles:
+    ${styleList}
+
+    Task: Select the ONE best matching style ID for this prompt. 
+    If the prompt asks for a specific vibe (e.g. "cute", "dark", "neon"), pick the closest match.
+    If unsure, pick the one marked "Default" or the most generic one.
+    
+    Return ONLY the ID.
+    `;
+
+    try {
+        const result = await ai.models.generateContent({
+            model: model,
+            contents: { parts: [{ text: routerPrompt }] }
+        });
+        
+        const selectedId = result.text?.trim();
+        const match = styles.find(s => s.id === selectedId || selectedId.includes(s.id));
+        return match || styles[0]; // Fallback to first
+    } catch (e) {
+        console.warn("Style routing failed, using default", e);
+        return styles[0];
+    }
+};
+
+// --- INTELLIGENCE CORE ---
 const runWithTimeout = <T>(promise: Promise<T>, ms: number, label: string): Promise<T> => {
     let timer: any;
     const timeoutPromise = new Promise<T>((_, reject) => {
@@ -229,7 +280,8 @@ export const generateImage = async (
     useSearch: boolean = false,
     useCloudRef: boolean = false,
     onLog: (msg: string) => void = () => {},
-    styleReferenceUrl: string | null = null // New Param
+    styleReferenceUrl: string | null = null, // Manual override
+    availableStyles: any[] = [] // New: Pool of styles for auto-selection
 ): Promise<string> => {
     onLog("Initializing Gemini 3.0 Pro...");
     const ai = await getAiClient();
@@ -250,19 +302,26 @@ export const generateImage = async (
         }
     }
 
-    // ... (Style Reference Logic)
+    // ... (Smart Style Selection Logic)
+    let finalStyleUrl = styleReferenceUrl;
+    
+    // If no manual style is forced, try to auto-select from pool
+    if (!finalStyleUrl && availableStyles && availableStyles.length > 0) {
+        onLog("🧠 AI Analyzing Request to pick best Style...");
+        const bestStyle = await selectBestStyle(prompt, availableStyles);
+        if (bestStyle) {
+            onLog(`🎨 Selected Style: ${bestStyle.name}`);
+            finalStyleUrl = bestStyle.image_url;
+        }
+    }
+
     let styleReferencePart = null;
-    if (styleReferenceUrl) {
+    if (finalStyleUrl) {
         onLog("Injecting Master Style Reference...");
-        // If URL is http, we need to fetch it (handled by caller usually, but let's assume base64 or handle fetch)
-        // For now, assume the caller passes Base64 or we fetch it here if needed.
-        // To be safe, let's assume the UI passes the URL and we might need to fetch it if it's not data URI.
-        // However, for simplicity and speed, we'll assume the UI handles the fetch-to-base64 or we do a quick fetch.
-        
         try {
-            let styleData = styleReferenceUrl;
-            if (styleReferenceUrl.startsWith('http')) {
-                const resp = await fetch(styleReferenceUrl);
+            let styleData = finalStyleUrl;
+            if (finalStyleUrl.startsWith('http')) {
+                const resp = await fetch(finalStyleUrl);
                 const blob = await resp.blob();
                 const reader = new FileReader();
                 styleData = await new Promise((resolve) => {

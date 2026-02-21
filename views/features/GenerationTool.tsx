@@ -86,11 +86,14 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
 
   // --- NEW: STYLE PRESET STATE ---
   const [activeStylePreset, setActiveStylePreset] = useState<string | null>(null);
+  const [availableStyles, setAvailableStyles] = useState<any[]>([]);
 
   useEffect(() => {
       // Load Default Style Preset
       const loadStyle = async () => {
           const presets = await getStylePresets();
+          setAvailableStyles(presets || []);
+          
           const def = presets.find((p: any) => p.is_default);
           if (def) {
               setActiveStylePreset(def.image_url);
@@ -389,7 +392,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
               useSearch,
               useCloudRef, 
               (msg) => addLog(msg),
-              activeStylePreset // Pass the style reference
+              activeStylePreset, // Pass the style reference
+              availableStyles // Pass the pool for auto-selection
           ),
           new Promise<null>((_, reject) => setTimeout(() => reject(new Error("Timeout: UI limit reached (90s)")), 90000))
       ]);

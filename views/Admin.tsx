@@ -22,13 +22,16 @@ import {
     adminBulkRejectTransactions,
     deleteTransaction,
     getSystemApiKey,
-    getUserProfile
+    getUserProfile,
+    getStylePresets,
+    saveStylePreset,
+    deleteStylePreset
 } from '../services/economyService';
 import { getAllImagesFromStorage, deleteImageFromStorage, checkR2Connection } from '../services/storageService';
-import { checkConnection } from '../services/geminiService';
+import { checkConnection, analyzeStyleImage } from '../services/geminiService';
 import { checkSupabaseConnection } from '../services/supabaseClient';
 import { Icons } from '../components/Icons';
-import { UserProfile, CreditPackage, Giftcode, PromotionCampaign, Transaction, GeneratedImage, Language } from '../types';
+import { UserProfile, CreditPackage, Giftcode, PromotionCampaign, Transaction, GeneratedImage, Language, StylePreset } from '../types';
 
 interface AdminProps {
   lang: Language;
@@ -159,6 +162,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [giftcodes, setGiftcodes] = useState<Giftcode[]>([]);
   const [promotions, setPromotions] = useState<PromotionCampaign[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [stylePresets, setStylePresets] = useState<StylePreset[]>([]);
+  const [editingStyle, setEditingStyle] = useState<StylePreset | null>(null);
   
   // API Key States
   const [apiKey, setApiKey] = useState('');
@@ -244,6 +249,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
       const promoConfig = await getGiftcodePromoConfig();
       setGiftcodePromo(promoConfig);
+
+      const styles = await getStylePresets();
+      setStylePresets(styles || []);
   };
 
   const runSystemChecks = async (specificKey?: string) => {
@@ -645,6 +653,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   { id: 'packages', icon: Icons.ShoppingBag, label: 'Gói Nạp' },
                   { id: 'giftcodes', icon: Icons.Gift, label: 'Code' },
                   { id: 'promotion', icon: Icons.Zap, label: 'Sự Kiện' },
+                  { id: 'styles', icon: Icons.Palette, label: 'Style Mẫu' },
                   { id: 'system', icon: Icons.Cpu, label: 'Hệ Thống' },
               ].map(tab => (
                   <button
@@ -1011,6 +1020,65 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               </div>
           )}
 
+           {/* ================= VIEW: STYLES ================= */}
+           {activeView === 'styles' && (
+              <div className="space-y-6 animate-slide-in-right">
+                  <div className="flex justify-between items-center">
+                      <h2 className="text-lg md:text-2xl font-bold text-white">Quản Lý Style Mẫu</h2>
+                      <button 
+                          onClick={() => setEditingStyle({
+                              id: `temp_${Date.now()}`, 
+                              name: '', 
+                              image_url: '', 
+                              trigger_prompt: '', 
+                              is_active: true, 
+                              is_default: false
+                          })} 
+                          className="px-3 py-2 md:px-4 bg-audi-pink text-white rounded-lg font-bold flex items-center gap-2 hover:bg-pink-600 text-xs md:text-sm"
+                      >
+                          <Icons.Plus className="w-4 h-4" /> <span className="hidden md:inline">Thêm Style Mới</span><span className="md:hidden">Thêm</span>
+                      </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {stylePresets.map(style => (
+                          <div key={style.id} className="bg-[#12121a] border border-white/10 rounded-2xl p-4 relative overflow-hidden group hover:border-white/30 transition-all">
+                              <div className="aspect-[3/4] w-full bg-black/50 rounded-xl mb-4 overflow-hidden relative">
+                                  <img src={style.image_url} alt={style.name} className="w-full h-full object-cover" />
+                                  {style.is_default && (
+                                      <div className="absolute top-2 right-2 bg-audi-yellow text-black text-[10px] font-bold px-2 py-1 rounded shadow-lg flex items-center gap-1">
+                                          <Icons.Star className="w-3 h-3" /> DEFAULT
+                                      </div>
+                                  )}
+                                  {!style.is_active && (
+                                      <div className="absolute inset-0 bg-black/60 flex items-center justify-center backdrop-blur-sm">
+                                          <span className="text-red-500 font-bold border border-red-500 px-3 py-1 rounded uppercase">Disabled</span>
+                                      </div>
+                                  )}
+                              </div>
+                              
+                              <div className="flex justify-between items-start mb-2">
+                                  <div>
+                                      <h3 className="font-bold text-white text-lg">{style.name}</h3>
+                                      <p className="text-xs text-slate-500 font-mono truncate max-w-[200px]">{style.trigger_prompt || 'No prompt'}</p>
+                                  </div>
+                                  <div className="flex gap-2">
+                                      <button onClick={() => setEditingStyle(style)} className="p-2 bg-blue-500/20 text-blue-500 rounded hover:bg-blue-500 hover:text-white transition-colors"><Icons.Settings className="w-4 h-4" /></button>
+                                      <button onClick={() => showConfirm('Xóa style này?', async () => { await deleteStylePreset(style.id); refreshData(); showToast('Đã xóa style'); })} className="p-2 bg-red-500/20 text-red-500 rounded hover:bg-red-500 hover:text-white transition-colors"><Icons.Trash className="w-4 h-4" /></button>
+                                  </div>
+                              </div>
+                          </div>
+                      ))}
+                      
+                      {stylePresets.length === 0 && (
+                          <div className="col-span-full py-12 text-center text-slate-500 italic border border-dashed border-white/10 rounded-2xl">
+                              Chưa có style mẫu nào. Hãy thêm mới!
+                          </div>
+                      )}
+                  </div>
+              </div>
+           )}
+
            {/* ================= VIEW: SYSTEM ================= */}
            {activeView === 'system' && (
               <div className="space-y-6 animate-slide-in-right">
@@ -1282,6 +1350,131 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               <div className="bg-[#12121a] w-full max-w-md p-6 rounded-2xl border border-white/20 shadow-2xl">
                   <h3 className="text-xl font-bold text-white mb-6">{editingGiftcode.id.startsWith('temp_') ? 'Tạo Giftcode' : 'Sửa Giftcode'}</h3>
                   <div className="space-y-4 mb-6"><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Mã Code (Tự động in hoa)</label><input value={editingGiftcode.code} onChange={e => setEditingGiftcode({...editingGiftcode, code: e.target.value.toUpperCase()})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-mono font-bold" placeholder="Vd: CHAOMUNG"/></div><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Phần thưởng (Vcoin)</label><input type="number" value={editingGiftcode.reward} onChange={e => setEditingGiftcode({...editingGiftcode, reward: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-audi-yellow font-bold" /></div><div className="grid grid-cols-2 gap-4"><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Giới hạn tổng</label><input type="number" value={editingGiftcode.totalLimit} onChange={e => setEditingGiftcode({...editingGiftcode, totalLimit: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white" /></div><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Max/Người</label><input type="number" value={editingGiftcode.maxPerUser} onChange={e => setEditingGiftcode({...editingGiftcode, maxPerUser: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white" /></div></div><label className="flex items-center gap-2 cursor-pointer bg-white/5 p-3 rounded-xl border border-white/10 hover:bg-white/10 transition-colors mt-2"><input type="checkbox" checked={editingGiftcode.isActive} onChange={e => setEditingGiftcode({...editingGiftcode, isActive: e.target.checked})} className="accent-green-500 w-4 h-4" /><span className="text-sm font-bold text-white">Kích hoạt ngay</span></label></div><div className="flex gap-3"><button onClick={() => setEditingGiftcode(null)} className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-bold">Hủy</button><button onClick={handleSaveGiftcode} className="flex-1 py-3 rounded-xl bg-audi-pink hover:bg-pink-600 text-white font-bold">Lưu Code</button></div>
+              </div>
+          </div>
+      )}
+
+      {editingStyle && (
+          <div className="fixed inset-0 z-[2000] flex justify-center items-start p-4 pt-24 overflow-y-auto">
+              <div className="bg-[#12121a] w-full max-w-lg p-6 rounded-2xl border border-white/20 shadow-2xl flex flex-col max-h-[90vh]">
+                  <h3 className="text-xl font-bold text-white mb-6 sticky top-0 bg-[#12121a] z-10 py-2 border-b border-white/10 shrink-0">
+                      {editingStyle.id.startsWith('temp_') ? 'Thêm Style Mới' : 'Sửa Style'}
+                  </h3>
+                  <div className="space-y-4 overflow-y-auto pr-2 custom-scrollbar">
+                      <div>
+                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Tên Style</label>
+                          <input 
+                              value={editingStyle.name} 
+                              onChange={e => setEditingStyle({...editingStyle, name: e.target.value})} 
+                              className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-bold" 
+                              placeholder="Ví dụ: 3D Audition"
+                          />
+                      </div>
+                      
+                      <div>
+                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Ảnh Mẫu (Reference)</label>
+                          <div className="flex gap-4 items-start">
+                              <div className="w-24 h-32 bg-black/50 rounded-lg border border-white/10 overflow-hidden shrink-0">
+                                  {editingStyle.image_url ? (
+                                      <img src={editingStyle.image_url} className="w-full h-full object-cover" />
+                                  ) : (
+                                      <div className="w-full h-full flex items-center justify-center text-slate-600"><Icons.Image className="w-8 h-8" /></div>
+                                  )}
+                              </div>
+                              <div className="flex-1">
+                                  <input 
+                                      type="file" 
+                                      accept="image/*"
+                                      onChange={(e) => {
+                                          const file = e.target.files?.[0];
+                                          if (file) {
+                                              const reader = new FileReader();
+                                              reader.onloadend = () => {
+                                                  setEditingStyle({...editingStyle, image_url: reader.result as string});
+                                              };
+                                              reader.readAsDataURL(file);
+                                          }
+                                      }}
+                                      className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-audi-pink file:text-white hover:file:bg-pink-600 mb-2"
+                                  />
+                                  <p className="text-[10px] text-slate-500">Upload ảnh chất lượng cao để làm mẫu chuẩn cho AI.</p>
+                              </div>
+                          </div>
+                      </div>
+
+                      <div>
+                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Trigger Prompt (Optional)</label>
+                          <textarea 
+                              value={editingStyle.trigger_prompt || ''} 
+                              onChange={e => setEditingStyle({...editingStyle, trigger_prompt: e.target.value})} 
+                              className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-mono text-xs h-24" 
+                              placeholder="Các từ khóa bổ sung để kích hoạt style này..."
+                          />
+                          <button 
+                              onClick={async () => {
+                                  if (!editingStyle.image_url) {
+                                      showToast('Vui lòng upload ảnh trước!', 'error');
+                                      return;
+                                  }
+                                  showToast('Đang phân tích style bằng AI...', 'info');
+                                  try {
+                                      const analysis = await analyzeStyleImage(editingStyle.image_url);
+                                      setEditingStyle(prev => prev ? ({...prev, trigger_prompt: analysis}) : null);
+                                      showToast('Đã phân tích xong!', 'success');
+                                  } catch (e) {
+                                      showToast('Lỗi phân tích: ' + (e as any).message, 'error');
+                                  }
+                              }}
+                              className="mt-2 text-[10px] font-bold text-audi-cyan hover:text-white flex items-center gap-1 bg-audi-cyan/10 px-2 py-1 rounded border border-audi-cyan/30 transition-colors"
+                          >
+                              <Icons.Sparkles className="w-3 h-3" /> AI Phân Tích Style
+                          </button>
+                      </div>
+
+                      <div className="flex gap-4 pt-2">
+                          <label className="flex items-center gap-2 cursor-pointer bg-white/5 p-3 rounded-xl border border-white/10 flex-1 hover:bg-white/10 transition-colors">
+                              <input 
+                                  type="checkbox" 
+                                  checked={editingStyle.is_default} 
+                                  onChange={e => setEditingStyle({...editingStyle, is_default: e.target.checked})} 
+                                  className="accent-audi-yellow w-4 h-4" 
+                              />
+                              <span className="text-sm font-bold text-white">Đặt làm Mặc Định</span>
+                          </label>
+                          <label className="flex items-center gap-2 cursor-pointer bg-white/5 p-3 rounded-xl border border-white/10 flex-1 hover:bg-white/10 transition-colors">
+                              <input 
+                                  type="checkbox" 
+                                  checked={editingStyle.is_active} 
+                                  onChange={e => setEditingStyle({...editingStyle, is_active: e.target.checked})} 
+                                  className="accent-green-500 w-4 h-4" 
+                              />
+                              <span className="text-sm font-bold text-white">Kích hoạt</span>
+                          </label>
+                      </div>
+                  </div>
+                  
+                  <div className="flex gap-3 pt-6 mt-2 border-t border-white/10 shrink-0">
+                      <button onClick={() => setEditingStyle(null)} className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-bold transition-colors">Hủy</button>
+                      <button 
+                          onClick={async () => {
+                              if (!editingStyle.name || !editingStyle.image_url) {
+                                  showToast('Vui lòng nhập tên và tải ảnh mẫu!', 'error');
+                                  return;
+                              }
+                              const res = await saveStylePreset(editingStyle);
+                              if (res.success) {
+                                  setEditingStyle(null);
+                                  refreshData();
+                                  showToast('Lưu Style thành công!');
+                              } else {
+                                  showToast('Lỗi: ' + res.error, 'error');
+                              }
+                          }} 
+                          className="flex-1 py-3 rounded-xl bg-audi-pink hover:bg-pink-600 text-white font-bold shadow-lg transition-all"
+                      >
+                          Lưu Style
+                      </button>
+                  </div>
               </div>
           </div>
       )}

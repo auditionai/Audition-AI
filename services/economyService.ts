@@ -703,9 +703,21 @@ export const getAdminStats = async () => {
     const { data: txs } = await supabase.from('transactions').select('*').order('created_at', { ascending: false });
     const { data: usageLogs } = await supabase.from('diamond_transactions').select('*').eq('type', 'usage');
     
+    const { data: generatedImages } = await supabase.from('generated_images').select('created_at');
+    const { data: visits } = await supabase.from('app_visits').select('created_at');
+
     // Calculate dashboard
-    const today = new Date().toISOString().split('T')[0];
-    const newUsersToday = users?.filter((u: any) => u.created_at.startsWith(today)).length || 0;
+    // Use local date string for comparison to match UI expectations
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    
+    const newUsersToday = users?.filter((u: any) => u.created_at && u.created_at.startsWith(today)).length || 0;
+    
+    const imagesToday = generatedImages?.filter((img: any) => img.created_at && img.created_at.startsWith(today)).length || 0;
+    const imagesTotal = generatedImages?.length || 0;
+
+    const visitsToday = visits?.filter((v: any) => v.created_at && v.created_at.startsWith(today)).length || 0;
+    const visitsTotal = visits?.length || 0;
 
     // Calculate AI Usage Stats
     const usageStats: Record<string, { count: number, vcoins: number }> = {};
@@ -736,7 +748,7 @@ export const getAdminStats = async () => {
          userEmail: users?.find((u: any) => u.id === t.user_id)?.email,
          userAvatar: users?.find((u: any) => u.id === t.user_id)?.photo_url,
          packageId: t.package_id,
-         amount: t.amount,
+         amount: Number(t.amount) || 0,
          coins: t.coins_received,
          status: t.status,
          createdAt: t.created_at,
@@ -757,12 +769,12 @@ export const getAdminStats = async () => {
 
     return {
         dashboard: {
-            visitsToday: 120, // Mock
-            visitsTotal: 5400, // Mock
+            visitsToday: visitsToday,
+            visitsTotal: visitsTotal,
             newUsersToday,
             usersTotal: users?.length || 0,
-            imagesToday: 45, // Need image count query
-            imagesTotal: 1200, // Need image count query
+            imagesToday: imagesToday,
+            imagesTotal: imagesTotal,
             aiUsage
         },
         usersList: userList,

@@ -24,6 +24,15 @@ export interface Feature {
   tag?: string;
 }
 
+export interface StylePreset {
+    id: string;
+    name: string;
+    image_url: string; // The visual anchor
+    trigger_prompt: string; // Extra keywords (e.g. "3D render, Audition style")
+    is_active: boolean;
+    is_default: boolean;
+}
+
 export interface MenuItem {
   id: ViewId;
   label: LocalizedString;

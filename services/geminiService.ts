@@ -172,34 +172,48 @@ const processDigitalTwinMode = (
     prompt: string, 
     refImagePart: any | null, 
     charParts: any[], 
-    charDescriptions: string[]
+    charDescriptions: string[],
+    styleReferencePart: any | null = null // New: Style Anchor
 ): { systemPrompt: string, parts: any[] } => {
     
     const parts = [];
     
+    // 1. STYLE REFERENCE (HIGHEST PRIORITY)
+    if (styleReferencePart) {
+        parts.push({ text: "CRITICAL STYLE REFERENCE: The following image defines the MANDATORY visual style. You must replicate its rendering, lighting, texture, and aesthetic exactly. Do NOT deviate." });
+        parts.push(styleReferencePart);
+    }
+
+    // 2. POSE / COMPOSITION
     if (refImagePart) {
-        parts.push({ text: "REFERENCE IMAGE [POSE & COMPOSITION]: Follow this image's camera angle and character pose exactly." });
+        parts.push({ text: "REFERENCE POSE: Follow this image's camera angle and character pose." });
         parts.push(refImagePart);
     }
     
+    // 3. FACE IDENTITY
     if (charParts.length > 0) {
-        parts.push({ text: `REFERENCE FACE [IDENTITY]: Use these facial features for the 3D character.` });
+        parts.push({ text: `REFERENCE FACE: Use these facial features for the character.` });
         parts.push(...charParts);
     }
     
     parts.push({ text: `GENERATE: ${prompt}` });
 
-    const systemPrompt = `** SYSTEM DIRECTIVE: KOREAN MMO GAME CHARACTER GENERATION (GEMINI 3.0 PRO) **
+    const systemPrompt = `** SYSTEM DIRECTIVE: 3D CHARACTER GENERATION ENGINE **
     
-    1.  **STRICT BODY PROPORTIONS (CRITICAL)**:
-        - The character MUST have **TALL, SLENDER, ADULT** proportions (like K-Pop Idols or Fashion Models).
-        - **Body Ratio**: 1:8 (Head to Body). LEGS MUST BE LONG.
-        - **ABSOLUTELY NO**: Chibi, Child-like, Big Head, Short Legs, Cartoonish proportions.
+    1.  **VISUAL STYLE ENFORCEMENT**:
+        - ${styleReferencePart ? "YOU MUST COPY THE STYLE OF THE 'STYLE REFERENCE' IMAGE EXACTLY." : "Style: High-End 3D Render (Octane/Unreal)."}
+        - **Texture**: Smooth, semi-realistic skin (doll-like but detailed).
+        - **Lighting**: High contrast, studio lighting, rim lights.
+        - **Forbidden**: 2D, Anime, Sketch, Painting, Low Poly, Flat colors.
 
-    2.  **STYLE**:
-        - Semi-realistic Anime / Korean MMO Style (Lost Ark, Black Desert).
-        - Octane Render, Unreal Engine 5, Ray Tracing.
-        - Detailed textures (skin pores, fabric weaving).
+    2.  **CHARACTER DESIGN**:
+        - **Proportions**: Tall, slender, fashion model ratio (1:8 head-to-body). Long legs.
+        - **Face**: Delicate features, sharp chin, large expressive eyes (if style dictates).
+        - **Outfit**: Highly detailed fabrics, modern fashion or fantasy armor as requested.
+
+    3.  **RENDERING**:
+        - Output must be 8K resolution, sharp focus, no blur.
+        - Perfect anatomy (hands, fingers).
     `;
 
     return { systemPrompt, parts };
@@ -214,13 +228,15 @@ export const generateImage = async (
     modelType: 'flash' | 'pro' = 'pro',
     useSearch: boolean = false,
     useCloudRef: boolean = false,
-    onLog: (msg: string) => void = () => {}
+    onLog: (msg: string) => void = () => {},
+    styleReferenceUrl: string | null = null // New Param
 ): Promise<string> => {
     onLog("Initializing Gemini 3.0 Pro...");
     const ai = await getAiClient();
     
-    const model = 'gemini-3-pro-image-preview'; // Only this model supports image generation size and search
+    const model = 'gemini-3-pro-image-preview'; 
     
+    // ... (Ref Image Logic)
     let refImagePart = null;
     if (refImageBase64) {
         onLog("Processing Reference Image...");
@@ -231,6 +247,38 @@ export const generateImage = async (
                     data: cleanBase64(refImageBase64)
                 }
             };
+        }
+    }
+
+    // ... (Style Reference Logic)
+    let styleReferencePart = null;
+    if (styleReferenceUrl) {
+        onLog("Injecting Master Style Reference...");
+        // If URL is http, we need to fetch it (handled by caller usually, but let's assume base64 or handle fetch)
+        // For now, assume the caller passes Base64 or we fetch it here if needed.
+        // To be safe, let's assume the UI passes the URL and we might need to fetch it if it's not data URI.
+        // However, for simplicity and speed, we'll assume the UI handles the fetch-to-base64 or we do a quick fetch.
+        
+        try {
+            let styleData = styleReferenceUrl;
+            if (styleReferenceUrl.startsWith('http')) {
+                const resp = await fetch(styleReferenceUrl);
+                const blob = await resp.blob();
+                const reader = new FileReader();
+                styleData = await new Promise((resolve) => {
+                    reader.onloadend = () => resolve(reader.result as string);
+                    reader.readAsDataURL(blob);
+                });
+            }
+            
+            styleReferencePart = {
+                inlineData: {
+                    mimeType: 'image/png',
+                    data: cleanBase64(styleData)
+                }
+            };
+        } catch (e) {
+            console.warn("Failed to load style reference", e);
         }
     }
 
@@ -258,7 +306,8 @@ export const generateImage = async (
     onLog("Reasoning Prompt...");
     const optimizedPrompt = await optimizePromptWithThinking(prompt);
     
-    const { systemPrompt, parts } = processDigitalTwinMode(optimizedPrompt, refImagePart, charParts, []);
+    // Pass styleReferencePart
+    const { systemPrompt, parts } = processDigitalTwinMode(optimizedPrompt, refImagePart, charParts, [], styleReferencePart);
     
     onLog("Sending to Generation Grid...");
 

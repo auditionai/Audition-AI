@@ -5,7 +5,7 @@ import { Icons } from '../../components/Icons';
 import { generateImage } from '../../services/geminiService';
 import { saveImageToStorage } from '../../services/storageService';
 import { createSolidFence, optimizePayload, urlToBase64 } from '../../utils/imageProcessor';
-import { getUserProfile, updateUserBalance } from '../../services/economyService';
+import { getUserProfile, updateUserBalance, getStylePresets } from '../../services/economyService';
 import { useNotification } from '../../components/NotificationSystem';
 import { caulenhauClient } from '../../services/supabaseClient';
 
@@ -83,6 +83,23 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const activeUploadType = useRef<{ charId?: number, type: 'body' | 'face' | 'ref' } | null>(null);
+
+  // --- NEW: STYLE PRESET STATE ---
+  const [activeStylePreset, setActiveStylePreset] = useState<string | null>(null);
+
+  useEffect(() => {
+      // Load Default Style Preset
+      const loadStyle = async () => {
+          const presets = await getStylePresets();
+          const def = presets.find((p: any) => p.is_default);
+          if (def) {
+              setActiveStylePreset(def.image_url);
+              console.log("Loaded Master Style:", def.name);
+          }
+      };
+      loadStyle();
+  }, []);
+  // -------------------------------
 
   useEffect(() => {
       const interval = setInterval(() => {
@@ -371,7 +388,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
               'pro', // ALWAYS PRO
               useSearch,
               useCloudRef, 
-              (msg) => addLog(msg)
+              (msg) => addLog(msg),
+              activeStylePreset // Pass the style reference
           ),
           new Promise<null>((_, reject) => setTimeout(() => reject(new Error("Timeout: UI limit reached (90s)")), 90000))
       ]);

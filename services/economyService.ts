@@ -705,6 +705,45 @@ export const redeemGiftcode = async (codeStr: string): Promise<{success: boolean
     }
 };
 
+// --- STYLE PRESETS ---
+
+export const getStylePresets = async () => {
+    const { data } = await supabase.from('style_presets').select('*').eq('is_active', true);
+    return data || [];
+};
+
+export const saveStylePreset = async (style: any) => {
+    try {
+        if (style.is_default) {
+            // Unset other defaults
+            await supabase.from('style_presets').update({ is_default: false }).neq('id', style.id);
+        }
+        
+        const payload = {
+            name: style.name,
+            image_url: style.image_url,
+            trigger_prompt: style.trigger_prompt,
+            is_active: style.is_active,
+            is_default: style.is_default
+        };
+
+        let error;
+        if (style.id.startsWith('temp_')) {
+            ({ error } = await supabase.from('style_presets').insert(payload));
+        } else {
+            ({ error } = await supabase.from('style_presets').update(payload).eq('id', style.id));
+        }
+        if (error) throw error;
+        return { success: true };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+};
+
+export const deleteStylePreset = async (id: string) => {
+    await supabase.from('style_presets').delete().eq('id', id);
+};
+
 // --- ADMIN STATS ---
 
 export const getAdminStats = async () => {

@@ -126,6 +126,23 @@ CREATE POLICY "Admin manage settings" ON public.system_settings FOR ALL TO authe
 -- 6. API KEYS ROTATION SUPPORT
 ALTER TABLE public.api_keys ADD COLUMN IF NOT EXISTS last_used_at timestamptz DEFAULT now();
 
+-- 7. STYLE PRESETS (NEW)
+CREATE TABLE IF NOT EXISTS public.style_presets (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    name text NOT NULL,
+    image_url text NOT NULL,
+    trigger_prompt text,
+    is_active boolean DEFAULT true,
+    is_default boolean DEFAULT false,
+    created_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE public.style_presets ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public read styles" ON public.style_presets;
+CREATE POLICY "Public read styles" ON public.style_presets FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "Admin manage styles" ON public.style_presets;
+CREATE POLICY "Admin manage styles" ON public.style_presets FOR ALL TO authenticated USING (true);
+
 -- Policies for Logs
 DROP POLICY IF EXISTS "User read own logs" ON public.diamond_transactions_log;
 CREATE POLICY "User read own logs" ON public.diamond_transactions_log FOR SELECT TO authenticated USING (auth.uid() = user_id);

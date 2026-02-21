@@ -191,8 +191,34 @@ export const checkConnection = async (key?: string): Promise<boolean> => {
     }
 };
 
+// --- NEW: ANALYZE REFERENCE IMAGE (POSE/BG) ---
+const analyzeReferenceImage = async (base64Data: string): Promise<string> => {
+    const ai = await getAiClient();
+    const model = 'gemini-3-flash-preview'; 
+
+    try {
+        const result = await runWithTimeout(
+            ai.models.generateContent({
+                model: model,
+                contents: {
+                    parts: [
+                        { text: "Analyze this image. Describe ONLY the 'Character Pose', 'Camera Angle', and 'Background Environment'. Do not describe the art style or colors. Keep it concise." },
+                        { inlineData: { mimeType: 'image/png', data: cleanBase64(base64Data) } }
+                    ]
+                }
+            }),
+            15000,
+            "Ref Analysis"
+        );
+        return result.text || "";
+    } catch (e) {
+        console.warn("Ref analysis failed", e);
+        return "";
+    }
+};
+
 // --- PROMPT REASONING ENGINE ---
-const optimizePromptWithThinking = async (rawPrompt: string): Promise<string> => {
+const optimizePromptWithThinking = async (rawPrompt: string, styleContext: string = "", poseContext: string = ""): Promise<string> => {
     try {
         const ai = await getAiClient();
         // Add Timeout to Thinking
@@ -200,11 +226,21 @@ const optimizePromptWithThinking = async (rawPrompt: string): Promise<string> =>
             ai.models.generateContent({
                 model: 'gemini-3-flash-preview',
                 contents: `You are a Technical Prompt Engineer. Convert user input into professional 3D art keywords.
-                USER INPUT: "${rawPrompt}"
+                
+                INPUTS:
+                - User Prompt: "${rawPrompt}"
+                - Target Style: "${styleContext}"
+                - Reference Pose/BG: "${poseContext}"
+
+                INSTRUCTIONS:
+                1. Merge User Prompt with the Reference Pose/BG (if any).
+                2. Apply the Target Style keywords.
+                3. Ensure the output describes the Subject, Action, Outfit, Environment, and Lighting clearly.
+                
                 OUTPUT: [Subject] + [Action] + [Outfit] + [Environment] + [Lighting] + [Style Tags].
-                MANDATORY: "3D Game Character, Korean MMO Style, Tall Slender Body, Long Legs, Small Head, Fashion Model Ratio, 8-head tall, Smooth Texture, Octane Render, 8K".`,
+                `,
             }),
-            10000, // 10s
+            15000, // 15s
             "Prompt Optimization"
         );
         
@@ -214,7 +250,7 @@ const optimizePromptWithThinking = async (rawPrompt: string): Promise<string> =>
 
     } catch (e) {
         console.warn("Prompt Optimization Failed/Timed out, using raw prompt", e);
-        return rawPrompt;
+        return rawPrompt + (styleContext ? `, ${styleContext}` : "");
     }
 }
 
@@ -223,7 +259,6 @@ const processDigitalTwinMode = (
     prompt: string, 
     refImagePart: any | null, 
     charParts: any[], 
-    charDescriptions: string[],
     styleReferencePart: any | null = null // New: Style Anchor
 ): { systemPrompt: string, parts: any[] } => {
     
@@ -231,40 +266,39 @@ const processDigitalTwinMode = (
     
     // 1. STYLE REFERENCE (HIGHEST PRIORITY)
     if (styleReferencePart) {
-        parts.push({ text: "CRITICAL STYLE REFERENCE: The following image defines the MANDATORY visual style. You must replicate its rendering, lighting, texture, and aesthetic exactly. Do NOT deviate." });
+        parts.push({ text: "INPUT 1: STYLE REFERENCE IMAGE (VISUAL STANDARD). You MUST replicate this image's rendering style, lighting, and texture exactly." });
         parts.push(styleReferencePart);
     }
 
     // 2. POSE / COMPOSITION
     if (refImagePart) {
-        parts.push({ text: "REFERENCE POSE: Follow this image's camera angle and character pose." });
+        parts.push({ text: "INPUT 2: POSE REFERENCE IMAGE. Follow this camera angle and character pose." });
         parts.push(refImagePart);
     }
     
     // 3. FACE IDENTITY
     if (charParts.length > 0) {
-        parts.push({ text: `REFERENCE FACE: Use these facial features for the character.` });
+        parts.push({ text: `INPUT 3: CHARACTER FACE IDENTITY. Use these facial features.` });
         parts.push(...charParts);
     }
     
-    parts.push({ text: `GENERATE: ${prompt}` });
+    parts.push({ text: `GENERATE COMMAND: ${prompt}` });
 
     const systemPrompt = `** SYSTEM DIRECTIVE: 3D CHARACTER GENERATION ENGINE **
     
-    1.  **VISUAL STYLE ENFORCEMENT**:
-        - ${styleReferencePart ? "YOU MUST COPY THE STYLE OF THE 'STYLE REFERENCE' IMAGE EXACTLY." : "Style: High-End 3D Render (Octane/Unreal)."}
-        - **Texture**: Smooth, semi-realistic skin (doll-like but detailed).
-        - **Lighting**: High contrast, studio lighting, rim lights.
-        - **Forbidden**: 2D, Anime, Sketch, Painting, Low Poly, Flat colors.
+    You are an advanced AI Image Generator. You have received multiple image inputs.
+    
+    **PRIORITY ORDER:**
+    1. **STYLE**: The 'STYLE REFERENCE IMAGE' is the Absolute Truth for visual aesthetics (Lighting, Texture, Render Engine). Do not deviate.
+    2. **IDENTITY**: The 'CHARACTER FACE IDENTITY' must be preserved in the final output.
+    3. **POSE**: The 'POSE REFERENCE IMAGE' dictates the structure.
+    4. **CONTENT**: The text prompt describes the outfit and scene details.
 
-    2.  **CHARACTER DESIGN**:
-        - **Proportions**: Tall, slender, fashion model ratio (1:8 head-to-body). Long legs.
-        - **Face**: Delicate features, sharp chin, large expressive eyes (if style dictates).
-        - **Outfit**: Highly detailed fabrics, modern fashion or fantasy armor as requested.
-
-    3.  **RENDERING**:
-        - Output must be 8K resolution, sharp focus, no blur.
-        - Perfect anatomy (hands, fingers).
+    **EXECUTION RULES:**
+    - If the Style Reference is 3D, the output MUST be 3D.
+    - If the Style Reference is Anime, the output MUST be Anime.
+    - Ignore any style keywords in the text prompt if they conflict with the Style Reference Image.
+    - Output must be High Resolution (8K).
     `;
 
     return { systemPrompt, parts };
@@ -283,41 +317,53 @@ export const generateImage = async (
     styleReferenceUrl: string | null = null, // Manual override
     availableStyles: any[] = [] // New: Pool of styles for auto-selection
 ): Promise<string> => {
-    onLog("Initializing Gemini 3.0 Pro...");
+    onLog("Initializing Gemini 3.0 Pro Pipeline...");
     const ai = await getAiClient();
     
     const model = 'gemini-3-pro-image-preview'; 
     
-    // ... (Ref Image Logic)
+    // 1. PROCESS REFERENCE IMAGE (VISUAL & TEXTUAL ANALYSIS)
     let refImagePart = null;
+    let poseDescription = "";
+    
     if (refImageBase64) {
-        onLog("Processing Reference Image...");
+        onLog("Step 1: Analyzing Reference Image (Pose & BG)...");
         if (refImageBase64.startsWith('data:') || refImageBase64.length > 100) {
+             const cleanRef = cleanBase64(refImageBase64);
              refImagePart = {
                 inlineData: {
                     mimeType: 'image/png',
-                    data: cleanBase64(refImageBase64)
+                    data: cleanRef
                 }
             };
+            // Call AI to analyze pose
+            poseDescription = await analyzeReferenceImage(cleanRef);
+            onLog(`> Pose Detected: ${poseDescription.substring(0, 50)}...`);
         }
     }
 
-    // ... (Smart Style Selection Logic)
+    // 2. SMART STYLE SELECTION
     let finalStyleUrl = styleReferenceUrl;
+    let styleKeywords = "";
     
-    // If no manual style is forced, try to auto-select from pool
     if (!finalStyleUrl && availableStyles && availableStyles.length > 0) {
-        onLog("🧠 AI Analyzing Request to pick best Style...");
+        onLog("Step 2: AI Selecting Best Style...");
         const bestStyle = await selectBestStyle(prompt, availableStyles);
         if (bestStyle) {
-            onLog(`🎨 Selected Style: ${bestStyle.name}`);
+            onLog(`> Selected Style: ${bestStyle.name}`);
             finalStyleUrl = bestStyle.image_url;
+            styleKeywords = bestStyle.trigger_prompt || "";
         }
+    } else if (finalStyleUrl) {
+        // If manual style, try to find keywords if possible, or just proceed
+        const match = availableStyles.find(s => s.image_url === finalStyleUrl);
+        if (match) styleKeywords = match.trigger_prompt || "";
     }
 
+    // 3. LOAD STYLE IMAGE (VISUAL)
     let styleReferencePart = null;
     if (finalStyleUrl) {
-        onLog("Injecting Master Style Reference...");
+        onLog("Step 3: Loading Style Reference Image...");
         try {
             let styleData = finalStyleUrl;
             if (finalStyleUrl.startsWith('http')) {
@@ -341,10 +387,10 @@ export const generateImage = async (
         }
     }
 
+    // 4. PREPARE CHARACTERS
     const charParts: any[] = [];
     for (const char of characters) {
         if (char.faceImage) {
-            onLog(`Processing Face ID for Character ${char.id}...`);
             charParts.push({
                 inlineData: {
                     mimeType: 'image/png',
@@ -362,13 +408,14 @@ export const generateImage = async (
         }
     }
 
-    onLog("Reasoning Prompt...");
-    const optimizedPrompt = await optimizePromptWithThinking(prompt);
+    // 5. PROMPT OPTIMIZATION (MERGING ALL CONTEXTS)
+    onLog("Step 4: Optimizing Prompt with Style & Pose Context...");
+    const optimizedPrompt = await optimizePromptWithThinking(prompt, styleKeywords, poseDescription);
     
-    // Pass styleReferencePart
-    const { systemPrompt, parts } = processDigitalTwinMode(optimizedPrompt, refImagePart, charParts, [], styleReferencePart);
+    // 6. FINAL ASSEMBLY
+    const { systemPrompt, parts } = processDigitalTwinMode(optimizedPrompt, refImagePart, charParts, styleReferencePart);
     
-    onLog("Sending to Generation Grid...");
+    onLog("Step 5: Sending to Generation Grid (Gemini 3.0 Pro)...");
 
     const config: any = {
         imageConfig: {
@@ -388,7 +435,7 @@ export const generateImage = async (
             contents: { parts },
             config: config
         }),
-        60000, 
+        90000, // 90s for final gen
         "Image Generation"
     );
 

@@ -636,6 +636,15 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                       </div>
                   ))}
               </div>
+              <button 
+                  onClick={() => {
+                      setStage('input');
+                      notify("Đã hủy tạo ảnh.", "info");
+                  }}
+                  className="mt-4 px-6 py-2 bg-white/10 hover:bg-red-500/20 text-slate-400 hover:text-red-400 rounded-full text-xs font-bold transition-all border border-white/5 hover:border-red-500/30 flex items-center gap-2"
+              >
+                  <Icons.X className="w-4 h-4" /> Hủy bỏ (Cancel)
+              </button>
           </div>
       );
   }

@@ -19,7 +19,8 @@ const retryWithBackoff = async <T>(
     operation: () => Promise<T>,
     retries: number = 3,
     delay: number = 2000,
-    label: string = "Operation"
+    label: string = "Operation",
+    onLog?: (msg: string) => void
 ): Promise<T> => {
     try {
         return await operation();
@@ -33,9 +34,11 @@ const retryWithBackoff = async <T>(
             error?.message?.includes('Overloaded');
 
         if (retries > 0 && isTransient) {
-            console.warn(`${label} failed with ${error.status || 'error'}. Retrying in ${delay}ms... (${retries} left)`);
+            const msg = `${label} quá tải (503). Thử lại sau ${delay/1000}s... (${retries} lần)`;
+            console.warn(msg);
+            if (onLog) onLog(`⚠️ ${msg}`);
             await new Promise(resolve => setTimeout(resolve, delay));
-            return retryWithBackoff(operation, retries - 1, delay * 2, label);
+            return retryWithBackoff(operation, retries - 1, delay * 2, label, onLog);
         }
         throw error;
     }
@@ -505,7 +508,8 @@ export const generateImage = async (
         ),
         3,
         2000,
-        "Image Generation"
+        "Image Generation",
+        onLog
     );
 
     onLog("Downloading result...");

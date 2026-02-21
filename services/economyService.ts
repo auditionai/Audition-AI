@@ -366,8 +366,6 @@ export const getSystemApiKey = async (): Promise<string | null> => {
         // Update the usage timestamp for this key (Async - don't await to block UI)
         supabase.from('api_keys').update({ last_used_at: new Date().toISOString() }).eq('id', data.id).then(() => {});
         
-        console.log(`[System] Smart Rotation: Selected API Key ID ${data.id} (Last used: ${data.last_used_at})`);
-        
         return data.key_value;
     } catch (e) {
         return null;

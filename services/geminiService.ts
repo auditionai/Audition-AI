@@ -1,5 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-import { getSystemApiKey } from "./economyService";
+import { getSystemApiKey, reportKeyFailure } from "./economyService";
 import { createTextureSheet, optimizePayload, createSolidFence } from "../utils/imageProcessor";
 
 export interface CharacterData {
@@ -25,20 +25,36 @@ const retryWithBackoff = async <T>(
     try {
         return await operation();
     } catch (error: any) {
-        // Check for 503 (Service Unavailable) or 429 (Too Many Requests)
+        // Check for 503 (Service Unavailable), 429 (Too Many Requests), or 403 (Quota/Auth)
         const isTransient = 
             error?.status === 503 || 
             error?.status === 429 || 
+            error?.status === 403 ||
+            error?.status === 500 ||
+            error?.status === 502 ||
+            error?.status === 504 ||
             error?.message?.includes('503') || 
             error?.message?.includes('429') ||
-            error?.message?.includes('Overloaded');
+            error?.message?.includes('403') ||
+            error?.message?.includes('500') ||
+            error?.message?.includes('502') ||
+            error?.message?.includes('504') ||
+            error?.message?.includes('Overloaded') ||
+            error?.message?.includes('quota') ||
+            error?.message?.includes('fetch failed') ||
+            error?.message?.includes('NetworkError') ||
+            error?.message?.includes('Failed to fetch') ||
+            error?.message?.includes('timed out') ||
+            error?.message?.includes('Timeout');
 
         if (retries > 0 && isTransient) {
-            const msg = `${label} quá tải (503). Đang đổi API Key khác và thử lại... (${retries} lần)`;
-            console.warn(msg);
-            if (onLog) onLog(`⚠️ ${msg}`);
+            const msg = `${label} gặp sự cố mạng/quá tải. Đang đổi API Key và thử lại... (Còn ${retries} lần)`;
+            console.warn(msg, error.message);
+            if (onLog) onLog(`🔄 ${msg}`);
+            
+            // Wait before retry
             await new Promise(resolve => setTimeout(resolve, delay));
-            return retryWithBackoff(operation, retries - 1, delay * 2, label, onLog);
+            return retryWithBackoff(operation, retries - 1, delay * 1.5, label, onLog);
         }
         throw error;
     }
@@ -46,21 +62,25 @@ const retryWithBackoff = async <T>(
 
 // --- NEW: ANALYZE STYLE IMAGE (For Admin) ---
 export const analyzeStyleImage = async (imageBase64: string): Promise<string> => {
-    const ai = await getAiClient();
     const model = 'gemini-3-flash-preview'; // Fast & Cheap for analysis
 
     const result = await retryWithBackoff(
         async () => {
             const freshAi = await getAiClient();
-            return freshAi.models.generateContent({
-                model: model,
-                contents: {
-                    parts: [
-                        { text: "Analyze this image's visual style for a 3D character generator. Describe the lighting, texture, rendering engine vibe (e.g. Octane, Unreal), and artistic mood. Keep it concise, comma-separated keywords." },
-                        { inlineData: { mimeType: 'image/png', data: cleanBase64(imageBase64) } }
-                    ]
-                }
-            });
+            try {
+                return await freshAi.models.generateContent({
+                    model: model,
+                    contents: {
+                        parts: [
+                            { text: "Analyze this image's visual style for a 3D character generator. Describe the lighting, texture, rendering engine vibe (e.g. Octane, Unreal), and artistic mood. Keep it concise, comma-separated keywords." },
+                            { inlineData: { mimeType: 'image/png', data: cleanBase64(imageBase64) } }
+                        ]
+                    }
+                });
+            } catch (e) {
+                reportKeyFailure((freshAi as any)._internalApiKey);
+                throw e;
+            }
         },
         3,
         2000,
@@ -75,7 +95,6 @@ const selectBestStyle = async (prompt: string, styles: any[]): Promise<any | nul
     if (!styles || styles.length === 0) return null;
     if (styles.length === 1) return styles[0]; // Only one choice
 
-    const ai = await getAiClient();
     // Use Flash for fast routing
     const model = 'gemini-3-flash-preview'; 
 
@@ -98,17 +117,22 @@ const selectBestStyle = async (prompt: string, styles: any[]): Promise<any | nul
         const result = await retryWithBackoff(
             async () => {
                 const freshAi = await getAiClient();
-                return freshAi.models.generateContent({
-                    model: model,
-                    contents: { parts: [{ text: routerPrompt }] }
-                });
+                try {
+                    return await freshAi.models.generateContent({
+                        model: model,
+                        contents: { parts: [{ text: routerPrompt }] }
+                    });
+                } catch (e) {
+                    reportKeyFailure((freshAi as any)._internalApiKey);
+                    throw e;
+                }
             },
             3,
             1000,
             "Style Selection"
         );
         
-        const selectedId = result.text?.trim();
+        const selectedId = result.text?.trim() || '';
         const match = styles.find(s => s.id === selectedId || selectedId.includes(s.id));
         return match || styles[0]; // Fallback to first
     } catch (e) {
@@ -132,15 +156,27 @@ const runWithTimeout = <T>(promise: Promise<T>, ms: number, label: string): Prom
 // Cấu hình timeout cao hơn cho Client (mặc định fetch là ngắn)
 const getAiClient = async (specificKey?: string) => {
     // 1. Specific key (testing)
-    if (specificKey) return new GoogleGenAI({ apiKey: specificKey });
+    if (specificKey) {
+        const ai = new GoogleGenAI({ apiKey: specificKey });
+        (ai as any)._internalApiKey = specificKey;
+        return ai;
+    }
 
     // 2. DB Key (Rotation System - Priority)
     // We prioritize the DB keys to enable the Load Balancing / Rotation mechanism
     const dbKey = await getSystemApiKey();
-    if (dbKey) return new GoogleGenAI({ apiKey: dbKey });
+    if (dbKey) {
+        const ai = new GoogleGenAI({ apiKey: dbKey });
+        (ai as any)._internalApiKey = dbKey;
+        return ai;
+    }
 
     // 3. Env Key (Fallback)
-    if (process.env.API_KEY) return new GoogleGenAI({ apiKey: process.env.API_KEY });
+    if (process.env.API_KEY) {
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        (ai as any)._internalApiKey = process.env.API_KEY;
+        return ai;
+    }
 
     throw new Error("API Key missing. Set process.env.API_KEY or configure in Admin.");
 };
@@ -239,26 +275,30 @@ export const checkConnection = async (key?: string): Promise<boolean> => {
 
 // --- NEW: ANALYZE REFERENCE IMAGE (POSE/BG) ---
 const analyzeReferenceImage = async (base64Data: string): Promise<string> => {
-    const ai = await getAiClient();
     const model = 'gemini-3-flash-preview'; 
 
     try {
         const result = await retryWithBackoff(
             async () => {
                 const freshAi = await getAiClient();
-                return runWithTimeout(
-                    freshAi.models.generateContent({
-                        model: model,
-                        contents: {
-                            parts: [
-                                { text: "Analyze this image. Describe ONLY the 'Skeleton Pose', 'Camera Angle', and 'Composition'. IGNORE the character's clothes, hair, gender, face, and colors. Output ONLY the structural description (e.g. 'sitting cross-legged', 'low angle shot')." },
-                                { inlineData: { mimeType: 'image/png', data: cleanBase64(base64Data) } }
-                            ]
-                        }
-                    }),
-                    60000, // Increased to 60s
-                    "Ref Analysis"
-                );
+                try {
+                    return await runWithTimeout(
+                        freshAi.models.generateContent({
+                            model: model,
+                            contents: {
+                                parts: [
+                                    { text: "Analyze this image. Describe ONLY the 'Skeleton Pose', 'Camera Angle', and 'Composition'. IGNORE the character's clothes, hair, gender, face, and colors. Output ONLY the structural description (e.g. 'sitting cross-legged', 'low angle shot')." },
+                                    { inlineData: { mimeType: 'image/png', data: cleanBase64(base64Data) } }
+                                ]
+                            }
+                        }),
+                        60000, // Increased to 60s
+                        "Ref Analysis"
+                    );
+                } catch (e) {
+                    reportKeyFailure((freshAi as any)._internalApiKey);
+                    throw e;
+                }
             },
             3,
             2000,
@@ -277,30 +317,36 @@ const optimizePromptWithThinking = async (rawPrompt: string, styleContext: strin
         const response = await retryWithBackoff(
             async () => {
                 const freshAi = await getAiClient();
-                return runWithTimeout(
-                    freshAi.models.generateContent({
-                        model: 'gemini-3-flash-preview',
-                        contents: `ROLE: EXECUTIONER PROMPT ENGINEER.
-                        MISSION: CONVERT INPUTS INTO A RIGID, MACHINE-READABLE 3D RENDERING SCRIPT.
-                        
-                        INPUT DATA:
-                        1. USER_COMMAND: "${rawPrompt}"
-                        2. STYLE_MANDATE: "${styleContext}" (MUST BE APPLIED)
-                        3. POSE_CONSTRAINT: "${poseContext}" (MUST BE FOLLOWED)
-        
-                        STRICT RULES:
-                        - DO NOT HALLUCINATE. Use ONLY the provided inputs.
-                        - IF STYLE_MANDATE conflicts with USER_COMMAND, STYLE_MANDATE WINS.
-                        - OUTPUT FORMAT must be a comma-separated list of high-weight tokens.
-                        - FORBIDDEN: "artistic", "creative interpretation", "maybe".
-                        
-                        REQUIRED OUTPUT STRUCTURE:
-                        (Subject Description), (Action/Pose from Constraint), (Outfit Details), (Environment/Background), (Lighting Setup), (Render Engine: Octane/Unreal), (Texture Quality: 8K, Hyper-detailed), (Style Keywords from Mandate).
-                        `,
-                    }),
-                    60000, // Increased to 60s
-                    "Prompt Optimization"
-                );
+                try {
+                    return await runWithTimeout(
+                        freshAi.models.generateContent({
+                            model: 'gemini-3-flash-preview',
+                            contents: `ROLE: EXECUTIONER PROMPT ENGINEER.
+                            MISSION: CONVERT INPUTS INTO A RIGID, MACHINE-READABLE 3D RENDERING SCRIPT.
+                            
+                            INPUT DATA:
+                            1. USER_COMMAND: "${rawPrompt}"
+                            2. STYLE_MANDATE: "${styleContext}" (MUST BE APPLIED)
+                            3. POSE_CONSTRAINT: "${poseContext}" (MUST BE FOLLOWED)
+            
+                            STRICT RULES:
+                            - DO NOT HALLUCINATE. Use ONLY the provided inputs.
+                            - IF STYLE_MANDATE conflicts with USER_COMMAND, STYLE_MANDATE WINS.
+                            - OUTPUT FORMAT must be a comma-separated list of high-weight tokens.
+                            - FORBIDDEN: "artistic", "creative interpretation", "maybe".
+                            - CRITICAL: If USER_COMMAND mentions using clothes/outfit from the uploaded image/reference, you MUST include "wearing exact same outfit as character reference image" in the Outfit Details. Do NOT describe the clothes of the pose reference.
+                            
+                            REQUIRED OUTPUT STRUCTURE:
+                            (Subject Description), (Action/Pose from Constraint), (Outfit Details), (Environment/Background), (Lighting Setup), (Render Engine: Octane/Unreal), (Texture Quality: 8K, Hyper-detailed), (Style Keywords from Mandate).
+                            `,
+                        }),
+                        60000, // Increased to 60s
+                        "Prompt Optimization"
+                    );
+                } catch (e) {
+                    reportKeyFailure((freshAi as any)._internalApiKey);
+                    throw e;
+                }
             },
             3,
             2000,
@@ -341,7 +387,7 @@ const processDigitalTwinMode = (
     
     // 3. FACE IDENTITY (THE TARGET - CONTENT SOURCE)
     if (charParts.length > 0) {
-        parts.push({ text: "[[INPUT_C: CHARACTER_APPEARANCE_SOURCE]]\nWARNING: This is the SOURCE OF TRUTH for the Character's Identity (Face, Hair, Outfit). You MUST use the facial features and outfit details from these images (unless the prompt specifies a different outfit)." });
+        parts.push({ text: "[[INPUT_C: CHARACTER_APPEARANCE_SOURCE]]\nWARNING: This is the SOURCE OF TRUTH for the Character's Identity (Face, Hair, Outfit). You MUST use the facial features and outfit details from these images. The character MUST wear the EXACT SAME OUTFIT as seen in the BODY & OUTFIT REFERENCE images." });
         parts.push(...charParts);
     }
     
@@ -467,19 +513,21 @@ export const generateImage = async (
     // 4. PREPARE CHARACTERS
     const charParts: any[] = [];
     for (const char of characters) {
-        if (char.faceImage) {
-            charParts.push({
-                inlineData: {
-                    mimeType: 'image/png',
-                    data: cleanBase64(char.faceImage)
-                }
-            });
-        }
-        if (char.image && !char.faceImage) { 
+        if (char.image) { 
+             charParts.push({ text: `[CHARACTER ${char.id} BODY & OUTFIT REFERENCE]` });
              charParts.push({
                 inlineData: {
                     mimeType: 'image/png',
                     data: cleanBase64(char.image)
+                }
+            });
+        }
+        if (char.faceImage) {
+            charParts.push({ text: `[CHARACTER ${char.id} FACE REFERENCE]` });
+            charParts.push({
+                inlineData: {
+                    mimeType: 'image/png',
+                    data: cleanBase64(char.faceImage)
                 }
             });
         }
@@ -492,14 +540,19 @@ export const generateImage = async (
     // 6. FINAL ASSEMBLY
     const { systemPrompt, parts } = processDigitalTwinMode(optimizedPrompt, refImagePart, charParts, styleReferencePart);
     
+    // Prepend system instruction to parts to ensure compatibility with image models
+    const finalParts = [
+        { text: systemPrompt },
+        ...parts
+    ];
+    
     onLog("Step 5: Sending to Generation Grid (Gemini 3.0 Pro)...");
 
     const config: any = {
         imageConfig: {
             aspectRatio: aspectRatio,
             imageSize: resolution
-        },
-        systemInstruction: systemPrompt
+        }
     };
 
     if (useSearch) {
@@ -509,15 +562,24 @@ export const generateImage = async (
     const response = await retryWithBackoff(
         async () => {
             const freshAi = await getAiClient();
-            return runWithTimeout(
-                freshAi.models.generateContent({
-                    model: model,
-                    contents: { parts },
-                    config: config
-                }),
-                timeoutMs, // Dynamic Timeout
-                "Image Generation"
-            );
+            const currentKey = (freshAi as any)._internalApiKey;
+            const shortKey = currentKey ? currentKey.substring(0, 4) + '...' + currentKey.slice(-4) : 'Default';
+            onLog(`> Đang dùng API Key: ${shortKey}`);
+            
+            try {
+                return await runWithTimeout(
+                    freshAi.models.generateContent({
+                        model: model,
+                        contents: { parts: finalParts },
+                        config: config
+                    }),
+                    timeoutMs, // Dynamic Timeout
+                    "Image Generation"
+                );
+            } catch (e) {
+                reportKeyFailure((freshAi as any)._internalApiKey);
+                throw e;
+            }
         },
         3,
         2000,
@@ -536,34 +598,37 @@ export const editImageWithInstructions = async (
     instruction: string, 
     mimeType: string
 ): Promise<string> => {
-    const ai = await getAiClient();
-    
     // gemini-2.5-flash-image for standard editing per guidelines
     const model = 'gemini-2.5-flash-image'; 
 
     const response = await retryWithBackoff(
         async () => {
             const freshAi = await getAiClient();
-            return runWithTimeout(
-                freshAi.models.generateContent({
-                    model: model,
-                    contents: {
-                        parts: [
-                            {
-                                inlineData: {
-                                    mimeType: mimeType || 'image/png',
-                                    data: cleanBase64(base64Data)
+            try {
+                return await runWithTimeout(
+                    freshAi.models.generateContent({
+                        model: model,
+                        contents: {
+                            parts: [
+                                {
+                                    inlineData: {
+                                        mimeType: mimeType || 'image/png',
+                                        data: cleanBase64(base64Data)
+                                    }
+                                },
+                                {
+                                    text: instruction
                                 }
-                            },
-                            {
-                                text: instruction
-                            }
-                        ]
-                    }
-                }),
-                45000,
-                "Image Editing"
-            );
+                            ]
+                        }
+                    }),
+                    45000,
+                    "Image Editing"
+                );
+            } catch (e) {
+                reportKeyFailure((freshAi as any)._internalApiKey);
+                throw e;
+            }
         },
         3,
         2000,

@@ -237,16 +237,16 @@ export const getShowcaseImages = async (): Promise<GeneratedImage[]> => {
     // 1. SUPABASE
     if (supabase) {
         try {
-            // ATTEMPT 1: Fetch with User Info (Might fail due to RLS on users table for anon)
-            const { data, error } = await supabase
+            // Fetch images ONLY to avoid 400 errors from missing relationships in schema cache
+            const { data: simpleData, error: simpleError } = await supabase
                 .from(TABLE_NAME)
-                .select('*, users(display_name)')
+                .select('*')
                 .eq('is_public', true)
                 .order('created_at', { ascending: false })
                 .limit(20);
-
-            if (!error && data) {
-                return data.map((row: any) => ({
+            
+            if (!simpleError && simpleData) {
+                return simpleData.map((row: any) => ({
                     id: row.id,
                     url: row.image_url, 
                     prompt: row.prompt,
@@ -255,36 +255,9 @@ export const getShowcaseImages = async (): Promise<GeneratedImage[]> => {
                     toolName: row.model_used || 'AI Tool',
                     engine: row.model_used,
                     isShared: row.is_public,
-                    userName: row.users?.display_name || 'Artist'
+                    userName: 'Artist' // Fallback name
                 }));
             }
-
-            // ATTEMPT 2: Fallback (Fetch images ONLY, ignore user info if joined query failed)
-            // This ensures images show up even if User table is private
-            if (error) {
-                console.warn("Showcase: Joined query failed, retrying simple fetch...", error.message);
-                const { data: simpleData, error: simpleError } = await supabase
-                    .from(TABLE_NAME)
-                    .select('*')
-                    .eq('is_public', true)
-                    .order('created_at', { ascending: false })
-                    .limit(20);
-                
-                if (!simpleError && simpleData) {
-                    return simpleData.map((row: any) => ({
-                        id: row.id,
-                        url: row.image_url, 
-                        prompt: row.prompt,
-                        timestamp: new Date(row.created_at).getTime(),
-                        toolId: 'gen_tool', 
-                        toolName: row.model_used || 'AI Tool',
-                        engine: row.model_used,
-                        isShared: row.is_public,
-                        userName: 'Artist' // Fallback name
-                    }));
-                }
-            }
-
         } catch (e) {
             console.warn("Fetch showcase cloud error", e);
         }

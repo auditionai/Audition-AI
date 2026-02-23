@@ -559,6 +559,10 @@ export const generateImage = async (
     const response = await retryWithBackoff(
         async () => {
             const freshAi = await getAiClient();
+            const currentKey = (freshAi as any)._internalApiKey;
+            const shortKey = currentKey ? currentKey.substring(0, 4) + '...' + currentKey.slice(-4) : 'Default';
+            onLog(`> Đang dùng API Key: ${shortKey}`);
+            
             try {
                 return await runWithTimeout(
                     freshAi.models.generateContent({

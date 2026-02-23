@@ -73,7 +73,7 @@ export const updateUserBalance = async (amount: number, reason: string, type: st
         const { error } = await supabase.from('diamond_transactions_log').insert({
             user_id: user.id,
             amount,
-            reason,
+            note: reason,
             type
         });
         if (error) {
@@ -84,39 +84,18 @@ export const updateUserBalance = async (amount: number, reason: string, type: st
         console.warn("[Economy] Log table missing or inaccessible.");
     }
     
-    // 2. Update balance
-    let updateSuccess = false;
-    
-    // Try RPC first (Atomic)
+    // 2. Update balance directly (skip RPC to avoid 404)
     try {
-        const { error } = await supabase.rpc('increment_diamonds', { 
-            user_id: user.id, 
-            amount_to_add: amount 
-        });
+        // Fetch latest balance first to minimize race condition
+        const { data: latestUser } = await supabase.from('users').select('diamonds').eq('id', user.id).single();
+        const currentBalance = latestUser?.diamonds || 0;
+        const newBalance = currentBalance + amount;
         
-        if (!error) {
-            updateSuccess = true;
-        } else {
-            console.warn("[Economy] RPC increment_diamonds failed, falling back to direct update:", error.message);
-        }
-    } catch (e) {
-        console.warn("[Economy] RPC call failed.");
-    }
-
-    // Fallback: Direct Update (Race condition possible but better than failure)
-    if (!updateSuccess) {
-         try {
-             // Fetch latest balance first to minimize race condition
-             const { data: latestUser } = await supabase.from('users').select('diamonds').eq('id', user.id).single();
-             const currentBalance = latestUser?.diamonds || 0;
-             const newBalance = currentBalance + amount;
-             
-             const { error } = await supabase.from('users').update({ diamonds: newBalance }).eq('id', user.id);
-             if (error) throw error;
-         } catch (e: any) {
-             console.error("[Economy] Critical: Failed to update balance", e);
-             throw new Error("Failed to update balance: " + e.message);
-         }
+        const { error } = await supabase.from('users').update({ diamonds: newBalance }).eq('id', user.id);
+        if (error) throw error;
+    } catch (e: any) {
+        console.error("[Economy] Critical: Failed to update balance", e);
+        throw new Error("Failed to update balance: " + e.message);
     }
     
     // Dispatch event for UI update
@@ -375,12 +354,16 @@ const KEY_COOLDOWN_MS = 60000; // 1 minute cooldown for bad keys
 
 export const reportKeyFailure = (key: string) => {
     if (!key) return;
-    console.warn(`[System] Temporarily disabling key ending in ...${key.slice(-4)} for 1 minute.`);
+    const shortKey = key.substring(0, 4) + '...' + key.slice(-4);
+    console.warn(`[System] 🔴 API Key ${shortKey} failed. Temporarily disabling for 1 minute.`);
     temporarilyDisabledKeys.add(key);
     setTimeout(() => {
         temporarilyDisabledKeys.delete(key);
+        console.log(`[System] 🟢 API Key ${shortKey} is back in rotation.`);
     }, KEY_COOLDOWN_MS);
 };
+
+let lastUsedKey: string | null = null;
 
 export const getSystemApiKey = async (excludedKeys: string[] = []): Promise<string | null> => {
     try {
@@ -388,8 +371,7 @@ export const getSystemApiKey = async (excludedKeys: string[] = []): Promise<stri
         const { data: allKeys, error } = await supabase
             .from('api_keys')
             .select('id, key_value, last_used_at')
-            .eq('status', 'active')
-            .order('last_used_at', { ascending: true }); // Oldest usage first
+            .eq('status', 'active');
         
         if (error || !allKeys || allKeys.length === 0) {
             // Fallback if DB error or empty
@@ -397,7 +379,7 @@ export const getSystemApiKey = async (excludedKeys: string[] = []): Promise<stri
         }
 
         // 2. Filter out keys that are in the in-memory blacklist OR the excluded list (from retry loop)
-        const validKeys = allKeys.filter(k => 
+        let validKeys = allKeys.filter(k => 
             !temporarilyDisabledKeys.has(k.key_value) && 
             !excludedKeys.includes(k.key_value)
         );
@@ -406,14 +388,24 @@ export const getSystemApiKey = async (excludedKeys: string[] = []): Promise<stri
         if (validKeys.length === 0) {
             console.warn("[System] All keys exhausted. Resetting temporary blacklist.");
             temporarilyDisabledKeys.clear();
-            // Return the absolute oldest one even if it failed before
-            return allKeys[0].key_value;
+            validKeys = allKeys;
         }
 
-        // 4. Pick the best candidate (Least Recently Used)
-        const selectedKey = validKeys[0];
+        // 4. Avoid picking the exact same key as last time if we have multiple choices
+        let candidates = validKeys;
+        if (candidates.length > 1 && lastUsedKey) {
+            const filtered = candidates.filter(k => k.key_value !== lastUsedKey);
+            if (filtered.length > 0) {
+                candidates = filtered;
+            }
+        }
 
-        // 5. Update usage timestamp (Fire & Forget)
+        // 5. Pick a RANDOM candidate
+        const randomIndex = Math.floor(Math.random() * candidates.length);
+        const selectedKey = candidates[randomIndex];
+
+        // 6. Update usage timestamp & state
+        lastUsedKey = selectedKey.key_value;
         supabase.from('api_keys').update({ last_used_at: new Date().toISOString() }).eq('id', selectedKey.id).then(() => {});
         
         return selectedKey.key_value;

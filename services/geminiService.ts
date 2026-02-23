@@ -30,18 +30,26 @@ const retryWithBackoff = async <T>(
             error?.status === 503 || 
             error?.status === 429 || 
             error?.status === 403 ||
+            error?.status === 500 ||
+            error?.status === 502 ||
+            error?.status === 504 ||
             error?.message?.includes('503') || 
             error?.message?.includes('429') ||
             error?.message?.includes('403') ||
+            error?.message?.includes('500') ||
+            error?.message?.includes('502') ||
+            error?.message?.includes('504') ||
             error?.message?.includes('Overloaded') ||
             error?.message?.includes('quota') ||
             error?.message?.includes('fetch failed') ||
             error?.message?.includes('NetworkError') ||
-            error?.message?.includes('Failed to fetch');
+            error?.message?.includes('Failed to fetch') ||
+            error?.message?.includes('timed out') ||
+            error?.message?.includes('Timeout');
 
         if (retries > 0 && isTransient) {
-            const msg = `${label} gặp lỗi (${error.status || 'Overload'}). Đang đổi API Key khác... (Còn ${retries} lần)`;
-            console.warn(msg);
+            const msg = `${label} gặp sự cố mạng/quá tải. Đang đổi API Key và thử lại... (Còn ${retries} lần)`;
+            console.warn(msg, error.message);
             if (onLog) onLog(`🔄 ${msg}`);
             
             // Wait before retry
@@ -124,7 +132,7 @@ const selectBestStyle = async (prompt: string, styles: any[]): Promise<any | nul
             "Style Selection"
         );
         
-        const selectedId = result.text?.trim();
+        const selectedId = result.text?.trim() || '';
         const match = styles.find(s => s.id === selectedId || selectedId.includes(s.id));
         return match || styles[0]; // Fallback to first
     } catch (e) {
@@ -529,14 +537,19 @@ export const generateImage = async (
     // 6. FINAL ASSEMBLY
     const { systemPrompt, parts } = processDigitalTwinMode(optimizedPrompt, refImagePart, charParts, styleReferencePart);
     
+    // Prepend system instruction to parts to ensure compatibility with image models
+    const finalParts = [
+        { text: systemPrompt },
+        ...parts
+    ];
+    
     onLog("Step 5: Sending to Generation Grid (Gemini 3.0 Pro)...");
 
     const config: any = {
         imageConfig: {
             aspectRatio: aspectRatio,
             imageSize: resolution
-        },
-        systemInstruction: systemPrompt
+        }
     };
 
     if (useSearch) {
@@ -550,7 +563,7 @@ export const generateImage = async (
                 return await runWithTimeout(
                     freshAi.models.generateContent({
                         model: model,
-                        contents: { parts },
+                        contents: { parts: finalParts },
                         config: config
                     }),
                     timeoutMs, // Dynamic Timeout

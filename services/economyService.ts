@@ -67,24 +67,56 @@ export const updateAdminUserProfile = async (profile: UserProfile): Promise<{suc
 
 export const updateUserBalance = async (amount: number, reason: string, type: string) => {
     const user = await getUserProfile();
-    // 1. Log transaction
-    await supabase.from('diamond_transactions_log').insert({
-        user_id: user.id,
-        amount,
-        reason,
-        type
-    });
+    
+    // 1. Log transaction (Silent Fail Safe)
+    try {
+        const { error } = await supabase.from('diamond_transactions_log').insert({
+            user_id: user.id,
+            amount,
+            reason,
+            type
+        });
+        if (error) {
+            // If table doesn't exist (404) or other error, just log to console warning, don't crash
+            console.warn("[Economy] Failed to log transaction (non-critical):", error.message);
+        }
+    } catch (e) {
+        console.warn("[Economy] Log table missing or inaccessible.");
+    }
     
     // 2. Update balance
-    const { error } = await supabase.rpc('increment_diamonds', { 
-        user_id: user.id, 
-        amount_to_add: amount 
-    });
+    let updateSuccess = false;
+    
+    // Try RPC first (Atomic)
+    try {
+        const { error } = await supabase.rpc('increment_diamonds', { 
+            user_id: user.id, 
+            amount_to_add: amount 
+        });
+        
+        if (!error) {
+            updateSuccess = true;
+        } else {
+            console.warn("[Economy] RPC increment_diamonds failed, falling back to direct update:", error.message);
+        }
+    } catch (e) {
+        console.warn("[Economy] RPC call failed.");
+    }
 
-    // Fallback if RPC missing
-    if (error) {
-         const newBalance = (user.balance || 0) + amount;
-         await supabase.from('users').update({ diamonds: newBalance }).eq('id', user.id);
+    // Fallback: Direct Update (Race condition possible but better than failure)
+    if (!updateSuccess) {
+         try {
+             // Fetch latest balance first to minimize race condition
+             const { data: latestUser } = await supabase.from('users').select('diamonds').eq('id', user.id).single();
+             const currentBalance = latestUser?.diamonds || 0;
+             const newBalance = currentBalance + amount;
+             
+             const { error } = await supabase.from('users').update({ diamonds: newBalance }).eq('id', user.id);
+             if (error) throw error;
+         } catch (e: any) {
+             console.error("[Economy] Critical: Failed to update balance", e);
+             throw new Error("Failed to update balance: " + e.message);
+         }
     }
     
     // Dispatch event for UI update
@@ -337,38 +369,57 @@ export const claimMilestoneReward = async (day: number): Promise<{success: boole
 
 // --- API KEYS (WITH INTELLIGENT ROTATION) ---
 
-export const getSystemApiKey = async (): Promise<string | null> => {
+// In-memory blacklist for the current session (to avoid hitting bad keys repeatedly in a loop)
+const temporarilyDisabledKeys: Set<string> = new Set();
+const KEY_COOLDOWN_MS = 60000; // 1 minute cooldown for bad keys
+
+export const reportKeyFailure = (key: string) => {
+    if (!key) return;
+    console.warn(`[System] Temporarily disabling key ending in ...${key.slice(-4)} for 1 minute.`);
+    temporarilyDisabledKeys.add(key);
+    setTimeout(() => {
+        temporarilyDisabledKeys.delete(key);
+    }, KEY_COOLDOWN_MS);
+};
+
+export const getSystemApiKey = async (excludedKeys: string[] = []): Promise<string | null> => {
     try {
-        // Fetch ALL active keys for Load Balancing
-        // Prioritize keys that haven't been used recently (Least Recently Used - LRU)
-        const { data, error } = await supabase
+        // 1. Get all active keys
+        const { data: allKeys, error } = await supabase
             .from('api_keys')
             .select('id, key_value, last_used_at')
             .eq('status', 'active')
-            .order('last_used_at', { ascending: true }) // Oldest usage first
-            .limit(1)
-            .single();
+            .order('last_used_at', { ascending: true }); // Oldest usage first
         
-        if (error || !data) {
-            // Fallback: Just get any active key if sorting fails (e.g. missing column)
-            const { data: fallbackData } = await supabase
-                .from('api_keys')
-                .select('key_value')
-                .eq('status', 'active')
-                .limit(1);
-            
-            if (fallbackData && fallbackData.length > 0) {
-                return fallbackData[0].key_value;
-            }
-            return null;
+        if (error || !allKeys || allKeys.length === 0) {
+            // Fallback if DB error or empty
+            return process.env.API_KEY || null;
         }
 
-        // Update the usage timestamp for this key (Async - don't await to block UI)
-        supabase.from('api_keys').update({ last_used_at: new Date().toISOString() }).eq('id', data.id).then(() => {});
+        // 2. Filter out keys that are in the in-memory blacklist OR the excluded list (from retry loop)
+        const validKeys = allKeys.filter(k => 
+            !temporarilyDisabledKeys.has(k.key_value) && 
+            !excludedKeys.includes(k.key_value)
+        );
+
+        // 3. If all keys are disabled/excluded, clear the temporary blacklist and try again (Desperation mode)
+        if (validKeys.length === 0) {
+            console.warn("[System] All keys exhausted. Resetting temporary blacklist.");
+            temporarilyDisabledKeys.clear();
+            // Return the absolute oldest one even if it failed before
+            return allKeys[0].key_value;
+        }
+
+        // 4. Pick the best candidate (Least Recently Used)
+        const selectedKey = validKeys[0];
+
+        // 5. Update usage timestamp (Fire & Forget)
+        supabase.from('api_keys').update({ last_used_at: new Date().toISOString() }).eq('id', selectedKey.id).then(() => {});
         
-        return data.key_value;
+        return selectedKey.key_value;
     } catch (e) {
-        return null;
+        console.error("Key rotation error:", e);
+        return process.env.API_KEY || null;
     }
 };
 

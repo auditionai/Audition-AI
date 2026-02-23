@@ -334,6 +334,7 @@ const optimizePromptWithThinking = async (rawPrompt: string, styleContext: strin
                             - IF STYLE_MANDATE conflicts with USER_COMMAND, STYLE_MANDATE WINS.
                             - OUTPUT FORMAT must be a comma-separated list of high-weight tokens.
                             - FORBIDDEN: "artistic", "creative interpretation", "maybe".
+                            - CRITICAL: If USER_COMMAND mentions using clothes/outfit from the uploaded image/reference, you MUST include "wearing exact same outfit as character reference image" in the Outfit Details. Do NOT describe the clothes of the pose reference.
                             
                             REQUIRED OUTPUT STRUCTURE:
                             (Subject Description), (Action/Pose from Constraint), (Outfit Details), (Environment/Background), (Lighting Setup), (Render Engine: Octane/Unreal), (Texture Quality: 8K, Hyper-detailed), (Style Keywords from Mandate).
@@ -386,7 +387,7 @@ const processDigitalTwinMode = (
     
     // 3. FACE IDENTITY (THE TARGET - CONTENT SOURCE)
     if (charParts.length > 0) {
-        parts.push({ text: "[[INPUT_C: CHARACTER_APPEARANCE_SOURCE]]\nWARNING: This is the SOURCE OF TRUTH for the Character's Identity (Face, Hair, Outfit). You MUST use the facial features and outfit details from these images (unless the prompt specifies a different outfit)." });
+        parts.push({ text: "[[INPUT_C: CHARACTER_APPEARANCE_SOURCE]]\nWARNING: This is the SOURCE OF TRUTH for the Character's Identity (Face, Hair, Outfit). You MUST use the facial features and outfit details from these images. The character MUST wear the EXACT SAME OUTFIT as seen in the BODY & OUTFIT REFERENCE images." });
         parts.push(...charParts);
     }
     
@@ -512,19 +513,21 @@ export const generateImage = async (
     // 4. PREPARE CHARACTERS
     const charParts: any[] = [];
     for (const char of characters) {
-        if (char.faceImage) {
-            charParts.push({
-                inlineData: {
-                    mimeType: 'image/png',
-                    data: cleanBase64(char.faceImage)
-                }
-            });
-        }
-        if (char.image && !char.faceImage) { 
+        if (char.image) { 
+             charParts.push({ text: `[CHARACTER ${char.id} BODY & OUTFIT REFERENCE]` });
              charParts.push({
                 inlineData: {
                     mimeType: 'image/png',
                     data: cleanBase64(char.image)
+                }
+            });
+        }
+        if (char.faceImage) {
+            charParts.push({ text: `[CHARACTER ${char.id} FACE REFERENCE]` });
+            charParts.push({
+                inlineData: {
+                    mimeType: 'image/png',
+                    data: cleanBase64(char.faceImage)
                 }
             });
         }

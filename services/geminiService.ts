@@ -623,21 +623,29 @@ export const generateImage = async (
     }
 
     // C. CHARACTER REFERENCES
+    let charPromptInstructions = "";
     if (charUris.length > 0) {
         finalParts.push({ text: "🔴 IMAGE 3+: CHARACTER REFERENCE(S)\nINSTRUCTION: These are the characters to be placed into the scene. Maintain their facial features and outfit details." });
+        
         // Iterate through ALL uploaded character URIs
-        for (const uri of charUris) {
+        charUris.forEach((uri, index) => {
+            const charIndex = index + 1;
+            const charInfo = characters[index]; // Get metadata (gender, id)
+            
             finalParts.push({
                 fileData: {
                     mimeType: 'image/jpeg',
                     fileUri: uri
                 }
             });
-        }
+            
+            // Build specific mapping instruction
+            charPromptInstructions += `\n- CHARACTER ${charIndex} (${charInfo.gender.toUpperCase()}): Use Face & Outfit from IMAGE ${index + 3}.`;
+        });
     }
     
     // D. FINAL PROMPT
-    finalParts.push({ text: `🔴 FINAL EXECUTION COMMAND:\n${optimizedPrompt}\n\nSTRICT CONSTRAINTS:\n- Art Style: Must match IMAGE 1.\n- Pose/Composition: Must match IMAGE 2.\n- Characters: Must match IMAGE 3+.` });
+    finalParts.push({ text: `🔴 FINAL EXECUTION COMMAND:\n${optimizedPrompt}\n\nSTRICT CONSTRAINTS:\n- Art Style: Must match IMAGE 1.\n- Pose/Composition: Must match IMAGE 2.\n${charPromptInstructions}\n- FACE FIDELITY: CRITICAL. You MUST use the exact facial features from the Character Reference images for each person. Do not invent new faces.` });
 
     const config: any = {
         imageConfig: {

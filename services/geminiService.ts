@@ -1,6 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import { getSystemApiKey, reportKeyFailure } from "./economyService";
-import { createTextureSheet, optimizePayload, createSolidFence } from "../utils/imageProcessor";
+import { createTextureSheet, optimizePayload, createSolidFence, createMasterReferenceSheet } from "../utils/imageProcessor";
 
 export interface CharacterData {
   id: number;
@@ -366,69 +366,50 @@ const optimizePromptWithThinking = async (rawPrompt: string, styleContext: strin
 // --- INTELLIGENCE CORE (ABSOLUTE COMMAND) ---
 const processDigitalTwinMode = (
     prompt: string, 
-    refImagePart: any | null, 
-    charParts: any[], 
-    styleReferencePart: any | null = null
+    masterSheetPart: any | null
 ): { parts: any[] } => {
     
-    const imageParts: any[] = [];
     let combinedText = `** SYSTEM OVERRIDE: PROTOCOL 3D-GEN-ALPHA **
     
 YOU ARE A NON-CREATIVE RENDERING ENGINE. YOU DO NOT "IMAGINE". YOU "EXECUTE".
 
-** SEPARATION OF CONCERNS (STRICT COMPARTMENTALIZATION) **\n`;
+** SEPARATION OF CONCERNS (STRICT COMPARTMENTALIZATION) **
+The attached image is a MASTER REFERENCE SHEET containing multiple labeled sections.
 
-    let imageIndex = 1;
-
-    // 1. STYLE REFERENCE (THE LAW - RENDERING ONLY)
-    if (styleReferencePart) {
-        imageParts.push(styleReferencePart);
-        combinedText += `\n1. **STYLE SOURCE (Image ${imageIndex})**: 
+1. **STYLE REFERENCE**: 
    - TAKE: Lighting, Texture, Render Quality, Art Style.
-   - IGNORE: The subject, their clothes, their face, their makeup.\n`;
-        imageIndex++;
-    }
+   - IGNORE: The subject, their clothes, their face, their makeup.
 
-    // 2. POSE / COMPOSITION (THE SKELETON - STRUCTURE ONLY)
-    if (refImagePart) {
-        imageParts.push(refImagePart);
-        combinedText += `\n2. **POSE SOURCE (Image ${imageIndex})**:
+2. **POSE REFERENCE**:
    - TAKE: Bone structure, Camera Angle, Composition.
-   - IGNORE: The outfit, the hair, the face, the background colors.\n`;
-        imageIndex++;
-    }
-    
-    // 3. FACE IDENTITY (THE TARGET - CONTENT SOURCE)
-    if (charParts.length > 0) {
-        combinedText += `\n3. **CONTENT SOURCE (Images ${imageIndex} to ${imageIndex + charParts.length - 1})**:
+   - IGNORE: The outfit, the hair, the face, the background colors.
+
+3. **CHARACTER REFERENCE(S)**:
    - WARNING: This is the SOURCE OF TRUTH for the Character's Identity (Face, Hair, Outfit). You MUST use the facial features and outfit details from these images.
    - TAKE: The Character's Identity (Face), The Outfit (Clothes), The Hair, The Accessories.
-   - THIS IS THE ONLY SOURCE FOR "WHAT" IS IN THE IMAGE.\n`;
-        
-        for (const charPart of charParts) {
-            imageParts.push(charPart);
-            imageIndex++;
-        }
-    }
-    
-    combinedText += `\n** CRITICAL FAILURE CONDITIONS **
-- FAILURE: If the output character wears the clothes from the POSE SOURCE.
-- FAILURE: If the output character has the eye color/makeup of the STYLE SOURCE.
+   - THIS IS THE ONLY SOURCE FOR "WHAT" IS IN THE IMAGE.
+
+** CRITICAL FAILURE CONDITIONS **
+- FAILURE: If the output character wears the clothes from the POSE REFERENCE.
+- FAILURE: If the output character has the eye color/makeup of the STYLE REFERENCE.
 - FAILURE: If the output is a painting/drawing when Style Ref is 3D.
-- FAILURE: If the user prompt says "use clothes from reference" and you use clothes from STYLE or POSE. You MUST use clothes from CONTENT SOURCE.
+- FAILURE: If the user prompt says "use clothes from reference" and you use clothes from STYLE or POSE. You MUST use clothes from CHARACTER REFERENCE.
 
 ** EXECUTION LOGIC **
-- Step 1: Extract the SKELETON from POSE SOURCE.
-- Step 2: Skin the skeleton with the CHARACTER from CONTENT SOURCE.
-- Step 3: Dress the character EXACTLY as seen in CONTENT SOURCE unless [COMMAND] explicitly specifies a different outfit.
-- Step 4: Render the scene using the ENGINE from STYLE SOURCE.
+- Step 1: Extract the SKELETON from POSE REFERENCE.
+- Step 2: Skin the skeleton with the CHARACTER from CHARACTER REFERENCE.
+- Step 3: Dress the character EXACTLY as seen in CHARACTER REFERENCE unless [COMMAND] explicitly specifies a different outfit.
+- Step 4: Render the scene using the ENGINE from STYLE REFERENCE.
 
 [[EXECUTION_COMMAND]]: ${prompt}
 
 ACKNOWLEDGE AND EXECUTE.`;
 
-    // Best practice: Images first, then text
-    const parts = [...imageParts, { text: combinedText }];
+    const parts = [];
+    if (masterSheetPart) {
+        parts.push(masterSheetPart);
+    }
+    parts.push({ text: combinedText });
 
     return { parts };
 };
@@ -452,32 +433,15 @@ export const generateImage = async (
     const model = 'gemini-3-pro-image-preview'; 
     
     // 1. PROCESS REFERENCE IMAGE (VISUAL & TEXTUAL ANALYSIS)
-    let refImagePart = null;
+    let cleanRefImage: string | null = null;
     let poseDescription = "";
     
     if (refImageBase64) {
         onLog("Step 1: Analyzing Reference Image (Pose & BG)...");
         if (refImageBase64.startsWith('data:') || refImageBase64.length > 100) {
-             const cleanRef = cleanBase64(refImageBase64);
-             try {
-                 const fileUri = await uploadToGemini(cleanRef, 'image/jpeg');
-                 refImagePart = {
-                     fileData: {
-                         mimeType: 'image/jpeg',
-                         fileUri: fileUri
-                     }
-                 };
-             } catch (e) {
-                 console.warn("Upload failed, falling back to inlineData", e);
-                 refImagePart = {
-                     inlineData: {
-                         mimeType: 'image/jpeg',
-                         data: cleanRef
-                     }
-                 };
-             }
+             cleanRefImage = cleanBase64(refImageBase64);
             // Call AI to analyze pose
-            poseDescription = await analyzeReferenceImage(cleanRef);
+            poseDescription = await analyzeReferenceImage(cleanRefImage);
             onLog(`> Pose Detected: ${poseDescription.substring(0, 50)}...`);
         }
     }
@@ -501,7 +465,7 @@ export const generateImage = async (
     }
 
     // 3. LOAD STYLE IMAGE (VISUAL)
-    let styleReferencePart = null;
+    let cleanStyleImage: string | null = null;
     if (finalStyleUrl) {
         onLog("Step 3: Loading Style Reference Image...");
         try {
@@ -516,102 +480,66 @@ export const generateImage = async (
                 });
             }
             
-            const optimizedStyle = await optimizePayload(styleData, 768); // Reduced from 1024 to 768 for lighter payload
-            
-            try {
-                const fileUri = await uploadToGemini(cleanBase64(optimizedStyle), 'image/jpeg');
-                styleReferencePart = {
-                    fileData: {
-                        mimeType: 'image/jpeg',
-                        fileUri: fileUri
-                    }
-                };
-            } catch (e) {
-                console.warn("Upload failed, falling back to inlineData", e);
-                styleReferencePart = {
-                    inlineData: {
-                        mimeType: 'image/jpeg',
-                        data: cleanBase64(optimizedStyle)
-                    }
-                };
-            }
+            cleanStyleImage = cleanBase64(styleData);
         } catch (e) {
             console.warn("Failed to load style reference", e);
         }
     }
 
     // 4. PREPARE CHARACTERS
-    const charImageParts: any[] = [];
+    const charBase64s: string[] = [];
     for (const char of characters) {
         if (char.image && char.faceImage) {
             const sheetBase64 = await createTextureSheet(char.image, char.faceImage);
-            const optimizedSheet = await optimizePayload(sheetBase64, 768); // Optimize sheet
-            try {
-                const fileUri = await uploadToGemini(cleanBase64(optimizedSheet), 'image/jpeg');
-                charImageParts.push({
-                    fileData: {
-                        mimeType: 'image/jpeg',
-                        fileUri: fileUri
-                    }
-                });
-            } catch (e) {
-                charImageParts.push({
-                    inlineData: {
-                        mimeType: 'image/jpeg',
-                        data: cleanBase64(optimizedSheet)
-                    }
-                });
-            }
+            charBase64s.push(cleanBase64(sheetBase64));
         } else if (char.image) {
-            const optimized = await optimizePayload(char.image, 768);
-            try {
-                const fileUri = await uploadToGemini(cleanBase64(optimized), 'image/jpeg');
-                charImageParts.push({
-                    fileData: {
-                        mimeType: 'image/jpeg',
-                        fileUri: fileUri
-                    }
-                });
-            } catch (e) {
-                charImageParts.push({
-                    inlineData: {
-                        mimeType: 'image/jpeg',
-                        data: cleanBase64(optimized)
-                    }
-                });
-            }
+            charBase64s.push(cleanBase64(char.image));
         } else if (char.faceImage) {
-            const optimized = await optimizePayload(char.faceImage, 768);
-            try {
-                const fileUri = await uploadToGemini(cleanBase64(optimized), 'image/jpeg');
-                charImageParts.push({
-                    fileData: {
-                        mimeType: 'image/jpeg',
-                        fileUri: fileUri
-                    }
-                });
-            } catch (e) {
-                charImageParts.push({
-                    inlineData: {
-                        mimeType: 'image/jpeg',
-                        data: cleanBase64(optimized)
-                    }
-                });
-            }
+            charBase64s.push(cleanBase64(char.faceImage));
         }
     }
 
-    // 5. PROMPT OPTIMIZATION (MERGING ALL CONTEXTS)
-    onLog("Step 4: Optimizing Prompt with Style & Pose Context...");
+    // 5. CREATE MASTER REFERENCE SHEET
+    onLog("Step 4: Creating Master Reference Sheet...");
+    let masterSheetPart = null;
+    const masterSheetBase64 = await createMasterReferenceSheet(
+        cleanStyleImage ? `data:image/jpeg;base64,${cleanStyleImage}` : null,
+        cleanRefImage ? `data:image/jpeg;base64,${cleanRefImage}` : null,
+        charBase64s.map(b64 => `data:image/jpeg;base64,${b64}`)
+    );
+
+    if (masterSheetBase64) {
+        const cleanMasterSheet = cleanBase64(masterSheetBase64);
+        try {
+            const fileUri = await uploadToGemini(cleanMasterSheet, 'image/jpeg');
+            masterSheetPart = {
+                fileData: {
+                    mimeType: 'image/jpeg',
+                    fileUri: fileUri
+                }
+            };
+        } catch (e) {
+            console.warn("Upload failed, falling back to inlineData", e);
+            masterSheetPart = {
+                inlineData: {
+                    mimeType: 'image/jpeg',
+                    data: cleanMasterSheet
+                }
+            };
+        }
+    }
+
+    // 6. PROMPT OPTIMIZATION (MERGING ALL CONTEXTS)
+    onLog("Step 5: Optimizing Prompt with Style & Pose Context...");
     const optimizedPrompt = await optimizePromptWithThinking(prompt, styleKeywords, poseDescription);
     
-    // 6. FINAL ASSEMBLY
-    const { parts } = processDigitalTwinMode(optimizedPrompt, refImagePart, charImageParts, styleReferencePart);
+    // 7. FINAL ASSEMBLY
+    const { parts } = processDigitalTwinMode(optimizedPrompt, masterSheetPart);
     
     // Keep parts interleaved so the model understands which image corresponds to which text label
     const finalParts = parts;
     
-    onLog("Step 5: Sending to Generation Grid (Gemini 3.0 Pro)...");
+    onLog("Step 6: Sending to Generation Grid (Gemini 3.0 Pro)...");
 
     const config: any = {
         imageConfig: {

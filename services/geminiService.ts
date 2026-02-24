@@ -604,12 +604,15 @@ export const generateImage = async (
     
     // Add character reference (using File URI)
     if (charUris.length > 0) {
-        finalParts.push({
-            fileData: {
-                mimeType: 'image/jpeg',
-                fileUri: charUris[0]
-            }
-        });
+        // Iterate through ALL uploaded character URIs and add them to the payload
+        for (const uri of charUris) {
+            finalParts.push({
+                fileData: {
+                    mimeType: 'image/jpeg',
+                    fileUri: uri
+                }
+            });
+        }
     }
     
     // Add Reference Image (Pose/BG) if available

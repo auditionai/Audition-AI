@@ -444,7 +444,7 @@ export const generateImage = async (
 ): Promise<string> => {
     onLog("Initializing Gemini 3.0 Pro Pipeline...");
     
-    const model = 'gemini-3-pro-image-preview'; 
+    const model = resolution === '1K' ? 'gemini-2.5-flash-image' : 'gemini-3-pro-image-preview'; 
     
     // 1. PROCESS REFERENCE IMAGE (VISUAL & TEXTUAL ANALYSIS)
     let refImagePart = null;
@@ -553,23 +553,36 @@ export const generateImage = async (
     // 6. FINAL ASSEMBLY
     const { systemPrompt, parts } = processDigitalTwinMode(optimizedPrompt, refImagePart, charParts, styleReferencePart);
     
-    // Prepend system instruction to parts to ensure compatibility with image models
+    // Combine all text parts into a single text part to avoid Gemini API errors with multiple text parts
+    let combinedText = systemPrompt + "\n\n";
+    const imageParts: any[] = [];
+    
+    for (const part of parts) {
+        if (part.text) {
+            combinedText += part.text + "\n\n";
+        } else if (part.inlineData) {
+            imageParts.push(part);
+        }
+    }
+    
     const finalParts = [
-        { text: systemPrompt },
-        ...parts
+        { text: combinedText },
+        ...imageParts
     ];
     
     onLog("Step 5: Sending to Generation Grid (Gemini 3.0 Pro)...");
 
     const config: any = {
         imageConfig: {
-            aspectRatio: aspectRatio,
-            imageSize: resolution
+            aspectRatio: aspectRatio
         }
     };
 
-    if (useSearch) {
-        config.tools = [{ googleSearch: {} }];
+    if (model === 'gemini-3-pro-image-preview') {
+        config.imageConfig.imageSize = resolution;
+        if (useSearch) {
+            config.tools = [{ google_search: {} }];
+        }
     }
 
     const response = await retryWithBackoff(
@@ -589,8 +602,11 @@ export const generateImage = async (
                     timeoutMs, // Dynamic Timeout
                     "Image Generation"
                 );
-            } catch (e) {
+            } catch (e: any) {
                 reportKeyFailure((freshAi as any)._internalApiKey);
+                if (e?.status === 403 && model === 'gemini-3-pro-image-preview') {
+                    throw new Error("API Key không hỗ trợ tạo ảnh 4K (Cần API Key trả phí). Vui lòng chọn độ phân giải 1K hoặc dùng API Key khác.");
+                }
                 throw e;
             }
         },

@@ -62,7 +62,7 @@ const retryWithBackoff = async <T>(
 
 // --- NEW: ANALYZE STYLE IMAGE (For Admin) ---
 export const analyzeStyleImage = async (imageBase64: string): Promise<string> => {
-    const model = 'gemini-3-flash-preview'; // Fast & Cheap for analysis
+    const model = 'gemini-3.1-pro-preview'; // Use pro for stability
 
     const result = await retryWithBackoff(
         async () => {
@@ -96,7 +96,7 @@ const selectBestStyle = async (prompt: string, styles: any[]): Promise<any | nul
     if (styles.length === 1) return styles[0]; // Only one choice
 
     // Use Flash for fast routing
-    const model = 'gemini-3-flash-preview'; 
+    const model = 'gemini-3.1-pro-preview'; 
 
     const styleList = styles.map(s => `- ID: ${s.id} | Name: ${s.name} | Keywords: ${s.trigger_prompt}`).join('\n');
 
@@ -260,7 +260,7 @@ export const checkConnection = async (key?: string): Promise<boolean> => {
         // Add Timeout to Ping - INCREASED TO 15s
         await runWithTimeout(
             ai.models.generateContent({
-                model: 'gemini-3-flash-preview',
+                model: 'gemini-3.1-pro-preview',
                 contents: 'ping'
             }),
             15000,
@@ -275,9 +275,13 @@ export const checkConnection = async (key?: string): Promise<boolean> => {
 
 // --- NEW: ANALYZE REFERENCE IMAGE (POSE/BG) ---
 const analyzeReferenceImage = async (base64Data: string): Promise<string> => {
-    const model = 'gemini-3-flash-preview'; 
+    const model = 'gemini-3.1-pro-preview'; 
 
     try {
+        // Optimize image before sending to reduce payload size and prevent 503
+        const optimizedImage = await optimizePayload(`data:image/jpeg;base64,${cleanBase64(base64Data)}`, 768);
+        const cleanOptimized = cleanBase64(optimizedImage);
+
         const result = await retryWithBackoff(
             async () => {
                 const freshAi = await getAiClient();
@@ -287,8 +291,8 @@ const analyzeReferenceImage = async (base64Data: string): Promise<string> => {
                             model: model,
                             contents: {
                                 parts: [
-                                    { text: "Analyze this image. Describe ONLY the 'Skeleton Pose', 'Camera Angle', and 'Composition'. IGNORE the character's clothes, hair, gender, face, and colors. Output ONLY the structural description (e.g. 'sitting cross-legged', 'low angle shot')." },
-                                    { inlineData: { mimeType: 'image/png', data: cleanBase64(base64Data) } }
+                                    { inlineData: { mimeType: 'image/jpeg', data: cleanOptimized } },
+                                    { text: "Analyze this image. Describe ONLY the 'Skeleton Pose', 'Camera Angle', and 'Composition'. IGNORE the character's clothes, hair, gender, face, and colors. Output ONLY the structural description (e.g. 'sitting cross-legged', 'low angle shot')." }
                                 ]
                             }
                         }),
@@ -354,7 +358,7 @@ REQUIRED OUTPUT STRUCTURE:
 
                     return await runWithTimeout(
                         freshAi.models.generateContent({
-                            model: 'gemini-3-pro-preview', // Use pro for better reasoning with images
+                            model: 'gemini-3.1-pro-preview', // Use 3.1-pro for better reasoning with images
                             contents: { parts: parts },
                             config: {
                                 temperature: 0.7,

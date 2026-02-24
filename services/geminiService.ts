@@ -265,8 +265,8 @@ const uploadToGemini = async (input: string, mimeType: string): Promise<string> 
             "File Upload"
         );
 
-        const file = (uploadResult as any).file;
-        const fileUri = file?.uri || (uploadResult as any).uri;
+        const file = (uploadResult as any).file || uploadResult;
+        const fileUri = file?.uri;
         
         if (!fileUri) throw new Error("No URI returned");
 
@@ -392,7 +392,7 @@ RULES:
                     temperature: 0.7,
                 }
             }),
-            15000, // 15s Hard Timeout
+            25000, // 25s Hard Timeout
             "Prompt Optimization"
         );
 

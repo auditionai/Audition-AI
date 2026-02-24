@@ -444,7 +444,7 @@ export const generateImage = async (
 ): Promise<string> => {
     onLog("Initializing Gemini 3.0 Pro Pipeline...");
     
-    const model = resolution === '1K' ? 'gemini-2.5-flash-image' : 'gemini-3-pro-image-preview'; 
+    const model = 'gemini-3-pro-image-preview'; 
     
     // 1. PROCESS REFERENCE IMAGE (VISUAL & TEXTUAL ANALYSIS)
     let refImagePart = null;
@@ -500,7 +500,7 @@ export const generateImage = async (
                 });
             }
             
-            const optimizedStyle = await optimizePayload(styleData, 1024);
+            const optimizedStyle = await optimizePayload(styleData, 768); // Reduced from 1024 to 768 for lighter payload
             
             styleReferencePart = {
                 inlineData: {
@@ -518,15 +518,16 @@ export const generateImage = async (
     for (const char of characters) {
         if (char.image && char.faceImage) {
             const sheetBase64 = await createTextureSheet(char.image, char.faceImage);
+            const optimizedSheet = await optimizePayload(sheetBase64, 768); // Optimize sheet
             charParts.push({ text: `[CHARACTER ${char.id} IDENTITY & OUTFIT REFERENCE]` });
             charParts.push({
                 inlineData: {
                     mimeType: 'image/jpeg',
-                    data: cleanBase64(sheetBase64)
+                    data: cleanBase64(optimizedSheet)
                 }
             });
         } else if (char.image) {
-            const optimized = await optimizePayload(char.image, 1024);
+            const optimized = await optimizePayload(char.image, 768);
             charParts.push({ text: `[CHARACTER ${char.id} IDENTITY & OUTFIT REFERENCE]` });
             charParts.push({
                 inlineData: {
@@ -535,7 +536,7 @@ export const generateImage = async (
                 }
             });
         } else if (char.faceImage) {
-            const optimized = await optimizePayload(char.faceImage, 1024);
+            const optimized = await optimizePayload(char.faceImage, 768);
             charParts.push({ text: `[CHARACTER ${char.id} FACE REFERENCE]` });
             charParts.push({
                 inlineData: {
@@ -553,36 +554,23 @@ export const generateImage = async (
     // 6. FINAL ASSEMBLY
     const { systemPrompt, parts } = processDigitalTwinMode(optimizedPrompt, refImagePart, charParts, styleReferencePart);
     
-    // Combine all text parts into a single text part to avoid Gemini API errors with multiple text parts
-    let combinedText = systemPrompt + "\n\n";
-    const imageParts: any[] = [];
-    
-    for (const part of parts) {
-        if (part.text) {
-            combinedText += part.text + "\n\n";
-        } else if (part.inlineData) {
-            imageParts.push(part);
-        }
-    }
-    
+    // Keep parts interleaved so the model understands which image corresponds to which text label
     const finalParts = [
-        { text: combinedText },
-        ...imageParts
+        { text: systemPrompt },
+        ...parts
     ];
     
     onLog("Step 5: Sending to Generation Grid (Gemini 3.0 Pro)...");
 
     const config: any = {
         imageConfig: {
-            aspectRatio: aspectRatio
+            aspectRatio: aspectRatio,
+            imageSize: resolution
         }
     };
 
-    if (model === 'gemini-3-pro-image-preview') {
-        config.imageConfig.imageSize = resolution;
-        if (useSearch) {
-            config.tools = [{ google_search: {} }];
-        }
+    if (useSearch) {
+        config.tools = [{ google_search: {} }];
     }
 
     const response = await retryWithBackoff(
@@ -604,9 +592,6 @@ export const generateImage = async (
                 );
             } catch (e: any) {
                 reportKeyFailure((freshAi as any)._internalApiKey);
-                if (e?.status === 403 && model === 'gemini-3-pro-image-preview') {
-                    throw new Error("API Key không hỗ trợ tạo ảnh 4K (Cần API Key trả phí). Vui lòng chọn độ phân giải 1K hoặc dùng API Key khác.");
-                }
                 throw e;
             }
         },

@@ -96,7 +96,7 @@ const selectBestStyle = async (prompt: string, styles: any[]): Promise<any | nul
     if (styles.length === 1) return styles[0]; // Only one choice
 
     // Use Flash for fast routing
-    const model = 'gemini-3.1-pro-preview'; 
+    const model = 'gemini-2.5-flash'; 
 
     const styleList = styles.map(s => `- ID: ${s.id} | Name: ${s.name} | Keywords: ${s.trigger_prompt}`).join('\n');
 
@@ -114,21 +114,14 @@ const selectBestStyle = async (prompt: string, styles: any[]): Promise<any | nul
     `;
 
     try {
-        const result = await retryWithBackoff(
-            async () => {
-                const freshAi = await getAiClient();
-                try {
-                    return await freshAi.models.generateContent({
-                        model: model,
-                        contents: { parts: [{ text: routerPrompt }] }
-                    });
-                } catch (e) {
-                    reportKeyFailure((freshAi as any)._internalApiKey);
-                    throw e;
-                }
-            },
-            3,
-            1000,
+        // AGGRESSIVE FAIL-FAST: No retries, 5s timeout
+        const freshAi = await getAiClient();
+        const result = await runWithTimeout(
+            freshAi.models.generateContent({
+                model: model,
+                contents: { parts: [{ text: routerPrompt }] }
+            }),
+            5000, // 5s Timeout
             "Style Selection"
         );
         
@@ -275,7 +268,7 @@ export const checkConnection = async (key?: string): Promise<boolean> => {
 
 // --- NEW: ANALYZE REFERENCE IMAGE (POSE/BG) ---
 const analyzeReferenceImage = async (base64Data: string): Promise<string> => {
-    const model = 'gemini-3.1-pro-preview'; 
+    const model = 'gemini-2.5-flash'; 
 
     try {
         // Optimize image before sending to reduce payload size and prevent 503
@@ -317,68 +310,52 @@ const optimizePromptWithThinking = async (
     poseContext: string = "",
     masterSheetPart: any | null = null
 ): Promise<string> => {
+    // AGGRESSIVE FAIL-FAST: Use Flash for speed/stability. No retries. No key banning.
+    // If this fails, we just use the raw prompt.
+    const model = 'gemini-2.5-flash'; 
+
     try {
-        const response = await retryWithBackoff(
-            async () => {
-                const freshAi = await getAiClient();
-                try {
-                    const parts: any[] = [];
-                    if (masterSheetPart) {
-                        parts.push(masterSheetPart);
-                    }
-                    parts.push({
-                        text: `ROLE: EXPERT IMAGE GENERATION PROMPT ENGINEER.
-MISSION: CONVERT INPUTS AND THE MASTER REFERENCE SHEET INTO A HIGHLY DETAILED, MACHINE-READABLE PROMPT.
+        const freshAi = await getAiClient();
+        
+        const parts: any[] = [];
+        // Note: We intentionally IGNORE masterSheetPart here to prevent payload overload.
+        // This step is purely text-based reasoning now.
+        
+        parts.push({
+            text: `ROLE: PROMPT ENGINEER.
+MISSION: Convert inputs into a detailed image generation prompt.
 
-INPUT DATA:
-1. USER_COMMAND: "${rawPrompt}"
-2. STYLE_MANDATE: "${styleContext}"
-3. POSE_CONSTRAINT: "${poseContext}"
+INPUTS:
+1. COMMAND: "${rawPrompt}"
+2. STYLE: "${styleContext}"
+3. POSE: "${poseContext}"
 
-The attached image is a MASTER REFERENCE SHEET containing multiple labeled sections:
-1. STYLE REFERENCE: Defines the Lighting, Texture, Render Quality, and Art Style.
-2. POSE REFERENCE: Defines the Bone structure, Camera Angle, and Composition.
-3. CHARACTER REFERENCE: Defines the Character's Identity (Face), Outfit (Clothes), Hair, and Accessories.
+RULES:
+- Combine all inputs into a single, descriptive paragraph.
+- Focus on visual details: lighting, camera angle, character appearance.
+- Output ONLY the final prompt. No explanations.`
+        });
 
-STRICT RULES:
-- Write ONLY the final image generation prompt. Do not include any explanations or conversational text.
-- Make it highly descriptive, focusing on visual details, lighting, camera angle, character appearance, and atmosphere.
-- Ensure the pose, style, and character details from the Master Reference Sheet are perfectly synthesized into the text prompt.
-- CRITICAL: The character MUST wear the exact outfit from the CHARACTER REFERENCE unless the USER_COMMAND explicitly specifies a different outfit.
-- CRITICAL: The character MUST NOT wear the outfit from the POSE REFERENCE.
-
-REQUIRED OUTPUT STRUCTURE:
-(Subject Description including Face and Hair), (Action/Pose from Constraint), (Outfit Details from Character Reference), (Environment/Background), (Lighting Setup), (Render Engine/Style Keywords from Mandate).`
-                    });
-
-                    return await runWithTimeout(
-                        freshAi.models.generateContent({
-                            model: 'gemini-3.1-pro-preview', // Use 3.1-pro for better reasoning with images
-                            contents: { parts: parts },
-                            config: {
-                                temperature: 0.7,
-                            }
-                        }),
-                        60000, // Increased to 60s
-                        "Prompt Optimization"
-                    );
-                } catch (e) {
-                    reportKeyFailure((freshAi as any)._internalApiKey);
-                    throw e;
+        const result = await runWithTimeout(
+            freshAi.models.generateContent({
+                model: model,
+                contents: { parts: parts },
+                config: {
+                    temperature: 0.7,
                 }
-            },
-            3,
-            2000,
+            }),
+            10000, // 10s Hard Timeout
             "Prompt Optimization"
         );
-        
-        const result = response.text?.trim();
-        if (!result) throw new Error("Empty reasoning response");
-        return result;
+
+        const text = result.text?.trim();
+        if (!text) throw new Error("Empty response");
+        return text;
 
     } catch (e) {
-        console.warn("Prompt Optimization Failed, using raw fallback", e);
-        return rawPrompt + (styleContext ? `, ${styleContext}` : "");
+        console.warn("Prompt Optimization Skipped (Fail-Fast)", e);
+        // Fallback: Simple concatenation
+        return `${rawPrompt}${styleContext ? ', ' + styleContext : ''}${poseContext ? ', ' + poseContext : ''}`;
     }
 }
 
@@ -550,7 +527,8 @@ export const generateImage = async (
 
     // 6. PROMPT OPTIMIZATION (MERGING ALL CONTEXTS)
     onLog("Step 5: Generating Perfect Image Prompt...");
-    const optimizedPrompt = await optimizePromptWithThinking(prompt, styleKeywords, poseDescription, masterSheetPart);
+    // REMOVED masterSheetPart from optimization to prevent 503 overload
+    const optimizedPrompt = await optimizePromptWithThinking(prompt, styleKeywords, poseDescription);
     
     // 7. FINAL ASSEMBLY
     onLog("Step 6: Sending to Generation Grid (Gemini 3.0 Pro)...");

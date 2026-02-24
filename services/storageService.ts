@@ -96,6 +96,51 @@ const processBase64Data = (base64: string): { blob: Blob, type: string, buffer: 
   };
 };
 
+// --- NEW: UPLOAD INPUT FILE TO R2 ---
+export const uploadFileToR2 = async (file: File | Blob | string, folder: string = 'inputs'): Promise<string> => {
+    if (!r2Client) {
+        throw new Error("R2 Client not initialized");
+    }
+
+    try {
+        let buffer: Uint8Array;
+        let contentType: string;
+        let extension = 'png';
+
+        if (typeof file === 'string') {
+            // Base64
+            const processed = processBase64Data(file);
+            buffer = processed.buffer;
+            contentType = processed.type;
+            extension = contentType.split('/')[1] || 'png';
+        } else {
+            // File or Blob
+            const arrayBuffer = await file.arrayBuffer();
+            buffer = new Uint8Array(arrayBuffer);
+            contentType = file.type || 'image/png';
+            extension = contentType.split('/')[1] || 'png';
+        }
+
+        const fileName = `${folder}/${Date.now()}_${Math.random().toString(36).substring(7)}.${extension}`;
+
+        const command = new PutObjectCommand({
+            Bucket: R2_BUCKET_NAME,
+            Key: fileName,
+            Body: buffer,
+            ContentType: contentType,
+        });
+
+        await r2Client.send(command);
+        
+        // Return Public URL
+        return `${R2_PUBLIC_URL}/${fileName}`;
+
+    } catch (error) {
+        console.error("R2 Upload Input Error:", error);
+        throw error;
+    }
+};
+
 // --- MAIN SERVICE FUNCTIONS ---
 
 export const saveImageToStorage = async (image: GeneratedImage): Promise<void> => {

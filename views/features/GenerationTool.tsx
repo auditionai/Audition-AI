@@ -2,8 +2,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Feature, Language, GeneratedImage } from '../../types';
 import { Icons } from '../../components/Icons';
-import { generateImage } from '../../services/geminiService';
-import { saveImageToStorage } from '../../services/storageService';
+import { generateImage, testApiKey } from '../../services/geminiService';
+import { saveImageToStorage, uploadFileToR2 } from '../../services/storageService';
 import { createSolidFence, optimizePayload, urlToBase64 } from '../../utils/imageProcessor';
 import { getUserProfile, updateUserBalance, getStylePresets } from '../../services/economyService';
 import { useNotification } from '../../components/NotificationSystem';
@@ -390,35 +390,75 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
     await new Promise(r => setTimeout(r, 100));
 
     try {
+        // --- NEW: API KEY PRE-FLIGHT TEST ---
+        addLog("Kiểm tra kết nối API Key (Gemini 3.0 Pro)...");
+        const isKeyValid = await testApiKey();
+        if (!isKeyValid) {
+            throw new Error("API Key Error: Không thể kết nối tới Google Gemini. Vui lòng thử lại sau.");
+        }
+        addLog("API Key OK. Kết nối ổn định.");
+
       // 3. Deduct Balance
       await updateUserBalance(-cost, `Gen: ${feature.name['en']}`, 'usage');
       
       let structureRefData: string | undefined = undefined;
       let sourceForStructure = refImage || feature.preview_image;
       
-      // Convert HTTP URL to Base64 if needed
-      if (sourceForStructure.startsWith('http')) {
-          addLog("Đang xử lý ảnh mẫu...");
-          const b64 = await urlToBase64(sourceForStructure);
-          if (b64) sourceForStructure = b64;
+      // --- NEW: UPLOAD TO R2 CLOUD (INPUTS) ---
+      // Upload Reference Image
+      if (sourceForStructure && sourceForStructure.startsWith('data:')) {
+          addLog("Đang tải ảnh mẫu lên R2 Cloud...");
+          try {
+              const r2Url = await uploadFileToR2(sourceForStructure, 'inputs');
+              sourceForStructure = r2Url; // Use URL
+              addLog(`> Upload Ref Success: ${r2Url.substring(0, 30)}...`);
+          } catch (e) {
+              console.warn("R2 Upload Ref Failed, using Base64 fallback", e);
+          }
       }
-      
-      // 4. STRUCTURE PROCESSING (Heavy Operation)
-      if (sourceForStructure) {
-          addLog("Đang trích xuất cấu trúc (Wireframe)...");
-          const optimizedStructure = await optimizePayload(sourceForStructure);
-          structureRefData = await createSolidFence(optimizedStructure, aspectRatio, true);
-      }
-      
+
+      // Upload Character Images
       const characterDataList = [];
       for (const char of characters) {
+          let bodyUrl = char.bodyImage;
+          let faceUrl = char.faceImage;
+
+          if (bodyUrl && bodyUrl.startsWith('data:')) {
+              addLog(`Đang tải ảnh Body (NV ${char.id}) lên Cloud...`);
+              try {
+                  bodyUrl = await uploadFileToR2(bodyUrl, 'inputs');
+              } catch (e) { console.warn("R2 Body Upload Failed", e); }
+          }
+
+          if (faceUrl && faceUrl.startsWith('data:')) {
+              addLog(`Đang tải ảnh Face (NV ${char.id}) lên Cloud...`);
+              try {
+                  faceUrl = await uploadFileToR2(faceUrl, 'inputs');
+              } catch (e) { console.warn("R2 Face Upload Failed", e); }
+          }
+
           characterDataList.push({
               id: char.id,
               gender: char.gender,
-              image: char.bodyImage, 
-              faceImage: char.isFaceLocked ? char.faceImage : null, 
+              image: bodyUrl, 
+              faceImage: char.isFaceLocked ? faceUrl : null, 
               shoesImage: null
           });
+      }
+      
+      // 4. STRUCTURE PROCESSING (Heavy Operation)
+      // Note: createSolidFence handles URLs internally via loadImageWithTimeout
+      if (sourceForStructure) {
+          addLog("Đang trích xuất cấu trúc (Wireframe)...");
+          // If it's a URL, we might need to fetch it to optimizePayload?
+          // optimizePayload handles URLs via loadImageWithTimeout too.
+          // But createSolidFence returns Base64.
+          // We can upload this result to R2 if we want, but generateImage expects structureRefData as base64/URL.
+          // Let's keep it simple: pass the URL or Base64 to generateImage.
+          // Wait, generateImage signature for structureRefData is string.
+          // If we pass URL, generateImage logic needs to handle it.
+          // My previous edit to generateImage handled refImageBase64 (which is structureRefData here) as URL.
+          structureRefData = sourceForStructure; 
       }
       
       let finalPrompt = (feature.defaultPrompt || "") + prompt;

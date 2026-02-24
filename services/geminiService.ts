@@ -216,16 +216,44 @@ const extractImage = (response: any): string | null => {
     throw new Error("No image data found in response");
 };
 
-const uploadToGemini = async (base64Data: string, mimeType: string): Promise<string> => {
+// --- NEW: TEST API KEY ---
+export const testApiKey = async (): Promise<boolean> => {
+    try {
+        const freshAi = await getAiClient();
+        await runWithTimeout(
+            freshAi.models.generateContent({
+                model: 'gemini-3.1-pro-preview',
+                contents: { parts: [{ text: "Hello" }] }
+            }),
+            10000,
+            "API Key Test"
+        );
+        return true;
+    } catch (e) {
+        console.warn("API Key Test Failed", e);
+        return false;
+    }
+};
+
+const uploadToGemini = async (input: string, mimeType: string): Promise<string> => {
     try {
         const ai = await getAiClient();
-        const byteCharacters = atob(cleanBase64(base64Data));
-        const byteNumbers = new Array(byteCharacters.length);
-        for (let i = 0; i < byteCharacters.length; i++) {
-            byteNumbers[i] = byteCharacters.charCodeAt(i);
+        let blob: Blob;
+
+        // Check if input is a URL
+        if (input.startsWith('http')) {
+            const resp = await fetch(input);
+            blob = await resp.blob();
+        } else {
+            // Assume Base64
+            const byteCharacters = atob(cleanBase64(input));
+            const byteNumbers = new Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            blob = new Blob([byteArray], { type: mimeType });
         }
-        const byteArray = new Uint8Array(byteNumbers);
-        const blob = new Blob([byteArray], { type: mimeType });
 
         // Add Timeout to Upload
         const uploadResult = await runWithTimeout(
@@ -242,7 +270,7 @@ const uploadToGemini = async (base64Data: string, mimeType: string): Promise<str
         
         return fileUri;
     } catch (e) {
-        console.warn("Cloud upload failed, falling back to inline", e);
+        console.warn("Cloud upload failed", e);
         throw e;
     }
 };
@@ -410,6 +438,25 @@ ACKNOWLEDGE AND EXECUTE.`;
     return { parts };
 };
 
+// --- NEW: PRE-FLIGHT CHECK ---
+const testGenModelAccess = async (modelName: string): Promise<boolean> => {
+    try {
+        const freshAi = await getAiClient();
+        await runWithTimeout(
+            freshAi.models.generateContent({
+                model: modelName,
+                contents: { parts: [{ text: "test" }] }
+            }),
+            10000,
+            "Pre-flight Check"
+        );
+        return true;
+    } catch (e) {
+        console.warn(`Pre-flight check failed for ${modelName}`, e);
+        return false;
+    }
+};
+
 export const generateImage = async (
     prompt: string,
     aspectRatio: string,
@@ -428,17 +475,48 @@ export const generateImage = async (
     
     const model = 'gemini-3-pro-image-preview'; 
     
+    // 0. PRE-FLIGHT CHECK (FAIL FAST)
+    onLog("Step 0: Pre-flight API Check...");
+    const isModelReady = await testGenModelAccess(model);
+    if (!isModelReady) {
+        throw new Error("Gemini 3.0 Pro is currently unreachable (503/Overload). Please try again in 1 minute.");
+    }
+
     // 1. PROCESS REFERENCE IMAGE (VISUAL & TEXTUAL ANALYSIS)
     let cleanRefImage: string | null = null;
     let poseDescription = "";
+    let refImageUri: string | null = null;
     
     if (refImageBase64) {
         onLog("Step 1: Analyzing Reference Image (Pose & BG)...");
-        if (refImageBase64.startsWith('data:') || refImageBase64.length > 100) {
-             cleanRefImage = cleanBase64(refImageBase64);
-            // Call AI to analyze pose
-            poseDescription = await analyzeReferenceImage(cleanRefImage);
-            onLog(`> Pose Detected: ${poseDescription.substring(0, 50)}...`);
+        
+        try {
+            // Handle URL Input
+            if (refImageBase64.startsWith('http')) {
+                // For Analysis (needs Base64)
+                const resp = await fetch(refImageBase64);
+                const blob = await resp.blob();
+                const reader = new FileReader();
+                cleanRefImage = await new Promise((resolve) => {
+                    reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+                    reader.readAsDataURL(blob);
+                });
+                
+                // For Final Generation (use URL directly)
+                refImageUri = await uploadToGemini(refImageBase64, 'image/jpeg');
+            } 
+            // Handle Base64 Input
+            else if (refImageBase64.startsWith('data:') || refImageBase64.length > 100) {
+                cleanRefImage = cleanBase64(refImageBase64);
+                refImageUri = await uploadToGemini(cleanRefImage, 'image/jpeg');
+            }
+
+            if (cleanRefImage) {
+                poseDescription = await analyzeReferenceImage(cleanRefImage);
+                onLog(`> Pose Detected: ${poseDescription.substring(0, 50)}...`);
+            }
+        } catch (e) {
+            console.warn("Ref Image Processing Failed", e);
         }
     }
 
@@ -462,6 +540,8 @@ export const generateImage = async (
 
     // 3. LOAD STYLE IMAGE (VISUAL)
     let cleanStyleImage: string | null = null;
+    let styleImageUri: string | null = null;
+    
     if (finalStyleUrl) {
         onLog("Step 3: Loading Style Reference Image...");
         try {
@@ -477,76 +557,77 @@ export const generateImage = async (
             }
             
             cleanStyleImage = cleanBase64(styleData);
+            // Upload Style Image
+            styleImageUri = await uploadToGemini(cleanStyleImage, 'image/jpeg');
+            
         } catch (e) {
-            console.warn("Failed to load style reference", e);
+            console.warn("Failed to load/upload style reference", e);
         }
     }
 
     // 4. PREPARE CHARACTERS
-    const charBase64s: string[] = [];
+    const charUris: string[] = [];
+    
     for (const char of characters) {
+        let finalCharBase64 = "";
         if (char.image && char.faceImage) {
             const sheetBase64 = await createTextureSheet(char.image, char.faceImage);
-            charBase64s.push(cleanBase64(sheetBase64));
+            const optimizedSheet = await optimizePayload(sheetBase64, 1024);
+            finalCharBase64 = cleanBase64(optimizedSheet);
         } else if (char.image) {
-            charBase64s.push(cleanBase64(char.image));
+            const optimized = await optimizePayload(char.image, 1024);
+            finalCharBase64 = cleanBase64(optimized);
         } else if (char.faceImage) {
-            charBase64s.push(cleanBase64(char.faceImage));
+            const optimized = await optimizePayload(char.faceImage, 1024);
+            finalCharBase64 = cleanBase64(optimized);
+        }
+        
+        if (finalCharBase64) {
+            try {
+                const uri = await uploadToGemini(finalCharBase64, 'image/jpeg');
+                charUris.push(uri);
+            } catch (e) {
+                console.warn("Failed to upload character sheet", e);
+            }
         }
     }
 
-    // 5. CREATE MASTER REFERENCE SHEET
-    onLog("Step 4: AI Synthesizing All Visual Data (Master Sheet)...");
-    let masterSheetPart = null;
-    const masterSheetBase64 = await createMasterReferenceSheet(
-        cleanStyleImage ? `data:image/jpeg;base64,${cleanStyleImage}` : null,
-        cleanRefImage ? `data:image/jpeg;base64,${cleanRefImage}` : null,
-        charBase64s.map(b64 => `data:image/jpeg;base64,${b64}`)
-    );
-
-    if (masterSheetBase64) {
-        const cleanMasterSheet = cleanBase64(masterSheetBase64);
-        try {
-            const fileUri = await uploadToGemini(cleanMasterSheet, 'image/jpeg');
-            masterSheetPart = {
-                fileData: {
-                    mimeType: 'image/jpeg',
-                    fileUri: fileUri
-                }
-            };
-        } catch (e) {
-            console.warn("Upload failed, falling back to inlineData", e);
-            masterSheetPart = {
-                inlineData: {
-                    mimeType: 'image/jpeg',
-                    data: cleanMasterSheet
-                }
-            };
-        }
-    }
-
+    // 5. CREATE MASTER REFERENCE SHEET (SKIPPED - OPTIMIZATION)
+    // We skip generating the Master Sheet to save time/bandwidth as it is not used in the final Pro generation
+    // to avoid confusing the model with a grid layout.
+    
     // 6. PROMPT OPTIMIZATION (MERGING ALL CONTEXTS)
-    onLog("Step 5: Generating Perfect Image Prompt...");
+    onLog("Step 4: Generating Perfect Image Prompt...");
     // REMOVED masterSheetPart from optimization to prevent 503 overload
     const optimizedPrompt = await optimizePromptWithThinking(prompt, styleKeywords, poseDescription);
     
     // 7. FINAL ASSEMBLY
-    onLog("Step 6: Sending to Generation Grid (Gemini 3.0 Pro)...");
+    onLog("Step 5: Sending to Generation Grid (Gemini 3.0 Pro)...");
     
     // For the final image generation, we ONLY send the optimized prompt and the character's face/body as the subject reference.
     // We DO NOT send the Master Sheet to the image model, because it will confuse the image model (it's a grid).
     const finalParts: any[] = [];
     
-    // Add character reference (just the first character's image) to ensure the face matches
-    if (charBase64s.length > 0) {
+    // Add character reference (using File URI)
+    if (charUris.length > 0) {
         finalParts.push({
-            inlineData: {
+            fileData: {
                 mimeType: 'image/jpeg',
-                data: charBase64s[0]
+                fileUri: charUris[0]
             }
         });
     }
     
+    // Add Reference Image (Pose/BG) if available
+    if (refImageUri) {
+        finalParts.push({
+            fileData: {
+                mimeType: 'image/jpeg',
+                fileUri: refImageUri
+            }
+        });
+    }
+
     finalParts.push({ text: optimizedPrompt });
 
     const config: any = {
@@ -578,34 +659,20 @@ export const generateImage = async (
                     "Image Generation"
                 );
             } catch (e: any) {
-                // FALLBACK STRATEGY: If Pro fails (503/Overloaded), switch to Flash
+                // NO FALLBACK to Flash. User demands Pro quality.
+                // We rely on retryWithBackoff to switch keys/wait on 503.
+                
+                // If it's a 503, log it clearly
                 if (e.message?.includes('503') || e.message?.includes('Overloaded') || e.status === 503) {
-                     onLog("⚠️ Gemini 3 Pro quá tải. Tự động chuyển sang Gemini 2.5 Flash...");
-                     console.warn("Gemini 3 Pro 503. Fallback to Flash.");
-                     
-                     // Adjust config for Flash (remove imageSize as it's not supported)
-                     const flashConfig = { ...config };
-                     if (flashConfig.imageConfig) {
-                        delete flashConfig.imageConfig.imageSize;
-                     }
-                     
-                     return await runWithTimeout(
-                        freshAi.models.generateContent({
-                            model: 'gemini-2.5-flash-image',
-                            contents: { parts: finalParts },
-                            config: flashConfig
-                        }),
-                        timeoutMs,
-                        "Image Generation (Fallback)"
-                     );
+                     console.warn("Gemini 3 Pro 503. Retrying with Backoff Strategy...");
                 }
                 
                 reportKeyFailure((freshAi as any)._internalApiKey);
                 throw e;
             }
         },
-        3,
-        2000,
+        5, // INCREASED RETRIES: 5 attempts
+        5000, // INCREASED DELAY: 5s initial wait
         "Image Generation",
         onLog
     );

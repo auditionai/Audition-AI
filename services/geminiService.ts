@@ -312,33 +312,53 @@ const analyzeReferenceImage = async (base64Data: string): Promise<string> => {
 };
 
 // --- PROMPT REASONING ENGINE (STEEL DISCIPLINE) ---
-const optimizePromptWithThinking = async (rawPrompt: string, styleContext: string = "", poseContext: string = ""): Promise<string> => {
+const optimizePromptWithThinking = async (
+    rawPrompt: string, 
+    styleContext: string = "", 
+    poseContext: string = "",
+    masterSheetPart: any | null = null
+): Promise<string> => {
     try {
         const response = await retryWithBackoff(
             async () => {
                 const freshAi = await getAiClient();
                 try {
+                    const parts: any[] = [];
+                    if (masterSheetPart) {
+                        parts.push(masterSheetPart);
+                    }
+                    parts.push({
+                        text: `ROLE: EXPERT IMAGE GENERATION PROMPT ENGINEER.
+MISSION: CONVERT INPUTS AND THE MASTER REFERENCE SHEET INTO A HIGHLY DETAILED, MACHINE-READABLE PROMPT.
+
+INPUT DATA:
+1. USER_COMMAND: "${rawPrompt}"
+2. STYLE_MANDATE: "${styleContext}"
+3. POSE_CONSTRAINT: "${poseContext}"
+
+The attached image is a MASTER REFERENCE SHEET containing multiple labeled sections:
+1. STYLE REFERENCE: Defines the Lighting, Texture, Render Quality, and Art Style.
+2. POSE REFERENCE: Defines the Bone structure, Camera Angle, and Composition.
+3. CHARACTER REFERENCE: Defines the Character's Identity (Face), Outfit (Clothes), Hair, and Accessories.
+
+STRICT RULES:
+- Write ONLY the final image generation prompt. Do not include any explanations or conversational text.
+- Make it highly descriptive, focusing on visual details, lighting, camera angle, character appearance, and atmosphere.
+- Ensure the pose, style, and character details from the Master Reference Sheet are perfectly synthesized into the text prompt.
+- CRITICAL: The character MUST wear the exact outfit from the CHARACTER REFERENCE unless the USER_COMMAND explicitly specifies a different outfit.
+- CRITICAL: The character MUST NOT wear the outfit from the POSE REFERENCE.
+
+REQUIRED OUTPUT STRUCTURE:
+(Subject Description including Face and Hair), (Action/Pose from Constraint), (Outfit Details from Character Reference), (Environment/Background), (Lighting Setup), (Render Engine/Style Keywords from Mandate).`
+                    });
+
                     return await runWithTimeout(
                         freshAi.models.generateContent({
-                            model: 'gemini-3-flash-preview',
-                            contents: `ROLE: EXECUTIONER PROMPT ENGINEER.
-                            MISSION: CONVERT INPUTS INTO A RIGID, MACHINE-READABLE 3D RENDERING SCRIPT.
-                            
-                            INPUT DATA:
-                            1. USER_COMMAND: "${rawPrompt}"
-                            2. STYLE_MANDATE: "${styleContext}" (MUST BE APPLIED)
-                            3. POSE_CONSTRAINT: "${poseContext}" (MUST BE FOLLOWED)
-            
-                            STRICT RULES:
-                            - DO NOT HALLUCINATE. Use ONLY the provided inputs.
-                            - IF STYLE_MANDATE conflicts with USER_COMMAND, STYLE_MANDATE WINS.
-                            - OUTPUT FORMAT must be a comma-separated list of high-weight tokens.
-                            - FORBIDDEN: "artistic", "creative interpretation", "maybe".
-                            - CRITICAL: If USER_COMMAND mentions using clothes/outfit from the uploaded image/reference, you MUST include "wearing exact same outfit as character reference image" in the Outfit Details. Do NOT describe the clothes of the pose reference.
-                            
-                            REQUIRED OUTPUT STRUCTURE:
-                            (Subject Description), (Action/Pose from Constraint), (Outfit Details), (Environment/Background), (Lighting Setup), (Render Engine: Octane/Unreal), (Texture Quality: 8K, Hyper-detailed), (Style Keywords from Mandate).
-                            `,
+                            model: 'gemini-3-pro-preview', // Use pro for better reasoning with images
+                            contents: { parts: parts },
+                            config: {
+                                temperature: 0.7,
+                            }
                         }),
                         60000, // Increased to 60s
                         "Prompt Optimization"
@@ -500,7 +520,7 @@ export const generateImage = async (
     }
 
     // 5. CREATE MASTER REFERENCE SHEET
-    onLog("Step 4: Creating Master Reference Sheet...");
+    onLog("Step 4: AI Synthesizing All Visual Data (Master Sheet)...");
     let masterSheetPart = null;
     const masterSheetBase64 = await createMasterReferenceSheet(
         cleanStyleImage ? `data:image/jpeg;base64,${cleanStyleImage}` : null,
@@ -530,16 +550,27 @@ export const generateImage = async (
     }
 
     // 6. PROMPT OPTIMIZATION (MERGING ALL CONTEXTS)
-    onLog("Step 5: Optimizing Prompt with Style & Pose Context...");
-    const optimizedPrompt = await optimizePromptWithThinking(prompt, styleKeywords, poseDescription);
+    onLog("Step 5: Generating Perfect Image Prompt...");
+    const optimizedPrompt = await optimizePromptWithThinking(prompt, styleKeywords, poseDescription, masterSheetPart);
     
     // 7. FINAL ASSEMBLY
-    const { parts } = processDigitalTwinMode(optimizedPrompt, masterSheetPart);
-    
-    // Keep parts interleaved so the model understands which image corresponds to which text label
-    const finalParts = parts;
-    
     onLog("Step 6: Sending to Generation Grid (Gemini 3.0 Pro)...");
+    
+    // For the final image generation, we ONLY send the optimized prompt and the character's face/body as the subject reference.
+    // We DO NOT send the Master Sheet to the image model, because it will confuse the image model (it's a grid).
+    const finalParts: any[] = [];
+    
+    // Add character reference (just the first character's image) to ensure the face matches
+    if (charBase64s.length > 0) {
+        finalParts.push({
+            inlineData: {
+                mimeType: 'image/jpeg',
+                data: charBase64s[0]
+            }
+        });
+    }
+    
+    finalParts.push({ text: optimizedPrompt });
 
     const config: any = {
         imageConfig: {

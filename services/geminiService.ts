@@ -438,25 +438,6 @@ ACKNOWLEDGE AND EXECUTE.`;
     return { parts };
 };
 
-// --- NEW: PRE-FLIGHT CHECK ---
-const testGenModelAccess = async (modelName: string): Promise<boolean> => {
-    try {
-        const freshAi = await getAiClient();
-        await runWithTimeout(
-            freshAi.models.generateContent({
-                model: modelName,
-                contents: { parts: [{ text: "test" }] }
-            }),
-            10000,
-            "Pre-flight Check"
-        );
-        return true;
-    } catch (e) {
-        console.warn(`Pre-flight check failed for ${modelName}`, e);
-        return false;
-    }
-};
-
 export const generateImage = async (
     prompt: string,
     aspectRatio: string,
@@ -475,13 +456,6 @@ export const generateImage = async (
     
     const model = 'gemini-3-pro-image-preview'; 
     
-    // 0. PRE-FLIGHT CHECK (FAIL FAST)
-    onLog("Step 0: Pre-flight API Check...");
-    const isModelReady = await testGenModelAccess(model);
-    if (!isModelReady) {
-        throw new Error("Gemini 3.0 Pro is currently unreachable (503/Overload). Please try again in 1 minute.");
-    }
-
     // 1. PROCESS REFERENCE IMAGE (VISUAL & TEXTUAL ANALYSIS)
     let cleanRefImage: string | null = null;
     let poseDescription = "";

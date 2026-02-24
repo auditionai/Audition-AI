@@ -282,35 +282,30 @@ const analyzeReferenceImage = async (base64Data: string): Promise<string> => {
         const optimizedImage = await optimizePayload(`data:image/jpeg;base64,${cleanBase64(base64Data)}`, 768);
         const cleanOptimized = cleanBase64(optimizedImage);
 
-        const result = await retryWithBackoff(
-            async () => {
-                const freshAi = await getAiClient();
-                try {
-                    return await runWithTimeout(
-                        freshAi.models.generateContent({
-                            model: model,
-                            contents: {
-                                parts: [
-                                    { inlineData: { mimeType: 'image/jpeg', data: cleanOptimized } },
-                                    { text: "Analyze this image. Describe ONLY the 'Skeleton Pose', 'Camera Angle', and 'Composition'. IGNORE the character's clothes, hair, gender, face, and colors. Output ONLY the structural description (e.g. 'sitting cross-legged', 'low angle shot')." }
-                                ]
-                            }
-                        }),
-                        60000, // Increased to 60s
-                        "Ref Analysis"
-                    );
-                } catch (e) {
-                    reportKeyFailure((freshAi as any)._internalApiKey);
-                    throw e;
-                }
-            },
-            3,
-            2000,
-            "Ref Analysis"
-        );
-        return result.text || "";
+        // AGGRESSIVE FAIL-FAST: No retries, short timeout (15s)
+        // If analysis fails, we proceed without it rather than blocking generation.
+        const freshAi = await getAiClient();
+        try {
+            const result = await runWithTimeout(
+                freshAi.models.generateContent({
+                    model: model,
+                    contents: {
+                        parts: [
+                            { inlineData: { mimeType: 'image/jpeg', data: cleanOptimized } },
+                            { text: "Analyze this image. Describe ONLY the 'Skeleton Pose', 'Camera Angle', and 'Composition'. IGNORE the character's clothes, hair, gender, face, and colors. Output ONLY the structural description (e.g. 'sitting cross-legged', 'low angle shot')." }
+                        ]
+                    }
+                }),
+                15000, // 15s timeout
+                "Ref Analysis"
+            );
+            return result.text || "";
+        } catch (e) {
+            console.warn("Ref Analysis Skipped (Fail-Fast)", e);
+            return ""; // Soft fail
+        }
     } catch (e) {
-        console.warn("Ref analysis failed", e);
+        console.warn("Ref Analysis Setup Failed", e);
         return "";
     }
 };

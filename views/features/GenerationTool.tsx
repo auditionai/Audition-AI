@@ -1048,12 +1048,12 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
 
                     <div className="space-y-2">
                         <label className="text-[10px] font-bold text-slate-400 uppercase">Tỉ lệ khung hình</label>
-                        <div className="flex flex-wrap gap-2">
+                        <div className="grid grid-cols-5 gap-2">
                             {ratios.map(r => (
                                 <button 
                                     key={r.id} 
                                     onClick={() => setAspectRatio(r.id)} 
-                                    className={`flex-1 min-w-[50px] py-2 rounded-lg border text-[10px] font-bold transition-all ${aspectRatio === r.id ? 'bg-white text-black border-white' : 'border-white/10 text-slate-500 hover:bg-white/5'}`}
+                                    className={`py-2 rounded-lg border text-[10px] font-bold transition-all flex items-center justify-center ${aspectRatio === r.id ? 'bg-white text-black border-white shadow-md scale-105' : 'border-white/10 text-slate-500 hover:bg-white/5 hover:text-white'}`}
                                 >
                                     {r.label}
                                 </button>

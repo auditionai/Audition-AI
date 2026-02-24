@@ -598,13 +598,34 @@ export const generateImage = async (
     // 7. FINAL ASSEMBLY
     onLog("Step 5: Sending to Generation Grid (Gemini 3.0 Pro)...");
     
-    // For the final image generation, we ONLY send the optimized prompt and the character's face/body as the subject reference.
-    // We DO NOT send the Master Sheet to the image model, because it will confuse the image model (it's a grid).
     const finalParts: any[] = [];
     
-    // Add character reference (using File URI)
+    // A. STYLE REFERENCE (HIGHEST PRIORITY FOR VIBE)
+    if (styleImageUri) {
+        finalParts.push({ text: "🔴 IMAGE 1: STYLE REFERENCE (CRITICAL)\nINSTRUCTION: Copy the art style, lighting, rendering technique, and color palette of this image exactly. Do NOT copy the subject." });
+        finalParts.push({
+            fileData: {
+                mimeType: 'image/jpeg',
+                fileUri: styleImageUri
+            }
+        });
+    }
+
+    // B. POSE/STRUCTURE REFERENCE (HIGHEST PRIORITY FOR COMPOSITION)
+    if (refImageUri) {
+        finalParts.push({ text: "🔴 IMAGE 2: POSE & COMPOSITION REFERENCE (CRITICAL)\nINSTRUCTION: Copy the camera angle, character pose, and scene composition of this image EXACTLY. The output must match this structure." });
+        finalParts.push({
+            fileData: {
+                mimeType: 'image/jpeg',
+                fileUri: refImageUri
+            }
+        });
+    }
+
+    // C. CHARACTER REFERENCES
     if (charUris.length > 0) {
-        // Iterate through ALL uploaded character URIs and add them to the payload
+        finalParts.push({ text: "🔴 IMAGE 3+: CHARACTER REFERENCE(S)\nINSTRUCTION: These are the characters to be placed into the scene. Maintain their facial features and outfit details." });
+        // Iterate through ALL uploaded character URIs
         for (const uri of charUris) {
             finalParts.push({
                 fileData: {
@@ -615,17 +636,8 @@ export const generateImage = async (
         }
     }
     
-    // Add Reference Image (Pose/BG) if available
-    if (refImageUri) {
-        finalParts.push({
-            fileData: {
-                mimeType: 'image/jpeg',
-                fileUri: refImageUri
-            }
-        });
-    }
-
-    finalParts.push({ text: optimizedPrompt });
+    // D. FINAL PROMPT
+    finalParts.push({ text: `🔴 FINAL EXECUTION COMMAND:\n${optimizedPrompt}\n\nSTRICT CONSTRAINTS:\n- Art Style: Must match IMAGE 1.\n- Pose/Composition: Must match IMAGE 2.\n- Characters: Must match IMAGE 3+.` });
 
     const config: any = {
         imageConfig: {

@@ -414,11 +414,12 @@ const processDigitalTwinMode = (
     - FAILURE: If the output character wears the clothes from [INPUT_B] (Pose Ref).
     - FAILURE: If the output character has the eye color/makeup of [INPUT_A] (Style Ref).
     - FAILURE: If the output is a painting/drawing when Style Ref is 3D.
+    - FAILURE: If the user prompt says "use clothes from reference" and you use clothes from [INPUT_A] or [INPUT_B]. You MUST use clothes from [INPUT_C].
 
     ** EXECUTION LOGIC **
     - Step 1: Extract the SKELETON from [INPUT_B].
     - Step 2: Skin the skeleton with the CHARACTER from [INPUT_C].
-    - Step 3: Dress the character according to [COMMAND] or [INPUT_C].
+    - Step 3: Dress the character EXACTLY as seen in [INPUT_C] unless [COMMAND] explicitly specifies a different outfit.
     - Step 4: Render the scene using the ENGINE from [INPUT_A].
     
     ACKNOWLEDGE AND EXECUTE.
@@ -499,10 +500,12 @@ export const generateImage = async (
                 });
             }
             
+            const optimizedStyle = await optimizePayload(styleData, 1024);
+            
             styleReferencePart = {
                 inlineData: {
-                    mimeType: 'image/png',
-                    data: cleanBase64(styleData)
+                    mimeType: 'image/jpeg',
+                    data: cleanBase64(optimizedStyle)
                 }
             };
         } catch (e) {
@@ -513,21 +516,31 @@ export const generateImage = async (
     // 4. PREPARE CHARACTERS
     const charParts: any[] = [];
     for (const char of characters) {
-        if (char.image) { 
-             charParts.push({ text: `[CHARACTER ${char.id} BODY & OUTFIT REFERENCE]` });
-             charParts.push({
+        if (char.image && char.faceImage) {
+            const sheetBase64 = await createTextureSheet(char.image, char.faceImage);
+            charParts.push({ text: `[CHARACTER ${char.id} IDENTITY & OUTFIT REFERENCE]` });
+            charParts.push({
                 inlineData: {
-                    mimeType: 'image/png',
-                    data: cleanBase64(char.image)
+                    mimeType: 'image/jpeg',
+                    data: cleanBase64(sheetBase64)
                 }
             });
-        }
-        if (char.faceImage) {
+        } else if (char.image) {
+            const optimized = await optimizePayload(char.image, 1024);
+            charParts.push({ text: `[CHARACTER ${char.id} IDENTITY & OUTFIT REFERENCE]` });
+            charParts.push({
+                inlineData: {
+                    mimeType: 'image/jpeg',
+                    data: cleanBase64(optimized)
+                }
+            });
+        } else if (char.faceImage) {
+            const optimized = await optimizePayload(char.faceImage, 1024);
             charParts.push({ text: `[CHARACTER ${char.id} FACE REFERENCE]` });
             charParts.push({
                 inlineData: {
-                    mimeType: 'image/png',
-                    data: cleanBase64(char.faceImage)
+                    mimeType: 'image/jpeg',
+                    data: cleanBase64(optimized)
                 }
             });
         }

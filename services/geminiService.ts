@@ -344,7 +344,7 @@ RULES:
                     temperature: 0.7,
                 }
             }),
-            10000, // 10s Hard Timeout
+            15000, // 15s Hard Timeout
             "Prompt Optimization"
         );
 
@@ -578,6 +578,28 @@ export const generateImage = async (
                     "Image Generation"
                 );
             } catch (e: any) {
+                // FALLBACK STRATEGY: If Pro fails (503/Overloaded), switch to Flash
+                if (e.message?.includes('503') || e.message?.includes('Overloaded') || e.status === 503) {
+                     onLog("⚠️ Gemini 3 Pro quá tải. Tự động chuyển sang Gemini 2.5 Flash...");
+                     console.warn("Gemini 3 Pro 503. Fallback to Flash.");
+                     
+                     // Adjust config for Flash (remove imageSize as it's not supported)
+                     const flashConfig = { ...config };
+                     if (flashConfig.imageConfig) {
+                        delete flashConfig.imageConfig.imageSize;
+                     }
+                     
+                     return await runWithTimeout(
+                        freshAi.models.generateContent({
+                            model: 'gemini-2.5-flash-image',
+                            contents: { parts: finalParts },
+                            config: flashConfig
+                        }),
+                        timeoutMs,
+                        "Image Generation (Fallback)"
+                     );
+                }
+                
                 reportKeyFailure((freshAi as any)._internalApiKey);
                 throw e;
             }

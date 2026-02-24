@@ -404,44 +404,42 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       let structureRefData: string | undefined = undefined;
       let sourceForStructure = refImage || feature.preview_image;
       
-      // --- NEW: UPLOAD TO R2 CLOUD (INPUTS) ---
+      // --- NEW: UPLOAD TO R2 CLOUD (INPUTS - LOGGING ONLY) ---
+      // We upload to R2 for persistent storage/logging, but we pass the ORIGINAL BASE64 to generateImage
+      // to avoid CORS issues when the browser tries to fetch the R2 URL to send to Google.
+      
       // Upload Reference Image
       if (sourceForStructure && sourceForStructure.startsWith('data:')) {
-          addLog("Đang tải ảnh mẫu lên R2 Cloud...");
-          try {
-              const r2Url = await uploadFileToR2(sourceForStructure, 'inputs');
-              sourceForStructure = r2Url; // Use URL
-              addLog(`> Upload Ref Success: ${r2Url.substring(0, 30)}...`);
-          } catch (e) {
-              console.warn("R2 Upload Ref Failed, using Base64 fallback", e);
-          }
+          addLog("Đang tải ảnh mẫu lên R2 Cloud (Backup)...");
+          uploadFileToR2(sourceForStructure, 'inputs').then(url => {
+              console.log("R2 Ref Backup URL:", url);
+          }).catch(e => console.warn("R2 Ref Backup Failed", e));
+          
+          // CRITICAL FIX: DO NOT OVERWRITE sourceForStructure with URL.
+          // Keep it as Base64 so generateImage can process it directly without CORS errors.
       }
 
       // Upload Character Images
       const characterDataList = [];
       for (const char of characters) {
-          let bodyUrl = char.bodyImage;
-          let faceUrl = char.faceImage;
+          let bodyData = char.bodyImage;
+          let faceData = char.faceImage;
 
-          if (bodyUrl && bodyUrl.startsWith('data:')) {
-              addLog(`Đang tải ảnh Body (NV ${char.id}) lên Cloud...`);
-              try {
-                  bodyUrl = await uploadFileToR2(bodyUrl, 'inputs');
-              } catch (e) { console.warn("R2 Body Upload Failed", e); }
+          if (bodyData && bodyData.startsWith('data:')) {
+              addLog(`Đang tải ảnh Body (NV ${char.id}) lên Cloud (Backup)...`);
+              uploadFileToR2(bodyData, 'inputs').catch(e => console.warn("R2 Body Backup Failed", e));
           }
 
-          if (faceUrl && faceUrl.startsWith('data:')) {
-              addLog(`Đang tải ảnh Face (NV ${char.id}) lên Cloud...`);
-              try {
-                  faceUrl = await uploadFileToR2(faceUrl, 'inputs');
-              } catch (e) { console.warn("R2 Face Upload Failed", e); }
+          if (faceData && faceData.startsWith('data:')) {
+              addLog(`Đang tải ảnh Face (NV ${char.id}) lên Cloud (Backup)...`);
+              uploadFileToR2(faceData, 'inputs').catch(e => console.warn("R2 Face Backup Failed", e));
           }
 
           characterDataList.push({
               id: char.id,
               gender: char.gender,
-              image: bodyUrl, 
-              faceImage: char.isFaceLocked ? faceUrl : null, 
+              image: bodyData, // Pass Base64
+              faceImage: char.isFaceLocked ? faceData : null, // Pass Base64
               shoesImage: null
           });
       }

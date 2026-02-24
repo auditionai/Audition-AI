@@ -261,12 +261,32 @@ const uploadToGemini = async (input: string, mimeType: string): Promise<string> 
                 file: blob,
                 config: { displayName: `ref_img_${Date.now()}` }
             }),
-            20000, // 20s
+            30000, // Increased to 30s
             "File Upload"
         );
 
-        const fileUri = (uploadResult as any).file?.uri || (uploadResult as any).uri;
+        const file = (uploadResult as any).file;
+        const fileUri = file?.uri || (uploadResult as any).uri;
+        
         if (!fileUri) throw new Error("No URI returned");
+
+        // --- NEW: WAIT FOR ACTIVE STATE ---
+        // Large files might be in 'PROCESSING' state. We must wait for 'ACTIVE'.
+        let state = file.state;
+        let attempts = 0;
+        while (state === 'PROCESSING' && attempts < 10) {
+            await new Promise(r => setTimeout(r, 2000)); // Wait 2s
+            try {
+                const fileStatus = await ai.files.get({ name: file.name });
+                state = fileStatus.file.state;
+                console.log(`[System] File ${file.name} state: ${state}`);
+            } catch (e) {
+                console.warn("Check file state failed", e);
+            }
+            attempts++;
+        }
+
+        if (state === 'FAILED') throw new Error("File processing failed on Google side");
         
         return fileUri;
     } catch (e) {

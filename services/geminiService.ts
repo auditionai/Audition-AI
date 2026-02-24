@@ -369,63 +369,68 @@ const processDigitalTwinMode = (
     refImagePart: any | null, 
     charParts: any[], 
     styleReferencePart: any | null = null
-): { systemPrompt: string, parts: any[] } => {
+): { parts: any[] } => {
     
-    const parts = [];
+    const imageParts: any[] = [];
+    let combinedText = `** SYSTEM OVERRIDE: PROTOCOL 3D-GEN-ALPHA **
     
+YOU ARE A NON-CREATIVE RENDERING ENGINE. YOU DO NOT "IMAGINE". YOU "EXECUTE".
+
+** SEPARATION OF CONCERNS (STRICT COMPARTMENTALIZATION) **\n`;
+
+    let imageIndex = 1;
+
     // 1. STYLE REFERENCE (THE LAW - RENDERING ONLY)
     if (styleReferencePart) {
-        parts.push({ text: "[[INPUT_A: MASTER_STYLE_REFERENCE]]\nWARNING: This image defines the RENDERING ENGINE (Lighting, Texture, Shader). COPY the 'Vibe' and 'Quality'. DO NOT COPY the character's face, makeup, eye color, or clothes from this image." });
-        parts.push(styleReferencePart);
+        imageParts.push(styleReferencePart);
+        combinedText += `\n1. **STYLE SOURCE (Image ${imageIndex})**: 
+   - TAKE: Lighting, Texture, Render Quality, Art Style.
+   - IGNORE: The subject, their clothes, their face, their makeup.\n`;
+        imageIndex++;
     }
 
     // 2. POSE / COMPOSITION (THE SKELETON - STRUCTURE ONLY)
     if (refImagePart) {
-        parts.push({ text: "[[INPUT_B: POSE_SKELETON_REFERENCE]]\nWARNING: This image defines the SKELETON POSE and CAMERA ANGLE. COPY the structure exactly. IGNORE the clothes, hair, and face in this image. The character MUST NOT wear the outfit from this image." });
-        parts.push(refImagePart);
+        imageParts.push(refImagePart);
+        combinedText += `\n2. **POSE SOURCE (Image ${imageIndex})**:
+   - TAKE: Bone structure, Camera Angle, Composition.
+   - IGNORE: The outfit, the hair, the face, the background colors.\n`;
+        imageIndex++;
     }
     
     // 3. FACE IDENTITY (THE TARGET - CONTENT SOURCE)
     if (charParts.length > 0) {
-        parts.push({ text: "[[INPUT_C: CHARACTER_APPEARANCE_SOURCE]]\nWARNING: This is the SOURCE OF TRUTH for the Character's Identity (Face, Hair, Outfit). You MUST use the facial features and outfit details from these images. The character MUST wear the EXACT SAME OUTFIT as seen in the BODY & OUTFIT REFERENCE images." });
-        parts.push(...charParts);
+        combinedText += `\n3. **CONTENT SOURCE (Images ${imageIndex} to ${imageIndex + charParts.length - 1})**:
+   - WARNING: This is the SOURCE OF TRUTH for the Character's Identity (Face, Hair, Outfit). You MUST use the facial features and outfit details from these images.
+   - TAKE: The Character's Identity (Face), The Outfit (Clothes), The Hair, The Accessories.
+   - THIS IS THE ONLY SOURCE FOR "WHAT" IS IN THE IMAGE.\n`;
+        
+        for (const charPart of charParts) {
+            imageParts.push(charPart);
+            imageIndex++;
+        }
     }
     
-    parts.push({ text: `[[EXECUTION_COMMAND]]: ${prompt}` });
+    combinedText += `\n** CRITICAL FAILURE CONDITIONS **
+- FAILURE: If the output character wears the clothes from the POSE SOURCE.
+- FAILURE: If the output character has the eye color/makeup of the STYLE SOURCE.
+- FAILURE: If the output is a painting/drawing when Style Ref is 3D.
+- FAILURE: If the user prompt says "use clothes from reference" and you use clothes from STYLE or POSE. You MUST use clothes from CONTENT SOURCE.
 
-    const systemPrompt = `** SYSTEM OVERRIDE: PROTOCOL 3D-GEN-ALPHA **
-    
-    YOU ARE A NON-CREATIVE RENDERING ENGINE. YOU DO NOT "IMAGINE". YOU "EXECUTE".
-    
-    ** SEPARATION OF CONCERNS (STRICT COMPARTMENTALIZATION) **
-    1. **STYLE SOURCE ([INPUT_A])**: 
-       - TAKE: Lighting, Texture, Render Quality, Art Style.
-       - IGNORE: The subject, their clothes, their face, their makeup.
-    
-    2. **POSE SOURCE ([INPUT_B])**:
-       - TAKE: Bone structure, Camera Angle, Composition.
-       - IGNORE: The outfit, the hair, the face, the background colors.
-       
-    3. **CONTENT SOURCE ([INPUT_C] + [COMMAND])**:
-       - TAKE: The Character's Identity (Face), The Outfit (Clothes), The Hair, The Accessories.
-       - THIS IS THE ONLY SOURCE FOR "WHAT" IS IN THE IMAGE.
+** EXECUTION LOGIC **
+- Step 1: Extract the SKELETON from POSE SOURCE.
+- Step 2: Skin the skeleton with the CHARACTER from CONTENT SOURCE.
+- Step 3: Dress the character EXACTLY as seen in CONTENT SOURCE unless [COMMAND] explicitly specifies a different outfit.
+- Step 4: Render the scene using the ENGINE from STYLE SOURCE.
 
-    ** CRITICAL FAILURE CONDITIONS **
-    - FAILURE: If the output character wears the clothes from [INPUT_B] (Pose Ref).
-    - FAILURE: If the output character has the eye color/makeup of [INPUT_A] (Style Ref).
-    - FAILURE: If the output is a painting/drawing when Style Ref is 3D.
-    - FAILURE: If the user prompt says "use clothes from reference" and you use clothes from [INPUT_A] or [INPUT_B]. You MUST use clothes from [INPUT_C].
+[[EXECUTION_COMMAND]]: ${prompt}
 
-    ** EXECUTION LOGIC **
-    - Step 1: Extract the SKELETON from [INPUT_B].
-    - Step 2: Skin the skeleton with the CHARACTER from [INPUT_C].
-    - Step 3: Dress the character EXACTLY as seen in [INPUT_C] unless [COMMAND] explicitly specifies a different outfit.
-    - Step 4: Render the scene using the ENGINE from [INPUT_A].
-    
-    ACKNOWLEDGE AND EXECUTE.
-    `;
+ACKNOWLEDGE AND EXECUTE.`;
 
-    return { systemPrompt, parts };
+    // Best practice: Images first, then text
+    const parts = [...imageParts, { text: combinedText }];
+
+    return { parts };
 };
 
 export const generateImage = async (
@@ -454,12 +459,23 @@ export const generateImage = async (
         onLog("Step 1: Analyzing Reference Image (Pose & BG)...");
         if (refImageBase64.startsWith('data:') || refImageBase64.length > 100) {
              const cleanRef = cleanBase64(refImageBase64);
-             refImagePart = {
-                inlineData: {
-                    mimeType: 'image/png',
-                    data: cleanRef
-                }
-            };
+             try {
+                 const fileUri = await uploadToGemini(cleanRef, 'image/jpeg');
+                 refImagePart = {
+                     fileData: {
+                         mimeType: 'image/jpeg',
+                         fileUri: fileUri
+                     }
+                 };
+             } catch (e) {
+                 console.warn("Upload failed, falling back to inlineData", e);
+                 refImagePart = {
+                     inlineData: {
+                         mimeType: 'image/jpeg',
+                         data: cleanRef
+                     }
+                 };
+             }
             // Call AI to analyze pose
             poseDescription = await analyzeReferenceImage(cleanRef);
             onLog(`> Pose Detected: ${poseDescription.substring(0, 50)}...`);
@@ -502,48 +518,86 @@ export const generateImage = async (
             
             const optimizedStyle = await optimizePayload(styleData, 768); // Reduced from 1024 to 768 for lighter payload
             
-            styleReferencePart = {
-                inlineData: {
-                    mimeType: 'image/jpeg',
-                    data: cleanBase64(optimizedStyle)
-                }
-            };
+            try {
+                const fileUri = await uploadToGemini(cleanBase64(optimizedStyle), 'image/jpeg');
+                styleReferencePart = {
+                    fileData: {
+                        mimeType: 'image/jpeg',
+                        fileUri: fileUri
+                    }
+                };
+            } catch (e) {
+                console.warn("Upload failed, falling back to inlineData", e);
+                styleReferencePart = {
+                    inlineData: {
+                        mimeType: 'image/jpeg',
+                        data: cleanBase64(optimizedStyle)
+                    }
+                };
+            }
         } catch (e) {
             console.warn("Failed to load style reference", e);
         }
     }
 
     // 4. PREPARE CHARACTERS
-    const charParts: any[] = [];
+    const charImageParts: any[] = [];
     for (const char of characters) {
         if (char.image && char.faceImage) {
             const sheetBase64 = await createTextureSheet(char.image, char.faceImage);
             const optimizedSheet = await optimizePayload(sheetBase64, 768); // Optimize sheet
-            charParts.push({ text: `[CHARACTER ${char.id} IDENTITY & OUTFIT REFERENCE]` });
-            charParts.push({
-                inlineData: {
-                    mimeType: 'image/jpeg',
-                    data: cleanBase64(optimizedSheet)
-                }
-            });
+            try {
+                const fileUri = await uploadToGemini(cleanBase64(optimizedSheet), 'image/jpeg');
+                charImageParts.push({
+                    fileData: {
+                        mimeType: 'image/jpeg',
+                        fileUri: fileUri
+                    }
+                });
+            } catch (e) {
+                charImageParts.push({
+                    inlineData: {
+                        mimeType: 'image/jpeg',
+                        data: cleanBase64(optimizedSheet)
+                    }
+                });
+            }
         } else if (char.image) {
             const optimized = await optimizePayload(char.image, 768);
-            charParts.push({ text: `[CHARACTER ${char.id} IDENTITY & OUTFIT REFERENCE]` });
-            charParts.push({
-                inlineData: {
-                    mimeType: 'image/jpeg',
-                    data: cleanBase64(optimized)
-                }
-            });
+            try {
+                const fileUri = await uploadToGemini(cleanBase64(optimized), 'image/jpeg');
+                charImageParts.push({
+                    fileData: {
+                        mimeType: 'image/jpeg',
+                        fileUri: fileUri
+                    }
+                });
+            } catch (e) {
+                charImageParts.push({
+                    inlineData: {
+                        mimeType: 'image/jpeg',
+                        data: cleanBase64(optimized)
+                    }
+                });
+            }
         } else if (char.faceImage) {
             const optimized = await optimizePayload(char.faceImage, 768);
-            charParts.push({ text: `[CHARACTER ${char.id} FACE REFERENCE]` });
-            charParts.push({
-                inlineData: {
-                    mimeType: 'image/jpeg',
-                    data: cleanBase64(optimized)
-                }
-            });
+            try {
+                const fileUri = await uploadToGemini(cleanBase64(optimized), 'image/jpeg');
+                charImageParts.push({
+                    fileData: {
+                        mimeType: 'image/jpeg',
+                        fileUri: fileUri
+                    }
+                });
+            } catch (e) {
+                charImageParts.push({
+                    inlineData: {
+                        mimeType: 'image/jpeg',
+                        data: cleanBase64(optimized)
+                    }
+                });
+            }
         }
     }
 
@@ -552,13 +606,10 @@ export const generateImage = async (
     const optimizedPrompt = await optimizePromptWithThinking(prompt, styleKeywords, poseDescription);
     
     // 6. FINAL ASSEMBLY
-    const { systemPrompt, parts } = processDigitalTwinMode(optimizedPrompt, refImagePart, charParts, styleReferencePart);
+    const { parts } = processDigitalTwinMode(optimizedPrompt, refImagePart, charImageParts, styleReferencePart);
     
     // Keep parts interleaved so the model understands which image corresponds to which text label
-    const finalParts = [
-        { text: systemPrompt },
-        ...parts
-    ];
+    const finalParts = parts;
     
     onLog("Step 5: Sending to Generation Grid (Gemini 3.0 Pro)...");
 

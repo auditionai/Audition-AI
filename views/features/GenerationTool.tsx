@@ -736,7 +736,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                     </button>
                     <iframe 
                         className="w-full h-full"
-                        src={`https://www.youtube.com/embed/${TUTORIAL_VIDEO_ID}?autoplay=1`}
+                        src={`https://www.youtube.com/embed/${TUTORIAL_VIDEO_ID}?autoplay=1&origin=${window.location.origin}`}
                         title="Hướng dẫn sử dụng"
                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                         allowFullScreen

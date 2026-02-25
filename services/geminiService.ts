@@ -499,7 +499,7 @@ export const generateImage = async (
 ): Promise<string> => {
     onLog("Initializing Gemini 3.0 Pro Pipeline...");
     
-    const model = 'gemini-3-pro-image-preview'; 
+    const model = 'gemini-3-pro-image'; 
     
     // 1. PROCESS REFERENCE IMAGE (VISUAL & TEXTUAL ANALYSIS)
     let cleanRefImage: string | null = null;
@@ -716,7 +716,7 @@ export const generateImage = async (
                 
                 return await runWithTimeout(
                     freshAi.models.generateContent({
-                        model: 'gemini-3-pro-image-preview',
+                        model: 'gemini-3-pro-image',
                         contents: { parts: finalParts },
                         config: config
                     }),

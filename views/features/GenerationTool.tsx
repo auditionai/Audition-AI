@@ -1077,20 +1077,31 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                         </button>
                     </div>
 
-                    <div className="space-y-2">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase">Mô hình AI</label>
-                        <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-3">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Mô hình AI</label>
+                        <div className="grid grid-cols-2 gap-3">
                             <button 
                                 onClick={() => setAiModel('flash')} 
-                                className={`py-2 rounded-lg border text-[10px] font-bold transition-all flex items-center justify-center ${aiModel === 'flash' ? 'bg-audi-cyan/20 text-audi-cyan border-audi-cyan shadow-md scale-105' : 'border-white/10 text-slate-500 hover:bg-white/5 hover:text-white'}`}
+                                className={`relative group overflow-hidden rounded-xl border transition-all duration-300 h-12 flex items-center justify-center gap-2 ${
+                                    aiModel === 'flash' 
+                                    ? 'bg-gradient-to-br from-cyan-500 to-blue-600 text-white border-transparent shadow-lg shadow-cyan-500/25 scale-[1.02]' 
+                                    : 'bg-[#1a1a24] border-white/10 text-slate-400 hover:text-white hover:border-white/20 hover:bg-[#252532]'
+                                }`}
                             >
-                                Flash (1 Vcoin)
+                                <Icons.Zap className={`w-4 h-4 ${aiModel === 'flash' ? 'text-white fill-current' : 'text-cyan-400'}`} />
+                                <span className="font-bold text-sm">Flash</span>
                             </button>
+
                             <button 
                                 onClick={() => setAiModel('pro')} 
-                                className={`py-2 rounded-lg border text-[10px] font-bold transition-all flex items-center justify-center ${aiModel === 'pro' ? 'bg-audi-pink/20 text-audi-pink border-audi-pink shadow-md scale-105' : 'border-white/10 text-slate-500 hover:bg-white/5 hover:text-white'}`}
+                                className={`relative group overflow-hidden rounded-xl border transition-all duration-300 h-12 flex items-center justify-center gap-2 ${
+                                    aiModel === 'pro' 
+                                    ? 'bg-gradient-to-br from-purple-500 to-pink-600 text-white border-transparent shadow-lg shadow-purple-500/25 scale-[1.02]' 
+                                    : 'bg-[#1a1a24] border-white/10 text-slate-400 hover:text-white hover:border-white/20 hover:bg-[#252532]'
+                                }`}
                             >
-                                Pro (Chất lượng cao)
+                                <Icons.Crown className={`w-4 h-4 ${aiModel === 'pro' ? 'text-white fill-current' : 'text-purple-400'}`} />
+                                <span className="font-bold text-sm">Pro</span>
                             </button>
                         </div>
                     </div>

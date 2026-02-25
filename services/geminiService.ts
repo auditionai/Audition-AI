@@ -224,9 +224,8 @@ export const testApiKey = async (): Promise<boolean> => {
         const freshAi = await getAiClient();
         currentKey = (freshAi as any)._internalApiKey;
         
-        // THAY ĐỔI CÁCH TEST: Sử dụng trực tiếp model Image để test.
+        // THAY ĐỔI CÁCH TEST: Sử dụng trực tiếp model Pro Image để test theo đúng yêu cầu.
         // Điều này đảm bảo 100% API Key có quyền truy cập và model Image đang hoạt động.
-        // Quá trình này sẽ mất từ 10s - 40s như thực tế tạo ảnh.
         await runWithTimeout(
             freshAi.models.generateContent({
                 model: 'gemini-3-pro-image-preview',
@@ -238,8 +237,8 @@ export const testApiKey = async (): Promise<boolean> => {
                     }
                 }
             }),
-            45000, // 45s Timeout cho bài test Image
-            "API Key Test (Image Model)"
+            60000, // 60s Timeout cho bài test Image
+            "API Key Test (Pro Image Model)"
         );
         return true;
     } catch (e: any) {
@@ -704,18 +703,14 @@ export const generateImage = async (
             const freshAi = await getAiClient();
             const currentKey = (freshAi as any)._internalApiKey;
             const shortKey = currentKey ? currentKey.substring(0, 4) + '...' + currentKey.slice(-4) : 'Default';
-            onLog(`> Đang dùng API Key: ${shortKey}`);
+            onLog(`> Đang dùng API Key: ${shortKey} | Model: gemini-3-pro-image-preview`);
             
             try {
-                // CAP THE REQUEST TIMEOUT:
-                // Instead of waiting 15-30 mins for a single request (which hangs the UI if network drops),
-                // we set a hard limit of 180s (3 mins) per attempt.
-                // If it times out, retryWithBackoff will trigger a retry.
                 const REQUEST_TIMEOUT = 180000; // 3 Minutes
                 
                 return await runWithTimeout(
                     freshAi.models.generateContent({
-                        model: model,
+                        model: 'gemini-3-pro-image-preview',
                         contents: { parts: finalParts },
                         config: config
                     }),
@@ -723,27 +718,22 @@ export const generateImage = async (
                     "Image Generation"
                 );
             } catch (e: any) {
-                // NO FALLBACK to Flash. User demands Pro quality.
-                // We rely on retryWithBackoff to switch keys/wait on 503.
-                
                 const isOverload = e.message?.includes('503') || e.message?.includes('Overloaded') || e.status === 503 || e.message?.includes('timed out') || e.message?.includes('Timeout');
                 const isRateLimit = e.message?.includes('429') || e.status === 429;
 
-                // If it's a 503 or 429, log it clearly but DO NOT kill the key immediately
-                if (isOverload) {
-                     console.warn("Gemini 3 Pro 503/Timeout (Overload). Retrying...");
-                } else if (isRateLimit) {
-                     console.warn("Gemini 3 Pro 429 (Rate Limit). Retrying...");
+                if (isOverload || isRateLimit) {
+                     console.warn(`Gemini 3.0 Pro ${isOverload ? '503/Timeout' : '429'}. Retrying...`);
+                     // KHÔNG SỬ DỤNG FALLBACK SANG FLASH NỮA. CHỈ DÙNG PRO.
+                     onLog(`⚠️ Gemini 3.0 Pro đang quá tải (${isOverload ? '503' : '429'}). Đang kiên nhẫn thử lại...`);
                 } else {
-                    // For other errors (400, 401, etc.), report key failure
                     reportKeyFailure((freshAi as any)._internalApiKey);
                 }
                 
                 throw e;
             }
         },
-        5, // INCREASED RETRIES: 5 attempts
-        5000, // INCREASED DELAY: 5s initial wait
+        10, // Tăng lên 10 lần thử lại cho Pro
+        8000, // Chờ 8s mỗi lần thử lại để Google kịp xả tải
         "Image Generation",
         onLog
     );

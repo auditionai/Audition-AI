@@ -487,11 +487,11 @@ export const createPaymentLink = async (packageId: string): Promise<Transaction>
     const { data, error } = await supabase.from('transactions').insert({
         user_id: user.id,
         package_id: packageId,
-        price: pkg.price, // Changed from amount to price
-        coins_received: totalCoins,
+        amount_vnd: pkg.price, // Changed from price to amount_vnd
+        diamonds_received: totalCoins, // Changed from coins_received to diamonds_received
         status: 'pending',
-        code: orderCode, // Changed from code to order_code
-        payment_method: 'payos'
+        order_code: orderCode,
+        // payment_method: 'payos' // Removed as it's not in schema
     }).select().single();
 
     if (error) throw error;
@@ -560,7 +560,7 @@ export const adminApproveTransaction = async (txId: string): Promise<{success: b
         if (updateError) throw updateError;
 
         // 2. Add Coins
-        await updateUserBalance(tx.coins_received, `Topup: ${tx.code}`, 'topup');
+        await updateUserBalance(tx.diamonds_received, `Topup: ${tx.order_code}`, 'topup');
         
         return { success: true };
     } catch (e: any) {
@@ -641,12 +641,12 @@ export const getUnifiedHistory = async (): Promise<HistoryItem[]> => {
         history.push({
             id: t.id,
             createdAt: t.created_at,
-            description: `Nạp Vcoin (${t.code})`,
-            vcoinChange: t.coins_received,
-            amountVnd: t.amount || t.price,
+            description: `Nạp Vcoin (${t.order_code})`,
+            vcoinChange: t.diamonds_received,
+            amountVnd: t.amount_vnd,
             type: t.status === 'paid' ? 'topup' : 'pending_topup',
             status: t.status === 'paid' ? 'success' : t.status === 'pending' ? 'pending' : 'failed',
-            code: t.order_code || t.code
+            code: t.order_code
         });
     });
 

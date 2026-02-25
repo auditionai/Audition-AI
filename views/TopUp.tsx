@@ -60,19 +60,6 @@ export const TopUp: React.FC<TopUpProps> = ({ lang, onNavigate }) => {
   useEffect(() => {
       if (activeTab === 'history') {
           const fetchHistory = async () => {
-              // DEBUG: Check transaction schema
-              try {
-                  const { supabase } = await import('../services/supabaseClient');
-                  const { data } = await supabase.from('transactions').select('*').limit(1);
-                  if (data && data.length > 0) {
-                      console.log('>>> DEBUG: Transaction Schema Keys:', Object.keys(data[0]));
-                  } else {
-                      console.log('>>> DEBUG: No transactions found to inspect schema');
-                  }
-              } catch (e) {
-                  console.error('>>> DEBUG: Failed to inspect schema', e);
-              }
-
               const txs = await getUnifiedHistory();
               setHistory(txs);
           };

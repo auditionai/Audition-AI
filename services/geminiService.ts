@@ -596,11 +596,32 @@ export const generateImage = async (
     const optimizedPrompt = await optimizePromptWithThinking(prompt, styleKeywords, poseDescription);
     
     // 7. FINAL ASSEMBLY
-    onLog("Step 5: Sending to Generation Grid (Gemini 3.0 Pro)...");
+    onLog("Step 5: Finalizing Data Payload (Integrity Check)...");
     
+    // --- BRUTAL DATA VERIFICATION (THE IRONCLAD PROTOCOL) ---
+    // 1. Verify Reference Image (CRITICAL)
+    if (refImageBase64 && !refImageUri) {
+         throw new Error("CRITICAL FAILURE: Reference Image (Pose) failed to upload. The pipeline cannot proceed without the Source of Truth.");
+    }
+
+    // 2. Verify Characters (CRITICAL)
+    if (characters.length > 0) {
+        if (charUris.length === 0) {
+            throw new Error("CRITICAL FAILURE: Character assets failed to upload. Aborting to prevent ghost generation.");
+        }
+        if (charUris.length < characters.length) {
+            onLog(`⚠️ WARNING: Partial Data. Only ${charUris.length}/${characters.length} characters were successfully uploaded.`);
+        }
+    }
+
+    // 3. Verify Style (OPTIONAL but logged)
+    if (finalStyleUrl && !styleImageUri) {
+         onLog("⚠️ WARNING: Style Image failed to upload. Proceeding without Style Reference.");
+    }
+
     const finalParts: any[] = [];
     
-    // A. STYLE REFERENCE (HIGHEST PRIORITY FOR VIBE)
+    // A. STYLE REFERENCE
     if (styleImageUri) {
         finalParts.push({ text: "🔴 IMAGE 1: STYLE REFERENCE (ART STYLE ONLY)\nINSTRUCTION: Extract ONLY the 3D rendering quality, lighting, texture, and artistic vibe. \nNEGATIVE CONSTRAINT: Do NOT copy the background, the characters, or any objects from this image. IGNORE the content of this image completely." });
         finalParts.push({
@@ -611,7 +632,7 @@ export const generateImage = async (
         });
     }
 
-    // B. POSE/STRUCTURE REFERENCE (HIGHEST PRIORITY FOR COMPOSITION)
+    // B. POSE/STRUCTURE REFERENCE
     if (refImageUri) {
         finalParts.push({ text: "🔴 IMAGE 2: POSE & BACKGROUND REFERENCE (SOURCE OF TRUTH)\nINSTRUCTION: This image is the BLUEPRINT for the scene. \n1. BACKGROUND: You MUST use the background/environment from this image.\n2. POSE: You MUST match the character poses and camera angle exactly.\n3. COMPOSITION: The scene layout must be identical to this image." });
         finalParts.push({
@@ -645,7 +666,20 @@ export const generateImage = async (
     }
     
     // D. FINAL PROMPT
-    finalParts.push({ text: `🔴 FINAL EXECUTION COMMAND:\n${optimizedPrompt}\n\nSTRICT SEPARATION OF CONCERNS:\n1. ART STYLE (Lighting, Texture, 3D Quality): MUST come from IMAGE 1.\n2. CONTENT (Background, Objects, Pose): MUST come from IMAGE 2.\n3. CHARACTERS (Face, Outfit): MUST come from IMAGE 3+.\n\nNEGATIVE PROMPT: Do not merge the background of Image 1 into the scene. Do not change the pose from Image 2.` });
+    const finalInstruction = `🔴 FINAL EXECUTION COMMAND:\n${optimizedPrompt}\n\nSTRICT SEPARATION OF CONCERNS:\n1. ART STYLE (Lighting, Texture, 3D Quality): MUST come from IMAGE 1.\n2. CONTENT (Background, Objects, Pose): MUST come from IMAGE 2.\n3. CHARACTERS (Face, Outfit): MUST come from IMAGE 3+.\n\nNEGATIVE PROMPT: Do not merge the background of Image 1 into the scene. Do not change the pose from Image 2.`;
+    finalParts.push({ text: finalInstruction });
+
+    // --- PAYLOAD SANITIZATION ---
+    const sanitizedParts = finalParts.filter(p => {
+        if (!p) return false;
+        if (p.text && typeof p.text === 'string' && p.text.trim().length > 0) return true;
+        if (p.fileData && p.fileData.fileUri) return true;
+        return false;
+    });
+
+    if (sanitizedParts.length === 0) throw new Error("CRITICAL: Final payload is empty! Data assembly failed.");
+
+    onLog(`Step 5: Sending Payload (${sanitizedParts.length} parts) to Gemini 3.0 Pro...`);
 
     const config: any = {
         imageConfig: {

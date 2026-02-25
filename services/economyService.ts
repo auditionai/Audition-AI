@@ -490,7 +490,7 @@ export const createPaymentLink = async (packageId: string): Promise<Transaction>
         price: pkg.price, // Changed from amount to price
         coins_received: totalCoins,
         status: 'pending',
-        code: orderCode,
+        code: orderCode, // Changed from code to order_code
         payment_method: 'payos'
     }).select().single();
 
@@ -646,7 +646,7 @@ export const getUnifiedHistory = async (): Promise<HistoryItem[]> => {
             amountVnd: t.amount || t.price,
             type: t.status === 'paid' ? 'topup' : 'pending_topup',
             status: t.status === 'paid' ? 'success' : t.status === 'pending' ? 'pending' : 'failed',
-            code: t.code
+            code: t.order_code || t.code
         });
     });
 

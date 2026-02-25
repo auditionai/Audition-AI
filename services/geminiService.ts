@@ -499,7 +499,7 @@ export const generateImage = async (
 ): Promise<string> => {
     onLog("Initializing Gemini 3.0 Pro Pipeline...");
     
-    const model = 'gemini-3-pro-image'; 
+    const model = 'gemini-3-pro-image-preview'; 
     
     // 1. PROCESS REFERENCE IMAGE (VISUAL & TEXTUAL ANALYSIS)
     let cleanRefImage: string | null = null;
@@ -695,8 +695,10 @@ export const generateImage = async (
 
     const config: any = {
         imageConfig: {
-            aspectRatio: aspectRatio,
-            imageSize: resolution
+            aspectRatio: aspectRatio
+            // CRITICAL: DO NOT ADD imageSize HERE. 
+            // It causes 429 Quota Exceeded errors on many accounts even if they have quota.
+            // The model will default to its native resolution.
         }
     };
 
@@ -716,7 +718,7 @@ export const generateImage = async (
                 
                 return await runWithTimeout(
                     freshAi.models.generateContent({
-                        model: 'gemini-3-pro-image',
+                        model: 'gemini-3-pro-image-preview',
                         contents: { parts: finalParts },
                         config: config
                     }),

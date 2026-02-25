@@ -244,8 +244,17 @@ export const testApiKey = async (): Promise<boolean> => {
                              e.message?.includes('Overloaded') ||
                              e.message?.includes('timed out') || e.message?.includes('Timeout');
 
-        // CRITICAL: DO NOT BAN THE KEY IF IT'S JUST A SERVER BUSY ERROR!
-        if (currentKey && !isServerBusy) {
+        // CRITICAL FIX: If the error is 503 (Overloaded) or 429 (Rate Limit) or Timeout,
+        // the API Key is actually VALID and authenticated successfully.
+        // The Google server is just busy. We MUST return TRUE here to pass the test
+        // and let the main generation's retryWithBackoff handle the 503.
+        if (isServerBusy) {
+            console.log("[System] API Key is VALID, but Gemini is busy (503/429/Timeout). Passing test.");
+            return true; 
+        }
+
+        // Only ban the key if it's a real error (e.g., 400 Bad Request, 403 Forbidden)
+        if (currentKey) {
             reportKeyFailure(currentKey);
         }
         return false;

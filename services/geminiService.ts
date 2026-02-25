@@ -700,13 +700,19 @@ export const generateImage = async (
             onLog(`> Đang dùng API Key: ${shortKey}`);
             
             try {
+                // CAP THE REQUEST TIMEOUT:
+                // Instead of waiting 15-30 mins for a single request (which hangs the UI if network drops),
+                // we set a hard limit of 180s (3 mins) per attempt.
+                // If it times out, retryWithBackoff will trigger a retry.
+                const REQUEST_TIMEOUT = 180000; // 3 Minutes
+                
                 return await runWithTimeout(
                     freshAi.models.generateContent({
                         model: model,
                         contents: { parts: finalParts },
                         config: config
                     }),
-                    timeoutMs, // Dynamic Timeout
+                    Math.min(timeoutMs, REQUEST_TIMEOUT), 
                     "Image Generation"
                 );
             } catch (e: any) {

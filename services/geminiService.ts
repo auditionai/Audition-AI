@@ -231,8 +231,21 @@ export const testApiKey = async (): Promise<boolean> => {
             "API Key Test (Pro)"
         );
         return true;
-    } catch (e) {
+    } catch (e: any) {
         console.warn("API Key Test Failed", e);
+        
+        // CRITICAL FIX: If the error is 503 (Overloaded) or 429 (Rate Limit), 
+        // the API Key is actually VALID and authenticated successfully.
+        // The Google server is just busy. We should NOT ban the key.
+        const isServerBusy = e.status === 503 || e.status === 429 || 
+                             e.message?.includes('503') || e.message?.includes('429') || 
+                             e.message?.includes('Overloaded');
+        
+        if (isServerBusy) {
+            console.log("[System] API Key is VALID, but Gemini 3.1 Pro is busy (503/429). Passing test.");
+            return true; // Key is good, let the main generation's retryWithBackoff handle the 503
+        }
+
         if (currentKey) {
             reportKeyFailure(currentKey);
         }
@@ -307,14 +320,18 @@ export const checkConnection = async (key?: string): Promise<boolean> => {
         await runWithTimeout(
             ai.models.generateContent({
                 model: 'gemini-3.1-pro-preview',
-                contents: 'ping'
+                contents: { parts: [{ text: "Ping" }] }
             }),
             15000,
             "Ping Connection"
         );
         return true;
-    } catch (e) {
+    } catch (e: any) {
         console.error("Gemini Connection Check Failed", e);
+        const isServerBusy = e.status === 503 || e.status === 429 || 
+                             e.message?.includes('503') || e.message?.includes('429') || 
+                             e.message?.includes('Overloaded');
+        if (isServerBusy) return true;
         return false;
     }
 };

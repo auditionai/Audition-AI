@@ -225,7 +225,7 @@ export const testApiKey = async (): Promise<boolean> => {
                 model: 'gemini-3.1-pro-preview',
                 contents: { parts: [{ text: "Hello" }] }
             }),
-            10000,
+            20000, // Increased to 20s
             "API Key Test"
         );
         return true;
@@ -679,12 +679,19 @@ export const generateImage = async (
                 // NO FALLBACK to Flash. User demands Pro quality.
                 // We rely on retryWithBackoff to switch keys/wait on 503.
                 
-                // If it's a 503, log it clearly
-                if (e.message?.includes('503') || e.message?.includes('Overloaded') || e.status === 503) {
-                     console.warn("Gemini 3 Pro 503. Retrying with Backoff Strategy...");
+                const isOverload = e.message?.includes('503') || e.message?.includes('Overloaded') || e.status === 503;
+                const isRateLimit = e.message?.includes('429') || e.status === 429;
+
+                // If it's a 503 or 429, log it clearly but DO NOT kill the key immediately
+                if (isOverload) {
+                     console.warn("Gemini 3 Pro 503 (Overload). Retrying...");
+                } else if (isRateLimit) {
+                     console.warn("Gemini 3 Pro 429 (Rate Limit). Retrying...");
+                } else {
+                    // For other errors (400, 401, etc.), report key failure
+                    reportKeyFailure((freshAi as any)._internalApiKey);
                 }
                 
-                reportKeyFailure((freshAi as any)._internalApiKey);
                 throw e;
             }
         },

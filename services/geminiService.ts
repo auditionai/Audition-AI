@@ -25,21 +25,22 @@ const retryWithBackoff = async <T>(
     try {
         return await operation();
     } catch (error: any) {
-        // Check for 503 (Service Unavailable) or 403 (Auth)
-        // CRITICAL FIX: DO NOT include 429 (Quota) here. If it's a quota error, 
-        // we want to fail immediately so the outer catch block can ban the key and rotate it.
+        // Check for 503 (Service Unavailable), 429 (Quota/Rate Limit), or 403 (Auth)
         const isTransient = 
             error?.status === 503 || 
+            error?.status === 429 ||
             error?.status === 403 ||
             error?.status === 500 ||
             error?.status === 502 ||
             error?.status === 504 ||
             error?.message?.includes('503') || 
+            error?.message?.includes('429') ||
             error?.message?.includes('403') ||
             error?.message?.includes('500') ||
             error?.message?.includes('502') ||
             error?.message?.includes('504') ||
             error?.message?.includes('Overloaded') ||
+            error?.message?.includes('quota') ||
             error?.message?.includes('fetch failed') ||
             error?.message?.includes('NetworkError') ||
             error?.message?.includes('Failed to fetch') ||
@@ -47,13 +48,18 @@ const retryWithBackoff = async <T>(
             error?.message?.includes('Timeout');
 
         if (retries > 0 && isTransient) {
-            // KHÔNG ĐỔI LỖI CHO API KEY. Báo rõ là Server Google đang bận.
-            const msg = `${label} - Server Google đang xử lý quá tải. Tự động kết nối lại... (Còn ${retries} lần)`;
+            const isRateLimit = error?.status === 429 || error?.message?.includes('429') || error?.message?.includes('quota');
+            const msg = isRateLimit 
+                ? `${label} - API Key hết hạn mức (429). Đang tự động đổi sang Key dự phòng... (Còn ${retries} lần)`
+                : `${label} - Server Google đang xử lý quá tải. Tự động kết nối lại... (Còn ${retries} lần)`;
+            
             console.warn(msg, error.message);
             if (onLog) onLog(`🔄 ${msg}`);
             
             // Wait before retry
-            await new Promise(resolve => setTimeout(resolve, delay));
+            // If it's a rate limit, we can retry faster because we are swapping keys
+            const waitTime = isRateLimit ? 1000 : delay;
+            await new Promise(resolve => setTimeout(resolve, waitTime));
             return retryWithBackoff(operation, retries - 1, delay, label, onLog);
         }
         throw error;
@@ -155,19 +161,19 @@ const getAiClient = async (specificKey?: string) => {
         return ai;
     }
 
-    // 2. DB Key (Rotation System - Priority)
-    // We prioritize the DB keys to enable the Load Balancing / Rotation mechanism
+    // 2. Env Key (Priority - User Selected Key in AI Studio)
+    // We MUST prioritize the user's selected key because gemini-3-pro-image-preview requires a paid key.
+    if (process.env.API_KEY) {
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        (ai as any)._internalApiKey = process.env.API_KEY;
+        return ai;
+    }
+
+    // 3. DB Key (Rotation System - Fallback)
     const dbKey = await getSystemApiKey();
     if (dbKey) {
         const ai = new GoogleGenAI({ apiKey: dbKey });
         (ai as any)._internalApiKey = dbKey;
-        return ai;
-    }
-
-    // 3. Env Key (Fallback)
-    if (process.env.API_KEY) {
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-        (ai as any)._internalApiKey = process.env.API_KEY;
         return ai;
     }
 
@@ -732,12 +738,11 @@ export const generateImage = async (
                 if (isOverload) {
                      console.warn(`Gemini 3.0 Pro 503/Timeout. Retrying...`);
                      onLog(`⏳ Đang xếp hàng chờ Google Render ảnh (Model Pro đang xử lý)...`);
+                } else if (isRateLimit) {
+                     console.warn(`Gemini 3.0 Pro 429 (Rate Limit). Banning key and retrying with a new one...`);
+                     reportKeyFailure((freshAi as any)._internalApiKey);
                 } else {
-                    if (isRateLimit) {
-                         console.warn(`Gemini 3.0 Pro 429 (Rate Limit). Banning key and retrying with a new one...`);
-                         onLog(`⚠️ API Key hết hạn mức (429). Đang tự động đổi sang Key dự phòng...`);
-                    }
-                    reportKeyFailure((freshAi as any)._internalApiKey);
+                     reportKeyFailure((freshAi as any)._internalApiKey);
                 }
                 
                 throw e;

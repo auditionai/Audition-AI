@@ -479,26 +479,21 @@ export const generateImage = async (
             if (!refImageBase64) return { uri: null, poseDesc: "" };
             
             try {
-                // 1. Analyze Pose (Parallel-ish, but we do it here)
+                // 1. Normalize & Optimize Image (CRITICAL FIX)
+                // We MUST convert to JPEG and resize to prevent MIME type mismatches (PNG vs JPEG)
+                // and reduce payload size.
+                const optimizedRef = await optimizePayload(refImageBase64, 1024);
+                const cleanRef = cleanBase64(optimizedRef);
+
+                // 2. Analyze Pose (Best Effort)
                 let poseDesc = "";
                 try {
-                    // We need clean base64 for analysis
-                    let cleanRef = "";
-                    if (refImageBase64.startsWith('http')) {
-                        // Skip analysis for URL to save time/complexity, or fetch it?
-                        // Let's skip analysis for URL inputs to be safe/fast, or implement fetch.
-                        // For now, let's just upload.
-                    } else {
-                        cleanRef = cleanBase64(refImageBase64);
-                        if (cleanRef) {
-                            poseDesc = await analyzeReferenceImage(cleanRef);
-                            if (poseDesc) onLog(`> [Ref] Pose Detected: ${poseDesc.substring(0, 30)}...`);
-                        }
-                    }
+                    poseDesc = await analyzeReferenceImage(cleanRef);
+                    if (poseDesc) onLog(`> [Ref] Pose Detected: ${poseDesc.substring(0, 30)}...`);
                 } catch (e) { console.warn("Pose analysis failed", e); }
 
-                // 2. Upload Reference
-                const uri = await uploadToGemini(refImageBase64, 'image/jpeg');
+                // 3. Upload Reference (Always JPEG now)
+                const uri = await uploadToGemini(cleanRef, 'image/jpeg');
                 onLog("> [Ref] Source Image Uploaded ✅");
                 return { uri, poseDesc };
             } catch (e) {
@@ -514,7 +509,7 @@ export const generateImage = async (
             const results = await Promise.all(characters.map(async (char, idx) => {
                 try {
                     let finalCharBase64 = "";
-                    // Optimization Logic
+                    // Optimization Logic (Always returns JPEG)
                     if (char.image && char.faceImage) {
                         const sheetBase64 = await createTextureSheet(char.image, char.faceImage);
                         finalCharBase64 = await optimizePayload(sheetBase64, 1024);

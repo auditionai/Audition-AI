@@ -225,7 +225,7 @@ export const testApiKey = async (): Promise<boolean> => {
         await runWithTimeout(
             freshAi.models.generateContent({
                 model: 'gemini-3.1-pro-preview',
-                contents: 'ping'
+                contents: { parts: [{ text: "Ping" }] }
             }),
             10000, // 10s Timeout for Pro ping
             "API Key Test (Pro)"

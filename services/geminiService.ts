@@ -102,7 +102,7 @@ const selectBestStyle = async (prompt: string, styles: any[]): Promise<any | nul
     if (styles.length === 1) return styles[0]; // Only one choice
 
     // Use Flash for fast routing
-    const model = 'gemini-2.5-flash'; 
+    const model = 'gemini-3-flash-preview'; 
 
     const styleList = styles.map(s => `- ID: ${s.id} | Name: ${s.name} | Keywords: ${s.trigger_prompt}`).join('\n');
 
@@ -332,7 +332,7 @@ export const checkConnection = async (key?: string): Promise<boolean> => {
         // Sử dụng Flash cho checkConnection (Admin) để ping nhanh và ổn định nhất
         await runWithTimeout(
             ai.models.generateContent({
-                model: 'gemini-2.5-flash',
+                model: 'gemini-3-flash-preview',
                 contents: { parts: [{ text: "Ping" }] }
             }),
             15000,
@@ -347,7 +347,7 @@ export const checkConnection = async (key?: string): Promise<boolean> => {
 
 // --- NEW: ANALYZE REFERENCE IMAGE (POSE/BG) ---
 const analyzeReferenceImage = async (base64Data: string): Promise<string> => {
-    const model = 'gemini-2.5-flash'; 
+    const model = 'gemini-3-flash-preview'; 
 
     try {
         // Optimize image before sending to reduce payload size and prevent 503
@@ -391,7 +391,7 @@ const optimizePromptWithThinking = async (
 ): Promise<string> => {
     // AGGRESSIVE FAIL-FAST: Use Flash for speed/stability. No retries. No key banning.
     // If this fails, we just use the raw prompt.
-    const model = 'gemini-2.5-flash'; 
+    const model = 'gemini-3-flash-preview'; 
 
     try {
         const freshAi = await getAiClient('flash');

@@ -223,13 +223,23 @@ export const testApiKey = async (): Promise<boolean> => {
     try {
         const freshAi = await getAiClient();
         currentKey = (freshAi as any)._internalApiKey;
+        
+        // THAY ĐỔI CÁCH TEST: Sử dụng trực tiếp model Image để test.
+        // Điều này đảm bảo 100% API Key có quyền truy cập và model Image đang hoạt động.
+        // Quá trình này sẽ mất từ 10s - 40s như thực tế tạo ảnh.
         await runWithTimeout(
             freshAi.models.generateContent({
-                model: 'gemini-3.1-pro-preview',
-                contents: { parts: [{ text: "Ping" }] }
+                model: 'gemini-3-pro-image-preview',
+                contents: { parts: [{ text: "A simple white background" }] },
+                config: {
+                    imageConfig: {
+                        aspectRatio: "1:1",
+                        imageSize: "1K"
+                    }
+                }
             }),
-            15000, // 15s Timeout for Pro ping
-            "API Key Test (Pro)"
+            45000, // 45s Timeout cho bài test Image
+            "API Key Test (Image Model)"
         );
         return true;
     } catch (e: any) {
@@ -308,10 +318,10 @@ const uploadToGemini = async (input: string, mimeType: string): Promise<string> 
 export const checkConnection = async (key?: string): Promise<boolean> => {
     try {
         const ai = await getAiClient(key);
-        // Add Timeout to Ping - INCREASED TO 15s
+        // Sử dụng Flash cho checkConnection (Admin) để ping nhanh và ổn định nhất
         await runWithTimeout(
             ai.models.generateContent({
-                model: 'gemini-3.1-pro-preview',
+                model: 'gemini-2.5-flash',
                 contents: { parts: [{ text: "Ping" }] }
             }),
             15000,

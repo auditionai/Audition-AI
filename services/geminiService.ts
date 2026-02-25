@@ -602,7 +602,7 @@ export const generateImage = async (
     
     // A. STYLE REFERENCE (HIGHEST PRIORITY FOR VIBE)
     if (styleImageUri) {
-        finalParts.push({ text: "🔴 IMAGE 1: STYLE REFERENCE (CRITICAL)\nINSTRUCTION: Copy the art style, lighting, rendering technique, and color palette of this image exactly. Do NOT copy the subject." });
+        finalParts.push({ text: "🔴 IMAGE 1: STYLE REFERENCE (ART STYLE ONLY)\nINSTRUCTION: Extract ONLY the 3D rendering quality, lighting, texture, and artistic vibe. \nNEGATIVE CONSTRAINT: Do NOT copy the background, the characters, or any objects from this image. IGNORE the content of this image completely." });
         finalParts.push({
             fileData: {
                 mimeType: 'image/jpeg',
@@ -613,7 +613,7 @@ export const generateImage = async (
 
     // B. POSE/STRUCTURE REFERENCE (HIGHEST PRIORITY FOR COMPOSITION)
     if (refImageUri) {
-        finalParts.push({ text: "🔴 IMAGE 2: POSE & COMPOSITION REFERENCE (CRITICAL)\nINSTRUCTION: Copy the camera angle, character pose, and scene composition of this image EXACTLY. The output must match this structure." });
+        finalParts.push({ text: "🔴 IMAGE 2: POSE & BACKGROUND REFERENCE (SOURCE OF TRUTH)\nINSTRUCTION: This image is the BLUEPRINT for the scene. \n1. BACKGROUND: You MUST use the background/environment from this image.\n2. POSE: You MUST match the character poses and camera angle exactly.\n3. COMPOSITION: The scene layout must be identical to this image." });
         finalParts.push({
             fileData: {
                 mimeType: 'image/jpeg',
@@ -645,7 +645,7 @@ export const generateImage = async (
     }
     
     // D. FINAL PROMPT
-    finalParts.push({ text: `🔴 FINAL EXECUTION COMMAND:\n${optimizedPrompt}\n\nSTRICT CONSTRAINTS:\n- Art Style: Must match IMAGE 1.\n- Pose/Composition: Must match IMAGE 2.\n${charPromptInstructions}\n- FACE FIDELITY: CRITICAL. You MUST use the exact facial features from the Character Reference images for each person. Do not invent new faces.` });
+    finalParts.push({ text: `🔴 FINAL EXECUTION COMMAND:\n${optimizedPrompt}\n\nSTRICT SEPARATION OF CONCERNS:\n1. ART STYLE (Lighting, Texture, 3D Quality): MUST come from IMAGE 1.\n2. CONTENT (Background, Objects, Pose): MUST come from IMAGE 2.\n3. CHARACTERS (Face, Outfit): MUST come from IMAGE 3+.\n\nNEGATIVE PROMPT: Do not merge the background of Image 1 into the scene. Do not change the pose from Image 2.` });
 
     const config: any = {
         imageConfig: {

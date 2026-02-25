@@ -400,30 +400,47 @@ export const getAllImagesFromStorage = async (): Promise<GeneratedImage[]> => {
   });
 };
 
-export const deleteImageFromStorage = async (id: string, targetUserId?: string): Promise<void> => {
+export const deleteImageFromStorage = async (id: string, targetUserId?: string, imageUrl?: string): Promise<void> => {
   const user = await getUserProfile();
   const userId = targetUserId || user.id;
 
   if (supabase && userId) {
-    try {
-        // A. Delete from R2 (if configured)
-        if (r2Client) {
-            const fileName = `${userId}/${id}.png`;
+    // A. Delete from R2 (if configured)
+    if (r2Client) {
+        try {
+            let fileName = `${userId}/${id}.png`;
+            
+            // Smart Key Extraction from URL (More Reliable)
+            if (imageUrl && R2_PUBLIC_URL && imageUrl.startsWith(R2_PUBLIC_URL)) {
+                fileName = imageUrl.replace(`${R2_PUBLIC_URL}/`, '');
+            }
+
+            console.log(`[Storage] Deleting R2 Key: ${fileName}`);
             await r2Client.send(new DeleteObjectCommand({
                 Bucket: R2_BUCKET_NAME,
                 Key: fileName
             }));
-        } 
-        // B. Delete from Supabase Storage (Legacy)
-        else {
+            console.log(`[Storage] R2 Delete Request Sent: ${fileName}`);
+        } catch (e) {
+            console.error("[Storage] R2 Delete Failed:", e);
+            // We re-throw so the caller knows it failed
+            throw e;
+        }
+    } 
+    
+    try {
+        // B. Delete from Supabase Storage (Legacy - only if R2 not active)
+        if (!r2Client) {
              await supabase.storage.from('images').remove([`${id}.png`]);
         }
 
         // C. Delete Metadata from DB
-        await supabase.from(TABLE_NAME).delete().eq('id', id);
+        const { error } = await supabase.from(TABLE_NAME).delete().eq('id', id);
+        if (error) throw error;
 
     } catch (e) { 
-        console.warn("Delete cloud error", e); 
+        console.warn("Delete DB/Metadata error", e); 
+        throw e;
     }
   }
 
@@ -460,7 +477,8 @@ export const cleanupExpiredImages = async (isSystemWide: boolean = false): Promi
         if (now - img.timestamp > EXPIRATION_MS) {
             console.log(`[Cleanup] Deleting expired image: ${img.id} (Age: ${((now - img.timestamp)/86400000).toFixed(1)} days)`);
             try {
-                await deleteImageFromStorage(img.id, img.userId);
+                // Pass URL for accurate key extraction
+                await deleteImageFromStorage(img.id, img.userId, img.url);
                 deletedCount++;
             } catch (e) {
                 console.error(`[Cleanup] Failed to delete ${img.id}`, e);

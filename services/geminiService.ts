@@ -72,7 +72,7 @@ export const analyzeStyleImage = async (imageBase64: string): Promise<string> =>
 
     const result = await retryWithBackoff(
         async () => {
-            const freshAi = await getAiClient();
+            const freshAi = await getAiClient('pro');
             try {
                 return await freshAi.models.generateContent({
                     model: model,
@@ -121,7 +121,7 @@ const selectBestStyle = async (prompt: string, styles: any[]): Promise<any | nul
 
     try {
         // AGGRESSIVE FAIL-FAST: No retries, 5s timeout
-        const freshAi = await getAiClient();
+        const freshAi = await getAiClient('flash');
         const result = await runWithTimeout(
             freshAi.models.generateContent({
                 model: model,
@@ -153,7 +153,7 @@ const runWithTimeout = <T>(promise: Promise<T>, ms: number, label: string): Prom
 };
 
 // Cấu hình timeout cao hơn cho Client (mặc định fetch là ngắn)
-const getAiClient = async (specificKey?: string) => {
+const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string) => {
     // 1. Specific key (testing)
     if (specificKey) {
         const ai = new GoogleGenAI({ apiKey: specificKey });
@@ -170,7 +170,7 @@ const getAiClient = async (specificKey?: string) => {
     }
 
     // 3. DB Key (Rotation System - Fallback)
-    const dbKey = await getSystemApiKey();
+    const dbKey = await getSystemApiKey(tier);
     if (dbKey) {
         const ai = new GoogleGenAI({ apiKey: dbKey });
         (ai as any)._internalApiKey = dbKey;
@@ -226,7 +226,7 @@ const extractImage = (response: any): string | null => {
 export const testApiKey = async (): Promise<boolean> => {
     let currentKey = "";
     try {
-        const freshAi = await getAiClient();
+        const freshAi = await getAiClient('pro');
         currentKey = (freshAi as any)._internalApiKey;
         
         // THAY ĐỔI CÁCH TEST: Sử dụng model Text (3.1 Pro) để xác thực API Key.
@@ -268,7 +268,7 @@ export const testApiKey = async (): Promise<boolean> => {
 
 const uploadToGemini = async (input: string, mimeType: string): Promise<string> => {
     try {
-        const ai = await getAiClient();
+        const ai = await getAiClient('flash');
         let blob: Blob;
 
         // Check if input is a URL
@@ -328,7 +328,7 @@ const uploadToGemini = async (input: string, mimeType: string): Promise<string> 
 
 export const checkConnection = async (key?: string): Promise<boolean> => {
     try {
-        const ai = await getAiClient(key);
+        const ai = await getAiClient('flash', key);
         // Sử dụng Flash cho checkConnection (Admin) để ping nhanh và ổn định nhất
         await runWithTimeout(
             ai.models.generateContent({
@@ -356,7 +356,7 @@ const analyzeReferenceImage = async (base64Data: string): Promise<string> => {
 
         // AGGRESSIVE FAIL-FAST: No retries, short timeout (15s)
         // If analysis fails, we proceed without it rather than blocking generation.
-        const freshAi = await getAiClient();
+        const freshAi = await getAiClient('flash');
         try {
             const result = await runWithTimeout(
                 freshAi.models.generateContent({
@@ -394,7 +394,7 @@ const optimizePromptWithThinking = async (
     const model = 'gemini-2.5-flash'; 
 
     try {
-        const freshAi = await getAiClient();
+        const freshAi = await getAiClient('flash');
         
         const parts: any[] = [];
         // Note: We intentionally IGNORE masterSheetPart here to prevent payload overload.
@@ -503,9 +503,8 @@ export const generateImage = async (
     availableStyles: any[] = [], // New: Pool of styles for auto-selection
     timeoutMs: number = 900000 // Default 15 mins
 ): Promise<string> => {
-    onLog("Initializing Gemini 3.0 Pro Pipeline...");
-    
-    const model = 'gemini-3-pro-image-preview'; 
+    const model = modelType === 'flash' ? 'gemini-2.5-flash-image' : 'gemini-3-pro-image-preview'; 
+    onLog(`Initializing ${model} Pipeline...`);
     
     // 1. PROCESS REFERENCE IMAGE (VISUAL & TEXTUAL ANALYSIS)
     let cleanRefImage: string | null = null;
@@ -697,7 +696,7 @@ export const generateImage = async (
 
     if (sanitizedParts.length === 0) throw new Error("CRITICAL: Final payload is empty! Data assembly failed.");
 
-    onLog(`Step 5: Sending Payload (${sanitizedParts.length} parts) to Gemini 3.0 Pro...`);
+    onLog(`Step 5: Sending Payload (${sanitizedParts.length} parts) to ${model}...`);
 
     const config: any = {
         imageConfig: {
@@ -708,23 +707,24 @@ export const generateImage = async (
         }
     };
 
-    if (useSearch) {
+    // google_search is only supported on gemini-3-pro-image-preview
+    if (useSearch && modelType === 'pro') {
         config.tools = [{ google_search: {} }];
     }
 
     const response = await retryWithBackoff(
         async () => {
-            const freshAi = await getAiClient();
+            const freshAi = await getAiClient(modelType);
             const currentKey = (freshAi as any)._internalApiKey;
             const shortKey = currentKey ? currentKey.substring(0, 4) + '...' + currentKey.slice(-4) : 'Default';
-            onLog(`> Đang dùng API Key: ${shortKey} | Model: gemini-3-pro-image-preview`);
+            onLog(`> Đang dùng API Key: ${shortKey} | Model: ${model}`);
             
             try {
                 const REQUEST_TIMEOUT = 180000; // 3 Minutes
                 
                 return await runWithTimeout(
                     freshAi.models.generateContent({
-                        model: 'gemini-3-pro-image-preview',
+                        model: model,
                         contents: { parts: finalParts },
                         config: config
                     }),
@@ -736,10 +736,10 @@ export const generateImage = async (
                 const isRateLimit = e.message?.includes('429') || e.status === 429 || e.message?.includes('quota');
 
                 if (isOverload) {
-                     console.warn(`Gemini 3.0 Pro 503/Timeout. Retrying...`);
-                     onLog(`⏳ Đang xếp hàng chờ Google Render ảnh (Model Pro đang xử lý)...`);
+                     console.warn(`${model} 503/Timeout. Retrying...`);
+                     onLog(`⏳ Đang xếp hàng chờ Google Render ảnh (${modelType === 'pro' ? 'Model Pro' : 'Model Flash'} đang xử lý)...`);
                 } else if (isRateLimit) {
-                     console.warn(`Gemini 3.0 Pro 429 (Rate Limit). Banning key and retrying with a new one...`);
+                     console.warn(`${model} 429 (Rate Limit). Banning key and retrying with a new one...`);
                      reportKeyFailure((freshAi as any)._internalApiKey);
                 } else {
                      reportKeyFailure((freshAi as any)._internalApiKey);
@@ -770,7 +770,7 @@ export const editImageWithInstructions = async (
 
     const response = await retryWithBackoff(
         async () => {
-            const freshAi = await getAiClient();
+            const freshAi = await getAiClient('flash');
             try {
                 return await runWithTimeout(
                     freshAi.models.generateContent({

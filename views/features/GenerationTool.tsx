@@ -75,6 +75,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
   // Default Resolution 1K
   const [aspectRatio, setAspectRatio] = useState('3:4'); 
   const [resolution, setResolution] = useState<Resolution>('1K'); 
+  const [aiModel, setAiModel] = useState<'flash' | 'pro'>('pro');
   
   // Features always ON
   const useSearch = true; 
@@ -344,10 +345,14 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
   const calculateCost = () => {
       let cost = 0;
       
-      // Resolution Based Pricing (High Quality 3.0 Pro)
-      if (resolution === '1K') cost = 5;
-      if (resolution === '2K') cost = 10;
-      if (resolution === '4K') cost = 15;
+      if (aiModel === 'flash') {
+          cost = 1; // Flash is always 1 Vcoin
+      } else {
+          // Resolution Based Pricing (High Quality 3.0 Pro)
+          if (resolution === '1K') cost = 5;
+          if (resolution === '2K') cost = 10;
+          if (resolution === '4K') cost = 15;
+      }
 
       // Add-ons (Search & CloudRef are now FREE/INCLUDED)
       // if (useSearch) cost += 0; 
@@ -1073,6 +1078,24 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                     </div>
 
                     <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase">Mô hình AI</label>
+                        <div className="grid grid-cols-2 gap-2">
+                            <button 
+                                onClick={() => setAiModel('flash')} 
+                                className={`py-2 rounded-lg border text-[10px] font-bold transition-all flex items-center justify-center ${aiModel === 'flash' ? 'bg-audi-cyan/20 text-audi-cyan border-audi-cyan shadow-md scale-105' : 'border-white/10 text-slate-500 hover:bg-white/5 hover:text-white'}`}
+                            >
+                                Flash (1 Vcoin)
+                            </button>
+                            <button 
+                                onClick={() => setAiModel('pro')} 
+                                className={`py-2 rounded-lg border text-[10px] font-bold transition-all flex items-center justify-center ${aiModel === 'pro' ? 'bg-audi-pink/20 text-audi-pink border-audi-pink shadow-md scale-105' : 'border-white/10 text-slate-500 hover:bg-white/5 hover:text-white'}`}
+                            >
+                                Pro (Chất lượng cao)
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="space-y-2">
                         <label className="text-[10px] font-bold text-slate-400 uppercase">Tỉ lệ khung hình</label>
                         <div className="grid grid-cols-5 gap-2">
                             {ratios.map(r => (
@@ -1089,7 +1112,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
 
                     <div className="space-y-3 animate-fade-in">
                         <label className="text-[10px] font-bold text-slate-400 uppercase">Độ phân giải (3.0 Pro)</label>
-                        <div className="flex gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5">
+                        <div className={`flex gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5 ${aiModel === 'flash' ? 'opacity-50 pointer-events-none' : ''}`}>
                             {['1K', '2K', '4K'].map(r => (
                                 <button 
                                     key={r} 
@@ -1107,16 +1130,22 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                                 <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Giá hiện tại</span>
                                 <div className="flex items-end gap-1">
                                     <span className="text-xl font-black text-white font-game drop-shadow-md">
-                                        {resolution === '1K' ? '5' : resolution === '2K' ? '10' : '15'}
+                                        {calculateCost()}
                                     </span>
                                     <span className="text-[10px] font-bold text-audi-yellow mb-1">VCOIN</span>
                                 </div>
                             </div>
-                            <div className="flex justify-between text-[9px] text-slate-500 mt-2 font-mono border-t border-white/5 pt-2">
-                                <span className={resolution === '1K' ? 'text-white font-bold' : ''}>1K: 5VC</span>
-                                <span className={resolution === '2K' ? 'text-white font-bold' : ''}>2K: 10VC</span>
-                                <span className={resolution === '4K' ? 'text-white font-bold' : ''}>4K: 15VC</span>
-                            </div>
+                            {aiModel === 'pro' ? (
+                                <div className="flex justify-between text-[9px] text-slate-500 mt-2 font-mono border-t border-white/5 pt-2">
+                                    <span className={resolution === '1K' ? 'text-white font-bold' : ''}>1K: 5VC</span>
+                                    <span className={resolution === '2K' ? 'text-white font-bold' : ''}>2K: 10VC</span>
+                                    <span className={resolution === '4K' ? 'text-white font-bold' : ''}>4K: 15VC</span>
+                                </div>
+                            ) : (
+                                <div className="flex justify-between text-[9px] text-slate-500 mt-2 font-mono border-t border-white/5 pt-2">
+                                    <span className="text-white font-bold">Flash: 1VC (Mọi tỷ lệ)</span>
+                                </div>
+                            )}
                         </div>
                     </div>
 

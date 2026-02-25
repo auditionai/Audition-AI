@@ -2,7 +2,7 @@
 import { GeneratedImage } from '../types';
 import { supabase } from './supabaseClient';
 import { getUserProfile } from './economyService';
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, DeleteObjectCommand, DeleteObjectsCommand } from "@aws-sdk/client-s3";
 
 const DB_NAME = 'DMP_AI_Studio_DB';
 const STORE_NAME = 'images';
@@ -400,6 +400,8 @@ export const getAllImagesFromStorage = async (): Promise<GeneratedImage[]> => {
   });
 };
 
+
+
 export const deleteImageFromStorage = async (id: string, targetUserId?: string, imageUrl?: string): Promise<void> => {
   const user = await getUserProfile();
   const userId = targetUserId || user.id;
@@ -408,22 +410,34 @@ export const deleteImageFromStorage = async (id: string, targetUserId?: string, 
     // A. Delete from R2 (if configured)
     if (r2Client) {
         try {
-            let fileName = `${userId}/${id}.png`;
+            let fileName = `${userId}/${id}.png`; // Default fallback
             
-            // Smart Key Extraction from URL (More Reliable)
-            if (imageUrl && R2_PUBLIC_URL && imageUrl.startsWith(R2_PUBLIC_URL)) {
-                fileName = imageUrl.replace(`${R2_PUBLIC_URL}/`, '');
+            // Robust Key Extraction Strategy
+            if (imageUrl && imageUrl.startsWith('http')) {
+                // Strategy 1: Remove R2_PUBLIC_URL prefix (Handles custom domains/paths)
+                if (R2_PUBLIC_URL && imageUrl.startsWith(R2_PUBLIC_URL)) {
+                    fileName = imageUrl.replace(`${R2_PUBLIC_URL}/`, '');
+                } 
+                // Strategy 2: Use Pathname (Handles domain changes)
+                else {
+                    try {
+                        const urlObj = new URL(imageUrl);
+                        const path = decodeURIComponent(urlObj.pathname);
+                        fileName = path.startsWith('/') ? path.substring(1) : path;
+                    } catch (e) {
+                        console.warn(`[Storage] URL Parse Failed for ${imageUrl}`);
+                    }
+                }
             }
 
-            console.log(`[Storage] Deleting R2 Key: ${fileName}`);
+            console.warn(`[Storage] DELETING R2 KEY: [${fileName}]`);
             await r2Client.send(new DeleteObjectCommand({
                 Bucket: R2_BUCKET_NAME,
                 Key: fileName
             }));
-            console.log(`[Storage] R2 Delete Request Sent: ${fileName}`);
+            console.warn(`[Storage] R2 Delete Sent for: ${fileName}`);
         } catch (e) {
             console.error("[Storage] R2 Delete Failed:", e);
-            // We re-throw so the caller knows it failed
             throw e;
         }
     } 
@@ -465,27 +479,83 @@ export const cleanupExpiredImages = async (isSystemWide: boolean = false): Promi
 
     const now = Date.now();
     const EXPIRATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 Days
-    let deletedCount = 0;
+    
+    // Filter Expired Images
+    const expiredImages = images.filter(img => {
+        return !img.isShared && (now - img.timestamp > EXPIRATION_MS);
+    });
 
-    console.log(`[Cleanup] Starting cleanup. SystemWide: ${isSystemWide}. Found ${images.length} images.`);
+    if (expiredImages.length === 0) {
+        console.log("[Cleanup] No expired images found.");
+        return 0;
+    }
 
-    for (const img of images) {
-        // Skip shared/saved images
-        if (img.isShared) continue;
+    console.log(`[Cleanup] Found ${expiredImages.length} expired images. Starting BATCH deletion...`);
 
-        // Check expiration
-        if (now - img.timestamp > EXPIRATION_MS) {
-            console.log(`[Cleanup] Deleting expired image: ${img.id} (Age: ${((now - img.timestamp)/86400000).toFixed(1)} days)`);
-            try {
-                // Pass URL for accurate key extraction
-                await deleteImageFromStorage(img.id, img.userId, img.url);
-                deletedCount++;
-            } catch (e) {
-                console.error(`[Cleanup] Failed to delete ${img.id}`, e);
+    // --- BATCH DELETE R2 ---
+    if (r2Client) {
+        try {
+            // Prepare Keys
+            const objectsToDelete = expiredImages.map(img => {
+                let key = `${img.userId || 'unknown'}/${img.id}.png`;
+                if (img.url && img.url.startsWith('http')) {
+                    if (R2_PUBLIC_URL && img.url.startsWith(R2_PUBLIC_URL)) {
+                        key = img.url.replace(`${R2_PUBLIC_URL}/`, '');
+                    } else {
+                        try {
+                            const path = decodeURIComponent(new URL(img.url).pathname);
+                            key = path.startsWith('/') ? path.substring(1) : path;
+                        } catch(e) {}
+                    }
+                }
+                return { Key: key };
+            });
+
+            // Split into chunks of 1000 (AWS Limit)
+            const chunkSize = 1000;
+            for (let i = 0; i < objectsToDelete.length; i += chunkSize) {
+                const chunk = objectsToDelete.slice(i, i + chunkSize);
+                console.log(`[Cleanup] Deleting R2 Batch ${i/chunkSize + 1} (${chunk.length} items)...`);
+                
+                await r2Client.send(new DeleteObjectsCommand({
+                    Bucket: R2_BUCKET_NAME,
+                    Delete: { Objects: chunk }
+                }));
             }
+            console.log("[Cleanup] R2 Batch Deletion Complete.");
+        } catch (e) {
+            console.error("[Cleanup] R2 Batch Delete Failed", e);
+            // Continue to DB delete even if R2 fails partially
         }
     }
-    
-    console.log(`[Cleanup] Completed. Deleted ${deletedCount} images.`);
-    return deletedCount;
+
+    // --- BATCH DELETE DB ---
+    if (supabase) {
+        try {
+            const ids = expiredImages.map(img => img.id);
+            // Delete in chunks of 1000 for DB safety
+            const chunkSize = 1000;
+            for (let i = 0; i < ids.length; i += chunkSize) {
+                const chunk = ids.slice(i, i + chunkSize);
+                const { error } = await supabase.from(TABLE_NAME).delete().in('id', chunk);
+                if (error) console.error("[Cleanup] DB Batch Delete Error", error);
+            }
+            console.log("[Cleanup] DB Batch Deletion Complete.");
+        } catch (e) {
+            console.error("[Cleanup] DB Delete Failed", e);
+        }
+    }
+
+    // --- BATCH DELETE LOCAL (IndexedDB) ---
+    try {
+        const db = await openDB();
+        const tx = db.transaction([STORE_NAME], 'readwrite');
+        const store = tx.objectStore(STORE_NAME);
+        expiredImages.forEach(img => store.delete(img.id));
+        console.log("[Cleanup] Local Batch Deletion Complete.");
+    } catch (e) {
+        console.warn("[Cleanup] Local Delete Failed", e);
+    }
+
+    return expiredImages.length;
 };

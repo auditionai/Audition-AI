@@ -222,10 +222,10 @@ export const testApiKey = async (): Promise<boolean> => {
         const freshAi = await getAiClient();
         await runWithTimeout(
             freshAi.models.generateContent({
-                model: 'gemini-2.5-flash', // Use Flash for fast ping
+                model: 'gemini-3.1-pro-preview',
                 contents: { parts: [{ text: "Hello" }] }
             }),
-            15000, // 15s is enough for Flash
+            20000, // Increased to 20s
             "API Key Test"
         );
         return true;
@@ -236,71 +236,63 @@ export const testApiKey = async (): Promise<boolean> => {
 };
 
 const uploadToGemini = async (input: string, mimeType: string): Promise<string> => {
-    return retryWithBackoff(
-        async () => {
-            try {
-                const ai = await getAiClient();
-                let blob: Blob;
+    try {
+        const ai = await getAiClient();
+        let blob: Blob;
 
-                // Check if input is a URL
-                if (input.startsWith('http')) {
-                    const resp = await fetch(input);
-                    if (!resp.ok) throw new Error(`Failed to fetch URL: ${resp.statusText}`);
-                    blob = await resp.blob();
-                } else {
-                    // Assume Base64
-                    const cleanData = cleanBase64(input);
-                    const byteCharacters = atob(cleanData);
-                    const byteNumbers = new Array(byteCharacters.length);
-                    for (let i = 0; i < byteCharacters.length; i++) {
-                        byteNumbers[i] = byteCharacters.charCodeAt(i);
-                    }
-                    const byteArray = new Uint8Array(byteNumbers);
-                    blob = new Blob([byteArray], { type: mimeType });
-                }
-
-                // Add Timeout to Upload
-                const uploadResult = await runWithTimeout(
-                    ai.files.upload({
-                        file: blob,
-                        config: { displayName: `asset_${Date.now()}_${Math.random().toString(36).substring(7)}` }
-                    }),
-                    45000, // Increased to 45s for stability
-                    "File Upload"
-                );
-
-                const file = (uploadResult as any).file || uploadResult;
-                const fileUri = file?.uri;
-                
-                if (!fileUri) throw new Error("No URI returned from upload");
-
-                // --- WAIT FOR ACTIVE STATE (POLLING) ---
-                let state = file.state;
-                let attempts = 0;
-                while (state === 'PROCESSING' && attempts < 15) { // Increased attempts
-                    await new Promise(r => setTimeout(r, 2000)); // Wait 2s
-                    try {
-                        const fileStatus = await ai.files.get({ name: file.name });
-                        state = fileStatus.file.state;
-                        // console.log(`[System] File ${file.name} state: ${state}`);
-                    } catch (e) {
-                        console.warn("Check file state failed (transient)", e);
-                    }
-                    attempts++;
-                }
-
-                if (state === 'FAILED') throw new Error("File processing failed on Google side");
-                
-                return fileUri;
-            } catch (e) {
-                console.warn("Cloud upload attempt failed", e);
-                throw e;
+        // Check if input is a URL
+        if (input.startsWith('http')) {
+            const resp = await fetch(input);
+            blob = await resp.blob();
+        } else {
+            // Assume Base64
+            const byteCharacters = atob(cleanBase64(input));
+            const byteNumbers = new Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i);
             }
-        },
-        3, // 3 Retries
-        2000, // 2s Delay
-        "Cloud Asset Upload"
-    );
+            const byteArray = new Uint8Array(byteNumbers);
+            blob = new Blob([byteArray], { type: mimeType });
+        }
+
+        // Add Timeout to Upload
+        const uploadResult = await runWithTimeout(
+            ai.files.upload({
+                file: blob,
+                config: { displayName: `ref_img_${Date.now()}` }
+            }),
+            30000, // Increased to 30s
+            "File Upload"
+        );
+
+        const file = (uploadResult as any).file || uploadResult;
+        const fileUri = file?.uri;
+        
+        if (!fileUri) throw new Error("No URI returned");
+
+        // --- NEW: WAIT FOR ACTIVE STATE ---
+        // Large files might be in 'PROCESSING' state. We must wait for 'ACTIVE'.
+        let state = file.state;
+        let attempts = 0;
+        while (state === 'PROCESSING' && attempts < 10) {
+            await new Promise(r => setTimeout(r, 2000)); // Wait 2s
+            try {
+                const fileStatus = await ai.files.get({ name: file.name });
+                state = fileStatus.file.state;
+                console.log(`[System] File ${file.name} state: ${state}`);
+            } catch (e) {
+                console.warn("Check file state failed", e);
+            }
+            attempts++;
+        }
+
+        if (state === 'FAILED') throw new Error("File processing failed on Google side");
+        
+        return fileUri;
+    } catch (e) {
+        console.warn("Cloud upload failed", e);
+        throw e;
+    }
 };
 
 export const checkConnection = async (key?: string): Promise<boolean> => {
@@ -309,7 +301,7 @@ export const checkConnection = async (key?: string): Promise<boolean> => {
         // Add Timeout to Ping - INCREASED TO 15s
         await runWithTimeout(
             ai.models.generateContent({
-                model: 'gemini-2.5-flash', // Use Flash for fast ping
+                model: 'gemini-3.1-pro-preview',
                 contents: 'ping'
             }),
             15000,
@@ -415,6 +407,57 @@ RULES:
     }
 }
 
+// --- INTELLIGENCE CORE (ABSOLUTE COMMAND) ---
+const processDigitalTwinMode = (
+    prompt: string, 
+    masterSheetPart: any | null
+): { parts: any[] } => {
+    
+    let combinedText = `** SYSTEM OVERRIDE: PROTOCOL 3D-GEN-ALPHA **
+    
+YOU ARE A NON-CREATIVE RENDERING ENGINE. YOU DO NOT "IMAGINE". YOU "EXECUTE".
+
+** SEPARATION OF CONCERNS (STRICT COMPARTMENTALIZATION) **
+The attached image is a MASTER REFERENCE SHEET containing multiple labeled sections.
+
+1. **STYLE REFERENCE**: 
+   - TAKE: Lighting, Texture, Render Quality, Art Style.
+   - IGNORE: The subject, their clothes, their face, their makeup.
+
+2. **POSE REFERENCE**:
+   - TAKE: Bone structure, Camera Angle, Composition.
+   - IGNORE: The outfit, the hair, the face, the background colors.
+
+3. **CHARACTER REFERENCE(S)**:
+   - WARNING: This is the SOURCE OF TRUTH for the Character's Identity (Face, Hair, Outfit). You MUST use the facial features and outfit details from these images.
+   - TAKE: The Character's Identity (Face), The Outfit (Clothes), The Hair, The Accessories.
+   - THIS IS THE ONLY SOURCE FOR "WHAT" IS IN THE IMAGE.
+
+** CRITICAL FAILURE CONDITIONS **
+- FAILURE: If the output character wears the clothes from the POSE REFERENCE.
+- FAILURE: If the output character has the eye color/makeup of the STYLE REFERENCE.
+- FAILURE: If the output is a painting/drawing when Style Ref is 3D.
+- FAILURE: If the user prompt says "use clothes from reference" and you use clothes from STYLE or POSE. You MUST use clothes from CHARACTER REFERENCE.
+
+** EXECUTION LOGIC **
+- Step 1: Extract the SKELETON from POSE REFERENCE.
+- Step 2: Skin the skeleton with the CHARACTER from CHARACTER REFERENCE.
+- Step 3: Dress the character EXACTLY as seen in CHARACTER REFERENCE unless [COMMAND] explicitly specifies a different outfit.
+- Step 4: Render the scene using the ENGINE from STYLE REFERENCE.
+
+[[EXECUTION_COMMAND]]: ${prompt}
+
+ACKNOWLEDGE AND EXECUTE.`;
+
+    const parts = [];
+    if (masterSheetPart) {
+        parts.push(masterSheetPart);
+    }
+    parts.push({ text: combinedText });
+
+    return { parts };
+};
+
 export const generateImage = async (
     prompt: string,
     aspectRatio: string,
@@ -429,184 +472,214 @@ export const generateImage = async (
     availableStyles: any[] = [], // New: Pool of styles for auto-selection
     timeoutMs: number = 900000 // Default 15 mins
 ): Promise<string> => {
-    onLog("Initializing Gemini 3.0 Pro Pipeline (Brutal Mode)...");
+    onLog("Initializing Gemini 3.0 Pro Pipeline...");
     
     const model = 'gemini-3-pro-image-preview'; 
     
-    // --- STEP 1: PARALLEL ASSET AGGREGATION (THE BRUTAL PART) ---
-    onLog("Step 1: Mass Aggregating Assets (Parallel Uploads)...");
-
-    // We run ALL uploads and processing in parallel to maximize speed and expose failures early.
-    // This includes: Style Image, Reference Image, and All Characters.
-
-    const aggregationStart = Date.now();
-
-    const [styleResult, refResult, charResults, optimizedPrompt] = await Promise.all([
-        // A. STYLE IMAGE TASK
-        (async () => {
-            let finalStyleUrl = styleReferenceUrl;
-            let styleKeywords = "";
-
-            // 1. Select Style (if needed)
-            if (!finalStyleUrl && availableStyles && availableStyles.length > 0) {
-                const bestStyle = await selectBestStyle(prompt, availableStyles);
-                if (bestStyle) {
-                    finalStyleUrl = bestStyle.image_url;
-                    styleKeywords = bestStyle.trigger_prompt || "";
-                    onLog(`> [Style] Auto-selected: ${bestStyle.name}`);
-                }
-            } else if (finalStyleUrl) {
-                const match = availableStyles.find(s => s.image_url === finalStyleUrl);
-                if (match) styleKeywords = match.trigger_prompt || "";
+    // 1. PROCESS REFERENCE IMAGE (VISUAL & TEXTUAL ANALYSIS)
+    let cleanRefImage: string | null = null;
+    let poseDescription = "";
+    let refImageUri: string | null = null;
+    
+    if (refImageBase64) {
+        onLog("Step 1: Analyzing Reference Image (Pose & BG)...");
+        
+        try {
+            // Handle URL Input
+            if (refImageBase64.startsWith('http')) {
+                // For Analysis (needs Base64)
+                const resp = await fetch(refImageBase64);
+                const blob = await resp.blob();
+                const reader = new FileReader();
+                cleanRefImage = await new Promise((resolve) => {
+                    reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+                    reader.readAsDataURL(blob);
+                });
+                
+                // For Final Generation (use URL directly)
+                refImageUri = await uploadToGemini(refImageBase64, 'image/jpeg');
+            } 
+            // Handle Base64 Input
+            else if (refImageBase64.startsWith('data:') || refImageBase64.length > 100) {
+                cleanRefImage = cleanBase64(refImageBase64);
+                refImageUri = await uploadToGemini(cleanRefImage, 'image/jpeg');
             }
 
-            // 2. Upload Style (if exists)
-            let styleUri: string | null = null;
-            if (finalStyleUrl) {
-                try {
-                    styleUri = await uploadToGemini(finalStyleUrl, 'image/jpeg');
-                    onLog("> [Style] Uploaded ✅");
-                } catch (e) {
-                    console.warn("Style upload failed", e);
-                    onLog("> [Style] Upload Failed (Non-Critical) ⚠️");
-                }
+            if (cleanRefImage) {
+                poseDescription = await analyzeReferenceImage(cleanRefImage);
+                onLog(`> Pose Detected: ${poseDescription.substring(0, 50)}...`);
             }
-            return { uri: styleUri, keywords: styleKeywords };
-        })(),
+        } catch (e) {
+            console.warn("Ref Image Processing Failed", e);
+        }
+    }
 
-        // B. REFERENCE IMAGE TASK (CRITICAL)
-        (async () => {
-            if (!refImageBase64) return { uri: null, poseDesc: "" };
+    // 2. SMART STYLE SELECTION
+    let finalStyleUrl = styleReferenceUrl;
+    let styleKeywords = "";
+    
+    if (!finalStyleUrl && availableStyles && availableStyles.length > 0) {
+        onLog("Step 2: AI Selecting Best Style...");
+        const bestStyle = await selectBestStyle(prompt, availableStyles);
+        if (bestStyle) {
+            onLog(`> Selected Style: ${bestStyle.name}`);
+            finalStyleUrl = bestStyle.image_url;
+            styleKeywords = bestStyle.trigger_prompt || "";
+        }
+    } else if (finalStyleUrl) {
+        // If manual style, try to find keywords if possible, or just proceed
+        const match = availableStyles.find(s => s.image_url === finalStyleUrl);
+        if (match) styleKeywords = match.trigger_prompt || "";
+    }
+
+    // 3. LOAD STYLE IMAGE (VISUAL)
+    let cleanStyleImage: string | null = null;
+    let styleImageUri: string | null = null;
+    
+    if (finalStyleUrl) {
+        onLog("Step 3: Loading Style Reference Image...");
+        try {
+            let styleData = finalStyleUrl;
+            if (finalStyleUrl.startsWith('http')) {
+                const resp = await fetch(finalStyleUrl);
+                const blob = await resp.blob();
+                const reader = new FileReader();
+                styleData = await new Promise((resolve) => {
+                    reader.onloadend = () => resolve(reader.result as string);
+                    reader.readAsDataURL(blob);
+                });
+            }
             
+            cleanStyleImage = cleanBase64(styleData);
+            // Upload Style Image
+            styleImageUri = await uploadToGemini(cleanStyleImage, 'image/jpeg');
+            
+        } catch (e) {
+            console.warn("Failed to load/upload style reference", e);
+        }
+    }
+
+    // 4. PREPARE CHARACTERS
+    const charUris: string[] = [];
+    
+    for (const char of characters) {
+        let finalCharBase64 = "";
+        if (char.image && char.faceImage) {
+            const sheetBase64 = await createTextureSheet(char.image, char.faceImage);
+            const optimizedSheet = await optimizePayload(sheetBase64, 1024);
+            finalCharBase64 = cleanBase64(optimizedSheet);
+        } else if (char.image) {
+            const optimized = await optimizePayload(char.image, 1024);
+            finalCharBase64 = cleanBase64(optimized);
+        } else if (char.faceImage) {
+            const optimized = await optimizePayload(char.faceImage, 1024);
+            finalCharBase64 = cleanBase64(optimized);
+        }
+        
+        if (finalCharBase64) {
             try {
-                // 1. Normalize & Optimize Image (CRITICAL FIX)
-                // We MUST convert to JPEG and resize to prevent MIME type mismatches (PNG vs JPEG)
-                // and reduce payload size.
-                const optimizedRef = await optimizePayload(refImageBase64, 1024);
-                const cleanRef = cleanBase64(optimizedRef);
-
-                // 2. Analyze Pose (Best Effort)
-                let poseDesc = "";
-                try {
-                    poseDesc = await analyzeReferenceImage(cleanRef);
-                    if (poseDesc) onLog(`> [Ref] Pose Detected: ${poseDesc.substring(0, 30)}...`);
-                } catch (e) { console.warn("Pose analysis failed", e); }
-
-                // 3. Upload Reference (Always JPEG now)
-                const uri = await uploadToGemini(cleanRef, 'image/jpeg');
-                onLog("> [Ref] Source Image Uploaded ✅");
-                return { uri, poseDesc };
+                const uri = await uploadToGemini(finalCharBase64, 'image/jpeg');
+                charUris.push(uri);
             } catch (e) {
-                console.error("Ref upload failed", e);
-                throw new Error("CRITICAL: Failed to upload Reference Image.");
+                console.warn("Failed to upload character sheet", e);
             }
-        })(),
+        }
+    }
 
-        // C. CHARACTERS TASK (CRITICAL)
-        (async () => {
-            if (characters.length === 0) return [];
-            
-            const results = await Promise.all(characters.map(async (char, idx) => {
-                try {
-                    let finalCharBase64 = "";
-                    // Optimization Logic (Always returns JPEG)
-                    if (char.image && char.faceImage) {
-                        const sheetBase64 = await createTextureSheet(char.image, char.faceImage);
-                        finalCharBase64 = await optimizePayload(sheetBase64, 1024);
-                    } else if (char.image) {
-                        finalCharBase64 = await optimizePayload(char.image, 1024);
-                    } else if (char.faceImage) {
-                        finalCharBase64 = await optimizePayload(char.faceImage, 1024);
-                    }
+    // 5. CREATE MASTER REFERENCE SHEET (SKIPPED - OPTIMIZATION)
+    // We skip generating the Master Sheet to save time/bandwidth as it is not used in the final Pro generation
+    // to avoid confusing the model with a grid layout.
+    
+    // 6. PROMPT OPTIMIZATION (MERGING ALL CONTEXTS)
+    onLog("Step 4: Generating Perfect Image Prompt...");
+    // REMOVED masterSheetPart from optimization to prevent 503 overload
+    const optimizedPrompt = await optimizePromptWithThinking(prompt, styleKeywords, poseDescription);
+    
+    // 7. FINAL ASSEMBLY
+    onLog("Step 5: Finalizing Data Payload (Integrity Check)...");
+    
+    // --- BRUTAL DATA VERIFICATION (THE IRONCLAD PROTOCOL) ---
+    // 1. Verify Reference Image (CRITICAL)
+    if (refImageBase64 && !refImageUri) {
+         throw new Error("CRITICAL FAILURE: Reference Image (Pose) failed to upload. The pipeline cannot proceed without the Source of Truth.");
+    }
 
-                    if (!finalCharBase64) return null;
+    // 2. Verify Characters (CRITICAL)
+    if (characters.length > 0) {
+        if (charUris.length === 0) {
+            throw new Error("CRITICAL FAILURE: Character assets failed to upload. Aborting to prevent ghost generation.");
+        }
+        if (charUris.length < characters.length) {
+            onLog(`⚠️ WARNING: Partial Data. Only ${charUris.length}/${characters.length} characters were successfully uploaded.`);
+        }
+    }
 
-                    const uri = await uploadToGemini(cleanBase64(finalCharBase64), 'image/jpeg');
-                    onLog(`> [Char ${idx + 1}] Uploaded ✅`);
-                    return { uri, gender: char.gender, id: char.id };
-                } catch (e) {
-                    console.error(`Char ${idx + 1} failed`, e);
-                    return null;
-                }
-            }));
-            return results;
-        })(),
-
-        // D. PROMPT OPTIMIZATION TASK
-        (async () => {
-             // We pass empty context first, then merge later? 
-             // Or we wait? 
-             // Actually, prompt optimization needs style keywords and pose desc.
-             // So this cannot be fully parallel if we want those inputs.
-             // BUT, to be "Brutal", we can run it in parallel with just the raw prompt 
-             // and append the other details manually later. This saves ~5-10s.
-             return optimizePromptWithThinking(prompt, "", ""); 
-        })()
-    ]);
-
-    const aggregationTime = ((Date.now() - aggregationStart) / 1000).toFixed(1);
-    onLog(`Step 2: Aggregation Complete in ${aggregationTime}s.`);
-
-    // --- STEP 2: PAYLOAD ASSEMBLY (SYNC) ---
-    onLog("Step 3: Assembling Final Payload (Direct Command Mode)...");
-
-    const styleUri = styleResult.uri;
-    const styleKeywords = styleResult.keywords;
-    const refUri = refResult.uri;
-    const poseDesc = refResult.poseDesc;
-    const validChars = charResults.filter(c => c !== null) as { uri: string, gender: string, id: number }[];
-
-    // Validate Critical Data
-    if (refImageBase64 && !refUri) throw new Error("CRITICAL: Reference Image missing after aggregation.");
-    if (characters.length > 0 && validChars.length === 0) throw new Error("CRITICAL: No characters uploaded successfully.");
-
-    // Construct Final Prompt (Merge Contexts)
-    // Simplify the text prompt to focus on the visual outcome
-    const finalContextPrompt = `
-    COMMAND: ${prompt}
-    ${styleKeywords ? `STYLE: ${styleKeywords}` : ''}
-    ${poseDesc ? `POSE: ${poseDesc}` : ''}
-    `;
+    // 3. Verify Style (OPTIONAL but logged)
+    if (finalStyleUrl && !styleImageUri) {
+         onLog("⚠️ WARNING: Style Image failed to upload. Proceeding without Style Reference.");
+    }
 
     const finalParts: any[] = [];
-
-    // A. STYLE REFERENCE (Stronger Instruction)
-    if (styleUri) {
-        finalParts.push({ text: "Input 1 [STYLE]: Transfer the art style, lighting, and rendering quality from this image. DO NOT copy the content." });
-        finalParts.push({ fileData: { mimeType: 'image/jpeg', fileUri: styleUri } });
-    }
-
-    // B. POSE/STRUCTURE REFERENCE (Stronger Instruction)
-    if (refUri) {
-        finalParts.push({ text: "Input 2 [STRUCTURE]: COPY the camera angle, character pose, and scene composition from this image EXACTLY. This is the skeleton of the image." });
-        finalParts.push({ fileData: { mimeType: 'image/jpeg', fileUri: refUri } });
-    }
-
-    // C. CHARACTER REFERENCES (Stronger Instruction)
-    if (validChars.length > 0) {
-        finalParts.push({ text: "Input 3+ [IDENTITY]: These are the characters in the scene. You MUST use their Face and Outfit." });
-        validChars.forEach((char, index) => {
-            finalParts.push({ fileData: { mimeType: 'image/jpeg', fileUri: char.uri } });
-            finalParts.push({ text: `Target ${index + 1} (${char.gender}): REPLICATE the face and clothes from the image above.` });
+    
+    // A. STYLE REFERENCE
+    if (styleImageUri) {
+        finalParts.push({ text: "🔴 IMAGE 1: STYLE REFERENCE (ART STYLE ONLY)\nINSTRUCTION: Extract ONLY the 3D rendering quality, lighting, texture, and artistic vibe. \nNEGATIVE CONSTRAINT: Do NOT copy the background, the characters, or any objects from this image. IGNORE the content of this image completely." });
+        finalParts.push({
+            fileData: {
+                mimeType: 'image/jpeg',
+                fileUri: styleImageUri
+            }
         });
     }
 
-    // D. FINAL INSTRUCTION (The "Binder")
-    const finalInstruction = `
-    GENERATE IMAGE REQUEST:
-    1. BASE: Start with the composition and pose from Input 2 [STRUCTURE].
-    2. CONTENT: Place the characters from Input 3+ [IDENTITY] into that pose.
-    3. APPEARANCE: Dress them EXACTLY as shown in Input 3+. Keep their faces.
-    4. RENDER: Apply the visual style from Input 1 [STYLE].
+    // B. POSE/STRUCTURE REFERENCE
+    if (refImageUri) {
+        finalParts.push({ text: "🔴 IMAGE 2: POSE & BACKGROUND REFERENCE (SOURCE OF TRUTH)\nINSTRUCTION: This image is the BLUEPRINT for the scene. \n1. BACKGROUND: You MUST use the background/environment from this image.\n2. POSE: You MUST match the character poses and camera angle exactly.\n3. COMPOSITION: The scene layout must be identical to this image." });
+        finalParts.push({
+            fileData: {
+                mimeType: 'image/jpeg',
+                fileUri: refImageUri
+            }
+        });
+    }
+
+    // C. CHARACTER REFERENCES
+    let charPromptInstructions = "";
+    if (charUris.length > 0) {
+        finalParts.push({ text: "🔴 IMAGE 3+: CHARACTER REFERENCE(S)\nINSTRUCTION: These are the characters to be placed into the scene. Maintain their facial features and outfit details." });
+        
+        // Iterate through ALL uploaded character URIs
+        charUris.forEach((uri, index) => {
+            const charIndex = index + 1;
+            const charInfo = characters[index]; // Get metadata (gender, id)
+            
+            finalParts.push({
+                fileData: {
+                    mimeType: 'image/jpeg',
+                    fileUri: uri
+                }
+            });
+            
+            // Build specific mapping instruction
+            charPromptInstructions += `\n- CHARACTER ${charIndex} (${charInfo.gender.toUpperCase()}): Use Face & Outfit from IMAGE ${index + 3}.`;
+        });
+    }
     
-    PROMPT: ${finalContextPrompt}
-    
-    NEGATIVE PROMPT: changing the pose, changing the clothes, changing the face, cartoon, drawing, low quality.
-    `;
+    // D. FINAL PROMPT
+    const finalInstruction = `🔴 FINAL EXECUTION COMMAND:\n${optimizedPrompt}\n\nSTRICT SEPARATION OF CONCERNS:\n1. ART STYLE (Lighting, Texture, 3D Quality): MUST come from IMAGE 1.\n2. CONTENT (Background, Objects, Pose): MUST come from IMAGE 2.\n3. CHARACTERS (Face, Outfit): MUST come from IMAGE 3+.\n\nNEGATIVE PROMPT: Do not merge the background of Image 1 into the scene. Do not change the pose from Image 2.`;
     finalParts.push({ text: finalInstruction });
 
-    // --- STEP 3: EXECUTION ---
-    onLog(`Step 4: Sending Payload (${finalParts.length} parts) to Gemini 3.0 Pro...`);
+    // --- PAYLOAD SANITIZATION ---
+    const sanitizedParts = finalParts.filter(p => {
+        if (!p) return false;
+        if (p.text && typeof p.text === 'string' && p.text.trim().length > 0) return true;
+        if (p.fileData && p.fileData.fileUri) return true;
+        return false;
+    });
+
+    if (sanitizedParts.length === 0) throw new Error("CRITICAL: Final payload is empty! Data assembly failed.");
+
+    onLog(`Step 5: Sending Payload (${sanitizedParts.length} parts) to Gemini 3.0 Pro...`);
 
     const config: any = {
         imageConfig: {
@@ -614,7 +687,10 @@ export const generateImage = async (
             imageSize: resolution
         }
     };
-    if (useSearch) config.tools = [{ google_search: {} }];
+
+    if (useSearch) {
+        config.tools = [{ google_search: {} }];
+    }
 
     const response = await retryWithBackoff(
         async () => {
@@ -630,21 +706,33 @@ export const generateImage = async (
                         contents: { parts: finalParts },
                         config: config
                     }),
-                    timeoutMs, 
+                    timeoutMs, // Dynamic Timeout
                     "Image Generation"
                 );
             } catch (e: any) {
+                // NO FALLBACK to Flash. User demands Pro quality.
+                // We rely on retryWithBackoff to switch keys/wait on 503.
+                
                 const isOverload = e.message?.includes('503') || e.message?.includes('Overloaded') || e.status === 503;
                 const isRateLimit = e.message?.includes('429') || e.status === 429;
 
-                if (isOverload) console.warn("Gemini 3 Pro 503 (Overload). Retrying...");
-                else if (isRateLimit) console.warn("Gemini 3 Pro 429 (Rate Limit). Retrying...");
-                else reportKeyFailure((freshAi as any)._internalApiKey);
+                // If it's a 503 or 429, log it clearly but DO NOT kill the key immediately
+                if (isOverload) {
+                     console.warn("Gemini 3 Pro 503 (Overload). Retrying...");
+                } else if (isRateLimit) {
+                     console.warn("Gemini 3 Pro 429 (Rate Limit). Retrying...");
+                } else {
+                    // For other errors (400, 401, etc.), report key failure
+                    reportKeyFailure((freshAi as any)._internalApiKey);
+                }
                 
                 throw e;
             }
         },
-        5, 5000, "Image Generation", onLog
+        5, // INCREASED RETRIES: 5 attempts
+        5000, // INCREASED DELAY: 5s initial wait
+        "Image Generation",
+        onLog
     );
 
     onLog("Downloading result...");

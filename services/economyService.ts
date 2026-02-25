@@ -352,6 +352,10 @@ export const claimMilestoneReward = async (day: number): Promise<{success: boole
 const temporarilyDisabledKeys: Set<string> = new Set();
 const KEY_COOLDOWN_MS = 60000; // 1 minute cooldown for bad keys
 
+export const isKeyDisabled = (key: string): boolean => {
+    return temporarilyDisabledKeys.has(key);
+};
+
 export const reportKeyFailure = (key: string) => {
     if (!key) return;
     const shortKey = key.substring(0, 4) + '...' + key.slice(-4);

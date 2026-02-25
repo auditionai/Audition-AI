@@ -1,5 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-import { getSystemApiKey, reportKeyFailure } from "./economyService";
+import { getSystemApiKey, reportKeyFailure, isKeyDisabled } from "./economyService";
 import { createTextureSheet, optimizePayload, createSolidFence, createMasterReferenceSheet } from "../utils/imageProcessor";
 
 export interface CharacterData {
@@ -163,7 +163,8 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
 
     // 2. Env Key (Priority - User Selected Key in AI Studio)
     // We MUST prioritize the user's selected key because gemini-3-pro-image-preview requires a paid key.
-    if (process.env.API_KEY) {
+    // BUT we must also respect the blacklist if this key has failed recently.
+    if (process.env.API_KEY && !isKeyDisabled(process.env.API_KEY)) {
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
         (ai as any)._internalApiKey = process.env.API_KEY;
         return ai;
@@ -175,6 +176,14 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
         const ai = new GoogleGenAI({ apiKey: dbKey });
         (ai as any)._internalApiKey = dbKey;
         return ai;
+    }
+
+    // If everything fails and we have an env key (even if disabled), try it as a last resort
+    if (process.env.API_KEY) {
+         console.warn("[System] All keys exhausted or disabled. Forcing retry with Env Key.");
+         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+         (ai as any)._internalApiKey = process.env.API_KEY;
+         return ai;
     }
 
     throw new Error("API Key missing. Set process.env.API_KEY or configure in Admin.");
@@ -701,7 +710,13 @@ export const generateImage = async (
     
     // For Flash, we need to be even more explicit because the model is smaller.
     // We inject the quality boosters directly into the command.
-    const finalInstruction = `🔴 FINAL EXECUTION COMMAND:\n${optimizedPrompt}, ${qualityBoosters}\n\nSTRICT SEPARATION OF CONCERNS:\n1. ART STYLE (Lighting, Texture, 3D Quality): MUST come from IMAGE 1.\n2. CONTENT (Background, Objects, Pose): MUST come from IMAGE 2.\n3. CHARACTERS (Face, Outfit): MUST come from IMAGE 3+.\n\nNEGATIVE PROMPT: ${negativePrompt}. Do not merge the background of Image 1 into the scene. Do not change the pose from Image 2.`;
+    let finalInstruction = `🔴 FINAL EXECUTION COMMAND:\n${optimizedPrompt}, ${qualityBoosters}\n\nSTRICT SEPARATION OF CONCERNS:\n1. ART STYLE (Lighting, Texture, 3D Quality): MUST come from IMAGE 1.\n2. CONTENT (Background, Objects, Pose): MUST come from IMAGE 2.\n3. CHARACTERS (Face, Outfit): MUST come from IMAGE 3+.\n\nNEGATIVE PROMPT: ${negativePrompt}. Do not merge the background of Image 1 into the scene. Do not change the pose from Image 2.`;
+
+    // SPECIAL FLASH INSTRUCTION: Force Style Transfer
+    if (modelType === 'flash' && cleanStyleImage) {
+        finalInstruction += `\n\nIMPORTANT FOR FLASH MODEL: You MUST mimic the art style of IMAGE 1. Look at the lighting, shading, and rendering style of IMAGE 1 and apply it to the scene. Make it look like a high-end 3D render.`;
+    }
+
     finalParts.push({ text: finalInstruction });
 
     // --- PAYLOAD SANITIZATION ---

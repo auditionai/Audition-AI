@@ -511,21 +511,29 @@ export const cleanupExpiredImages = async (isSystemWide: boolean = false): Promi
                 return { Key: key };
             });
 
-            // Split into chunks of 1000 (AWS Limit)
-            const chunkSize = 1000;
+            // Split into chunks of 50 (Safe size for Browser & CORS)
+            const chunkSize = 50;
             for (let i = 0; i < objectsToDelete.length; i += chunkSize) {
                 const chunk = objectsToDelete.slice(i, i + chunkSize);
-                console.log(`[Cleanup] Deleting R2 Batch ${i/chunkSize + 1} (${chunk.length} items)...`);
+                console.log(`[Cleanup] Deleting R2 Batch ${Math.floor(i/chunkSize) + 1} (${chunk.length} items)...`);
                 
-                await r2Client.send(new DeleteObjectsCommand({
-                    Bucket: R2_BUCKET_NAME,
-                    Delete: { Objects: chunk }
-                }));
+                try {
+                    await r2Client.send(new DeleteObjectsCommand({
+                        Bucket: R2_BUCKET_NAME,
+                        Delete: { Objects: chunk }
+                    }));
+                } catch (batchErr: any) {
+                    console.error(`[Cleanup] R2 Batch Error:`, batchErr);
+                    if (batchErr.name === 'TypeError' && batchErr.message === 'Failed to fetch') {
+                        console.error("🚨 LỖI CORS: Trình duyệt đã chặn yêu cầu xóa. Bạn CẦN cấu hình CORS trên R2 Bucket.");
+                        throw new Error("CORS_ERROR: Vui lòng cấu hình CORS cho R2 Bucket để cho phép lệnh DELETE.");
+                    }
+                }
             }
             console.log("[Cleanup] R2 Batch Deletion Complete.");
-        } catch (e) {
-            console.error("[Cleanup] R2 Batch Delete Failed", e);
-            // Continue to DB delete even if R2 fails partially
+        } catch (e: any) {
+            console.error("[Cleanup] R2 Batch Delete Failed Global", e);
+            if (e.message.includes("CORS_ERROR")) throw e; // Re-throw to notify UI
         }
     }
 
@@ -533,12 +541,14 @@ export const cleanupExpiredImages = async (isSystemWide: boolean = false): Promi
     if (supabase) {
         try {
             const ids = expiredImages.map(img => img.id);
-            // Delete in chunks of 1000 for DB safety
-            const chunkSize = 1000;
+            // Delete in chunks of 50 for DB safety
+            const chunkSize = 50;
             for (let i = 0; i < ids.length; i += chunkSize) {
                 const chunk = ids.slice(i, i + chunkSize);
                 const { error } = await supabase.from(TABLE_NAME).delete().in('id', chunk);
-                if (error) console.error("[Cleanup] DB Batch Delete Error", error);
+                if (error) {
+                    console.error("[Cleanup] DB Batch Delete Error", error);
+                }
             }
             console.log("[Cleanup] DB Batch Deletion Complete.");
         } catch (e) {

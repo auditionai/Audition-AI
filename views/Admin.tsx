@@ -192,6 +192,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
   // Error Recovery States
   const [showGiftcodeFix, setShowGiftcodeFix] = useState(false);
+  const [showCorsModal, setShowCorsModal] = useState(false);
 
   // UX States
   const [processingTxId, setProcessingTxId] = useState<string | null>(null);
@@ -1113,6 +1114,12 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                               <span className="text-sm text-slate-400">Loại: {health.storage.type}</span>
                               <StatusBadge status={health.storage.status} />
                           </div>
+                          <button 
+                              onClick={() => setShowCorsModal(true)}
+                              className="w-full py-2 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white rounded-lg text-xs font-bold border border-white/5 transition-colors flex items-center justify-center gap-2"
+                          >
+                              <Icons.Settings className="w-3 h-3" /> Cấu hình CORS (Sửa lỗi xóa ảnh)
+                          </button>
                       </div>
 
                       <div className="bg-[#12121a] border border-white/10 rounded-2xl p-6 relative overflow-hidden">
@@ -1269,6 +1276,78 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
       {/* --- MOVED MODALS (ROOT LEVEL) --- */}
       
+      {/* CORS CONFIG MODAL */}
+      {showCorsModal && (
+          <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 animate-fade-in">
+              <div className="bg-[#12121a] w-full max-w-2xl p-6 rounded-2xl border border-audi-cyan/50 shadow-[0_0_50px_rgba(0,255,255,0.1)] flex flex-col max-h-[90vh]">
+                  <div className="flex items-center gap-4 mb-4">
+                      <div className="w-12 h-12 bg-audi-cyan/20 rounded-full flex items-center justify-center text-audi-cyan animate-pulse">
+                          <Icons.Settings className="w-6 h-6" />
+                      </div>
+                      <div>
+                          <h3 className="text-xl font-bold text-white">CẤU HÌNH CORS CHO R2 (BẮT BUỘC)</h3>
+                          <p className="text-slate-400 text-xs">Để trình duyệt cho phép xóa ảnh trên R2, bạn cần thêm cấu hình này.</p>
+                      </div>
+                  </div>
+                  
+                  <div className="bg-audi-cyan/10 border border-audi-cyan/20 p-4 rounded-xl mb-4">
+                      <p className="text-sm text-audi-cyan font-bold mb-1">Tại sao cần làm điều này?</p>
+                      <p className="text-xs text-slate-300 leading-relaxed">
+                          Trình duyệt chặn các yêu cầu <code>DELETE</code> gửi tới server khác domain (R2) nếu server đó không cho phép (CORS Policy). Đây là bảo mật mặc định của trình duyệt.
+                      </p>
+                  </div>
+
+                  <div className="flex-1 overflow-hidden flex flex-col">
+                      <p className="text-sm font-bold text-white mb-2 uppercase">Copy JSON này vào R2 Bucket Settings -&gt; CORS:</p>
+                      <div className="relative h-48 bg-black/50 border border-white/10 rounded-xl overflow-hidden">
+                          <pre className="absolute inset-0 p-4 text-xs font-mono text-green-400 overflow-auto whitespace-pre-wrap selection:bg-audi-pink selection:text-white">
+{`[
+  {
+    "AllowedOrigins": ["*"],
+    "AllowedMethods": ["GET", "PUT", "POST", "DELETE", "HEAD"],
+    "AllowedHeaders": ["*"],
+    "ExposeHeaders": ["ETag"],
+    "MaxAgeSeconds": 3000
+  }
+]`}
+                          </pre>
+                          <button 
+                            onClick={() => {
+                                navigator.clipboard.writeText(`[
+  {
+    "AllowedOrigins": ["*"],
+    "AllowedMethods": ["GET", "PUT", "POST", "DELETE", "HEAD"],
+    "AllowedHeaders": ["*"],
+    "ExposeHeaders": ["ETag"],
+    "MaxAgeSeconds": 3000
+  }
+]`);
+                                showToast("Đã sao chép JSON!", 'info');
+                            }}
+                            className="absolute top-2 right-2 p-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors flex items-center gap-2 text-xs font-bold"
+                          >
+                              <Icons.Copy className="w-4 h-4" /> Sao chép
+                          </button>
+                      </div>
+                  </div>
+
+                  <div className="flex gap-3 mt-6">
+                      <a 
+                        href="https://dash.cloudflare.com/" 
+                        target="_blank" 
+                        rel="noreferrer"
+                        className="flex-1 py-3 bg-audi-cyan hover:bg-cyan-400 text-black rounded-xl font-bold text-center transition-colors flex items-center justify-center gap-2"
+                      >
+                          <Icons.ExternalLink className="w-4 h-4" /> Mở Cloudflare Dashboard
+                      </a>
+                      <button onClick={() => setShowCorsModal(false)} className="flex-1 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold transition-colors">
+                          Đã Hiểu / Đóng
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
+
       {/* GIFTCODE ERROR FIX MODAL (NEW) */}
       {showGiftcodeFix && (
           <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 animate-fade-in">

@@ -1188,6 +1188,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           <table className="w-full text-left text-sm text-slate-400">
                               <thead className="bg-black/30 text-xs font-bold text-slate-300 uppercase">
                                   <tr>
+                                      <th className="px-4 py-3 w-24">Loại</th>
                                       <th className="px-4 py-3">Tên / ID</th>
                                       <th className="px-4 py-3">Key Value</th>
                                       <th className="px-4 py-3">Trạng thái</th>
@@ -1197,11 +1198,26 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                               </thead>
                               <tbody className="divide-y divide-white/5">
                                   {dbKeys.length === 0 ? (
-                                      <tr><td colSpan={5} className="text-center py-6 text-slate-500">Chưa tìm thấy key nào trong database.</td></tr>
-                                  ) : dbKeys.map((k) => (
+                                      <tr><td colSpan={6} className="text-center py-6 text-slate-500">Chưa tìm thấy key nào trong database.</td></tr>
+                                  ) : dbKeys.map((k) => {
+                                      const isPro = k.name?.includes('[PRO]');
+                                      const displayName = k.name?.replace('[PRO]', '').replace('[FLASH]', '').trim() || 'Unnamed Key';
+                                      
+                                      return (
                                       <tr key={k.id} className="hover:bg-white/5">
+                                          <td className="px-4 py-3">
+                                              {isPro ? (
+                                                  <span className="inline-flex items-center justify-center px-2 py-1 rounded bg-audi-pink/20 text-audi-pink border border-audi-pink/30 text-[10px] font-bold w-16">
+                                                      PRO
+                                                  </span>
+                                              ) : (
+                                                  <span className="inline-flex items-center justify-center px-2 py-1 rounded bg-audi-cyan/20 text-audi-cyan border border-audi-cyan/30 text-[10px] font-bold w-16">
+                                                      FLASH
+                                                  </span>
+                                              )}
+                                          </td>
                                           <td className="px-4 py-3 font-bold text-white">
-                                              {k.name || 'Unnamed Key'}
+                                              <div className="text-sm">{displayName}</div>
                                               <div className="text-[10px] text-slate-600 font-mono">{k.id.substring(0,8)}...</div>
                                           </td>
                                           <td className="px-4 py-3 font-mono text-xs">
@@ -1218,18 +1234,32 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                               <button onClick={() => handleDeleteApiKey(k.id)} className="p-1.5 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white rounded transition-colors"><Icons.Trash className="w-4 h-4" /></button>
                                           </td>
                                       </tr>
-                                  ))}
+                                      );
+                                  })}
                               </tbody>
                           </table>
                       </div>
                       <div className="md:hidden space-y-4">
                           {dbKeys.length === 0 ? (
                               <div className="text-center py-4 text-slate-500 text-sm">Chưa có key.</div>
-                          ) : dbKeys.map((k) => (
-                              <div key={k.id} className="bg-white/5 rounded-xl p-4 border border-white/5">
-                                  <div className="flex justify-between items-start mb-2">
+                          ) : dbKeys.map((k) => {
+                              const isPro = k.name?.includes('[PRO]');
+                              const displayName = k.name?.replace('[PRO]', '').replace('[FLASH]', '').trim() || 'Unnamed Key';
+                              
+                              return (
+                              <div key={k.id} className="bg-white/5 rounded-xl p-4 border border-white/5 relative overflow-hidden">
+                                  {/* Badge at top right */}
+                                  <div className="absolute top-0 right-0">
+                                      {isPro ? (
+                                          <div className="bg-audi-pink text-white text-[9px] font-bold px-2 py-1 rounded-bl-lg">PRO TIER</div>
+                                      ) : (
+                                          <div className="bg-audi-cyan text-black text-[9px] font-bold px-2 py-1 rounded-bl-lg">FLASH TIER</div>
+                                      )}
+                                  </div>
+
+                                  <div className="flex justify-between items-start mb-2 pr-12">
                                       <div>
-                                          <div className="font-bold text-white text-sm">{k.name || 'Unnamed'}</div>
+                                          <div className="font-bold text-white text-sm">{displayName}</div>
                                           <div className="font-mono text-[10px] text-slate-500">{k.id}</div>
                                       </div>
                                       <span className={`text-[10px] font-bold px-2 py-1 rounded border ${k.status === 'active' ? 'bg-green-500/20 text-green-500 border-green-500/50' : 'bg-slate-500/20 text-slate-500 border-slate-500/50'}`}>
@@ -1247,7 +1277,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                       </div>
                                   </div>
                               </div>
-                          ))}
+                              );
+                          })}
                       </div>
                   </div>
               </div>

@@ -332,7 +332,7 @@ export const checkConnection = async (key?: string): Promise<boolean> => {
         // Sử dụng Flash cho checkConnection (Admin) để ping nhanh và ổn định nhất
         await runWithTimeout(
             ai.models.generateContent({
-                model: 'gemini-3-flash-preview',
+                model: 'gemini-2.5-flash',
                 contents: { parts: [{ text: "Ping" }] }
             }),
             15000,

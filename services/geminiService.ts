@@ -548,7 +548,7 @@ export const generateImage = async (
     onLog(`Step 2: Aggregation Complete in ${aggregationTime}s.`);
 
     // --- STEP 2: PAYLOAD ASSEMBLY (SYNC) ---
-    onLog("Step 3: Assembling Final Payload...");
+    onLog("Step 3: Assembling Final Payload (Direct Command Mode)...");
 
     const styleUri = styleResult.uri;
     const styleKeywords = styleResult.keywords;
@@ -561,37 +561,48 @@ export const generateImage = async (
     if (characters.length > 0 && validChars.length === 0) throw new Error("CRITICAL: No characters uploaded successfully.");
 
     // Construct Final Prompt (Merge Contexts)
+    // Simplify the text prompt to focus on the visual outcome
     const finalContextPrompt = `
-    ${optimizedPrompt}
-    ${styleKeywords ? `\nSTYLE KEYWORDS: ${styleKeywords}` : ''}
-    ${poseDesc ? `\nPOSE DESCRIPTION: ${poseDesc}` : ''}
+    COMMAND: ${prompt}
+    ${styleKeywords ? `STYLE: ${styleKeywords}` : ''}
+    ${poseDesc ? `POSE: ${poseDesc}` : ''}
     `;
 
     const finalParts: any[] = [];
 
-    // A. STYLE REFERENCE
+    // A. STYLE REFERENCE (Stronger Instruction)
     if (styleUri) {
-        finalParts.push({ text: "🔴 IMAGE 1: STYLE REFERENCE (ART STYLE ONLY)\nINSTRUCTION: Extract ONLY the 3D rendering quality, lighting, texture, and artistic vibe. \nNEGATIVE CONSTRAINT: Do NOT copy the background, the characters, or any objects from this image. IGNORE the content of this image completely." });
+        finalParts.push({ text: "Input 1 [STYLE]: Transfer the art style, lighting, and rendering quality from this image. DO NOT copy the content." });
         finalParts.push({ fileData: { mimeType: 'image/jpeg', fileUri: styleUri } });
     }
 
-    // B. POSE/STRUCTURE REFERENCE
+    // B. POSE/STRUCTURE REFERENCE (Stronger Instruction)
     if (refUri) {
-        finalParts.push({ text: "🔴 IMAGE 2: POSE & BACKGROUND REFERENCE (SOURCE OF TRUTH)\nINSTRUCTION: This image is the BLUEPRINT for the scene. \n1. BACKGROUND: You MUST use the background/environment from this image.\n2. POSE: You MUST match the character poses and camera angle exactly.\n3. COMPOSITION: The scene layout must be identical to this image." });
+        finalParts.push({ text: "Input 2 [STRUCTURE]: COPY the camera angle, character pose, and scene composition from this image EXACTLY. This is the skeleton of the image." });
         finalParts.push({ fileData: { mimeType: 'image/jpeg', fileUri: refUri } });
     }
 
-    // C. CHARACTER REFERENCES
+    // C. CHARACTER REFERENCES (Stronger Instruction)
     if (validChars.length > 0) {
-        finalParts.push({ text: "🔴 IMAGE 3+: CHARACTER REFERENCE(S)\nINSTRUCTION: These are the characters to be placed into the scene. Maintain their facial features and outfit details." });
+        finalParts.push({ text: "Input 3+ [IDENTITY]: These are the characters in the scene. You MUST use their Face and Outfit." });
         validChars.forEach((char, index) => {
             finalParts.push({ fileData: { mimeType: 'image/jpeg', fileUri: char.uri } });
-            finalParts.push({ text: `\n- CHARACTER ${index + 1} (${char.gender.toUpperCase()}): Use Face & Outfit from IMAGE ${index + 3}.` });
+            finalParts.push({ text: `Target ${index + 1} (${char.gender}): REPLICATE the face and clothes from the image above.` });
         });
     }
 
-    // D. FINAL INSTRUCTION
-    const finalInstruction = `🔴 FINAL EXECUTION COMMAND:\n${finalContextPrompt}\n\nSTRICT SEPARATION OF CONCERNS:\n1. ART STYLE: From IMAGE 1.\n2. POSE/BG: From IMAGE 2.\n3. CHARACTERS: From IMAGE 3+.\n\nNEGATIVE PROMPT: Do not merge the background of Image 1. Do not change the pose from Image 2.`;
+    // D. FINAL INSTRUCTION (The "Binder")
+    const finalInstruction = `
+    GENERATE IMAGE REQUEST:
+    1. BASE: Start with the composition and pose from Input 2 [STRUCTURE].
+    2. CONTENT: Place the characters from Input 3+ [IDENTITY] into that pose.
+    3. APPEARANCE: Dress them EXACTLY as shown in Input 3+. Keep their faces.
+    4. RENDER: Apply the visual style from Input 1 [STYLE].
+    
+    PROMPT: ${finalContextPrompt}
+    
+    NEGATIVE PROMPT: changing the pose, changing the clothes, changing the face, cartoon, drawing, low quality.
+    `;
     finalParts.push({ text: finalInstruction });
 
     // --- STEP 3: EXECUTION ---

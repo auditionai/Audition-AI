@@ -235,19 +235,9 @@ export const testApiKey = async (): Promise<boolean> => {
     } catch (e: any) {
         console.warn("API Key Test Failed", e);
         
-        // CRITICAL FIX: If the error is 503 (Overloaded) or 429 (Rate Limit), 
-        // the API Key is actually VALID and authenticated successfully.
-        // The Google server is just busy. We should NOT ban the key.
-        const isServerBusy = e.status === 503 || e.status === 429 || 
-                             e.message?.includes('503') || e.message?.includes('429') || 
-                             e.message?.includes('Overloaded') ||
-                             e.message?.includes('timed out') || e.message?.includes('Timeout');
-        
-        if (isServerBusy) {
-            console.log("[System] API Key is VALID, but Gemini 3.1 Pro is busy (503/429/Timeout). Passing test.");
-            return true; // Key is good, let the main generation's retryWithBackoff handle the 503
-        }
-
+        // We MUST return false here so the UI knows the connection is NOT ready.
+        // If it's a 503/Timeout, we still want to rotate the key or wait, 
+        // rather than blindly proceeding to the heavy image generation step.
         if (currentKey) {
             reportKeyFailure(currentKey);
         }
@@ -330,11 +320,6 @@ export const checkConnection = async (key?: string): Promise<boolean> => {
         return true;
     } catch (e: any) {
         console.error("Gemini Connection Check Failed", e);
-        const isServerBusy = e.status === 503 || e.status === 429 || 
-                             e.message?.includes('503') || e.message?.includes('429') || 
-                             e.message?.includes('Overloaded') ||
-                             e.message?.includes('timed out') || e.message?.includes('Timeout');
-        if (isServerBusy) return true;
         return false;
     }
 };

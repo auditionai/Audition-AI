@@ -390,11 +390,37 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
     await new Promise(r => setTimeout(r, 100));
 
     try {
-        // --- NEW: API KEY PRE-FLIGHT TEST ---
-        addLog("Kiểm tra kết nối API Key (Ping)...");
-        const isKeyValid = await testApiKey();
+        // --- NEW: API KEY PRE-FLIGHT TEST (120s Timeout / 30s Retry) ---
+        let isKeyValid = false;
+        const startTime = Date.now();
+        const TIMEOUT_LIMIT = 120000; // 120s
+        const RETRY_INTERVAL = 30000; // 30s
+        let attempt = 0;
+
+        while (Date.now() - startTime < TIMEOUT_LIMIT) {
+            attempt++;
+            addLog(`Kiểm tra kết nối API Key (Gemini 3.0 Pro) - Lần ${attempt}...`);
+            
+            const stepStart = Date.now();
+            isKeyValid = await testApiKey();
+            
+            if (isKeyValid) break;
+            
+            const elapsed = Date.now() - stepStart;
+            const waitTime = Math.max(0, RETRY_INTERVAL - elapsed);
+            
+            if (Date.now() - startTime + waitTime < TIMEOUT_LIMIT) {
+                if (waitTime > 1000) {
+                     addLog(`Kết nối chưa sẵn sàng. Thử lại sau ${Math.ceil(waitTime/1000)}s...`);
+                     await new Promise(r => setTimeout(r, waitTime));
+                } else {
+                     addLog(`Kết nối chưa sẵn sàng. Đang thử lại...`);
+                }
+            }
+        }
+
         if (!isKeyValid) {
-            throw new Error("API Key Error: Không thể kết nối tới Google Gemini. Vui lòng thử lại sau.");
+            throw new Error("API Key quá tải (Timeout 120s). Vui lòng ấn Tạo lại ảnh.");
         }
         addLog("API Key OK. Kết nối ổn định.");
 

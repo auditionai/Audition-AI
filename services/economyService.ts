@@ -365,12 +365,12 @@ export const reportKeyFailure = (key: string) => {
 
 let lastUsedKey: string | null = null;
 
-export const getSystemApiKey = async (excludedKeys: string[] = []): Promise<string | null> => {
+export const getSystemApiKey = async (tier: 'flash' | 'pro' = 'flash', excludedKeys: string[] = []): Promise<string | null> => {
     try {
         // 1. Get all active keys
         const { data: allKeys, error } = await supabase
             .from('api_keys')
-            .select('id, key_value, last_used_at')
+            .select('id, key_value, last_used_at, name')
             .eq('status', 'active');
         
         if (error || !allKeys || allKeys.length === 0) {
@@ -378,8 +378,22 @@ export const getSystemApiKey = async (excludedKeys: string[] = []): Promise<stri
             return process.env.API_KEY || null;
         }
 
+        // Filter by tier
+        let tierKeys = allKeys;
+        if (tier === 'pro') {
+            tierKeys = allKeys.filter((k: any) => k.name && k.name.includes('[PRO]'));
+        } else {
+            // Flash keys are those without [PRO] (or explicitly marked [FLASH])
+            tierKeys = allKeys.filter((k: any) => !k.name || !k.name.includes('[PRO]'));
+        }
+
+        if (tierKeys.length === 0) {
+            // If no keys for this tier, fallback to env key
+            return process.env.API_KEY || null;
+        }
+
         // 2. Filter out keys that are in the in-memory blacklist OR the excluded list (from retry loop)
-        let validKeys = allKeys.filter(k => 
+        let validKeys = tierKeys.filter((k: any) => 
             !temporarilyDisabledKeys.has(k.key_value) && 
             !excludedKeys.includes(k.key_value)
         );
@@ -388,13 +402,13 @@ export const getSystemApiKey = async (excludedKeys: string[] = []): Promise<stri
         if (validKeys.length === 0) {
             console.warn("[System] All keys exhausted. Resetting temporary blacklist.");
             temporarilyDisabledKeys.clear();
-            validKeys = allKeys;
+            validKeys = tierKeys;
         }
 
         // 4. Avoid picking the exact same key as last time if we have multiple choices
         let candidates = validKeys;
         if (candidates.length > 1 && lastUsedKey) {
-            const filtered = candidates.filter(k => k.key_value !== lastUsedKey);
+            const filtered = candidates.filter((k: any) => k.key_value !== lastUsedKey);
             if (filtered.length > 0) {
                 candidates = filtered;
             }
@@ -415,22 +429,27 @@ export const getSystemApiKey = async (excludedKeys: string[] = []): Promise<stri
     }
 };
 
-export const saveSystemApiKey = async (key: string): Promise<{success: boolean, error?: string}> => {
+export const saveSystemApiKey = async (key: string, tier: 'flash' | 'pro' = 'flash'): Promise<{success: boolean, error?: string}> => {
     try {
         const cleanKey = key.trim();
+        const prefix = tier === 'pro' ? '[PRO]' : '[FLASH]';
+        
         // Check if exists
         const { data: existing } = await supabase
             .from('api_keys')
-            .select('id')
+            .select('id, name')
             .eq('key_value', cleanKey)
             .single();
 
         if (existing) {
-             const { error } = await supabase.from('api_keys').update({ status: 'active' }).eq('id', existing.id);
+             const newName = existing.name?.includes('[') 
+                ? existing.name.replace(/\[.*?\]/, prefix) 
+                : `${prefix} ${existing.name || 'Admin Key'}`;
+             const { error } = await supabase.from('api_keys').update({ status: 'active', name: newName }).eq('id', existing.id);
              if (error) throw error;
         } else {
              const { error } = await supabase.from('api_keys').insert({
-                 name: 'Admin Key ' + new Date().toISOString(),
+                 name: `${prefix} Admin Key ` + new Date().toISOString(),
                  key_value: cleanKey,
                  status: 'active'
              });

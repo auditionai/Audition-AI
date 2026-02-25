@@ -914,7 +914,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                 <Icons.Flame className="w-4 h-4 text-yellow-500 animate-pulse" />
             </div>
             <p className="text-[10px] md:text-xs text-yellow-200/80 font-medium leading-relaxed">
-                <strong className="text-yellow-500">Lưu ý quan trọng:</strong> Mô hình tạo ảnh AI từ Gemini 2.5 Flash đã lỗi thời. Để đảm bảo chất lượng ảnh đầu ra, ứng dụng sẽ chuyển toàn bộ sang sử dụng <span className="text-white font-bold">Gemini 3.0 Pro (Nano Banana Pro)</span> để tạo ảnh.
+                <strong className="text-yellow-500">Lưu ý:</strong> Mô hình <span className="text-audi-cyan font-bold">Flash</span> có tốc độ nhanh nhưng chất lượng ảnh thấp hơn, chi tiết nhân vật và độ khối 3D kém hơn. Hãy chọn <span className="text-audi-pink font-bold">Pro</span> để có những bức ảnh đẹp nhất, sắc nét và sống động.
             </p>
         </div>
 

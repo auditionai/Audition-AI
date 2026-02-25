@@ -509,7 +509,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
               structureRefData, 
               characterDataList, 
               resolution,
-              'pro', // ALWAYS PRO
+              aiModel, // Use selected AI Model
               useSearch,
               useCloudRef, 
               (msg) => addLog(msg),

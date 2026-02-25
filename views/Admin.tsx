@@ -27,7 +27,7 @@ import {
     saveStylePreset,
     deleteStylePreset
 } from '../services/economyService';
-import { getAllImagesFromStorage, deleteImageFromStorage, checkR2Connection } from '../services/storageService';
+import { getAllImagesFromStorage, deleteImageFromStorage, checkR2Connection, cleanupExpiredImages } from '../services/storageService';
 import { checkConnection, analyzeStyleImage } from '../services/geminiService';
 import { checkSupabaseConnection } from '../services/supabaseClient';
 import { Icons } from '../components/Icons';
@@ -1112,6 +1112,27 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           <div className="flex items-center justify-between mb-4">
                               <span className="text-sm text-slate-400">Loại: {health.storage.type}</span>
                               <StatusBadge status={health.storage.status} />
+                          </div>
+                      </div>
+
+                      <div className="bg-[#12121a] border border-white/10 rounded-2xl p-6 relative overflow-hidden">
+                          <h3 className="font-bold text-lg text-white mb-1">Bảo Trì Hệ Thống</h3>
+                          <div className="flex items-center justify-between mb-4">
+                              <span className="text-sm text-slate-400">Dọn dẹp ảnh hết hạn (7 ngày)</span>
+                              <button 
+                                  onClick={() => showConfirm('Bạn có chắc chắn muốn xóa tất cả ảnh hết hạn (cũ hơn 7 ngày) trên toàn hệ thống không?', async () => {
+                                      showToast('Đang dọn dẹp...', 'info');
+                                      try {
+                                        const count = await cleanupExpiredImages(true);
+                                        showToast(`Đã xóa ${count} ảnh hết hạn!`, 'success');
+                                      } catch (e) {
+                                        showToast('Lỗi dọn dẹp: ' + (e as any).message, 'error');
+                                      }
+                                  })}
+                                  className="px-3 py-1.5 bg-red-500/20 text-red-500 hover:bg-red-500 hover:text-white rounded border border-red-500/50 text-xs font-bold transition-colors flex items-center gap-2"
+                              >
+                                  <Icons.Trash className="w-3 h-3" /> Dọn Dẹp Ngay
+                              </button>
                           </div>
                       </div>
                   </div>

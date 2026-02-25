@@ -324,6 +324,35 @@ export const getShowcaseImages = async (): Promise<GeneratedImage[]> => {
     });
 };
 
+export const getAllImagesSystemWide = async (): Promise<GeneratedImage[]> => {
+    if (!supabase) return [];
+    
+    try {
+        const { data, error } = await supabase
+            .from(TABLE_NAME)
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (error || !data) return [];
+
+        return data.map((row: any) => ({
+            id: row.id,
+            url: row.image_url,
+            prompt: row.prompt,
+            timestamp: new Date(row.created_at).getTime(),
+            toolId: 'gen_tool',
+            toolName: row.model_used || 'AI Gen',
+            engine: row.model_used,
+            isShared: row.is_public,
+            userId: row.user_id,
+            userName: 'User'
+        }));
+    } catch (e) {
+        console.error("System Wide Fetch Error", e);
+        return [];
+    }
+};
+
 export const getAllImagesFromStorage = async (): Promise<GeneratedImage[]> => {
   // 1. SUPABASE (Fetches metadata, URL points to R2 or Supabase Storage)
   if (supabase) {
@@ -346,7 +375,8 @@ export const getAllImagesFromStorage = async (): Promise<GeneratedImage[]> => {
                     toolName: row.model_used || 'AI Gen',
                     engine: row.model_used,
                     isShared: row.is_public,
-                    userName: 'Me'
+                    userName: 'Me',
+                    userId: row.user_id
                 }));
             }
         }
@@ -370,14 +400,15 @@ export const getAllImagesFromStorage = async (): Promise<GeneratedImage[]> => {
   });
 };
 
-export const deleteImageFromStorage = async (id: string): Promise<void> => {
+export const deleteImageFromStorage = async (id: string, targetUserId?: string): Promise<void> => {
   const user = await getUserProfile();
-  
-  if (supabase && user.id) {
+  const userId = targetUserId || user.id;
+
+  if (supabase && userId) {
     try {
         // A. Delete from R2 (if configured)
         if (r2Client) {
-            const fileName = `${user.id}/${id}.png`;
+            const fileName = `${userId}/${id}.png`;
             await r2Client.send(new DeleteObjectCommand({
                 Bucket: R2_BUCKET_NAME,
                 Key: fileName
@@ -405,4 +436,38 @@ export const deleteImageFromStorage = async (id: string): Promise<void> => {
     request.onsuccess = () => resolve();
     request.onerror = () => reject(request.error);
   });
+};
+
+export const cleanupExpiredImages = async (isSystemWide: boolean = false): Promise<number> => {
+    let images: GeneratedImage[] = [];
+    if (isSystemWide) {
+        images = await getAllImagesSystemWide();
+    } else {
+        images = await getAllImagesFromStorage();
+    }
+
+    const now = Date.now();
+    const EXPIRATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 Days
+    let deletedCount = 0;
+
+    console.log(`[Cleanup] Starting cleanup. SystemWide: ${isSystemWide}. Found ${images.length} images.`);
+
+    for (const img of images) {
+        // Skip shared/saved images
+        if (img.isShared) continue;
+
+        // Check expiration
+        if (now - img.timestamp > EXPIRATION_MS) {
+            console.log(`[Cleanup] Deleting expired image: ${img.id} (Age: ${((now - img.timestamp)/86400000).toFixed(1)} days)`);
+            try {
+                await deleteImageFromStorage(img.id, img.userId);
+                deletedCount++;
+            } catch (e) {
+                console.error(`[Cleanup] Failed to delete ${img.id}`, e);
+            }
+        }
+    }
+    
+    console.log(`[Cleanup] Completed. Deleted ${deletedCount} images.`);
+    return deletedCount;
 };

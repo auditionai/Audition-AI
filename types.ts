@@ -66,6 +66,7 @@ export interface GeneratedImage {
   engine: string;
   isShared?: boolean; // New: Status for Showcase
   userName?: string;  // New: Author name
+  userId?: string;    // New: Owner ID for admin cleanup
 }
 
 // --- NEW ECONOMY & USER TYPES ---

@@ -225,7 +225,7 @@ export const testApiKey = async (): Promise<boolean> => {
                 model: 'gemini-3.1-pro-preview',
                 contents: { parts: [{ text: "Hello" }] }
             }),
-            20000, // Increased to 20s
+            60000, // Increased to 60s
             "API Key Test"
         );
         return true;

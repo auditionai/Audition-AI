@@ -25,22 +25,21 @@ const retryWithBackoff = async <T>(
     try {
         return await operation();
     } catch (error: any) {
-        // Check for 503 (Service Unavailable), 429 (Too Many Requests), or 403 (Quota/Auth)
+        // Check for 503 (Service Unavailable) or 403 (Auth)
+        // CRITICAL FIX: DO NOT include 429 (Quota) here. If it's a quota error, 
+        // we want to fail immediately so the outer catch block can ban the key and rotate it.
         const isTransient = 
             error?.status === 503 || 
-            error?.status === 429 || 
             error?.status === 403 ||
             error?.status === 500 ||
             error?.status === 502 ||
             error?.status === 504 ||
             error?.message?.includes('503') || 
-            error?.message?.includes('429') ||
             error?.message?.includes('403') ||
             error?.message?.includes('500') ||
             error?.message?.includes('502') ||
             error?.message?.includes('504') ||
             error?.message?.includes('Overloaded') ||
-            error?.message?.includes('quota') ||
             error?.message?.includes('fetch failed') ||
             error?.message?.includes('NetworkError') ||
             error?.message?.includes('Failed to fetch') ||
@@ -239,21 +238,21 @@ export const testApiKey = async (): Promise<boolean> => {
     } catch (e: any) {
         console.warn("API Key Test Failed", e);
         
-        const isServerBusy = e.status === 503 || e.status === 429 || 
-                             e.message?.includes('503') || e.message?.includes('429') || 
+        const isServerBusy = e.status === 503 || 
+                             e.message?.includes('503') || 
                              e.message?.includes('Overloaded') ||
                              e.message?.includes('timed out') || e.message?.includes('Timeout');
 
-        // CRITICAL FIX: If the error is 503 (Overloaded) or 429 (Rate Limit) or Timeout,
+        // CRITICAL FIX: If the error is 503 (Overloaded) or Timeout,
         // the API Key is actually VALID and authenticated successfully.
         // The Google server is just busy. We MUST return TRUE here to pass the test
         // and let the main generation's retryWithBackoff handle the 503.
         if (isServerBusy) {
-            console.log("[System] API Key is VALID, but Gemini is busy (503/429/Timeout). Passing test.");
+            console.log("[System] API Key is VALID, but Gemini is busy (503/Timeout). Passing test.");
             return true; 
         }
 
-        // Only ban the key if it's a real error (e.g., 400 Bad Request, 403 Forbidden)
+        // Only ban the key if it's a real error (e.g., 400 Bad Request, 403 Forbidden) OR 429 (Quota Exceeded)
         if (currentKey) {
             reportKeyFailure(currentKey);
         }
@@ -726,13 +725,16 @@ export const generateImage = async (
                 );
             } catch (e: any) {
                 const isOverload = e.message?.includes('503') || e.message?.includes('Overloaded') || e.status === 503 || e.message?.includes('timed out') || e.message?.includes('Timeout');
-                const isRateLimit = e.message?.includes('429') || e.status === 429;
+                const isRateLimit = e.message?.includes('429') || e.status === 429 || e.message?.includes('quota');
 
-                if (isOverload || isRateLimit) {
-                     console.warn(`Gemini 3.0 Pro ${isOverload ? '503/Timeout' : '429'}. Retrying...`);
-                     // KHÔNG SỬ DỤNG FALLBACK SANG FLASH NỮA. CHỈ DÙNG PRO.
+                if (isOverload) {
+                     console.warn(`Gemini 3.0 Pro 503/Timeout. Retrying...`);
                      onLog(`⏳ Đang xếp hàng chờ Google Render ảnh (Model Pro đang xử lý)...`);
                 } else {
+                    if (isRateLimit) {
+                         console.warn(`Gemini 3.0 Pro 429 (Rate Limit). Banning key and retrying with a new one...`);
+                         onLog(`⚠️ API Key hết hạn mức (429). Đang tự động đổi sang Key dự phòng...`);
+                    }
                     reportKeyFailure((freshAi as any)._internalApiKey);
                 }
                 

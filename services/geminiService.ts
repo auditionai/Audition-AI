@@ -400,20 +400,20 @@ const optimizePromptWithThinking = async (
     poseContext: string = "",
     masterSheetPart: any | null = null
 ): Promise<string> => {
-    // AGGRESSIVE FAIL-FAST: Use Flash for speed/stability. No retries. No key banning.
-    // If this fails, we just use the raw prompt.
-    const model = 'gemini-3-flash-preview'; 
+    // UPGRADE: Use Gemini 3.1 Pro for the "Brain" of the operation.
+    // This ensures that even if we use the Flash Image Model, the PROMPT itself is crafted by the smartest Text Model.
+    // This meets the user's requirement for "Flash model to be smarter, superior".
+    const model = 'gemini-3.1-pro-preview'; 
 
     try {
-        const freshAi = await getAiClient('flash');
+        // Use Pro client for reasoning (it's text-only so it's cheap/fast enough)
+        const freshAi = await getAiClient('pro');
         
         const parts: any[] = [];
-        // Note: We intentionally IGNORE masterSheetPart here to prevent payload overload.
-        // This step is purely text-based reasoning now.
         
         parts.push({
-            text: `ROLE: PROMPT ENGINEER.
-MISSION: Convert inputs into a detailed image generation prompt.
+            text: `ROLE: ELITE PROMPT ENGINEER (MIDJOURNEY V6 LEVEL).
+MISSION: Convert user inputs into a MASTERPIECE image generation prompt.
 
 INPUTS:
 1. COMMAND: "${rawPrompt}"
@@ -421,8 +421,10 @@ INPUTS:
 3. POSE: "${poseContext}"
 
 RULES:
-- Combine all inputs into a single, descriptive paragraph.
-- Focus on visual details: lighting, camera angle, character appearance.
+- You are the "Brain" of the operation. The image generator needs explicit, high-fidelity instructions.
+- Combine all inputs into a single, rich, descriptive paragraph.
+- Focus on: Lighting (Volumetric, Cinematic), Texture (8k, Unreal Engine 5), Camera (Depth of Field, Bokeh), and Character Details.
+- ENHANCE the prompt with "Quality Boosters": masterpiece, best quality, ultra-detailed, photorealistic, 8k, ray tracing, hdr.
 - Output ONLY the final prompt. No explanations.`
         });
 
@@ -445,7 +447,7 @@ RULES:
     } catch (e) {
         console.warn("Prompt Optimization Skipped (Fail-Fast)", e);
         // Fallback: Simple concatenation
-        return `${rawPrompt}${styleContext ? ', ' + styleContext : ''}${poseContext ? ', ' + poseContext : ''}`;
+        return `${rawPrompt}${styleContext ? ', ' + styleContext : ''}${poseContext ? ', ' + poseContext : ''}, masterpiece, best quality, 8k, ultra detailed`;
     }
 }
 
@@ -693,8 +695,13 @@ export const generateImage = async (
         });
     }
     
-    // D. FINAL PROMPT
-    const finalInstruction = `🔴 FINAL EXECUTION COMMAND:\n${optimizedPrompt}\n\nSTRICT SEPARATION OF CONCERNS:\n1. ART STYLE (Lighting, Texture, 3D Quality): MUST come from IMAGE 1.\n2. CONTENT (Background, Objects, Pose): MUST come from IMAGE 2.\n3. CHARACTERS (Face, Outfit): MUST come from IMAGE 3+.\n\nNEGATIVE PROMPT: Do not merge the background of Image 1 into the scene. Do not change the pose from Image 2.`;
+    // D. FINAL PROMPT (QUALITY INJECTION)
+    const qualityBoosters = "masterpiece, best quality, ultra-detailed, 8k, photorealistic, ray tracing, hdr, cinematic lighting, unreal engine 5 render";
+    const negativePrompt = "low quality, bad anatomy, worst quality, deformed, disfigured, extra limbs, missing limbs, blur, grain, watermark, text, signature, bad hands, bad face, mutation, ugly, disgusting";
+    
+    // For Flash, we need to be even more explicit because the model is smaller.
+    // We inject the quality boosters directly into the command.
+    const finalInstruction = `🔴 FINAL EXECUTION COMMAND:\n${optimizedPrompt}, ${qualityBoosters}\n\nSTRICT SEPARATION OF CONCERNS:\n1. ART STYLE (Lighting, Texture, 3D Quality): MUST come from IMAGE 1.\n2. CONTENT (Background, Objects, Pose): MUST come from IMAGE 2.\n3. CHARACTERS (Face, Outfit): MUST come from IMAGE 3+.\n\nNEGATIVE PROMPT: ${negativePrompt}. Do not merge the background of Image 1 into the scene. Do not change the pose from Image 2.`;
     finalParts.push({ text: finalInstruction });
 
     // --- PAYLOAD SANITIZATION ---

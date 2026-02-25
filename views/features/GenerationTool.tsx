@@ -393,7 +393,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
         // --- NEW: API KEY PRE-FLIGHT TEST (120s Timeout / 5s Retry) ---
         let isKeyValid = false;
         const startTime = Date.now();
-        const TIMEOUT_LIMIT = 120000; // 120s
+        const TIMEOUT_LIMIT = 300000; // Tăng lên 5 phút (300s) để có đủ thời gian test và xoay vòng Key khi Server quá tải
         const RETRY_INTERVAL = 5000; // 5s
         let attempt = 0;
 
@@ -420,7 +420,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
         }
 
         if (!isKeyValid) {
-            throw new Error("API Key quá tải (Timeout 120s). Vui lòng ấn Tạo lại ảnh.");
+            throw new Error(`API Key quá tải (Timeout ${TIMEOUT_LIMIT/1000}s). Vui lòng ấn Tạo lại ảnh.`);
         }
         addLog("API Key OK. Kết nối ổn định.");
 

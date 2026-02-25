@@ -244,10 +244,16 @@ export const testApiKey = async (): Promise<boolean> => {
     } catch (e: any) {
         console.warn("API Key Test Failed", e);
         
+        const isServerBusy = e.status === 503 || e.status === 429 || 
+                             e.message?.includes('503') || e.message?.includes('429') || 
+                             e.message?.includes('Overloaded') ||
+                             e.message?.includes('timed out') || e.message?.includes('Timeout');
+
         // We MUST return false here so the UI knows the connection is NOT ready.
         // If it's a 503/Timeout, we still want to rotate the key or wait, 
         // rather than blindly proceeding to the heavy image generation step.
-        if (currentKey) {
+        // CRITICAL: DO NOT BAN THE KEY IF IT'S JUST A SERVER BUSY ERROR!
+        if (currentKey && !isServerBusy) {
             reportKeyFailure(currentKey);
         }
         return false;

@@ -292,9 +292,18 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       if (!apiKey.trim()) return;
       
       setKeyStatus('checking');
-      const isValid = await checkConnection(apiKey);
+      const check = await checkConnection(apiKey);
       
-      if (isValid) {
+      // Allow saving if valid OR if user confirms to bypass
+      let shouldSave = check.success;
+      if (!check.success) {
+          setKeyStatus('invalid');
+          if (window.confirm(`API Key này có vẻ không hoạt động:\n"${check.message}"\n\nBạn có chắc chắn muốn lưu nó vào Database không?`)) {
+              shouldSave = true;
+          }
+      }
+
+      if (shouldSave) {
           const result = await saveSystemApiKey(apiKey, apiKeyTier);
           if (result.success) {
               setKeyStatus('valid');
@@ -307,20 +316,19 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               showToast(`Lỗi Database: ${result.error}`, 'error');
           }
       } else {
-          setKeyStatus('invalid');
-          showToast('API Key không hoạt động. Vui lòng kiểm tra lại.', 'error');
+          showToast(`Lỗi: ${check.message}`, 'error');
       }
   };
 
   const handleTestKey = async (key: string) => {
       showToast('Đang kiểm tra key...', 'info');
-      const isValid = await checkConnection(key);
-      if (isValid) {
+      const check = await checkConnection(key);
+      if (check.success) {
           showToast('Kết nối thành công! Key hoạt động tốt.', 'success');
       } else {
-          showToast('Key không hoạt động hoặc hết hạn ngạch.', 'error');
+          showToast(`Kết nối thất bại: ${check.message}`, 'error');
       }
-  }
+  };
 
   const handleDeleteApiKey = async (id: string) => {
       showConfirm('Xóa API Key này khỏi database?', async () => {

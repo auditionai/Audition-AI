@@ -326,7 +326,7 @@ const uploadToGemini = async (input: string, mimeType: string): Promise<string> 
     }
 };
 
-export const checkConnection = async (key?: string): Promise<boolean> => {
+export const checkConnection = async (key?: string): Promise<{ success: boolean; message?: string }> => {
     try {
         const ai = await getAiClient('flash', key);
         // Sử dụng Flash cho checkConnection (Admin) để ping nhanh và ổn định nhất
@@ -338,10 +338,21 @@ export const checkConnection = async (key?: string): Promise<boolean> => {
             15000,
             "Ping Connection"
         );
-        return true;
+        return { success: true };
     } catch (e: any) {
         console.error("Gemini Connection Check Failed", e);
-        return false;
+        let msg = e.message || "Unknown Error";
+        
+        // Parse Google Error
+        if (msg.includes('403') || msg.includes('PERMISSION_DENIED')) {
+            msg = "Lỗi quyền truy cập (403). Vui lòng kiểm tra xem Google Generative AI API đã được bật trong Google Cloud Console chưa.";
+        } else if (msg.includes('400') || msg.includes('INVALID_ARGUMENT')) {
+            msg = "Key không hợp lệ hoặc sai định dạng.";
+        } else if (msg.includes('429')) {
+            msg = "Key đang bị giới hạn (Rate Limit).";
+        }
+
+        return { success: false, message: msg };
     }
 };
 

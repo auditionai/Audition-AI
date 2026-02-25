@@ -399,7 +399,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
 
         while (Date.now() - startTime < TIMEOUT_LIMIT) {
             attempt++;
-            addLog(`Kiểm tra kết nối API Key (Gemini 3.0 Pro) - Lần ${attempt}...`);
+            addLog(`Xác thực tài khoản VIP & Khởi tạo luồng Render - Lần ${attempt}...`);
             
             const stepStart = Date.now();
             isKeyValid = await testApiKey();
@@ -411,18 +411,18 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
             
             if (Date.now() - startTime + waitTime < TIMEOUT_LIMIT) {
                 if (waitTime > 1000) {
-                     addLog(`Server Google đang bận. Thử lại sau ${Math.ceil(waitTime/1000)}s...`);
+                     addLog(`Đang kết nối đến máy chủ đồ họa Google...`);
                      await new Promise(r => setTimeout(r, waitTime));
                 } else {
-                     addLog(`Server Google đang bận. Đang thử lại...`);
+                     addLog(`Đang kết nối đến máy chủ đồ họa Google...`);
                 }
             }
         }
 
         if (!isKeyValid) {
-            throw new Error(`API Key quá tải (Timeout ${TIMEOUT_LIMIT/1000}s). Vui lòng ấn Tạo lại ảnh.`);
+            throw new Error(`Máy chủ Google hiện đang quá tải (Timeout ${TIMEOUT_LIMIT/1000}s). Vui lòng ấn Tạo lại ảnh.`);
         }
-        addLog("API Key OK. Kết nối ổn định.");
+        addLog("Xác thực thành công. Bắt đầu quá trình tạo ảnh...");
 
       // 3. Deduct Balance
       await updateUserBalance(-cost, `Gen: ${feature.name['en']}`, 'usage');

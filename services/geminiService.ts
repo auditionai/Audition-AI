@@ -224,21 +224,16 @@ export const testApiKey = async (): Promise<boolean> => {
         const freshAi = await getAiClient();
         currentKey = (freshAi as any)._internalApiKey;
         
-        // THAY ĐỔI CÁCH TEST: Sử dụng trực tiếp model Pro Image để test theo đúng yêu cầu.
-        // Điều này đảm bảo 100% API Key có quyền truy cập và model Image đang hoạt động.
+        // THAY ĐỔI CÁCH TEST: Sử dụng model Text (3.1 Pro) để xác thực API Key.
+        // Model Text phản hồi cực nhanh (2-3s) và hiếm khi bị 503.
+        // Mục đích ở đây chỉ là để chứng minh API Key hợp lệ và có quyền truy cập.
         await runWithTimeout(
             freshAi.models.generateContent({
-                model: 'gemini-3-pro-image-preview',
-                contents: { parts: [{ text: "A simple white background" }] },
-                config: {
-                    imageConfig: {
-                        aspectRatio: "1:1",
-                        imageSize: "1K"
-                    }
-                }
+                model: 'gemini-3.1-pro-preview',
+                contents: { parts: [{ text: "Hello" }] }
             }),
-            60000, // 60s Timeout cho bài test Image
-            "API Key Test (Pro Image Model)"
+            15000, // 15s Timeout
+            "API Key Authentication"
         );
         return true;
     } catch (e: any) {
@@ -249,9 +244,6 @@ export const testApiKey = async (): Promise<boolean> => {
                              e.message?.includes('Overloaded') ||
                              e.message?.includes('timed out') || e.message?.includes('Timeout');
 
-        // We MUST return false here so the UI knows the connection is NOT ready.
-        // If it's a 503/Timeout, we still want to rotate the key or wait, 
-        // rather than blindly proceeding to the heavy image generation step.
         // CRITICAL: DO NOT BAN THE KEY IF IT'S JUST A SERVER BUSY ERROR!
         if (currentKey && !isServerBusy) {
             reportKeyFailure(currentKey);
@@ -730,7 +722,7 @@ export const generateImage = async (
                 if (isOverload || isRateLimit) {
                      console.warn(`Gemini 3.0 Pro ${isOverload ? '503/Timeout' : '429'}. Retrying...`);
                      // KHÔNG SỬ DỤNG FALLBACK SANG FLASH NỮA. CHỈ DÙNG PRO.
-                     onLog(`⚠️ Gemini 3.0 Pro đang quá tải (${isOverload ? '503' : '429'}). Đang kiên nhẫn thử lại...`);
+                     onLog(`⏳ Đang xếp hàng chờ Google Render ảnh (Model Pro đang xử lý)...`);
                 } else {
                     reportKeyFailure((freshAi as any)._internalApiKey);
                 }

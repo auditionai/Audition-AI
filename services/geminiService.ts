@@ -222,10 +222,10 @@ export const testApiKey = async (): Promise<boolean> => {
         const freshAi = await getAiClient();
         await runWithTimeout(
             freshAi.models.generateContent({
-                model: 'gemini-3.1-pro-preview',
+                model: 'gemini-2.5-flash', // Use Flash for fast ping
                 contents: { parts: [{ text: "Hello" }] }
             }),
-            60000, // Increased to 60s
+            15000, // 15s is enough for Flash
             "API Key Test"
         );
         return true;
@@ -301,7 +301,7 @@ export const checkConnection = async (key?: string): Promise<boolean> => {
         // Add Timeout to Ping - INCREASED TO 15s
         await runWithTimeout(
             ai.models.generateContent({
-                model: 'gemini-3.1-pro-preview',
+                model: 'gemini-2.5-flash', // Use Flash for fast ping
                 contents: 'ping'
             }),
             15000,

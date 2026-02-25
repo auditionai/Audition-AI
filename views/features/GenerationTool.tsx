@@ -391,7 +391,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
 
     try {
         // --- NEW: API KEY PRE-FLIGHT TEST ---
-        addLog("Kiểm tra kết nối API Key (Gemini 3.0 Pro)...");
+        addLog("Kiểm tra kết nối API Key (Ping)...");
         const isKeyValid = await testApiKey();
         if (!isKeyValid) {
             throw new Error("API Key Error: Không thể kết nối tới Google Gemini. Vui lòng thử lại sau.");

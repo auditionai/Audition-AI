@@ -390,11 +390,11 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
     await new Promise(r => setTimeout(r, 100));
 
     try {
-        // --- NEW: API KEY PRE-FLIGHT TEST (120s Timeout / 30s Retry) ---
+        // --- NEW: API KEY PRE-FLIGHT TEST (120s Timeout / 5s Retry) ---
         let isKeyValid = false;
         const startTime = Date.now();
         const TIMEOUT_LIMIT = 120000; // 120s
-        const RETRY_INTERVAL = 30000; // 30s
+        const RETRY_INTERVAL = 5000; // 5s
         let attempt = 0;
 
         while (Date.now() - startTime < TIMEOUT_LIMIT) {
@@ -411,10 +411,10 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
             
             if (Date.now() - startTime + waitTime < TIMEOUT_LIMIT) {
                 if (waitTime > 1000) {
-                     addLog(`Kết nối chưa sẵn sàng. Thử lại sau ${Math.ceil(waitTime/1000)}s...`);
+                     addLog(`Kết nối thất bại. Đổi Key và thử lại sau ${Math.ceil(waitTime/1000)}s...`);
                      await new Promise(r => setTimeout(r, waitTime));
                 } else {
-                     addLog(`Kết nối chưa sẵn sàng. Đang thử lại...`);
+                     addLog(`Kết nối thất bại. Đang đổi Key và thử lại...`);
                 }
             }
         }

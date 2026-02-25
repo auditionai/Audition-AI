@@ -218,19 +218,24 @@ const extractImage = (response: any): string | null => {
 
 // --- NEW: TEST API KEY ---
 export const testApiKey = async (): Promise<boolean> => {
+    let currentKey = "";
     try {
         const freshAi = await getAiClient();
+        currentKey = (freshAi as any)._internalApiKey;
         await runWithTimeout(
             freshAi.models.generateContent({
                 model: 'gemini-3.1-pro-preview',
-                contents: { parts: [{ text: "Ping" }] }
+                contents: 'ping'
             }),
-            30000, // 30s Timeout for Pro
+            10000, // 10s Timeout for Pro ping
             "API Key Test (Pro)"
         );
         return true;
     } catch (e) {
         console.warn("API Key Test Failed", e);
+        if (currentKey) {
+            reportKeyFailure(currentKey);
+        }
         return false;
     }
 };

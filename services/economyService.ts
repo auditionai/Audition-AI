@@ -73,7 +73,7 @@ export const updateUserBalance = async (amount: number, reason: string, type: st
         const { error } = await supabase.from('diamond_transactions_log').insert({
             user_id: user.id,
             amount,
-            note: reason,
+            reason: reason, // Changed from note to reason
             type
         });
         if (error) {
@@ -654,9 +654,9 @@ export const getUnifiedHistory = async (): Promise<HistoryItem[]> => {
         history.push({
             id: l.id,
             createdAt: l.created_at,
-            description: l.reason,
-            vcoinChange: l.type === 'usage' ? -l.amount : l.amount,
-            type: l.type,
+            description: l.reason || l.note || 'Giao dịch hệ thống', // Fallback to note or default
+            vcoinChange: l.amount, // Amount is already signed (negative for usage)
+            type: l.type || 'usage', // Fallback to usage if type is missing (for legacy logs)
             status: 'success'
         });
     });

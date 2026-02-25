@@ -240,10 +240,11 @@ export const testApiKey = async (): Promise<boolean> => {
         // The Google server is just busy. We should NOT ban the key.
         const isServerBusy = e.status === 503 || e.status === 429 || 
                              e.message?.includes('503') || e.message?.includes('429') || 
-                             e.message?.includes('Overloaded');
+                             e.message?.includes('Overloaded') ||
+                             e.message?.includes('timed out') || e.message?.includes('Timeout');
         
         if (isServerBusy) {
-            console.log("[System] API Key is VALID, but Gemini 3.1 Pro is busy (503/429). Passing test.");
+            console.log("[System] API Key is VALID, but Gemini 3.1 Pro is busy (503/429/Timeout). Passing test.");
             return true; // Key is good, let the main generation's retryWithBackoff handle the 503
         }
 
@@ -331,7 +332,8 @@ export const checkConnection = async (key?: string): Promise<boolean> => {
         console.error("Gemini Connection Check Failed", e);
         const isServerBusy = e.status === 503 || e.status === 429 || 
                              e.message?.includes('503') || e.message?.includes('429') || 
-                             e.message?.includes('Overloaded');
+                             e.message?.includes('Overloaded') ||
+                             e.message?.includes('timed out') || e.message?.includes('Timeout');
         if (isServerBusy) return true;
         return false;
     }

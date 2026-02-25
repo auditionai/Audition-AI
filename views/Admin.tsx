@@ -1,1584 +1,1149 @@
 
-import React, { useState, useEffect } from 'react';
-import { supabase } from '../services/supabaseClient';
-import { 
-    getAdminStats, 
-    getApiKeysList, 
-    saveSystemApiKey, 
-    deleteApiKey, 
-    updateAdminUserProfile, 
-    savePackage, 
-    deletePackage, 
-    updatePackageOrder, 
-    saveGiftcode, 
-    deleteGiftcode, 
-    getGiftcodePromoConfig, 
-    saveGiftcodePromoConfig, 
-    savePromotion, 
-    deletePromotion,
-    adminApproveTransaction, 
-    adminRejectTransaction, 
-    adminBulkApproveTransactions,
-    adminBulkRejectTransactions,
-    deleteTransaction,
-    getSystemApiKey,
-    getUserProfile,
-    getStylePresets,
-    saveStylePreset,
-    deleteStylePreset
-} from '../services/economyService';
-import { getAllImagesFromStorage, deleteImageFromStorage, checkR2Connection, cleanupExpiredImages } from '../services/storageService';
-import { checkConnection, analyzeStyleImage } from '../services/geminiService';
-import { checkSupabaseConnection } from '../services/supabaseClient';
-import { Icons } from '../components/Icons';
-import { UserProfile, CreditPackage, Giftcode, PromotionCampaign, Transaction, GeneratedImage, Language, StylePreset } from '../types';
+import React, { useState, useRef, useEffect } from 'react';
+import { Feature, Language, GeneratedImage } from '../../types';
+import { Icons } from '../../components/Icons';
+import { generateImage, testApiKey } from '../../services/geminiService';
+import { saveImageToStorage, uploadFileToR2 } from '../../services/storageService';
+import { createSolidFence, optimizePayload, urlToBase64 } from '../../utils/imageProcessor';
+import { getUserProfile, updateUserBalance, getStylePresets } from '../../services/economyService';
+import { useNotification } from '../../components/NotificationSystem';
+import { caulenhauClient } from '../../services/supabaseClient';
 
-interface AdminProps {
+interface GenerationToolProps {
+  feature: Feature;
   lang: Language;
-  isAdmin: boolean;
 }
 
-interface SystemHealth {
-    gemini: { status: string, latency: number };
-    supabase: { status: string, latency: number };
-    storage: { status: string, type: string };
+type GenMode = 'single' | 'couple' | 'group3' | 'group4';
+type Stage = 'input' | 'processing' | 'result';
+type Resolution = '1K' | '2K' | '4K';
+
+interface CharacterInput {
+  id: number;
+  bodyImage: string | null;
+  faceImage: string | null; 
+  gender: 'female' | 'male';
+  isFaceLocked: boolean;
 }
 
-interface ToastMsg {
-    id: number;
-    msg: string;
-    type: 'success' | 'error' | 'info';
+const SMART_TIPS = [
+    { icon: Icons.Sparkles, text: "✨ MỚI: Chế độ 'Deep Scan' sẽ quét toàn bộ makeup, khuyên mũi/môi và phụ kiện trên mặt để tái tạo chính xác 99%." },
+    { icon: Icons.Zap, text: "⚡ Tip: Để khuôn mặt sắc nét, hãy dùng ảnh chụp cận mặt từ Patch hoặc đã qua làm nét (Remini)." },
+    { icon: Icons.Crown, text: "👑 Lưu ý: Model Pro 4K mang lại độ chi tiết trang phục chân thực nhất." },
+    { icon: Icons.Palette, text: "🎨 Mẹo: Nhập mô tả màu sắc trang phục cụ thể (ví dụ: váy đỏ, giày trắng) để AI vẽ đúng ý." },
+    { icon: Icons.Unlock, text: "🔓 Tip: Tắt 'Khóa Mặt' nếu bạn muốn AI tự sáng tạo khuôn mặt mới ngẫu nhiên." },
+    { icon: Icons.Image, text: "📸 Mẹo: Ảnh mẫu (Ref) nên có góc chụp tương đồng với ý tưởng bạn muốn tạo." },
+    { icon: Icons.MessageCircle, text: "✍️ Tip: Bí ý tưởng? Dùng nút 'Sử dụng Prompt Mẫu' để lấy ý tưởng từ cộng đồng." },
+    { icon: Icons.Monitor, text: "🖥️ Lưu ý: Độ phân giải 4K rất nét, thích hợp in ấn nhưng sẽ tốn thời gian xử lý hơn." }
+];
+
+const TUTORIAL_VIDEO_ID = "ba2WR8txe_c"; 
+
+interface SamplePrompt {
+    id: string;
+    image_url: string;
+    prompt: string;
+    category?: string;
 }
 
-interface ConfirmState {
-    show: boolean;
-    msg: string;
-    title?: string;
-    isAlertOnly?: boolean;
-    onConfirm: () => void;
-}
+export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang }) => {
+  const { notify } = useNotification();
+  const [stage, setStage] = useState<Stage>('input');
+  const [progressMsg, setProgressMsg] = useState('');
+  const [progressLogs, setProgressLogs] = useState<string[]>([]);
+  const [estimatedSeconds, setEstimatedSeconds] = useState(0);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
-// SQL Code for fixing Giftcode table issues
-const GIFTCODE_FIX_SQL = `-- FIX DATABASE STRUCTURE (GIFTCODES & SETTINGS)
-
--- 1. GIFT CODES TABLE
-CREATE TABLE IF NOT EXISTS public.gift_codes (
-    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    code text NOT NULL,
-    reward numeric DEFAULT 0,
-    total_limit numeric DEFAULT 100,
-    used_count numeric DEFAULT 0,
-    max_per_user numeric DEFAULT 1,
-    is_active boolean DEFAULT true,
-    created_at timestamptz DEFAULT now()
-);
-
--- Ensure columns exist
-DO $$
-BEGIN
-    ALTER TABLE public.gift_codes ADD COLUMN IF NOT EXISTS reward numeric DEFAULT 0;
-    ALTER TABLE public.gift_codes ADD COLUMN IF NOT EXISTS total_limit numeric DEFAULT 100;
-    ALTER TABLE public.gift_codes ADD COLUMN IF NOT EXISTS used_count numeric DEFAULT 0;
-    ALTER TABLE public.gift_codes ADD COLUMN IF NOT EXISTS max_per_user numeric DEFAULT 1;
-    ALTER TABLE public.gift_codes ADD COLUMN IF NOT EXISTS is_active boolean DEFAULT true;
-END $$;
-
--- 2. USAGE TRACKING TABLE
-CREATE TABLE IF NOT EXISTS public.gift_code_usages (
-    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    user_id uuid REFERENCES public.users(id),
-    gift_code_id uuid REFERENCES public.gift_codes(id),
-    created_at timestamptz DEFAULT now()
-);
-
--- 3. SYSTEM SETTINGS (For Promo Banners)
-CREATE TABLE IF NOT EXISTS public.system_settings (
-    key text PRIMARY KEY,
-    value jsonb
-);
-
--- 4. DIAMOND TRANSACTIONS LOG (For Usage Stats)
-CREATE TABLE IF NOT EXISTS public.diamond_transactions_log (
-    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    user_id uuid REFERENCES public.users(id),
-    amount numeric NOT NULL,
-    reason text,
-    type text, -- 'usage', 'topup', 'reward', etc.
-    created_at timestamptz DEFAULT now()
-);
-
--- 5. ENABLE RLS & POLICIES
-ALTER TABLE public.gift_codes ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.system_settings ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.diamond_transactions_log ENABLE ROW LEVEL SECURITY;
-
--- Policies for Giftcodes
-DROP POLICY IF EXISTS "Public read giftcodes" ON public.gift_codes;
-CREATE POLICY "Public read giftcodes" ON public.gift_codes FOR SELECT TO anon, authenticated USING (true);
-
-DROP POLICY IF EXISTS "Admin manage giftcodes" ON public.gift_codes;
-CREATE POLICY "Admin manage giftcodes" ON public.gift_codes FOR ALL TO authenticated USING (true);
-
--- Policies for System Settings
-DROP POLICY IF EXISTS "Public read settings" ON public.system_settings;
-CREATE POLICY "Public read settings" ON public.system_settings FOR SELECT TO anon, authenticated USING (true);
-
-DROP POLICY IF EXISTS "Admin manage settings" ON public.system_settings;
-CREATE POLICY "Admin manage settings" ON public.system_settings FOR ALL TO authenticated USING (true);
-
--- 6. API KEYS ROTATION SUPPORT
-ALTER TABLE public.api_keys ADD COLUMN IF NOT EXISTS last_used_at timestamptz DEFAULT now();
-
--- 7. STYLE PRESETS (NEW)
-CREATE TABLE IF NOT EXISTS public.style_presets (
-    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    name text NOT NULL,
-    image_url text NOT NULL,
-    trigger_prompt text,
-    is_active boolean DEFAULT true,
-    is_default boolean DEFAULT false,
-    created_at timestamptz DEFAULT now()
-);
-
-ALTER TABLE public.style_presets ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Public read styles" ON public.style_presets;
-CREATE POLICY "Public read styles" ON public.style_presets FOR SELECT TO authenticated USING (true);
-DROP POLICY IF EXISTS "Admin manage styles" ON public.style_presets;
-CREATE POLICY "Admin manage styles" ON public.style_presets FOR ALL TO authenticated USING (true);
-
--- Policies for Logs
-DROP POLICY IF EXISTS "User read own logs" ON public.diamond_transactions_log;
-CREATE POLICY "User read own logs" ON public.diamond_transactions_log FOR SELECT TO authenticated USING (auth.uid() = user_id);
-
-DROP POLICY IF EXISTS "Admin read all logs" ON public.diamond_transactions_log;
-CREATE POLICY "Admin read all logs" ON public.diamond_transactions_log FOR ALL TO authenticated USING (true); -- Ideally check is_admin
-`;
-
-export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
-  const [activeView, setActiveView] = useState<'overview' | 'transactions' | 'users' | 'packages' | 'promotion' | 'giftcodes' | 'system' | 'styles'>('overview');
-  const [stats, setStats] = useState<any>(null);
-  const [allImages, setAllImages] = useState<GeneratedImage[]>([]);
-  const [packages, setPackages] = useState<CreditPackage[]>([]);
-  const [giftcodes, setGiftcodes] = useState<Giftcode[]>([]);
-  const [promotions, setPromotions] = useState<PromotionCampaign[]>([]);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [stylePresets, setStylePresets] = useState<StylePreset[]>([]);
-  const [editingStyle, setEditingStyle] = useState<StylePreset | null>(null);
+  const [activeMode, setActiveMode] = useState<GenMode>('single');
+  const [characters, setCharacters] = useState<CharacterInput[]>([{ id: 1, bodyImage: null, faceImage: null, gender: 'female', isFaceLocked: true }]);
+  const [activeCharTab, setActiveCharTab] = useState<number>(1);
   
-  // API Key States
-  const [apiKey, setApiKey] = useState('');
-  const [showKey, setShowKey] = useState(false);
-  const [keyStatus, setKeyStatus] = useState<'valid' | 'invalid' | 'unknown' | 'checking'>('unknown');
-  const [dbKeys, setDbKeys] = useState<any[]>([]); 
+  const [refImage, setRefImage] = useState<string | null>(null);
+  const [prompt, setPrompt] = useState('');
+  const [negativePrompt, setNegativePrompt] = useState('crowd, extra people, audience, bystanders, deformed, bad anatomy, disfigured, poorly drawn face, mutation, mutated, extra limb, ugly, disgusting, poorly drawn hands, missing limb, floating limbs, disconnected limbs, malformed hands, blur, out of focus, long neck, long body, mutated hands and fingers, out of frame, blender, doll, cropped, low-res, close-up, poorly-drawn face, out of frame double, two heads, blurred, ugly, disfigured, too many fingers, deformed, repetitive, black and white, grainy, extra limbs, bad anatomy, duplicate, photorealistic, realistic photo, sketch, cartoon, drawing, art, 2d');
   
-  // Giftcode Promo Config
-  const [giftcodePromo, setGiftcodePromo] = useState({ text: '', isActive: false });
+  const [showSampleModal, setShowSampleModal] = useState(false);
+  const [samplePrompts, setSamplePrompts] = useState<SamplePrompt[]>([]);
+  const [loadingSamples, setLoadingSamples] = useState(false);
+  const [currentCategoryName, setCurrentCategoryName] = useState('');
+  
+  // Pagination State
+  const SAMPLES_PER_PAGE = 20;
+  const [samplePage, setSamplePage] = useState(0);
+  const [hasMoreSamples, setHasMoreSamples] = useState(true);
 
-  // Search States
-  const [userSearchEmail, setUserSearchEmail] = useState('');
+  // Default Resolution 1K
+  const [aspectRatio, setAspectRatio] = useState('3:4'); 
+  const [resolution, setResolution] = useState<Resolution>('1K'); 
+  
+  // Features always ON
+  const useSearch = true; 
+  const useCloudRef = true;
 
-  // Health State
-  const [health, setHealth] = useState<SystemHealth>({
-      gemini: { status: 'checking', latency: 0 },
-      supabase: { status: 'checking', latency: 0 },
-      storage: { status: 'checking', type: 'None' }
-  });
+  const [guideTopic, setGuideTopic] = useState<'chars' | 'settings' | null>(null);
+  const [currentTipIdx, setCurrentTipIdx] = useState(0);
+  const [showVideo, setShowVideo] = useState(false);
 
-  // Modal States
-  const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
-  const [editingPackage, setEditingPackage] = useState<CreditPackage | null>(null);
-  const [editingGiftcode, setEditingGiftcode] = useState<Giftcode | null>(null);
-  const [editingPromotion, setEditingPromotion] = useState<PromotionCampaign | null>(null);
+  const [resultImage, setResultImage] = useState<string | null>(null);
+  const [generatedData, setGeneratedData] = useState<GeneratedImage | null>(null);
 
-  // Error Recovery States
-  const [showGiftcodeFix, setShowGiftcodeFix] = useState(false);
-  const [showCorsModal, setShowCorsModal] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const activeUploadType = useRef<{ charId?: number, type: 'body' | 'face' | 'ref' } | null>(null);
 
-  // UX States
-  const [processingTxId, setProcessingTxId] = useState<string | null>(null);
-  const [selectedTxIds, setSelectedTxIds] = useState<string[]>([]);
+  // --- NEW: STYLE PRESET STATE ---
+  const [activeStylePreset, setActiveStylePreset] = useState<string | null>(null);
+  const [availableStyles, setAvailableStyles] = useState<any[]>([]);
 
-  // Notification State
-  const [toasts, setToasts] = useState<ToastMsg[]>([]);
-  const [confirmDialog, setConfirmDialog] = useState<ConfirmState>({ show: false, msg: '', onConfirm: () => {} });
-
-  // Helpers for Notifications
-  const showToast = (msg: string, type: 'success' | 'error' | 'info' = 'success') => {
-      const id = Date.now();
-      setToasts(prev => [...prev, { id, msg, type }]);
-      setTimeout(() => {
-          setToasts(prev => prev.filter(t => t.id !== id));
-      }, 4000);
-  };
-
-  const showConfirm = (msg: string, action: () => void) => {
-      setConfirmDialog({
-          show: true,
-          msg,
-          onConfirm: () => {
-              action();
-              setConfirmDialog(prev => ({ ...prev, show: false }));
-          }
-      });
-  };
-
-  // Load Data Sequence
   useEffect(() => {
-    if (isAdmin) {
-        const init = async () => {
-            await refreshData();
-            await runSystemChecks(undefined);
-        };
-        init();
-    }
-  }, [isAdmin]);
-
-  const refreshData = async () => {
-      const s = await getAdminStats();
-      if (s) {
-          setStats(s);
-          setPackages(s.packages || []);
-          setPromotions(s.promotions || []);
-          setGiftcodes(s.giftcodes || []);
-          setTransactions(s.transactions || []); 
-          const imgs = await getAllImagesFromStorage();
-          setAllImages(imgs);
-      }
-      
-      const keys = await getApiKeysList();
-      setDbKeys(keys);
-
-      const promoConfig = await getGiftcodePromoConfig();
-      setGiftcodePromo(promoConfig);
-
-      const styles = await getStylePresets();
-      setStylePresets(styles || []);
-  };
-
-  const runSystemChecks = async (specificKey?: string) => {
-      const startGemini = Date.now();
-      const keyToUse = specificKey !== undefined ? specificKey : (apiKey || undefined);
-      
-      const geminiOk = await checkConnection(keyToUse);
-      const geminiLatency = Date.now() - startGemini;
-      const sbCheck = await checkSupabaseConnection();
-      const r2Ok = await checkR2Connection();
-      
-      let storageStatus: 'connected' | 'disconnected' = 'disconnected';
-      let storageType: 'R2' | 'Supabase' | 'None' = 'None';
-
-      if (r2Ok) {
-          storageStatus = 'connected';
-          storageType = 'R2';
-      } else if (sbCheck.storage) {
-          storageStatus = 'connected';
-          storageType = 'Supabase';
-      }
-
-      setHealth({
-          gemini: { status: geminiOk ? 'connected' : 'disconnected', latency: geminiLatency },
-          supabase: { status: sbCheck.db ? 'connected' : 'disconnected', latency: sbCheck.latency },
-          storage: { status: storageStatus, type: storageType }
-      });
-      
-      if (keyToUse || geminiOk) {
-          setKeyStatus(geminiOk ? 'valid' : 'invalid');
-      }
-  };
-
-  // --- ACTIONS ---
-
-  const handleSaveApiKey = async () => {
-      if (!apiKey.trim()) return;
-      
-      setKeyStatus('checking');
-      const isValid = await checkConnection(apiKey);
-      
-      if (isValid) {
-          const result = await saveSystemApiKey(apiKey);
-          if (result.success) {
-              setKeyStatus('valid');
-              showToast('Đã lưu API Key vào Database thành công!');
-              setApiKey(''); // Clear input for security
-              await refreshData(); 
-              runSystemChecks();
-          } else {
-              setKeyStatus('unknown');
-              showToast(`Lỗi Database: ${result.error}`, 'error');
-          }
-      } else {
-          setKeyStatus('invalid');
-          showToast('API Key không hoạt động. Vui lòng kiểm tra lại.', 'error');
-      }
-  };
-
-  const handleTestKey = async (key: string) => {
-      showToast('Đang kiểm tra key...', 'info');
-      const isValid = await checkConnection(key);
-      if (isValid) {
-          showToast('Kết nối thành công! Key hoạt động tốt.', 'success');
-      } else {
-          showToast('Key không hoạt động hoặc hết hạn ngạch.', 'error');
-      }
-  }
-
-  const handleDeleteApiKey = async (id: string) => {
-      showConfirm('Xóa API Key này khỏi database?', async () => {
-          await deleteApiKey(id);
-          refreshData();
-          showToast('Đã xóa API Key');
-      });
-  }
-
-  const handleSaveUser = async () => {
-      if (editingUser) {
-          const result = await updateAdminUserProfile(editingUser);
+      // Load Default Style Preset
+      const loadStyle = async () => {
+          const presets = await getStylePresets();
+          setAvailableStyles(presets || []);
           
-          if (result.success) {
-              setEditingUser(null);
-              await refreshData();
-              showToast('Cập nhật người dùng thành công!');
-          } else {
-              showToast(`Lỗi: ${result.error}`, 'error');
+          const def = presets.find((p: any) => p.is_default);
+          if (def) {
+              setActiveStylePreset(def.image_url);
+              console.log("Loaded Master Style:", def.name);
           }
+      };
+      loadStyle();
+  }, []);
+  // -------------------------------
+
+  useEffect(() => {
+      const interval = setInterval(() => {
+          setCurrentTipIdx(prev => (prev + 1) % SMART_TIPS.length);
+      }, 5000);
+      return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (feature.id.includes('couple')) handleModeChange('couple');
+    else if (feature.id.includes('group_3')) handleModeChange('group3');
+    else if (feature.id.includes('group_4')) handleModeChange('group4');
+    else handleModeChange('single');
+  }, [feature]);
+
+  useEffect(() => {
+      let interval: any;
+      if (stage === 'processing') {
+          interval = setInterval(() => {
+              setElapsedSeconds(prev => prev + 1);
+          }, 1000);
+      } else {
+          setElapsedSeconds(0);
       }
+      return () => clearInterval(interval);
+  }, [stage]);
+
+  const formatTime = (seconds: number) => {
+      const mins = Math.floor(seconds / 60);
+      const secs = seconds % 60;
+      return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const handleSavePackage = async () => {
-      if (editingPackage) {
-          const result = await savePackage(editingPackage);
-          if (result.success) {
-              setEditingPackage(null);
-              refreshData();
-              showToast('Cập nhật gói nạp thành công!');
-          } else {
-              showToast(`Lỗi: ${result.error}`, 'error');
-          }
-      }
-  };
+  const handleModeChange = (mode: GenMode) => {
+      setActiveMode(mode);
+      setActiveCharTab(1);
+      let count = 1;
+      if (mode === 'couple') count = 2;
+      if (mode === 'group3') count = 3;
+      if (mode === 'group4') count = 4;
 
-  const handleDeletePackage = async (id: string) => {
-      showConfirm('Bạn có chắc chắn muốn xóa gói nạp này?', async () => {
-          const result = await deletePackage(id);
-          if (result.success) {
-              refreshData();
-              if (result.action === 'hidden') {
-                  showToast('Gói đã chuyển sang trạng thái ẨN (do có giao dịch lịch sử)', 'info');
-              } else {
-                  showToast('Đã xóa gói nạp vĩnh viễn');
-              }
-          } else {
-              showToast('Lỗi khi xóa: ' + result.error, 'error');
+      setCharacters(prev => {
+          const newChars = [];
+          for (let i = 1; i <= count; i++) {
+              const existing = prev.find(p => p.id === i);
+              newChars.push(existing || { id: i, bodyImage: null, faceImage: null, gender: (i % 2 === 0 ? 'male' : 'female') as 'male' | 'female', isFaceLocked: true });
           }
+          return newChars;
       });
   };
 
-  const handleMovePackage = async (index: number, direction: number) => {
-      const newPackages = [...packages];
-      const newIndex = index + direction;
-
-      if (newIndex < 0 || newIndex >= newPackages.length) return;
-
-      [newPackages[index], newPackages[newIndex]] = [newPackages[newIndex], newPackages[index]];
-      setPackages(newPackages);
-
-      const result = await updatePackageOrder(newPackages);
-      if (!result.success) {
-          showToast('Lỗi khi lưu thứ tự: ' + result.error, 'error');
-      }
-  };
-
-  const handleSaveGiftcode = async () => {
-      if (editingGiftcode) {
-          const result = await saveGiftcode(editingGiftcode);
-          if (result.success) {
-              setEditingGiftcode(null);
-              refreshData();
-              showToast('Lưu Giftcode thành công!');
-          } else {
-              showToast(`Lỗi: ${result.error}`, 'error');
-              // Detect specific DB Error for missing column
-              if (result.error?.includes('column') || result.error?.includes('schema cache')) {
-                  setShowGiftcodeFix(true);
-              }
-          }
-      }
-  };
-
-  const handleDeleteGiftcode = async (id: string) => {
-      showConfirm('Xóa mã này vĩnh viễn?', async () => {
-          await deleteGiftcode(id);
-          refreshData();
-          showToast('Đã xóa Giftcode');
-      });
-  };
-
-  const handleSaveGiftcodePromo = async () => {
-      if (giftcodePromo.isActive && !giftcodePromo.text.trim()) {
-          showToast('Vui lòng nhập nội dung thông báo!', 'error');
+  const fetchSamplePrompts = async (isLoadMore = false) => {
+      if (!caulenhauClient) {
+          notify("Chưa kết nối database mẫu.", "error");
           return;
       }
-      const result = await saveGiftcodePromoConfig(giftcodePromo.text, giftcodePromo.isActive);
-      if (result.success) {
-          showToast('Đã lưu thông báo thành công!');
+      setLoadingSamples(true);
+      
+      try {
+          let targetCategoryId = 2;
+          let catName = "Ảnh Nam Nữ";
+
+          if (activeMode === 'single') {
+              targetCategoryId = 2;
+              catName = "Ảnh Nam Nữ";
+          } else if (activeMode === 'couple') {
+              targetCategoryId = 3;
+              catName = "Ảnh Couple";
+          } else if (activeMode.startsWith('group')) {
+              targetCategoryId = 4;
+              catName = "Ảnh Nhóm";
+          }
+          setCurrentCategoryName(catName);
+
+          const pageToFetch = isLoadMore ? samplePage + 1 : 0;
+          const from = pageToFetch * SAMPLES_PER_PAGE;
+          const to = from + SAMPLES_PER_PAGE - 1;
+
+          const { data, error } = await caulenhauClient
+              .from('images')
+              .select(`id, image_url, prompt, image_categories!inner(category_id)`)
+              .eq('image_categories.category_id', targetCategoryId)
+              .order('created_at', { ascending: false })
+              .range(from, to);
+
+          if (error) throw error;
+          
+          if (data) {
+              const newSamples = data.map((item: any) => ({
+                  id: item.id,
+                  image_url: item.image_url,
+                  prompt: item.prompt,
+                  category: catName
+              }));
+
+              if (isLoadMore) {
+                  setSamplePrompts(prev => [...prev, ...newSamples]);
+                  setSamplePage(pageToFetch);
+              } else {
+                  setSamplePrompts(newSamples);
+                  setSamplePage(0);
+              }
+              
+              setHasMoreSamples(data.length === SAMPLES_PER_PAGE);
+          } else {
+              if (!isLoadMore) setSamplePrompts([]);
+              setHasMoreSamples(false);
+          }
+      } catch (e: any) {
+          console.error("Fetch samples error", e);
+          notify(`Lỗi tải dữ liệu: ${e.message}`, 'error');
+          if (!isLoadMore) setSamplePrompts([]);
+      } finally {
+          setLoadingSamples(false);
+      }
+  };
+
+  const handleOpenSamples = () => {
+      setShowSampleModal(true);
+      fetchSamplePrompts(false);
+  };
+
+  const handleSelectSample = (sample: SamplePrompt) => {
+      if (sample.prompt) {
+          setPrompt(sample.prompt);
+          setShowSampleModal(false);
+          notify("Đã áp dụng Prompt mẫu!", "success");
       } else {
-          showToast('Lỗi lưu: ' + result.error, 'error');
-          // If table system_settings is missing, trigger fix modal
-          if (result.error?.includes('relation "public.system_settings" does not exist')) {
-              setShowGiftcodeFix(true);
-          }
-      }
-  }
-
-  const handleSavePromotion = async () => {
-      if (editingPromotion) {
-          const result = await savePromotion(editingPromotion);
-          if (result.success) {
-              setEditingPromotion(null);
-              refreshData();
-              showToast('Lưu chiến dịch thành công!');
-          } else {
-              showToast(`Lỗi: ${result.error}`, 'error');
-          }
+          notify("Mẫu này không có prompt.", "warning");
       }
   };
 
-  const handleDeletePromotion = async (id: string) => {
-      showConfirm('Xóa chiến dịch này vĩnh viễn?', async () => {
-          await deletePromotion(id);
-          refreshData();
-          showToast('Đã xóa chiến dịch');
-      });
+  const handleUploadClick = (charId: number, type: 'body' | 'face') => {
+      activeUploadType.current = { charId, type };
+      fileInputRef.current?.click();
   };
 
-  const handleDeleteContent = async (id: string) => {
-      showConfirm('Xóa vĩnh viễn hình ảnh này?', async () => {
-          await deleteImageFromStorage(id);
-          setAllImages(prev => prev.filter(img => img.id !== id));
-          showToast('Đã xóa ảnh');
-      });
-  }
+  const handleRefUploadClick = () => {
+      activeUploadType.current = { type: 'ref' };
+      fileInputRef.current?.click();
+  };
 
-  const handleApproveTransaction = async (txId: string) => {
-      if (processingTxId) return;
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file || !activeUploadType.current) return;
 
-      showConfirm('Xác nhận duyệt giao dịch này và cộng Vcoin cho user?', async () => {
-          setProcessingTxId(txId);
-          const result = await adminApproveTransaction(txId);
-          if (result.success) {
-              setTransactions(prev => prev.map(t => 
-                  t.id === txId ? { ...t, status: 'paid' } : t
-              ));
-              showToast('Đã duyệt thành công!');
-              await refreshData();
-          } else {
-              showToast('Lỗi: ' + result.error, 'error');
-              await refreshData();
+      const reader = new FileReader();
+      reader.onloadend = () => {
+          const result = reader.result as string;
+          const currentType = activeUploadType.current;
+
+          if (currentType?.type === 'ref') {
+             setRefImage(result);
+          } else if (currentType?.charId) {
+              setCharacters(prev => prev.map(c => {
+                  if (c.id === currentType.charId) {
+                      if (currentType.type === 'body') return { ...c, bodyImage: result };
+                      if (currentType.type === 'face') return { ...c, faceImage: result, isFaceLocked: true };
+                  }
+                  return c;
+              }));
           }
-          setProcessingTxId(null);
-      });
+      };
+      reader.readAsDataURL(file);
+      e.target.value = '';
+  };
+
+  const toggleGender = (charId: number, gender: 'male' | 'female') => {
+      setCharacters(prev => prev.map(c => c.id === charId ? { ...c, gender } : c));
   }
 
-  const handleRejectTransaction = async (txId: string) => {
-      if (processingTxId) return;
+  const toggleFaceLock = (charId: number) => {
+      setCharacters(prev => prev.map(c => c.id === charId ? { ...c, isFaceLocked: !c.isFaceLocked } : c));
+  }
 
-      showConfirm('Từ chối giao dịch này?', async () => {
-          setProcessingTxId(txId);
-          const result = await adminRejectTransaction(txId);
-          if (result.success) {
-              setTransactions(prev => prev.map(t => 
-                  t.id === txId ? { ...t, status: 'failed' } : t
-              ));
-              showToast('Đã từ chối giao dịch', 'info');
-              await refreshData();
-          } else {
-              showToast('Lỗi: ' + result.error, 'error');
+  const handleForceDownload = async (url: string, filename: string) => {
+      if (!url) return;
+      notify(lang === 'vi' ? 'Đang tải xuống...' : 'Downloading...', 'info');
+      
+      try {
+          let blob: Blob;
+
+          // 1. Base64
+          if (url.startsWith('data:')) {
+              const arr = url.split(',');
+              const mime = arr[0].match(/:(.*?);/)?.[1];
+              const bstr = atob(arr[1]);
+              let n = bstr.length;
+              const u8arr = new Uint8Array(n);
+              while (n--) {
+                  u8arr[n] = bstr.charCodeAt(n);
+              }
+              blob = new Blob([u8arr], { type: mime });
+          } 
+          // 2. Remote URL with Proxy Fallback
+          else {
+              try {
+                  const response = await fetch(url, { mode: 'cors' });
+                  if (!response.ok) throw new Error("Direct fetch failed");
+                  blob = await response.blob();
+              } catch (directError) {
+                  // Fallback to WSRV.NL Proxy (Adds CORS headers)
+                  try {
+                      const proxyUrl = `https://wsrv.nl/?url=${encodeURIComponent(url)}&output=png`;
+                      const proxyResponse = await fetch(proxyUrl);
+                      if (!proxyResponse.ok) throw new Error("Proxy download failed");
+                      blob = await proxyResponse.blob();
+                  } catch (proxyError) {
+                      // Fallback to CorsProxy.io
+                      const proxyUrl2 = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+                      const proxyResponse2 = await fetch(proxyUrl2);
+                      if (!proxyResponse2.ok) throw new Error("All proxies failed");
+                      blob = await proxyResponse2.blob();
+                  }
+              }
           }
-          setProcessingTxId(null);
-      });
-  }
 
-  const handleDeleteTransaction = async (txId: string) => {
-      if (processingTxId) return;
+          const blobUrl = window.URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = blobUrl;
+          link.download = filename;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          window.URL.revokeObjectURL(blobUrl);
+          notify('Đã lưu ảnh về máy!', 'success');
+      } catch (e) {
+          console.error("Download failed", e);
+          window.open(url, '_blank'); // Last resort
+      }
+  };
 
-      showConfirm('Xóa lịch sử giao dịch này khỏi hệ thống?', async () => {
-          setProcessingTxId(txId);
-          const res = await deleteTransaction(txId);
-          if (res.success) {
-              setTransactions(prev => prev.filter(t => t.id !== txId));
-              showToast('Đã xóa giao dịch vĩnh viễn', 'info');
-          } else {
-               showToast('Lỗi xóa: ' + res.error, 'error');
+  const calculateCost = () => {
+      let cost = 0;
+      
+      // Resolution Based Pricing (High Quality 3.0 Pro)
+      if (resolution === '1K') cost = 5;
+      if (resolution === '2K') cost = 10;
+      if (resolution === '4K') cost = 15;
+
+      // Add-ons (Search & CloudRef are now FREE/INCLUDED)
+      // if (useSearch) cost += 0; 
+      // if (useCloudRef) cost += 0;
+      
+      // Mode Multipliers (More characters = more processing)
+      if (activeMode === 'couple') cost += 2;
+      if (activeMode === 'group3') cost += 4;
+      if (activeMode === 'group4') cost += 6;
+      
+      return cost;
+  };
+
+  const addLog = (msg: string) => {
+      setProgressLogs(prev => [...prev, msg]);
+      setProgressMsg(msg);
+  };
+
+  const handleGenerate = async () => {
+    // 1. Validation
+    if (!prompt.trim()) {
+         notify(lang === 'vi' ? 'Vui lòng nhập mô tả' : 'Please enter a prompt', 'warning');
+         return;
+    }
+
+    const cost = calculateCost();
+    const user = await getUserProfile();
+
+    if ((user.balance || 0) < cost) {
+        notify(lang === 'vi' ? 'Số dư không đủ!' : 'Insufficient balance!', 'error');
+        return;
+    }
+    
+    // 2. UI UPDATE IMMEDIATELY
+    setStage('processing');
+    setProgressLogs([]);
+    addLog(lang === 'vi' ? 'Hệ thống đang khởi động...' : 'System starting...');
+    
+    // Force a small delay to allow React to render the Loading UI before blocking logic starts
+    await new Promise(r => setTimeout(r, 100));
+
+    try {
+        // --- NEW: API KEY PRE-FLIGHT TEST ---
+        addLog("Kiểm tra kết nối API Key (Gemini 3.0 Pro)...");
+        const isKeyValid = await testApiKey();
+        if (!isKeyValid) {
+            throw new Error("API Key Error: Không thể kết nối tới Google Gemini. Vui lòng thử lại sau.");
+        }
+        addLog("API Key OK. Kết nối ổn định.");
+
+      // 3. Deduct Balance
+      await updateUserBalance(-cost, `Gen: ${feature.name['en']}`, 'usage');
+      
+      let structureRefData: string | undefined = undefined;
+      let sourceForStructure = refImage || feature.preview_image;
+      
+      // --- NEW: UPLOAD TO R2 CLOUD (INPUTS - LOGGING ONLY) ---
+      // We upload to R2 for persistent storage/logging, but we pass the ORIGINAL BASE64 to generateImage
+      // to avoid CORS issues when the browser tries to fetch the R2 URL to send to Google.
+      
+      // Upload Reference Image
+      if (sourceForStructure && sourceForStructure.startsWith('data:')) {
+          addLog("Đang tải ảnh mẫu lên R2 Cloud (Backup)...");
+          uploadFileToR2(sourceForStructure, 'inputs').then(url => {
+              console.log("R2 Ref Backup URL:", url);
+          }).catch(e => console.warn("R2 Ref Backup Failed", e));
+          
+          // CRITICAL FIX: DO NOT OVERWRITE sourceForStructure with URL.
+          // Keep it as Base64 so generateImage can process it directly without CORS errors.
+      }
+
+      // Upload Character Images
+      const characterDataList = [];
+      for (const char of characters) {
+          let bodyData = char.bodyImage;
+          let faceData = char.faceImage;
+
+          if (bodyData && bodyData.startsWith('data:')) {
+              addLog(`Đang tải ảnh Body (NV ${char.id}) lên Cloud (Backup)...`);
+              uploadFileToR2(bodyData, 'inputs').catch(e => console.warn("R2 Body Backup Failed", e));
           }
-          setProcessingTxId(null);
-      });
-  }
 
-  // --- BULK ACTIONS ---
-  const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
-      if (e.target.checked) {
-          setSelectedTxIds(transactions.map(t => t.id));
+          if (faceData && faceData.startsWith('data:')) {
+              addLog(`Đang tải ảnh Face (NV ${char.id}) lên Cloud (Backup)...`);
+              uploadFileToR2(faceData, 'inputs').catch(e => console.warn("R2 Face Backup Failed", e));
+          }
+
+          characterDataList.push({
+              id: char.id,
+              gender: char.gender,
+              image: bodyData, // Pass Base64
+              faceImage: char.isFaceLocked ? faceData : null, // Pass Base64
+              shoesImage: null
+          });
+      }
+      
+      // 4. STRUCTURE PROCESSING (Heavy Operation)
+      // Note: createSolidFence handles URLs internally via loadImageWithTimeout
+      if (sourceForStructure) {
+          addLog("Đang trích xuất cấu trúc (Wireframe)...");
+          // If it's a URL, we might need to fetch it to optimizePayload?
+          // optimizePayload handles URLs via loadImageWithTimeout too.
+          // But createSolidFence returns Base64.
+          // We can upload this result to R2 if we want, but generateImage expects structureRefData as base64/URL.
+          // Let's keep it simple: pass the URL or Base64 to generateImage.
+          // Wait, generateImage signature for structureRefData is string.
+          // If we pass URL, generateImage logic needs to handle it.
+          // My previous edit to generateImage handled refImageBase64 (which is structureRefData here) as URL.
+          structureRefData = sourceForStructure; 
+      }
+      
+      let finalPrompt = (feature.defaultPrompt || "") + prompt;
+      if (negativePrompt) finalPrompt += ` --no ${negativePrompt}`;
+      
+      addLog("Gửi lệnh đến Gemini Intelligence Grid...");
+
+      // 5. EXECUTE WITH DYNAMIC TIMEOUT
+      let timeoutMs = 900000; // 15 mins (Single)
+      if (activeMode === 'couple') timeoutMs = 1200000; // 20 mins
+      if (activeMode.startsWith('group')) timeoutMs = 1800000; // 30 mins
+      
+      setEstimatedSeconds(timeoutMs / 1000);
+
+      const result = await Promise.race([
+          generateImage(
+              finalPrompt, 
+              aspectRatio, 
+              structureRefData, 
+              characterDataList, 
+              resolution,
+              'pro', // ALWAYS PRO
+              useSearch,
+              useCloudRef, 
+              (msg) => addLog(msg),
+              activeStylePreset, // Pass the style reference
+              availableStyles, // Pass the pool for auto-selection
+              timeoutMs // Pass Dynamic Timeout
+          ),
+          new Promise<null>((_, reject) => setTimeout(() => reject(new Error(`Timeout: Limit reached (${timeoutMs/60000} mins)`)), timeoutMs))
+      ]);
+
+      if (result) {
+        addLog(lang === 'vi' ? 'Hoàn tất!' : 'Finalizing...');
+        setResultImage(result); 
+        
+        const newImage: GeneratedImage = {
+          id: crypto.randomUUID(),
+          url: result,
+          prompt: finalPrompt,
+          timestamp: Date.now(),
+          toolId: feature.id,
+          toolName: feature.name['en'],
+          engine: `Gemini 3.0 Pro ${resolution}`
+        };
+        setGeneratedData(newImage);
+        
+        saveImageToStorage(newImage).catch(console.error);
+        setStage('result');
+        notify(lang === 'vi' ? 'Tạo ảnh thành công!' : 'Generation successful!', 'success');
       } else {
-          setSelectedTxIds([]);
+          throw new Error("No result returned (Empty)");
       }
+    } catch (error: any) {
+      console.error(error);
+      const errorMsg = error.message || (lang === 'vi' ? 'Lỗi không xác định' : 'Unknown Error');
+      addLog(`❌ LỖI: ${errorMsg}`);
+      addLog(`💸 Đang thực hiện hoàn tiền...`);
+      
+      try {
+          await updateUserBalance(cost, `Refund: ${feature.name['en']} Failed`, 'refund');
+          notify(lang === 'vi' ? `Lỗi: ${errorMsg}. Đã hoàn tiền.` : `Error: ${errorMsg}. Refunded.`, 'error');
+      } catch (refundError) {
+          console.error("Refund failed", refundError);
+          notify("Lỗi hoàn tiền! Vui lòng liên hệ Admin.", "error");
+      } finally {
+          // ALWAYS RESET UI
+          setTimeout(() => setStage('input'), 2000);
+      }
+    }
   };
 
-  const handleSelectTx = (id: string) => {
-      setSelectedTxIds(prev => 
-          prev.includes(id) ? prev.filter(pid => pid !== id) : [...prev, id]
-      );
-  };
+  const ratios = [
+      { id: '1:1', label: '1:1', desc: 'Vuông' },
+      { id: '9:16', label: '9:16', desc: 'Story' },
+      { id: '16:9', label: '16:9', desc: 'Cinema' },
+      { id: '3:4', label: '3:4', desc: 'Dọc' },
+      { id: '4:3', label: '4:3', desc: 'Ngang' },
+  ];
 
-  const handleBulkApprove = async () => {
-      if (selectedTxIds.length === 0) return;
-      showConfirm(`Duyệt ${selectedTxIds.length} giao dịch đã chọn?`, async () => {
-          const res = await adminBulkApproveTransactions(selectedTxIds);
-          if (res.success) {
-              showToast(`Đã duyệt ${res.count} giao dịch thành công!`);
-              await refreshData();
-              setSelectedTxIds([]);
-          } else {
-              showToast('Lỗi: ' + res.error, 'error');
-          }
-      });
-  };
+  const renderGuideContent = () => {
+      switch(guideTopic) {
+          case 'chars':
+              return (
+                  <div className="space-y-4">
+                      <h3 className="text-xl font-bold text-audi-yellow flex items-center gap-2 border-b border-white/10 pb-2">
+                          <Icons.User className="w-6 h-6" /> Hướng dẫn Upload Nhân vật
+                      </h3>
+                      
+                      {/* Step 1: Body */}
+                      <div className="bg-white/5 p-3 rounded-xl border border-white/5">
+                          <div className="flex items-center gap-2 mb-1">
+                              <span className="bg-audi-cyan text-black text-[10px] font-bold px-1.5 rounded">BƯỚC 1</span>
+                              <span className="text-sm font-bold text-audi-cyan">Ảnh Toàn Thân (Body)</span>
+                          </div>
+                          <p className="text-xs text-slate-300 leading-relaxed pl-1">
+                              Dùng để AI học <b>trang phục</b>, <b>dáng đứng</b> và <b>cấu trúc cơ thể</b>.
+                              <br/>
+                              <span className="text-slate-500 italic">Khuyên dùng: Ảnh toàn thân rõ ràng, phông nền đơn giản hoặc đã tách nền.</span>
+                          </p>
+                      </div>
 
-  const handleBulkReject = async () => {
-      if (selectedTxIds.length === 0) return;
-      showConfirm(`Từ chối ${selectedTxIds.length} giao dịch đã chọn?`, async () => {
-          const res = await adminBulkRejectTransactions(selectedTxIds);
-          if (res.success) {
-              showToast(`Đã từ chối ${res.count} giao dịch!`, 'info');
-              await refreshData();
-              setSelectedTxIds([]);
-          } else {
-              showToast('Lỗi: ' + res.error, 'error');
-          }
-      });
-  };
+                      {/* Step 2: Face */}
+                      <div className="bg-white/5 p-3 rounded-xl border border-white/5">
+                          <div className="flex items-center gap-2 mb-1">
+                              <span className="bg-audi-pink text-white text-[10px] font-bold px-1.5 rounded">BƯỚC 2</span>
+                              <span className="text-sm font-bold text-audi-pink">Ảnh Khuôn Mặt (Face)</span>
+                              <span className="ml-auto text-[9px] bg-red-500/20 text-red-400 px-1.5 rounded border border-red-500/30">QUAN TRỌNG</span>
+                          </div>
+                          <p className="text-xs text-slate-300 leading-relaxed pl-1 mb-2">
+                              Dùng để <b>ghép mặt (Face Swap)</b> vào nhân vật.
+                          </p>
+                          <div className="grid grid-cols-2 gap-2 text-[10px]">
+                              <div className="bg-green-500/10 border border-green-500/30 p-2 rounded text-green-400 flex items-center gap-1">
+                                  <Icons.Check className="w-3 h-3"/> Cận mặt, chính diện
+                              </div>
+                              <div className="bg-red-500/10 border border-red-500/30 p-2 rounded text-red-400 flex items-center gap-1">
+                                  <Icons.X className="w-3 h-3"/> Bị che, nghiêng, mờ
+                              </div>
+                          </div>
+                      </div>
 
-  // --- ACCESS DENIED ---
-  if (!isAdmin) {
+                      {/* Step 3: Lock */}
+                      <div className="bg-white/5 p-3 rounded-xl border border-white/5">
+                          <div className="flex items-center gap-2 mb-1">
+                              <span className="bg-white text-black text-[10px] font-bold px-1.5 rounded">TÙY CHỌN</span>
+                              <span className="text-sm font-bold text-white">Chế độ Khóa Mặt</span>
+                          </div>
+                          <div className="flex gap-2 mt-2">
+                              <div className="flex-1 bg-black/30 p-2 rounded border border-audi-cyan/30 text-center">
+                                  <Icons.Lock className="w-4 h-4 text-audi-cyan mx-auto mb-1"/>
+                                  <div className="text-[10px] font-bold text-audi-cyan">ĐANG BẬT</div>
+                                  <div className="text-[9px] text-slate-400">Giữ nguyên khuôn mặt gốc</div>
+                              </div>
+                              <div className="flex-1 bg-black/30 p-2 rounded border border-red-500/30 text-center">
+                                  <Icons.Unlock className="w-4 h-4 text-red-500 mx-auto mb-1"/>
+                                  <div className="text-[10px] font-bold text-red-500">ĐANG TẮT</div>
+                                  <div className="text-[9px] text-slate-400">AI tự vẽ mặt mới</div>
+                              </div>
+                          </div>
+                      </div>
+                  </div>
+              );
+          case 'settings':
+              return (
+                  <div className="space-y-4">
+                      <h3 className="text-xl font-bold text-audi-yellow flex items-center gap-2 border-b border-white/10 pb-2">
+                          <Icons.Settings className="w-6 h-6" /> Cấu hình Nâng cao
+                      </h3>
+                      
+                      <div className="space-y-3">
+                          <div className="flex items-start gap-3 p-3 bg-white/5 rounded-xl border border-white/5">
+                              <div className="p-2 bg-audi-cyan/20 rounded-lg text-audi-cyan">
+                                  <Icons.Cpu className="w-5 h-5" />
+                              </div>
+                              <div>
+                                  <h4 className="text-sm font-bold text-white">Model 3.0 Pro</h4>
+                                  <p className="text-xs text-slate-400 mt-1">Sử dụng mô hình Nano Banana Pro mới nhất. Hiểu lệnh tốt hơn, chi tiết trang phục sắc nét hơn bản Flash cũ.</p>
+                              </div>
+                          </div>
+
+                          <div className="flex items-start gap-3 p-3 bg-white/5 rounded-xl border border-white/5">
+                              <div className="p-2 bg-audi-pink/20 rounded-lg text-audi-pink">
+                                  <Icons.Cloud className="w-5 h-5" />
+                              </div>
+                              <div>
+                                  <h4 className="text-sm font-bold text-white">HQ Cloud Link</h4>
+                                  <p className="text-xs text-slate-400 mt-1">Ảnh gốc được upload lên Cloud để phân tích sâu (Deep Analysis). Giúp kết quả giống ảnh mẫu hơn 30%.</p>
+                              </div>
+                          </div>
+
+                          <div className="flex items-start gap-3 p-3 bg-white/5 rounded-xl border border-white/5">
+                              <div className="p-2 bg-white/10 rounded-lg text-white">
+                                  <Icons.Monitor className="w-5 h-5" />
+                              </div>
+                              <div>
+                                  <h4 className="text-sm font-bold text-white">Độ phân giải (Resolution)</h4>
+                                  <div className="flex gap-2 mt-2">
+                                      <span className="text-[10px] px-2 py-1 bg-black rounded border border-slate-600 text-slate-300">2K (Khuyên dùng)</span>
+                                      <span className="text-[10px] px-2 py-1 bg-black rounded border border-audi-purple text-audi-purple">4K (In ấn)</span>
+                                  </div>
+                              </div>
+                          </div>
+                      </div>
+                  </div>
+              );
+          default: return null;
+      }
+  }
+
+  if (stage === 'processing') {
       return (
-          <div className="flex flex-col items-center justify-center h-[70vh] text-center animate-fade-in">
-              <div className="w-24 h-24 bg-red-500/10 rounded-full flex items-center justify-center mb-6 animate-pulse">
-                  <Icons.Lock className="w-10 h-10 text-red-500" />
+          <div className="flex flex-col items-center justify-center min-h-[60vh] text-center animate-fade-in w-full max-w-md mx-auto">
+              <div className="relative w-24 h-24 mb-8">
+                  <div className="absolute inset-0 rounded-full border-4 border-slate-800"></div>
+                  <div className="absolute inset-0 rounded-full border-4 border-t-audi-pink border-r-audi-purple border-b-transparent border-l-transparent animate-spin"></div>
+                  <div className="absolute inset-4 rounded-full bg-white/5 flex items-center justify-center animate-pulse">
+                      <Icons.Sparkles className="w-10 h-10 text-white" />
+                  </div>
               </div>
-              <h1 className="text-4xl font-game font-bold text-white mb-2">ACCESS DENIED</h1>
-              <p className="text-slate-400 font-mono">Khu vực hạn chế. Cần quyền Admin cấp 5.</p>
+              <h2 className="font-game text-2xl font-bold text-white mb-2 tracking-widest animate-neon-flash">
+                  {lang === 'vi' ? 'AI ĐANG VẼ...' : 'GENERATING...'}
+              </h2>
+              <div className="text-4xl font-mono font-bold text-audi-yellow mb-4 animate-pulse">
+                  {formatTime(elapsedSeconds)} <span className="text-sm text-slate-500">/ ~{formatTime(estimatedSeconds)}</span>
+              </div>
+              <p className="text-audi-cyan font-mono text-sm max-w-xs mx-auto mb-8 animate-pulse font-bold">
+                  {progressMsg}
+              </p>
+              <div className="w-full bg-[#12121a] border border-white/10 rounded-2xl p-4 space-y-2 shadow-2xl text-left h-48 overflow-y-auto custom-scrollbar">
+                  {progressLogs.map((log, idx) => (
+                      <div key={idx} className="flex items-start gap-2 text-xs font-mono border-b border-white/5 pb-1 last:border-0 animate-fade-in">
+                          <span className="text-audi-pink"> &gt; </span>
+                          <span className={idx === progressLogs.length - 1 ? 'text-white font-bold' : 'text-slate-400'}>{log}</span>
+                      </div>
+                  ))}
+              </div>
+              <button 
+                  onClick={() => {
+                      setStage('input');
+                      notify("Đã hủy tạo ảnh.", "info");
+                  }}
+                  className="mt-4 px-6 py-2 bg-white/10 hover:bg-red-500/20 text-slate-400 hover:text-red-400 rounded-full text-xs font-bold transition-all border border-white/5 hover:border-red-500/30 flex items-center gap-2"
+              >
+                  <Icons.X className="w-4 h-4" /> Hủy bỏ (Cancel)
+              </button>
           </div>
       );
   }
 
-  // --- SUB-COMPONENTS ---
-  const StatusBadge = ({ status, latency }: { status: string, latency?: number }) => (
-      <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-bold uppercase ${
-          status === 'connected' ? 'bg-green-500/10 border-green-500 text-green-500' :
-          status === 'checking' ? 'bg-yellow-500/10 border-yellow-500 text-yellow-500' :
-          'bg-red-500/10 border-red-500 text-red-500'
-      }`}>
-          <div className={`w-2 h-2 rounded-full ${status === 'connected' ? 'bg-green-500 animate-pulse' : status === 'checking' ? 'bg-yellow-500 animate-bounce' : 'bg-red-500'}`}></div>
-          {status === 'connected' ? 'Ổn định' : status === 'checking' ? 'Checking' : 'Mất kết nối'}
-          {latency !== undefined && latency > 0 && <span className="text-[9px] opacity-70 ml-1">({latency}ms)</span>}
-      </div>
-  );
+  if (stage === 'result' && resultImage) {
+      return (
+          <div className="flex flex-col items-center animate-fade-in pb-20 w-full">
+              <div className="w-full max-w-xl bg-[#090014] border border-white/10 rounded-3xl overflow-hidden shadow-2xl mx-auto">
+                  <div className="flex justify-between items-center p-3 border-b border-white/10 bg-white/5">
+                      <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                          <span className="font-bold text-xs text-white">Result (3.0 Pro)</span>
+                      </div>
+                      <button onClick={() => setStage('input')} className="text-[10px] font-bold text-slate-400 hover:text-white px-2 py-1 rounded bg-white/5 hover:bg-white/10">X</button>
+                  </div>
+                  <div className="relative bg-black/50 min-h-[300px] flex items-center justify-center p-4">
+                      <img src={resultImage} alt="Result" className="max-w-full max-h-[50vh] object-contain rounded-lg shadow-[0_0_30px_rgba(0,0,0,0.5)] border border-white/5" />
+                  </div>
+                  <div className="p-4 bg-[#12121a] flex flex-col gap-3">
+                      <div className="flex gap-2">
+                          <button 
+                            onClick={() => handleForceDownload(resultImage, `auditionai-image-${Date.now()}.png`)}
+                            className="flex-1 px-4 py-2.5 bg-white text-black rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-audi-cyan transition-colors text-sm"
+                          >
+                              <Icons.Download className="w-4 h-4" /> Tải Về
+                          </button>
+                          <button onClick={() => setStage('input')} className="flex-1 px-4 py-2.5 bg-audi-pink text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-pink-600 transition-colors shadow-[0_0_15px_#FF0099] text-sm">
+                              <Icons.Wand className="w-4 h-4" /> Tạo Tiếp
+                          </button>
+                      </div>
+                  </div>
+              </div>
+          </div>
+      );
+  }
+
+  const TipIcon = SMART_TIPS[currentTipIdx].icon;
 
   return (
-    <div className="min-h-screen pb-24 animate-fade-in bg-[#05050A]">
-      {/* --- TOASTS CONTAINER --- */}
-      <div className="fixed top-24 right-4 z-[9999] flex flex-col gap-2 pointer-events-none w-full max-w-sm px-4 md:px-0">
-          {toasts.map(t => (
-              <div key={t.id} className={`pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-xl border shadow-xl animate-fade-in backdrop-blur-md ${
-                  t.type === 'success' ? 'bg-[#0f1f12]/90 border-green-500/50 text-green-400' : 
-                  t.type === 'error' ? 'bg-[#1f0f0f]/90 border-red-500/50 text-red-400' : 'bg-[#0f151f]/90 border-blue-500/50 text-blue-400'
-              }`}>
-                  {t.type === 'success' && <Icons.Check className="w-5 h-5 shrink-0" />}
-                  {t.type === 'error' && <Icons.X className="w-5 h-5 shrink-0" />}
-                  {t.type === 'info' && <Icons.Info className="w-5 h-5 shrink-0" />}
-                  <span className="text-sm font-bold break-words">{t.msg}</span>
-              </div>
-          ))}
-      </div>
+    <div className="flex flex-col items-center w-full max-w-5xl mx-auto pb-48 animate-fade-in relative">
+        <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/*" />
 
-      {/* --- CONFIRM / ALERT DIALOG (Updated Overlay) --- */}
-      {confirmDialog.show && (
-          <div className="fixed inset-0 z-[10000] flex items-start justify-center p-4 pt-24 animate-fade-in overflow-y-auto">
-              <div className="bg-[#12121a] border border-white/20 p-6 rounded-2xl max-w-lg w-full shadow-[0_0_50px_rgba(0,0,0,0.8)] transform scale-100 transition-all m-4 max-h-[90vh] overflow-y-auto custom-scrollbar">
-                  <div className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center mb-4 text-audi-yellow mx-auto">
-                      <Icons.Bell className="w-6 h-6 animate-swing" />
-                  </div>
-                  <h3 className="text-lg font-bold text-white text-center mb-2">{confirmDialog.title || 'Thông báo'}</h3>
-                  <p className="text-slate-400 text-center text-sm mb-6 leading-relaxed">{confirmDialog.msg}</p>
-                  
-                  <div className="flex gap-3">
-                      {!confirmDialog.isAlertOnly && (
-                          <button onClick={() => setConfirmDialog(prev => ({...prev, show: false}))} className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-bold transition-colors">
-                              Hủy
-                          </button>
-                      )}
-                      <button onClick={() => { confirmDialog.onConfirm(); setConfirmDialog(prev => ({...prev, show: false})) }} className="flex-1 py-3 rounded-xl bg-audi-pink hover:bg-pink-600 text-white font-bold transition-colors shadow-lg">
-                          {confirmDialog.isAlertOnly ? 'Đã Hiểu' : 'Đồng ý'}
-                      </button>
-                  </div>
-              </div>
-          </div>
-      )}
-      
-      {/* Top Command Bar */}
-      <div className="bg-[#12121a] border-b border-white/10 sticky top-[72px] z-40 shadow-lg">
-          <div className="max-w-7xl mx-auto px-4 py-3 flex flex-row justify-between items-center gap-4">
-              <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-audi-pink flex items-center justify-center text-white font-bold shadow-lg shadow-audi-pink/30">
-                      <Icons.Shield className="w-5 h-5 md:w-6 md:h-6" />
-                  </div>
-                  <div>
-                      <h1 className="font-game text-base md:text-xl font-bold text-white leading-none">QUẢN TRỊ</h1>
-                      <p className="text-[9px] md:text-[10px] text-audi-cyan font-mono tracking-widest mt-0.5 hidden md:block">V42.0.0-RELEASE • SYSTEM MONITOR</p>
-                  </div>
-              </div>
+        {showVideo && (
+            <div className="fixed inset-0 z-[200] flex items-start justify-center p-4 pt-24 animate-fade-in" onClick={() => setShowVideo(false)}>
+                <div className="relative w-full max-w-2xl aspect-video bg-black rounded-2xl overflow-hidden border border-white/20 shadow-[0_0_50px_rgba(255,255,255,0.1)]" onClick={e => e.stopPropagation()}>
+                    <button 
+                        onClick={() => setShowVideo(false)} 
+                        className="absolute -top-10 right-0 md:top-4 md:right-4 bg-white/10 hover:bg-red-600 text-white p-2 rounded-full transition-colors z-50 backdrop-blur-md"
+                    >
+                        <Icons.X className="w-6 h-6" />
+                    </button>
+                    <iframe 
+                        className="w-full h-full"
+                        src={`https://www.youtube.com/embed/${TUTORIAL_VIDEO_ID}?autoplay=1&origin=${window.location.origin}`}
+                        title="Hướng dẫn sử dụng"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                    ></iframe>
+                </div>
+            </div>
+        )}
 
-              {/* Quick Health Indicators (Compact Mobile) */}
-              <div className="flex items-center gap-2 bg-black/40 px-2 py-1 rounded-full border border-white/5">
-                  <div title="Gemini" className={`w-2 h-2 rounded-full ${health.gemini.status === 'connected' ? 'bg-blue-500' : 'bg-red-500'}`}></div>
-                  <div title="DB" className={`w-2 h-2 rounded-full ${health.supabase.status === 'connected' ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                  <div title="Storage" className={`w-2 h-2 rounded-full ${health.storage.status === 'connected' ? 'bg-orange-500' : 'bg-red-500'}`}></div>
-              </div>
-          </div>
+        {guideTopic && (
+            <div className="fixed inset-0 z-[100] flex items-start justify-center p-4 pt-32 animate-fade-in" onClick={() => setGuideTopic(null)}>
+                <div className="bg-[#12121a] w-full max-w-md p-6 rounded-2xl border border-audi-yellow/50 shadow-[0_0_30px_rgba(251,218,97,0.2)] relative" onClick={e => e.stopPropagation()}>
+                    <button onClick={() => setGuideTopic(null)} className="absolute top-4 right-4 text-slate-500 hover:text-white">
+                        <Icons.X className="w-6 h-6" />
+                    </button>
+                    {renderGuideContent()}
+                    <div className="mt-6 pt-4 border-t border-white/10 text-center">
+                        <button onClick={() => setGuideTopic(null)} className="px-6 py-2 bg-white/10 hover:bg-white/20 rounded-full text-xs font-bold text-white transition-colors">
+                            Đã Hiểu
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
 
-          {/* Navigation Tabs (Scrollable) */}
-          <div className="max-w-7xl mx-auto px-4 flex gap-2 overflow-x-auto no-scrollbar py-2 border-t border-white/5">
-              {[
-                  { id: 'overview', icon: Icons.Home, label: 'Tổng Quan' },
-                  { id: 'transactions', icon: Icons.Gem, label: 'Giao Dịch' },
-                  { id: 'users', icon: Icons.User, label: 'Người Dùng' },
-                  { id: 'packages', icon: Icons.ShoppingBag, label: 'Gói Nạp' },
-                  { id: 'giftcodes', icon: Icons.Gift, label: 'Code' },
-                  { id: 'promotion', icon: Icons.Zap, label: 'Sự Kiện' },
-                  { id: 'styles', icon: Icons.Palette, label: 'Style Mẫu' },
-                  { id: 'system', icon: Icons.Cpu, label: 'Hệ Thống' },
-              ].map(tab => (
-                  <button
-                      key={tab.id}
-                      onClick={() => setActiveView(tab.id as any)}
-                      className={`px-3 py-1.5 md:px-4 md:py-2 rounded-lg flex items-center gap-2 text-xs font-bold uppercase tracking-wider transition-all whitespace-nowrap shrink-0 ${
-                          activeView === tab.id 
-                          ? 'bg-white text-black shadow-md' 
-                          : 'text-slate-400 hover:text-white hover:bg-white/5 bg-white/5 border border-white/5'
-                      }`}
-                  >
-                      <tab.icon className="w-3 h-3 md:w-4 md:h-4" />
-                      {tab.label}
-                  </button>
-              ))}
-          </div>
-      </div>
+        {showSampleModal && (
+            <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 animate-fade-in" onClick={() => setShowSampleModal(false)}>
+                <div className="bg-[#12121a] w-full max-w-xl h-[500px] rounded-[2rem] border border-audi-purple/50 shadow-[0_0_50px_rgba(183,33,255,0.2)] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+                    <div className="p-4 border-b border-white/10 flex justify-between items-center bg-black/20">
+                        <div className="flex items-center gap-2">
+                            <Icons.Image className="w-5 h-5 text-audi-purple" />
+                            <h3 className="font-bold text-white text-lg">Thư viện Prompt Mẫu</h3>
+                            <span className="text-xs bg-audi-purple/20 text-audi-purple px-2 py-0.5 rounded border border-audi-purple/30 truncate max-w-[150px]">
+                                {currentCategoryName || activeMode.toUpperCase()}
+                            </span>
+                        </div>
+                        <button onClick={() => setShowSampleModal(false)} className="p-2 hover:bg-white/10 rounded-full text-white">
+                            <Icons.X className="w-6 h-6" />
+                        </button>
+                    </div>
+                    
+                    <div className="flex-1 overflow-y-auto p-4 custom-scrollbar bg-black/10">
+                        {loadingSamples ? (
+                            <div className="flex flex-col items-center justify-center h-full gap-4">
+                                <Icons.Loader className="w-10 h-10 text-audi-purple animate-spin" />
+                                <span className="text-slate-400 text-sm">Đang tải dữ liệu từ caulenhau.io.vn...</span>
+                            </div>
+                        ) : samplePrompts.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center h-full text-slate-500 gap-4">
+                                <div className="p-4 bg-white/5 rounded-full">
+                                    <Icons.Image className="w-12 h-12 opacity-30" />
+                                </div>
+                                <p>Chưa có mẫu nào cho chế độ này.</p>
+                                <button 
+                                    onClick={() => fetchSamplePrompts(false)}
+                                    className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-full text-xs font-bold text-white transition-colors"
+                                >
+                                    Thử lại
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                {samplePrompts.map((sample) => (
+                                    <div 
+                                        key={sample.id} 
+                                        onClick={() => handleSelectSample(sample)}
+                                        className="group relative aspect-[3/4] rounded-xl overflow-hidden cursor-pointer border border-white/10 hover:border-audi-purple transition-all hover:scale-[1.02]"
+                                    >
+                                        <img src={sample.image_url} alt="Sample" className="w-full h-full object-cover" loading="lazy" />
+                                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center p-2">
+                                            <span className="text-xs font-bold text-white text-center bg-audi-purple px-3 py-1 rounded-full shadow-lg">
+                                                Sử dụng
+                                            </span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        
+                        {hasMoreSamples && !loadingSamples && samplePrompts.length > 0 && (
+                            <div className="w-full flex justify-center mt-6 pb-4">
+                                <button
+                                    onClick={() => fetchSamplePrompts(true)}
+                                    className="px-6 py-2 bg-audi-purple/20 hover:bg-audi-purple/40 border border-audi-purple/50 rounded-full text-sm font-bold text-white transition-all flex items-center gap-2"
+                                >
+                                    Xem thêm
+                                    <Icons.ArrowDown className="w-4 h-4" />
+                                </button>
+                            </div>
+                        )}
+                        
+                        {loadingSamples && samplePrompts.length > 0 && (
+                            <div className="w-full flex justify-center mt-6 pb-4">
+                                <div className="px-6 py-2 bg-audi-purple/20 border border-audi-purple/50 rounded-full text-sm font-bold text-white flex items-center gap-2 opacity-70">
+                                    <Icons.Loader className="w-4 h-4 animate-spin" />
+                                    Đang tải...
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                    <div className="p-3 border-t border-white/10 bg-black/20 text-center text-[10px] text-slate-500">
+                        Dữ liệu được cung cấp bởi caulenhau.io.vn
+                    </div>
+                </div>
+            </div>
+        )}
 
-      <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
-          
-          {/* ... (Existing Views) ... */}
-          {activeView === 'overview' && (
-              <div className="space-y-6 animate-slide-in-right">
-                  {/* Grid 3x2 Dashboard */}
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-6">
-                      {[
-                          { title: 'Truy cập hôm nay', value: stats?.dashboard?.visitsToday, icon: Icons.Menu, color: 'text-white' },
-                          { title: 'Tổng truy cập', value: new Intl.NumberFormat('de-DE').format(stats?.dashboard?.visitsTotal || 0), icon: Icons.Cloud, color: 'text-audi-cyan' },
-                          { title: 'User mới hôm nay', value: stats?.dashboard?.newUsersToday, icon: Icons.User, color: 'text-white' },
-                          { title: 'Tổng User', value: stats?.dashboard?.usersTotal, icon: Icons.User, color: 'text-green-500' },
-                          { title: 'Ảnh hôm nay', value: stats?.dashboard?.imagesToday, icon: Icons.Image, color: 'text-white' },
-                          { title: 'Tổng số ảnh', value: new Intl.NumberFormat('de-DE').format(stats?.dashboard?.imagesTotal || 0), icon: Icons.Image, color: 'text-audi-pink' },
-                      ].map((item, i) => (
-                          <div key={i} className="bg-[#12121a] border border-white/5 rounded-2xl p-4 md:p-6 relative overflow-hidden shadow-lg hover:border-white/10 transition-all">
-                              <div className="flex justify-between items-start">
-                                  <div>
-                                      <p className="text-[9px] md:text-xs font-bold text-slate-400 uppercase mb-1 md:mb-2 truncate">{item.title}</p>
-                                      <h3 className={`text-2xl md:text-4xl font-game font-bold ${item.color} drop-shadow-[0_0_10px_rgba(255,255,255,0.2)]`}>
-                                          {item.value}
-                                      </h3>
-                                  </div>
-                                  <div className="p-2 md:p-3 bg-white/5 rounded-xl text-slate-400 hidden md:block">
-                                      <item.icon className="w-6 h-6" />
-                                  </div>
-                              </div>
-                              <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none"></div>
-                          </div>
-                      ))}
-                  </div>
+        <div className="w-full flex justify-center mb-4">
+            <div className="bg-[#12121a] p-1.5 rounded-2xl border border-white/10 flex gap-1 shadow-lg overflow-x-auto no-scrollbar max-w-full">
+                {[
+                    { id: 'single', label: { vi: 'Đơn', en: 'Single' }, icon: Icons.User },
+                    { id: 'couple', label: { vi: 'Đôi', en: 'Couple' }, icon: Icons.Heart },
+                    { id: 'group3', label: { vi: 'Nhóm 3', en: 'Group 3' }, icon: Icons.User },
+                    { id: 'group4', label: { vi: 'Nhóm 4', en: 'Group 4' }, icon: Icons.User },
+                ].map(mode => (
+                    <button
+                        key={mode.id}
+                        onClick={() => handleModeChange(mode.id as GenMode)}
+                        className={`px-4 py-2.5 rounded-xl flex items-center gap-2 text-xs md:text-sm font-bold transition-all whitespace-nowrap ${activeMode === mode.id ? 'bg-white text-black shadow-md' : 'text-slate-500 hover:text-white hover:bg-white/5'}`}
+                    >
+                        {mode.id === 'group4' ? <div className="flex -space-x-1"><Icons.User className="w-3 h-3"/><Icons.User className="w-3 h-3"/></div> : <mode.icon className="w-3 h-3 md:w-4 md:h-4" />}
+                        {mode.label[lang === 'vi' ? 'vi' : 'en']}
+                    </button>
+                ))}
+            </div>
+        </div>
 
-                  {/* AI Stats Table */}
-                  <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4 md:p-6 shadow-xl">
-                      <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                          <Icons.BarChart className="w-5 h-5 text-audi-yellow" />
-                          Thống Kê Sử Dụng
-                      </h3>
-                      {/* ... (Existing table) ... */}
-                      <div className="hidden md:block overflow-x-auto">
-                          <table className="w-full text-left text-sm text-slate-400">
-                              <thead className="bg-[#090014] text-xs font-bold text-slate-500 uppercase">
-                                  <tr>
-                                      <th className="px-6 py-4">Tính năng</th>
-                                      <th className="px-6 py-4 text-audi-cyan">Số lượt</th>
-                                      <th className="px-6 py-4 text-audi-pink">Vcoin tiêu thụ</th>
-                                      <th className="px-6 py-4 text-right text-green-500">Doanh Thu (Ước tính)</th>
-                                  </tr>
-                              </thead>
-                              <tbody className="divide-y divide-white/5">
-                                  {stats?.dashboard?.aiUsage && stats.dashboard.aiUsage.length > 0 ? (
-                                      stats.dashboard.aiUsage.map((row: any, i: number) => (
-                                          <tr key={i} className="hover:bg-white/5 transition-colors">
-                                              <td className="px-6 py-4 font-bold text-white capitalize">{row.feature}</td>
-                                              <td className="px-6 py-4 text-audi-cyan font-mono">{new Intl.NumberFormat('de-DE').format(row.count)}</td>
-                                              <td className="px-6 py-4 text-audi-pink font-bold">{new Intl.NumberFormat('de-DE').format(row.vcoins)} Vcoin</td>
-                                              <td className="px-6 py-4 text-right text-green-500 font-bold">
-                                                  {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(row.revenue)}
-                                              </td>
-                                          </tr>
-                                      ))
-                                  ) : (
-                                      <tr>
-                                          <td colSpan={4} className="px-6 py-8 text-center text-slate-500 italic">Chưa có dữ liệu.</td>
-                                      </tr>
-                                  )}
-                              </tbody>
-                          </table>
-                      </div>
-                      <div className="md:hidden space-y-3">
-                          {stats?.dashboard?.aiUsage && stats.dashboard.aiUsage.length > 0 ? (
-                              stats.dashboard.aiUsage.map((row: any, i: number) => (
-                                  <div key={i} className="bg-white/5 rounded-xl p-3 border border-white/5 flex justify-between items-center">
-                                      <div>
-                                          <div className="font-bold text-white capitalize text-sm">{row.feature}</div>
-                                          <div className="text-xs text-slate-500">{new Intl.NumberFormat('de-DE').format(row.count)} lượt</div>
-                                      </div>
-                                      <div className="text-right">
-                                          <div className="text-audi-pink font-bold text-sm">{new Intl.NumberFormat('de-DE').format(row.vcoins)} VC</div>
-                                          <div className="text-green-500 text-[10px] font-bold">
-                                              {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(row.revenue)}
-                                          </div>
-                                      </div>
-                                  </div>
-                              ))
-                          ) : (
-                              <div className="text-center text-slate-500 italic text-sm py-4">Chưa có dữ liệu.</div>
-                          )}
-                      </div>
-                  </div>
-              </div>
-          )}
+        <div className="w-full bg-gradient-to-r from-orange-500/10 via-yellow-500/10 to-orange-500/10 border-y border-white/5 md:border md:rounded-xl md:mb-6 p-2 md:p-3 flex items-center justify-center gap-3 backdrop-blur-md overflow-hidden relative min-h-[40px]">
+            <div key={currentTipIdx} className="flex items-center gap-2 animate-fade-in transition-all duration-500">
+                <TipIcon className="w-4 h-4 md:w-5 md:h-5 text-audi-yellow shrink-0 animate-bounce-slow" />
+                <span className="text-[10px] md:text-xs font-medium text-slate-200 line-clamp-2 md:line-clamp-1 text-center md:text-left">
+                    {SMART_TIPS[currentTipIdx].text}
+                </span>
+            </div>
+            <div className="absolute bottom-1 md:right-3 flex gap-1 justify-center w-full md:w-auto">
+                {SMART_TIPS.map((_, i) => (
+                    <div key={i} className={`w-1 h-1 rounded-full transition-all ${i === currentTipIdx ? 'bg-audi-yellow w-3' : 'bg-white/10'}`}></div>
+                ))}
+            </div>
+        </div>
 
-          {activeView === 'transactions' && (
-              // ... existing transaction view ...
-              <div className="space-y-6 animate-slide-in-right">
-                  <div className="flex justify-between items-center">
-                      <h2 className="text-lg md:text-2xl font-bold text-white">Giao Dịch</h2>
-                      <div className="flex gap-2">
-                          {selectedTxIds.length > 0 && (
-                              <div className="flex items-center gap-2 bg-white/10 px-3 py-1.5 rounded-lg animate-fade-in">
-                                  <span className="text-xs font-bold text-white">{selectedTxIds.length} đã chọn</span>
-                                  <button onClick={handleBulkApprove} className="p-1.5 bg-green-500/20 text-green-500 rounded hover:bg-green-500 hover:text-white" title="Duyệt tất cả"><Icons.Check className="w-4 h-4" /></button>
-                                  <button onClick={handleBulkReject} className="p-1.5 bg-red-500/20 text-red-500 rounded hover:bg-red-500 hover:text-white" title="Hủy tất cả"><Icons.X className="w-4 h-4" /></button>
-                              </div>
-                          )}
-                          <button onClick={refreshData} className="px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-xs md:text-sm font-bold text-white flex items-center gap-2">
-                              <Icons.Clock className="w-3 h-3 md:w-4 md:h-4" /> Làm mới
-                          </button>
-                      </div>
-                  </div>
-                  {/* ... same table content ... */}
-                  <div className="hidden md:block bg-[#12121a] border border-white/10 rounded-2xl overflow-hidden">
-                      <table className="w-full text-left text-sm text-slate-400">
-                          <thead className="bg-black/30 text-xs font-bold text-slate-300 uppercase">
-                              <tr>
-                                  <th className="px-6 py-4 w-10">
-                                      <input 
-                                          type="checkbox" 
-                                          className="rounded border-white/20 bg-white/5 checked:bg-audi-pink"
-                                          checked={transactions.length > 0 && selectedTxIds.length === transactions.length}
-                                          onChange={handleSelectAll}
-                                      />
-                                  </th>
-                                  <th className="px-6 py-4">Thời gian</th>
-                                  <th className="px-6 py-4">Mã đơn</th>
-                                  <th className="px-6 py-4">Người dùng</th>
-                                  <th className="px-6 py-4">Gói nạp</th>
-                                  <th className="px-6 py-4 text-right">Số tiền</th>
-                                  <th className="px-6 py-4">Trạng thái</th>
-                                  <th className="px-6 py-4 text-right">Hành động</th>
-                              </tr>
-                          </thead>
-                          <tbody className="divide-y divide-white/5">
-                              {transactions.length === 0 ? (
-                                  <tr><td colSpan={8} className="text-center py-8">Chưa có giao dịch nào.</td></tr>
-                              ) : transactions.map(tx => (
-                                  <tr key={tx.id} className={`hover:bg-white/5 transition-colors ${processingTxId === tx.id ? 'opacity-50 pointer-events-none' : ''} ${selectedTxIds.includes(tx.id) ? 'bg-white/5' : ''}`}>
-                                      <td className="px-6 py-4">
-                                          <input 
-                                              type="checkbox" 
-                                              className="rounded border-white/20 bg-white/5 checked:bg-audi-pink"
-                                              checked={selectedTxIds.includes(tx.id)}
-                                              onChange={() => handleSelectTx(tx.id)}
-                                          />
-                                      </td>
-                                      <td className="px-6 py-4 text-xs font-mono">{new Date(tx.createdAt).toLocaleString()}</td>
-                                      <td className="px-6 py-4 font-mono font-bold text-white">{tx.code}</td>
-                                      <td className="px-6 py-4">
-                                          <div className="flex items-center gap-3">
-                                              <img src={tx.userAvatar || 'https://picsum.photos/100/100'} className="w-8 h-8 rounded-full border border-white/10 object-cover" />
-                                              <div className="flex flex-col">
-                                                  <span className="font-bold text-white text-xs">{tx.userName || 'Unknown'}</span>
-                                                  <span className="text-[10px] text-slate-500">{tx.userEmail || 'No Email'}</span>
-                                              </div>
-                                          </div>
-                                      </td>
-                                      <td className="px-6 py-4 text-audi-pink font-bold">+{tx.coins} Vcoin</td>
-                                      <td className="px-6 py-4 text-right font-bold text-white">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(tx.amount)}</td>
-                                      <td className="px-6 py-4">
-                                          <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${
-                                              tx.status === 'paid' ? 'bg-green-500/20 text-green-500' : 
-                                              tx.status === 'pending' ? 'bg-yellow-500/20 text-yellow-500' : 'bg-red-500/20 text-red-500'
-                                          }`}>
-                                              {tx.status}
-                                          </span>
-                                      </td>
-                                      <td className="px-6 py-4 text-right">
-                                          <div className="flex justify-end gap-2">
-                                              {tx.status === 'pending' && (
-                                                  <>
-                                                      <button onClick={() => handleApproveTransaction(tx.id)} className="p-2 bg-green-500/20 text-green-500 rounded hover:bg-green-500 hover:text-white" title="Duyệt"><Icons.Check className="w-4 h-4" /></button>
-                                                      <button onClick={() => handleRejectTransaction(tx.id)} className="p-2 bg-red-500/20 text-red-500 rounded hover:bg-red-500 hover:text-white" title="Hủy"><Icons.X className="w-4 h-4" /></button>
-                                                  </>
-                                              )}
-                                              <button onClick={() => handleDeleteTransaction(tx.id)} className="p-2 bg-slate-500/20 text-slate-500 rounded hover:bg-slate-500 hover:text-white" title="Xóa"><Icons.Trash className="w-4 h-4" /></button>
-                                          </div>
-                                      </td>
-                                  </tr>
-                              ))}
-                          </tbody>
-                      </table>
-                  </div>
-                  {/* Mobile cards also same */}
-                  <div className="md:hidden space-y-4">
-                      {transactions.map(tx => (
-                          <div key={tx.id} className="bg-[#12121a] border border-white/10 rounded-xl p-4 relative overflow-hidden shadow-md">
-                              <div className={`absolute top-0 left-0 w-1 h-full ${
-                                  tx.status === 'paid' ? 'bg-green-500' : 
-                                  tx.status === 'pending' ? 'bg-yellow-500' : 'bg-red-500'
-                              }`}></div>
-                              <div className="pl-3">
-                                  <div className="flex justify-between items-start mb-3">
-                                      <div className="flex items-center gap-3">
-                                          <img src={tx.userAvatar || 'https://picsum.photos/100/100'} className="w-10 h-10 rounded-full border border-white/10 object-cover bg-black" />
-                                          <div>
-                                              <div className="font-bold text-white text-sm">{tx.userName || 'Unknown'}</div>
-                                              <div className="text-xs text-slate-500 font-mono">{tx.code}</div>
-                                          </div>
-                                      </div>
-                                      <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${
-                                          tx.status === 'paid' ? 'bg-green-500/10 text-green-500 border border-green-500/30' : 
-                                          tx.status === 'pending' ? 'bg-yellow-500/10 text-yellow-500 border border-yellow-500/30' : 
-                                          'bg-red-500/10 text-red-500 border border-red-500/30'
-                                      }`}>
-                                          {tx.status}
-                                      </span>
-                                  </div>
-                                  <div className="grid grid-cols-2 gap-4 mb-3 bg-white/5 p-3 rounded-lg">
-                                      <div>
-                                          <div className="text-[10px] text-slate-500 uppercase font-bold">Số tiền</div>
-                                          <div className="text-white font-bold">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(tx.amount)}</div>
-                                      </div>
-                                      <div>
-                                          <div className="text-[10px] text-slate-500 uppercase font-bold">Gói nạp</div>
-                                          <div className="text-audi-pink font-bold">+{tx.coins} Vcoin</div>
-                                      </div>
-                                  </div>
-                                  <div className="flex gap-2 border-t border-white/5 pt-3">
-                                      {tx.status === 'pending' && (
-                                          <>
-                                              <button onClick={() => handleApproveTransaction(tx.id)} className="flex-1 py-2 bg-green-500 text-white rounded-lg font-bold text-xs shadow-lg shadow-green-500/20 active:scale-95 transition-all">DUYỆT</button>
-                                              <button onClick={() => handleRejectTransaction(tx.id)} className="flex-1 py-2 bg-red-500/10 text-red-500 border border-red-500/30 rounded-lg font-bold text-xs active:scale-95 transition-all">HỦY</button>
-                                          </>
-                                      )}
-                                      <button onClick={() => handleDeleteTransaction(tx.id)} className="px-3 py-2 bg-slate-800 text-slate-400 rounded-lg font-bold text-xs border border-white/10 active:scale-95"><Icons.Trash className="w-4 h-4" /></button>
-                                  </div>
-                              </div>
-                          </div>
-                      ))}
-                  </div>
-              </div>
-          )}
+        {/* MOVED NOTIFICATION BANNER */}
+        <div className="w-full mb-4 md:mb-6 bg-yellow-500/5 border border-yellow-500/20 rounded-xl p-3 flex items-center gap-3 animate-fade-in hover:bg-yellow-500/10 transition-colors">
+            <div className="shrink-0 p-1.5 bg-yellow-500/10 rounded-full">
+                <Icons.Flame className="w-4 h-4 text-yellow-500 animate-pulse" />
+            </div>
+            <p className="text-[10px] md:text-xs text-yellow-200/80 font-medium leading-relaxed">
+                <strong className="text-yellow-500">Lưu ý quan trọng:</strong> Mô hình tạo ảnh AI từ Gemini 2.5 Flash đã lỗi thời. Để đảm bảo chất lượng ảnh đầu ra, ứng dụng sẽ chuyển toàn bộ sang sử dụng <span className="text-white font-bold">Gemini 3.0 Pro (Nano Banana Pro)</span> để tạo ảnh.
+            </p>
+        </div>
 
-          {activeView === 'users' && (
-              // ... existing users view ...
-              <div className="space-y-6 animate-slide-in-right">
-                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                      <h2 className="text-lg md:text-2xl font-bold text-white">Người Dùng</h2>
-                      <div className="flex items-center gap-2 bg-white/5 rounded-xl border border-white/10 px-3 py-2 w-full md:w-64">
-                          <Icons.Search className="w-4 h-4 text-slate-500" />
-                          <input type="text" placeholder="Tìm email..." value={userSearchEmail} onChange={(e) => setUserSearchEmail(e.target.value)} className="bg-transparent border-none outline-none text-sm text-white w-full placeholder-slate-500" />
-                      </div>
-                  </div>
-                  {/* ... same table ... */}
-                  <div className="hidden md:block bg-[#12121a] border border-white/10 rounded-2xl overflow-hidden">
-                      <table className="w-full text-left text-sm text-slate-400">
-                          <thead className="bg-black/30 text-xs font-bold text-slate-300 uppercase">
-                              <tr>
-                                  <th className="px-6 py-4">User</th>
-                                  <th className="px-6 py-4">Số dư</th>
-                                  <th className="px-6 py-4">Vai trò</th>
-                                  <th className="px-6 py-4">Ngày tham gia</th>
-                                  <th className="px-6 py-4 text-right">Hành động</th>
-                              </tr>
-                          </thead>
-                          <tbody className="divide-y divide-white/5">
-                              {stats?.usersList.filter((u: any) => u.email.toLowerCase().includes(userSearchEmail.toLowerCase())).map((u: UserProfile) => (
-                                  <tr key={u.id} className="hover:bg-white/5">
-                                      <td className="px-6 py-4"><div className="flex items-center gap-3"><img src={u.avatar} className="w-8 h-8 rounded-full border border-white/10" onError={(e) => (e.currentTarget.src = 'https://picsum.photos/100/100')} /><div><div className="font-bold text-white">{u.username}</div><div className="text-xs text-slate-500">{u.email}</div></div></div></td>
-                                      <td className="px-6 py-4 text-audi-yellow font-bold font-mono">{u.balance}</td>
-                                      <td className="px-6 py-4"><span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${u.role === 'admin' ? 'bg-red-500/20 text-red-500' : 'bg-blue-500/20 text-blue-500'}`}>{u.role}</span></td>
-                                      <td className="px-6 py-4 text-xs font-mono">{u.lastCheckin ? new Date(u.lastCheckin).toLocaleDateString() : 'N/A'}</td>
-                                      <td className="px-6 py-4 text-right"><button onClick={() => setEditingUser(u)} className="text-xs font-bold text-audi-cyan hover:text-white bg-audi-cyan/10 hover:bg-audi-cyan/30 px-3 py-1.5 rounded transition-colors">Sửa</button></td>
-                                  </tr>
-                              ))}
-                          </tbody>
-                      </table>
-                  </div>
-              </div>
-          )}
+        <div className="w-full grid grid-cols-1 lg:grid-cols-3 gap-6 mt-4 md:mt-0">
+            <div className="lg:col-span-2 space-y-4">
+                <div className="flex items-center justify-between px-2">
+                    <h3 className="font-bold text-white text-sm uppercase flex items-center gap-2">
+                        <Icons.User className="w-4 h-4 text-audi-pink" /> 1. Upload Nhân Vật
+                    </h3>
+                    <div className="flex gap-2">
+                        <button 
+                            onClick={() => setShowVideo(true)}
+                            className="flex items-center gap-1 text-[10px] font-bold text-white hover:scale-105 transition-transform bg-red-600 px-3 py-1 rounded-full shadow-[0_0_10px_rgba(220,38,38,0.5)] border border-red-400 group"
+                        >
+                            <Icons.Play className="w-3 h-3 fill-white group-hover:animate-pulse" />
+                            Video HD
+                        </button>
+                        <button 
+                            onClick={() => setGuideTopic('chars')}
+                            className="flex items-center gap-1 text-[10px] font-bold text-audi-yellow hover:text-white transition-colors bg-audi-yellow/10 px-2 py-1 rounded-full border border-audi-yellow/30"
+                        >
+                            <Icons.Info className="w-3 h-3" /> Hướng dẫn
+                        </button>
+                    </div>
+                </div>
 
-          {activeView === 'packages' && (
-              // ... existing packages view ...
-              <div className="space-y-6 animate-slide-in-right">
-                  <div className="flex justify-between items-center">
-                      <h2 className="text-lg md:text-2xl font-bold text-white">Gói Nạp</h2>
-                      <button onClick={() => setEditingPackage({id: `temp_${Date.now()}`, name: 'Gói Mới', coin: 100, price: 50000, currency: 'VND', bonusText: '', bonusPercent: 0, isPopular: false, isActive: true, displayOrder: packages.length, colorTheme: 'border-slate-600', transferContent: 'NAP 50K'})} className="px-3 py-1.5 md:px-4 md:py-2 bg-audi-pink text-white rounded-lg font-bold flex items-center gap-2 hover:bg-pink-600 text-xs md:text-sm"><Icons.Plus className="w-4 h-4" /> Thêm Gói</button>
-                  </div>
-                  <div className="grid grid-cols-1 gap-4">
-                      {packages.map((pkg, idx) => (
-                          <div key={pkg.id} className="bg-[#12121a] border border-white/10 rounded-xl p-4 flex items-center justify-between group hover:border-white/30 transition-all shadow-md">
-                              <div className="flex items-center gap-3 md:gap-4">
-                                  <div className="flex flex-col gap-1 pr-3 md:pr-4 border-r border-white/10">
-                                      <button onClick={() => handleMovePackage(idx, -1)} disabled={idx === 0} className="p-1 hover:bg-white/10 rounded text-slate-500 disabled:opacity-30"><Icons.ArrowUp className="w-3 h-3" /></button>
-                                      <button onClick={() => handleMovePackage(idx, 1)} disabled={idx === packages.length - 1} className="p-1 hover:bg-white/10 rounded text-slate-500 disabled:opacity-30"><Icons.ArrowUp className="w-3 h-3 rotate-180" /></button>
-                                  </div>
-                                  <div className={`w-10 h-10 rounded-full border-2 ${pkg.colorTheme} flex items-center justify-center bg-black/50 shrink-0`}><Icons.Gem className="w-5 h-5 text-white" /></div>
-                                  <div>
-                                      <h4 className="font-bold text-white flex items-center gap-2 text-sm md:text-base">{pkg.name} {!pkg.isActive && <span className="text-[9px] bg-red-500 text-white px-1.5 py-0.5 rounded">HIDDEN</span>} {pkg.isPopular && <span className="text-[9px] bg-audi-pink text-white px-1.5 py-0.5 rounded">HOT</span>}</h4>
-                                      <div className="flex gap-3 text-xs text-slate-400 mt-1"><span><b className="text-green-400">{(pkg.price || 0).toLocaleString()}đ</b></span><span><b className="text-audi-yellow">{pkg.coin || 0} VC</b></span>{pkg.bonusPercent > 0 && <span className="text-audi-pink">+{pkg.bonusPercent}%</span>}</div>
-                                  </div>
-                              </div>
-                              <div className="flex gap-2"><button onClick={() => setEditingPackage({ id: pkg.id || '', name: pkg.name || '', price: pkg.price || 0, coin: pkg.coin || 0, bonusPercent: pkg.bonusPercent || 0, bonusText: pkg.bonusText || '', transferContent: pkg.transferContent || '', isPopular: !!pkg.isPopular, isActive: pkg.isActive !== false, colorTheme: pkg.colorTheme || 'border-slate-600', displayOrder: pkg.displayOrder || 0, currency: pkg.currency || 'VND' })} className="p-2 bg-blue-500/20 text-blue-500 rounded hover:bg-blue-500 hover:text-white"><Icons.Settings className="w-4 h-4" /></button><button onClick={() => handleDeletePackage(pkg.id)} className="p-2 bg-red-500/20 text-red-500 rounded hover:bg-red-500 hover:text-white"><Icons.Trash className="w-4 h-4" /></button></div>
-                          </div>
-                      ))}
-                  </div>
-              </div>
-          )}
+                {characters.length > 1 && (
+                    <div className="flex md:hidden overflow-x-auto gap-2 pb-2 no-scrollbar">
+                        {characters.map((char) => (
+                            <button
+                                key={char.id}
+                                onClick={() => setActiveCharTab(char.id)}
+                                className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all border ${
+                                    activeCharTab === char.id 
+                                    ? 'bg-audi-pink text-white border-audi-pink shadow-lg' 
+                                    : 'bg-[#12121a] text-slate-400 border-white/10 hover:border-white/30'
+                                }`}
+                            >
+                                {lang === 'vi' ? `Nhân vật ${char.id}` : `Char ${char.id}`}
+                                {char.bodyImage && <span className="ml-1 text-green-400">✓</span>}
+                            </button>
+                        ))}
+                    </div>
+                )}
 
-          {activeView === 'giftcodes' && (
-              // ... existing giftcodes view ...
-              <div className="space-y-6 animate-slide-in-right">
-                  <div className="flex justify-between items-center">
-                      <h2 className="text-lg md:text-2xl font-bold text-white">Quản Lý Giftcode</h2>
-                      <button onClick={() => setEditingGiftcode({id: `temp_${Date.now()}`, code: '', reward: 10, totalLimit: 100, usedCount: 0, maxPerUser: 1, isActive: true})} className="px-3 py-2 bg-audi-pink text-white rounded-lg font-bold flex items-center gap-2 hover:bg-pink-600 text-xs md:text-sm"><Icons.Plus className="w-4 h-4" /> <span className="hidden md:inline">Tạo Code</span><span className="md:hidden">Tạo</span></button>
-                  </div>
-                  {/* ... same ... */}
-                  <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4 md:p-6 mb-6">
-                      <h3 className="font-bold text-white mb-4 flex items-center gap-2"><Icons.Bell className="w-5 h-5 text-audi-yellow" /> Cấu Hình Thông Báo Sự Kiện (Nổi bật)</h3>
-                      <div className="space-y-4">
-                          <input type="text" value={giftcodePromo.text} onChange={(e) => setGiftcodePromo({...giftcodePromo, text: e.target.value})} placeholder="Ví dụ: Nhập CODE 'HELLO2026' để nhận 20Vcoin miễn phí" className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white focus:border-audi-cyan outline-none" />
-                          <div className="flex items-center justify-between">
-                              <label className="flex items-center gap-2 cursor-pointer bg-white/5 px-4 py-2 rounded-lg border border-white/5 hover:bg-white/10 transition-colors"><input type="checkbox" checked={giftcodePromo.isActive} onChange={(e) => setGiftcodePromo({...giftcodePromo, isActive: e.target.checked})} className="accent-audi-cyan w-4 h-4" /><span className="text-sm font-bold text-white">Hiển thị thông báo này</span></label>
-                              <button onClick={handleSaveGiftcodePromo} className="px-4 py-2 bg-audi-cyan/20 text-audi-cyan hover:bg-audi-cyan hover:text-black font-bold rounded-lg transition-colors border border-audi-cyan/30 text-xs md:text-sm">Lưu Cấu Hình</button>
-                          </div>
-                      </div>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {giftcodes.map(code => (
-                          <div key={code.id} className="bg-[#12121a] border border-white/10 rounded-xl p-4 shadow-sm relative overflow-hidden">
-                              <div className="flex justify-between items-start mb-3"><div><div className="font-mono font-bold text-white text-lg tracking-wider">{code.code}</div><div className="text-audi-yellow font-bold text-sm">+{code.reward} Vcoin</div></div>{code.isActive ? <span className="text-green-500 text-[10px] font-bold border border-green-500/20 px-2 py-1 rounded bg-green-500/10">ACTIVE</span> : <span className="text-red-500 text-[10px] font-bold border border-red-500/20 px-2 py-1 rounded bg-red-500/10">INACTIVE</span>}</div>
-                              <div className="mb-3"><div className="flex justify-between text-[10px] text-slate-500 mb-1 font-bold uppercase"><span>Sử dụng</span><span>{code.usedCount}/{code.totalLimit}</span></div><div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden"><div className="h-full bg-green-500" style={{ width: `${Math.min(100, (code.usedCount / code.totalLimit) * 100)}%` }}></div></div></div>
-                              <div className="flex justify-between items-center border-t border-white/5 pt-3"><span className="text-[10px] text-slate-500">Max: {code.maxPerUser}/người</span><div className="flex gap-2"><button onClick={() => setEditingGiftcode(code)} className="p-1.5 bg-blue-500/20 text-blue-500 rounded hover:bg-blue-500 hover:text-white transition-colors"><Icons.Settings className="w-4 h-4" /></button><button onClick={() => handleDeleteGiftcode(code.id)} className="p-1.5 bg-red-500/20 text-red-500 rounded hover:bg-red-500 hover:text-white transition-colors"><Icons.Trash className="w-4 h-4" /></button></div></div>
-                          </div>
-                      ))}
-                  </div>
-              </div>
-          )}
+                <div className="flex flex-wrap justify-center gap-4 w-full">
+                    {characters.map((char) => (
+                        <div 
+                            key={char.id} 
+                            className={`w-full md:w-[220px] bg-[#12121a] border border-white/10 rounded-2xl p-4 hover:border-white/20 transition-colors relative group shrink-0 shadow-lg ${
+                                char.id === activeCharTab ? 'block' : 'hidden md:block'
+                            }`}
+                        >
+                            <div className="flex justify-between items-center mb-3">
+                                <span className="text-xs font-bold text-white bg-white/10 px-2 py-1 rounded">NV {char.id}</span>
+                                <div className="flex bg-black/40 rounded-lg p-0.5 border border-white/10">
+                                    <button onClick={() => toggleGender(char.id, 'female')} className={`px-2 py-0.5 rounded text-[9px] font-bold ${char.gender === 'female' ? 'bg-audi-pink text-white' : 'text-slate-500'}`}>Nữ</button>
+                                    <button onClick={() => toggleGender(char.id, 'male')} className={`px-2 py-0.5 rounded text-[9px] font-bold ${char.gender === 'male' ? 'bg-blue-500 text-white' : 'text-slate-500'}`}>Nam</button>
+                                </div>
+                            </div>
+                            
+                            <div className="space-y-3">
+                                <div onClick={() => handleUploadClick(char.id, 'body')} className="w-full h-40 bg-black/40 rounded-xl border-2 border-dashed border-slate-700 hover:border-audi-pink cursor-pointer relative overflow-hidden group/item transition-all flex flex-col items-center justify-center">
+                                    {char.bodyImage ? (
+                                        <img src={char.bodyImage} className="w-full h-full object-contain" alt="Body" />
+                                    ) : (
+                                        <div className="flex flex-col items-center text-slate-500 group-hover/item:text-audi-pink transition-colors">
+                                            <Icons.User className="w-8 h-8 mb-1" />
+                                            <span className="text-[10px] uppercase font-bold">Ảnh Toàn Thân</span>
+                                        </div>
+                                    )}
+                                </div>
 
-          {activeView === 'promotion' && (
-              // ... existing promotion view ...
-              <div className="space-y-6 animate-slide-in-right">
-                  <div className="flex justify-between items-center">
-                      <h2 className="text-lg md:text-2xl font-bold text-white">Chiến Dịch Khuyến Mãi</h2>
-                      <div className="flex gap-2"><button onClick={refreshData} className="px-3 py-2 bg-white/10 text-white rounded-lg font-bold hover:bg-white/20" title="Làm mới danh sách"><Icons.Clock className="w-4 h-4" /></button><button onClick={() => setEditingPromotion({id: `temp_${Date.now()}`, name: '', marqueeText: '', bonusPercent: 10, startTime: new Date().toISOString(), endTime: new Date(Date.now() + 86400000).toISOString(), isActive: true})} className="px-3 py-2 md:px-4 bg-audi-pink text-white rounded-lg font-bold flex items-center gap-2 hover:bg-pink-600 text-xs md:text-sm"><Icons.Plus className="w-4 h-4" /> <span className="hidden md:inline">Tạo Chiến Dịch Mới</span><span className="md:hidden">Mới</span></button></div>
-                  </div>
-                  <div className="grid grid-cols-1 gap-4">
-                      {promotions.map(p => {
-                          const now = new Date().getTime(); const start = new Date(p.startTime).getTime(); const end = new Date(p.endTime).getTime();
-                          let statusBadge = <span className="text-slate-500 text-xs font-bold border border-slate-500/20 px-2 py-1 rounded">Stopped</span>;
-                          if (p.isActive) { if (now < start) statusBadge = <span className="text-yellow-500 text-xs font-bold border border-yellow-500/20 px-2 py-1 rounded flex items-center gap-1"><Icons.Clock className="w-3 h-3" /> Scheduled</span>; else if (now > end) statusBadge = <span className="text-slate-500 text-xs font-bold border border-slate-500/20 px-2 py-1 rounded">Expired</span>; else statusBadge = <span className="text-green-500 text-xs font-bold border border-green-500/20 px-2 py-1 rounded flex items-center gap-1 animate-pulse"><Icons.Zap className="w-3 h-3" /> Running</span>; } else { statusBadge = <span className="text-red-500 text-xs font-bold border border-red-500/20 px-2 py-1 rounded">Disabled</span>; }
-                          return (<div key={p.id} className="bg-[#12121a] border border-white/10 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm"><div className="flex-1"><div className="flex justify-between items-start"><div><div className="font-bold text-white text-lg">{p.name}</div><div className="text-audi-pink font-bold text-sm">+{p.bonusPercent}% Vcoin Bonus</div></div><div className="md:hidden">{statusBadge}</div></div><div className="text-xs font-mono mt-2 space-y-1 bg-black/20 p-2 rounded-lg border border-white/5"><div className="text-green-400 flex items-center gap-2"><Icons.Calendar className="w-3 h-3"/> Start: {new Date(p.startTime).toLocaleString()}</div><div className="text-red-400 flex items-center gap-2"><Icons.Calendar className="w-3 h-3"/> End: {new Date(p.endTime).toLocaleString()}</div></div></div><div className="flex items-center justify-between md:justify-end gap-4 border-t md:border-t-0 border-white/5 pt-3 md:pt-0"><div className="hidden md:block">{statusBadge}</div><div className="flex gap-2"><button onClick={() => setEditingPromotion(p)} className="px-3 py-2 bg-blue-500/20 text-blue-500 rounded-lg hover:bg-blue-500 hover:text-white font-bold text-xs"><Icons.Settings className="w-4 h-4" /></button><button onClick={() => handleDeletePromotion(p.id)} className="px-3 py-2 bg-red-500/20 text-red-500 rounded-lg hover:bg-red-500 hover:text-white font-bold text-xs"><Icons.Trash className="w-4 h-4" /></button></div></div></div>);
-                      })}
-                  </div>
-              </div>
-          )}
+                                <div onClick={() => handleUploadClick(char.id, 'face')} className="w-full h-40 bg-black/40 rounded-xl border-2 border-dashed border-slate-700 hover:border-audi-cyan cursor-pointer relative overflow-hidden group/item transition-all flex flex-col items-center justify-center">
+                                    {char.faceImage ? (
+                                        <>
+                                            <img src={char.faceImage} className={`w-full h-full object-cover transition-all ${char.isFaceLocked ? '' : 'grayscale opacity-50'}`} alt="Face" />
+                                            <div 
+                                                onClick={(e) => { e.stopPropagation(); toggleFaceLock(char.id); }}
+                                                className={`absolute bottom-2 right-2 px-2 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-1.5 shadow-xl transition-all cursor-pointer z-10 border ${char.isFaceLocked ? 'bg-audi-cyan text-black border-white' : 'bg-red-500/90 text-white border-red-400'}`}
+                                            >
+                                                {char.isFaceLocked ? <Icons.Lock className="w-3 h-3" /> : <Icons.Unlock className="w-3 h-3" />}
+                                                {char.isFaceLocked ? (lang === 'vi' ? 'Đã Khóa' : 'Locked') : (lang === 'vi' ? 'Không dùng' : 'Unlocked')}
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <div className="flex flex-col items-center text-slate-500 group-hover/item:text-audi-cyan transition-colors">
+                                            <Icons.Eye className="w-8 h-8 mb-1" />
+                                            <span className="text-[10px] uppercase font-bold">Ảnh Mặt (Tùy chọn)</span>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
 
-           {/* ================= VIEW: STYLES ================= */}
-           {activeView === 'styles' && (
-              <div className="space-y-6 animate-slide-in-right">
-                  <div className="flex justify-between items-center">
-                      <h2 className="text-lg md:text-2xl font-bold text-white">Quản Lý Style Mẫu</h2>
-                      <button 
-                          onClick={() => setEditingStyle({
-                              id: `temp_${Date.now()}`, 
-                              name: '', 
-                              image_url: '', 
-                              trigger_prompt: '', 
-                              is_active: true, 
-                              is_default: false
-                          })} 
-                          className="px-3 py-2 md:px-4 bg-audi-pink text-white rounded-lg font-bold flex items-center gap-2 hover:bg-pink-600 text-xs md:text-sm"
-                      >
-                          <Icons.Plus className="w-4 h-4" /> <span className="hidden md:inline">Thêm Style Mới</span><span className="md:hidden">Thêm</span>
-                      </button>
-                  </div>
+                <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4 shadow-lg">
+                    <div className="flex justify-between items-center mb-3">
+                        <label className="text-xs font-bold text-slate-400 uppercase flex items-center gap-2">
+                            <Icons.MessageCircle className="w-4 h-4" /> 2. Mô tả & Ảnh mẫu
+                        </label>
+                        <div className="flex gap-2">
+                            <button 
+                                onClick={handleOpenSamples}
+                                className="text-[10px] font-bold text-audi-yellow hover:text-white flex items-center gap-1 bg-audi-yellow/10 px-3 py-1.5 rounded-full border border-audi-yellow/30 animate-pulse transition-all hover:bg-audi-yellow/20"
+                            >
+                                <Icons.Image className="w-3 h-3" /> Sử dụng Prompt Mẫu
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div className="flex flex-col md:flex-row gap-4">
+                        <div 
+                            onClick={handleRefUploadClick}
+                            className="w-full md:w-32 aspect-[3/4] md:aspect-square bg-black/40 rounded-xl border-2 border-dashed border-slate-700 hover:border-audi-purple cursor-pointer relative overflow-hidden group shrink-0 flex items-center justify-center transition-all"
+                        >
+                            {refImage ? (
+                                <>
+                                    <img src={refImage} className="w-full h-full object-cover opacity-80" alt="Ref" />
+                                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <Icons.X className="w-6 h-6 text-white" onClick={(e) => { e.stopPropagation(); setRefImage(null); }} />
+                                    </div>
+                                    {/* VISUAL INDICATOR FOR STRUCTURE MODE */}
+                                    <div className="absolute bottom-0 left-0 right-0 bg-audi-purple/80 text-white text-[9px] font-bold text-center py-1">
+                                        POSE REF
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="flex flex-col items-center text-slate-500 p-2 text-center">
+                                    <Icons.Image className="w-6 h-6 mb-1" />
+                                    <span className="text-[9px] font-bold uppercase leading-tight">Ảnh mẫu<br/>(Pose)</span>
+                                </div>
+                            )}
+                        </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      {stylePresets.map(style => (
-                          <div key={style.id} className="bg-[#12121a] border border-white/10 rounded-2xl p-4 relative overflow-hidden group hover:border-white/30 transition-all">
-                              <div className="aspect-[3/4] w-full bg-black/50 rounded-xl mb-4 overflow-hidden relative">
-                                  <img src={style.image_url} alt={style.name} className="w-full h-full object-cover" />
-                                  {style.is_default && (
-                                      <div className="absolute top-2 right-2 bg-audi-yellow text-black text-[10px] font-bold px-2 py-1 rounded shadow-lg flex items-center gap-1">
-                                          <Icons.Star className="w-3 h-3" /> DEFAULT
-                                      </div>
-                                  )}
-                                  {!style.is_active && (
-                                      <div className="absolute inset-0 bg-black/60 flex items-center justify-center backdrop-blur-sm">
-                                          <span className="text-red-500 font-bold border border-red-500 px-3 py-1 rounded uppercase">Disabled</span>
-                                      </div>
-                                  )}
-                              </div>
-                              
-                              <div className="flex justify-between items-start mb-2">
-                                  <div>
-                                      <h3 className="font-bold text-white text-lg">{style.name}</h3>
-                                      <p className="text-xs text-slate-500 font-mono truncate max-w-[200px]">{style.trigger_prompt || 'No prompt'}</p>
-                                  </div>
-                                  <div className="flex gap-2">
-                                      <button onClick={() => setEditingStyle(style)} className="p-2 bg-blue-500/20 text-blue-500 rounded hover:bg-blue-500 hover:text-white transition-colors"><Icons.Settings className="w-4 h-4" /></button>
-                                      <button onClick={() => showConfirm('Xóa style này?', async () => { await deleteStylePreset(style.id); refreshData(); showToast('Đã xóa style'); })} className="p-2 bg-red-500/20 text-red-500 rounded hover:bg-red-500 hover:text-white transition-colors"><Icons.Trash className="w-4 h-4" /></button>
-                                  </div>
-                              </div>
-                          </div>
-                      ))}
-                      
-                      {stylePresets.length === 0 && (
-                          <div className="col-span-full py-12 text-center text-slate-500 italic border border-dashed border-white/10 rounded-2xl">
-                              Chưa có style mẫu nào. Hãy thêm mới!
-                          </div>
-                      )}
-                  </div>
-              </div>
-           )}
+                        <textarea 
+                            value={prompt}
+                            onChange={(e) => setPrompt(e.target.value)}
+                            placeholder={lang === 'vi' ? "Mô tả chi tiết: trang phục, bối cảnh, ánh sáng..." : "Detailed prompt: clothes, scene, lighting..."}
+                            className="flex-1 bg-black/20 border border-white/5 rounded-xl p-3 text-sm text-white focus:border-audi-purple outline-none resize-none min-h-[100px]"
+                        />
+                    </div>
+                </div>
+            </div>
 
-           {/* ================= VIEW: SYSTEM ================= */}
-           {activeView === 'system' && (
-              <div className="space-y-6 animate-slide-in-right">
-                  <div className="flex justify-between items-center">
-                      <h2 className="text-lg md:text-2xl font-bold text-white">Hệ Thống</h2>
-                      <button onClick={() => runSystemChecks(undefined)} className="px-3 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-bold text-white flex items-center gap-2">
-                          <Icons.Rocket className="w-4 h-4" /> <span className="hidden md:inline">Quét Ngay</span>
-                      </button>
-                  </div>
+            <div className="lg:col-span-1 space-y-6">
+                
+                <div className="bg-[#12121a] border border-white/10 rounded-2xl p-5 space-y-5 shadow-lg h-full">
+                    <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                        <h3 className="font-bold text-white flex items-center gap-2">
+                            <Icons.Settings className="w-5 h-5 text-slate-400" />
+                            3. Cấu Hình
+                        </h3>
+                        <button 
+                            onClick={() => setGuideTopic('settings')}
+                            className="text-audi-yellow hover:text-white transition-colors animate-pulse"
+                        >
+                            <Icons.Info className="w-4 h-4" />
+                        </button>
+                    </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                      {/* Health Cards */}
-                      <div className="bg-[#12121a] border border-white/10 rounded-2xl p-6 relative overflow-hidden">
-                          <h3 className="font-bold text-lg text-white mb-1">Gemini AI Engine</h3>
-                          <div className="flex items-center justify-between mb-4">
-                              <span className="text-sm text-slate-400">Kết nối</span>
-                              <StatusBadge status={health.gemini.status} latency={health.gemini.latency} />
-                          </div>
-                      </div>
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase">Tỉ lệ khung hình</label>
+                        <div className="grid grid-cols-5 gap-2">
+                            {ratios.map(r => (
+                                <button 
+                                    key={r.id} 
+                                    onClick={() => setAspectRatio(r.id)} 
+                                    className={`py-2 rounded-lg border text-[10px] font-bold transition-all flex items-center justify-center ${aspectRatio === r.id ? 'bg-white text-black border-white shadow-md scale-105' : 'border-white/10 text-slate-500 hover:bg-white/5 hover:text-white'}`}
+                                >
+                                    {r.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
 
-                      <div className="bg-[#12121a] border border-white/10 rounded-2xl p-6 relative overflow-hidden">
-                          <h3 className="font-bold text-lg text-white mb-1">Database</h3>
-                          <div className="flex items-center justify-between mb-4">
-                              <span className="text-sm text-slate-400">Trạng thái</span>
-                              <StatusBadge status={health.supabase.status} latency={health.supabase.latency} />
-                          </div>
-                      </div>
+                    <div className="space-y-3 animate-fade-in">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase">Độ phân giải (3.0 Pro)</label>
+                        <div className="flex gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5">
+                            {['1K', '2K', '4K'].map(r => (
+                                <button 
+                                    key={r} 
+                                    onClick={() => setResolution(r as any)} 
+                                    className={`flex-1 py-3 rounded-lg text-xs font-bold transition-all ${resolution === r ? 'bg-audi-purple text-white shadow-lg' : 'text-slate-500 hover:text-white hover:bg-white/5'}`}
+                                >
+                                    {r}
+                                </button>
+                            ))}
+                        </div>
+                        
+                        {/* Redesigned Pricing Display */}
+                        <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-audi-purple/20 to-audi-pink/20 border border-white/10 p-3">
+                            <div className="flex justify-between items-center relative z-10">
+                                <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Giá hiện tại</span>
+                                <div className="flex items-end gap-1">
+                                    <span className="text-xl font-black text-white font-game drop-shadow-md">
+                                        {resolution === '1K' ? '5' : resolution === '2K' ? '10' : '15'}
+                                    </span>
+                                    <span className="text-[10px] font-bold text-audi-yellow mb-1">VCOIN</span>
+                                </div>
+                            </div>
+                            <div className="flex justify-between text-[9px] text-slate-500 mt-2 font-mono border-t border-white/5 pt-2">
+                                <span className={resolution === '1K' ? 'text-white font-bold' : ''}>1K: 5VC</span>
+                                <span className={resolution === '2K' ? 'text-white font-bold' : ''}>2K: 10VC</span>
+                                <span className={resolution === '4K' ? 'text-white font-bold' : ''}>4K: 15VC</span>
+                            </div>
+                        </div>
+                    </div>
 
-                      <div className="bg-[#12121a] border border-white/10 rounded-2xl p-6 relative overflow-hidden">
-                          <h3 className="font-bold text-lg text-white mb-1">Cloud Storage</h3>
-                          <div className="flex items-center justify-between mb-4">
-                              <span className="text-sm text-slate-400">Loại: {health.storage.type}</span>
-                              <StatusBadge status={health.storage.status} />
-                          </div>
-                          <button 
-                              onClick={() => setShowCorsModal(true)}
-                              className="w-full py-2 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white rounded-lg text-xs font-bold border border-white/5 transition-colors flex items-center justify-center gap-2"
-                          >
-                              <Icons.Settings className="w-3 h-3" /> Cấu hình CORS (Sửa lỗi xóa ảnh)
-                          </button>
-                      </div>
+                    <div className="pt-4 border-t border-white/10 space-y-3">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase">Tính năng mặc định (Included)</label>
+                        
+                        {/* HQ Cloud Link (Always On) */}
+                        <div className="flex items-center justify-between p-3 rounded-xl bg-audi-cyan/10 border border-audi-cyan/30">
+                            <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-audi-cyan/20 flex items-center justify-center text-audi-cyan">
+                                    <Icons.Cloud className="w-4 h-4" />
+                                </div>
+                                <div>
+                                    <div className="text-xs font-bold text-white">HQ Cloud Link (R2)</div>
+                                    <div className="text-[9px] text-audi-cyan font-bold">ACTIVE • FREE</div>
+                                </div>
+                            </div>
+                            <Icons.Lock className="w-4 h-4 text-audi-cyan opacity-50" />
+                        </div>
 
-                      <div className="bg-[#12121a] border border-white/10 rounded-2xl p-6 relative overflow-hidden">
-                          <h3 className="font-bold text-lg text-white mb-1">Bảo Trì Hệ Thống</h3>
-                          <div className="flex items-center justify-between mb-4">
-                              <span className="text-sm text-slate-400">Dọn dẹp ảnh hết hạn (7 ngày)</span>
-                              <button 
-                                  onClick={() => showConfirm('Bạn có chắc chắn muốn xóa tất cả ảnh hết hạn (cũ hơn 7 ngày) trên toàn hệ thống không?', async () => {
-                                      showToast('Đang dọn dẹp...', 'info');
-                                      try {
-                                        const count = await cleanupExpiredImages(true);
-                                        showToast(`Đã xóa ${count} ảnh hết hạn!`, 'success');
-                                      } catch (e) {
-                                        showToast('Lỗi dọn dẹp: ' + (e as any).message, 'error');
-                                      }
-                                  })}
-                                  className="px-3 py-1.5 bg-red-500/20 text-red-500 hover:bg-red-500 hover:text-white rounded border border-red-500/50 text-xs font-bold transition-colors flex items-center gap-2"
-                              >
-                                  <Icons.Trash className="w-3 h-3" /> Dọn Dẹp Ngay
-                              </button>
-                          </div>
-                      </div>
-                  </div>
+                        {/* Google Search (Always On) */}
+                        <div className="flex items-center justify-between p-3 rounded-xl bg-blue-500/10 border border-blue-500/30">
+                            <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400">
+                                    <Icons.Search className="w-4 h-4" />
+                                </div>
+                                <div>
+                                    <div className="text-xs font-bold text-white">Google Search (Grounding)</div>
+                                    <div className="text-[9px] text-blue-400 font-bold">ACTIVE • FREE</div>
+                                </div>
+                            </div>
+                            <Icons.Lock className="w-4 h-4 text-blue-400 opacity-50" />
+                        </div>
+                    </div>
 
-                  {/* API Key Configuration */}
-                  <div className="bg-[#12121a] p-6 rounded-2xl border border-white/10">
-                      <h3 className="font-bold text-lg text-white mb-4 flex items-center gap-2">
-                          <Icons.Lock className="w-5 h-5 text-audi-pink" />
-                          Thêm mới Gemini API Key (System)
-                      </h3>
-                      <div className="space-y-4">
-                          <div>
-                              <div className="flex justify-between items-end mb-2">
-                                  <label className="text-xs font-bold text-slate-400 uppercase">Google GenAI API Key</label>
-                                  <div className="flex items-center gap-2">
-                                      <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${
-                                          keyStatus === 'valid' ? 'bg-green-500/20 text-green-400' :
-                                          keyStatus === 'invalid' ? 'bg-red-500/20 text-red-400' :
-                                          keyStatus === 'checking' ? 'bg-yellow-500/20 text-yellow-400' :
-                                          'bg-white/10 text-slate-400'
-                                      }`}>
-                                          {keyStatus === 'valid' ? 'VALID' :
-                                           keyStatus === 'invalid' ? 'INVALID' :
-                                           keyStatus === 'checking' ? 'CHECKING...' : 'IDLE'}
-                                      </span>
-                                  </div>
-                              </div>
-                              <div className="flex gap-2 relative">
-                                  <input 
-                                      type={showKey ? "text" : "password"}
-                                      value={apiKey}
-                                      onChange={(e) => {
-                                          setApiKey(e.target.value);
-                                          setKeyStatus('unknown');
-                                      }}
-                                      placeholder="AIzaSy..."
-                                      className="flex-1 bg-black/40 border border-white/10 rounded-lg p-3 text-white font-mono text-sm pr-12"
-                                  />
-                                  <button 
-                                    onClick={() => setShowKey(!showKey)} 
-                                    className="absolute right-36 top-3 text-slate-500 hover:text-white hidden md:block"
-                                    title="Hiện/Ẩn Key"
-                                  >
-                                      {showKey ? <Icons.Eye className="w-5 h-5" /> : <Icons.Lock className="w-5 h-5" />}
-                                  </button>
-                                  <button onClick={handleSaveApiKey} disabled={keyStatus === 'checking'} className="px-6 py-3 bg-audi-pink text-white font-bold rounded-lg hover:bg-pink-600 disabled:opacity-50 text-sm whitespace-nowrap">
-                                      {keyStatus === 'checking' ? <Icons.Loader className="animate-spin w-5 h-5"/> : 'Thêm Key'}
-                                  </button>
-                              </div>
-                              <p className="text-xs text-slate-500 mt-2">
-                                  Key sẽ được lưu vào Database. Hệ thống sẽ tự động xoay vòng ngẫu nhiên giữa các key đang hoạt động để tránh quá tải.
-                              </p>
-                          </div>
-                      </div>
-                  </div>
+                </div>
+            </div>
 
-                  {/* List of Keys in DB */}
-                  <div className="bg-[#12121a] p-6 rounded-2xl border border-white/10">
-                      <h3 className="font-bold text-lg text-white mb-4 flex items-center gap-2">
-                          <Icons.Database className="w-5 h-5 text-audi-cyan" />
-                          Danh sách API Key trong Database
-                      </h3>
-                      
-                      <div className="hidden md:block overflow-x-auto">
-                          <table className="w-full text-left text-sm text-slate-400">
-                              <thead className="bg-black/30 text-xs font-bold text-slate-300 uppercase">
-                                  <tr>
-                                      <th className="px-4 py-3">Tên / ID</th>
-                                      <th className="px-4 py-3">Key Value</th>
-                                      <th className="px-4 py-3">Trạng thái</th>
-                                      <th className="px-4 py-3">Ngày tạo</th>
-                                      <th className="px-4 py-3 text-right">Thao tác</th>
-                                  </tr>
-                              </thead>
-                              <tbody className="divide-y divide-white/5">
-                                  {dbKeys.length === 0 ? (
-                                      <tr><td colSpan={5} className="text-center py-6 text-slate-500">Chưa tìm thấy key nào trong database.</td></tr>
-                                  ) : dbKeys.map((k) => (
-                                      <tr key={k.id} className="hover:bg-white/5">
-                                          <td className="px-4 py-3 font-bold text-white">
-                                              {k.name || 'Unnamed Key'}
-                                              <div className="text-[10px] text-slate-600 font-mono">{k.id.substring(0,8)}...</div>
-                                          </td>
-                                          <td className="px-4 py-3 font-mono text-xs">
-                                              {k.key_value ? `${k.key_value.substring(0, 8)}...${k.key_value.substring(k.key_value.length - 6)}` : 'N/A'}
-                                          </td>
-                                          <td className="px-4 py-3">
-                                              <span className={`text-[10px] font-bold px-2 py-1 rounded border ${k.status === 'active' ? 'bg-green-500/20 text-green-500 border-green-500/50' : 'bg-slate-500/20 text-slate-500 border-slate-500/50'}`}>
-                                                  {k.status?.toUpperCase() || 'UNKNOWN'}
-                                              </span>
-                                          </td>
-                                          <td className="px-4 py-3 text-xs">{new Date(k.created_at).toLocaleString()}</td>
-                                          <td className="px-4 py-3 text-right flex justify-end gap-2">
-                                              <button onClick={() => handleTestKey(k.key_value)} className="px-3 py-1 bg-audi-purple/20 text-audi-purple hover:bg-audi-purple hover:text-white rounded border border-audi-purple/50 text-xs font-bold transition-colors">Test</button>
-                                              <button onClick={() => handleDeleteApiKey(k.id)} className="p-1.5 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white rounded transition-colors"><Icons.Trash className="w-4 h-4" /></button>
-                                          </td>
-                                      </tr>
-                                  ))}
-                              </tbody>
-                          </table>
-                      </div>
-                      <div className="md:hidden space-y-4">
-                          {dbKeys.length === 0 ? (
-                              <div className="text-center py-4 text-slate-500 text-sm">Chưa có key.</div>
-                          ) : dbKeys.map((k) => (
-                              <div key={k.id} className="bg-white/5 rounded-xl p-4 border border-white/5">
-                                  <div className="flex justify-between items-start mb-2">
-                                      <div>
-                                          <div className="font-bold text-white text-sm">{k.name || 'Unnamed'}</div>
-                                          <div className="font-mono text-[10px] text-slate-500">{k.id}</div>
-                                      </div>
-                                      <span className={`text-[10px] font-bold px-2 py-1 rounded border ${k.status === 'active' ? 'bg-green-500/20 text-green-500 border-green-500/50' : 'bg-slate-500/20 text-slate-500 border-slate-500/50'}`}>
-                                          {k.status?.toUpperCase()}
-                                      </span>
-                                  </div>
-                                  <div className="font-mono text-xs text-slate-300 break-all mb-3 bg-black/30 p-2 rounded">
-                                      {k.key_value ? `${k.key_value.substring(0, 15)}...` : 'N/A'}
-                                  </div>
-                                  <div className="flex justify-between items-center mt-3 border-t border-white/5 pt-3">
-                                      <span className="text-[10px] text-slate-500">{new Date(k.created_at).toLocaleDateString()}</span>
-                                      <div className="flex gap-2">
-                                          <button onClick={() => handleTestKey(k.key_value)} className="px-3 py-1.5 bg-audi-purple/20 text-audi-purple rounded text-xs font-bold border border-audi-purple/30">Test</button>
-                                          <button onClick={() => handleDeleteApiKey(k.id)} className="px-3 py-1.5 bg-red-500/10 text-red-500 rounded text-xs font-bold border border-red-500/30">Xóa</button>
-                                      </div>
-                                  </div>
-                              </div>
-                          ))}
-                      </div>
-                  </div>
-              </div>
-           )}
+        </div>
 
-      </div>
-
-      {/* --- MOVED MODALS (ROOT LEVEL) --- */}
-      
-      {/* CORS CONFIG MODAL */}
-      {showCorsModal && (
-          <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 animate-fade-in">
-              <div className="bg-[#12121a] w-full max-w-2xl p-6 rounded-2xl border border-audi-cyan/50 shadow-[0_0_50px_rgba(0,255,255,0.1)] flex flex-col max-h-[90vh]">
-                  <div className="flex items-center gap-4 mb-4">
-                      <div className="w-12 h-12 bg-audi-cyan/20 rounded-full flex items-center justify-center text-audi-cyan animate-pulse">
-                          <Icons.Settings className="w-6 h-6" />
-                      </div>
-                      <div>
-                          <h3 className="text-xl font-bold text-white">CẤU HÌNH CORS CHO R2 (BẮT BUỘC)</h3>
-                          <p className="text-slate-400 text-xs">Để trình duyệt cho phép xóa ảnh trên R2, bạn cần thêm cấu hình này.</p>
-                      </div>
-                  </div>
-                  
-                  <div className="bg-audi-cyan/10 border border-audi-cyan/20 p-4 rounded-xl mb-4">
-                      <p className="text-sm text-audi-cyan font-bold mb-1">Tại sao cần làm điều này?</p>
-                      <p className="text-xs text-slate-300 leading-relaxed">
-                          Trình duyệt chặn các yêu cầu <code>DELETE</code> gửi tới server khác domain (R2) nếu server đó không cho phép (CORS Policy). Đây là bảo mật mặc định của trình duyệt.
-                      </p>
-                  </div>
-
-                  <div className="flex-1 overflow-hidden flex flex-col">
-                      <p className="text-sm font-bold text-white mb-2 uppercase">Copy JSON này vào R2 Bucket Settings -&gt; CORS:</p>
-                      <div className="relative h-48 bg-black/50 border border-white/10 rounded-xl overflow-hidden">
-                          <pre className="absolute inset-0 p-4 text-xs font-mono text-green-400 overflow-auto whitespace-pre-wrap selection:bg-audi-pink selection:text-white">
-{`[
-  {
-    "AllowedOrigins": ["*"],
-    "AllowedMethods": ["GET", "PUT", "POST", "DELETE", "HEAD"],
-    "AllowedHeaders": ["*"],
-    "ExposeHeaders": ["ETag"],
-    "MaxAgeSeconds": 3000
-  }
-]`}
-                          </pre>
-                          <button 
-                            onClick={() => {
-                                navigator.clipboard.writeText(`[
-  {
-    "AllowedOrigins": ["*"],
-    "AllowedMethods": ["GET", "PUT", "POST", "DELETE", "HEAD"],
-    "AllowedHeaders": ["*"],
-    "ExposeHeaders": ["ETag"],
-    "MaxAgeSeconds": 3000
-  }
-]`);
-                                showToast("Đã sao chép JSON!", 'info');
-                            }}
-                            className="absolute top-2 right-2 p-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors flex items-center gap-2 text-xs font-bold"
-                          >
-                              <Icons.Copy className="w-4 h-4" /> Sao chép
-                          </button>
-                      </div>
-                  </div>
-
-                  <div className="flex gap-3 mt-6">
-                      <a 
-                        href="https://dash.cloudflare.com/" 
-                        target="_blank" 
-                        rel="noreferrer"
-                        className="flex-1 py-3 bg-audi-cyan hover:bg-cyan-400 text-black rounded-xl font-bold text-center transition-colors flex items-center justify-center gap-2"
-                      >
-                          <Icons.ExternalLink className="w-4 h-4" /> Mở Cloudflare Dashboard
-                      </a>
-                      <button onClick={() => setShowCorsModal(false)} className="flex-1 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold transition-colors">
-                          Đã Hiểu / Đóng
-                      </button>
-                  </div>
-              </div>
-          </div>
-      )}
-
-      {/* GIFTCODE ERROR FIX MODAL (NEW) */}
-      {showGiftcodeFix && (
-          <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 animate-fade-in">
-              <div className="bg-[#12121a] w-full max-w-2xl p-6 rounded-2xl border border-red-500/50 shadow-[0_0_50px_rgba(255,0,0,0.2)] flex flex-col max-h-[90vh]">
-                  <div className="flex items-center gap-4 mb-4">
-                      <div className="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center text-red-500 animate-pulse">
-                          <Icons.Database className="w-6 h-6" />
-                      </div>
-                      <div>
-                          <h3 className="text-xl font-bold text-white">LỖI DATABASE: BẢNG DỮ LIỆU</h3>
-                          <p className="text-slate-400 text-xs">Phát hiện thiếu bảng Giftcode hoặc System Settings</p>
-                      </div>
-                  </div>
-                  
-                  <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-xl mb-4">
-                      <p className="text-sm text-red-300 font-bold mb-1">Nguyên nhân:</p>
-                      <p className="text-xs text-slate-300 leading-relaxed">
-                          Supabase báo lỗi thiếu bảng <code>gift_codes</code> hoặc <code>system_settings</code>. Đây là lỗi phổ biến khi tạo dự án mới chưa chạy script khởi tạo.
-                      </p>
-                  </div>
-
-                  <div className="flex-1 overflow-hidden flex flex-col">
-                      <p className="text-sm font-bold text-green-400 mb-2 uppercase">Giải pháp: Copy mã SQL này và chạy trong Supabase SQL Editor</p>
-                      <div className="relative h-64 bg-black/50 border border-white/10 rounded-xl overflow-hidden">
-                          <pre className="absolute inset-0 p-4 text-[10px] md:text-xs font-mono text-slate-300 overflow-auto whitespace-pre-wrap selection:bg-audi-pink selection:text-white">
-                              {GIFTCODE_FIX_SQL}
-                          </pre>
-                          <button 
-                            onClick={() => {
-                                navigator.clipboard.writeText(GIFTCODE_FIX_SQL);
-                                showToast("Đã sao chép SQL!", 'info');
-                            }}
-                            className="absolute top-2 right-2 p-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors flex items-center gap-2 text-xs font-bold"
-                          >
-                              <Icons.Copy className="w-4 h-4" /> Sao chép
-                          </button>
-                      </div>
-                  </div>
-
-                  <div className="flex gap-3 mt-6">
-                      <a 
-                        href="https://supabase.com/dashboard/project/_/sql" 
-                        target="_blank" 
-                        rel="noreferrer"
-                        className="flex-1 py-3 bg-audi-purple hover:bg-purple-600 text-white rounded-xl font-bold text-center transition-colors flex items-center justify-center gap-2"
-                      >
-                          <Icons.Database className="w-4 h-4" /> Mở SQL Editor
-                      </a>
-                      <button onClick={() => setShowGiftcodeFix(false)} className="flex-1 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold transition-colors">
-                          Đóng
-                      </button>
-                  </div>
-              </div>
-          </div>
-      )}
-
-      {editingUser && (
-          <div className="fixed inset-0 z-[2000] flex justify-center items-start p-4 pt-24 animate-fade-in overflow-y-auto">
-              <div className="bg-[#12121a] w-full max-w-md p-6 rounded-2xl border border-white/20 shadow-2xl relative max-h-[90vh] overflow-y-auto custom-scrollbar">
-                  <h3 className="text-xl font-bold text-white mb-4">Sửa Người Dùng</h3>
-                  <div className="space-y-4 mb-6">
-                      <div>
-                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Tên hiển thị</label>
-                          <input value={editingUser.username || ''} onChange={e => setEditingUser({...editingUser, username: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white focus:border-audi-pink outline-none" />
-                      </div>
-                      <div>
-                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Số dư Vcoin</label>
-                          <input type="number" value={editingUser.balance || 0} onChange={e => setEditingUser({...editingUser, balance: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-audi-yellow font-bold focus:border-audi-pink outline-none" />
-                      </div>
-                      <div>
-                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Ảnh đại diện URL</label>
-                          <input value={editingUser.avatar || ''} onChange={e => setEditingUser({...editingUser, avatar: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-slate-300 text-xs font-mono focus:border-audi-pink outline-none" />
-                      </div>
-                  </div>
-                  <div className="flex gap-3"><button onClick={() => setEditingUser(null)} className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-bold">Hủy</button><button onClick={handleSaveUser} className="flex-1 py-3 rounded-xl bg-audi-pink hover:bg-pink-600 text-white font-bold">Lưu</button></div>
-              </div>
-          </div>
-      )}
-      {/* ... Other modals ... */}
-      {editingPackage && (
-          <div className="fixed inset-0 z-[2000] flex justify-center items-start p-4 pt-24 overflow-y-auto">
-              <div className="bg-[#12121a] w-full max-w-lg p-6 rounded-2xl border border-white/20 shadow-2xl flex flex-col max-h-[90vh] overflow-y-auto custom-scrollbar">
-                  <h3 className="text-xl font-bold text-white mb-6">{editingPackage.id.startsWith('temp_') ? 'Thêm Gói Mới' : 'Sửa Gói Nạp'}</h3>
-                  <div className="space-y-4 mb-6">
-                      <div className="grid grid-cols-2 gap-4"><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Tên gói</label><input value={editingPackage.name} onChange={e => setEditingPackage({...editingPackage, name: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white" /></div><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Tag (VD: Mới)</label><input value={editingPackage.bonusText} onChange={e => setEditingPackage({...editingPackage, bonusText: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white" /></div></div>
-                      <div className="grid grid-cols-2 gap-4"><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Giá (VND)</label><input type="number" value={editingPackage.price} onChange={e => setEditingPackage({...editingPackage, price: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-green-400 font-bold" /></div><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Vcoin nhận</label><input type="number" value={editingPackage.coin} onChange={e => setEditingPackage({...editingPackage, coin: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-audi-yellow font-bold" /></div></div>
-                      <div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">% Bonus thêm (Mặc định)</label><div className="relative"><input type="number" value={editingPackage.bonusPercent} onChange={e => setEditingPackage({...editingPackage, bonusPercent: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-audi-pink font-bold pl-3" /><span className="absolute right-3 top-3.5 text-xs text-slate-500 font-bold">%</span></div></div>
-                      <div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Cú pháp chuyển khoản</label><input value={editingPackage.transferContent} onChange={e => setEditingPackage({...editingPackage, transferContent: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-mono" /></div>
-                      <div className="flex gap-4 pt-2"><label className="flex items-center gap-2 cursor-pointer bg-white/5 p-3 rounded-xl border border-white/10 flex-1 hover:bg-white/10 transition-colors"><input type="checkbox" checked={editingPackage.isPopular} onChange={e => setEditingPackage({...editingPackage, isPopular: e.target.checked})} className="accent-audi-pink w-4 h-4" /><span className="text-sm font-bold text-white">Gói HOT (Nổi bật)</span></label><label className="flex items-center gap-2 cursor-pointer bg-white/5 p-3 rounded-xl border border-white/10 flex-1 hover:bg-white/10 transition-colors"><input type="checkbox" checked={editingPackage.isActive} onChange={e => setEditingPackage({...editingPackage, isActive: e.target.checked})} className="accent-green-500 w-4 h-4" /><span className="text-sm font-bold text-white">Đang bán (Active)</span></label></div>
-                  </div>
-                  <div className="flex gap-3"><button onClick={() => setEditingPackage(null)} className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-bold">Hủy</button><button onClick={handleSavePackage} className="flex-1 py-3 rounded-xl bg-audi-pink hover:bg-pink-600 text-white font-bold">Lưu Thay Đổi</button></div>
-              </div>
-          </div>
-      )}
-      {editingPromotion && (
-          <div className="fixed inset-0 z-[2000] flex justify-center items-start p-4 pt-24 overflow-y-auto"><div className="bg-[#12121a] w-full max-w-lg p-6 rounded-2xl border border-white/20 shadow-2xl flex flex-col max-h-[90vh]"><h3 className="text-xl font-bold text-white mb-6 sticky top-0 bg-[#12121a] z-10 py-2 border-b border-white/10 shrink-0">{editingPromotion.id.startsWith('temp_') ? 'Tạo Chiến Dịch Mới' : 'Sửa Chiến Dịch'}</h3><div className="space-y-4 overflow-y-auto pr-2 custom-scrollbar"><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Tên chiến dịch (Nội bộ)</label><input value={editingPromotion.name} onChange={e => setEditingPromotion({...editingPromotion, name: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-bold" placeholder="Ví dụ: Sale 8/3"/></div><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Thông báo chạy (Marquee)</label><input value={editingPromotion.marqueeText} onChange={e => setEditingPromotion({...editingPromotion, marqueeText: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white" placeholder="Khuyến mãi đặc biệt..."/></div><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">% Bonus Vcoin</label><div className="relative"><input type="number" value={editingPromotion.bonusPercent} onChange={e => setEditingPromotion({...editingPromotion, bonusPercent: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-audi-pink font-bold pl-3" /><span className="absolute right-3 top-3.5 text-xs text-slate-500 font-bold">%</span></div></div><div className="grid grid-cols-2 gap-4"><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Bắt đầu</label><input type="datetime-local" value={editingPromotion.startTime ? new Date(editingPromotion.startTime).toISOString().slice(0, 16) : ''} onChange={e => setEditingPromotion({...editingPromotion, startTime: new Date(e.target.value).toISOString()})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-mono text-xs" /></div><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Kết thúc</label><input type="datetime-local" value={editingPromotion.endTime ? new Date(editingPromotion.endTime).toISOString().slice(0, 16) : ''} onChange={e => setEditingPromotion({...editingPromotion, endTime: new Date(e.target.value).toISOString()})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-mono text-xs" /></div></div><div className="bg-white/5 rounded-xl p-3 flex items-center gap-3 border border-white/10 cursor-pointer hover:bg-white/10 transition-colors" onClick={() => setEditingPromotion({...editingPromotion, isActive: !editingPromotion.isActive})}><div className={`w-5 h-5 rounded border flex items-center justify-center transition-all ${editingPromotion.isActive ? 'bg-audi-lime border-audi-lime' : 'border-slate-500'}`}>{editingPromotion.isActive && <Icons.Check className="w-3 h-3 text-black" />}</div><label className="text-sm font-bold text-white cursor-pointer select-none">Kích hoạt (Manual Switch)</label></div><p className="text-[10px] text-slate-500 italic">Chiến dịch chỉ chạy khi BẬT và trong khoảng thời gian quy định.</p></div><div className="flex gap-3 pt-6 mt-2 border-t border-white/10 shrink-0"><button onClick={() => setEditingPromotion(null)} className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-bold transition-colors">Hủy</button><button onClick={handleSavePromotion} className="flex-1 py-3 rounded-xl bg-audi-pink hover:bg-pink-600 text-white font-bold shadow-lg transition-all">Lưu Chiến Dịch</button></div></div></div>
-      )}
-      {editingGiftcode && (
-          <div className="fixed inset-0 z-[2000] flex justify-center items-start p-4 pt-24 overflow-y-auto">
-              <div className="bg-[#12121a] w-full max-w-md p-6 rounded-2xl border border-white/20 shadow-2xl">
-                  <h3 className="text-xl font-bold text-white mb-6">{editingGiftcode.id.startsWith('temp_') ? 'Tạo Giftcode' : 'Sửa Giftcode'}</h3>
-                  <div className="space-y-4 mb-6"><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Mã Code (Tự động in hoa)</label><input value={editingGiftcode.code} onChange={e => setEditingGiftcode({...editingGiftcode, code: e.target.value.toUpperCase()})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-mono font-bold" placeholder="Vd: CHAOMUNG"/></div><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Phần thưởng (Vcoin)</label><input type="number" value={editingGiftcode.reward} onChange={e => setEditingGiftcode({...editingGiftcode, reward: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-audi-yellow font-bold" /></div><div className="grid grid-cols-2 gap-4"><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Giới hạn tổng</label><input type="number" value={editingGiftcode.totalLimit} onChange={e => setEditingGiftcode({...editingGiftcode, totalLimit: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white" /></div><div><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Max/Người</label><input type="number" value={editingGiftcode.maxPerUser} onChange={e => setEditingGiftcode({...editingGiftcode, maxPerUser: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white" /></div></div><label className="flex items-center gap-2 cursor-pointer bg-white/5 p-3 rounded-xl border border-white/10 hover:bg-white/10 transition-colors mt-2"><input type="checkbox" checked={editingGiftcode.isActive} onChange={e => setEditingGiftcode({...editingGiftcode, isActive: e.target.checked})} className="accent-green-500 w-4 h-4" /><span className="text-sm font-bold text-white">Kích hoạt ngay</span></label></div><div className="flex gap-3"><button onClick={() => setEditingGiftcode(null)} className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-bold">Hủy</button><button onClick={handleSaveGiftcode} className="flex-1 py-3 rounded-xl bg-audi-pink hover:bg-pink-600 text-white font-bold">Lưu Code</button></div>
-              </div>
-          </div>
-      )}
-
-      {editingStyle && (
-          <div className="fixed inset-0 z-[2000] flex justify-center items-start p-4 pt-24 overflow-y-auto">
-              <div className="bg-[#12121a] w-full max-w-lg p-6 rounded-2xl border border-white/20 shadow-2xl flex flex-col max-h-[90vh]">
-                  <h3 className="text-xl font-bold text-white mb-6 sticky top-0 bg-[#12121a] z-10 py-2 border-b border-white/10 shrink-0">
-                      {editingStyle.id.startsWith('temp_') ? 'Thêm Style Mới' : 'Sửa Style'}
-                  </h3>
-                  <div className="space-y-4 overflow-y-auto pr-2 custom-scrollbar">
-                      <div>
-                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Tên Style</label>
-                          <input 
-                              value={editingStyle.name} 
-                              onChange={e => setEditingStyle({...editingStyle, name: e.target.value})} 
-                              className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-bold" 
-                              placeholder="Ví dụ: 3D Audition"
-                          />
-                      </div>
-                      
-                      <div>
-                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Ảnh Mẫu (Reference)</label>
-                          <div className="flex gap-4 items-start">
-                              <div className="w-24 h-32 bg-black/50 rounded-lg border border-white/10 overflow-hidden shrink-0">
-                                  {editingStyle.image_url ? (
-                                      <img src={editingStyle.image_url} className="w-full h-full object-cover" />
-                                  ) : (
-                                      <div className="w-full h-full flex items-center justify-center text-slate-600"><Icons.Image className="w-8 h-8" /></div>
-                                  )}
-                              </div>
-                              <div className="flex-1">
-                                  <input 
-                                      type="file" 
-                                      accept="image/*"
-                                      onChange={(e) => {
-                                          const file = e.target.files?.[0];
-                                          if (file) {
-                                              const reader = new FileReader();
-                                              reader.onloadend = () => {
-                                                  setEditingStyle({...editingStyle, image_url: reader.result as string});
-                                              };
-                                              reader.readAsDataURL(file);
-                                          }
-                                      }}
-                                      className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-audi-pink file:text-white hover:file:bg-pink-600 mb-2"
-                                  />
-                                  <p className="text-[10px] text-slate-500">Upload ảnh chất lượng cao để làm mẫu chuẩn cho AI.</p>
-                              </div>
-                          </div>
-                      </div>
-
-                      <div>
-                          <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Trigger Prompt (Optional)</label>
-                          <textarea 
-                              value={editingStyle.trigger_prompt || ''} 
-                              onChange={e => setEditingStyle({...editingStyle, trigger_prompt: e.target.value})} 
-                              className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-mono text-xs h-24" 
-                              placeholder="Các từ khóa bổ sung để kích hoạt style này..."
-                          />
-                          <button 
-                              onClick={async () => {
-                                  if (!editingStyle.image_url) {
-                                      showToast('Vui lòng upload ảnh trước!', 'error');
-                                      return;
-                                  }
-                                  showToast('Đang phân tích style bằng AI...', 'info');
-                                  try {
-                                      const analysis = await analyzeStyleImage(editingStyle.image_url);
-                                      setEditingStyle(prev => prev ? ({...prev, trigger_prompt: analysis}) : null);
-                                      showToast('Đã phân tích xong!', 'success');
-                                  } catch (e) {
-                                      showToast('Lỗi phân tích: ' + (e as any).message, 'error');
-                                  }
-                              }}
-                              className="mt-2 text-[10px] font-bold text-audi-cyan hover:text-white flex items-center gap-1 bg-audi-cyan/10 px-2 py-1 rounded border border-audi-cyan/30 transition-colors"
-                          >
-                              <Icons.Sparkles className="w-3 h-3" /> AI Phân Tích Style
-                          </button>
-                      </div>
-
-                      <div className="flex gap-4 pt-2">
-                          <label className="flex items-center gap-2 cursor-pointer bg-white/5 p-3 rounded-xl border border-white/10 flex-1 hover:bg-white/10 transition-colors">
-                              <input 
-                                  type="checkbox" 
-                                  checked={editingStyle.is_default} 
-                                  onChange={e => setEditingStyle({...editingStyle, is_default: e.target.checked})} 
-                                  className="accent-audi-yellow w-4 h-4" 
-                              />
-                              <span className="text-sm font-bold text-white">Đặt làm Mặc Định</span>
-                          </label>
-                          <label className="flex items-center gap-2 cursor-pointer bg-white/5 p-3 rounded-xl border border-white/10 flex-1 hover:bg-white/10 transition-colors">
-                              <input 
-                                  type="checkbox" 
-                                  checked={editingStyle.is_active} 
-                                  onChange={e => setEditingStyle({...editingStyle, is_active: e.target.checked})} 
-                                  className="accent-green-500 w-4 h-4" 
-                              />
-                              <span className="text-sm font-bold text-white">Kích hoạt</span>
-                          </label>
-                      </div>
-                  </div>
-                  
-                  <div className="flex gap-3 pt-6 mt-2 border-t border-white/10 shrink-0">
-                      <button onClick={() => setEditingStyle(null)} className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-bold transition-colors">Hủy</button>
-                      <button 
-                          onClick={async () => {
-                              if (!editingStyle.name || !editingStyle.image_url) {
-                                  showToast('Vui lòng nhập tên và tải ảnh mẫu!', 'error');
-                                  return;
-                              }
-                              const res = await saveStylePreset(editingStyle);
-                              if (res.success) {
-                                  setEditingStyle(null);
-                                  refreshData();
-                                  showToast('Lưu Style thành công!');
-                              } else {
-                                  showToast('Lỗi: ' + res.error, 'error');
-                              }
-                          }} 
-                          className="flex-1 py-3 rounded-xl bg-audi-pink hover:bg-pink-600 text-white font-bold shadow-lg transition-all"
-                      >
-                          Lưu Style
-                      </button>
-                  </div>
-              </div>
-          </div>
-      )}
-
+        <div className="fixed bottom-24 left-4 right-4 md:left-[50%] md:-translate-x-1/2 md:w-[900px] p-4 bg-[#090014]/90 backdrop-blur-md border border-white/10 rounded-2xl z-50 shadow-2xl flex items-center justify-between">
+            <div className="flex flex-col">
+                <span className="text-[10px] text-slate-400 font-bold uppercase">Chi phí ước tính</span>
+                <span className="text-xl font-black text-white">{calculateCost()} <span className="text-audi-yellow text-sm">VCOIN</span></span>
+            </div>
+            <button 
+                onClick={handleGenerate}
+                className="px-8 py-3 bg-gradient-to-r from-audi-pink to-audi-purple rounded-xl font-bold text-white shadow-[0_0_20px_rgba(255,0,153,0.4)] hover:scale-105 transition-all flex items-center gap-2"
+            >
+                <Icons.Wand className="w-5 h-5" />
+                <span>{lang === 'vi' ? 'TẠO ẢNH NGAY' : 'GENERATE'}</span>
+            </button>
+        </div>
     </div>
   );
 };

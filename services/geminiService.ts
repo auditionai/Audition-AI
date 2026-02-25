@@ -223,10 +223,10 @@ export const testApiKey = async (): Promise<boolean> => {
         await runWithTimeout(
             freshAi.models.generateContent({
                 model: 'gemini-3.1-pro-preview',
-                contents: { parts: [{ text: "Hello" }] }
+                contents: { parts: [{ text: "Ping" }] }
             }),
-            60000, // Increased to 60s
-            "API Key Test"
+            30000, // 30s Timeout for Pro
+            "API Key Test (Pro)"
         );
         return true;
     } catch (e) {
@@ -278,7 +278,7 @@ const uploadToGemini = async (input: string, mimeType: string): Promise<string> 
             await new Promise(r => setTimeout(r, 2000)); // Wait 2s
             try {
                 const fileStatus = await ai.files.get({ name: file.name });
-                state = fileStatus.file.state;
+                state = (fileStatus as any).state || (fileStatus as any).file?.state;
                 console.log(`[System] File ${file.name} state: ${state}`);
             } catch (e) {
                 console.warn("Check file state failed", e);

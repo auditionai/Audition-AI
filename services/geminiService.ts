@@ -17,8 +17,8 @@ const cleanBase64 = (b64: string) => b64.replace(/^data:image\/\w+;base64,/, "")
 // --- HELPER: RETRY WITH BACKOFF ---
 const retryWithBackoff = async <T>(
     operation: () => Promise<T>,
-    retries: number = 3,
-    delay: number = 2000,
+    retries: number = 10, // Tăng số lần thử lại lên 10 lần (Thô bạo nhất)
+    delay: number = 5000, // Cố định chờ 5s mỗi lần
     label: string = "Operation",
     onLog?: (msg: string) => void
 ): Promise<T> => {
@@ -48,13 +48,14 @@ const retryWithBackoff = async <T>(
             error?.message?.includes('Timeout');
 
         if (retries > 0 && isTransient) {
-            const msg = `${label} gặp sự cố mạng/quá tải. Đang đổi API Key và thử lại... (Còn ${retries} lần)`;
+            // KHÔNG ĐỔI LỖI CHO API KEY. Báo rõ là Server Google đang bận.
+            const msg = `${label} - Server Google đang xử lý quá tải. Tự động kết nối lại... (Còn ${retries} lần)`;
             console.warn(msg, error.message);
             if (onLog) onLog(`🔄 ${msg}`);
             
             // Wait before retry
             await new Promise(resolve => setTimeout(resolve, delay));
-            return retryWithBackoff(operation, retries - 1, delay * 1.5, label, onLog);
+            return retryWithBackoff(operation, retries - 1, delay, label, onLog);
         }
         throw error;
     }
@@ -227,7 +228,7 @@ export const testApiKey = async (): Promise<boolean> => {
                 model: 'gemini-3.1-pro-preview',
                 contents: { parts: [{ text: "Ping" }] }
             }),
-            10000, // 10s Timeout for Pro ping
+            15000, // 15s Timeout for Pro ping
             "API Key Test (Pro)"
         );
         return true;
@@ -359,7 +360,7 @@ const analyzeReferenceImage = async (base64Data: string): Promise<string> => {
                         ]
                     }
                 }),
-                15000, // 15s timeout
+                30000, // 30s timeout
                 "Ref Analysis"
             );
             return result.text || "";
@@ -414,7 +415,7 @@ RULES:
                     temperature: 0.7,
                 }
             }),
-            25000, // 25s Hard Timeout
+            60000, // 60s Hard Timeout
             "Prompt Optimization"
         );
 

@@ -92,13 +92,11 @@ export const createSolidFence = async (base64Str: string, targetAspectRatio: str
     }
 };
   
-export const optimizePayload = async (base64Str: string, maxWidth = 1024): Promise<string> => {
+export const optimizePayload = async (base64Str: string, maxWidth = 768): Promise<string> => {
     try {
         const img = await loadImageWithTimeout(base64Str);
         
-        if (img.width <= maxWidth && img.height <= maxWidth) {
-            return base64Str;
-        }
+        // Always re-encode to ensure it's a compressed JPEG
         let width = img.width;
         let height = img.height;
         if (width > height) {
@@ -121,7 +119,7 @@ export const optimizePayload = async (base64Str: string, maxWidth = 1024): Promi
             ctx.imageSmoothingQuality = 'high';
             ctx.drawImage(img, 0, 0, width, height);
         }
-        return canvas.toDataURL('image/jpeg', 0.9); 
+        return canvas.toDataURL('image/jpeg', 0.85); 
     } catch (e) {
         return base64Str;
     }

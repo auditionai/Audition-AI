@@ -411,10 +411,10 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
             
             if (Date.now() - startTime + waitTime < TIMEOUT_LIMIT) {
                 if (waitTime > 1000) {
-                     addLog(`Kết nối thất bại. Đổi Key và thử lại sau ${Math.ceil(waitTime/1000)}s...`);
+                     addLog(`Server Google đang bận. Thử lại sau ${Math.ceil(waitTime/1000)}s...`);
                      await new Promise(r => setTimeout(r, waitTime));
                 } else {
-                     addLog(`Kết nối thất bại. Đang đổi Key và thử lại...`);
+                     addLog(`Server Google đang bận. Đang thử lại...`);
                 }
             }
         }

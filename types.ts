@@ -66,7 +66,6 @@ export interface GeneratedImage {
   engine: string;
   isShared?: boolean; // New: Status for Showcase
   userName?: string;  // New: Author name
-  userId?: string;    // New: Owner ID for admin cleanup
 }
 
 // --- NEW ECONOMY & USER TYPES ---
@@ -123,7 +122,8 @@ export interface Transaction {
   userAvatar?: string;
   // -------------------------------------
   packageId: string;
-  amount: number;
+  amount?: number;
+  price?: number;
   coins: number;
   status: TransactionStatus;
   createdAt: string;

@@ -487,7 +487,7 @@ export const createPaymentLink = async (packageId: string): Promise<Transaction>
     const { data, error } = await supabase.from('transactions').insert({
         user_id: user.id,
         package_id: packageId,
-        amount: pkg.price,
+        price: pkg.price, // Changed from amount to price
         coins_received: totalCoins,
         status: 'pending',
         code: orderCode,
@@ -643,7 +643,7 @@ export const getUnifiedHistory = async (): Promise<HistoryItem[]> => {
             createdAt: t.created_at,
             description: `Nạp Vcoin (${t.code})`,
             vcoinChange: t.coins_received,
-            amountVnd: t.amount,
+            amountVnd: t.amount || t.price,
             type: t.status === 'paid' ? 'topup' : 'pending_topup',
             status: t.status === 'paid' ? 'success' : t.status === 'pending' ? 'pending' : 'failed',
             code: t.code

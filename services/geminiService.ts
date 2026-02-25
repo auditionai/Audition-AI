@@ -501,7 +501,6 @@ export const generateImage = async (
     // 1. PROCESS REFERENCE IMAGE (VISUAL & TEXTUAL ANALYSIS)
     let cleanRefImage: string | null = null;
     let poseDescription = "";
-    let refImageUri: string | null = null;
     
     if (refImageBase64) {
         onLog("Step 1: Analyzing Reference Image (Pose & BG)...");
@@ -517,14 +516,10 @@ export const generateImage = async (
                     reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
                     reader.readAsDataURL(blob);
                 });
-                
-                // For Final Generation (use URL directly)
-                refImageUri = await uploadToGemini(refImageBase64, 'image/jpeg');
             } 
             // Handle Base64 Input
             else if (refImageBase64.startsWith('data:') || refImageBase64.length > 100) {
                 cleanRefImage = cleanBase64(refImageBase64);
-                refImageUri = await uploadToGemini(cleanRefImage, 'image/jpeg');
             }
 
             if (cleanRefImage) {
@@ -556,7 +551,6 @@ export const generateImage = async (
 
     // 3. LOAD STYLE IMAGE (VISUAL)
     let cleanStyleImage: string | null = null;
-    let styleImageUri: string | null = null;
     
     if (finalStyleUrl) {
         onLog("Step 3: Loading Style Reference Image...");
@@ -573,16 +567,14 @@ export const generateImage = async (
             }
             
             cleanStyleImage = cleanBase64(styleData);
-            // Upload Style Image
-            styleImageUri = await uploadToGemini(cleanStyleImage, 'image/jpeg');
             
         } catch (e) {
-            console.warn("Failed to load/upload style reference", e);
+            console.warn("Failed to load style reference", e);
         }
     }
 
     // 4. PREPARE CHARACTERS
-    const charUris: string[] = [];
+    const charBase64List: string[] = [];
     
     for (const char of characters) {
         let finalCharBase64 = "";
@@ -599,12 +591,7 @@ export const generateImage = async (
         }
         
         if (finalCharBase64) {
-            try {
-                const uri = await uploadToGemini(finalCharBase64, 'image/jpeg');
-                charUris.push(uri);
-            } catch (e) {
-                console.warn("Failed to upload character sheet", e);
-            }
+            charBase64List.push(finalCharBase64);
         }
     }
 
@@ -622,63 +609,63 @@ export const generateImage = async (
     
     // --- BRUTAL DATA VERIFICATION (THE IRONCLAD PROTOCOL) ---
     // 1. Verify Reference Image (CRITICAL)
-    if (refImageBase64 && !refImageUri) {
-         throw new Error("CRITICAL FAILURE: Reference Image (Pose) failed to upload. The pipeline cannot proceed without the Source of Truth.");
+    if (refImageBase64 && !cleanRefImage) {
+         throw new Error("CRITICAL FAILURE: Reference Image (Pose) failed to process. The pipeline cannot proceed without the Source of Truth.");
     }
 
     // 2. Verify Characters (CRITICAL)
     if (characters.length > 0) {
-        if (charUris.length === 0) {
-            throw new Error("CRITICAL FAILURE: Character assets failed to upload. Aborting to prevent ghost generation.");
+        if (charBase64List.length === 0) {
+            throw new Error("CRITICAL FAILURE: Character assets failed to process. Aborting to prevent ghost generation.");
         }
-        if (charUris.length < characters.length) {
-            onLog(`⚠️ WARNING: Partial Data. Only ${charUris.length}/${characters.length} characters were successfully uploaded.`);
+        if (charBase64List.length < characters.length) {
+            onLog(`⚠️ WARNING: Partial Data. Only ${charBase64List.length}/${characters.length} characters were successfully processed.`);
         }
     }
 
     // 3. Verify Style (OPTIONAL but logged)
-    if (finalStyleUrl && !styleImageUri) {
-         onLog("⚠️ WARNING: Style Image failed to upload. Proceeding without Style Reference.");
+    if (finalStyleUrl && !cleanStyleImage) {
+         onLog("⚠️ WARNING: Style Image failed to process. Proceeding without Style Reference.");
     }
 
     const finalParts: any[] = [];
     
     // A. STYLE REFERENCE
-    if (styleImageUri) {
+    if (cleanStyleImage) {
         finalParts.push({ text: "🔴 IMAGE 1: STYLE REFERENCE (ART STYLE ONLY)\nINSTRUCTION: Extract ONLY the 3D rendering quality, lighting, texture, and artistic vibe. \nNEGATIVE CONSTRAINT: Do NOT copy the background, the characters, or any objects from this image. IGNORE the content of this image completely." });
         finalParts.push({
-            fileData: {
+            inlineData: {
                 mimeType: 'image/jpeg',
-                fileUri: styleImageUri
+                data: cleanStyleImage
             }
         });
     }
 
     // B. POSE/STRUCTURE REFERENCE
-    if (refImageUri) {
+    if (cleanRefImage) {
         finalParts.push({ text: "🔴 IMAGE 2: POSE & BACKGROUND REFERENCE (SOURCE OF TRUTH)\nINSTRUCTION: This image is the BLUEPRINT for the scene. \n1. BACKGROUND: You MUST use the background/environment from this image.\n2. POSE: You MUST match the character poses and camera angle exactly.\n3. COMPOSITION: The scene layout must be identical to this image." });
         finalParts.push({
-            fileData: {
+            inlineData: {
                 mimeType: 'image/jpeg',
-                fileUri: refImageUri
+                data: cleanRefImage
             }
         });
     }
 
     // C. CHARACTER REFERENCES
     let charPromptInstructions = "";
-    if (charUris.length > 0) {
+    if (charBase64List.length > 0) {
         finalParts.push({ text: "🔴 IMAGE 3+: CHARACTER REFERENCE(S)\nINSTRUCTION: These are the characters to be placed into the scene. Maintain their facial features and outfit details." });
         
         // Iterate through ALL uploaded character URIs
-        charUris.forEach((uri, index) => {
+        charBase64List.forEach((b64, index) => {
             const charIndex = index + 1;
             const charInfo = characters[index]; // Get metadata (gender, id)
             
             finalParts.push({
-                fileData: {
+                inlineData: {
                     mimeType: 'image/jpeg',
-                    fileUri: uri
+                    data: b64
                 }
             });
             
@@ -695,7 +682,7 @@ export const generateImage = async (
     const sanitizedParts = finalParts.filter(p => {
         if (!p) return false;
         if (p.text && typeof p.text === 'string' && p.text.trim().length > 0) return true;
-        if (p.fileData && p.fileData.fileUri) return true;
+        if (p.inlineData && p.inlineData.data) return true;
         return false;
     });
 
@@ -741,12 +728,12 @@ export const generateImage = async (
                 // NO FALLBACK to Flash. User demands Pro quality.
                 // We rely on retryWithBackoff to switch keys/wait on 503.
                 
-                const isOverload = e.message?.includes('503') || e.message?.includes('Overloaded') || e.status === 503;
+                const isOverload = e.message?.includes('503') || e.message?.includes('Overloaded') || e.status === 503 || e.message?.includes('timed out') || e.message?.includes('Timeout');
                 const isRateLimit = e.message?.includes('429') || e.status === 429;
 
                 // If it's a 503 or 429, log it clearly but DO NOT kill the key immediately
                 if (isOverload) {
-                     console.warn("Gemini 3 Pro 503 (Overload). Retrying...");
+                     console.warn("Gemini 3 Pro 503/Timeout (Overload). Retrying...");
                 } else if (isRateLimit) {
                      console.warn("Gemini 3 Pro 429 (Rate Limit). Retrying...");
                 } else {

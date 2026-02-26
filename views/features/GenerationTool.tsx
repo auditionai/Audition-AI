@@ -75,7 +75,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
   // Default Resolution 1K
   const [aspectRatio, setAspectRatio] = useState('3:4'); 
   const [resolution, setResolution] = useState<Resolution>('1K'); 
-  const [aiModel, setAiModel] = useState<'flash' | 'pro'>('pro');
+  const [aiModel, setAiModel] = useState<'flash' | 'pro'>('flash');
   
   // Features always ON
   const useSearch = true; 

@@ -790,11 +790,14 @@ export const generateImage = async (
     const config: any = {
         imageConfig: {
             aspectRatio: aspectRatio
-            // CRITICAL: DO NOT ADD imageSize HERE. 
-            // It causes 429 Quota Exceeded errors on many accounts even if they have quota.
-            // The model will default to its native resolution.
         }
     };
+
+    // RESTORED: Resolution Setting for Pro Model
+    // User explicitly requested 1K/2K/4K support.
+    if (modelType === 'pro') {
+        config.imageConfig.imageSize = resolution;
+    }
 
     // google_search is only supported on gemini-3-pro-image-preview
     if (useSearch && modelType === 'pro') {

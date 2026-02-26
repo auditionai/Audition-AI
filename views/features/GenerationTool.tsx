@@ -477,17 +477,11 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       
       // 4. STRUCTURE PROCESSING (Heavy Operation)
       // Note: createSolidFence handles URLs internally via loadImageWithTimeout
-      if (sourceForStructure) {
+      if (refImage) {
           addLog("Đang trích xuất cấu trúc (Wireframe)...");
-          // If it's a URL, we might need to fetch it to optimizePayload?
-          // optimizePayload handles URLs via loadImageWithTimeout too.
-          // But createSolidFence returns Base64.
-          // We can upload this result to R2 if we want, but generateImage expects structureRefData as base64/URL.
-          // Let's keep it simple: pass the URL or Base64 to generateImage.
-          // Wait, generateImage signature for structureRefData is string.
-          // If we pass URL, generateImage logic needs to handle it.
-          // My previous edit to generateImage handled refImageBase64 (which is structureRefData here) as URL.
-          structureRefData = sourceForStructure; 
+          // Only use the USER UPLOADED reference image.
+          // NEVER use feature.preview_image as a fallback, as it forces unwanted compositions (e.g. wooden tables).
+          structureRefData = refImage; 
       }
       
       let finalPrompt = (feature.defaultPrompt || "") + prompt;

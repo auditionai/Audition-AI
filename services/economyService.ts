@@ -70,15 +70,27 @@ export const updateUserBalance = async (amount: number, reason: string, type: st
     
     // 1. Log transaction (Silent Fail Safe)
     try {
+        // Attempt 1: Try 'note' (Legacy column)
         const { error } = await supabase.from('diamond_transactions_log').insert({
             user_id: user.id,
             amount,
-            note: reason,
+            note: reason, 
             type
         });
+        
         if (error) {
-            // If table doesn't exist (404) or other error, just log to console warning, don't crash
-            console.warn("[Economy] Failed to log transaction (non-critical):", error.message);
+            // Attempt 2: If 'note' column missing, try 'reason' (New column)
+            if (error.message?.includes('note') || error.message?.includes('does not exist')) {
+                 const { error: err2 } = await supabase.from('diamond_transactions_log').insert({
+                    user_id: user.id,
+                    amount,
+                    reason: reason, 
+                    type
+                });
+                if (err2) console.warn("[Economy] Failed to log (Retry):", err2.message);
+            } else {
+                console.warn("[Economy] Failed to log transaction:", error.message);
+            }
         }
     } catch (e) {
         console.warn("[Economy] Log table missing or inaccessible.");
@@ -352,6 +364,10 @@ export const claimMilestoneReward = async (day: number): Promise<{success: boole
 const temporarilyDisabledKeys: Set<string> = new Set();
 const KEY_COOLDOWN_MS = 60000; // 1 minute cooldown for bad keys
 
+export const isKeyDisabled = (key: string): boolean => {
+    return temporarilyDisabledKeys.has(key);
+};
+
 export const reportKeyFailure = (key: string) => {
     if (!key) return;
     const shortKey = key.substring(0, 4) + '...' + key.slice(-4);
@@ -365,12 +381,12 @@ export const reportKeyFailure = (key: string) => {
 
 let lastUsedKey: string | null = null;
 
-export const getSystemApiKey = async (excludedKeys: string[] = []): Promise<string | null> => {
+export const getSystemApiKey = async (tier: 'flash' | 'pro' = 'flash', excludedKeys: string[] = []): Promise<string | null> => {
     try {
         // 1. Get all active keys
         const { data: allKeys, error } = await supabase
             .from('api_keys')
-            .select('id, key_value, last_used_at')
+            .select('id, key_value, last_used_at, name')
             .eq('status', 'active');
         
         if (error || !allKeys || allKeys.length === 0) {
@@ -378,8 +394,22 @@ export const getSystemApiKey = async (excludedKeys: string[] = []): Promise<stri
             return process.env.API_KEY || null;
         }
 
+        // Filter by tier
+        let tierKeys = allKeys;
+        if (tier === 'pro') {
+            tierKeys = allKeys.filter((k: any) => k.name && k.name.includes('[PRO]'));
+        } else {
+            // Flash keys are those without [PRO] (or explicitly marked [FLASH])
+            tierKeys = allKeys.filter((k: any) => !k.name || !k.name.includes('[PRO]'));
+        }
+
+        if (tierKeys.length === 0) {
+            // If no keys for this tier, fallback to env key
+            return process.env.API_KEY || null;
+        }
+
         // 2. Filter out keys that are in the in-memory blacklist OR the excluded list (from retry loop)
-        let validKeys = allKeys.filter(k => 
+        let validKeys = tierKeys.filter((k: any) => 
             !temporarilyDisabledKeys.has(k.key_value) && 
             !excludedKeys.includes(k.key_value)
         );
@@ -388,13 +418,13 @@ export const getSystemApiKey = async (excludedKeys: string[] = []): Promise<stri
         if (validKeys.length === 0) {
             console.warn("[System] All keys exhausted. Resetting temporary blacklist.");
             temporarilyDisabledKeys.clear();
-            validKeys = allKeys;
+            validKeys = tierKeys;
         }
 
         // 4. Avoid picking the exact same key as last time if we have multiple choices
         let candidates = validKeys;
         if (candidates.length > 1 && lastUsedKey) {
-            const filtered = candidates.filter(k => k.key_value !== lastUsedKey);
+            const filtered = candidates.filter((k: any) => k.key_value !== lastUsedKey);
             if (filtered.length > 0) {
                 candidates = filtered;
             }
@@ -415,22 +445,27 @@ export const getSystemApiKey = async (excludedKeys: string[] = []): Promise<stri
     }
 };
 
-export const saveSystemApiKey = async (key: string): Promise<{success: boolean, error?: string}> => {
+export const saveSystemApiKey = async (key: string, tier: 'flash' | 'pro' = 'flash'): Promise<{success: boolean, error?: string}> => {
     try {
         const cleanKey = key.trim();
+        const prefix = tier === 'pro' ? '[PRO]' : '[FLASH]';
+        
         // Check if exists
         const { data: existing } = await supabase
             .from('api_keys')
-            .select('id')
+            .select('id, name')
             .eq('key_value', cleanKey)
             .single();
 
         if (existing) {
-             const { error } = await supabase.from('api_keys').update({ status: 'active' }).eq('id', existing.id);
+             const newName = existing.name?.includes('[') 
+                ? existing.name.replace(/\[.*?\]/, prefix) 
+                : `${prefix} ${existing.name || 'Admin Key'}`;
+             const { error } = await supabase.from('api_keys').update({ status: 'active', name: newName }).eq('id', existing.id);
              if (error) throw error;
         } else {
              const { error } = await supabase.from('api_keys').insert({
-                 name: 'Admin Key ' + new Date().toISOString(),
+                 name: `${prefix} Admin Key ` + new Date().toISOString(),
                  key_value: cleanKey,
                  status: 'active'
              });
@@ -468,11 +503,11 @@ export const createPaymentLink = async (packageId: string): Promise<Transaction>
     const { data, error } = await supabase.from('transactions').insert({
         user_id: user.id,
         package_id: packageId,
-        amount: pkg.price,
-        coins_received: totalCoins,
+        amount_vnd: pkg.price, // Changed from price to amount_vnd
+        diamonds_received: totalCoins, // Changed from coins_received to diamonds_received
         status: 'pending',
-        code: orderCode,
-        payment_method: 'payos'
+        order_code: orderCode,
+        // payment_method: 'payos' // Removed as it's not in schema
     }).select().single();
 
     if (error) throw error;
@@ -541,7 +576,7 @@ export const adminApproveTransaction = async (txId: string): Promise<{success: b
         if (updateError) throw updateError;
 
         // 2. Add Coins
-        await updateUserBalance(tx.coins_received, `Topup: ${tx.code}`, 'topup');
+        await updateUserBalance(tx.diamonds_received, `Topup: ${tx.order_code}`, 'topup');
         
         return { success: true };
     } catch (e: any) {
@@ -622,12 +657,12 @@ export const getUnifiedHistory = async (): Promise<HistoryItem[]> => {
         history.push({
             id: t.id,
             createdAt: t.created_at,
-            description: `Nạp Vcoin (${t.code})`,
-            vcoinChange: t.coins_received,
-            amountVnd: t.amount,
+            description: `Nạp Vcoin (${t.order_code})`,
+            vcoinChange: t.diamonds_received,
+            amountVnd: t.amount_vnd,
             type: t.status === 'paid' ? 'topup' : 'pending_topup',
             status: t.status === 'paid' ? 'success' : t.status === 'pending' ? 'pending' : 'failed',
-            code: t.code
+            code: t.order_code
         });
     });
 
@@ -635,9 +670,9 @@ export const getUnifiedHistory = async (): Promise<HistoryItem[]> => {
         history.push({
             id: l.id,
             createdAt: l.created_at,
-            description: l.reason,
-            vcoinChange: l.type === 'usage' ? -l.amount : l.amount,
-            type: l.type,
+            description: l.reason || l.note || 'Giao dịch hệ thống', // Fallback to note or default
+            vcoinChange: l.amount, // Amount is already signed (negative for usage)
+            type: l.type || 'usage', // Fallback to usage if type is missing (for legacy logs)
             status: 'success'
         });
     });

@@ -2,7 +2,7 @@
 import { GeneratedImage } from '../types';
 import { supabase } from './supabaseClient';
 import { getUserProfile } from './economyService';
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, DeleteObjectCommand, DeleteObjectsCommand } from "@aws-sdk/client-s3";
 
 const DB_NAME = 'DMP_AI_Studio_DB';
 const STORE_NAME = 'images';
@@ -94,6 +94,51 @@ const processBase64Data = (base64: string): { blob: Blob, type: string, buffer: 
       type: contentType,
       buffer: uInt8Array // Direct buffer for R2
   };
+};
+
+// --- NEW: UPLOAD INPUT FILE TO R2 ---
+export const uploadFileToR2 = async (file: File | Blob | string, folder: string = 'inputs'): Promise<string> => {
+    if (!r2Client) {
+        throw new Error("R2 Client not initialized");
+    }
+
+    try {
+        let buffer: Uint8Array;
+        let contentType: string;
+        let extension = 'png';
+
+        if (typeof file === 'string') {
+            // Base64
+            const processed = processBase64Data(file);
+            buffer = processed.buffer;
+            contentType = processed.type;
+            extension = contentType.split('/')[1] || 'png';
+        } else {
+            // File or Blob
+            const arrayBuffer = await file.arrayBuffer();
+            buffer = new Uint8Array(arrayBuffer);
+            contentType = file.type || 'image/png';
+            extension = contentType.split('/')[1] || 'png';
+        }
+
+        const fileName = `${folder}/${Date.now()}_${Math.random().toString(36).substring(7)}.${extension}`;
+
+        const command = new PutObjectCommand({
+            Bucket: R2_BUCKET_NAME,
+            Key: fileName,
+            Body: buffer,
+            ContentType: contentType,
+        });
+
+        await r2Client.send(command);
+        
+        // Return Public URL
+        return `${R2_PUBLIC_URL}/${fileName}`;
+
+    } catch (error) {
+        console.error("R2 Upload Input Error:", error);
+        throw error;
+    }
 };
 
 // --- MAIN SERVICE FUNCTIONS ---
@@ -279,6 +324,35 @@ export const getShowcaseImages = async (): Promise<GeneratedImage[]> => {
     });
 };
 
+export const getAllImagesSystemWide = async (): Promise<GeneratedImage[]> => {
+    if (!supabase) return [];
+    
+    try {
+        const { data, error } = await supabase
+            .from(TABLE_NAME)
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (error || !data) return [];
+
+        return data.map((row: any) => ({
+            id: row.id,
+            url: row.image_url,
+            prompt: row.prompt,
+            timestamp: new Date(row.created_at).getTime(),
+            toolId: 'gen_tool',
+            toolName: row.model_used || 'AI Gen',
+            engine: row.model_used,
+            isShared: row.is_public,
+            userId: row.user_id,
+            userName: 'User'
+        }));
+    } catch (e) {
+        console.error("System Wide Fetch Error", e);
+        return [];
+    }
+};
+
 export const getAllImagesFromStorage = async (): Promise<GeneratedImage[]> => {
   // 1. SUPABASE (Fetches metadata, URL points to R2 or Supabase Storage)
   if (supabase) {
@@ -301,7 +375,8 @@ export const getAllImagesFromStorage = async (): Promise<GeneratedImage[]> => {
                     toolName: row.model_used || 'AI Gen',
                     engine: row.model_used,
                     isShared: row.is_public,
-                    userName: 'Me'
+                    userName: 'Me',
+                    userId: row.user_id
                 }));
             }
         }
@@ -325,29 +400,61 @@ export const getAllImagesFromStorage = async (): Promise<GeneratedImage[]> => {
   });
 };
 
-export const deleteImageFromStorage = async (id: string): Promise<void> => {
+
+
+export const deleteImageFromStorage = async (id: string, targetUserId?: string, imageUrl?: string): Promise<void> => {
   const user = await getUserProfile();
-  
-  if (supabase && user.id) {
-    try {
-        // A. Delete from R2 (if configured)
-        if (r2Client) {
-            const fileName = `${user.id}/${id}.png`;
+  const userId = targetUserId || user.id;
+
+  if (supabase && userId) {
+    // A. Delete from R2 (if configured)
+    if (r2Client) {
+        try {
+            let fileName = `${userId}/${id}.png`; // Default fallback
+            
+            // Robust Key Extraction Strategy
+            if (imageUrl && imageUrl.startsWith('http')) {
+                // Strategy 1: Remove R2_PUBLIC_URL prefix (Handles custom domains/paths)
+                if (R2_PUBLIC_URL && imageUrl.startsWith(R2_PUBLIC_URL)) {
+                    fileName = imageUrl.replace(`${R2_PUBLIC_URL}/`, '');
+                } 
+                // Strategy 2: Use Pathname (Handles domain changes)
+                else {
+                    try {
+                        const urlObj = new URL(imageUrl);
+                        const path = decodeURIComponent(urlObj.pathname);
+                        fileName = path.startsWith('/') ? path.substring(1) : path;
+                    } catch (e) {
+                        console.warn(`[Storage] URL Parse Failed for ${imageUrl}`);
+                    }
+                }
+            }
+
+            console.warn(`[Storage] DELETING R2 KEY: [${fileName}]`);
             await r2Client.send(new DeleteObjectCommand({
                 Bucket: R2_BUCKET_NAME,
                 Key: fileName
             }));
-        } 
-        // B. Delete from Supabase Storage (Legacy)
-        else {
+            console.warn(`[Storage] R2 Delete Sent for: ${fileName}`);
+        } catch (e) {
+            console.error("[Storage] R2 Delete Failed:", e);
+            throw e;
+        }
+    } 
+    
+    try {
+        // B. Delete from Supabase Storage (Legacy - only if R2 not active)
+        if (!r2Client) {
              await supabase.storage.from('images').remove([`${id}.png`]);
         }
 
         // C. Delete Metadata from DB
-        await supabase.from(TABLE_NAME).delete().eq('id', id);
+        const { error } = await supabase.from(TABLE_NAME).delete().eq('id', id);
+        if (error) throw error;
 
     } catch (e) { 
-        console.warn("Delete cloud error", e); 
+        console.warn("Delete DB/Metadata error", e); 
+        throw e;
     }
   }
 
@@ -360,4 +467,105 @@ export const deleteImageFromStorage = async (id: string): Promise<void> => {
     request.onsuccess = () => resolve();
     request.onerror = () => reject(request.error);
   });
+};
+
+export const cleanupExpiredImages = async (isSystemWide: boolean = false): Promise<number> => {
+    let images: GeneratedImage[] = [];
+    if (isSystemWide) {
+        images = await getAllImagesSystemWide();
+    } else {
+        images = await getAllImagesFromStorage();
+    }
+
+    const now = Date.now();
+    const EXPIRATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 Days
+    
+    // Filter Expired Images
+    const expiredImages = images.filter(img => {
+        return !img.isShared && (now - img.timestamp > EXPIRATION_MS);
+    });
+
+    if (expiredImages.length === 0) {
+        console.log("[Cleanup] No expired images found.");
+        return 0;
+    }
+
+    console.log(`[Cleanup] Found ${expiredImages.length} expired images. Starting BATCH deletion...`);
+
+    // --- BATCH DELETE R2 ---
+    if (r2Client) {
+        try {
+            // Prepare Keys
+            const objectsToDelete = expiredImages.map(img => {
+                let key = `${img.userId || 'unknown'}/${img.id}.png`;
+                if (img.url && img.url.startsWith('http')) {
+                    if (R2_PUBLIC_URL && img.url.startsWith(R2_PUBLIC_URL)) {
+                        key = img.url.replace(`${R2_PUBLIC_URL}/`, '');
+                    } else {
+                        try {
+                            const path = decodeURIComponent(new URL(img.url).pathname);
+                            key = path.startsWith('/') ? path.substring(1) : path;
+                        } catch(e) {}
+                    }
+                }
+                return { Key: key };
+            });
+
+            // Split into chunks of 50 (Safe size for Browser & CORS)
+            const chunkSize = 50;
+            for (let i = 0; i < objectsToDelete.length; i += chunkSize) {
+                const chunk = objectsToDelete.slice(i, i + chunkSize);
+                console.log(`[Cleanup] Deleting R2 Batch ${Math.floor(i/chunkSize) + 1} (${chunk.length} items)...`);
+                
+                try {
+                    await r2Client.send(new DeleteObjectsCommand({
+                        Bucket: R2_BUCKET_NAME,
+                        Delete: { Objects: chunk }
+                    }));
+                } catch (batchErr: any) {
+                    console.error(`[Cleanup] R2 Batch Error:`, batchErr);
+                    if (batchErr.name === 'TypeError' && batchErr.message === 'Failed to fetch') {
+                        console.error("🚨 LỖI CORS: Trình duyệt đã chặn yêu cầu xóa. Bạn CẦN cấu hình CORS trên R2 Bucket.");
+                        throw new Error("CORS_ERROR: Vui lòng cấu hình CORS cho R2 Bucket để cho phép lệnh DELETE.");
+                    }
+                }
+            }
+            console.log("[Cleanup] R2 Batch Deletion Complete.");
+        } catch (e: any) {
+            console.error("[Cleanup] R2 Batch Delete Failed Global", e);
+            if (e.message.includes("CORS_ERROR")) throw e; // Re-throw to notify UI
+        }
+    }
+
+    // --- BATCH DELETE DB ---
+    if (supabase) {
+        try {
+            const ids = expiredImages.map(img => img.id);
+            // Delete in chunks of 50 for DB safety
+            const chunkSize = 50;
+            for (let i = 0; i < ids.length; i += chunkSize) {
+                const chunk = ids.slice(i, i + chunkSize);
+                const { error } = await supabase.from(TABLE_NAME).delete().in('id', chunk);
+                if (error) {
+                    console.error("[Cleanup] DB Batch Delete Error", error);
+                }
+            }
+            console.log("[Cleanup] DB Batch Deletion Complete.");
+        } catch (e) {
+            console.error("[Cleanup] DB Delete Failed", e);
+        }
+    }
+
+    // --- BATCH DELETE LOCAL (IndexedDB) ---
+    try {
+        const db = await openDB();
+        const tx = db.transaction([STORE_NAME], 'readwrite');
+        const store = tx.objectStore(STORE_NAME);
+        expiredImages.forEach(img => store.delete(img.id));
+        console.log("[Cleanup] Local Batch Deletion Complete.");
+    } catch (e) {
+        console.warn("[Cleanup] Local Delete Failed", e);
+    }
+
+    return expiredImages.length;
 };

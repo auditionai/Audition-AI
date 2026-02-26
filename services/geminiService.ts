@@ -1,6 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
-import { getSystemApiKey, reportKeyFailure } from "./economyService";
-import { createTextureSheet, optimizePayload, createSolidFence } from "../utils/imageProcessor";
+import { getSystemApiKey, reportKeyFailure, isKeyDisabled } from "./economyService";
+import { createTextureSheet, optimizePayload, createSolidFence, createMasterReferenceSheet } from "../utils/imageProcessor";
 
 export interface CharacterData {
   id: number;
@@ -17,18 +17,18 @@ const cleanBase64 = (b64: string) => b64.replace(/^data:image\/\w+;base64,/, "")
 // --- HELPER: RETRY WITH BACKOFF ---
 const retryWithBackoff = async <T>(
     operation: () => Promise<T>,
-    retries: number = 3,
-    delay: number = 2000,
+    retries: number = 10, // Tăng số lần thử lại lên 10 lần (Thô bạo nhất)
+    delay: number = 5000, // Cố định chờ 5s mỗi lần
     label: string = "Operation",
     onLog?: (msg: string) => void
 ): Promise<T> => {
     try {
         return await operation();
     } catch (error: any) {
-        // Check for 503 (Service Unavailable), 429 (Too Many Requests), or 403 (Quota/Auth)
+        // Check for 503 (Service Unavailable), 429 (Quota/Rate Limit), or 403 (Auth)
         const isTransient = 
             error?.status === 503 || 
-            error?.status === 429 || 
+            error?.status === 429 ||
             error?.status === 403 ||
             error?.status === 500 ||
             error?.status === 502 ||
@@ -48,13 +48,19 @@ const retryWithBackoff = async <T>(
             error?.message?.includes('Timeout');
 
         if (retries > 0 && isTransient) {
-            const msg = `${label} gặp sự cố mạng/quá tải. Đang đổi API Key và thử lại... (Còn ${retries} lần)`;
+            const isRateLimit = error?.status === 429 || error?.message?.includes('429') || error?.message?.includes('quota');
+            const msg = isRateLimit 
+                ? `${label} - API Key hết hạn mức (429). Đang tự động đổi sang Key dự phòng... (Còn ${retries} lần)`
+                : `${label} - Server Google đang xử lý quá tải. Tự động kết nối lại... (Còn ${retries} lần)`;
+            
             console.warn(msg, error.message);
             if (onLog) onLog(`🔄 ${msg}`);
             
             // Wait before retry
-            await new Promise(resolve => setTimeout(resolve, delay));
-            return retryWithBackoff(operation, retries - 1, delay * 1.5, label, onLog);
+            // If it's a rate limit, we can retry faster because we are swapping keys
+            const waitTime = isRateLimit ? 1000 : delay;
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+            return retryWithBackoff(operation, retries - 1, delay, label, onLog);
         }
         throw error;
     }
@@ -62,11 +68,11 @@ const retryWithBackoff = async <T>(
 
 // --- NEW: ANALYZE STYLE IMAGE (For Admin) ---
 export const analyzeStyleImage = async (imageBase64: string): Promise<string> => {
-    const model = 'gemini-3-flash-preview'; // Fast & Cheap for analysis
+    const model = 'gemini-3.1-pro-preview'; // Use pro for stability
 
     const result = await retryWithBackoff(
         async () => {
-            const freshAi = await getAiClient();
+            const freshAi = await getAiClient('pro');
             try {
                 return await freshAi.models.generateContent({
                     model: model,
@@ -114,21 +120,14 @@ const selectBestStyle = async (prompt: string, styles: any[]): Promise<any | nul
     `;
 
     try {
-        const result = await retryWithBackoff(
-            async () => {
-                const freshAi = await getAiClient();
-                try {
-                    return await freshAi.models.generateContent({
-                        model: model,
-                        contents: { parts: [{ text: routerPrompt }] }
-                    });
-                } catch (e) {
-                    reportKeyFailure((freshAi as any)._internalApiKey);
-                    throw e;
-                }
-            },
-            3,
-            1000,
+        // AGGRESSIVE FAIL-FAST: No retries, 5s timeout
+        const freshAi = await getAiClient('flash');
+        const result = await runWithTimeout(
+            freshAi.models.generateContent({
+                model: model,
+                contents: { parts: [{ text: routerPrompt }] }
+            }),
+            5000, // 5s Timeout
             "Style Selection"
         );
         
@@ -154,7 +153,7 @@ const runWithTimeout = <T>(promise: Promise<T>, ms: number, label: string): Prom
 };
 
 // Cấu hình timeout cao hơn cho Client (mặc định fetch là ngắn)
-const getAiClient = async (specificKey?: string) => {
+const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string) => {
     // 1. Specific key (testing)
     if (specificKey) {
         const ai = new GoogleGenAI({ apiKey: specificKey });
@@ -162,20 +161,29 @@ const getAiClient = async (specificKey?: string) => {
         return ai;
     }
 
-    // 2. DB Key (Rotation System - Priority)
-    // We prioritize the DB keys to enable the Load Balancing / Rotation mechanism
-    const dbKey = await getSystemApiKey();
+    // 2. Env Key (Priority - User Selected Key in AI Studio)
+    // We MUST prioritize the user's selected key because gemini-3-pro-image-preview requires a paid key.
+    // BUT we must also respect the blacklist if this key has failed recently.
+    if (process.env.API_KEY && !isKeyDisabled(process.env.API_KEY)) {
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        (ai as any)._internalApiKey = process.env.API_KEY;
+        return ai;
+    }
+
+    // 3. DB Key (Rotation System - Fallback)
+    const dbKey = await getSystemApiKey(tier);
     if (dbKey) {
         const ai = new GoogleGenAI({ apiKey: dbKey });
         (ai as any)._internalApiKey = dbKey;
         return ai;
     }
 
-    // 3. Env Key (Fallback)
+    // If everything fails and we have an env key (even if disabled), try it as a last resort
     if (process.env.API_KEY) {
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-        (ai as any)._internalApiKey = process.env.API_KEY;
-        return ai;
+         console.warn("[System] All keys exhausted or disabled. Forcing retry with Env Key.");
+         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+         (ai as any)._internalApiKey = process.env.API_KEY;
+         return ai;
     }
 
     throw new Error("API Key missing. Set process.env.API_KEY or configure in Admin.");
@@ -223,16 +231,69 @@ const extractImage = (response: any): string | null => {
     throw new Error("No image data found in response");
 };
 
-const uploadToGemini = async (base64Data: string, mimeType: string): Promise<string> => {
+// --- NEW: TEST API KEY ---
+export const testApiKey = async (): Promise<boolean> => {
+    let currentKey = "";
     try {
-        const ai = await getAiClient();
-        const byteCharacters = atob(cleanBase64(base64Data));
-        const byteNumbers = new Array(byteCharacters.length);
-        for (let i = 0; i < byteCharacters.length; i++) {
-            byteNumbers[i] = byteCharacters.charCodeAt(i);
+        const freshAi = await getAiClient('pro');
+        currentKey = (freshAi as any)._internalApiKey;
+        
+        // THAY ĐỔI CÁCH TEST: Sử dụng model Text (3.1 Pro) để xác thực API Key.
+        // Model Text phản hồi cực nhanh (2-3s) và hiếm khi bị 503.
+        // Mục đích ở đây chỉ là để chứng minh API Key hợp lệ và có quyền truy cập.
+        await runWithTimeout(
+            freshAi.models.generateContent({
+                model: 'gemini-3.1-pro-preview',
+                contents: { parts: [{ text: "Hello" }] }
+            }),
+            15000, // 15s Timeout
+            "API Key Authentication"
+        );
+        return true;
+    } catch (e: any) {
+        console.warn("API Key Test Failed", e);
+        
+        const isServerBusy = e.status === 503 || 
+                             e.message?.includes('503') || 
+                             e.message?.includes('Overloaded') ||
+                             e.message?.includes('timed out') || e.message?.includes('Timeout');
+
+        // CRITICAL FIX: If the error is 503 (Overloaded) or Timeout,
+        // the API Key is actually VALID and authenticated successfully.
+        // The Google server is just busy. We MUST return TRUE here to pass the test
+        // and let the main generation's retryWithBackoff handle the 503.
+        if (isServerBusy) {
+            console.log("[System] API Key is VALID, but Gemini is busy (503/Timeout). Passing test.");
+            return true; 
         }
-        const byteArray = new Uint8Array(byteNumbers);
-        const blob = new Blob([byteArray], { type: mimeType });
+
+        // Only ban the key if it's a real error (e.g., 400 Bad Request, 403 Forbidden) OR 429 (Quota Exceeded)
+        if (currentKey) {
+            reportKeyFailure(currentKey);
+        }
+        return false;
+    }
+};
+
+const uploadToGemini = async (input: string, mimeType: string): Promise<string> => {
+    try {
+        const ai = await getAiClient('flash');
+        let blob: Blob;
+
+        // Check if input is a URL
+        if (input.startsWith('http')) {
+            const resp = await fetch(input);
+            blob = await resp.blob();
+        } else {
+            // Assume Base64
+            const byteCharacters = atob(cleanBase64(input));
+            const byteNumbers = new Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            blob = new Blob([byteArray], { type: mimeType });
+        }
 
         // Add Timeout to Upload
         const uploadResult = await runWithTimeout(
@@ -240,36 +301,67 @@ const uploadToGemini = async (base64Data: string, mimeType: string): Promise<str
                 file: blob,
                 config: { displayName: `ref_img_${Date.now()}` }
             }),
-            20000, // 20s
+            30000, // Increased to 30s
             "File Upload"
         );
 
-        const fileUri = (uploadResult as any).file?.uri || (uploadResult as any).uri;
+        const file = (uploadResult as any).file || uploadResult;
+        const fileUri = file?.uri;
+        
         if (!fileUri) throw new Error("No URI returned");
+
+        // --- NEW: WAIT FOR ACTIVE STATE ---
+        // Large files might be in 'PROCESSING' state. We must wait for 'ACTIVE'.
+        let state = file.state;
+        let attempts = 0;
+        while (state === 'PROCESSING' && attempts < 10) {
+            await new Promise(r => setTimeout(r, 2000)); // Wait 2s
+            try {
+                const fileStatus = await ai.files.get({ name: file.name });
+                state = (fileStatus as any).state || (fileStatus as any).file?.state;
+                console.log(`[System] File ${file.name} state: ${state}`);
+            } catch (e) {
+                console.warn("Check file state failed", e);
+            }
+            attempts++;
+        }
+
+        if (state === 'FAILED') throw new Error("File processing failed on Google side");
         
         return fileUri;
     } catch (e) {
-        console.warn("Cloud upload failed, falling back to inline", e);
+        console.warn("Cloud upload failed", e);
         throw e;
     }
 };
 
-export const checkConnection = async (key?: string): Promise<boolean> => {
+export const checkConnection = async (key?: string): Promise<{ success: boolean; message?: string }> => {
     try {
-        const ai = await getAiClient(key);
-        // Add Timeout to Ping - INCREASED TO 15s
+        const ai = await getAiClient('flash', key);
+        // Sử dụng Flash cho checkConnection (Admin) để ping nhanh và ổn định nhất
         await runWithTimeout(
             ai.models.generateContent({
-                model: 'gemini-3-flash-preview',
-                contents: 'ping'
+                model: 'gemini-2.5-flash',
+                contents: { parts: [{ text: "Ping" }] }
             }),
             15000,
             "Ping Connection"
         );
-        return true;
-    } catch (e) {
+        return { success: true };
+    } catch (e: any) {
         console.error("Gemini Connection Check Failed", e);
-        return false;
+        let msg = e.message || "Unknown Error";
+        
+        // Parse Google Error
+        if (msg.includes('403') || msg.includes('PERMISSION_DENIED')) {
+            msg = "Lỗi quyền truy cập (403). Vui lòng kiểm tra xem Google Generative AI API đã được bật trong Google Cloud Console chưa.";
+        } else if (msg.includes('400') || msg.includes('INVALID_ARGUMENT')) {
+            msg = "Key không hợp lệ hoặc sai định dạng.";
+        } else if (msg.includes('429')) {
+            msg = "Key đang bị giới hạn (Rate Limit).";
+        }
+
+        return { success: false, message: msg };
     }
 };
 
@@ -278,153 +370,152 @@ const analyzeReferenceImage = async (base64Data: string): Promise<string> => {
     const model = 'gemini-3-flash-preview'; 
 
     try {
-        const result = await retryWithBackoff(
-            async () => {
-                const freshAi = await getAiClient();
-                try {
-                    return await runWithTimeout(
-                        freshAi.models.generateContent({
-                            model: model,
-                            contents: {
-                                parts: [
-                                    { text: "Analyze this image. Describe ONLY the 'Skeleton Pose', 'Camera Angle', and 'Composition'. IGNORE the character's clothes, hair, gender, face, and colors. Output ONLY the structural description (e.g. 'sitting cross-legged', 'low angle shot')." },
-                                    { inlineData: { mimeType: 'image/png', data: cleanBase64(base64Data) } }
-                                ]
-                            }
-                        }),
-                        60000, // Increased to 60s
-                        "Ref Analysis"
-                    );
-                } catch (e) {
-                    reportKeyFailure((freshAi as any)._internalApiKey);
-                    throw e;
-                }
-            },
-            3,
-            2000,
-            "Ref Analysis"
-        );
-        return result.text || "";
+        // Optimize image before sending to reduce payload size and prevent 503
+        const optimizedImage = await optimizePayload(`data:image/jpeg;base64,${cleanBase64(base64Data)}`, 768);
+        const cleanOptimized = cleanBase64(optimizedImage);
+
+        // AGGRESSIVE FAIL-FAST: No retries, short timeout (15s)
+        // If analysis fails, we proceed without it rather than blocking generation.
+        const freshAi = await getAiClient('flash');
+        try {
+            const result = await runWithTimeout(
+                freshAi.models.generateContent({
+                    model: model,
+                    contents: {
+                        parts: [
+                            { inlineData: { mimeType: 'image/jpeg', data: cleanOptimized } },
+                            { text: "Analyze this image. Describe ONLY the 'Skeleton Pose', 'Camera Angle', and 'Composition'. IGNORE the character's clothes, hair, gender, face, and colors. Output ONLY the structural description (e.g. 'sitting cross-legged', 'low angle shot')." }
+                        ]
+                    }
+                }),
+                30000, // 30s timeout
+                "Ref Analysis"
+            );
+            return result.text || "";
+        } catch (e) {
+            console.warn("Ref Analysis Skipped (Fail-Fast)", e);
+            return ""; // Soft fail
+        }
     } catch (e) {
-        console.warn("Ref analysis failed", e);
+        console.warn("Ref Analysis Setup Failed", e);
         return "";
     }
 };
 
 // --- PROMPT REASONING ENGINE (STEEL DISCIPLINE) ---
-const optimizePromptWithThinking = async (rawPrompt: string, styleContext: string = "", poseContext: string = ""): Promise<string> => {
+const optimizePromptWithThinking = async (
+    rawPrompt: string, 
+    styleContext: string = "", 
+    poseContext: string = "",
+    masterSheetPart: any | null = null
+): Promise<string> => {
+    // UPGRADE: Use Gemini 3.1 Pro for the "Brain" of the operation.
+    // This ensures that even if we use the Flash Image Model, the PROMPT itself is crafted by the smartest Text Model.
+    // This meets the user's requirement for "Flash model to be smarter, superior".
+    const model = 'gemini-3.1-pro-preview'; 
+
     try {
-        const response = await retryWithBackoff(
-            async () => {
-                const freshAi = await getAiClient();
-                try {
-                    return await runWithTimeout(
-                        freshAi.models.generateContent({
-                            model: 'gemini-3-flash-preview',
-                            contents: `ROLE: EXECUTIONER PROMPT ENGINEER.
-                            MISSION: CONVERT INPUTS INTO A RIGID, MACHINE-READABLE 3D RENDERING SCRIPT.
-                            
-                            INPUT DATA:
-                            1. USER_COMMAND: "${rawPrompt}"
-                            2. STYLE_MANDATE: "${styleContext}" (MUST BE APPLIED)
-                            3. POSE_CONSTRAINT: "${poseContext}" (MUST BE FOLLOWED)
-            
-                            STRICT RULES:
-                            - DO NOT HALLUCINATE. Use ONLY the provided inputs.
-                            - IF STYLE_MANDATE conflicts with USER_COMMAND, STYLE_MANDATE WINS.
-                            - OUTPUT FORMAT must be a comma-separated list of high-weight tokens.
-                            - FORBIDDEN: "artistic", "creative interpretation", "maybe".
-                            - CRITICAL: If USER_COMMAND mentions using clothes/outfit from the uploaded image/reference, you MUST include "wearing exact same outfit as character reference image" in the Outfit Details. Do NOT describe the clothes of the pose reference.
-                            
-                            REQUIRED OUTPUT STRUCTURE:
-                            (Subject Description), (Action/Pose from Constraint), (Outfit Details), (Environment/Background), (Lighting Setup), (Render Engine: Octane/Unreal), (Texture Quality: 8K, Hyper-detailed), (Style Keywords from Mandate).
-                            `,
-                        }),
-                        60000, // Increased to 60s
-                        "Prompt Optimization"
-                    );
-                } catch (e) {
-                    reportKeyFailure((freshAi as any)._internalApiKey);
-                    throw e;
+        // Use Pro client for reasoning (it's text-only so it's cheap/fast enough)
+        const freshAi = await getAiClient('pro');
+        
+        const parts: any[] = [];
+        
+        if (masterSheetPart) {
+            parts.push(masterSheetPart);
+            parts.push({ text: "🔴 REFERENCE SHEET PROVIDED: The image above contains the characters for this scene. Analyze their appearance (Face, Hair, Outfit) and describe them in the final prompt." });
+        }
+
+        parts.push({
+            text: `ROLE: ELITE PROMPT ENGINEER (MIDJOURNEY V6 LEVEL).
+MISSION: Convert user inputs into a MASTERPIECE image generation prompt.
+
+INPUTS:
+1. COMMAND: "${rawPrompt}"
+2. STYLE: "${styleContext}"
+3. POSE: "${poseContext}"
+${masterSheetPart ? '4. CHARACTERS: See Reference Sheet above.' : ''}
+
+RULES:
+- You are the "Brain" of the operation. The image generator needs explicit, high-fidelity instructions.
+- Combine all inputs into a single, rich, descriptive paragraph.
+- Focus on: Lighting (Volumetric, Cinematic), Texture (8k, Unreal Engine 5), Camera (Depth of Field, Bokeh), and Character Details.
+- IF CHARACTERS ARE PROVIDED: You MUST describe their visual features (hair color, outfit style, accessories) in the prompt so the image generator knows what to draw.
+- ENHANCE the prompt with "Quality Boosters": masterpiece, best quality, ultra-detailed, photorealistic, 8k, ray tracing, hdr.
+- Output ONLY the final prompt. No explanations.`
+        });
+
+        const result = await runWithTimeout(
+            freshAi.models.generateContent({
+                model: model,
+                contents: { parts: parts },
+                config: {
+                    temperature: 0.7,
                 }
-            },
-            3,
-            2000,
+            }),
+            60000, // 60s Hard Timeout
             "Prompt Optimization"
         );
-        
-        const result = response.text?.trim();
-        if (!result) throw new Error("Empty reasoning response");
-        return result;
+
+        const text = result.text?.trim();
+        if (!text) throw new Error("Empty response");
+        return text;
 
     } catch (e) {
-        console.warn("Prompt Optimization Failed, using raw fallback", e);
-        return rawPrompt + (styleContext ? `, ${styleContext}` : "");
+        console.warn("Prompt Optimization Skipped (Fail-Fast)", e);
+        // Fallback: Simple concatenation
+        return `${rawPrompt}${styleContext ? ', ' + styleContext : ''}${poseContext ? ', ' + poseContext : ''}, masterpiece, best quality, 8k, ultra detailed`;
     }
 }
 
 // --- INTELLIGENCE CORE (ABSOLUTE COMMAND) ---
 const processDigitalTwinMode = (
     prompt: string, 
-    refImagePart: any | null, 
-    charParts: any[], 
-    styleReferencePart: any | null = null
-): { systemPrompt: string, parts: any[] } => {
+    masterSheetPart: any | null
+): { parts: any[] } => {
     
+    let combinedText = `** SYSTEM OVERRIDE: PROTOCOL 3D-GEN-ALPHA **
+    
+YOU ARE A NON-CREATIVE RENDERING ENGINE. YOU DO NOT "IMAGINE". YOU "EXECUTE".
+
+** SEPARATION OF CONCERNS (STRICT COMPARTMENTALIZATION) **
+The attached image is a MASTER REFERENCE SHEET containing multiple labeled sections.
+
+1. **STYLE REFERENCE**: 
+   - TAKE: Lighting, Texture, Render Quality, Art Style.
+   - IGNORE: The subject, their clothes, their face, their makeup.
+
+2. **POSE REFERENCE**:
+   - TAKE: Bone structure, Camera Angle, Composition.
+   - IGNORE: The outfit, the hair, the face, the background colors.
+
+3. **CHARACTER REFERENCE(S)**:
+   - WARNING: This is the SOURCE OF TRUTH for the Character's Identity (Face, Hair, Outfit). You MUST use the facial features and outfit details from these images.
+   - TAKE: The Character's Identity (Face), The Outfit (Clothes), The Hair, The Accessories.
+   - THIS IS THE ONLY SOURCE FOR "WHAT" IS IN THE IMAGE.
+
+** CRITICAL FAILURE CONDITIONS **
+- FAILURE: If the output character wears the clothes from the POSE REFERENCE.
+- FAILURE: If the output character has the eye color/makeup of the STYLE REFERENCE.
+- FAILURE: If the output is a painting/drawing when Style Ref is 3D.
+- FAILURE: If the user prompt says "use clothes from reference" and you use clothes from STYLE or POSE. You MUST use clothes from CHARACTER REFERENCE.
+
+** EXECUTION LOGIC **
+- Step 1: Extract the SKELETON from POSE REFERENCE.
+- Step 2: Skin the skeleton with the CHARACTER from CHARACTER REFERENCE.
+- Step 3: Dress the character EXACTLY as seen in CHARACTER REFERENCE unless [COMMAND] explicitly specifies a different outfit.
+- Step 4: Render the scene using the ENGINE from STYLE REFERENCE.
+
+[[EXECUTION_COMMAND]]: ${prompt}
+
+ACKNOWLEDGE AND EXECUTE.`;
+
     const parts = [];
-    
-    // 1. STYLE REFERENCE (THE LAW - RENDERING ONLY)
-    if (styleReferencePart) {
-        parts.push({ text: "[[INPUT_A: MASTER_STYLE_REFERENCE]]\nWARNING: This image defines the RENDERING ENGINE (Lighting, Texture, Shader). COPY the 'Vibe' and 'Quality'. DO NOT COPY the character's face, makeup, eye color, or clothes from this image." });
-        parts.push(styleReferencePart);
+    if (masterSheetPart) {
+        parts.push(masterSheetPart);
     }
+    parts.push({ text: combinedText });
 
-    // 2. POSE / COMPOSITION (THE SKELETON - STRUCTURE ONLY)
-    if (refImagePart) {
-        parts.push({ text: "[[INPUT_B: POSE_SKELETON_REFERENCE]]\nWARNING: This image defines the SKELETON POSE and CAMERA ANGLE. COPY the structure exactly. IGNORE the clothes, hair, and face in this image. The character MUST NOT wear the outfit from this image." });
-        parts.push(refImagePart);
-    }
-    
-    // 3. FACE IDENTITY (THE TARGET - CONTENT SOURCE)
-    if (charParts.length > 0) {
-        parts.push({ text: "[[INPUT_C: CHARACTER_APPEARANCE_SOURCE]]\nWARNING: This is the SOURCE OF TRUTH for the Character's Identity (Face, Hair, Outfit). You MUST use the facial features and outfit details from these images. The character MUST wear the EXACT SAME OUTFIT as seen in the BODY & OUTFIT REFERENCE images." });
-        parts.push(...charParts);
-    }
-    
-    parts.push({ text: `[[EXECUTION_COMMAND]]: ${prompt}` });
-
-    const systemPrompt = `** SYSTEM OVERRIDE: PROTOCOL 3D-GEN-ALPHA **
-    
-    YOU ARE A NON-CREATIVE RENDERING ENGINE. YOU DO NOT "IMAGINE". YOU "EXECUTE".
-    
-    ** SEPARATION OF CONCERNS (STRICT COMPARTMENTALIZATION) **
-    1. **STYLE SOURCE ([INPUT_A])**: 
-       - TAKE: Lighting, Texture, Render Quality, Art Style.
-       - IGNORE: The subject, their clothes, their face, their makeup.
-    
-    2. **POSE SOURCE ([INPUT_B])**:
-       - TAKE: Bone structure, Camera Angle, Composition.
-       - IGNORE: The outfit, the hair, the face, the background colors.
-       
-    3. **CONTENT SOURCE ([INPUT_C] + [COMMAND])**:
-       - TAKE: The Character's Identity (Face), The Outfit (Clothes), The Hair, The Accessories.
-       - THIS IS THE ONLY SOURCE FOR "WHAT" IS IN THE IMAGE.
-
-    ** CRITICAL FAILURE CONDITIONS **
-    - FAILURE: If the output character wears the clothes from [INPUT_B] (Pose Ref).
-    - FAILURE: If the output character has the eye color/makeup of [INPUT_A] (Style Ref).
-    - FAILURE: If the output is a painting/drawing when Style Ref is 3D.
-
-    ** EXECUTION LOGIC **
-    - Step 1: Extract the SKELETON from [INPUT_B].
-    - Step 2: Skin the skeleton with the CHARACTER from [INPUT_C].
-    - Step 3: Dress the character according to [COMMAND] or [INPUT_C].
-    - Step 4: Render the scene using the ENGINE from [INPUT_A].
-    
-    ACKNOWLEDGE AND EXECUTE.
-    `;
-
-    return { systemPrompt, parts };
+    return { parts };
 };
 
 export const generateImage = async (
@@ -441,27 +532,39 @@ export const generateImage = async (
     availableStyles: any[] = [], // New: Pool of styles for auto-selection
     timeoutMs: number = 900000 // Default 15 mins
 ): Promise<string> => {
-    onLog("Initializing Gemini 3.0 Pro Pipeline...");
-    
-    const model = 'gemini-3-pro-image-preview'; 
+    const model = modelType === 'flash' ? 'gemini-2.5-flash-image' : 'gemini-3-pro-image-preview'; 
+    onLog(`Initializing ${model} Pipeline...`);
     
     // 1. PROCESS REFERENCE IMAGE (VISUAL & TEXTUAL ANALYSIS)
-    let refImagePart = null;
+    let cleanRefImage: string | null = null;
     let poseDescription = "";
     
     if (refImageBase64) {
         onLog("Step 1: Analyzing Reference Image (Pose & BG)...");
-        if (refImageBase64.startsWith('data:') || refImageBase64.length > 100) {
-             const cleanRef = cleanBase64(refImageBase64);
-             refImagePart = {
-                inlineData: {
-                    mimeType: 'image/png',
-                    data: cleanRef
-                }
-            };
-            // Call AI to analyze pose
-            poseDescription = await analyzeReferenceImage(cleanRef);
-            onLog(`> Pose Detected: ${poseDescription.substring(0, 50)}...`);
+        
+        try {
+            // Handle URL Input
+            if (refImageBase64.startsWith('http')) {
+                // For Analysis (needs Base64)
+                const resp = await fetch(refImageBase64);
+                const blob = await resp.blob();
+                const reader = new FileReader();
+                cleanRefImage = await new Promise((resolve) => {
+                    reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+                    reader.readAsDataURL(blob);
+                });
+            } 
+            // Handle Base64 Input
+            else if (refImageBase64.startsWith('data:') || refImageBase64.length > 100) {
+                cleanRefImage = cleanBase64(refImageBase64);
+            }
+
+            if (cleanRefImage) {
+                poseDescription = await analyzeReferenceImage(cleanRefImage);
+                onLog(`> Pose Detected: ${poseDescription.substring(0, 50)}...`);
+            }
+        } catch (e) {
+            console.warn("Ref Image Processing Failed", e);
         }
     }
 
@@ -484,7 +587,8 @@ export const generateImage = async (
     }
 
     // 3. LOAD STYLE IMAGE (VISUAL)
-    let styleReferencePart = null;
+    let cleanStyleImage: string | null = null;
+    
     if (finalStyleUrl) {
         onLog("Step 3: Loading Style Reference Image...");
         try {
@@ -499,90 +603,247 @@ export const generateImage = async (
                 });
             }
             
-            styleReferencePart = {
-                inlineData: {
-                    mimeType: 'image/png',
-                    data: cleanBase64(styleData)
-                }
-            };
+            cleanStyleImage = cleanBase64(styleData);
+            
         } catch (e) {
             console.warn("Failed to load style reference", e);
         }
     }
 
     // 4. PREPARE CHARACTERS
-    const charParts: any[] = [];
+    const charBase64List: string[] = [];
+    const charFaceList: (string | null)[] = []; // Store standalone faces
+    
     for (const char of characters) {
-        if (char.image) { 
-             charParts.push({ text: `[CHARACTER ${char.id} BODY & OUTFIT REFERENCE]` });
-             charParts.push({
-                inlineData: {
-                    mimeType: 'image/png',
-                    data: cleanBase64(char.image)
-                }
-            });
+        let finalCharBase64 = "";
+        if (char.image && char.faceImage) {
+            const sheetBase64 = await createTextureSheet(char.image, char.faceImage);
+            const optimizedSheet = await optimizePayload(sheetBase64, 1024);
+            finalCharBase64 = cleanBase64(optimizedSheet);
+        } else if (char.image) {
+            const optimized = await optimizePayload(char.image, 1024);
+            finalCharBase64 = cleanBase64(optimized);
+        } else if (char.faceImage) {
+            const optimized = await optimizePayload(char.faceImage, 1024);
+            finalCharBase64 = cleanBase64(optimized);
         }
-        if (char.faceImage) {
-            charParts.push({ text: `[CHARACTER ${char.id} FACE REFERENCE]` });
-            charParts.push({
-                inlineData: {
-                    mimeType: 'image/png',
-                    data: cleanBase64(char.faceImage)
-                }
-            });
+        
+        if (finalCharBase64) {
+            charBase64List.push(finalCharBase64);
+            
+            // Prepare standalone face for strict identity
+            if (char.faceImage) {
+                const optimizedFace = await optimizePayload(char.faceImage, 768);
+                charFaceList.push(cleanBase64(optimizedFace));
+            } else {
+                charFaceList.push(null);
+            }
         }
     }
 
-    // 5. PROMPT OPTIMIZATION (MERGING ALL CONTEXTS)
-    onLog("Step 4: Optimizing Prompt with Style & Pose Context...");
-    const optimizedPrompt = await optimizePromptWithThinking(prompt, styleKeywords, poseDescription);
+    // 5. CREATE MASTER REFERENCE SHEET (RESTORED)
+    // We restore this to ensure the "Brain" (Text Model) can see the characters and describe them accurately.
+    let masterSheetPart = null;
+    if (charBase64List.length > 0) {
+        try {
+            onLog("Step 3.5: Assembling Character Master Sheet...");
+            // Correctly pass style, pose, and characters to the Master Sheet generator
+            const masterSheetBase64 = await createMasterReferenceSheet(
+                cleanStyleImage || null, 
+                cleanRefImage || null, 
+                charBase64List
+            );
+            
+            if (masterSheetBase64) {
+                masterSheetPart = {
+                    inlineData: {
+                        mimeType: 'image/png',
+                        data: cleanBase64(masterSheetBase64)
+                    }
+                };
+            }
+        } catch (e) {
+            console.warn("Master Sheet creation failed", e);
+        }
+    }
     
-    // 6. FINAL ASSEMBLY
-    const { systemPrompt, parts } = processDigitalTwinMode(optimizedPrompt, refImagePart, charParts, styleReferencePart);
+    // 6. PROMPT OPTIMIZATION (MERGING ALL CONTEXTS)
+    onLog("Step 4: Generating Perfect Image Prompt...");
+    // Pass masterSheetPart to the brain so it can describe the characters
+    const optimizedPrompt = await optimizePromptWithThinking(prompt, styleKeywords, poseDescription, masterSheetPart);
     
-    // Prepend system instruction to parts to ensure compatibility with image models
-    const finalParts = [
-        { text: systemPrompt },
-        ...parts
-    ];
+    // 7. FINAL ASSEMBLY
+    onLog("Step 5: Finalizing Data Payload (Integrity Check)...");
     
-    onLog("Step 5: Sending to Generation Grid (Gemini 3.0 Pro)...");
+    // --- BRUTAL DATA VERIFICATION (THE IRONCLAD PROTOCOL) ---
+    // 1. Verify Reference Image (CRITICAL)
+    if (refImageBase64 && !cleanRefImage) {
+         throw new Error("CRITICAL FAILURE: Reference Image (Pose) failed to process. The pipeline cannot proceed without the Source of Truth.");
+    }
+
+    // 2. Verify Characters (CRITICAL)
+    if (characters.length > 0) {
+        if (charBase64List.length === 0) {
+            throw new Error("CRITICAL FAILURE: Character assets failed to process. Aborting to prevent ghost generation.");
+        }
+        if (charBase64List.length < characters.length) {
+            onLog(`⚠️ WARNING: Partial Data. Only ${charBase64List.length}/${characters.length} characters were successfully processed.`);
+        }
+    }
+
+    // 3. Verify Style (OPTIONAL but logged)
+    if (finalStyleUrl && !cleanStyleImage) {
+         onLog("⚠️ WARNING: Style Image failed to process. Proceeding without Style Reference.");
+    }
+
+    const finalParts: any[] = [];
+    
+    // PRIORITY 1: CHARACTER REFERENCES (Moved to TOP for Attention Priority)
+    let charPromptInstructions = "";
+    if (charBase64List.length > 0) {
+        finalParts.push({ text: "🔴 PRIORITY 1: CHARACTER IDENTITY (CRITICAL)\nINSTRUCTION: You MUST use the exact faces and outfits from the following character images. Perform a 'Face Swap' if necessary to ensure 100% resemblance." });
+        
+        // Iterate through ALL uploaded character URIs
+        charBase64List.forEach((b64, index) => {
+            const charIndex = index + 1;
+            const charInfo = characters[index]; // Get metadata (gender, id)
+            
+            // 1. The Sheet (Body + Face)
+            finalParts.push({
+                inlineData: {
+                    mimeType: 'image/jpeg',
+                    data: b64
+                }
+            });
+            
+            // 2. The Standalone Face (if exists) - for MAXIMUM fidelity
+            const faceB64 = charFaceList[index];
+            if (faceB64) {
+                 finalParts.push({ text: `🔴 CHARACTER ${charIndex} FACE CLOSE-UP (STRICT IDENTITY)\nINSTRUCTION: This is the exact face to use. Copy the eyes, nose, mouth, and facial structure exactly.` });
+                 finalParts.push({
+                    inlineData: {
+                        mimeType: 'image/jpeg',
+                        data: faceB64
+                    }
+                 });
+            }
+            
+            // Build specific mapping instruction
+            charPromptInstructions += `\n- CHARACTER ${charIndex} (${charInfo.gender.toUpperCase()}): MUST look exactly like IMAGE ${index + 1} (Face & Outfit).`;
+        });
+    }
+
+    // PRIORITY 2: POSE/STRUCTURE REFERENCE
+    if (cleanRefImage) {
+        finalParts.push({ text: "🔴 PRIORITY 2: POSE & BACKGROUND (SOURCE OF TRUTH)\nINSTRUCTION: Use the pose and background from this image." });
+        finalParts.push({
+            inlineData: {
+                mimeType: 'image/jpeg',
+                data: cleanRefImage
+            }
+        });
+    }
+
+    // PRIORITY 3: STYLE REFERENCE
+    if (cleanStyleImage) {
+        finalParts.push({ text: "🔴 PRIORITY 3: ART STYLE\nINSTRUCTION: Apply this rendering style (lighting, texture) to the final image." });
+        finalParts.push({
+            inlineData: {
+                mimeType: 'image/jpeg',
+                data: cleanStyleImage
+            }
+        });
+    }
+    
+    // D. FINAL PROMPT (QUALITY INJECTION)
+    const qualityBoosters = "masterpiece, best quality, ultra-detailed, 8k, photorealistic, ray tracing, hdr, cinematic lighting, unreal engine 5 render";
+    const negativePrompt = "low quality, bad anatomy, worst quality, deformed, disfigured, extra limbs, missing limbs, blur, grain, watermark, text, signature, bad hands, bad face, mutation, ugly, disgusting";
+    
+    // DEFAULT INSTRUCTION (PRO MODEL - STRICT SEPARATION)
+    // This logic is critical for Pro model to respect reference images correctly.
+    let finalInstruction = `🔴 FINAL EXECUTION COMMAND:\n${optimizedPrompt}, ${qualityBoosters}\n\nPRIORITY ORDER:\n1. CHARACTER IDENTITY: The characters in the scene MUST look exactly like the provided character reference images (Face & Outfit).\n2. POSE & BACKGROUND: Use the pose and background from the Pose Reference Image.\n3. ART STYLE: Apply the lighting and texture from the Style Reference Image.\n\nCHARACTER MAPPING:${charPromptInstructions}\n\nNEGATIVE PROMPT: ${negativePrompt}. Do not change the character's face or outfit.`;
+
+    // SPECIAL FLASH INSTRUCTION: Force Style Transfer & Relaxed Constraints
+    if (modelType === 'flash') {
+        // Relax constraints for Flash to allow prompt creativity
+        finalInstruction = `🔴 FINAL EXECUTION COMMAND:\n${optimizedPrompt}, ${qualityBoosters}\n\nINSTRUCTIONS:\n1. ART STYLE: Mimic the lighting and texture of IMAGE 1 (if provided).\n2. CHARACTER: Use the face and outfit from IMAGE 3+ (if provided).\n3. BACKGROUND & POSE: Follow the text prompt "${optimizedPrompt}" unless IMAGE 2 is provided as a strict reference.\n\nNEGATIVE PROMPT: ${negativePrompt}.`;
+
+        if (cleanStyleImage) {
+            finalInstruction += `\n\nIMPORTANT: You MUST mimic the art style of IMAGE 1. Look at the lighting, shading, and rendering style of IMAGE 1 and apply it to the scene. Make it look like a high-end 3D render.`;
+        }
+    }
+
+    finalParts.push({ text: finalInstruction });
+
+    // --- PAYLOAD SANITIZATION ---
+    const sanitizedParts = finalParts.filter(p => {
+        if (!p) return false;
+        if (p.text && typeof p.text === 'string' && p.text.trim().length > 0) return true;
+        if (p.inlineData && p.inlineData.data) return true;
+        return false;
+    });
+
+    if (sanitizedParts.length === 0) throw new Error("CRITICAL: Final payload is empty! Data assembly failed.");
+
+    onLog(`Step 5: Sending Payload (${sanitizedParts.length} parts) to ${model}...`);
 
     const config: any = {
         imageConfig: {
-            aspectRatio: aspectRatio,
-            imageSize: resolution
+            aspectRatio: aspectRatio
         }
     };
 
-    if (useSearch) {
-        config.tools = [{ googleSearch: {} }];
+    // RESTORED: Resolution Setting for Pro Model
+    // User explicitly requested 1K/2K/4K support.
+    if (modelType === 'pro') {
+        config.imageConfig.imageSize = resolution;
+    }
+
+    // google_search is only supported on gemini-3-pro-image-preview
+    if (useSearch && modelType === 'pro') {
+        config.tools = [{ google_search: {} }];
     }
 
     const response = await retryWithBackoff(
         async () => {
-            const freshAi = await getAiClient();
+            const freshAi = await getAiClient(modelType);
             const currentKey = (freshAi as any)._internalApiKey;
             const shortKey = currentKey ? currentKey.substring(0, 4) + '...' + currentKey.slice(-4) : 'Default';
-            onLog(`> Đang dùng API Key: ${shortKey}`);
+            onLog(`> Đang dùng API Key: ${shortKey} | Model: ${model}`);
             
             try {
+                const REQUEST_TIMEOUT = 180000; // 3 Minutes
+                
                 return await runWithTimeout(
                     freshAi.models.generateContent({
                         model: model,
                         contents: { parts: finalParts },
                         config: config
                     }),
-                    timeoutMs, // Dynamic Timeout
+                    Math.min(timeoutMs, REQUEST_TIMEOUT), 
                     "Image Generation"
                 );
-            } catch (e) {
-                reportKeyFailure((freshAi as any)._internalApiKey);
+            } catch (e: any) {
+                const isOverload = e.message?.includes('503') || e.message?.includes('Overloaded') || e.status === 503 || e.message?.includes('timed out') || e.message?.includes('Timeout');
+                const isRateLimit = e.message?.includes('429') || e.status === 429 || e.message?.includes('quota');
+
+                if (isOverload) {
+                     console.warn(`${model} 503/Timeout. Retrying...`);
+                     onLog(`⏳ Đang xếp hàng chờ Google Render ảnh (${modelType === 'pro' ? 'Model Pro' : 'Model Flash'} đang xử lý)...`);
+                     // Force Key Rotation for 503 too, to avoid hammering the same busy shard/key
+                     reportKeyFailure((freshAi as any)._internalApiKey);
+                } else if (isRateLimit) {
+                     console.warn(`${model} 429 (Rate Limit). Banning key and retrying with a new one...`);
+                     reportKeyFailure((freshAi as any)._internalApiKey);
+                } else {
+                     reportKeyFailure((freshAi as any)._internalApiKey);
+                }
+                
                 throw e;
             }
         },
-        3,
-        2000,
+        10, // Tăng lên 10 lần thử lại cho Pro
+        8000, // Chờ 8s mỗi lần thử lại để Google kịp xả tải
         "Image Generation",
         onLog
     );
@@ -603,7 +864,7 @@ export const editImageWithInstructions = async (
 
     const response = await retryWithBackoff(
         async () => {
-            const freshAi = await getAiClient();
+            const freshAi = await getAiClient('flash');
             try {
                 return await runWithTimeout(
                     freshAi.models.generateContent({

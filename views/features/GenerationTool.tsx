@@ -2,8 +2,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Feature, Language, GeneratedImage } from '../../types';
 import { Icons } from '../../components/Icons';
-import { generateImage } from '../../services/geminiService';
-import { saveImageToStorage } from '../../services/storageService';
+import { generateImage, testApiKey } from '../../services/geminiService';
+import { saveImageToStorage, uploadFileToR2 } from '../../services/storageService';
 import { createSolidFence, optimizePayload, urlToBase64 } from '../../utils/imageProcessor';
 import { getUserProfile, updateUserBalance, getStylePresets } from '../../services/economyService';
 import { useNotification } from '../../components/NotificationSystem';
@@ -75,6 +75,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
   // Default Resolution 1K
   const [aspectRatio, setAspectRatio] = useState('3:4'); 
   const [resolution, setResolution] = useState<Resolution>('1K'); 
+  const [aiModel, setAiModel] = useState<'flash' | 'pro'>('flash');
   
   // Features always ON
   const useSearch = true; 
@@ -344,10 +345,14 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
   const calculateCost = () => {
       let cost = 0;
       
-      // Resolution Based Pricing (High Quality 3.0 Pro)
-      if (resolution === '1K') cost = 5;
-      if (resolution === '2K') cost = 10;
-      if (resolution === '4K') cost = 15;
+      if (aiModel === 'flash') {
+          cost = 1; // Flash is always 1 Vcoin
+      } else {
+          // Resolution Based Pricing (High Quality 3.0 Pro)
+          if (resolution === '1K') cost = 5;
+          if (resolution === '2K') cost = 10;
+          if (resolution === '4K') cost = 15;
+      }
 
       // Add-ons (Search & CloudRef are now FREE/INCLUDED)
       // if (useSearch) cost += 0; 
@@ -390,35 +395,93 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
     await new Promise(r => setTimeout(r, 100));
 
     try {
+        // --- NEW: API KEY PRE-FLIGHT TEST (120s Timeout / 5s Retry) ---
+        let isKeyValid = false;
+        const startTime = Date.now();
+        const TIMEOUT_LIMIT = 300000; // Tăng lên 5 phút (300s) để có đủ thời gian test và xoay vòng Key khi Server quá tải
+        const RETRY_INTERVAL = 5000; // 5s
+        let attempt = 0;
+
+        while (Date.now() - startTime < TIMEOUT_LIMIT) {
+            attempt++;
+            addLog(`Xác thực tài khoản VIP & Khởi tạo luồng Render - Lần ${attempt}...`);
+            
+            const stepStart = Date.now();
+            isKeyValid = await testApiKey();
+            
+            if (isKeyValid) break;
+            
+            const elapsed = Date.now() - stepStart;
+            const waitTime = Math.max(0, RETRY_INTERVAL - elapsed);
+            
+            if (Date.now() - startTime + waitTime < TIMEOUT_LIMIT) {
+                if (waitTime > 1000) {
+                     addLog(`Đang kết nối đến máy chủ đồ họa Google...`);
+                     await new Promise(r => setTimeout(r, waitTime));
+                } else {
+                     addLog(`Đang kết nối đến máy chủ đồ họa Google...`);
+                }
+            }
+        }
+
+        if (!isKeyValid) {
+            throw new Error(`Máy chủ Google hiện đang quá tải (Timeout ${TIMEOUT_LIMIT/1000}s). Vui lòng ấn Tạo lại ảnh.`);
+        }
+        addLog("Xác thực thành công. Bắt đầu quá trình tạo ảnh...");
+
       // 3. Deduct Balance
       await updateUserBalance(-cost, `Gen: ${feature.name['en']}`, 'usage');
       
       let structureRefData: string | undefined = undefined;
       let sourceForStructure = refImage || feature.preview_image;
       
-      // Convert HTTP URL to Base64 if needed
-      if (sourceForStructure.startsWith('http')) {
-          addLog("Đang xử lý ảnh mẫu...");
-          const b64 = await urlToBase64(sourceForStructure);
-          if (b64) sourceForStructure = b64;
-      }
+      // --- NEW: UPLOAD TO R2 CLOUD (INPUTS - LOGGING ONLY) ---
+      // We upload to R2 for persistent storage/logging, but we pass the ORIGINAL BASE64 to generateImage
+      // to avoid CORS issues when the browser tries to fetch the R2 URL to send to Google.
       
-      // 4. STRUCTURE PROCESSING (Heavy Operation)
-      if (sourceForStructure) {
-          addLog("Đang trích xuất cấu trúc (Wireframe)...");
-          const optimizedStructure = await optimizePayload(sourceForStructure);
-          structureRefData = await createSolidFence(optimizedStructure, aspectRatio, true);
+      // Upload Reference Image
+      if (sourceForStructure && sourceForStructure.startsWith('data:')) {
+          addLog("Đang tải ảnh mẫu lên R2 Cloud (Backup)...");
+          uploadFileToR2(sourceForStructure, 'inputs').then(url => {
+              console.log("R2 Ref Backup URL:", url);
+          }).catch(e => console.warn("R2 Ref Backup Failed", e));
+          
+          // CRITICAL FIX: DO NOT OVERWRITE sourceForStructure with URL.
+          // Keep it as Base64 so generateImage can process it directly without CORS errors.
       }
-      
+
+      // Upload Character Images
       const characterDataList = [];
       for (const char of characters) {
+          let bodyData = char.bodyImage;
+          let faceData = char.faceImage;
+
+          if (bodyData && bodyData.startsWith('data:')) {
+              addLog(`Đang tải ảnh Body (NV ${char.id}) lên Cloud (Backup)...`);
+              uploadFileToR2(bodyData, 'inputs').catch(e => console.warn("R2 Body Backup Failed", e));
+          }
+
+          if (faceData && faceData.startsWith('data:')) {
+              addLog(`Đang tải ảnh Face (NV ${char.id}) lên Cloud (Backup)...`);
+              uploadFileToR2(faceData, 'inputs').catch(e => console.warn("R2 Face Backup Failed", e));
+          }
+
           characterDataList.push({
               id: char.id,
               gender: char.gender,
-              image: char.bodyImage, 
-              faceImage: char.isFaceLocked ? char.faceImage : null, 
+              image: bodyData, // Pass Base64
+              faceImage: char.isFaceLocked ? faceData : null, // Pass Base64
               shoesImage: null
           });
+      }
+      
+      // 4. STRUCTURE PROCESSING (Heavy Operation)
+      // Note: createSolidFence handles URLs internally via loadImageWithTimeout
+      if (refImage) {
+          addLog("Đang trích xuất cấu trúc (Wireframe)...");
+          // Only use the USER UPLOADED reference image.
+          // NEVER use feature.preview_image as a fallback, as it forces unwanted compositions (e.g. wooden tables).
+          structureRefData = refImage; 
       }
       
       let finalPrompt = (feature.defaultPrompt || "") + prompt;
@@ -440,7 +503,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
               structureRefData, 
               characterDataList, 
               resolution,
-              'pro', // ALWAYS PRO
+              aiModel, // Use selected AI Model
               useSearch,
               useCloudRef, 
               (msg) => addLog(msg),
@@ -698,7 +761,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                     </button>
                     <iframe 
                         className="w-full h-full"
-                        src={`https://www.youtube.com/embed/${TUTORIAL_VIDEO_ID}?autoplay=1`}
+                        src={`https://www.youtube.com/embed/${TUTORIAL_VIDEO_ID}?autoplay=1&origin=${window.location.origin}`}
                         title="Hướng dẫn sử dụng"
                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                         allowFullScreen
@@ -845,7 +908,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                 <Icons.Flame className="w-4 h-4 text-yellow-500 animate-pulse" />
             </div>
             <p className="text-[10px] md:text-xs text-yellow-200/80 font-medium leading-relaxed">
-                <strong className="text-yellow-500">Lưu ý quan trọng:</strong> Mô hình tạo ảnh AI từ Gemini 2.5 Flash đã lỗi thời. Để đảm bảo chất lượng ảnh đầu ra, ứng dụng sẽ chuyển toàn bộ sang sử dụng <span className="text-white font-bold">Gemini 3.0 Pro (Nano Banana Pro)</span> để tạo ảnh.
+                <strong className="text-yellow-500">Lưu ý:</strong> Mô hình <span className="text-audi-cyan font-bold">Flash</span> có tốc độ nhanh nhưng chất lượng ảnh thấp hơn, chi tiết nhân vật và độ khối 3D kém hơn. Hãy chọn <span className="text-audi-pink font-bold">Pro</span> để có những bức ảnh đẹp nhất, sắc nét và sống động.
             </p>
         </div>
 
@@ -1008,14 +1071,43 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                         </button>
                     </div>
 
+                    <div className="space-y-3">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Mô hình AI</label>
+                        <div className="grid grid-cols-2 gap-3">
+                            <button 
+                                onClick={() => setAiModel('flash')} 
+                                className={`relative group overflow-hidden rounded-xl border transition-all duration-300 h-12 flex items-center justify-center gap-2 ${
+                                    aiModel === 'flash' 
+                                    ? 'bg-gradient-to-br from-cyan-500 to-blue-600 text-white border-transparent shadow-lg shadow-cyan-500/25 scale-[1.02]' 
+                                    : 'bg-[#1a1a24] border-white/10 text-slate-400 hover:text-white hover:border-white/20 hover:bg-[#252532]'
+                                }`}
+                            >
+                                <Icons.Zap className={`w-4 h-4 ${aiModel === 'flash' ? 'text-white fill-current' : 'text-cyan-400'}`} />
+                                <span className="font-bold text-sm">Flash</span>
+                            </button>
+
+                            <button 
+                                onClick={() => setAiModel('pro')} 
+                                className={`relative group overflow-hidden rounded-xl border transition-all duration-300 h-12 flex items-center justify-center gap-2 ${
+                                    aiModel === 'pro' 
+                                    ? 'bg-gradient-to-br from-purple-500 to-pink-600 text-white border-transparent shadow-lg shadow-purple-500/25 scale-[1.02]' 
+                                    : 'bg-[#1a1a24] border-white/10 text-slate-400 hover:text-white hover:border-white/20 hover:bg-[#252532]'
+                                }`}
+                            >
+                                <Icons.Crown className={`w-4 h-4 ${aiModel === 'pro' ? 'text-white fill-current' : 'text-purple-400'}`} />
+                                <span className="font-bold text-sm">Pro</span>
+                            </button>
+                        </div>
+                    </div>
+
                     <div className="space-y-2">
                         <label className="text-[10px] font-bold text-slate-400 uppercase">Tỉ lệ khung hình</label>
-                        <div className="flex flex-wrap gap-2">
+                        <div className="grid grid-cols-5 gap-2">
                             {ratios.map(r => (
                                 <button 
                                     key={r.id} 
                                     onClick={() => setAspectRatio(r.id)} 
-                                    className={`flex-1 min-w-[50px] py-2 rounded-lg border text-[10px] font-bold transition-all ${aspectRatio === r.id ? 'bg-white text-black border-white' : 'border-white/10 text-slate-500 hover:bg-white/5'}`}
+                                    className={`py-2 rounded-lg border text-[10px] font-bold transition-all flex items-center justify-center ${aspectRatio === r.id ? 'bg-white text-black border-white shadow-md scale-105' : 'border-white/10 text-slate-500 hover:bg-white/5 hover:text-white'}`}
                                 >
                                     {r.label}
                                 </button>
@@ -1025,7 +1117,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
 
                     <div className="space-y-3 animate-fade-in">
                         <label className="text-[10px] font-bold text-slate-400 uppercase">Độ phân giải (3.0 Pro)</label>
-                        <div className="flex gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5">
+                        <div className={`flex gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5 ${aiModel === 'flash' ? 'opacity-50 pointer-events-none' : ''}`}>
                             {['1K', '2K', '4K'].map(r => (
                                 <button 
                                     key={r} 
@@ -1043,16 +1135,22 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                                 <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Giá hiện tại</span>
                                 <div className="flex items-end gap-1">
                                     <span className="text-xl font-black text-white font-game drop-shadow-md">
-                                        {resolution === '1K' ? '5' : resolution === '2K' ? '10' : '15'}
+                                        {calculateCost()}
                                     </span>
                                     <span className="text-[10px] font-bold text-audi-yellow mb-1">VCOIN</span>
                                 </div>
                             </div>
-                            <div className="flex justify-between text-[9px] text-slate-500 mt-2 font-mono border-t border-white/5 pt-2">
-                                <span className={resolution === '1K' ? 'text-white font-bold' : ''}>1K: 5VC</span>
-                                <span className={resolution === '2K' ? 'text-white font-bold' : ''}>2K: 10VC</span>
-                                <span className={resolution === '4K' ? 'text-white font-bold' : ''}>4K: 15VC</span>
-                            </div>
+                            {aiModel === 'pro' ? (
+                                <div className="flex justify-between text-[9px] text-slate-500 mt-2 font-mono border-t border-white/5 pt-2">
+                                    <span className={resolution === '1K' ? 'text-white font-bold' : ''}>1K: 5VC</span>
+                                    <span className={resolution === '2K' ? 'text-white font-bold' : ''}>2K: 10VC</span>
+                                    <span className={resolution === '4K' ? 'text-white font-bold' : ''}>4K: 15VC</span>
+                                </div>
+                            ) : (
+                                <div className="flex justify-between text-[9px] text-slate-500 mt-2 font-mono border-t border-white/5 pt-2">
+                                    <span className="text-white font-bold">Flash: 1VC (Mọi tỷ lệ)</span>
+                                </div>
+                            )}
                         </div>
                     </div>
 

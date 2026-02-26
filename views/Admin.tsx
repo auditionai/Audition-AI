@@ -167,6 +167,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   
   // API Key States
   const [apiKey, setApiKey] = useState('');
+  const [apiKeyTier, setApiKeyTier] = useState<'flash' | 'pro'>('flash');
   const [showKey, setShowKey] = useState(false);
   const [keyStatus, setKeyStatus] = useState<'valid' | 'invalid' | 'unknown' | 'checking'>('unknown');
   const [dbKeys, setDbKeys] = useState<any[]>([]); 
@@ -291,10 +292,19 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       if (!apiKey.trim()) return;
       
       setKeyStatus('checking');
-      const isValid = await checkConnection(apiKey);
+      const check = await checkConnection(apiKey);
       
-      if (isValid) {
-          const result = await saveSystemApiKey(apiKey);
+      // Allow saving if valid OR if user confirms to bypass
+      let shouldSave = check.success;
+      if (!check.success) {
+          setKeyStatus('invalid');
+          if (window.confirm(`API Key này có vẻ không hoạt động:\n"${check.message}"\n\nBạn có chắc chắn muốn lưu nó vào Database không?`)) {
+              shouldSave = true;
+          }
+      }
+
+      if (shouldSave) {
+          const result = await saveSystemApiKey(apiKey, apiKeyTier);
           if (result.success) {
               setKeyStatus('valid');
               showToast('Đã lưu API Key vào Database thành công!');
@@ -306,20 +316,19 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               showToast(`Lỗi Database: ${result.error}`, 'error');
           }
       } else {
-          setKeyStatus('invalid');
-          showToast('API Key không hoạt động. Vui lòng kiểm tra lại.', 'error');
+          showToast(`Lỗi: ${check.message}`, 'error');
       }
   };
 
   const handleTestKey = async (key: string) => {
       showToast('Đang kiểm tra key...', 'info');
-      const isValid = await checkConnection(key);
-      if (isValid) {
+      const check = await checkConnection(key);
+      if (check.success) {
           showToast('Kết nối thành công! Key hoạt động tốt.', 'success');
       } else {
-          showToast('Key không hoạt động hoặc hết hạn ngạch.', 'error');
+          showToast(`Kết nối thất bại: ${check.message}`, 'error');
       }
-  }
+  };
 
   const handleDeleteApiKey = async (id: string) => {
       showConfirm('Xóa API Key này khỏi database?', async () => {
@@ -830,7 +839,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                           </div>
                                       </td>
                                       <td className="px-6 py-4 text-audi-pink font-bold">+{tx.coins} Vcoin</td>
-                                      <td className="px-6 py-4 text-right font-bold text-white">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(tx.amount)}</td>
+                                      <td className="px-6 py-4 text-right font-bold text-white">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(tx.amount || tx.price || 0)}</td>
                                       <td className="px-6 py-4">
                                           <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${
                                               tx.status === 'paid' ? 'bg-green-500/20 text-green-500' : 
@@ -883,7 +892,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                   <div className="grid grid-cols-2 gap-4 mb-3 bg-white/5 p-3 rounded-lg">
                                       <div>
                                           <div className="text-[10px] text-slate-500 uppercase font-bold">Số tiền</div>
-                                          <div className="text-white font-bold">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(tx.amount)}</div>
+                                          <div className="text-white font-bold">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(tx.amount || tx.price || 0)}</div>
                                       </div>
                                       <div>
                                           <div className="text-[10px] text-slate-500 uppercase font-bold">Gói nạp</div>
@@ -1140,6 +1149,14 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                   </div>
                               </div>
                               <div className="flex gap-2 relative">
+                                  <select 
+                                      value={apiKeyTier}
+                                      onChange={(e) => setApiKeyTier(e.target.value as 'flash' | 'pro')}
+                                      className="bg-black/40 border border-white/10 rounded-lg p-3 text-white font-bold text-sm"
+                                  >
+                                      <option value="flash">Flash Tier</option>
+                                      <option value="pro">Pro Tier</option>
+                                  </select>
                                   <input 
                                       type={showKey ? "text" : "password"}
                                       value={apiKey}
@@ -1179,6 +1196,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           <table className="w-full text-left text-sm text-slate-400">
                               <thead className="bg-black/30 text-xs font-bold text-slate-300 uppercase">
                                   <tr>
+                                      <th className="px-4 py-3 w-24">Loại</th>
                                       <th className="px-4 py-3">Tên / ID</th>
                                       <th className="px-4 py-3">Key Value</th>
                                       <th className="px-4 py-3">Trạng thái</th>
@@ -1188,11 +1206,26 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                               </thead>
                               <tbody className="divide-y divide-white/5">
                                   {dbKeys.length === 0 ? (
-                                      <tr><td colSpan={5} className="text-center py-6 text-slate-500">Chưa tìm thấy key nào trong database.</td></tr>
-                                  ) : dbKeys.map((k) => (
+                                      <tr><td colSpan={6} className="text-center py-6 text-slate-500">Chưa tìm thấy key nào trong database.</td></tr>
+                                  ) : dbKeys.map((k) => {
+                                      const isPro = k.name?.includes('[PRO]');
+                                      const displayName = k.name?.replace('[PRO]', '').replace('[FLASH]', '').trim() || 'Unnamed Key';
+                                      
+                                      return (
                                       <tr key={k.id} className="hover:bg-white/5">
+                                          <td className="px-4 py-3">
+                                              {isPro ? (
+                                                  <span className="inline-flex items-center justify-center px-2 py-1 rounded bg-audi-pink/20 text-audi-pink border border-audi-pink/30 text-[10px] font-bold w-16">
+                                                      PRO
+                                                  </span>
+                                              ) : (
+                                                  <span className="inline-flex items-center justify-center px-2 py-1 rounded bg-audi-cyan/20 text-audi-cyan border border-audi-cyan/30 text-[10px] font-bold w-16">
+                                                      FLASH
+                                                  </span>
+                                              )}
+                                          </td>
                                           <td className="px-4 py-3 font-bold text-white">
-                                              {k.name || 'Unnamed Key'}
+                                              <div className="text-sm">{displayName}</div>
                                               <div className="text-[10px] text-slate-600 font-mono">{k.id.substring(0,8)}...</div>
                                           </td>
                                           <td className="px-4 py-3 font-mono text-xs">
@@ -1209,18 +1242,32 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                               <button onClick={() => handleDeleteApiKey(k.id)} className="p-1.5 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white rounded transition-colors"><Icons.Trash className="w-4 h-4" /></button>
                                           </td>
                                       </tr>
-                                  ))}
+                                      );
+                                  })}
                               </tbody>
                           </table>
                       </div>
                       <div className="md:hidden space-y-4">
                           {dbKeys.length === 0 ? (
                               <div className="text-center py-4 text-slate-500 text-sm">Chưa có key.</div>
-                          ) : dbKeys.map((k) => (
-                              <div key={k.id} className="bg-white/5 rounded-xl p-4 border border-white/5">
-                                  <div className="flex justify-between items-start mb-2">
+                          ) : dbKeys.map((k) => {
+                              const isPro = k.name?.includes('[PRO]');
+                              const displayName = k.name?.replace('[PRO]', '').replace('[FLASH]', '').trim() || 'Unnamed Key';
+                              
+                              return (
+                              <div key={k.id} className="bg-white/5 rounded-xl p-4 border border-white/5 relative overflow-hidden">
+                                  {/* Badge at top right */}
+                                  <div className="absolute top-0 right-0">
+                                      {isPro ? (
+                                          <div className="bg-audi-pink text-white text-[9px] font-bold px-2 py-1 rounded-bl-lg">PRO TIER</div>
+                                      ) : (
+                                          <div className="bg-audi-cyan text-black text-[9px] font-bold px-2 py-1 rounded-bl-lg">FLASH TIER</div>
+                                      )}
+                                  </div>
+
+                                  <div className="flex justify-between items-start mb-2 pr-12">
                                       <div>
-                                          <div className="font-bold text-white text-sm">{k.name || 'Unnamed'}</div>
+                                          <div className="font-bold text-white text-sm">{displayName}</div>
                                           <div className="font-mono text-[10px] text-slate-500">{k.id}</div>
                                       </div>
                                       <span className={`text-[10px] font-bold px-2 py-1 rounded border ${k.status === 'active' ? 'bg-green-500/20 text-green-500 border-green-500/50' : 'bg-slate-500/20 text-slate-500 border-slate-500/50'}`}>
@@ -1238,7 +1285,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                       </div>
                                   </div>
                               </div>
-                          ))}
+                              );
+                          })}
                       </div>
                   </div>
               </div>

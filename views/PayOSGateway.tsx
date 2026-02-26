@@ -82,7 +82,7 @@ export const PayOSGateway: React.FC<PayOSGatewayProps> = ({ transaction, onSucce
                             <div className="w-full h-px bg-slate-200 my-2"></div>
                             <div className="flex justify-between items-center">
                                 <span className="text-sm text-slate-500">Số tiền</span>
-                                <span className="font-bold text-2xl text-[#233dff]">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(transaction.amount)}</span>
+                                <span className="font-bold text-2xl text-[#233dff]">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(transaction.amount || 0)}</span>
                             </div>
                         </div>
 

@@ -66,6 +66,7 @@ export interface GeneratedImage {
   engine: string;
   isShared?: boolean; // New: Status for Showcase
   userName?: string;  // New: Author name
+  userId?: string; // New: User ID for storage organization
 }
 
 // --- NEW ECONOMY & USER TYPES ---
@@ -122,12 +123,14 @@ export interface Transaction {
   userAvatar?: string;
   // -------------------------------------
   packageId: string;
-  amount: number;
+  amount?: number;
+  price?: number;
   coins: number;
   status: TransactionStatus;
   createdAt: string;
   paymentMethod: 'payos' | 'manual';
-  code: string; // Order Code
+  code?: string; // Order Code
+  order_code?: string; // New field
   checkoutUrl?: string; // URL thanh toán PayOS
 }
 

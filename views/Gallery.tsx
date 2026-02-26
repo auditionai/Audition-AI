@@ -2,7 +2,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { GeneratedImage, Language } from '../types';
-import { getAllImagesFromStorage, deleteImageFromStorage, shareImageToShowcase } from '../services/storageService';
+import { getAllImagesFromStorage, deleteImageFromStorage, shareImageToShowcase, cleanupExpiredImages } from '../services/storageService';
 import { Icons } from '../components/Icons';
 import { useNotification } from '../components/NotificationSystem';
 
@@ -18,18 +18,30 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
   const [sharing, setSharing] = useState(false);
 
   useEffect(() => {
-    loadImages();
+    const init = async () => {
+        setLoading(true);
+        try {
+            // Auto-cleanup expired images on visit
+            const deletedCount = await cleanupExpiredImages();
+            if (deletedCount > 0) {
+                console.log(`[Gallery] Auto-cleaned ${deletedCount} expired images.`);
+            }
+            await loadImages();
+        } catch (e) {
+            console.error("Gallery Init Error", e);
+        } finally {
+            setLoading(false);
+        }
+    };
+    init();
   }, []);
 
   const loadImages = async () => {
-    setLoading(true);
     try {
       const storedImages = await getAllImagesFromStorage();
       setImages(storedImages);
     } catch (error) {
       console.error("Failed to load gallery", error);
-    } finally {
-      setLoading(false);
     }
   };
 

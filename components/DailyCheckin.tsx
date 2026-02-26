@@ -47,7 +47,7 @@ BEGIN
     new.email,
     COALESCE(new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'name', split_part(new.email, '@', 1)),
     COALESCE(new.raw_user_meta_data->>'avatar_url', ''),
-    25, -- 25 Vcoin Bonus
+    0, -- 0 Vcoin Default
     false,
     now(),
     now()
@@ -68,6 +68,47 @@ ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Public read users" ON public.users FOR SELECT USING (true);
 CREATE POLICY "Users can update own profile" ON public.users FOR UPDATE USING (auth.uid() = id);
 CREATE POLICY "Users can insert own profile" ON public.users FOR INSERT WITH CHECK (auth.uid() = id);
+
+-- 6. MISSING TABLES FIX (Transactions, Checkins, Milestones)
+CREATE TABLE IF NOT EXISTS public.diamond_transactions_log (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id uuid REFERENCES public.users(id),
+    amount numeric NOT NULL,
+    reason text,
+    type text,
+    created_at timestamptz DEFAULT now()
+);
+ALTER TABLE public.diamond_transactions_log ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "User read own logs" ON public.diamond_transactions_log;
+CREATE POLICY "User read own logs" ON public.diamond_transactions_log FOR SELECT TO authenticated USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Admin read all logs" ON public.diamond_transactions_log;
+CREATE POLICY "Admin read all logs" ON public.diamond_transactions_log FOR ALL TO authenticated USING (true);
+
+CREATE TABLE IF NOT EXISTS public.daily_check_ins (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id uuid REFERENCES public.users(id),
+    check_in_date date NOT NULL,
+    created_at timestamptz DEFAULT now()
+);
+ALTER TABLE public.daily_check_ins ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "User read own checkins" ON public.daily_check_ins;
+CREATE POLICY "User read own checkins" ON public.daily_check_ins FOR SELECT TO authenticated USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "User insert own checkins" ON public.daily_check_ins;
+CREATE POLICY "User insert own checkins" ON public.daily_check_ins FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE TABLE IF NOT EXISTS public.milestone_claims (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id uuid REFERENCES public.users(id),
+    day_milestone numeric NOT NULL,
+    reward_amount numeric NOT NULL,
+    claim_month text,
+    created_at timestamptz DEFAULT now()
+);
+ALTER TABLE public.milestone_claims ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "User read own milestones" ON public.milestone_claims;
+CREATE POLICY "User read own milestones" ON public.milestone_claims FOR SELECT TO authenticated USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "User insert own milestones" ON public.milestone_claims;
+CREATE POLICY "User insert own milestones" ON public.milestone_claims FOR INSERT WITH CHECK (auth.uid() = user_id);
 `;
 
 export const DailyCheckin: React.FC<DailyCheckinProps> = ({ onClose, onSuccess, lang }) => {
@@ -113,14 +154,15 @@ export const DailyCheckin: React.FC<DailyCheckinProps> = ({ onClose, onSuccess, 
               }, 1500); 
           } else {
               setMessage(res.message || (lang === 'vi' ? 'Lỗi điểm danh' : 'Error checking in'));
-              // Detect FK error signal from service
-              if (res.message?.includes('FK') || res.message?.includes('foreign key')) {
+              // Show SQL fix for ANY database error to help user debug
+              if (res.message?.includes('FK') || res.message?.includes('foreign key') || res.message?.includes('relation') || res.message?.includes('does not exist')) {
                   setShowSqlFix(true);
               }
           }
-      } catch (e) {
+      } catch (e: any) {
           console.error(e);
           setMessage('System Error');
+          setShowSqlFix(true);
       } finally {
           setLoading(false);
       }
@@ -136,9 +178,13 @@ export const DailyCheckin: React.FC<DailyCheckinProps> = ({ onClose, onSuccess, 
               onSuccess(); // Refresh balance
           } else {
               setMessage(res.message);
+              if (res.message?.includes('relation') || res.message?.includes('does not exist')) {
+                  setShowSqlFix(true);
+              }
           }
       } catch (e) {
           console.error(e);
+          setShowSqlFix(true);
       } finally {
           setLoading(false);
       }
@@ -198,9 +244,14 @@ export const DailyCheckin: React.FC<DailyCheckinProps> = ({ onClose, onSuccess, 
             {/* Header */}
             <div className="flex justify-between items-center mb-6">
                  <h2 className="font-game text-xl font-bold text-white uppercase">{lang === 'vi' ? 'Điểm Danh Nhận Quà' : 'Daily Check-in'}</h2>
-                 <button onClick={onClose} className="bg-white/10 p-2 rounded-full hover:bg-white/20 transition-colors">
-                     <Icons.X className="w-5 h-5 text-white" />
-                 </button>
+                 <div className="flex gap-2">
+                     <button onClick={() => setShowSqlFix(!showSqlFix)} className="bg-white/10 p-2 rounded-full hover:bg-white/20 transition-colors" title="Fix Database">
+                         <Icons.Database className="w-5 h-5 text-audi-yellow" />
+                     </button>
+                     <button onClick={onClose} className="bg-white/10 p-2 rounded-full hover:bg-white/20 transition-colors">
+                         <Icons.X className="w-5 h-5 text-white" />
+                     </button>
+                 </div>
             </div>
 
             {/* Streak Banner */}

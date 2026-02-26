@@ -776,6 +776,8 @@ export const generateImage = async (
                 if (isOverload) {
                      console.warn(`${model} 503/Timeout. Retrying...`);
                      onLog(`⏳ Đang xếp hàng chờ Google Render ảnh (${modelType === 'pro' ? 'Model Pro' : 'Model Flash'} đang xử lý)...`);
+                     // Force Key Rotation for 503 too, to avoid hammering the same busy shard/key
+                     reportKeyFailure((freshAi as any)._internalApiKey);
                 } else if (isRateLimit) {
                      console.warn(`${model} 429 (Rate Limit). Banning key and retrying with a new one...`);
                      reportKeyFailure((freshAi as any)._internalApiKey);

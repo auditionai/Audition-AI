@@ -612,6 +612,7 @@ export const generateImage = async (
 
     // 4. PREPARE CHARACTERS
     const charBase64List: string[] = [];
+    const charFaceList: (string | null)[] = []; // Store standalone faces
     
     for (const char of characters) {
         let finalCharBase64 = "";
@@ -629,6 +630,14 @@ export const generateImage = async (
         
         if (finalCharBase64) {
             charBase64List.push(finalCharBase64);
+            
+            // Prepare standalone face for strict identity
+            if (char.faceImage) {
+                const optimizedFace = await optimizePayload(char.faceImage, 768);
+                charFaceList.push(cleanBase64(optimizedFace));
+            } else {
+                charFaceList.push(null);
+            }
         }
     }
 
@@ -692,19 +701,32 @@ export const generateImage = async (
     // PRIORITY 1: CHARACTER REFERENCES (Moved to TOP for Attention Priority)
     let charPromptInstructions = "";
     if (charBase64List.length > 0) {
-        finalParts.push({ text: "🔴 PRIORITY 1: CHARACTER IDENTITY (CRITICAL)\nINSTRUCTION: You MUST use the exact faces and outfits from the following character images. Do not invent new faces. Do not change their clothes." });
+        finalParts.push({ text: "🔴 PRIORITY 1: CHARACTER IDENTITY (CRITICAL)\nINSTRUCTION: You MUST use the exact faces and outfits from the following character images. Perform a 'Face Swap' if necessary to ensure 100% resemblance." });
         
         // Iterate through ALL uploaded character URIs
         charBase64List.forEach((b64, index) => {
             const charIndex = index + 1;
             const charInfo = characters[index]; // Get metadata (gender, id)
             
+            // 1. The Sheet (Body + Face)
             finalParts.push({
                 inlineData: {
                     mimeType: 'image/jpeg',
                     data: b64
                 }
             });
+            
+            // 2. The Standalone Face (if exists) - for MAXIMUM fidelity
+            const faceB64 = charFaceList[index];
+            if (faceB64) {
+                 finalParts.push({ text: `🔴 CHARACTER ${charIndex} FACE CLOSE-UP (STRICT IDENTITY)\nINSTRUCTION: This is the exact face to use. Copy the eyes, nose, mouth, and facial structure exactly.` });
+                 finalParts.push({
+                    inlineData: {
+                        mimeType: 'image/jpeg',
+                        data: faceB64
+                    }
+                 });
+            }
             
             // Build specific mapping instruction
             charPromptInstructions += `\n- CHARACTER ${charIndex} (${charInfo.gender.toUpperCase()}): MUST look exactly like IMAGE ${index + 1} (Face & Outfit).`;

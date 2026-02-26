@@ -420,6 +420,11 @@ const optimizePromptWithThinking = async (
         
         const parts: any[] = [];
         
+        if (masterSheetPart) {
+            parts.push(masterSheetPart);
+            parts.push({ text: "🔴 REFERENCE SHEET PROVIDED: The image above contains the characters for this scene. Analyze their appearance (Face, Hair, Outfit) and describe them in the final prompt." });
+        }
+
         parts.push({
             text: `ROLE: ELITE PROMPT ENGINEER (MIDJOURNEY V6 LEVEL).
 MISSION: Convert user inputs into a MASTERPIECE image generation prompt.
@@ -428,11 +433,13 @@ INPUTS:
 1. COMMAND: "${rawPrompt}"
 2. STYLE: "${styleContext}"
 3. POSE: "${poseContext}"
+${masterSheetPart ? '4. CHARACTERS: See Reference Sheet above.' : ''}
 
 RULES:
 - You are the "Brain" of the operation. The image generator needs explicit, high-fidelity instructions.
 - Combine all inputs into a single, rich, descriptive paragraph.
 - Focus on: Lighting (Volumetric, Cinematic), Texture (8k, Unreal Engine 5), Camera (Depth of Field, Bokeh), and Character Details.
+- IF CHARACTERS ARE PROVIDED: You MUST describe their visual features (hair color, outfit style, accessories) in the prompt so the image generator knows what to draw.
 - ENHANCE the prompt with "Quality Boosters": masterpiece, best quality, ultra-detailed, photorealistic, 8k, ray tracing, hdr.
 - Output ONLY the final prompt. No explanations.`
         });
@@ -625,14 +632,36 @@ export const generateImage = async (
         }
     }
 
-    // 5. CREATE MASTER REFERENCE SHEET (SKIPPED - OPTIMIZATION)
-    // We skip generating the Master Sheet to save time/bandwidth as it is not used in the final Pro generation
-    // to avoid confusing the model with a grid layout.
+    // 5. CREATE MASTER REFERENCE SHEET (RESTORED)
+    // We restore this to ensure the "Brain" (Text Model) can see the characters and describe them accurately.
+    let masterSheetPart = null;
+    if (charBase64List.length > 0) {
+        try {
+            onLog("Step 3.5: Assembling Character Master Sheet...");
+            // Correctly pass style, pose, and characters to the Master Sheet generator
+            const masterSheetBase64 = await createMasterReferenceSheet(
+                cleanStyleImage || null, 
+                cleanRefImage || null, 
+                charBase64List
+            );
+            
+            if (masterSheetBase64) {
+                masterSheetPart = {
+                    inlineData: {
+                        mimeType: 'image/png',
+                        data: cleanBase64(masterSheetBase64)
+                    }
+                };
+            }
+        } catch (e) {
+            console.warn("Master Sheet creation failed", e);
+        }
+    }
     
     // 6. PROMPT OPTIMIZATION (MERGING ALL CONTEXTS)
     onLog("Step 4: Generating Perfect Image Prompt...");
-    // REMOVED masterSheetPart from optimization to prevent 503 overload
-    const optimizedPrompt = await optimizePromptWithThinking(prompt, styleKeywords, poseDescription);
+    // Pass masterSheetPart to the brain so it can describe the characters
+    const optimizedPrompt = await optimizePromptWithThinking(prompt, styleKeywords, poseDescription, masterSheetPart);
     
     // 7. FINAL ASSEMBLY
     onLog("Step 5: Finalizing Data Payload (Integrity Check)...");

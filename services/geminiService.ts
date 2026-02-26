@@ -708,11 +708,11 @@ export const generateImage = async (
     const qualityBoosters = "masterpiece, best quality, ultra-detailed, 8k, photorealistic, ray tracing, hdr, cinematic lighting, unreal engine 5 render";
     const negativePrompt = "low quality, bad anatomy, worst quality, deformed, disfigured, extra limbs, missing limbs, blur, grain, watermark, text, signature, bad hands, bad face, mutation, ugly, disgusting";
     
-    // For Flash, we need to be even more explicit because the model is smaller.
-    // We inject the quality boosters directly into the command.
-    let finalInstruction = `🔴 FINAL EXECUTION COMMAND:\n${optimizedPrompt}, ${qualityBoosters}\n\nSTRICT SEPARATION OF CONCERNS:\n1. ART STYLE (Lighting, Texture, 3D Quality): MUST come from IMAGE 1.\n2. CONTENT (Background, Objects, Pose): MUST come from IMAGE 2.\n3. CHARACTERS (Face, Outfit): MUST come from IMAGE 3+.\n\nNEGATIVE PROMPT: ${negativePrompt}. Do not merge the background of Image 1 into the scene. Do not change the pose from Image 2.`;
+    // DEFAULT INSTRUCTION (PRO MODEL - STRICT SEPARATION)
+    // This logic is critical for Pro model to respect reference images correctly.
+    let finalInstruction = `🔴 FINAL EXECUTION COMMAND:\n${optimizedPrompt}, ${qualityBoosters}\n\nSTRICT SEPARATION OF CONCERNS:\n1. ART STYLE (Lighting, Texture, 3D Quality): MUST come from IMAGE 1.\n2. CONTENT (Background, Objects, Pose): MUST come from IMAGE 2.\n3. CHARACTERS (Face, Outfit): MUST come from IMAGE 3+.\n\nCHARACTER MAPPING:${charPromptInstructions}\n\nNEGATIVE PROMPT: ${negativePrompt}. Do not merge the background of Image 1 into the scene. Do not change the pose from Image 2.`;
 
-    // SPECIAL FLASH INSTRUCTION: Force Style Transfer
+    // SPECIAL FLASH INSTRUCTION: Force Style Transfer & Relaxed Constraints
     if (modelType === 'flash') {
         // Relax constraints for Flash to allow prompt creativity
         finalInstruction = `🔴 FINAL EXECUTION COMMAND:\n${optimizedPrompt}, ${qualityBoosters}\n\nINSTRUCTIONS:\n1. ART STYLE: Mimic the lighting and texture of IMAGE 1 (if provided).\n2. CHARACTER: Use the face and outfit from IMAGE 3+ (if provided).\n3. BACKGROUND & POSE: Follow the text prompt "${optimizedPrompt}" unless IMAGE 2 is provided as a strict reference.\n\nNEGATIVE PROMPT: ${negativePrompt}.`;

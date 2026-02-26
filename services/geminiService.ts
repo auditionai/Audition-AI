@@ -673,7 +673,7 @@ export const generateImage = async (
 
     // B. POSE/STRUCTURE REFERENCE
     if (cleanRefImage) {
-        finalParts.push({ text: "🔴 IMAGE 2: POSE & BACKGROUND REFERENCE (SOURCE OF TRUTH)\nINSTRUCTION: This image is the BLUEPRINT for the scene. \n1. BACKGROUND: You MUST use the background/environment from this image.\n2. POSE: You MUST match the character poses and camera angle exactly.\n3. COMPOSITION: The scene layout must be identical to this image." });
+        finalParts.push({ text: "🔴 IMAGE 2: POSE & BACKGROUND REFERENCE (SOURCE OF TRUTH)\nINSTRUCTION: This image is the BLUEPRINT for the scene. \n1. BACKGROUND: You MUST use the background/environment from this image (or create a similar one).\n2. POSE: You MUST match the character poses and camera angle exactly.\n3. COMPOSITION: The scene layout must be identical to this image." });
         finalParts.push({
             inlineData: {
                 mimeType: 'image/jpeg',

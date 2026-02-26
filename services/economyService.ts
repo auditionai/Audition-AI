@@ -70,15 +70,27 @@ export const updateUserBalance = async (amount: number, reason: string, type: st
     
     // 1. Log transaction (Silent Fail Safe)
     try {
+        // Attempt 1: Try 'note' (Legacy column)
         const { error } = await supabase.from('diamond_transactions_log').insert({
             user_id: user.id,
             amount,
-            reason: reason, // Changed from note to reason
+            note: reason, 
             type
         });
+        
         if (error) {
-            // If table doesn't exist (404) or other error, just log to console warning, don't crash
-            console.warn("[Economy] Failed to log transaction (non-critical):", error.message);
+            // Attempt 2: If 'note' column missing, try 'reason' (New column)
+            if (error.message?.includes('note') || error.message?.includes('does not exist')) {
+                 const { error: err2 } = await supabase.from('diamond_transactions_log').insert({
+                    user_id: user.id,
+                    amount,
+                    reason: reason, 
+                    type
+                });
+                if (err2) console.warn("[Economy] Failed to log (Retry):", err2.message);
+            } else {
+                console.warn("[Economy] Failed to log transaction:", error.message);
+            }
         }
     } catch (e) {
         console.warn("[Economy] Log table missing or inaccessible.");

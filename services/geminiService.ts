@@ -660,32 +660,10 @@ export const generateImage = async (
 
     const finalParts: any[] = [];
     
-    // A. STYLE REFERENCE
-    if (cleanStyleImage) {
-        finalParts.push({ text: "🔴 IMAGE 1: STYLE REFERENCE (ART STYLE ONLY)\nINSTRUCTION: Extract ONLY the 3D rendering quality, lighting, texture, and artistic vibe. \nNEGATIVE CONSTRAINT: Do NOT copy the background, the characters, or any objects from this image. IGNORE the content of this image completely." });
-        finalParts.push({
-            inlineData: {
-                mimeType: 'image/jpeg',
-                data: cleanStyleImage
-            }
-        });
-    }
-
-    // B. POSE/STRUCTURE REFERENCE
-    if (cleanRefImage) {
-        finalParts.push({ text: "🔴 IMAGE 2: POSE & BACKGROUND REFERENCE (SOURCE OF TRUTH)\nINSTRUCTION: This image is the BLUEPRINT for the scene. \n1. BACKGROUND: You MUST use the background/environment from this image (or create a similar one).\n2. POSE: You MUST match the character poses and camera angle exactly.\n3. COMPOSITION: The scene layout must be identical to this image." });
-        finalParts.push({
-            inlineData: {
-                mimeType: 'image/jpeg',
-                data: cleanRefImage
-            }
-        });
-    }
-
-    // C. CHARACTER REFERENCES
+    // PRIORITY 1: CHARACTER REFERENCES (Moved to TOP for Attention Priority)
     let charPromptInstructions = "";
     if (charBase64List.length > 0) {
-        finalParts.push({ text: "🔴 IMAGE 3+: CHARACTER REFERENCE(S)\nINSTRUCTION: These are the characters to be placed into the scene. Maintain their facial features and outfit details." });
+        finalParts.push({ text: "🔴 PRIORITY 1: CHARACTER IDENTITY (CRITICAL)\nINSTRUCTION: You MUST use the exact faces and outfits from the following character images. Do not invent new faces. Do not change their clothes." });
         
         // Iterate through ALL uploaded character URIs
         charBase64List.forEach((b64, index) => {
@@ -700,7 +678,29 @@ export const generateImage = async (
             });
             
             // Build specific mapping instruction
-            charPromptInstructions += `\n- CHARACTER ${charIndex} (${charInfo.gender.toUpperCase()}): Use Face & Outfit from IMAGE ${index + 3}.`;
+            charPromptInstructions += `\n- CHARACTER ${charIndex} (${charInfo.gender.toUpperCase()}): MUST look exactly like IMAGE ${index + 1} (Face & Outfit).`;
+        });
+    }
+
+    // PRIORITY 2: POSE/STRUCTURE REFERENCE
+    if (cleanRefImage) {
+        finalParts.push({ text: "🔴 PRIORITY 2: POSE & BACKGROUND (SOURCE OF TRUTH)\nINSTRUCTION: Use the pose and background from this image." });
+        finalParts.push({
+            inlineData: {
+                mimeType: 'image/jpeg',
+                data: cleanRefImage
+            }
+        });
+    }
+
+    // PRIORITY 3: STYLE REFERENCE
+    if (cleanStyleImage) {
+        finalParts.push({ text: "🔴 PRIORITY 3: ART STYLE\nINSTRUCTION: Apply this rendering style (lighting, texture) to the final image." });
+        finalParts.push({
+            inlineData: {
+                mimeType: 'image/jpeg',
+                data: cleanStyleImage
+            }
         });
     }
     
@@ -710,7 +710,7 @@ export const generateImage = async (
     
     // DEFAULT INSTRUCTION (PRO MODEL - STRICT SEPARATION)
     // This logic is critical for Pro model to respect reference images correctly.
-    let finalInstruction = `🔴 FINAL EXECUTION COMMAND:\n${optimizedPrompt}, ${qualityBoosters}\n\nSTRICT SEPARATION OF CONCERNS:\n1. ART STYLE (Lighting, Texture, 3D Quality): MUST come from IMAGE 1.\n2. CONTENT (Background, Objects, Pose): MUST come from IMAGE 2.\n3. CHARACTERS (Face, Outfit): MUST come from IMAGE 3+.\n\nCHARACTER MAPPING:${charPromptInstructions}\n\nNEGATIVE PROMPT: ${negativePrompt}. Do not merge the background of Image 1 into the scene. Do not change the pose from Image 2.`;
+    let finalInstruction = `🔴 FINAL EXECUTION COMMAND:\n${optimizedPrompt}, ${qualityBoosters}\n\nPRIORITY ORDER:\n1. CHARACTER IDENTITY: The characters in the scene MUST look exactly like the provided character reference images (Face & Outfit).\n2. POSE & BACKGROUND: Use the pose and background from the Pose Reference Image.\n3. ART STYLE: Apply the lighting and texture from the Style Reference Image.\n\nCHARACTER MAPPING:${charPromptInstructions}\n\nNEGATIVE PROMPT: ${negativePrompt}. Do not change the character's face or outfit.`;
 
     // SPECIAL FLASH INSTRUCTION: Force Style Transfer & Relaxed Constraints
     if (modelType === 'flash') {

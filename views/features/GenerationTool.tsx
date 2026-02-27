@@ -407,7 +407,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
             addLog(`Xác thực tài khoản VIP & Khởi tạo luồng Render - Lần ${attempt}...`);
             
             const stepStart = Date.now();
-            isKeyValid = await testApiKey();
+            // Pass the selected AI Model (flash/pro) to testApiKey so it tests the correct key/tier
+            isKeyValid = await testApiKey(aiModel);
             
             if (isKeyValid) break;
             

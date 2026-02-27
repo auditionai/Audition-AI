@@ -232,18 +232,21 @@ const extractImage = (response: any): string | null => {
 };
 
 // --- NEW: TEST API KEY ---
-export const testApiKey = async (): Promise<boolean> => {
+export const testApiKey = async (tier: 'flash' | 'pro' = 'flash'): Promise<boolean> => {
     let currentKey = "";
     try {
-        const freshAi = await getAiClient('pro');
+        // Use the correct client based on the selected tier
+        const freshAi = await getAiClient(tier);
         currentKey = (freshAi as any)._internalApiKey;
         
-        // THAY ĐỔI CÁCH TEST: Sử dụng model Text (3.1 Pro) để xác thực API Key.
-        // Model Text phản hồi cực nhanh (2-3s) và hiếm khi bị 503.
-        // Mục đích ở đây chỉ là để chứng minh API Key hợp lệ và có quyền truy cập.
+        // Use a lightweight model for testing based on tier
+        // For Pro: Use gemini-3.1-pro-preview (Text)
+        // For Flash: Use gemini-3-flash-preview (Text) - Faster & Cheaper
+        const testModel = tier === 'pro' ? 'gemini-3.1-pro-preview' : 'gemini-3-flash-preview';
+
         await runWithTimeout(
             freshAi.models.generateContent({
-                model: 'gemini-3.1-pro-preview',
+                model: testModel,
                 contents: { parts: [{ text: "Hello" }] }
             }),
             15000, // 15s Timeout
@@ -251,7 +254,7 @@ export const testApiKey = async (): Promise<boolean> => {
         );
         return true;
     } catch (e: any) {
-        console.warn("API Key Test Failed", e);
+        console.warn(`API Key Test Failed (${tier})`, e);
         
         const isServerBusy = e.status === 503 || 
                              e.message?.includes('503') || 
@@ -260,10 +263,8 @@ export const testApiKey = async (): Promise<boolean> => {
 
         // CRITICAL FIX: If the error is 503 (Overloaded) or Timeout,
         // the API Key is actually VALID and authenticated successfully.
-        // The Google server is just busy. We MUST return TRUE here to pass the test
-        // and let the main generation's retryWithBackoff handle the 503.
         if (isServerBusy) {
-            console.log("[System] API Key is VALID, but Gemini is busy (503/Timeout). Passing test.");
+            console.log(`[System] API Key (${tier}) is VALID, but Gemini is busy (503/Timeout). Passing test.`);
             return true; 
         }
 
@@ -532,7 +533,8 @@ export const generateImage = async (
     availableStyles: any[] = [], // New: Pool of styles for auto-selection
     timeoutMs: number = 900000 // Default 15 mins
 ): Promise<string> => {
-    const model = modelType === 'flash' ? 'gemini-2.5-flash-image' : 'gemini-3-pro-image-preview'; 
+    // UPGRADE: Use Gemini 3.1 Flash Image Preview for Flash Tier
+    const model = modelType === 'flash' ? 'gemini-3.1-flash-image-preview' : 'gemini-3-pro-image-preview'; 
     onLog(`Initializing ${model} Pipeline...`);
     
     // 1. PROCESS REFERENCE IMAGE (VISUAL & TEXTUAL ANALYSIS)

@@ -60,7 +60,8 @@ import {
   Monitor,
   ArrowDown,
   History,
-  Users
+  Users,
+  ExternalLink
 } from 'lucide-react';
 
 export const Icons = {
@@ -124,5 +125,6 @@ export const Icons = {
   Monitor,
   ArrowDown,
   History,
-  Users
+  Users,
+  ExternalLink
 };

@@ -180,6 +180,9 @@ AS $$
 $$;
 
 -- 3. Ensure columns exist (Fixes missing data)
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS display_name text;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS photo_url text;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS diamonds numeric DEFAULT 0;
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS last_active TIMESTAMPTZ;
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS is_vip BOOLEAN DEFAULT false;
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT false;
@@ -345,7 +348,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
         init();
     }
     // Get current user email for recovery instructions
-    supabase.auth.getUser().then(({ data }) => {
+    supabase.auth.getUser().then((response: any) => {
+        const data = response.data;
         if (data?.user?.email) setCurrentUserEmail(data.user.email);
     });
   }, [isAdmin]);

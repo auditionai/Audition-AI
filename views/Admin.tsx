@@ -28,7 +28,7 @@ import {
     deleteStylePreset,
     getUnifiedHistory
 } from '../services/economyService';
-import { getAllImagesFromStorage, deleteImageFromStorage, checkR2Connection } from '../services/storageService';
+import { getAllImagesFromStorage, deleteImageFromStorage, checkR2Connection, getUserImagesFromStorage } from '../services/storageService';
 import { checkConnection, analyzeStyleImage } from '../services/geminiService';
 import { checkSupabaseConnection } from '../services/supabaseClient';
 import { Icons } from '../components/Icons';
@@ -191,6 +191,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [viewingUser, setViewingUser] = useState<UserProfile | null>(null);
   const [userHistory, setUserHistory] = useState<HistoryItem[]>([]);
   const [userImages, setUserImages] = useState<GeneratedImage[]>([]);
+  const [totalImagesCreated, setTotalImagesCreated] = useState(0);
   const [loadingUserDetails, setLoadingUserDetails] = useState(false);
   const [editingPackage, setEditingPackage] = useState<CreditPackage | null>(null);
   const [editingGiftcode, setEditingGiftcode] = useState<Giftcode | null>(null);
@@ -349,7 +350,19 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       try {
           const history = await getUnifiedHistory(user.id);
           setUserHistory(history);
-          setUserImages(allImages.filter(img => img.userId === user.id));
+          
+          // Calculate total images created from history (type === 'usage')
+          const totalCreated = history.filter(h => h.type === 'usage').length;
+          setTotalImagesCreated(totalCreated);
+
+          // Fetch images for this user
+          const images = await getUserImagesFromStorage(user.id);
+          
+          // Filter images from the last 7 days
+          const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+          const recentImages = images.filter(img => img.timestamp >= sevenDaysAgo);
+          
+          setUserImages(recentImages);
       } catch (e) {
           showToast('Lỗi tải dữ liệu người dùng', 'error');
       } finally {
@@ -1403,9 +1416,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                   <Icons.History className="w-5 h-5 text-audi-cyan" />
                                   Lịch sử hoạt động
                               </h4>
-                              <div className="bg-black/30 rounded-xl border border-white/5 overflow-hidden">
+                              <div className="bg-black/30 rounded-xl border border-white/5 overflow-hidden max-h-80 overflow-y-auto custom-scrollbar">
                                   <table className="w-full text-left text-sm text-slate-400">
-                                      <thead className="bg-black/50 text-xs font-bold text-slate-500 uppercase">
+                                      <thead className="bg-black/80 text-xs font-bold text-slate-500 uppercase sticky top-0 z-10 backdrop-blur-sm">
                                           <tr>
                                               <th className="px-4 py-3">Thời gian</th>
                                               <th className="px-4 py-3">Nội dung</th>
@@ -1414,9 +1427,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                       </thead>
                                       <tbody className="divide-y divide-white/5">
                                           {userHistory.length === 0 ? (
-                                              <tr><td colSpan={3} className="text-center py-4 text-slate-500 italic">Chưa có lịch sử giao dịch.</td></tr>
+                                              <tr><td colSpan={3} className="text-center py-8 text-slate-500 italic">Chưa có lịch sử giao dịch.</td></tr>
                                           ) : userHistory.map(item => (
-                                              <tr key={item.id} className="hover:bg-white/5">
+                                              <tr key={item.id} className="hover:bg-white/5 transition-colors">
                                                   <td className="px-4 py-3 text-xs font-mono">{new Date(item.createdAt).toLocaleString()}</td>
                                                   <td className="px-4 py-3 text-white">{item.description}</td>
                                                   <td className={`px-4 py-3 text-right font-bold ${item.vcoinChange > 0 ? 'text-green-400' : 'text-audi-pink'}`}>
@@ -1433,11 +1446,12 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           <div>
                               <h4 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
                                   <Icons.Image className="w-5 h-5 text-audi-pink" />
-                                  Ảnh đã tạo ({userImages.length})
+                                  Ảnh đã tạo ({totalImagesCreated} tổng cộng)
+                                  <span className="text-xs font-normal text-slate-400 ml-2 bg-white/5 px-2 py-1 rounded-full">Hiển thị 7 ngày gần nhất</span>
                               </h4>
                               {userImages.length === 0 ? (
                                   <div className="text-center py-8 text-slate-500 italic bg-black/30 rounded-xl border border-white/5">
-                                      Người dùng này chưa tạo ảnh nào.
+                                      Không có ảnh nào trong 7 ngày qua.
                                   </div>
                               ) : (
                                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

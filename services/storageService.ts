@@ -400,6 +400,36 @@ export const getAllImagesFromStorage = async (): Promise<GeneratedImage[]> => {
   });
 };
 
+export const getUserImagesFromStorage = async (userId: string): Promise<GeneratedImage[]> => {
+    if (!supabase) return [];
+    
+    try {
+        const { data, error } = await supabase
+            .from(TABLE_NAME)
+            .select('*')
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false });
+
+        if (error || !data) return [];
+
+        return data.map((row: any) => ({
+            id: row.id,
+            url: row.image_url,
+            prompt: row.prompt,
+            timestamp: new Date(row.created_at).getTime(),
+            toolId: 'gen_tool',
+            toolName: row.model_used || 'AI Gen',
+            engine: row.model_used,
+            isShared: row.is_public,
+            userId: row.user_id,
+            userName: 'User'
+        }));
+    } catch (e) {
+        console.error("User Images Fetch Error", e);
+        return [];
+    }
+};
+
 
 
 export const deleteImageFromStorage = async (id: string, targetUserId?: string, imageUrl?: string): Promise<void> => {

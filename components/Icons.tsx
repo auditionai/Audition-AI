@@ -58,7 +58,8 @@ import {
   Copy,
   Scissors,
   Monitor,
-  ArrowDown
+  ArrowDown,
+  History
 } from 'lucide-react';
 
 export const Icons = {
@@ -120,5 +121,6 @@ export const Icons = {
   Copy,
   Scissors,
   Monitor,
-  ArrowDown
+  ArrowDown,
+  History
 };

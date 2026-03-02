@@ -65,14 +65,18 @@ export const updateAdminUserProfile = async (profile: UserProfile): Promise<{suc
     }
 };
 
-export const updateUserBalance = async (amount: number, reason: string, type: string) => {
-    const user = await getUserProfile();
+export const updateUserBalance = async (amount: number, reason: string, type: string, targetUserId?: string) => {
+    let userId = targetUserId;
+    if (!userId) {
+        const user = await getUserProfile();
+        userId = user.id;
+    }
     
     // 1. Log transaction (Silent Fail Safe)
     try {
         // Attempt 1: Try 'note' (Legacy column)
         const { error } = await supabase.from('diamond_transactions_log').insert({
-            user_id: user.id,
+            user_id: userId,
             amount,
             note: reason, 
             type
@@ -82,7 +86,7 @@ export const updateUserBalance = async (amount: number, reason: string, type: st
             // Attempt 2: If 'note' column missing, try 'reason' (New column)
             if (error.message?.includes('note') || error.message?.includes('does not exist')) {
                  const { error: err2 } = await supabase.from('diamond_transactions_log').insert({
-                    user_id: user.id,
+                    user_id: userId,
                     amount,
                     reason: reason, 
                     type
@@ -99,11 +103,11 @@ export const updateUserBalance = async (amount: number, reason: string, type: st
     // 2. Update balance directly (skip RPC to avoid 404)
     try {
         // Fetch latest balance first to minimize race condition
-        const { data: latestUser } = await supabase.from('users').select('diamonds').eq('id', user.id).single();
+        const { data: latestUser } = await supabase.from('users').select('diamonds').eq('id', userId).single();
         const currentBalance = latestUser?.diamonds || 0;
         const newBalance = currentBalance + amount;
         
-        const { error } = await supabase.from('users').update({ diamonds: newBalance }).eq('id', user.id);
+        const { error } = await supabase.from('users').update({ diamonds: newBalance }).eq('id', userId);
         if (error) throw error;
     } catch (e: any) {
         console.error("[Economy] Critical: Failed to update balance", e);
@@ -111,7 +115,9 @@ export const updateUserBalance = async (amount: number, reason: string, type: st
     }
     
     // Dispatch event for UI update
-    window.dispatchEvent(new Event('balance_updated'));
+    if (!targetUserId) {
+        window.dispatchEvent(new Event('balance_updated'));
+    }
 };
 
 export const logVisit = async () => {
@@ -576,7 +582,7 @@ export const adminApproveTransaction = async (txId: string): Promise<{success: b
         if (updateError) throw updateError;
 
         // 2. Add Coins
-        await updateUserBalance(tx.diamonds_received, `Topup: ${tx.order_code}`, 'topup');
+        await updateUserBalance(tx.diamonds_received, `Topup: ${tx.order_code || tx.code || tx.id}`, 'topup', tx.user_id);
         
         return { success: true };
     } catch (e: any) {
@@ -634,21 +640,25 @@ export const deleteTransaction = async (txId: string): Promise<{success: boolean
     }
 };
 
-export const getUnifiedHistory = async (): Promise<HistoryItem[]> => {
-    const user = await getUserProfile();
+export const getUnifiedHistory = async (targetUserId?: string): Promise<HistoryItem[]> => {
+    let userId = targetUserId;
+    if (!userId) {
+        const user = await getUserProfile();
+        userId = user.id;
+    }
     
     // 1. Get Topup History
     const { data: txs } = await supabase
         .from('transactions')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .order('created_at', { ascending: false });
 
     // 2. Get Usage/Reward Logs
     const { data: logs } = await supabase
         .from('diamond_transactions_log')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .order('created_at', { ascending: false });
 
     const history: HistoryItem[] = [];

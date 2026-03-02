@@ -25,13 +25,14 @@ import {
     getUserProfile,
     getStylePresets,
     saveStylePreset,
-    deleteStylePreset
+    deleteStylePreset,
+    getUnifiedHistory
 } from '../services/economyService';
 import { getAllImagesFromStorage, deleteImageFromStorage, checkR2Connection } from '../services/storageService';
 import { checkConnection, analyzeStyleImage } from '../services/geminiService';
 import { checkSupabaseConnection } from '../services/supabaseClient';
 import { Icons } from '../components/Icons';
-import { UserProfile, CreditPackage, Giftcode, PromotionCampaign, Transaction, GeneratedImage, Language, StylePreset } from '../types';
+import { UserProfile, CreditPackage, Giftcode, PromotionCampaign, Transaction, GeneratedImage, Language, StylePreset, HistoryItem } from '../types';
 
 interface AdminProps {
   lang: Language;
@@ -187,6 +188,10 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
   // Modal States
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
+  const [viewingUser, setViewingUser] = useState<UserProfile | null>(null);
+  const [userHistory, setUserHistory] = useState<HistoryItem[]>([]);
+  const [userImages, setUserImages] = useState<GeneratedImage[]>([]);
+  const [loadingUserDetails, setLoadingUserDetails] = useState(false);
   const [editingPackage, setEditingPackage] = useState<CreditPackage | null>(null);
   const [editingGiftcode, setEditingGiftcode] = useState<Giftcode | null>(null);
   const [editingPromotion, setEditingPromotion] = useState<PromotionCampaign | null>(null);
@@ -337,6 +342,20 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           showToast('Đã xóa API Key');
       });
   }
+
+  const handleViewUser = async (user: UserProfile) => {
+      setViewingUser(user);
+      setLoadingUserDetails(true);
+      try {
+          const history = await getUnifiedHistory(user.id);
+          setUserHistory(history);
+          setUserImages(allImages.filter(img => img.userId === user.id));
+      } catch (e) {
+          showToast('Lỗi tải dữ liệu người dùng', 'error');
+      } finally {
+          setLoadingUserDetails(false);
+      }
+  };
 
   const handleSaveUser = async () => {
       if (editingUser) {
@@ -828,7 +847,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                           />
                                       </td>
                                       <td className="px-6 py-4 text-xs font-mono">{new Date(tx.createdAt).toLocaleString()}</td>
-                                      <td className="px-6 py-4 font-mono font-bold text-white">{tx.code}</td>
+                                      <td className="px-6 py-4 font-mono font-bold text-white">{tx.order_code || tx.code}</td>
                                       <td className="px-6 py-4">
                                           <div className="flex items-center gap-3">
                                               <img src={tx.userAvatar || 'https://picsum.photos/100/100'} className="w-8 h-8 rounded-full border border-white/10 object-cover" />
@@ -878,7 +897,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                           <img src={tx.userAvatar || 'https://picsum.photos/100/100'} className="w-10 h-10 rounded-full border border-white/10 object-cover bg-black" />
                                           <div>
                                               <div className="font-bold text-white text-sm">{tx.userName || 'Unknown'}</div>
-                                              <div className="text-xs text-slate-500 font-mono">{tx.code}</div>
+                                              <div className="text-xs text-slate-500 font-mono">{tx.order_code || tx.code}</div>
                                           </div>
                                       </div>
                                       <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${
@@ -944,7 +963,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                       <td className="px-6 py-4 text-audi-yellow font-bold font-mono">{u.balance}</td>
                                       <td className="px-6 py-4"><span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${u.role === 'admin' ? 'bg-red-500/20 text-red-500' : 'bg-blue-500/20 text-blue-500'}`}>{u.role}</span></td>
                                       <td className="px-6 py-4 text-xs font-mono">{u.lastCheckin ? new Date(u.lastCheckin).toLocaleDateString() : 'N/A'}</td>
-                                      <td className="px-6 py-4 text-right"><button onClick={() => setEditingUser(u)} className="text-xs font-bold text-audi-cyan hover:text-white bg-audi-cyan/10 hover:bg-audi-cyan/30 px-3 py-1.5 rounded transition-colors">Sửa</button></td>
+                                      <td className="px-6 py-4 text-right flex justify-end gap-2"><button onClick={() => handleViewUser(u)} className="text-xs font-bold text-audi-pink hover:text-white bg-audi-pink/10 hover:bg-audi-pink/30 px-3 py-1.5 rounded transition-colors">Chi tiết</button><button onClick={() => setEditingUser(u)} className="text-xs font-bold text-audi-cyan hover:text-white bg-audi-cyan/10 hover:bg-audi-cyan/30 px-3 py-1.5 rounded transition-colors">Sửa</button></td>
                                   </tr>
                               ))}
                           </tbody>
@@ -1348,6 +1367,99 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           Đóng
                       </button>
                   </div>
+              </div>
+          </div>
+      )}
+
+      {viewingUser && (
+          <div className="fixed inset-0 z-[2000] flex justify-center items-start p-4 pt-24 animate-fade-in overflow-y-auto">
+              <div className="bg-[#12121a] w-full max-w-4xl p-6 rounded-2xl border border-white/20 shadow-2xl relative max-h-[90vh] overflow-y-auto custom-scrollbar flex flex-col">
+                  <div className="flex justify-between items-center mb-6">
+                      <div className="flex items-center gap-4">
+                          <img src={viewingUser.avatar || 'https://picsum.photos/100/100'} className="w-16 h-16 rounded-full border-2 border-audi-pink object-cover" />
+                          <div>
+                              <h3 className="text-2xl font-bold text-white">{viewingUser.username}</h3>
+                              <p className="text-slate-400 text-sm">{viewingUser.email}</p>
+                              <div className="flex gap-2 mt-1">
+                                  <span className="text-audi-yellow font-bold text-xs bg-audi-yellow/10 px-2 py-0.5 rounded">{viewingUser.balance} Vcoin</span>
+                                  <span className="text-blue-400 font-bold text-xs bg-blue-400/10 px-2 py-0.5 rounded uppercase">{viewingUser.role}</span>
+                              </div>
+                          </div>
+                      </div>
+                      <button onClick={() => setViewingUser(null)} className="p-2 bg-white/5 hover:bg-white/10 rounded-xl text-slate-400 hover:text-white transition-colors">
+                          <Icons.X className="w-6 h-6" />
+                      </button>
+                  </div>
+
+                  {loadingUserDetails ? (
+                      <div className="flex-1 flex items-center justify-center py-12">
+                          <Icons.Loader className="w-8 h-8 text-audi-pink animate-spin" />
+                      </div>
+                  ) : (
+                      <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-8">
+                          {/* Lịch sử giao dịch */}
+                          <div>
+                              <h4 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                                  <Icons.History className="w-5 h-5 text-audi-cyan" />
+                                  Lịch sử hoạt động
+                              </h4>
+                              <div className="bg-black/30 rounded-xl border border-white/5 overflow-hidden">
+                                  <table className="w-full text-left text-sm text-slate-400">
+                                      <thead className="bg-black/50 text-xs font-bold text-slate-500 uppercase">
+                                          <tr>
+                                              <th className="px-4 py-3">Thời gian</th>
+                                              <th className="px-4 py-3">Nội dung</th>
+                                              <th className="px-4 py-3 text-right">Biến động</th>
+                                          </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-white/5">
+                                          {userHistory.length === 0 ? (
+                                              <tr><td colSpan={3} className="text-center py-4 text-slate-500 italic">Chưa có lịch sử giao dịch.</td></tr>
+                                          ) : userHistory.map(item => (
+                                              <tr key={item.id} className="hover:bg-white/5">
+                                                  <td className="px-4 py-3 text-xs font-mono">{new Date(item.createdAt).toLocaleString()}</td>
+                                                  <td className="px-4 py-3 text-white">{item.description}</td>
+                                                  <td className={`px-4 py-3 text-right font-bold ${item.vcoinChange > 0 ? 'text-green-400' : 'text-audi-pink'}`}>
+                                                      {item.vcoinChange > 0 ? '+' : ''}{item.vcoinChange} VC
+                                                  </td>
+                                              </tr>
+                                          ))}
+                                      </tbody>
+                                  </table>
+                              </div>
+                          </div>
+
+                          {/* Lịch sử tạo ảnh */}
+                          <div>
+                              <h4 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                                  <Icons.Image className="w-5 h-5 text-audi-pink" />
+                                  Ảnh đã tạo ({userImages.length})
+                              </h4>
+                              {userImages.length === 0 ? (
+                                  <div className="text-center py-8 text-slate-500 italic bg-black/30 rounded-xl border border-white/5">
+                                      Người dùng này chưa tạo ảnh nào.
+                                  </div>
+                              ) : (
+                                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                      {userImages.map(img => (
+                                          <div key={img.id} className="bg-black/30 rounded-xl border border-white/5 overflow-hidden group">
+                                              <div className="aspect-square relative">
+                                                  <img src={img.url} className="w-full h-full object-cover" />
+                                                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center p-2">
+                                                      <p className="text-[10px] text-white text-center line-clamp-4">{img.prompt}</p>
+                                                  </div>
+                                              </div>
+                                              <div className="p-2">
+                                                  <div className="text-[10px] text-slate-400 font-mono truncate">{new Date(img.timestamp).toLocaleDateString()}</div>
+                                                  <div className="text-xs font-bold text-audi-cyan truncate">{img.toolName}</div>
+                                              </div>
+                                          </div>
+                                      ))}
+                                  </div>
+                              )}
+                          </div>
+                      </div>
+                  )}
               </div>
           </div>
       )}

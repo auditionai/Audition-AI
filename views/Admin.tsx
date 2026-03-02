@@ -155,6 +155,40 @@ DROP POLICY IF EXISTS "Admin read all logs" ON public.diamond_transactions_log;
 CREATE POLICY "Admin read all logs" ON public.diamond_transactions_log FOR ALL TO authenticated USING (true); -- Ideally check is_admin
 `;
 
+const USER_FIX_SQL = `
+-- Create users table if not exists (idempotent)
+CREATE TABLE IF NOT EXISTS public.users (
+  id UUID REFERENCES auth.users NOT NULL PRIMARY KEY,
+  email TEXT,
+  display_name TEXT,
+  photo_url TEXT,
+  diamonds BIGINT DEFAULT 0,
+  is_admin BOOLEAN DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  last_active TIMESTAMPTZ,
+  is_vip BOOLEAN DEFAULT false
+);
+
+-- Enable RLS
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+
+-- Policies
+DROP POLICY IF EXISTS "Public profiles are viewable by everyone" ON public.users;
+CREATE POLICY "Public profiles are viewable by everyone" ON public.users FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Users can insert their own profile" ON public.users;
+CREATE POLICY "Users can insert their own profile" ON public.users FOR INSERT WITH CHECK (auth.uid() = id);
+
+DROP POLICY IF EXISTS "Users can update own profile" ON public.users;
+CREATE POLICY "Users can update own profile" ON public.users FOR UPDATE USING (auth.uid() = id);
+
+-- Admin policy (simplified for now, ideally checks is_admin)
+DROP POLICY IF EXISTS "Admins can do everything" ON public.users;
+CREATE POLICY "Admins can do everything" ON public.users FOR ALL USING (
+  (SELECT is_admin FROM public.users WHERE id = auth.uid()) = true
+);
+`;
+
 // Helper for time ago
 const getTimeAgo = (dateString?: string) => {
     if (!dateString) return 'Chưa truy cập';
@@ -1448,6 +1482,41 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           })}
                       </div>
                   </div>
+
+                  {/* Database Maintenance */}
+                  <div className="bg-[#12121a] p-6 rounded-2xl border border-white/10 mt-6">
+                      <h3 className="font-bold text-lg text-white mb-4 flex items-center gap-2">
+                          <Icons.Database className="w-5 h-5 text-audi-cyan" />
+                          Bảo trì Database
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <button 
+                              onClick={() => setShowGiftcodeFix(true)}
+                              className="p-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-left transition-colors group"
+                          >
+                              <div className="flex items-center gap-3 mb-2">
+                                  <div className="w-10 h-10 rounded-full bg-audi-purple/20 flex items-center justify-center text-audi-purple group-hover:scale-110 transition-transform">
+                                      <Icons.Gift className="w-5 h-5" />
+                                  </div>
+                                  <span className="font-bold text-white">Fix Giftcode Table</span>
+                              </div>
+                              <p className="text-xs text-slate-400">Sửa lỗi thiếu bảng gift_codes hoặc system_settings.</p>
+                          </button>
+
+                          <button 
+                              onClick={() => setShowUserFix(true)}
+                              className="p-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-left transition-colors group"
+                          >
+                              <div className="flex items-center gap-3 mb-2">
+                                  <div className="w-10 h-10 rounded-full bg-audi-pink/20 flex items-center justify-center text-audi-pink group-hover:scale-110 transition-transform">
+                                      <Icons.Users className="w-5 h-5" />
+                                  </div>
+                                  <span className="font-bold text-white">Fix Users Table</span>
+                              </div>
+                              <p className="text-xs text-slate-400">Sửa lỗi thiếu bảng users hoặc lỗi phân quyền (RLS).</p>
+                          </button>
+                      </div>
+                  </div>
               </div>
            )}
 
@@ -1504,6 +1573,62 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           <Icons.Database className="w-4 h-4" /> Mở SQL Editor
                       </a>
                       <button onClick={() => setShowGiftcodeFix(false)} className="flex-1 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold transition-colors">
+                          Đóng
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* USER DB FIX MODAL */}
+      {showUserFix && (
+          <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 animate-fade-in">
+              <div className="bg-[#12121a] w-full max-w-2xl p-6 rounded-2xl border border-red-500/50 shadow-[0_0_50px_rgba(255,0,0,0.2)] flex flex-col max-h-[90vh]">
+                  <div className="flex items-center gap-4 mb-4">
+                      <div className="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center text-red-500 animate-pulse">
+                          <Icons.Database className="w-6 h-6" />
+                      </div>
+                      <div>
+                          <h3 className="text-xl font-bold text-white">LỖI DATABASE: BẢNG USERS</h3>
+                          <p className="text-slate-400 text-xs">Phát hiện thiếu bảng Users hoặc lỗi RLS Policy</p>
+                      </div>
+                  </div>
+                  
+                  <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-xl mb-4">
+                      <p className="text-sm text-red-300 font-bold mb-1">Nguyên nhân:</p>
+                      <p className="text-xs text-slate-300 leading-relaxed">
+                          Supabase không cho phép đọc bảng <code>public.users</code> hoặc bảng chưa được tạo. Điều này thường xảy ra khi Row Level Security (RLS) chưa được cấu hình đúng.
+                      </p>
+                  </div>
+
+                  <div className="flex-1 overflow-hidden flex flex-col">
+                      <p className="text-sm font-bold text-green-400 mb-2 uppercase">Giải pháp: Copy mã SQL này và chạy trong Supabase SQL Editor</p>
+                      <div className="relative h-64 bg-black/50 border border-white/10 rounded-xl overflow-hidden">
+                          <pre className="absolute inset-0 p-4 text-[10px] md:text-xs font-mono text-slate-300 overflow-auto whitespace-pre-wrap selection:bg-audi-pink selection:text-white">
+                              {USER_FIX_SQL}
+                          </pre>
+                          <button 
+                            onClick={() => {
+                                navigator.clipboard.writeText(USER_FIX_SQL);
+                                showToast("Đã sao chép SQL!", 'info');
+                            }}
+                            className="absolute top-2 right-2 p-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors flex items-center gap-2 text-xs font-bold"
+                          >
+                              <Icons.Copy className="w-4 h-4" /> Sao chép
+                          </button>
+                      </div>
+                  </div>
+
+                  <div className="flex gap-3 mt-6">
+                      <a 
+                        href="https://supabase.com/dashboard/project/_/sql" 
+                        target="_blank" 
+                        rel="noreferrer"
+                        className="flex-1 py-3 bg-audi-purple hover:bg-purple-600 text-white rounded-xl font-bold text-center transition-colors flex items-center justify-center gap-2"
+                      >
+                          <Icons.Database className="w-4 h-4" /> Mở SQL Editor
+                      </a>
+                      <button onClick={() => setShowUserFix(false)} className="flex-1 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold transition-colors">
                           Đóng
                       </button>
                   </div>

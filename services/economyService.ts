@@ -847,7 +847,12 @@ export const deleteStylePreset = async (id: string) => {
 // --- ADMIN STATS ---
 
 export const getAdminStats = async () => {
-    const { data: users } = await supabase.from('users').select('id, email, display_name, diamonds, is_admin, created_at, photo_url, last_active');
+    // Fetch Users
+    const { data: users, error: userError } = await supabase.from('users').select('id, email, display_name, diamonds, is_admin, created_at, photo_url, last_active');
+
+    if (userError) {
+        console.error("Error fetching users for Admin Stats:", userError);
+    }
     const { data: pkgs } = await supabase.from('credit_packages').select('*').order('display_order');
     const { data: promos } = await supabase.from('promotions').select('*');
     const { data: codes } = await supabase.from('gift_codes').select('*');

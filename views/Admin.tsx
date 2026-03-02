@@ -156,23 +156,11 @@ CREATE POLICY "Admin read all logs" ON public.diamond_transactions_log FOR ALL T
 `;
 
 const USER_FIX_SQL = `
--- 1. Create users table if not exists
-CREATE TABLE IF NOT EXISTS public.users (
-  id UUID REFERENCES auth.users NOT NULL PRIMARY KEY,
-  email TEXT,
-  display_name TEXT,
-  photo_url TEXT,
-  diamonds BIGINT DEFAULT 0,
-  is_admin BOOLEAN DEFAULT false,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  last_active TIMESTAMPTZ,
-  is_vip BOOLEAN DEFAULT false
-);
+-- 1. Add missing columns if they don't exist (Safe migration)
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS last_active TIMESTAMPTZ;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS is_vip BOOLEAN DEFAULT false;
 
--- 2. Enable RLS
-ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
-
--- 3. Sync from auth.users (Recover lost profiles)
+-- 2. Sync from auth.users (Recover lost profiles)
 INSERT INTO public.users (id, email, display_name, photo_url, created_at, last_active)
 SELECT 
     id, 
@@ -188,27 +176,41 @@ ON CONFLICT (id) DO UPDATE SET
     photo_url = COALESCE(public.users.photo_url, EXCLUDED.photo_url),
     last_active = EXCLUDED.last_active;
 
--- 4. Policies
-DROP POLICY IF EXISTS "Public profiles are viewable by everyone" ON public.users;
-CREATE POLICY "Public profiles are viewable by everyone" ON public.users FOR SELECT USING (true);
+-- 3. Enable RLS & Policies
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "Users can insert their own profile" ON public.users;
-CREATE POLICY "Users can insert their own profile" ON public.users FOR INSERT WITH CHECK (auth.uid() = id);
+DO $$
+BEGIN
+    DROP POLICY IF EXISTS "Public profiles are viewable by everyone" ON public.users;
+    CREATE POLICY "Public profiles are viewable by everyone" ON public.users FOR SELECT USING (true);
 
-DROP POLICY IF EXISTS "Users can update own profile" ON public.users;
-CREATE POLICY "Users can update own profile" ON public.users FOR UPDATE USING (auth.uid() = id);
+    DROP POLICY IF EXISTS "Users can insert their own profile" ON public.users;
+    CREATE POLICY "Users can insert their own profile" ON public.users FOR INSERT WITH CHECK (auth.uid() = id);
 
-DROP POLICY IF EXISTS "Admins can do everything" ON public.users;
-CREATE POLICY "Admins can do everything" ON public.users FOR ALL USING (
-  (SELECT is_admin FROM public.users WHERE id = auth.uid()) = true
-);
+    DROP POLICY IF EXISTS "Users can update own profile" ON public.users;
+    CREATE POLICY "Users can update own profile" ON public.users FOR UPDATE USING (auth.uid() = id);
 
--- 5. Auto-create profile trigger
+    DROP POLICY IF EXISTS "Admins can do everything" ON public.users;
+    CREATE POLICY "Admins can do everything" ON public.users FOR ALL USING (
+        (SELECT is_admin FROM public.users WHERE id = auth.uid()) = true
+    );
+END
+$$;
+
+-- 4. Auto-create profile trigger
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger AS $$
 BEGIN
-  INSERT INTO public.users (id, email, display_name, photo_url)
-  VALUES (new.id, new.email, new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'avatar_url');
+  INSERT INTO public.users (id, email, display_name, photo_url, created_at, last_active)
+  VALUES (
+    new.id, 
+    new.email, 
+    new.raw_user_meta_data->>'full_name', 
+    new.raw_user_meta_data->>'avatar_url',
+    new.created_at,
+    new.last_sign_in_at
+  )
+  ON CONFLICT (id) DO NOTHING;
   RETURN new;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;

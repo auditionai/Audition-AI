@@ -156,11 +156,24 @@ CREATE POLICY "Admin read all logs" ON public.diamond_transactions_log FOR ALL T
 `;
 
 const USER_FIX_SQL = `
--- 1. Add missing columns if they don't exist (Safe migration)
+-- RECOVERY SCRIPT (Run in Supabase SQL Editor)
+
+-- 1. Reset Policies to avoid recursion loops (Fixes 500 Error)
+ALTER TABLE public.users DISABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Admins can do everything" ON public.users;
+DROP POLICY IF EXISTS "Public profiles are viewable by everyone" ON public.users;
+DROP POLICY IF EXISTS "Users can insert their own profile" ON public.users;
+DROP POLICY IF EXISTS "Users can update own profile" ON public.users;
+DROP POLICY IF EXISTS "Public read access" ON public.users;
+DROP POLICY IF EXISTS "Self update" ON public.users;
+DROP POLICY IF EXISTS "Admin full access" ON public.users;
+
+-- 2. Ensure columns exist (Fixes missing data)
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS last_active TIMESTAMPTZ;
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS is_vip BOOLEAN DEFAULT false;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT false;
 
--- 2. Sync from auth.users (Recover lost profiles)
+-- 3. Sync from auth.users (Restores Avatar/Name)
 INSERT INTO public.users (id, email, display_name, photo_url, created_at, last_active)
 SELECT 
     id, 
@@ -176,49 +189,36 @@ ON CONFLICT (id) DO UPDATE SET
     photo_url = COALESCE(public.users.photo_url, EXCLUDED.photo_url),
     last_active = EXCLUDED.last_active;
 
--- 3. Enable RLS & Policies
+-- 4. Restore Admin Rights (Replace email if needed)
+UPDATE public.users 
+SET is_admin = true 
+WHERE email = 'codycn2804@gmail.com';
+
+-- 5. Reconstruct Balance from Logs (Optional - attempts to restore lost Vcoin)
+UPDATE public.users 
+SET diamonds = (
+    SELECT COALESCE(SUM(amount), 0) 
+    FROM public.diamond_transactions_log 
+    WHERE user_id = public.users.id
+)
+WHERE EXISTS (SELECT 1 FROM public.diamond_transactions_log WHERE user_id = public.users.id);
+
+-- 6. Re-enable RLS with SAFE policies
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 
-DO $$
-BEGIN
-    DROP POLICY IF EXISTS "Public profiles are viewable by everyone" ON public.users;
-    CREATE POLICY "Public profiles are viewable by everyone" ON public.users FOR SELECT USING (true);
+-- Policy: Everyone can read basic info (Prevents recursion for is_admin check)
+CREATE POLICY "Public read access" ON public.users FOR SELECT USING (true);
 
-    DROP POLICY IF EXISTS "Users can insert their own profile" ON public.users;
-    CREATE POLICY "Users can insert their own profile" ON public.users FOR INSERT WITH CHECK (auth.uid() = id);
+-- Policy: Users can update their own data
+CREATE POLICY "Self update" ON public.users FOR UPDATE USING (auth.uid() = id);
 
-    DROP POLICY IF EXISTS "Users can update own profile" ON public.users;
-    CREATE POLICY "Users can update own profile" ON public.users FOR UPDATE USING (auth.uid() = id);
+-- Policy: Admins can do everything (Safe because 'Public read access' handles the subquery)
+CREATE POLICY "Admin full access" ON public.users FOR ALL USING (
+  (SELECT is_admin FROM public.users WHERE id = auth.uid()) = true
+);
 
-    DROP POLICY IF EXISTS "Admins can do everything" ON public.users;
-    CREATE POLICY "Admins can do everything" ON public.users FOR ALL USING (
-        (SELECT is_admin FROM public.users WHERE id = auth.uid()) = true
-    );
-END
-$$;
-
--- 4. Auto-create profile trigger
-CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS trigger AS $$
-BEGIN
-  INSERT INTO public.users (id, email, display_name, photo_url, created_at, last_active)
-  VALUES (
-    new.id, 
-    new.email, 
-    new.raw_user_meta_data->>'full_name', 
-    new.raw_user_meta_data->>'avatar_url',
-    new.created_at,
-    new.last_sign_in_at
-  )
-  ON CONFLICT (id) DO NOTHING;
-  RETURN new;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-CREATE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
+-- 7. Refresh Schema Cache (Fixes "column does not exist" errors)
+NOTIFY pgrst, 'reload config';
 `;
 
 // Helper for time ago

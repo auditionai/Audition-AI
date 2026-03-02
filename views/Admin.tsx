@@ -151,6 +151,9 @@ CREATE POLICY "Admin manage styles" ON public.style_presets FOR ALL TO authentic
 DROP POLICY IF EXISTS "User read own logs" ON public.diamond_transactions_log;
 CREATE POLICY "User read own logs" ON public.diamond_transactions_log FOR SELECT TO authenticated USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "User insert own logs" ON public.diamond_transactions_log;
+CREATE POLICY "User insert own logs" ON public.diamond_transactions_log FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+
 DROP POLICY IF EXISTS "Admin read all logs" ON public.diamond_transactions_log;
 CREATE POLICY "Admin read all logs" ON public.diamond_transactions_log FOR ALL TO authenticated USING (true); -- Ideally check is_admin
 `;
@@ -301,6 +304,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [userImages, setUserImages] = useState<GeneratedImage[]>([]);
   const [totalImagesCreated, setTotalImagesCreated] = useState(0);
   const [loadingUserDetails, setLoadingUserDetails] = useState(false);
+  const [historyLimit, setHistoryLimit] = useState(20);
+  const [imagesLimit, setImagesLimit] = useState(20);
   const [editingPackage, setEditingPackage] = useState<CreditPackage | null>(null);
   const [editingGiftcode, setEditingGiftcode] = useState<Giftcode | null>(null);
   const [editingPromotion, setEditingPromotion] = useState<PromotionCampaign | null>(null);
@@ -462,6 +467,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const handleViewUser = async (user: UserProfile) => {
       setViewingUser(user);
       setLoadingUserDetails(true);
+      setHistoryLimit(20);
+      setImagesLimit(20);
       try {
           const history = await getUnifiedHistory(user.id);
           setUserHistory(history);
@@ -472,12 +479,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
           // Fetch images for this user
           const images = await getUserImagesFromStorage(user.id);
-          
-          // Filter images from the last 7 days
-          const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-          const recentImages = images.filter(img => img.timestamp >= sevenDaysAgo);
-          
-          setUserImages(recentImages);
+          setUserImages(images);
       } catch (e) {
           showToast('Lỗi tải dữ liệu người dùng', 'error');
       } finally {
@@ -1804,29 +1806,41 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                   <Icons.History className="w-5 h-5 text-audi-cyan" />
                                   Lịch sử hoạt động
                               </h4>
-                              <div className="bg-black/30 rounded-xl border border-white/5 overflow-hidden max-h-80 overflow-y-auto custom-scrollbar">
-                                  <table className="w-full text-left text-sm text-slate-400">
-                                      <thead className="bg-black/80 text-xs font-bold text-slate-500 uppercase sticky top-0 z-10 backdrop-blur-sm">
-                                          <tr>
-                                              <th className="px-4 py-3">Thời gian</th>
-                                              <th className="px-4 py-3">Nội dung</th>
-                                              <th className="px-4 py-3 text-right">Biến động</th>
-                                          </tr>
-                                      </thead>
-                                      <tbody className="divide-y divide-white/5">
-                                          {userHistory.length === 0 ? (
-                                              <tr><td colSpan={3} className="text-center py-8 text-slate-500 italic">Chưa có lịch sử giao dịch.</td></tr>
-                                          ) : userHistory.map(item => (
-                                              <tr key={item.id} className="hover:bg-white/5 transition-colors">
-                                                  <td className="px-4 py-3 text-xs font-mono">{new Date(item.createdAt).toLocaleString()}</td>
-                                                  <td className="px-4 py-3 text-white">{item.description}</td>
-                                                  <td className={`px-4 py-3 text-right font-bold ${item.vcoinChange > 0 ? 'text-green-400' : 'text-audi-pink'}`}>
-                                                      {item.vcoinChange > 0 ? '+' : ''}{item.vcoinChange} VC
-                                                  </td>
+                              <div className="bg-black/30 rounded-xl border border-white/5 overflow-hidden">
+                                  <div className="max-h-80 overflow-y-auto custom-scrollbar">
+                                      <table className="w-full text-left text-sm text-slate-400">
+                                          <thead className="bg-black/80 text-xs font-bold text-slate-500 uppercase sticky top-0 z-10 backdrop-blur-sm">
+                                              <tr>
+                                                  <th className="px-4 py-3">Thời gian</th>
+                                                  <th className="px-4 py-3">Nội dung</th>
+                                                  <th className="px-4 py-3 text-right">Biến động</th>
                                               </tr>
-                                          ))}
-                                      </tbody>
-                                  </table>
+                                          </thead>
+                                          <tbody className="divide-y divide-white/5">
+                                              {userHistory.length === 0 ? (
+                                                  <tr><td colSpan={3} className="text-center py-8 text-slate-500 italic">Chưa có lịch sử giao dịch.</td></tr>
+                                              ) : userHistory.slice(0, historyLimit).map(item => (
+                                                  <tr key={item.id} className="hover:bg-white/5 transition-colors">
+                                                      <td className="px-4 py-3 text-xs font-mono">{new Date(item.createdAt).toLocaleString()}</td>
+                                                      <td className="px-4 py-3 text-white">{item.description}</td>
+                                                      <td className={`px-4 py-3 text-right font-bold ${item.vcoinChange > 0 ? 'text-green-400' : 'text-audi-pink'}`}>
+                                                          {item.vcoinChange > 0 ? '+' : ''}{item.vcoinChange} VC
+                                                      </td>
+                                                  </tr>
+                                              ))}
+                                          </tbody>
+                                      </table>
+                                  </div>
+                                  {userHistory.length > historyLimit && (
+                                      <div className="p-2 border-t border-white/5 text-center">
+                                          <button 
+                                              onClick={() => setHistoryLimit(prev => prev + 20)}
+                                              className="text-xs font-bold text-audi-cyan hover:text-white transition-colors py-2 px-4 rounded-lg hover:bg-white/5"
+                                          >
+                                              Xem thêm ({userHistory.length - historyLimit} giao dịch)
+                                          </button>
+                                      </div>
+                                  )}
                               </div>
                           </div>
 
@@ -1834,30 +1848,41 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           <div>
                               <h4 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
                                   <Icons.Image className="w-5 h-5 text-audi-pink" />
-                                  Ảnh đã tạo ({totalImagesCreated} tổng cộng)
-                                  <span className="text-xs font-normal text-slate-400 ml-2 bg-white/5 px-2 py-1 rounded-full">Hiển thị 7 ngày gần nhất</span>
+                                  Ảnh đã tạo ({userImages.length} tổng cộng)
                               </h4>
                               {userImages.length === 0 ? (
                                   <div className="text-center py-8 text-slate-500 italic bg-black/30 rounded-xl border border-white/5">
-                                      Không có ảnh nào trong 7 ngày qua.
+                                      Chưa có ảnh nào được tạo.
                                   </div>
                               ) : (
-                                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                      {userImages.map(img => (
-                                          <div key={img.id} className="bg-black/30 rounded-xl border border-white/5 overflow-hidden group">
-                                              <div className="aspect-square relative">
-                                                  <img src={img.url} className="w-full h-full object-cover" />
-                                                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center p-2">
-                                                      <p className="text-[10px] text-white text-center line-clamp-4">{img.prompt}</p>
+                                  <>
+                                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                          {userImages.slice(0, imagesLimit).map(img => (
+                                              <div key={img.id} className="bg-black/30 rounded-xl border border-white/5 overflow-hidden group">
+                                                  <div className="aspect-square relative">
+                                                      <img src={img.url} className="w-full h-full object-cover" />
+                                                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center p-2">
+                                                          <p className="text-[10px] text-white text-center line-clamp-4">{img.prompt}</p>
+                                                      </div>
+                                                  </div>
+                                                  <div className="p-2">
+                                                      <div className="text-[10px] text-slate-400 font-mono truncate">{new Date(img.timestamp).toLocaleDateString()}</div>
+                                                      <div className="text-xs font-bold text-audi-cyan truncate">{img.toolName}</div>
                                                   </div>
                                               </div>
-                                              <div className="p-2">
-                                                  <div className="text-[10px] text-slate-400 font-mono truncate">{new Date(img.timestamp).toLocaleDateString()}</div>
-                                                  <div className="text-xs font-bold text-audi-cyan truncate">{img.toolName}</div>
-                                              </div>
+                                          ))}
+                                      </div>
+                                      {userImages.length > imagesLimit && (
+                                          <div className="mt-4 text-center">
+                                              <button 
+                                                  onClick={() => setImagesLimit(prev => prev + 20)}
+                                                  className="text-sm font-bold text-audi-pink hover:text-white transition-colors py-2 px-6 rounded-xl border border-audi-pink/30 hover:bg-audi-pink/20"
+                                              >
+                                                  Xem thêm ({userImages.length - imagesLimit} ảnh)
+                                              </button>
                                           </div>
-                                      ))}
-                                  </div>
+                                      )}
+                                  </>
                               )}
                           </div>
                       </div>

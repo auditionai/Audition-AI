@@ -168,12 +168,23 @@ DROP POLICY IF EXISTS "Public read access" ON public.users;
 DROP POLICY IF EXISTS "Self update" ON public.users;
 DROP POLICY IF EXISTS "Admin full access" ON public.users;
 
--- 2. Ensure columns exist (Fixes missing data)
+-- 2. Create SECURE function to check admin status (Bypasses RLS recursion)
+CREATE OR REPLACE FUNCTION public.check_is_admin()
+RETURNS BOOLEAN
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+STABLE
+AS $$
+  SELECT EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND is_admin = true);
+$$;
+
+-- 3. Ensure columns exist (Fixes missing data)
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS last_active TIMESTAMPTZ;
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS is_vip BOOLEAN DEFAULT false;
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT false;
 
--- 3. Sync from auth.users (Restores Avatar/Name)
+-- 4. Sync from auth.users (Restores Avatar/Name)
 INSERT INTO public.users (id, email, display_name, photo_url, created_at, last_active)
 SELECT 
     id, 
@@ -189,12 +200,12 @@ ON CONFLICT (id) DO UPDATE SET
     photo_url = COALESCE(public.users.photo_url, EXCLUDED.photo_url),
     last_active = EXCLUDED.last_active;
 
--- 4. Restore Admin Rights (Replace email if needed)
+-- 5. Restore Admin Rights (Replace email if needed)
 UPDATE public.users 
 SET is_admin = true 
 WHERE email = 'codycn2804@gmail.com';
 
--- 5. Reconstruct Balance from Logs (Optional - attempts to restore lost Vcoin)
+-- 6. Reconstruct Balance from Logs (Optional - attempts to restore lost Vcoin)
 UPDATE public.users 
 SET diamonds = (
     SELECT COALESCE(SUM(amount), 0) 
@@ -203,21 +214,21 @@ SET diamonds = (
 )
 WHERE EXISTS (SELECT 1 FROM public.diamond_transactions_log WHERE user_id = public.users.id);
 
--- 6. Re-enable RLS with SAFE policies
+-- 7. Re-enable RLS with SAFE policies
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 
--- Policy: Everyone can read basic info (Prevents recursion for is_admin check)
+-- Policy: Everyone can read basic info
 CREATE POLICY "Public read access" ON public.users FOR SELECT USING (true);
 
 -- Policy: Users can update their own data
 CREATE POLICY "Self update" ON public.users FOR UPDATE USING (auth.uid() = id);
 
--- Policy: Admins can do everything (Safe because 'Public read access' handles the subquery)
+-- Policy: Admins can do everything (Uses SECURITY DEFINER function to avoid recursion)
 CREATE POLICY "Admin full access" ON public.users FOR ALL USING (
-  (SELECT is_admin FROM public.users WHERE id = auth.uid()) = true
+  public.check_is_admin() = true
 );
 
--- 7. Refresh Schema Cache (Fixes "column does not exist" errors)
+-- 8. Refresh Schema Cache (Fixes "column does not exist" errors)
 NOTIFY pgrst, 'reload config';
 `;
 
@@ -1067,7 +1078,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                               </tr>
                           </thead>
                           <tbody className="divide-y divide-white/5">
-                              {stats?.usersList
+                              {(stats?.usersList || [])
                                   .filter((u: any) => u.email.toLowerCase().includes(userSearchEmail.toLowerCase()))
                                   .sort((a: UserProfile, b: UserProfile) => {
                                       const aOnline = isUserOnline(a.lastActive);
@@ -1125,7 +1136,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   
                   {/* Mobile View */}
                   <div className="md:hidden space-y-4">
-                      {stats?.usersList
+                      {(stats?.usersList || [])
                           .filter((u: any) => u.email.toLowerCase().includes(userSearchEmail.toLowerCase()))
                           .sort((a: UserProfile, b: UserProfile) => {
                               const aOnline = isUserOnline(a.lastActive);

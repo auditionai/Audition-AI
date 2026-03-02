@@ -59,7 +59,8 @@ import {
   Scissors,
   Monitor,
   ArrowDown,
-  History
+  History,
+  Users
 } from 'lucide-react';
 
 export const Icons = {
@@ -122,5 +123,6 @@ export const Icons = {
   Scissors,
   Monitor,
   ArrowDown,
-  History
+  History,
+  Users
 };

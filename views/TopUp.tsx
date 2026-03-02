@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Language, Transaction, CreditPackage, PromotionCampaign, ViewId, HistoryItem } from '../types';
 import { Icons } from '../components/Icons';
-import { getPackages, createPaymentLink, getActivePromotion, getUnifiedHistory } from '../services/economyService';
+import { getPackages, createPaymentLink, getActivePromotion, getUnifiedHistory, updateLastActive } from '../services/economyService';
 import { useNotification } from '../components/NotificationSystem';
 
 interface TopUpProps {
@@ -90,6 +90,7 @@ export const TopUp: React.FC<TopUpProps> = ({ lang, onNavigate }) => {
 
   const handleBuyPackage = async (pkg: CreditPackage) => {
       setLoading(true);
+      updateLastActive(); // Mark active on purchase attempt
       try {
           const tx = await createPaymentLink(pkg.id);
           

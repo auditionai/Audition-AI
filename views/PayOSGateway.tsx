@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Transaction } from '../types';
 import { Icons } from '../components/Icons';
-import { mockPayOSSuccess } from '../services/economyService';
+import { mockPayOSSuccess, updateLastActive } from '../services/economyService';
 
 interface PayOSGatewayProps {
   transaction: Transaction;
@@ -44,6 +44,7 @@ export const PayOSGateway: React.FC<PayOSGatewayProps> = ({ transaction, onSucce
   const handleConfirmPayment = async () => {
       // Simulate API check
       setIsPaid(true);
+      updateLastActive(); // Mark active on payment confirmation
       // Even though user clicks "Paid", in this flow we keep it pending until Admin approves,
       // But we show a success message then redirect.
       // Or if we want auto-approve logic (mocked):

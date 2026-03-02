@@ -15,7 +15,7 @@ import { PayOSGateway } from './views/PayOSGateway';
 import { Language, Theme, ViewId, Feature } from './types';
 import { APP_CONFIG } from './constants';
 import { supabase } from './services/supabaseClient';
-import { logVisit } from './services/economyService';
+import { logVisit, updateLastActive } from './services/economyService';
 import { NotificationProvider, useNotification } from './components/NotificationSystem';
 
 function AppContent() {
@@ -44,10 +44,24 @@ function AppContent() {
 
     // Log Visit (Tracks every reload)
     logVisit();
+    updateLastActive();
+
+    // Update last active every 5 minutes
+    const activeInterval = setInterval(() => {
+        updateLastActive();
+    }, 5 * 60 * 1000);
+
+    // Update on visibility change (tab switch/mobile app switch)
+    const handleVisibilityChange = () => {
+        if (document.visibilityState === 'visible') {
+            updateLastActive();
+        }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     // Check for existing session on load
     if (supabase) {
-        supabase.auth.getSession().then(({ data: { session } }) => {
+        supabase.auth.getSession().then(({ data: { session } }: any) => {
             if (session) {
                 setIsAuthenticated(true);
                 checkAdminRole(session.user.id);
@@ -55,16 +69,21 @@ function AppContent() {
         });
 
         // Listen for auth changes (login/logout/oauth redirect)
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: any, session: any) => {
             if (session) {
                 setIsAuthenticated(true);
                 checkAdminRole(session.user.id);
+                updateLastActive(); // Update on login/session refresh
             } else {
                 setIsAuthenticated(false);
             }
         });
 
-        return () => subscription.unsubscribe();
+        return () => {
+            subscription.unsubscribe();
+            clearInterval(activeInterval);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
     }
   }, []);
 

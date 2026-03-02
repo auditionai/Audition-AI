@@ -184,7 +184,7 @@ ALTER TABLE public.users ADD COLUMN IF NOT EXISTS last_active TIMESTAMPTZ;
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS is_vip BOOLEAN DEFAULT false;
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT false;
 
--- 4. Sync from auth.users (Restores Avatar/Name)
+-- 4. Sync from auth.users (Restores Avatar/Name, preserves latest activity)
 INSERT INTO public.users (id, email, display_name, photo_url, created_at, last_active)
 SELECT 
     id, 
@@ -198,23 +198,14 @@ ON CONFLICT (id) DO UPDATE SET
     email = EXCLUDED.email,
     display_name = COALESCE(public.users.display_name, EXCLUDED.display_name),
     photo_url = COALESCE(public.users.photo_url, EXCLUDED.photo_url),
-    last_active = EXCLUDED.last_active;
+    last_active = GREATEST(public.users.last_active, EXCLUDED.last_active);
 
 -- 5. Restore Admin Rights (Replace email if needed)
 UPDATE public.users 
 SET is_admin = true 
 WHERE email = 'codycn2804@gmail.com';
 
--- 6. Reconstruct Balance from Logs (Optional - attempts to restore lost Vcoin)
-UPDATE public.users 
-SET diamonds = (
-    SELECT COALESCE(SUM(amount), 0) 
-    FROM public.diamond_transactions_log 
-    WHERE user_id = public.users.id
-)
-WHERE EXISTS (SELECT 1 FROM public.diamond_transactions_log WHERE user_id = public.users.id);
-
--- 7. Re-enable RLS with SAFE policies
+-- 6. Re-enable RLS with SAFE policies
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 
 -- Policy: Everyone can read basic info
@@ -228,8 +219,20 @@ CREATE POLICY "Admin full access" ON public.users FOR ALL USING (
   public.check_is_admin() = true
 );
 
--- 8. Refresh Schema Cache (Fixes "column does not exist" errors)
+-- 7. Refresh Schema Cache (Fixes "column does not exist" errors)
 NOTIFY pgrst, 'reload config';
+`;
+
+const BALANCE_FIX_SQL = `
+-- FIX NEGATIVE BALANCES SCRIPT
+
+-- 1. Reset negative balances to 0
+UPDATE public.users 
+SET diamonds = 0 
+WHERE diamonds < 0;
+
+-- 2. (Optional) Manually set balance for specific user (Uncomment to use)
+-- UPDATE public.users SET diamonds = 2000 WHERE email = 'codycn2804@gmail.com';
 `;
 
 // Helper for time ago
@@ -302,6 +305,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   // Error Recovery States
   const [showGiftcodeFix, setShowGiftcodeFix] = useState(false);
   const [showUserFix, setShowUserFix] = useState(false);
+  const [showBalanceFix, setShowBalanceFix] = useState(false);
 
   // UX States
   const [processingTxId, setProcessingTxId] = useState<string | null>(null);
@@ -1564,6 +1568,19 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                               </div>
                               <p className="text-xs text-slate-400">Sửa lỗi thiếu bảng users hoặc lỗi phân quyền (RLS).</p>
                           </button>
+
+                          <button 
+                              onClick={() => setShowBalanceFix(true)}
+                              className="p-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-left transition-colors group"
+                          >
+                              <div className="flex items-center gap-3 mb-2">
+                                  <div className="w-10 h-10 rounded-full bg-yellow-500/20 flex items-center justify-center text-yellow-500 group-hover:scale-110 transition-transform">
+                                      <Icons.Gem className="w-5 h-5" />
+                                  </div>
+                                  <span className="font-bold text-white">Fix Negative Balance</span>
+                              </div>
+                              <p className="text-xs text-slate-400">Sửa lỗi số dư âm (-Vcoin) cho tất cả tài khoản.</p>
+                          </button>
                       </div>
                   </div>
               </div>
@@ -1573,6 +1590,54 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
       {/* --- MOVED MODALS (ROOT LEVEL) --- */}
       
+      {/* BALANCE FIX MODAL */}
+      {showBalanceFix && (
+          <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 animate-fade-in bg-black/80 backdrop-blur-sm">
+              <div className="bg-[#12121a] w-full max-w-2xl p-6 rounded-2xl border border-yellow-500/50 shadow-[0_0_50px_rgba(255,200,0,0.2)] flex flex-col max-h-[90vh]">
+                  <div className="flex items-center gap-4 mb-4">
+                      <div className="w-12 h-12 bg-yellow-500/20 rounded-full flex items-center justify-center text-yellow-500 animate-pulse">
+                          <Icons.Gem className="w-6 h-6" />
+                      </div>
+                      <div>
+                          <h3 className="text-xl font-bold text-white">SỬA LỖI SỐ DƯ ÂM</h3>
+                          <p className="text-slate-400 text-xs">Reset số dư về 0 cho các tài khoản bị âm Vcoin</p>
+                      </div>
+                  </div>
+                  
+                  <div className="bg-yellow-500/10 border border-yellow-500/20 p-4 rounded-xl mb-4">
+                      <p className="text-sm text-yellow-300 font-bold mb-1">Cảnh báo:</p>
+                      <p className="text-xs text-slate-300 leading-relaxed">
+                          Hành động này sẽ đặt lại số dư của tất cả người dùng có số dư &lt; 0 về 0. Hãy chắc chắn rằng bạn muốn thực hiện điều này.
+                      </p>
+                  </div>
+
+                  <div className="flex-1 overflow-hidden flex flex-col">
+                      <p className="text-sm font-bold text-green-400 mb-2 uppercase">Copy mã SQL này và chạy trong Supabase SQL Editor</p>
+                      <div className="relative h-64 bg-black/50 border border-white/10 rounded-xl overflow-hidden">
+                          <pre className="absolute inset-0 p-4 text-[10px] md:text-xs font-mono text-slate-300 overflow-auto whitespace-pre-wrap selection:bg-audi-pink selection:text-white">
+                              {BALANCE_FIX_SQL}
+                          </pre>
+                          <button 
+                            onClick={() => {
+                                navigator.clipboard.writeText(BALANCE_FIX_SQL);
+                                showToast("Đã sao chép SQL!", 'info');
+                            }}
+                            className="absolute top-2 right-2 p-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors flex items-center gap-2 text-xs font-bold"
+                          >
+                              <Icons.Copy className="w-4 h-4" /> Sao chép
+                          </button>
+                      </div>
+                  </div>
+                  
+                  <div className="flex justify-end gap-3 mt-6">
+                      <button onClick={() => setShowBalanceFix(false)} className="px-6 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg font-bold transition-colors text-sm">Đóng</button>
+                      <button onClick={() => window.open('https://supabase.com/dashboard/project/_/sql', '_blank')} className="px-6 py-2 bg-yellow-500 text-black hover:bg-yellow-400 rounded-lg font-bold transition-colors text-sm flex items-center gap-2">
+                          <Icons.ExternalLink className="w-4 h-4" /> Mở SQL Editor
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
       {/* GIFTCODE ERROR FIX MODAL (NEW) */}
       {showGiftcodeFix && (
           <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 animate-fade-in">

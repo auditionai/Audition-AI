@@ -156,7 +156,7 @@ CREATE POLICY "Admin read all logs" ON public.diamond_transactions_log FOR ALL T
 `;
 
 const USER_FIX_SQL = `
--- Create users table if not exists (idempotent)
+-- 1. Create users table if not exists
 CREATE TABLE IF NOT EXISTS public.users (
   id UUID REFERENCES auth.users NOT NULL PRIMARY KEY,
   email TEXT,
@@ -169,10 +169,26 @@ CREATE TABLE IF NOT EXISTS public.users (
   is_vip BOOLEAN DEFAULT false
 );
 
--- Enable RLS
+-- 2. Enable RLS
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 
--- Policies
+-- 3. Sync from auth.users (Recover lost profiles)
+INSERT INTO public.users (id, email, display_name, photo_url, created_at, last_active)
+SELECT 
+    id, 
+    email, 
+    COALESCE(raw_user_meta_data->>'full_name', email), 
+    COALESCE(raw_user_meta_data->>'avatar_url', raw_user_meta_data->>'picture'), 
+    created_at, 
+    last_sign_in_at
+FROM auth.users
+ON CONFLICT (id) DO UPDATE SET
+    email = EXCLUDED.email,
+    display_name = COALESCE(public.users.display_name, EXCLUDED.display_name),
+    photo_url = COALESCE(public.users.photo_url, EXCLUDED.photo_url),
+    last_active = EXCLUDED.last_active;
+
+-- 4. Policies
 DROP POLICY IF EXISTS "Public profiles are viewable by everyone" ON public.users;
 CREATE POLICY "Public profiles are viewable by everyone" ON public.users FOR SELECT USING (true);
 
@@ -182,11 +198,25 @@ CREATE POLICY "Users can insert their own profile" ON public.users FOR INSERT WI
 DROP POLICY IF EXISTS "Users can update own profile" ON public.users;
 CREATE POLICY "Users can update own profile" ON public.users FOR UPDATE USING (auth.uid() = id);
 
--- Admin policy (simplified for now, ideally checks is_admin)
 DROP POLICY IF EXISTS "Admins can do everything" ON public.users;
 CREATE POLICY "Admins can do everything" ON public.users FOR ALL USING (
   (SELECT is_admin FROM public.users WHERE id = auth.uid()) = true
 );
+
+-- 5. Auto-create profile trigger
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger AS $$
+BEGIN
+  INSERT INTO public.users (id, email, display_name, photo_url)
+  VALUES (new.id, new.email, new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'avatar_url');
+  RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
 `;
 
 // Helper for time ago
@@ -236,6 +266,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
   // Search States
   const [userSearchEmail, setUserSearchEmail] = useState('');
+  const [currentUserEmail, setCurrentUserEmail] = useState('');
 
   // Health State
   const [health, setHealth] = useState<SystemHealth>({
@@ -296,6 +327,10 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
         };
         init();
     }
+    // Get current user email for recovery instructions
+    supabase.auth.getUser().then(({ data }) => {
+        if (data?.user?.email) setCurrentUserEmail(data.user.email);
+    });
   }, [isAdmin]);
 
   const refreshData = async () => {
@@ -1617,6 +1652,24 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           >
                               <Icons.Copy className="w-4 h-4" /> Sao chép
                           </button>
+                      </div>
+                      
+                      <div className="mt-4 bg-audi-pink/10 border border-audi-pink/30 p-3 rounded-xl">
+                          <p className="text-xs font-bold text-audi-pink mb-1 uppercase">Khôi phục quyền Admin:</p>
+                          <div className="flex gap-2">
+                              <code className="flex-1 bg-black/50 p-2 rounded text-[10px] font-mono text-white overflow-x-auto whitespace-nowrap">
+                                  UPDATE public.users SET is_admin = true WHERE email = '{currentUserEmail || 'YOUR_EMAIL'}';
+                              </code>
+                              <button 
+                                  onClick={() => {
+                                      navigator.clipboard.writeText(`UPDATE public.users SET is_admin = true WHERE email = '${currentUserEmail || 'YOUR_EMAIL'}';`);
+                                      showToast("Đã sao chép lệnh!", 'info');
+                                  }}
+                                  className="px-3 bg-audi-pink text-white rounded font-bold text-xs hover:bg-pink-600 transition-colors"
+                              >
+                                  Copy
+                              </button>
+                          </div>
                       </div>
                   </div>
 

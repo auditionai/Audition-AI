@@ -257,6 +257,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
   // Error Recovery States
   const [showGiftcodeFix, setShowGiftcodeFix] = useState(false);
+  const [showUserFix, setShowUserFix] = useState(false);
 
   // UX States
   const [processingTxId, setProcessingTxId] = useState<string | null>(null);

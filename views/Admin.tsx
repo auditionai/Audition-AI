@@ -155,6 +155,30 @@ DROP POLICY IF EXISTS "Admin read all logs" ON public.diamond_transactions_log;
 CREATE POLICY "Admin read all logs" ON public.diamond_transactions_log FOR ALL TO authenticated USING (true); -- Ideally check is_admin
 `;
 
+// Helper for time ago
+const getTimeAgo = (dateString?: string) => {
+    if (!dateString) return 'Chưa truy cập';
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffMins < 1) return 'Vừa xong';
+    if (diffMins < 60) return `${diffMins} phút trước`;
+    if (diffHours < 24) return `${diffHours} giờ trước`;
+    return `${diffDays} ngày trước`;
+};
+
+const isUserOnline = (dateString?: string) => {
+    if (!dateString) return false;
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    return diffMs < 5 * 60 * 1000; // Online if active within last 5 mins
+};
+
 export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [activeView, setActiveView] = useState<'overview' | 'transactions' | 'users' | 'packages' | 'promotion' | 'giftcodes' | 'system' | 'styles'>('overview');
   const [stats, setStats] = useState<any>(null);
@@ -957,30 +981,133 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           <input type="text" placeholder="Tìm email..." value={userSearchEmail} onChange={(e) => setUserSearchEmail(e.target.value)} className="bg-transparent border-none outline-none text-sm text-white w-full placeholder-slate-500" />
                       </div>
                   </div>
-                  {/* ... same table ... */}
+                  
                   <div className="hidden md:block bg-[#12121a] border border-white/10 rounded-2xl overflow-hidden">
                       <table className="w-full text-left text-sm text-slate-400">
                           <thead className="bg-black/30 text-xs font-bold text-slate-300 uppercase">
                               <tr>
                                   <th className="px-6 py-4">User</th>
+                                  <th className="px-6 py-4">Trạng thái</th>
                                   <th className="px-6 py-4">Số dư</th>
+                                  <th className="px-6 py-4">Hoạt động (Gen)</th>
                                   <th className="px-6 py-4">Vai trò</th>
-                                  <th className="px-6 py-4">Ngày tham gia</th>
                                   <th className="px-6 py-4 text-right">Hành động</th>
                               </tr>
                           </thead>
                           <tbody className="divide-y divide-white/5">
-                              {stats?.usersList.filter((u: any) => u.email.toLowerCase().includes(userSearchEmail.toLowerCase())).map((u: UserProfile) => (
-                                  <tr key={u.id} className="hover:bg-white/5">
-                                      <td className="px-6 py-4"><div className="flex items-center gap-3"><img src={u.avatar} className="w-8 h-8 rounded-full border border-white/10" onError={(e) => (e.currentTarget.src = 'https://picsum.photos/100/100')} /><div><div className="font-bold text-white">{u.username}</div><div className="text-xs text-slate-500">{u.email}</div></div></div></td>
-                                      <td className="px-6 py-4 text-audi-yellow font-bold font-mono">{u.balance}</td>
-                                      <td className="px-6 py-4"><span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${u.role === 'admin' ? 'bg-red-500/20 text-red-500' : 'bg-blue-500/20 text-blue-500'}`}>{u.role}</span></td>
-                                      <td className="px-6 py-4 text-xs font-mono">{u.lastCheckin ? new Date(u.lastCheckin).toLocaleDateString() : 'N/A'}</td>
-                                      <td className="px-6 py-4 text-right flex justify-end gap-2"><button onClick={() => handleViewUser(u)} className="text-xs font-bold text-audi-pink hover:text-white bg-audi-pink/10 hover:bg-audi-pink/30 px-3 py-1.5 rounded transition-colors">Chi tiết</button><button onClick={() => setEditingUser(u)} className="text-xs font-bold text-audi-cyan hover:text-white bg-audi-cyan/10 hover:bg-audi-cyan/30 px-3 py-1.5 rounded transition-colors">Sửa</button></td>
-                                  </tr>
-                              ))}
+                              {stats?.usersList
+                                  .filter((u: any) => u.email.toLowerCase().includes(userSearchEmail.toLowerCase()))
+                                  .sort((a: UserProfile, b: UserProfile) => {
+                                      const aOnline = isUserOnline(a.lastActive);
+                                      const bOnline = isUserOnline(b.lastActive);
+                                      if (aOnline && !bOnline) return -1;
+                                      if (!aOnline && bOnline) return 1;
+                                      const timeA = a.lastActive ? new Date(a.lastActive).getTime() : 0;
+                                      const timeB = b.lastActive ? new Date(b.lastActive).getTime() : 0;
+                                      return timeB - timeA;
+                                  })
+                                  .map((u: UserProfile) => {
+                                      const online = isUserOnline(u.lastActive);
+                                      return (
+                                          <tr key={u.id} className="hover:bg-white/5 transition-colors">
+                                              <td className="px-6 py-4">
+                                                  <div className="flex items-center gap-3">
+                                                      <div className="relative">
+                                                          <img src={u.avatar} className="w-8 h-8 rounded-full border border-white/10 object-cover" onError={(e) => (e.currentTarget.src = 'https://picsum.photos/100/100')} />
+                                                          {online && <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 border-2 border-[#12121a] rounded-full animate-pulse"></div>}
+                                                      </div>
+                                                      <div>
+                                                          <div className="font-bold text-white">{u.username}</div>
+                                                          <div className="text-xs text-slate-500">{u.email}</div>
+                                                      </div>
+                                                  </div>
+                                              </td>
+                                              <td className="px-6 py-4">
+                                                  <div className="flex items-center gap-2">
+                                                      <div className={`w-1.5 h-1.5 rounded-full ${online ? 'bg-green-500' : 'bg-slate-600'}`}></div>
+                                                      <span className={`text-xs font-bold ${online ? 'text-green-500' : 'text-slate-500'}`}>
+                                                          {online ? 'Online' : getTimeAgo(u.lastActive)}
+                                                      </span>
+                                                  </div>
+                                              </td>
+                                              <td className="px-6 py-4 text-audi-yellow font-bold font-mono">{u.balance}</td>
+                                              <td className="px-6 py-4">
+                                                  <span className="text-white font-bold">{u.usageCount || 0}</span>
+                                                  <span className="text-xs text-slate-500 ml-1">lượt</span>
+                                              </td>
+                                              <td className="px-6 py-4">
+                                                  <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${u.role === 'admin' ? 'bg-red-500/20 text-red-500' : 'bg-blue-500/20 text-blue-500'}`}>
+                                                      {u.role}
+                                                  </span>
+                                              </td>
+                                              <td className="px-6 py-4 text-right flex justify-end gap-2">
+                                                  <button onClick={() => handleViewUser(u)} className="text-xs font-bold text-audi-pink hover:text-white bg-audi-pink/10 hover:bg-audi-pink/30 px-3 py-1.5 rounded transition-colors">Chi tiết</button>
+                                                  <button onClick={() => setEditingUser(u)} className="text-xs font-bold text-audi-cyan hover:text-white bg-audi-cyan/10 hover:bg-audi-cyan/30 px-3 py-1.5 rounded transition-colors">Sửa</button>
+                                              </td>
+                                          </tr>
+                                      );
+                                  })}
                           </tbody>
                       </table>
+                  </div>
+                  
+                  {/* Mobile View */}
+                  <div className="md:hidden space-y-4">
+                      {stats?.usersList
+                          .filter((u: any) => u.email.toLowerCase().includes(userSearchEmail.toLowerCase()))
+                          .sort((a: UserProfile, b: UserProfile) => {
+                              const aOnline = isUserOnline(a.lastActive);
+                              const bOnline = isUserOnline(b.lastActive);
+                              if (aOnline && !bOnline) return -1;
+                              if (!aOnline && bOnline) return 1;
+                              const timeA = a.lastActive ? new Date(a.lastActive).getTime() : 0;
+                              const timeB = b.lastActive ? new Date(b.lastActive).getTime() : 0;
+                              return timeB - timeA;
+                          })
+                          .map((u: UserProfile) => {
+                              const online = isUserOnline(u.lastActive);
+                              return (
+                                  <div key={u.id} className="bg-[#12121a] border border-white/10 rounded-xl p-4 relative overflow-hidden">
+                                      <div className="flex justify-between items-start mb-3">
+                                          <div className="flex items-center gap-3">
+                                              <div className="relative">
+                                                  <img src={u.avatar} className="w-10 h-10 rounded-full border border-white/10 object-cover" onError={(e) => (e.currentTarget.src = 'https://picsum.photos/100/100')} />
+                                                  {online && <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 border-2 border-[#12121a] rounded-full animate-pulse"></div>}
+                                              </div>
+                                              <div>
+                                                  <div className="font-bold text-white text-sm">{u.username}</div>
+                                                  <div className="text-xs text-slate-500">{u.email}</div>
+                                              </div>
+                                          </div>
+                                          <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${u.role === 'admin' ? 'bg-red-500/20 text-red-500' : 'bg-blue-500/20 text-blue-500'}`}>
+                                              {u.role}
+                                          </span>
+                                      </div>
+                                      
+                                      <div className="grid grid-cols-3 gap-2 mb-3 bg-white/5 p-2 rounded-lg">
+                                          <div className="text-center">
+                                              <div className="text-[10px] text-slate-500 uppercase font-bold">Trạng thái</div>
+                                              <div className={`text-xs font-bold ${online ? 'text-green-500' : 'text-slate-400'}`}>
+                                                  {online ? 'Online' : getTimeAgo(u.lastActive)}
+                                              </div>
+                                          </div>
+                                          <div className="text-center border-l border-white/10">
+                                              <div className="text-[10px] text-slate-500 uppercase font-bold">Số dư</div>
+                                              <div className="text-xs font-bold text-audi-yellow">{u.balance} VC</div>
+                                          </div>
+                                          <div className="text-center border-l border-white/10">
+                                              <div className="text-[10px] text-slate-500 uppercase font-bold">Hoạt động</div>
+                                              <div className="text-xs font-bold text-white">{u.usageCount || 0} gen</div>
+                                          </div>
+                                      </div>
+
+                                      <div className="flex gap-2 border-t border-white/5 pt-3">
+                                          <button onClick={() => handleViewUser(u)} className="flex-1 py-2 bg-audi-pink/10 text-audi-pink rounded-lg font-bold text-xs border border-audi-pink/30">Chi tiết</button>
+                                          <button onClick={() => setEditingUser(u)} className="flex-1 py-2 bg-audi-cyan/10 text-audi-cyan rounded-lg font-bold text-xs border border-audi-cyan/30">Sửa</button>
+                                      </div>
+                                  </div>
+                              );
+                          })}
                   </div>
               </div>
           )}

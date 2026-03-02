@@ -84,6 +84,8 @@ export interface UserProfile {
   checkinHistory: string[]; // Array of 'YYYY-MM-DD' strings
   password?: string; // Mock password field for admin editing
   usedGiftcodes?: string[]; // Track used codes
+  lastActive?: string; // New: Last active timestamp
+  usageCount?: number; // New: Total AI generations/usages
 }
 
 export interface CreditPackage {

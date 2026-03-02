@@ -43,8 +43,20 @@ export const getUserProfile = async (): Promise<UserProfile> => {
         streak: 0, // Need separate checkin table query if needed
         lastCheckin: null,
         checkinHistory: [],
-        usedGiftcodes: []
+        usedGiftcodes: [],
+        lastActive: data.last_active || null
     };
+};
+
+export const updateLastActive = async () => {
+    try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+            await supabase.from('users').update({ last_active: new Date().toISOString() }).eq('id', user.id);
+        }
+    } catch (e) {
+        console.warn("Failed to update last active", e);
+    }
 };
 
 export const updateAdminUserProfile = async (profile: UserProfile): Promise<{success: boolean, error?: string}> => {
@@ -835,7 +847,7 @@ export const deleteStylePreset = async (id: string) => {
 // --- ADMIN STATS ---
 
 export const getAdminStats = async () => {
-    const { data: users } = await supabase.from('users').select('id, email, display_name, diamonds, is_admin, created_at, photo_url');
+    const { data: users } = await supabase.from('users').select('id, email, display_name, diamonds, is_admin, created_at, photo_url, last_active');
     const { data: pkgs } = await supabase.from('credit_packages').select('*').order('display_order');
     const { data: promos } = await supabase.from('promotions').select('*');
     const { data: codes } = await supabase.from('gift_codes').select('*');
@@ -883,7 +895,14 @@ export const getAdminStats = async () => {
 
     // Calculate AI Usage Stats
     const usageStats: Record<string, { count: number, vcoins: number }> = {};
+    const userUsageCounts: Record<string, number> = {}; // New: Track usage per user
+
     usageLogs?.forEach((log: any) => {
+        // Track per user
+        if (log.user_id) {
+            userUsageCounts[log.user_id] = (userUsageCounts[log.user_id] || 0) + 1;
+        }
+
         // Try to find the reason field from various potential column names
         let rawFeature = log.reason || log.description || log.note || log.action || log.activity || log.details || 'Khác';
         
@@ -980,7 +999,9 @@ export const getAdminStats = async () => {
         balance: u.diamonds,
         role: u.is_admin ? 'admin' : 'user',
         created_at: u.created_at,
-        isVip: false
+        isVip: false,
+        lastActive: u.last_active,
+        usageCount: userUsageCounts[u.id] || 0 // New: Include usage count
     })) || [];
 
     return {

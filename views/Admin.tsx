@@ -25,13 +25,15 @@ import {
     getUserProfile,
     getStylePresets,
     saveStylePreset,
-    deleteStylePreset
+    deleteStylePreset,
+    getUnifiedHistory,
+    getGiftcodeUsages
 } from '../services/economyService';
-import { getAllImagesFromStorage, deleteImageFromStorage, checkR2Connection } from '../services/storageService';
+import { getAllImagesFromStorage, deleteImageFromStorage, checkR2Connection, getUserImagesFromStorage } from '../services/storageService';
 import { checkConnection, analyzeStyleImage } from '../services/geminiService';
 import { checkSupabaseConnection } from '../services/supabaseClient';
 import { Icons } from '../components/Icons';
-import { UserProfile, CreditPackage, Giftcode, PromotionCampaign, Transaction, GeneratedImage, Language, StylePreset } from '../types';
+import { UserProfile, CreditPackage, Giftcode, PromotionCampaign, Transaction, GeneratedImage, Language, StylePreset, HistoryItem } from '../types';
 
 interface AdminProps {
   lang: Language;
@@ -150,9 +152,149 @@ CREATE POLICY "Admin manage styles" ON public.style_presets FOR ALL TO authentic
 DROP POLICY IF EXISTS "User read own logs" ON public.diamond_transactions_log;
 CREATE POLICY "User read own logs" ON public.diamond_transactions_log FOR SELECT TO authenticated USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "User insert own logs" ON public.diamond_transactions_log;
+CREATE POLICY "User insert own logs" ON public.diamond_transactions_log FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+
 DROP POLICY IF EXISTS "Admin read all logs" ON public.diamond_transactions_log;
 CREATE POLICY "Admin read all logs" ON public.diamond_transactions_log FOR ALL TO authenticated USING (true); -- Ideally check is_admin
+
+-- 8. RPC FOR ATOMIC INCREMENT (Fixes concurrency issues)
+CREATE OR REPLACE FUNCTION public.increment_giftcode_usage(code_id uuid)
+RETURNS void
+LANGUAGE sql
+SECURITY DEFINER
+AS $$
+  UPDATE public.gift_codes
+  SET used_count = used_count + 1
+  WHERE id = code_id;
+$$;
+
+-- 9. APP VISITS TRACKING
+CREATE TABLE IF NOT EXISTS public.app_visits (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id uuid REFERENCES public.users(id),
+    visit_date date DEFAULT CURRENT_DATE,
+    user_agent text,
+    created_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE public.app_visits ENABLE ROW LEVEL SECURITY;
+
+-- Allow anyone to insert (logging visit)
+DROP POLICY IF EXISTS "Public insert visits" ON public.app_visits;
+CREATE POLICY "Public insert visits" ON public.app_visits FOR INSERT TO anon, authenticated WITH CHECK (true);
+
+-- Allow admins to read all
+DROP POLICY IF EXISTS "Admin read visits" ON public.app_visits;
+CREATE POLICY "Admin read visits" ON public.app_visits FOR SELECT TO authenticated USING (true);
 `;
+
+const USER_FIX_SQL = `
+-- RECOVERY SCRIPT (Run in Supabase SQL Editor)
+
+-- 1. Reset Policies to avoid recursion loops (Fixes 500 Error)
+ALTER TABLE public.users DISABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Admins can do everything" ON public.users;
+DROP POLICY IF EXISTS "Public profiles are viewable by everyone" ON public.users;
+DROP POLICY IF EXISTS "Users can insert their own profile" ON public.users;
+DROP POLICY IF EXISTS "Users can update own profile" ON public.users;
+DROP POLICY IF EXISTS "Public read access" ON public.users;
+DROP POLICY IF EXISTS "Self update" ON public.users;
+DROP POLICY IF EXISTS "Admin full access" ON public.users;
+
+-- 2. Create SECURE function to check admin status (Bypasses RLS recursion)
+CREATE OR REPLACE FUNCTION public.check_is_admin()
+RETURNS BOOLEAN
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+STABLE
+AS $$
+  SELECT EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND is_admin = true);
+$$;
+
+-- 3. Ensure columns exist (Fixes missing data)
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS display_name text;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS photo_url text;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS diamonds numeric DEFAULT 0;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS last_active TIMESTAMPTZ;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS is_vip BOOLEAN DEFAULT false;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT false;
+
+-- 4. Sync from auth.users (Restores Avatar/Name, preserves latest activity)
+INSERT INTO public.users (id, email, display_name, photo_url, created_at, last_active)
+SELECT 
+    id, 
+    email, 
+    COALESCE(raw_user_meta_data->>'full_name', email), 
+    COALESCE(raw_user_meta_data->>'avatar_url', raw_user_meta_data->>'picture'), 
+    created_at, 
+    last_sign_in_at
+FROM auth.users
+ON CONFLICT (id) DO UPDATE SET
+    email = EXCLUDED.email,
+    display_name = COALESCE(public.users.display_name, EXCLUDED.display_name),
+    photo_url = COALESCE(public.users.photo_url, EXCLUDED.photo_url),
+    last_active = GREATEST(public.users.last_active, EXCLUDED.last_active);
+
+-- 5. Restore Admin Rights (Replace email if needed)
+UPDATE public.users 
+SET is_admin = true 
+WHERE email = 'codycn2804@gmail.com';
+
+-- 6. Re-enable RLS with SAFE policies
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+
+-- Policy: Everyone can read basic info
+CREATE POLICY "Public read access" ON public.users FOR SELECT USING (true);
+
+-- Policy: Users can update their own data
+CREATE POLICY "Self update" ON public.users FOR UPDATE USING (auth.uid() = id);
+
+-- Policy: Admins can do everything (Uses SECURITY DEFINER function to avoid recursion)
+CREATE POLICY "Admin full access" ON public.users FOR ALL USING (
+  public.check_is_admin() = true
+);
+
+-- 7. Refresh Schema Cache (Fixes "column does not exist" errors)
+NOTIFY pgrst, 'reload config';
+`;
+
+const BALANCE_FIX_SQL = `
+-- FIX NEGATIVE BALANCES SCRIPT
+
+-- 1. Reset negative balances to 0
+UPDATE public.users 
+SET diamonds = 0 
+WHERE diamonds < 0;
+
+-- 2. (Optional) Manually set balance for specific user (Uncomment to use)
+-- UPDATE public.users SET diamonds = 2000 WHERE email = 'codycn2804@gmail.com';
+`;
+
+// Helper for time ago
+const getTimeAgo = (dateString?: string) => {
+    if (!dateString) return 'Chưa truy cập';
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffMins < 1) return 'Vừa xong';
+    if (diffMins < 60) return `${diffMins} phút trước`;
+    if (diffHours < 24) return `${diffHours} giờ trước`;
+    return `${diffDays} ngày trước`;
+};
+
+const isUserOnline = (dateString?: string) => {
+    if (!dateString) return false;
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    return diffMs < 5 * 60 * 1000; // Online if active within last 5 mins
+};
 
 export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [activeView, setActiveView] = useState<'overview' | 'transactions' | 'users' | 'packages' | 'promotion' | 'giftcodes' | 'system' | 'styles'>('overview');
@@ -177,6 +319,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
   // Search States
   const [userSearchEmail, setUserSearchEmail] = useState('');
+  const [currentUserEmail, setCurrentUserEmail] = useState('');
 
   // Health State
   const [health, setHealth] = useState<SystemHealth>({
@@ -187,12 +330,24 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
   // Modal States
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
+  const [viewingUser, setViewingUser] = useState<UserProfile | null>(null);
+  const [userHistory, setUserHistory] = useState<HistoryItem[]>([]);
+  const [userImages, setUserImages] = useState<GeneratedImage[]>([]);
+  const [totalImagesCreated, setTotalImagesCreated] = useState(0);
+  const [loadingUserDetails, setLoadingUserDetails] = useState(false);
+  const [historyLimit, setHistoryLimit] = useState(20);
+  const [imagesLimit, setImagesLimit] = useState(20);
   const [editingPackage, setEditingPackage] = useState<CreditPackage | null>(null);
   const [editingGiftcode, setEditingGiftcode] = useState<Giftcode | null>(null);
   const [editingPromotion, setEditingPromotion] = useState<PromotionCampaign | null>(null);
+  const [viewingGiftcodeUsage, setViewingGiftcodeUsage] = useState<Giftcode | null>(null);
+  const [giftcodeUsers, setGiftcodeUsers] = useState<any[]>([]);
+  const [loadingGiftcodeUsers, setLoadingGiftcodeUsers] = useState(false);
 
   // Error Recovery States
   const [showGiftcodeFix, setShowGiftcodeFix] = useState(false);
+  const [showUserFix, setShowUserFix] = useState(false);
+  const [showBalanceFix, setShowBalanceFix] = useState(false);
 
   // UX States
   const [processingTxId, setProcessingTxId] = useState<string | null>(null);
@@ -231,6 +386,11 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
         };
         init();
     }
+    // Get current user email for recovery instructions
+    supabase.auth.getUser().then((response: any) => {
+        const data = response.data;
+        if (data?.user?.email) setCurrentUserEmail(data.user.email);
+    });
   }, [isAdmin]);
 
   const refreshData = async () => {
@@ -337,6 +497,42 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           showToast('Đã xóa API Key');
       });
   }
+
+  const handleViewUser = async (user: UserProfile) => {
+      setViewingUser(user);
+      setLoadingUserDetails(true);
+      setHistoryLimit(20);
+      setImagesLimit(20);
+      try {
+          const history = await getUnifiedHistory(user.id);
+          setUserHistory(history);
+          
+          // Calculate total images created from history (type === 'usage')
+          const totalCreated = history.filter(h => h.type === 'usage').length;
+          setTotalImagesCreated(totalCreated);
+
+          // Fetch images for this user
+          const images = await getUserImagesFromStorage(user.id);
+          setUserImages(images);
+      } catch (e) {
+          showToast('Lỗi tải dữ liệu người dùng', 'error');
+      } finally {
+          setLoadingUserDetails(false);
+      }
+  };
+
+  const handleViewGiftcodeUsage = async (code: Giftcode) => {
+      setViewingGiftcodeUsage(code);
+      setLoadingGiftcodeUsers(true);
+      try {
+          const users = await getGiftcodeUsages(code.id);
+          setGiftcodeUsers(users);
+      } catch (e) {
+          showToast('Lỗi tải danh sách người dùng', 'error');
+      } finally {
+          setLoadingGiftcodeUsers(false);
+      }
+  };
 
   const handleSaveUser = async () => {
       if (editingUser) {
@@ -828,7 +1024,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                           />
                                       </td>
                                       <td className="px-6 py-4 text-xs font-mono">{new Date(tx.createdAt).toLocaleString()}</td>
-                                      <td className="px-6 py-4 font-mono font-bold text-white">{tx.code}</td>
+                                      <td className="px-6 py-4 font-mono font-bold text-white">{tx.order_code || tx.code}</td>
                                       <td className="px-6 py-4">
                                           <div className="flex items-center gap-3">
                                               <img src={tx.userAvatar || 'https://picsum.photos/100/100'} className="w-8 h-8 rounded-full border border-white/10 object-cover" />
@@ -878,7 +1074,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                           <img src={tx.userAvatar || 'https://picsum.photos/100/100'} className="w-10 h-10 rounded-full border border-white/10 object-cover bg-black" />
                                           <div>
                                               <div className="font-bold text-white text-sm">{tx.userName || 'Unknown'}</div>
-                                              <div className="text-xs text-slate-500 font-mono">{tx.code}</div>
+                                              <div className="text-xs text-slate-500 font-mono">{tx.order_code || tx.code}</div>
                                           </div>
                                       </div>
                                       <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${
@@ -925,30 +1121,133 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           <input type="text" placeholder="Tìm email..." value={userSearchEmail} onChange={(e) => setUserSearchEmail(e.target.value)} className="bg-transparent border-none outline-none text-sm text-white w-full placeholder-slate-500" />
                       </div>
                   </div>
-                  {/* ... same table ... */}
+                  
                   <div className="hidden md:block bg-[#12121a] border border-white/10 rounded-2xl overflow-hidden">
                       <table className="w-full text-left text-sm text-slate-400">
                           <thead className="bg-black/30 text-xs font-bold text-slate-300 uppercase">
                               <tr>
                                   <th className="px-6 py-4">User</th>
+                                  <th className="px-6 py-4">Trạng thái</th>
                                   <th className="px-6 py-4">Số dư</th>
+                                  <th className="px-6 py-4">Hoạt động (Gen)</th>
                                   <th className="px-6 py-4">Vai trò</th>
-                                  <th className="px-6 py-4">Ngày tham gia</th>
                                   <th className="px-6 py-4 text-right">Hành động</th>
                               </tr>
                           </thead>
                           <tbody className="divide-y divide-white/5">
-                              {stats?.usersList.filter((u: any) => u.email.toLowerCase().includes(userSearchEmail.toLowerCase())).map((u: UserProfile) => (
-                                  <tr key={u.id} className="hover:bg-white/5">
-                                      <td className="px-6 py-4"><div className="flex items-center gap-3"><img src={u.avatar} className="w-8 h-8 rounded-full border border-white/10" onError={(e) => (e.currentTarget.src = 'https://picsum.photos/100/100')} /><div><div className="font-bold text-white">{u.username}</div><div className="text-xs text-slate-500">{u.email}</div></div></div></td>
-                                      <td className="px-6 py-4 text-audi-yellow font-bold font-mono">{u.balance}</td>
-                                      <td className="px-6 py-4"><span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${u.role === 'admin' ? 'bg-red-500/20 text-red-500' : 'bg-blue-500/20 text-blue-500'}`}>{u.role}</span></td>
-                                      <td className="px-6 py-4 text-xs font-mono">{u.lastCheckin ? new Date(u.lastCheckin).toLocaleDateString() : 'N/A'}</td>
-                                      <td className="px-6 py-4 text-right"><button onClick={() => setEditingUser(u)} className="text-xs font-bold text-audi-cyan hover:text-white bg-audi-cyan/10 hover:bg-audi-cyan/30 px-3 py-1.5 rounded transition-colors">Sửa</button></td>
-                                  </tr>
-                              ))}
+                              {(stats?.usersList || [])
+                                  .filter((u: any) => u.email.toLowerCase().includes(userSearchEmail.toLowerCase()))
+                                  .sort((a: UserProfile, b: UserProfile) => {
+                                      const aOnline = isUserOnline(a.lastActive);
+                                      const bOnline = isUserOnline(b.lastActive);
+                                      if (aOnline && !bOnline) return -1;
+                                      if (!aOnline && bOnline) return 1;
+                                      const timeA = a.lastActive ? new Date(a.lastActive).getTime() : 0;
+                                      const timeB = b.lastActive ? new Date(b.lastActive).getTime() : 0;
+                                      return timeB - timeA;
+                                  })
+                                  .map((u: UserProfile) => {
+                                      const online = isUserOnline(u.lastActive);
+                                      return (
+                                          <tr key={u.id} className="hover:bg-white/5 transition-colors">
+                                              <td className="px-6 py-4">
+                                                  <div className="flex items-center gap-3">
+                                                      <div className="relative">
+                                                          <img src={u.avatar} className="w-8 h-8 rounded-full border border-white/10 object-cover" onError={(e) => (e.currentTarget.src = 'https://picsum.photos/100/100')} />
+                                                          {online && <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 border-2 border-[#12121a] rounded-full animate-pulse"></div>}
+                                                      </div>
+                                                      <div>
+                                                          <div className="font-bold text-white">{u.username}</div>
+                                                          <div className="text-xs text-slate-500">{u.email}</div>
+                                                      </div>
+                                                  </div>
+                                              </td>
+                                              <td className="px-6 py-4">
+                                                  <div className="flex items-center gap-2">
+                                                      <div className={`w-1.5 h-1.5 rounded-full ${online ? 'bg-green-500' : 'bg-slate-600'}`}></div>
+                                                      <span className={`text-xs font-bold ${online ? 'text-green-500' : 'text-slate-500'}`}>
+                                                          {online ? 'Online' : getTimeAgo(u.lastActive)}
+                                                      </span>
+                                                  </div>
+                                              </td>
+                                              <td className="px-6 py-4 text-audi-yellow font-bold font-mono">{u.balance}</td>
+                                              <td className="px-6 py-4">
+                                                  <span className="text-white font-bold">{u.usageCount || 0}</span>
+                                                  <span className="text-xs text-slate-500 ml-1">lượt</span>
+                                              </td>
+                                              <td className="px-6 py-4">
+                                                  <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${u.role === 'admin' ? 'bg-red-500/20 text-red-500' : 'bg-blue-500/20 text-blue-500'}`}>
+                                                      {u.role}
+                                                  </span>
+                                              </td>
+                                              <td className="px-6 py-4 text-right flex justify-end gap-2">
+                                                  <button onClick={() => handleViewUser(u)} className="text-xs font-bold text-audi-pink hover:text-white bg-audi-pink/10 hover:bg-audi-pink/30 px-3 py-1.5 rounded transition-colors">Chi tiết</button>
+                                                  <button onClick={() => setEditingUser(u)} className="text-xs font-bold text-audi-cyan hover:text-white bg-audi-cyan/10 hover:bg-audi-cyan/30 px-3 py-1.5 rounded transition-colors">Sửa</button>
+                                              </td>
+                                          </tr>
+                                      );
+                                  })}
                           </tbody>
                       </table>
+                  </div>
+                  
+                  {/* Mobile View */}
+                  <div className="md:hidden space-y-4">
+                      {(stats?.usersList || [])
+                          .filter((u: any) => u.email.toLowerCase().includes(userSearchEmail.toLowerCase()))
+                          .sort((a: UserProfile, b: UserProfile) => {
+                              const aOnline = isUserOnline(a.lastActive);
+                              const bOnline = isUserOnline(b.lastActive);
+                              if (aOnline && !bOnline) return -1;
+                              if (!aOnline && bOnline) return 1;
+                              const timeA = a.lastActive ? new Date(a.lastActive).getTime() : 0;
+                              const timeB = b.lastActive ? new Date(b.lastActive).getTime() : 0;
+                              return timeB - timeA;
+                          })
+                          .map((u: UserProfile) => {
+                              const online = isUserOnline(u.lastActive);
+                              return (
+                                  <div key={u.id} className="bg-[#12121a] border border-white/10 rounded-xl p-4 relative overflow-hidden">
+                                      <div className="flex justify-between items-start mb-3">
+                                          <div className="flex items-center gap-3">
+                                              <div className="relative">
+                                                  <img src={u.avatar} className="w-10 h-10 rounded-full border border-white/10 object-cover" onError={(e) => (e.currentTarget.src = 'https://picsum.photos/100/100')} />
+                                                  {online && <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 border-2 border-[#12121a] rounded-full animate-pulse"></div>}
+                                              </div>
+                                              <div>
+                                                  <div className="font-bold text-white text-sm">{u.username}</div>
+                                                  <div className="text-xs text-slate-500">{u.email}</div>
+                                              </div>
+                                          </div>
+                                          <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${u.role === 'admin' ? 'bg-red-500/20 text-red-500' : 'bg-blue-500/20 text-blue-500'}`}>
+                                              {u.role}
+                                          </span>
+                                      </div>
+                                      
+                                      <div className="grid grid-cols-3 gap-2 mb-3 bg-white/5 p-2 rounded-lg">
+                                          <div className="text-center">
+                                              <div className="text-[10px] text-slate-500 uppercase font-bold">Trạng thái</div>
+                                              <div className={`text-xs font-bold ${online ? 'text-green-500' : 'text-slate-400'}`}>
+                                                  {online ? 'Online' : getTimeAgo(u.lastActive)}
+                                              </div>
+                                          </div>
+                                          <div className="text-center border-l border-white/10">
+                                              <div className="text-[10px] text-slate-500 uppercase font-bold">Số dư</div>
+                                              <div className="text-xs font-bold text-audi-yellow">{u.balance} VC</div>
+                                          </div>
+                                          <div className="text-center border-l border-white/10">
+                                              <div className="text-[10px] text-slate-500 uppercase font-bold">Hoạt động</div>
+                                              <div className="text-xs font-bold text-white">{u.usageCount || 0} gen</div>
+                                          </div>
+                                      </div>
+
+                                      <div className="flex gap-2 border-t border-white/5 pt-3">
+                                          <button onClick={() => handleViewUser(u)} className="flex-1 py-2 bg-audi-pink/10 text-audi-pink rounded-lg font-bold text-xs border border-audi-pink/30">Chi tiết</button>
+                                          <button onClick={() => setEditingUser(u)} className="flex-1 py-2 bg-audi-cyan/10 text-audi-cyan rounded-lg font-bold text-xs border border-audi-cyan/30">Sửa</button>
+                                      </div>
+                                  </div>
+                              );
+                          })}
                   </div>
               </div>
           )}
@@ -986,7 +1285,10 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               <div className="space-y-6 animate-slide-in-right">
                   <div className="flex justify-between items-center">
                       <h2 className="text-lg md:text-2xl font-bold text-white">Quản Lý Giftcode</h2>
-                      <button onClick={() => setEditingGiftcode({id: `temp_${Date.now()}`, code: '', reward: 10, totalLimit: 100, usedCount: 0, maxPerUser: 1, isActive: true})} className="px-3 py-2 bg-audi-pink text-white rounded-lg font-bold flex items-center gap-2 hover:bg-pink-600 text-xs md:text-sm"><Icons.Plus className="w-4 h-4" /> <span className="hidden md:inline">Tạo Code</span><span className="md:hidden">Tạo</span></button>
+                      <div className="flex gap-2">
+                          <button onClick={refreshData} className="px-3 py-2 bg-white/10 text-white rounded-lg font-bold hover:bg-white/20" title="Làm mới dữ liệu"><Icons.Clock className="w-4 h-4" /></button>
+                          <button onClick={() => setEditingGiftcode({id: `temp_${Date.now()}`, code: '', reward: 10, totalLimit: 100, usedCount: 0, maxPerUser: 1, isActive: true})} className="px-3 py-2 bg-audi-pink text-white rounded-lg font-bold flex items-center gap-2 hover:bg-pink-600 text-xs md:text-sm"><Icons.Plus className="w-4 h-4" /> <span className="hidden md:inline">Tạo Code</span><span className="md:hidden">Tạo</span></button>
+                      </div>
                   </div>
                   {/* ... same ... */}
                   <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4 md:p-6 mb-6">
@@ -1004,7 +1306,14 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           <div key={code.id} className="bg-[#12121a] border border-white/10 rounded-xl p-4 shadow-sm relative overflow-hidden">
                               <div className="flex justify-between items-start mb-3"><div><div className="font-mono font-bold text-white text-lg tracking-wider">{code.code}</div><div className="text-audi-yellow font-bold text-sm">+{code.reward} Vcoin</div></div>{code.isActive ? <span className="text-green-500 text-[10px] font-bold border border-green-500/20 px-2 py-1 rounded bg-green-500/10">ACTIVE</span> : <span className="text-red-500 text-[10px] font-bold border border-red-500/20 px-2 py-1 rounded bg-red-500/10">INACTIVE</span>}</div>
                               <div className="mb-3"><div className="flex justify-between text-[10px] text-slate-500 mb-1 font-bold uppercase"><span>Sử dụng</span><span>{code.usedCount}/{code.totalLimit}</span></div><div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden"><div className="h-full bg-green-500" style={{ width: `${Math.min(100, (code.usedCount / code.totalLimit) * 100)}%` }}></div></div></div>
-                              <div className="flex justify-between items-center border-t border-white/5 pt-3"><span className="text-[10px] text-slate-500">Max: {code.maxPerUser}/người</span><div className="flex gap-2"><button onClick={() => setEditingGiftcode(code)} className="p-1.5 bg-blue-500/20 text-blue-500 rounded hover:bg-blue-500 hover:text-white transition-colors"><Icons.Settings className="w-4 h-4" /></button><button onClick={() => handleDeleteGiftcode(code.id)} className="p-1.5 bg-red-500/20 text-red-500 rounded hover:bg-red-500 hover:text-white transition-colors"><Icons.Trash className="w-4 h-4" /></button></div></div>
+                              <div className="flex justify-between items-center border-t border-white/5 pt-3">
+                                  <span className="text-[10px] text-slate-500">Max: {code.maxPerUser}/người</span>
+                                  <div className="flex gap-2">
+                                      <button onClick={() => handleViewGiftcodeUsage(code)} className="p-1.5 bg-green-500/20 text-green-500 rounded hover:bg-green-500 hover:text-white transition-colors" title="Xem người dùng"><Icons.Users className="w-4 h-4" /></button>
+                                      <button onClick={() => setEditingGiftcode(code)} className="p-1.5 bg-blue-500/20 text-blue-500 rounded hover:bg-blue-500 hover:text-white transition-colors"><Icons.Settings className="w-4 h-4" /></button>
+                                      <button onClick={() => handleDeleteGiftcode(code.id)} className="p-1.5 bg-red-500/20 text-red-500 rounded hover:bg-red-500 hover:text-white transition-colors"><Icons.Trash className="w-4 h-4" /></button>
+                                  </div>
+                              </div>
                           </div>
                       ))}
                   </div>
@@ -1289,6 +1598,54 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           })}
                       </div>
                   </div>
+
+                  {/* Database Maintenance */}
+                  <div className="bg-[#12121a] p-6 rounded-2xl border border-white/10 mt-6">
+                      <h3 className="font-bold text-lg text-white mb-4 flex items-center gap-2">
+                          <Icons.Database className="w-5 h-5 text-audi-cyan" />
+                          Bảo trì Database
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <button 
+                              onClick={() => setShowGiftcodeFix(true)}
+                              className="p-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-left transition-colors group"
+                          >
+                              <div className="flex items-center gap-3 mb-2">
+                                  <div className="w-10 h-10 rounded-full bg-audi-purple/20 flex items-center justify-center text-audi-purple group-hover:scale-110 transition-transform">
+                                      <Icons.Gift className="w-5 h-5" />
+                                  </div>
+                                  <span className="font-bold text-white">Fix Giftcode Table</span>
+                              </div>
+                              <p className="text-xs text-slate-400">Sửa lỗi thiếu bảng gift_codes hoặc system_settings.</p>
+                          </button>
+
+                          <button 
+                              onClick={() => setShowUserFix(true)}
+                              className="p-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-left transition-colors group"
+                          >
+                              <div className="flex items-center gap-3 mb-2">
+                                  <div className="w-10 h-10 rounded-full bg-audi-pink/20 flex items-center justify-center text-audi-pink group-hover:scale-110 transition-transform">
+                                      <Icons.Users className="w-5 h-5" />
+                                  </div>
+                                  <span className="font-bold text-white">Fix Users Table</span>
+                              </div>
+                              <p className="text-xs text-slate-400">Sửa lỗi thiếu bảng users hoặc lỗi phân quyền (RLS).</p>
+                          </button>
+
+                          <button 
+                              onClick={() => setShowBalanceFix(true)}
+                              className="p-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-left transition-colors group"
+                          >
+                              <div className="flex items-center gap-3 mb-2">
+                                  <div className="w-10 h-10 rounded-full bg-yellow-500/20 flex items-center justify-center text-yellow-500 group-hover:scale-110 transition-transform">
+                                      <Icons.Gem className="w-5 h-5" />
+                                  </div>
+                                  <span className="font-bold text-white">Fix Negative Balance</span>
+                              </div>
+                              <p className="text-xs text-slate-400">Sửa lỗi số dư âm (-Vcoin) cho tất cả tài khoản.</p>
+                          </button>
+                      </div>
+                  </div>
               </div>
            )}
 
@@ -1296,6 +1653,54 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
       {/* --- MOVED MODALS (ROOT LEVEL) --- */}
       
+      {/* BALANCE FIX MODAL */}
+      {showBalanceFix && (
+          <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 animate-fade-in bg-black/80 backdrop-blur-sm">
+              <div className="bg-[#12121a] w-full max-w-2xl p-6 rounded-2xl border border-yellow-500/50 shadow-[0_0_50px_rgba(255,200,0,0.2)] flex flex-col max-h-[90vh]">
+                  <div className="flex items-center gap-4 mb-4">
+                      <div className="w-12 h-12 bg-yellow-500/20 rounded-full flex items-center justify-center text-yellow-500 animate-pulse">
+                          <Icons.Gem className="w-6 h-6" />
+                      </div>
+                      <div>
+                          <h3 className="text-xl font-bold text-white">SỬA LỖI SỐ DƯ ÂM</h3>
+                          <p className="text-slate-400 text-xs">Reset số dư về 0 cho các tài khoản bị âm Vcoin</p>
+                      </div>
+                  </div>
+                  
+                  <div className="bg-yellow-500/10 border border-yellow-500/20 p-4 rounded-xl mb-4">
+                      <p className="text-sm text-yellow-300 font-bold mb-1">Cảnh báo:</p>
+                      <p className="text-xs text-slate-300 leading-relaxed">
+                          Hành động này sẽ đặt lại số dư của tất cả người dùng có số dư &lt; 0 về 0. Hãy chắc chắn rằng bạn muốn thực hiện điều này.
+                      </p>
+                  </div>
+
+                  <div className="flex-1 overflow-hidden flex flex-col">
+                      <p className="text-sm font-bold text-green-400 mb-2 uppercase">Copy mã SQL này và chạy trong Supabase SQL Editor</p>
+                      <div className="relative h-64 bg-black/50 border border-white/10 rounded-xl overflow-hidden">
+                          <pre className="absolute inset-0 p-4 text-[10px] md:text-xs font-mono text-slate-300 overflow-auto whitespace-pre-wrap selection:bg-audi-pink selection:text-white">
+                              {BALANCE_FIX_SQL}
+                          </pre>
+                          <button 
+                            onClick={() => {
+                                navigator.clipboard.writeText(BALANCE_FIX_SQL);
+                                showToast("Đã sao chép SQL!", 'info');
+                            }}
+                            className="absolute top-2 right-2 p-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors flex items-center gap-2 text-xs font-bold"
+                          >
+                              <Icons.Copy className="w-4 h-4" /> Sao chép
+                          </button>
+                      </div>
+                  </div>
+                  
+                  <div className="flex justify-end gap-3 mt-6">
+                      <button onClick={() => setShowBalanceFix(false)} className="px-6 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg font-bold transition-colors text-sm">Đóng</button>
+                      <button onClick={() => window.open('https://supabase.com/dashboard/project/_/sql', '_blank')} className="px-6 py-2 bg-yellow-500 text-black hover:bg-yellow-400 rounded-lg font-bold transition-colors text-sm flex items-center gap-2">
+                          <Icons.ExternalLink className="w-4 h-4" /> Mở SQL Editor
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
       {/* GIFTCODE ERROR FIX MODAL (NEW) */}
       {showGiftcodeFix && (
           <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 animate-fade-in">
@@ -1348,6 +1753,197 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           Đóng
                       </button>
                   </div>
+              </div>
+          </div>
+      )}
+
+      {/* USER DB FIX MODAL */}
+      {showUserFix && (
+          <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 animate-fade-in">
+              <div className="bg-[#12121a] w-full max-w-2xl p-6 rounded-2xl border border-red-500/50 shadow-[0_0_50px_rgba(255,0,0,0.2)] flex flex-col max-h-[90vh]">
+                  <div className="flex items-center gap-4 mb-4">
+                      <div className="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center text-red-500 animate-pulse">
+                          <Icons.Database className="w-6 h-6" />
+                      </div>
+                      <div>
+                          <h3 className="text-xl font-bold text-white">LỖI DATABASE: BẢNG USERS</h3>
+                          <p className="text-slate-400 text-xs">Phát hiện thiếu bảng Users hoặc lỗi RLS Policy</p>
+                      </div>
+                  </div>
+                  
+                  <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-xl mb-4">
+                      <p className="text-sm text-red-300 font-bold mb-1">Nguyên nhân:</p>
+                      <p className="text-xs text-slate-300 leading-relaxed">
+                          Supabase không cho phép đọc bảng <code>public.users</code> hoặc bảng chưa được tạo. Điều này thường xảy ra khi Row Level Security (RLS) chưa được cấu hình đúng.
+                      </p>
+                  </div>
+
+                  <div className="flex-1 overflow-hidden flex flex-col">
+                      <p className="text-sm font-bold text-green-400 mb-2 uppercase">Giải pháp: Copy mã SQL này và chạy trong Supabase SQL Editor</p>
+                      <div className="relative h-64 bg-black/50 border border-white/10 rounded-xl overflow-hidden">
+                          <pre className="absolute inset-0 p-4 text-[10px] md:text-xs font-mono text-slate-300 overflow-auto whitespace-pre-wrap selection:bg-audi-pink selection:text-white">
+                              {USER_FIX_SQL}
+                          </pre>
+                          <button 
+                            onClick={() => {
+                                navigator.clipboard.writeText(USER_FIX_SQL);
+                                showToast("Đã sao chép SQL!", 'info');
+                            }}
+                            className="absolute top-2 right-2 p-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors flex items-center gap-2 text-xs font-bold"
+                          >
+                              <Icons.Copy className="w-4 h-4" /> Sao chép
+                          </button>
+                      </div>
+                      
+                      <div className="mt-4 bg-audi-pink/10 border border-audi-pink/30 p-3 rounded-xl">
+                          <p className="text-xs font-bold text-audi-pink mb-1 uppercase">Khôi phục quyền Admin:</p>
+                          <div className="flex gap-2">
+                              <code className="flex-1 bg-black/50 p-2 rounded text-[10px] font-mono text-white overflow-x-auto whitespace-nowrap">
+                                  UPDATE public.users SET is_admin = true WHERE email = '{currentUserEmail || 'YOUR_EMAIL'}';
+                              </code>
+                              <button 
+                                  onClick={() => {
+                                      navigator.clipboard.writeText(`UPDATE public.users SET is_admin = true WHERE email = '${currentUserEmail || 'YOUR_EMAIL'}';`);
+                                      showToast("Đã sao chép lệnh!", 'info');
+                                  }}
+                                  className="px-3 bg-audi-pink text-white rounded font-bold text-xs hover:bg-pink-600 transition-colors"
+                              >
+                                  Copy
+                              </button>
+                          </div>
+                      </div>
+                  </div>
+
+                  <div className="flex gap-3 mt-6">
+                      <a 
+                        href="https://supabase.com/dashboard/project/_/sql" 
+                        target="_blank" 
+                        rel="noreferrer"
+                        className="flex-1 py-3 bg-audi-purple hover:bg-purple-600 text-white rounded-xl font-bold text-center transition-colors flex items-center justify-center gap-2"
+                      >
+                          <Icons.Database className="w-4 h-4" /> Mở SQL Editor
+                      </a>
+                      <button onClick={() => setShowUserFix(false)} className="flex-1 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold transition-colors">
+                          Đóng
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {viewingUser && (
+          <div className="fixed inset-0 z-[2000] flex justify-center items-start p-4 pt-24 animate-fade-in overflow-y-auto">
+              <div className="bg-[#12121a] w-full max-w-4xl p-6 rounded-2xl border border-white/20 shadow-2xl relative max-h-[90vh] overflow-y-auto custom-scrollbar flex flex-col">
+                  <div className="flex justify-between items-center mb-6">
+                      <div className="flex items-center gap-4">
+                          <img src={viewingUser.avatar || 'https://picsum.photos/100/100'} className="w-16 h-16 rounded-full border-2 border-audi-pink object-cover" />
+                          <div>
+                              <h3 className="text-2xl font-bold text-white">{viewingUser.username}</h3>
+                              <p className="text-slate-400 text-sm">{viewingUser.email}</p>
+                              <div className="flex gap-2 mt-1">
+                                  <span className="text-audi-yellow font-bold text-xs bg-audi-yellow/10 px-2 py-0.5 rounded">{viewingUser.balance} Vcoin</span>
+                                  <span className="text-blue-400 font-bold text-xs bg-blue-400/10 px-2 py-0.5 rounded uppercase">{viewingUser.role}</span>
+                              </div>
+                          </div>
+                      </div>
+                      <button onClick={() => setViewingUser(null)} className="p-2 bg-white/5 hover:bg-white/10 rounded-xl text-slate-400 hover:text-white transition-colors">
+                          <Icons.X className="w-6 h-6" />
+                      </button>
+                  </div>
+
+                  {loadingUserDetails ? (
+                      <div className="flex-1 flex items-center justify-center py-12">
+                          <Icons.Loader className="w-8 h-8 text-audi-pink animate-spin" />
+                      </div>
+                  ) : (
+                      <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-8">
+                          {/* Lịch sử giao dịch */}
+                          <div>
+                              <h4 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                                  <Icons.History className="w-5 h-5 text-audi-cyan" />
+                                  Lịch sử hoạt động
+                              </h4>
+                              <div className="bg-black/30 rounded-xl border border-white/5 overflow-hidden">
+                                  <div className="max-h-80 overflow-y-auto custom-scrollbar">
+                                      <table className="w-full text-left text-sm text-slate-400">
+                                          <thead className="bg-black/80 text-xs font-bold text-slate-500 uppercase sticky top-0 z-10 backdrop-blur-sm">
+                                              <tr>
+                                                  <th className="px-4 py-3">Thời gian</th>
+                                                  <th className="px-4 py-3">Nội dung</th>
+                                                  <th className="px-4 py-3 text-right">Biến động</th>
+                                              </tr>
+                                          </thead>
+                                          <tbody className="divide-y divide-white/5">
+                                              {userHistory.length === 0 ? (
+                                                  <tr><td colSpan={3} className="text-center py-8 text-slate-500 italic">Chưa có lịch sử giao dịch.</td></tr>
+                                              ) : userHistory.slice(0, historyLimit).map(item => (
+                                                  <tr key={item.id} className="hover:bg-white/5 transition-colors">
+                                                      <td className="px-4 py-3 text-xs font-mono">{new Date(item.createdAt).toLocaleString()}</td>
+                                                      <td className="px-4 py-3 text-white">{item.description}</td>
+                                                      <td className={`px-4 py-3 text-right font-bold ${item.vcoinChange > 0 ? 'text-green-400' : 'text-audi-pink'}`}>
+                                                          {item.vcoinChange > 0 ? '+' : ''}{item.vcoinChange} VC
+                                                      </td>
+                                                  </tr>
+                                              ))}
+                                          </tbody>
+                                      </table>
+                                  </div>
+                                  {userHistory.length > historyLimit && (
+                                      <div className="p-2 border-t border-white/5 text-center">
+                                          <button 
+                                              onClick={() => setHistoryLimit(prev => prev + 20)}
+                                              className="text-xs font-bold text-audi-cyan hover:text-white transition-colors py-2 px-4 rounded-lg hover:bg-white/5"
+                                          >
+                                              Xem thêm ({userHistory.length - historyLimit} giao dịch)
+                                          </button>
+                                      </div>
+                                  )}
+                              </div>
+                          </div>
+
+                          {/* Lịch sử tạo ảnh */}
+                          <div>
+                              <h4 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                                  <Icons.Image className="w-5 h-5 text-audi-pink" />
+                                  Ảnh đã tạo ({userImages.length} tổng cộng)
+                              </h4>
+                              {userImages.length === 0 ? (
+                                  <div className="text-center py-8 text-slate-500 italic bg-black/30 rounded-xl border border-white/5">
+                                      Chưa có ảnh nào được tạo.
+                                  </div>
+                              ) : (
+                                  <>
+                                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                          {userImages.slice(0, imagesLimit).map(img => (
+                                              <div key={img.id} className="bg-black/30 rounded-xl border border-white/5 overflow-hidden group">
+                                                  <div className="aspect-square relative">
+                                                      <img src={img.url} className="w-full h-full object-cover" />
+                                                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center p-2">
+                                                          <p className="text-[10px] text-white text-center line-clamp-4">{img.prompt}</p>
+                                                      </div>
+                                                  </div>
+                                                  <div className="p-2">
+                                                      <div className="text-[10px] text-slate-400 font-mono truncate">{new Date(img.timestamp).toLocaleDateString()}</div>
+                                                      <div className="text-xs font-bold text-audi-cyan truncate">{img.toolName}</div>
+                                                  </div>
+                                              </div>
+                                          ))}
+                                      </div>
+                                      {userImages.length > imagesLimit && (
+                                          <div className="mt-4 text-center">
+                                              <button 
+                                                  onClick={() => setImagesLimit(prev => prev + 20)}
+                                                  className="text-sm font-bold text-audi-pink hover:text-white transition-colors py-2 px-6 rounded-xl border border-audi-pink/30 hover:bg-audi-pink/20"
+                                              >
+                                                  Xem thêm ({userImages.length - imagesLimit} ảnh)
+                                              </button>
+                                          </div>
+                                      )}
+                                  </>
+                              )}
+                          </div>
+                      </div>
+                  )}
               </div>
           </div>
       )}
@@ -1522,6 +2118,60 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                       >
                           Lưu Style
                       </button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* Modal Xem Người Dùng Giftcode */}
+      {viewingGiftcodeUsage && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+              <div className="bg-[#1a1a24] w-full max-w-2xl rounded-2xl border border-white/10 shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
+                  <div className="p-6 border-b border-white/10 flex justify-between items-center shrink-0">
+                      <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                          <Icons.Users className="w-6 h-6 text-green-500" />
+                          Người dùng đã nhập code <span className="text-audi-yellow font-mono">{viewingGiftcodeUsage.code}</span>
+                      </h3>
+                      <button onClick={() => setViewingGiftcodeUsage(null)} className="p-2 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white transition-colors"><Icons.X className="w-5 h-5" /></button>
+                  </div>
+                  
+                  <div className="p-0 overflow-y-auto custom-scrollbar flex-1">
+                      {loadingGiftcodeUsers ? (
+                          <div className="flex flex-col items-center justify-center py-12 text-slate-500 gap-3">
+                              <Icons.Loader className="w-8 h-8 animate-spin text-audi-cyan" />
+                              <p>Đang tải danh sách...</p>
+                          </div>
+                      ) : giftcodeUsers.length === 0 ? (
+                          <div className="text-center py-12 text-slate-500 italic">
+                              Chưa có ai sử dụng mã này.
+                          </div>
+                      ) : (
+                          <table className="w-full text-left text-sm text-slate-400">
+                              <thead className="bg-black/40 text-xs font-bold text-slate-500 uppercase sticky top-0 backdrop-blur-md z-10">
+                                  <tr>
+                                      <th className="px-6 py-3">Người dùng</th>
+                                      <th className="px-6 py-3">Email</th>
+                                      <th className="px-6 py-3 text-right">Thời gian</th>
+                                  </tr>
+                              </thead>
+                              <tbody className="divide-y divide-white/5">
+                                  {giftcodeUsers.map((u, idx) => (
+                                      <tr key={idx} className="hover:bg-white/5 transition-colors">
+                                          <td className="px-6 py-3 flex items-center gap-3">
+                                              <img src={u.userAvatar} className="w-8 h-8 rounded-full bg-white/10" />
+                                              <span className="font-bold text-white">{u.userName}</span>
+                                          </td>
+                                          <td className="px-6 py-3">{u.userEmail}</td>
+                                          <td className="px-6 py-3 text-right font-mono text-xs">{new Date(u.usedAt).toLocaleString()}</td>
+                                      </tr>
+                                  ))}
+                              </tbody>
+                          </table>
+                      )}
+                  </div>
+
+                  <div className="p-4 border-t border-white/10 bg-black/20 shrink-0 text-right">
+                      <button onClick={() => setViewingGiftcodeUsage(null)} className="px-6 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg font-bold transition-colors">Đóng</button>
                   </div>
               </div>
           </div>

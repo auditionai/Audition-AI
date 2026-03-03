@@ -43,8 +43,20 @@ export const getUserProfile = async (): Promise<UserProfile> => {
         streak: 0, // Need separate checkin table query if needed
         lastCheckin: null,
         checkinHistory: [],
-        usedGiftcodes: []
+        usedGiftcodes: [],
+        lastActive: data.last_active || null
     };
+};
+
+export const updateLastActive = async () => {
+    try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+            await supabase.from('users').update({ last_active: new Date().toISOString() }).eq('id', user.id);
+        }
+    } catch (e) {
+        console.warn("Failed to update last active", e);
+    }
 };
 
 export const updateAdminUserProfile = async (profile: UserProfile): Promise<{success: boolean, error?: string}> => {
@@ -65,14 +77,18 @@ export const updateAdminUserProfile = async (profile: UserProfile): Promise<{suc
     }
 };
 
-export const updateUserBalance = async (amount: number, reason: string, type: string) => {
-    const user = await getUserProfile();
+export const updateUserBalance = async (amount: number, reason: string, type: string, targetUserId?: string) => {
+    let userId = targetUserId;
+    if (!userId) {
+        const user = await getUserProfile();
+        userId = user.id;
+    }
     
     // 1. Log transaction (Silent Fail Safe)
     try {
         // Attempt 1: Try 'note' (Legacy column)
         const { error } = await supabase.from('diamond_transactions_log').insert({
-            user_id: user.id,
+            user_id: userId,
             amount,
             note: reason, 
             type
@@ -82,7 +98,7 @@ export const updateUserBalance = async (amount: number, reason: string, type: st
             // Attempt 2: If 'note' column missing, try 'reason' (New column)
             if (error.message?.includes('note') || error.message?.includes('does not exist')) {
                  const { error: err2 } = await supabase.from('diamond_transactions_log').insert({
-                    user_id: user.id,
+                    user_id: userId,
                     amount,
                     reason: reason, 
                     type
@@ -99,11 +115,11 @@ export const updateUserBalance = async (amount: number, reason: string, type: st
     // 2. Update balance directly (skip RPC to avoid 404)
     try {
         // Fetch latest balance first to minimize race condition
-        const { data: latestUser } = await supabase.from('users').select('diamonds').eq('id', user.id).single();
+        const { data: latestUser } = await supabase.from('users').select('diamonds').eq('id', userId).single();
         const currentBalance = latestUser?.diamonds || 0;
         const newBalance = currentBalance + amount;
         
-        const { error } = await supabase.from('users').update({ diamonds: newBalance }).eq('id', user.id);
+        const { error } = await supabase.from('users').update({ diamonds: newBalance }).eq('id', userId);
         if (error) throw error;
     } catch (e: any) {
         console.error("[Economy] Critical: Failed to update balance", e);
@@ -111,15 +127,29 @@ export const updateUserBalance = async (amount: number, reason: string, type: st
     }
     
     // Dispatch event for UI update
-    window.dispatchEvent(new Event('balance_updated'));
+    if (!targetUserId) {
+        window.dispatchEvent(new Event('balance_updated'));
+    }
 };
 
 export const logVisit = async () => {
     try {
-        // Simple pixel log or increment counter
-        const today = new Date().toISOString().split('T')[0];
-        // Assuming a 'visits' table exists or just skip
-    } catch(e) {}
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        // Log visit - rely on DB defaults for dates
+        const { error } = await supabase.from('app_visits').insert({
+            user_id: user?.id || null,
+            user_agent: navigator.userAgent
+        });
+        
+        if (error) {
+            console.warn("Failed to log visit (Table might be missing):", error.message);
+        } else {
+            console.log("Visit logged successfully!");
+        }
+    } catch(e) {
+        console.warn("Error logging visit:", e);
+    }
 };
 
 // --- PACKAGES & PROMOTIONS ---
@@ -260,6 +290,12 @@ export const deletePromotion = async (id: string): Promise<{success: boolean, er
     }
 };
 
+// --- HELPER ---
+export const getLocalTodayStr = () => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+};
+
 // --- CHECKIN & REWARDS ---
 
 export const getCheckinStatus = async () => {
@@ -268,7 +304,7 @@ export const getCheckinStatus = async () => {
 
     // Get basic stats from user table or dedicated checkin table
     // Simplified: check `daily_check_ins` table
-    const today = new Date().toISOString().split('T')[0];
+    const today = getLocalTodayStr();
     const { data } = await supabase
         .from('daily_check_ins')
         .select('check_in_date')
@@ -299,7 +335,7 @@ export const getCheckinStatus = async () => {
 
 export const performCheckin = async (): Promise<{success: boolean, reward: number, newStreak: number, message?: string}> => {
     const user = await getUserProfile();
-    const today = new Date().toISOString().split('T')[0];
+    const today = getLocalTodayStr();
     const reward = 5;
 
     try {
@@ -325,7 +361,7 @@ export const claimMilestoneReward = async (day: number): Promise<{success: boole
     const rewards: Record<number, number> = { 7: 20, 14: 50, 30: 100 };
     const amount = rewards[day] || 0;
 
-    const today = new Date().toISOString().split('T')[0];
+    const today = getLocalTodayStr();
     const startOfMonth = new Date(today.substring(0, 7) + '-01').toISOString();
 
     try {
@@ -494,7 +530,8 @@ export const createPaymentLink = async (packageId: string): Promise<Transaction>
     if (!pkg) throw new Error("Invalid package");
 
     const promo = await getActivePromotion();
-    const bonus = promo ? Math.floor(pkg.coin * promo.bonusPercent / 100) : 0;
+    const activeBonusPercent = promo ? promo.bonusPercent : (pkg.bonusPercent || 0);
+    const bonus = Math.floor(pkg.coin * activeBonusPercent / 100);
     const totalCoins = pkg.coin + bonus;
 
     const orderCode = `${Date.now()}`;
@@ -576,7 +613,7 @@ export const adminApproveTransaction = async (txId: string): Promise<{success: b
         if (updateError) throw updateError;
 
         // 2. Add Coins
-        await updateUserBalance(tx.diamonds_received, `Topup: ${tx.order_code}`, 'topup');
+        await updateUserBalance(tx.diamonds_received, `Topup: ${tx.order_code || tx.code || tx.id}`, 'topup', tx.user_id);
         
         return { success: true };
     } catch (e: any) {
@@ -634,21 +671,25 @@ export const deleteTransaction = async (txId: string): Promise<{success: boolean
     }
 };
 
-export const getUnifiedHistory = async (): Promise<HistoryItem[]> => {
-    const user = await getUserProfile();
+export const getUnifiedHistory = async (targetUserId?: string): Promise<HistoryItem[]> => {
+    let userId = targetUserId;
+    if (!userId) {
+        const user = await getUserProfile();
+        userId = user.id;
+    }
     
     // 1. Get Topup History
     const { data: txs } = await supabase
         .from('transactions')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .order('created_at', { ascending: false });
 
     // 2. Get Usage/Reward Logs
     const { data: logs } = await supabase
         .from('diamond_transactions_log')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .order('created_at', { ascending: false });
 
     const history: HistoryItem[] = [];
@@ -783,6 +824,24 @@ export const redeemGiftcode = async (codeStr: string): Promise<{success: boolean
     }
 };
 
+export const getGiftcodeUsages = async (codeId: string) => {
+    const { data, error } = await supabase
+        .from('gift_code_usages')
+        .select('user_id, created_at, users(display_name, email, photo_url)')
+        .eq('gift_code_id', codeId)
+        .order('created_at', { ascending: false });
+        
+    if (error) throw error;
+    
+    return data.map((u: any) => ({
+        userId: u.user_id,
+        usedAt: u.created_at,
+        userName: u.users?.display_name || 'Unknown',
+        userEmail: u.users?.email || 'No Email',
+        userAvatar: u.users?.photo_url || 'https://picsum.photos/50/50'
+    }));
+};
+
 // --- STYLE PRESETS ---
 
 export const getStylePresets = async () => {
@@ -825,10 +884,20 @@ export const deleteStylePreset = async (id: string) => {
 // --- ADMIN STATS ---
 
 export const getAdminStats = async () => {
-    const { data: users } = await supabase.from('users').select('id, email, display_name, diamonds, is_admin, created_at, photo_url');
+    // Fetch Users
+    const { data: users, error: userError } = await supabase.from('users').select('id, email, display_name, diamonds, is_admin, created_at, photo_url, last_active');
+
+    if (userError) {
+        console.error("Error fetching users for Admin Stats:", userError);
+    }
     const { data: pkgs } = await supabase.from('credit_packages').select('*').order('display_order');
     const { data: promos } = await supabase.from('promotions').select('*');
-    const { data: codes } = await supabase.from('gift_codes').select('*');
+    
+    // Fetch giftcodes with accurate usage count from relation
+    const { data: codes } = await supabase
+        .from('gift_codes')
+        .select('*, gift_code_usages(count)');
+
     const { data: txs } = await supabase.from('transactions').select('*').order('created_at', { ascending: false });
     
     // Try to fetch logs from both potential table names
@@ -858,22 +927,31 @@ export const getAdminStats = async () => {
 
     // Calculate dashboard
     const now = new Date();
-    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const todayStr = getLocalTodayStr();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfTodayISO = startOfToday.toISOString();
     
     // 1. Users
-    const newUsersToday = users?.filter((u: any) => u.created_at && u.created_at.startsWith(todayStr)).length || 0;
+    const newUsersToday = users?.filter((u: any) => u.created_at && new Date(u.created_at) >= startOfToday).length || 0;
     
     // 2. Images (Use count for performance and to bypass limit)
     const { count: imagesTotal } = await supabase.from('generated_images').select('*', { count: 'exact', head: true });
-    const { count: imagesToday } = await supabase.from('generated_images').select('*', { count: 'exact', head: true }).gte('created_at', todayStr);
+    const { count: imagesToday } = await supabase.from('generated_images').select('*', { count: 'exact', head: true }).gte('created_at', startOfTodayISO);
 
     // 3. Visits (Use count for performance)
     const { count: visitsTotal } = await supabase.from('app_visits').select('*', { count: 'exact', head: true });
-    const { count: visitsToday } = await supabase.from('app_visits').select('*', { count: 'exact', head: true }).gte('created_at', todayStr);
+    const { count: visitsToday } = await supabase.from('app_visits').select('*', { count: 'exact', head: true }).gte('created_at', startOfTodayISO);
 
     // Calculate AI Usage Stats
     const usageStats: Record<string, { count: number, vcoins: number }> = {};
+    const userUsageCounts: Record<string, number> = {}; // New: Track usage per user
+
     usageLogs?.forEach((log: any) => {
+        // Track per user
+        if (log.user_id) {
+            userUsageCounts[log.user_id] = (userUsageCounts[log.user_id] || 0) + 1;
+        }
+
         // Try to find the reason field from various potential column names
         let rawFeature = log.reason || log.description || log.note || log.action || log.activity || log.details || 'Khác';
         
@@ -926,7 +1004,7 @@ export const getAdminStats = async () => {
     
     const transactions = txs?.map((t: any) => {
          // Fallback for coins: Check DB columns -> Check Package Info -> Estimate from Amount
-         let coins = t.coins_received ? Number(t.coins_received) : (t.coins ? Number(t.coins) : (t.diamonds ? Number(t.diamonds) : (t.credits ? Number(t.credits) : 0)));
+         let coins = t.diamonds_received ? Number(t.diamonds_received) : (t.coins_received ? Number(t.coins_received) : (t.coins ? Number(t.coins) : (t.diamonds ? Number(t.diamonds) : (t.credits ? Number(t.credits) : 0))));
          
          if (coins === 0) {
              // Try to get from Package
@@ -970,7 +1048,9 @@ export const getAdminStats = async () => {
         balance: u.diamonds,
         role: u.is_admin ? 'admin' : 'user',
         created_at: u.created_at,
-        isVip: false
+        isVip: false,
+        lastActive: u.last_active,
+        usageCount: userUsageCounts[u.id] || 0 // New: Include usage count
     })) || [];
 
     return {
@@ -1007,15 +1087,20 @@ export const getAdminStats = async () => {
              endTime: p.end_time,
              isActive: p.is_active
         })) || [],
-        giftcodes: codes?.map((c: any) => ({
-             id: c.id,
-             code: c.code,
-             reward: c.reward,
-             totalLimit: c.total_limit,
-             usedCount: c.used_count,
-             maxPerUser: c.max_per_user,
-             isActive: c.is_active
-        })) || [],
+        giftcodes: codes?.map((c: any) => {
+             // Use count from relation if available, otherwise fallback to column
+             const realCount = c.gift_code_usages && c.gift_code_usages[0] ? c.gift_code_usages[0].count : (c.used_count || 0);
+             
+             return {
+                 id: c.id,
+                 code: c.code,
+                 reward: c.reward,
+                 totalLimit: c.total_limit,
+                 usedCount: realCount,
+                 maxPerUser: c.max_per_user,
+                 isActive: c.is_active
+             };
+        }) || [],
         transactions
     };
 };

@@ -168,6 +168,25 @@ AS $$
   SET used_count = used_count + 1
   WHERE id = code_id;
 $$;
+
+-- 9. APP VISITS TRACKING
+CREATE TABLE IF NOT EXISTS public.app_visits (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id uuid REFERENCES public.users(id),
+    visit_date date DEFAULT CURRENT_DATE,
+    user_agent text,
+    created_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE public.app_visits ENABLE ROW LEVEL SECURITY;
+
+-- Allow anyone to insert (logging visit)
+DROP POLICY IF EXISTS "Public insert visits" ON public.app_visits;
+CREATE POLICY "Public insert visits" ON public.app_visits FOR INSERT TO anon, authenticated WITH CHECK (true);
+
+-- Allow admins to read all
+DROP POLICY IF EXISTS "Admin read visits" ON public.app_visits;
+CREATE POLICY "Admin read visits" ON public.app_visits FOR SELECT TO authenticated USING (true);
 `;
 
 const USER_FIX_SQL = `

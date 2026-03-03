@@ -134,10 +134,23 @@ export const updateUserBalance = async (amount: number, reason: string, type: st
 
 export const logVisit = async () => {
     try {
-        // Simple pixel log or increment counter
+        const { data: { user } } = await supabase.auth.getUser();
         const today = new Date().toISOString().split('T')[0];
-        // Assuming a 'visits' table exists or just skip
-    } catch(e) {}
+        
+        // Log visit
+        const { error } = await supabase.from('app_visits').insert({
+            user_id: user?.id || null,
+            visit_date: today,
+            user_agent: navigator.userAgent
+        });
+        
+        if (error) {
+            // If table doesn't exist, this will fail silently in prod but warn in dev
+            console.warn("Failed to log visit (Table might be missing):", error.message);
+        }
+    } catch(e) {
+        console.warn("Error logging visit:", e);
+    }
 };
 
 // --- PACKAGES & PROMOTIONS ---

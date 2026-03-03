@@ -873,7 +873,12 @@ export const getAdminStats = async () => {
     }
     const { data: pkgs } = await supabase.from('credit_packages').select('*').order('display_order');
     const { data: promos } = await supabase.from('promotions').select('*');
-    const { data: codes } = await supabase.from('gift_codes').select('*');
+    
+    // Fetch giftcodes with accurate usage count from relation
+    const { data: codes } = await supabase
+        .from('gift_codes')
+        .select('*, gift_code_usages(count)');
+
     const { data: txs } = await supabase.from('transactions').select('*').order('created_at', { ascending: false });
     
     // Try to fetch logs from both potential table names
@@ -1061,15 +1066,20 @@ export const getAdminStats = async () => {
              endTime: p.end_time,
              isActive: p.is_active
         })) || [],
-        giftcodes: codes?.map((c: any) => ({
-             id: c.id,
-             code: c.code,
-             reward: c.reward,
-             totalLimit: c.total_limit,
-             usedCount: c.used_count,
-             maxPerUser: c.max_per_user,
-             isActive: c.is_active
-        })) || [],
+        giftcodes: codes?.map((c: any) => {
+             // Use count from relation if available, otherwise fallback to column
+             const realCount = c.gift_code_usages && c.gift_code_usages[0] ? c.gift_code_usages[0].count : (c.used_count || 0);
+             
+             return {
+                 id: c.id,
+                 code: c.code,
+                 reward: c.reward,
+                 totalLimit: c.total_limit,
+                 usedCount: realCount,
+                 maxPerUser: c.max_per_user,
+                 isActive: c.is_active
+             };
+        }) || [],
         transactions
     };
 };

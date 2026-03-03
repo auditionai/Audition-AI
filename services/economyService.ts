@@ -135,18 +135,17 @@ export const updateUserBalance = async (amount: number, reason: string, type: st
 export const logVisit = async () => {
     try {
         const { data: { user } } = await supabase.auth.getUser();
-        const today = getLocalTodayStr();
         
-        // Log visit
+        // Log visit - rely on DB defaults for dates
         const { error } = await supabase.from('app_visits').insert({
             user_id: user?.id || null,
-            visit_date: today,
             user_agent: navigator.userAgent
         });
         
         if (error) {
-            // If table doesn't exist, this will fail silently in prod but warn in dev
             console.warn("Failed to log visit (Table might be missing):", error.message);
+        } else {
+            console.log("Visit logged successfully!");
         }
     } catch(e) {
         console.warn("Error logging visit:", e);
@@ -531,7 +530,8 @@ export const createPaymentLink = async (packageId: string): Promise<Transaction>
     if (!pkg) throw new Error("Invalid package");
 
     const promo = await getActivePromotion();
-    const bonus = promo ? Math.floor(pkg.coin * promo.bonusPercent / 100) : 0;
+    const activeBonusPercent = promo ? promo.bonusPercent : (pkg.bonusPercent || 0);
+    const bonus = Math.floor(pkg.coin * activeBonusPercent / 100);
     const totalCoins = pkg.coin + bonus;
 
     const orderCode = `${Date.now()}`;
@@ -923,7 +923,7 @@ export const getAdminStats = async () => {
     console.log("Usage Logs:", usageLogs);
 
     const { data: generatedImages } = await supabase.from('generated_images').select('created_at');
-    const { data: visits } = await supabase.from('app_visits').select('visit_date');
+    const { data: visits } = await supabase.from('app_visits').select('created_at');
 
     // Calculate dashboard
     const now = new Date();
@@ -940,7 +940,7 @@ export const getAdminStats = async () => {
 
     // 3. Visits (Use count for performance)
     const { count: visitsTotal } = await supabase.from('app_visits').select('*', { count: 'exact', head: true });
-    const { count: visitsToday } = await supabase.from('app_visits').select('*', { count: 'exact', head: true }).eq('visit_date', todayStr);
+    const { count: visitsToday } = await supabase.from('app_visits').select('*', { count: 'exact', head: true }).gte('created_at', startOfTodayISO);
 
     // Calculate AI Usage Stats
     const usageStats: Record<string, { count: number, vcoins: number }> = {};
@@ -1004,7 +1004,7 @@ export const getAdminStats = async () => {
     
     const transactions = txs?.map((t: any) => {
          // Fallback for coins: Check DB columns -> Check Package Info -> Estimate from Amount
-         let coins = t.coins_received ? Number(t.coins_received) : (t.coins ? Number(t.coins) : (t.diamonds ? Number(t.diamonds) : (t.credits ? Number(t.credits) : 0)));
+         let coins = t.diamonds_received ? Number(t.diamonds_received) : (t.coins_received ? Number(t.coins_received) : (t.coins ? Number(t.coins) : (t.diamonds ? Number(t.diamonds) : (t.credits ? Number(t.credits) : 0))));
          
          if (coins === 0) {
              // Try to get from Package

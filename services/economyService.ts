@@ -135,7 +135,7 @@ export const updateUserBalance = async (amount: number, reason: string, type: st
 export const logVisit = async () => {
     try {
         const { data: { user } } = await supabase.auth.getUser();
-        const today = new Date().toISOString().split('T')[0];
+        const today = getLocalTodayStr();
         
         // Log visit
         const { error } = await supabase.from('app_visits').insert({
@@ -291,6 +291,12 @@ export const deletePromotion = async (id: string): Promise<{success: boolean, er
     }
 };
 
+// --- HELPER ---
+export const getLocalTodayStr = () => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+};
+
 // --- CHECKIN & REWARDS ---
 
 export const getCheckinStatus = async () => {
@@ -299,7 +305,7 @@ export const getCheckinStatus = async () => {
 
     // Get basic stats from user table or dedicated checkin table
     // Simplified: check `daily_check_ins` table
-    const today = new Date().toISOString().split('T')[0];
+    const today = getLocalTodayStr();
     const { data } = await supabase
         .from('daily_check_ins')
         .select('check_in_date')
@@ -330,7 +336,7 @@ export const getCheckinStatus = async () => {
 
 export const performCheckin = async (): Promise<{success: boolean, reward: number, newStreak: number, message?: string}> => {
     const user = await getUserProfile();
-    const today = new Date().toISOString().split('T')[0];
+    const today = getLocalTodayStr();
     const reward = 5;
 
     try {
@@ -356,7 +362,7 @@ export const claimMilestoneReward = async (day: number): Promise<{success: boole
     const rewards: Record<number, number> = { 7: 20, 14: 50, 30: 100 };
     const amount = rewards[day] || 0;
 
-    const today = new Date().toISOString().split('T')[0];
+    const today = getLocalTodayStr();
     const startOfMonth = new Date(today.substring(0, 7) + '-01').toISOString();
 
     try {
@@ -917,22 +923,24 @@ export const getAdminStats = async () => {
     console.log("Usage Logs:", usageLogs);
 
     const { data: generatedImages } = await supabase.from('generated_images').select('created_at');
-    const { data: visits } = await supabase.from('app_visits').select('created_at');
+    const { data: visits } = await supabase.from('app_visits').select('visit_date');
 
     // Calculate dashboard
     const now = new Date();
-    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const todayStr = getLocalTodayStr();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfTodayISO = startOfToday.toISOString();
     
     // 1. Users
-    const newUsersToday = users?.filter((u: any) => u.created_at && u.created_at.startsWith(todayStr)).length || 0;
+    const newUsersToday = users?.filter((u: any) => u.created_at && new Date(u.created_at) >= startOfToday).length || 0;
     
     // 2. Images (Use count for performance and to bypass limit)
     const { count: imagesTotal } = await supabase.from('generated_images').select('*', { count: 'exact', head: true });
-    const { count: imagesToday } = await supabase.from('generated_images').select('*', { count: 'exact', head: true }).gte('created_at', todayStr);
+    const { count: imagesToday } = await supabase.from('generated_images').select('*', { count: 'exact', head: true }).gte('created_at', startOfTodayISO);
 
     // 3. Visits (Use count for performance)
     const { count: visitsTotal } = await supabase.from('app_visits').select('*', { count: 'exact', head: true });
-    const { count: visitsToday } = await supabase.from('app_visits').select('*', { count: 'exact', head: true }).gte('created_at', todayStr);
+    const { count: visitsToday } = await supabase.from('app_visits').select('*', { count: 'exact', head: true }).eq('visit_date', todayStr);
 
     // Calculate AI Usage Stats
     const usageStats: Record<string, { count: number, vcoins: number }> = {};

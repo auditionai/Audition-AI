@@ -805,6 +805,24 @@ export const redeemGiftcode = async (codeStr: string): Promise<{success: boolean
     }
 };
 
+export const getGiftcodeUsages = async (codeId: string) => {
+    const { data, error } = await supabase
+        .from('gift_code_usages')
+        .select('user_id, created_at, users(display_name, email, photo_url)')
+        .eq('gift_code_id', codeId)
+        .order('created_at', { ascending: false });
+        
+    if (error) throw error;
+    
+    return data.map((u: any) => ({
+        userId: u.user_id,
+        usedAt: u.created_at,
+        userName: u.users?.display_name || 'Unknown',
+        userEmail: u.users?.email || 'No Email',
+        userAvatar: u.users?.photo_url || 'https://picsum.photos/50/50'
+    }));
+};
+
 // --- STYLE PRESETS ---
 
 export const getStylePresets = async () => {

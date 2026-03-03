@@ -26,7 +26,8 @@ import {
     getStylePresets,
     saveStylePreset,
     deleteStylePreset,
-    getUnifiedHistory
+    getUnifiedHistory,
+    getGiftcodeUsages
 } from '../services/economyService';
 import { getAllImagesFromStorage, deleteImageFromStorage, checkR2Connection, getUserImagesFromStorage } from '../services/storageService';
 import { checkConnection, analyzeStyleImage } from '../services/geminiService';
@@ -309,6 +310,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [editingPackage, setEditingPackage] = useState<CreditPackage | null>(null);
   const [editingGiftcode, setEditingGiftcode] = useState<Giftcode | null>(null);
   const [editingPromotion, setEditingPromotion] = useState<PromotionCampaign | null>(null);
+  const [viewingGiftcodeUsage, setViewingGiftcodeUsage] = useState<Giftcode | null>(null);
+  const [giftcodeUsers, setGiftcodeUsers] = useState<any[]>([]);
+  const [loadingGiftcodeUsers, setLoadingGiftcodeUsers] = useState(false);
 
   // Error Recovery States
   const [showGiftcodeFix, setShowGiftcodeFix] = useState(false);
@@ -484,6 +488,19 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           showToast('Lỗi tải dữ liệu người dùng', 'error');
       } finally {
           setLoadingUserDetails(false);
+      }
+  };
+
+  const handleViewGiftcodeUsage = async (code: Giftcode) => {
+      setViewingGiftcodeUsage(code);
+      setLoadingGiftcodeUsers(true);
+      try {
+          const users = await getGiftcodeUsages(code.id);
+          setGiftcodeUsers(users);
+      } catch (e) {
+          showToast('Lỗi tải danh sách người dùng', 'error');
+      } finally {
+          setLoadingGiftcodeUsers(false);
       }
   };
 
@@ -1256,7 +1273,14 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           <div key={code.id} className="bg-[#12121a] border border-white/10 rounded-xl p-4 shadow-sm relative overflow-hidden">
                               <div className="flex justify-between items-start mb-3"><div><div className="font-mono font-bold text-white text-lg tracking-wider">{code.code}</div><div className="text-audi-yellow font-bold text-sm">+{code.reward} Vcoin</div></div>{code.isActive ? <span className="text-green-500 text-[10px] font-bold border border-green-500/20 px-2 py-1 rounded bg-green-500/10">ACTIVE</span> : <span className="text-red-500 text-[10px] font-bold border border-red-500/20 px-2 py-1 rounded bg-red-500/10">INACTIVE</span>}</div>
                               <div className="mb-3"><div className="flex justify-between text-[10px] text-slate-500 mb-1 font-bold uppercase"><span>Sử dụng</span><span>{code.usedCount}/{code.totalLimit}</span></div><div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden"><div className="h-full bg-green-500" style={{ width: `${Math.min(100, (code.usedCount / code.totalLimit) * 100)}%` }}></div></div></div>
-                              <div className="flex justify-between items-center border-t border-white/5 pt-3"><span className="text-[10px] text-slate-500">Max: {code.maxPerUser}/người</span><div className="flex gap-2"><button onClick={() => setEditingGiftcode(code)} className="p-1.5 bg-blue-500/20 text-blue-500 rounded hover:bg-blue-500 hover:text-white transition-colors"><Icons.Settings className="w-4 h-4" /></button><button onClick={() => handleDeleteGiftcode(code.id)} className="p-1.5 bg-red-500/20 text-red-500 rounded hover:bg-red-500 hover:text-white transition-colors"><Icons.Trash className="w-4 h-4" /></button></div></div>
+                              <div className="flex justify-between items-center border-t border-white/5 pt-3">
+                                  <span className="text-[10px] text-slate-500">Max: {code.maxPerUser}/người</span>
+                                  <div className="flex gap-2">
+                                      <button onClick={() => handleViewGiftcodeUsage(code)} className="p-1.5 bg-green-500/20 text-green-500 rounded hover:bg-green-500 hover:text-white transition-colors" title="Xem người dùng"><Icons.Users className="w-4 h-4" /></button>
+                                      <button onClick={() => setEditingGiftcode(code)} className="p-1.5 bg-blue-500/20 text-blue-500 rounded hover:bg-blue-500 hover:text-white transition-colors"><Icons.Settings className="w-4 h-4" /></button>
+                                      <button onClick={() => handleDeleteGiftcode(code.id)} className="p-1.5 bg-red-500/20 text-red-500 rounded hover:bg-red-500 hover:text-white transition-colors"><Icons.Trash className="w-4 h-4" /></button>
+                                  </div>
+                              </div>
                           </div>
                       ))}
                   </div>
@@ -2061,6 +2085,60 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                       >
                           Lưu Style
                       </button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* Modal Xem Người Dùng Giftcode */}
+      {viewingGiftcodeUsage && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+              <div className="bg-[#1a1a24] w-full max-w-2xl rounded-2xl border border-white/10 shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
+                  <div className="p-6 border-b border-white/10 flex justify-between items-center shrink-0">
+                      <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                          <Icons.Users className="w-6 h-6 text-green-500" />
+                          Người dùng đã nhập code <span className="text-audi-yellow font-mono">{viewingGiftcodeUsage.code}</span>
+                      </h3>
+                      <button onClick={() => setViewingGiftcodeUsage(null)} className="p-2 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white transition-colors"><Icons.X className="w-5 h-5" /></button>
+                  </div>
+                  
+                  <div className="p-0 overflow-y-auto custom-scrollbar flex-1">
+                      {loadingGiftcodeUsers ? (
+                          <div className="flex flex-col items-center justify-center py-12 text-slate-500 gap-3">
+                              <Icons.Loader className="w-8 h-8 animate-spin text-audi-cyan" />
+                              <p>Đang tải danh sách...</p>
+                          </div>
+                      ) : giftcodeUsers.length === 0 ? (
+                          <div className="text-center py-12 text-slate-500 italic">
+                              Chưa có ai sử dụng mã này.
+                          </div>
+                      ) : (
+                          <table className="w-full text-left text-sm text-slate-400">
+                              <thead className="bg-black/40 text-xs font-bold text-slate-500 uppercase sticky top-0 backdrop-blur-md z-10">
+                                  <tr>
+                                      <th className="px-6 py-3">Người dùng</th>
+                                      <th className="px-6 py-3">Email</th>
+                                      <th className="px-6 py-3 text-right">Thời gian</th>
+                                  </tr>
+                              </thead>
+                              <tbody className="divide-y divide-white/5">
+                                  {giftcodeUsers.map((u, idx) => (
+                                      <tr key={idx} className="hover:bg-white/5 transition-colors">
+                                          <td className="px-6 py-3 flex items-center gap-3">
+                                              <img src={u.userAvatar} className="w-8 h-8 rounded-full bg-white/10" />
+                                              <span className="font-bold text-white">{u.userName}</span>
+                                          </td>
+                                          <td className="px-6 py-3">{u.userEmail}</td>
+                                          <td className="px-6 py-3 text-right font-mono text-xs">{new Date(u.usedAt).toLocaleString()}</td>
+                                      </tr>
+                                  ))}
+                              </tbody>
+                          </table>
+                      )}
+                  </div>
+
+                  <div className="p-4 border-t border-white/10 bg-black/20 shrink-0 text-right">
+                      <button onClick={() => setViewingGiftcodeUsage(null)} className="px-6 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg font-bold transition-colors">Đóng</button>
                   </div>
               </div>
           </div>

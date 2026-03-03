@@ -157,6 +157,17 @@ CREATE POLICY "User insert own logs" ON public.diamond_transactions_log FOR INSE
 
 DROP POLICY IF EXISTS "Admin read all logs" ON public.diamond_transactions_log;
 CREATE POLICY "Admin read all logs" ON public.diamond_transactions_log FOR ALL TO authenticated USING (true); -- Ideally check is_admin
+
+-- 8. RPC FOR ATOMIC INCREMENT (Fixes concurrency issues)
+CREATE OR REPLACE FUNCTION public.increment_giftcode_usage(code_id uuid)
+RETURNS void
+LANGUAGE sql
+SECURITY DEFINER
+AS $$
+  UPDATE public.gift_codes
+  SET used_count = used_count + 1
+  WHERE id = code_id;
+$$;
 `;
 
 const USER_FIX_SQL = `

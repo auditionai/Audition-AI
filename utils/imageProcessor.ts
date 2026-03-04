@@ -1,4 +1,6 @@
 
+import { removeBackground } from '@imgly/background-removal';
+
 /**
  * CORE SOLUTION: "Structural Image Conditioning" & "Identity Texture Sheets"
  * Giúp Flash 2.5 phân biệt rõ đâu là Cấu trúc (Pose), đâu là Giao diện (Skin/Clothes)
@@ -42,6 +44,53 @@ const loadImageWithTimeout = (src: string, timeoutMs = 5000): Promise<HTMLImageE
         }
         img.src = safeSrc;
     });
+};
+
+export const removeBackgroundAndAddBlack = async (base64Str: string, onProgress?: (msg: string) => void): Promise<string> => {
+    try {
+        if (onProgress) onProgress("Đang phân tích và tách nền nhân vật...");
+        
+        // Convert base64 to Blob
+        const response = await fetch(base64Str);
+        const blob = await response.blob();
+        
+        // Remove background using imgly
+        const imageBlob = await removeBackground(blob, {
+            progress: (key, current, total) => {
+                if (onProgress && total > 0) {
+                    const percent = Math.round((current / total) * 100);
+                    onProgress(`Đang tải mô hình AI tách nền... ${percent}%`);
+                }
+            }
+        });
+        
+        if (onProgress) onProgress("Đang xử lý nền đen tiêu chuẩn...");
+
+        // Convert transparent blob to base64
+        const transparentBase64 = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(imageBlob);
+        });
+
+        // Draw on black canvas
+        const img = await loadImageWithTimeout(transparentBase64);
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return base64Str;
+
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0);
+
+        return canvas.toDataURL('image/jpeg', 0.95);
+    } catch (e) {
+        console.error("Background removal failed:", e);
+        return base64Str; // Fallback to original if failed
+    }
 };
 
 // Chế độ Solid Fence: Xử lý ảnh Pose để AI không copy y nguyên pixel

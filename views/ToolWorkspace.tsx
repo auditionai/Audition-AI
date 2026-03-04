@@ -9,9 +9,10 @@ interface ToolWorkspaceProps {
   feature: Feature;
   lang: Language;
   onBack: () => void;
+  onNavigateToFeature?: (featureId: string) => void;
 }
 
-export const ToolWorkspace: React.FC<ToolWorkspaceProps> = ({ feature, lang, onBack }) => {
+export const ToolWorkspace: React.FC<ToolWorkspaceProps> = ({ feature, lang, onBack, onNavigateToFeature }) => {
   
   // This component now acts as a Controller/Router for tools
   // ensuring separation of concerns.
@@ -19,7 +20,7 @@ export const ToolWorkspace: React.FC<ToolWorkspaceProps> = ({ feature, lang, onB
   const renderTool = () => {
     switch (feature.toolType) {
         case 'generation':
-            return <GenerationTool feature={feature} lang={lang} />;
+            return <GenerationTool feature={feature} lang={lang} onNavigateToFeature={onNavigateToFeature} />;
         case 'editing':
             return <EditingTool feature={feature} lang={lang} />;
         default:

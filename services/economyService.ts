@@ -103,7 +103,17 @@ export const updateUserBalance = async (amount: number, reason: string, type: st
                     reason: reason, 
                     type
                 });
-                if (err2) console.warn("[Economy] Failed to log (Retry):", err2.message);
+                
+                if (err2) {
+                    // Attempt 3: Try 'diamond_transactions' table with 'note'
+                    const { error: err3 } = await supabase.from('diamond_transactions').insert({
+                        user_id: userId,
+                        amount,
+                        note: reason, 
+                        type
+                    });
+                    if (err3) console.warn("[Economy] Failed to log (Retry 3):", err3.message);
+                }
             } else {
                 console.warn("[Economy] Failed to log transaction:", error.message);
             }
@@ -138,8 +148,7 @@ export const logVisit = async () => {
         
         // Log visit - rely on DB defaults for dates
         const { error } = await supabase.from('app_visits').insert({
-            user_id: user?.id || null,
-            user_agent: navigator.userAgent
+            user_id: user?.id || null
         });
         
         if (error) {

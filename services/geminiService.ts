@@ -387,6 +387,14 @@ const analyzeReferenceImage = async (base64Data: string): Promise<string> => {
                             { inlineData: { mimeType: 'image/jpeg', data: cleanOptimized } },
                             { text: "Analyze this image. Describe ONLY the 'Skeleton Pose', 'Camera Angle', and 'Composition'. IGNORE the character's clothes, hair, gender, face, and colors. Output ONLY the structural description (e.g. 'sitting cross-legged', 'low angle shot')." }
                         ]
+                    },
+                    config: {
+                        safetySettings: [
+                            { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+                            { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+                            { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+                            { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' }
+                        ]
                     }
                 }),
                 30000, // 30s timeout
@@ -451,6 +459,12 @@ RULES:
                 contents: { parts: parts },
                 config: {
                     temperature: 0.7,
+                    safetySettings: [
+                        { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+                        { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+                        { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+                        { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' }
+                    ]
                 }
             }),
             60000, // 60s Hard Timeout
@@ -490,9 +504,9 @@ The attached image is a MASTER REFERENCE SHEET containing multiple labeled secti
    - IGNORE: The outfit, the hair, the face, the background colors.
 
 3. **CHARACTER REFERENCE(S)**:
-   - WARNING: This is the SOURCE OF TRUTH for the Character's Identity (Face, Hair, Outfit). You MUST use the facial features and outfit details from these images.
-   - TAKE: The Character's Identity (Face), The Outfit (Clothes), The Hair, The Accessories.
-   - THIS IS THE ONLY SOURCE FOR "WHAT" IS IN THE IMAGE.
+   - WARNING: This is the SOURCE OF TRUTH for the Character's visual design (Hairstyle, Outfit). You should use the facial features and outfit details from these images as strong references.
+   - TAKE: The Character's visual design (Face), The Outfit (Clothes), The Hair, The Accessories.
+   - THIS IS THE PRIMARY SOURCE FOR "WHAT" IS IN THE IMAGE.
 
 ** CRITICAL FAILURE CONDITIONS **
 - FAILURE: If the output character wears the clothes from the POSE REFERENCE.
@@ -503,7 +517,7 @@ The attached image is a MASTER REFERENCE SHEET containing multiple labeled secti
 ** EXECUTION LOGIC **
 - Step 1: Extract the SKELETON from POSE REFERENCE.
 - Step 2: Skin the skeleton with the CHARACTER from CHARACTER REFERENCE.
-- Step 3: Dress the character EXACTLY as seen in CHARACTER REFERENCE unless [COMMAND] explicitly specifies a different outfit.
+- Step 3: Dress the character as seen in CHARACTER REFERENCE unless [COMMAND] explicitly specifies a different outfit.
 - Step 4: Render the scene using the ENGINE from STYLE REFERENCE.
 
 [[EXECUTION_COMMAND]]: ${prompt}
@@ -633,7 +647,7 @@ export const generateImage = async (
         if (finalCharBase64) {
             charBase64List.push(finalCharBase64);
             
-            // Prepare standalone face for strict identity
+            // Prepare standalone face for strong reference
             if (char.faceImage) {
                 const optimizedFace = await optimizePayload(char.faceImage, 768);
                 charFaceList.push(cleanBase64(optimizedFace));
@@ -703,7 +717,7 @@ export const generateImage = async (
     // PRIORITY 1: CHARACTER REFERENCES (Moved to TOP for Attention Priority)
     let charPromptInstructions = "";
     if (charBase64List.length > 0) {
-        finalParts.push({ text: "🔴 PRIORITY 1: CHARACTER IDENTITY (CRITICAL)\nINSTRUCTION: You MUST use the exact faces and outfits from the following character images. Perform a 'Face Swap' if necessary to ensure 100% resemblance." });
+        finalParts.push({ text: "🔴 PRIORITY 1: CHARACTER DESIGN (CRITICAL)\nINSTRUCTION: You MUST use the visual design, hairstyle, and clothing style from the following character images." });
         
         // Iterate through ALL uploaded character URIs
         charBase64List.forEach((b64, index) => {
@@ -721,7 +735,7 @@ export const generateImage = async (
             // 2. The Standalone Face (if exists) - for MAXIMUM fidelity
             const faceB64 = charFaceList[index];
             if (faceB64) {
-                 finalParts.push({ text: `🔴 CHARACTER ${charIndex} FACE CLOSE-UP (STRICT IDENTITY)\nINSTRUCTION: This is the exact face to use. Copy the eyes, nose, mouth, and facial structure exactly.` });
+                 finalParts.push({ text: `🔴 CHARACTER ${charIndex} FACE CLOSE-UP\nINSTRUCTION: Use this image as a strong visual reference for the character's facial features and expression.` });
                  finalParts.push({
                     inlineData: {
                         mimeType: 'image/jpeg',
@@ -731,7 +745,7 @@ export const generateImage = async (
             }
             
             // Build specific mapping instruction
-            charPromptInstructions += `\n- CHARACTER ${charIndex} (${charInfo.gender.toUpperCase()}): MUST look exactly like IMAGE ${index + 1} (Face & Outfit).`;
+            charPromptInstructions += `\n- CHARACTER ${charIndex} (${charInfo.gender.toUpperCase()}): Should match the visual design of IMAGE ${index + 1} (Hairstyle & Outfit).`;
         });
     }
 
@@ -759,16 +773,16 @@ export const generateImage = async (
     
     // D. FINAL PROMPT (QUALITY INJECTION)
     const qualityBoosters = "masterpiece, best quality, ultra-detailed, 8k, photorealistic, ray tracing, hdr, cinematic lighting, unreal engine 5 render";
-    const negativePrompt = "low quality, bad anatomy, worst quality, deformed, disfigured, extra limbs, missing limbs, blur, grain, watermark, text, signature, bad hands, bad face, mutation, ugly, disgusting";
+    const negativePrompt = "low quality, bad anatomy, worst quality, blur, grain, watermark, text, signature, bad hands, bad face";
     
     // DEFAULT INSTRUCTION (PRO MODEL - STRICT SEPARATION)
     // This logic is critical for Pro model to respect reference images correctly.
-    let finalInstruction = `🔴 FINAL EXECUTION COMMAND:\n${optimizedPrompt}, ${qualityBoosters}\n\nPRIORITY ORDER:\n1. CHARACTER IDENTITY: The characters in the scene MUST look exactly like the provided character reference images (Face & Outfit).\n2. POSE & BACKGROUND: Use the pose and background from the Pose Reference Image.\n3. ART STYLE: Apply the lighting and texture from the Style Reference Image.\n\nCHARACTER MAPPING:${charPromptInstructions}\n\nNEGATIVE PROMPT: ${negativePrompt}. Do not change the character's face or outfit.`;
+    let finalInstruction = `🔴 FINAL EXECUTION COMMAND:\n${optimizedPrompt}, ${qualityBoosters}\n\nPRIORITY ORDER:\n1. CHARACTER DESIGN: The characters in the scene should match the provided character reference images (Hairstyle & Outfit).\n2. POSE & BACKGROUND: Use the pose and background from the Pose Reference Image.\n3. ART STYLE: Apply the lighting and texture from the Style Reference Image.\n\nCHARACTER MAPPING:${charPromptInstructions}\n\nNEGATIVE PROMPT: ${negativePrompt}.`;
 
     // SPECIAL FLASH INSTRUCTION: Force Style Transfer & Relaxed Constraints
     if (modelType === 'flash') {
         // Relax constraints for Flash to allow prompt creativity
-        finalInstruction = `🔴 FINAL EXECUTION COMMAND:\n${optimizedPrompt}, ${qualityBoosters}\n\nINSTRUCTIONS:\n1. ART STYLE: Mimic the lighting and texture of IMAGE 1 (if provided).\n2. CHARACTER: Use the face and outfit from IMAGE 3+ (if provided).\n3. BACKGROUND & POSE: Follow the text prompt "${optimizedPrompt}" unless IMAGE 2 is provided as a strict reference.\n\nNEGATIVE PROMPT: ${negativePrompt}.`;
+        finalInstruction = `🔴 FINAL EXECUTION COMMAND:\n${optimizedPrompt}, ${qualityBoosters}\n\nINSTRUCTIONS:\n1. ART STYLE: Mimic the lighting and texture of IMAGE 1 (if provided).\n2. CHARACTER: Use the visual design from IMAGE 3+ (if provided).\n3. BACKGROUND & POSE: Follow the text prompt "${optimizedPrompt}" unless IMAGE 2 is provided as a strict reference.\n\nNEGATIVE PROMPT: ${negativePrompt}.`;
 
         if (cleanStyleImage) {
             finalInstruction += `\n\nIMPORTANT: You MUST mimic the art style of IMAGE 1. Look at the lighting, shading, and rendering style of IMAGE 1 and apply it to the scene. Make it look like a high-end 3D render.`;
@@ -792,7 +806,25 @@ export const generateImage = async (
     const config: any = {
         imageConfig: {
             aspectRatio: aspectRatio
-        }
+        },
+        safetySettings: [
+            {
+                category: 'HARM_CATEGORY_HARASSMENT',
+                threshold: 'BLOCK_NONE',
+            },
+            {
+                category: 'HARM_CATEGORY_HATE_SPEECH',
+                threshold: 'BLOCK_NONE',
+            },
+            {
+                category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
+                threshold: 'BLOCK_NONE',
+            },
+            {
+                category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
+                threshold: 'BLOCK_NONE',
+            }
+        ]
     };
 
     // RESTORED: Resolution Setting for Pro Model

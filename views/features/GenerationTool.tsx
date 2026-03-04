@@ -564,60 +564,74 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       switch(guideTopic) {
           case 'chars':
               return (
-                  <div className="space-y-4">
-                      <h3 className="text-xl font-bold text-audi-yellow flex items-center gap-2 border-b border-white/10 pb-2">
-                          <Icons.User className="w-6 h-6" /> Hướng dẫn Upload Nhân vật
+                  <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2 custom-scrollbar">
+                      <h3 className="text-xl font-bold text-audi-yellow flex items-center gap-2 border-b border-white/10 pb-2 sticky top-0 bg-[#12121a] z-10">
+                          <Icons.BookOpen className="w-6 h-6" /> Hướng Dẫn Tạo Ảnh Chi Tiết
                       </h3>
                       
-                      {/* Step 1: Body */}
-                      <div className="bg-white/5 p-3 rounded-xl border border-white/5">
-                          <div className="flex items-center gap-2 mb-1">
-                              <span className="bg-audi-cyan text-black text-[10px] font-bold px-1.5 rounded">BƯỚC 1</span>
-                              <span className="text-sm font-bold text-audi-cyan">Ảnh Toàn Thân (Body)</span>
+                      {/* Chuẩn bị nguyên liệu */}
+                      <div className="bg-white/5 p-4 rounded-xl border border-white/5 space-y-3">
+                          <div className="flex items-center gap-2 mb-2">
+                              <span className="bg-audi-cyan text-black text-[10px] font-bold px-2 py-0.5 rounded uppercase">Bước 1</span>
+                              <span className="text-sm font-bold text-audi-cyan">Chuẩn Bị Nguyên Liệu</span>
                           </div>
-                          <p className="text-xs text-slate-300 leading-relaxed pl-1">
-                              Dùng để AI học <b>trang phục</b>, <b>dáng đứng</b> và <b>cấu trúc cơ thể</b>.
-                              <br/>
-                              <span className="text-slate-500 italic">Khuyên dùng: Ảnh toàn thân rõ ràng, phông nền đơn giản hoặc đã tách nền.</span>
+                          <p className="text-xs text-slate-300 leading-relaxed">
+                              Để AI vẽ chính xác, ảnh nhân vật của bạn phải đạt chuẩn:
                           </p>
+                          <ul className="text-xs text-slate-300 space-y-2 list-disc pl-4">
+                              <li>
+                                  <b>Phải tách nền:</b> Ảnh nhân vật cần được tách nền sạch sẽ (phông nền trong suốt hoặc đen/trắng trơn). 
+                                  <br/><span className="text-slate-400 italic">Nếu ảnh chưa tách nền, hãy dùng công cụ <b className="text-audi-cyan">Tách Nền</b> trước.</span>
+                              </li>
+                              <li>
+                                  <b>Phải sắc nét:</b> Khuôn mặt và trang phục phải rõ nét, không bị mờ nhòe.
+                                  <br/><span className="text-slate-400 italic">Nếu ảnh mờ, hãy dùng công cụ <b className="text-audi-pink">Làm Nét</b> để nâng cấp chất lượng.</span>
+                              </li>
+                          </ul>
                       </div>
 
-                      {/* Step 2: Face */}
-                      <div className="bg-white/5 p-3 rounded-xl border border-white/5">
-                          <div className="flex items-center gap-2 mb-1">
-                              <span className="bg-audi-pink text-white text-[10px] font-bold px-1.5 rounded">BƯỚC 2</span>
-                              <span className="text-sm font-bold text-audi-pink">Ảnh Khuôn Mặt (Face)</span>
-                              <span className="ml-auto text-[9px] bg-red-500/20 text-red-400 px-1.5 rounded border border-red-500/30">QUAN TRỌNG</span>
+                      {/* Các bước tạo ảnh */}
+                      <div className="bg-white/5 p-4 rounded-xl border border-white/5 space-y-3">
+                          <div className="flex items-center gap-2 mb-2">
+                              <span className="bg-audi-pink text-white text-[10px] font-bold px-2 py-0.5 rounded uppercase">Bước 2</span>
+                              <span className="text-sm font-bold text-audi-pink">Thiết Lập Tạo Ảnh</span>
                           </div>
-                          <p className="text-xs text-slate-300 leading-relaxed pl-1 mb-2">
-                              Dùng để <b>ghép mặt (Face Swap)</b> vào nhân vật.
-                          </p>
-                          <div className="grid grid-cols-2 gap-2 text-[10px]">
-                              <div className="bg-green-500/10 border border-green-500/30 p-2 rounded text-green-400 flex items-center gap-1">
-                                  <Icons.Check className="w-3 h-3"/> Cận mặt, chính diện
+                          
+                          <div className="space-y-3">
+                              <div className="bg-black/30 p-3 rounded-lg border border-white/5">
+                                  <h4 className="text-xs font-bold text-white mb-1 flex items-center gap-1"><Icons.User className="w-3 h-3 text-audi-cyan"/> 1. Tải Ảnh Nhân Vật</h4>
+                                  <p className="text-[11px] text-slate-400">Tải bức ảnh đã chuẩn bị ở Bước 1 lên. AI sẽ dùng ảnh này để học khuôn mặt, kiểu tóc, trang phục và phụ kiện của nhân vật.</p>
                               </div>
-                              <div className="bg-red-500/10 border border-red-500/30 p-2 rounded text-red-400 flex items-center gap-1">
-                                  <Icons.X className="w-3 h-3"/> Bị che, nghiêng, mờ
+
+                              <div className="bg-black/30 p-3 rounded-lg border border-white/5">
+                                  <h4 className="text-xs font-bold text-white mb-1 flex items-center gap-1"><Icons.Image className="w-3 h-3 text-audi-yellow"/> 2. Ảnh Mẫu (Reference)</h4>
+                                  <p className="text-[11px] text-slate-400">Ảnh mẫu dùng để AI học <b>Tư thế (Pose)</b>, <b>Góc máy</b> và <b>Bối cảnh (Background)</b>. AI sẽ KHÔNG lấy khuôn mặt hay quần áo từ ảnh mẫu này.</p>
+                              </div>
+
+                              <div className="bg-black/30 p-3 rounded-lg border border-white/5">
+                                  <h4 className="text-xs font-bold text-white mb-1 flex items-center gap-1"><Icons.MessageSquare className="w-3 h-3 text-green-400"/> 3. Viết Prompt (Câu lệnh)</h4>
+                                  <p className="text-[11px] text-slate-400 mb-2">Prompt dùng để miêu tả phong cách, ánh sáng, chất lượng ảnh. Nếu bạn có dùng Ảnh Mẫu, <b>BẮT BUỘC</b> thêm đoạn prompt sau để AI không bị nhầm lẫn:</p>
+                                  <div className="bg-black/50 p-2 rounded border border-green-500/30 text-[10px] text-green-300 font-mono">
+                                      "Sử dụng quần áo, trang phục, kiểu tóc, gương mặt, lớp hoá trang makeup, biểu cảm, phụ kiện, giày dép của ảnh tham chiếu nam và nữ tải lên. Không sử dụng quần áo, trang phục, kiểu tóc, gương mặt, lớp hoá trang makeup, biểu cảm, phụ kiện, giày dép của ảnh mẫu."
+                                  </div>
                               </div>
                           </div>
                       </div>
 
-                      {/* Step 3: Lock */}
-                      <div className="bg-white/5 p-3 rounded-xl border border-white/5">
-                          <div className="flex items-center gap-2 mb-1">
-                              <span className="bg-white text-black text-[10px] font-bold px-1.5 rounded">TÙY CHỌN</span>
-                              <span className="text-sm font-bold text-white">Chế độ Khóa Mặt</span>
+                      {/* Chọn Model */}
+                      <div className="bg-white/5 p-4 rounded-xl border border-white/5 space-y-3">
+                          <div className="flex items-center gap-2 mb-2">
+                              <span className="bg-white text-black text-[10px] font-bold px-2 py-0.5 rounded uppercase">Bước 3</span>
+                              <span className="text-sm font-bold text-white">Chọn Mô Hình AI</span>
                           </div>
-                          <div className="flex gap-2 mt-2">
-                              <div className="flex-1 bg-black/30 p-2 rounded border border-audi-cyan/30 text-center">
-                                  <Icons.Lock className="w-4 h-4 text-audi-cyan mx-auto mb-1"/>
-                                  <div className="text-[10px] font-bold text-audi-cyan">ĐANG BẬT</div>
-                                  <div className="text-[9px] text-slate-400">Giữ nguyên khuôn mặt gốc</div>
+                          <div className="grid grid-cols-1 gap-2">
+                              <div className="bg-black/30 p-3 rounded-lg border border-audi-cyan/30">
+                                  <h4 className="text-xs font-bold text-audi-cyan mb-1">Mô hình Flash (Nhanh, Rẻ)</h4>
+                                  <p className="text-[10px] text-slate-400">Tốc độ tạo ảnh cực nhanh, chi phí thấp. Phù hợp để test prompt hoặc tạo ảnh nháp. Chất lượng chi tiết và độ khối 3D ở mức khá.</p>
                               </div>
-                              <div className="flex-1 bg-black/30 p-2 rounded border border-red-500/30 text-center">
-                                  <Icons.Unlock className="w-4 h-4 text-red-500 mx-auto mb-1"/>
-                                  <div className="text-[10px] font-bold text-red-500">ĐANG TẮT</div>
-                                  <div className="text-[9px] text-slate-400">AI tự vẽ mặt mới</div>
+                              <div className="bg-black/30 p-3 rounded-lg border border-audi-pink/30">
+                                  <h4 className="text-xs font-bold text-audi-pink mb-1">Mô hình Pro (Chất lượng cao)</h4>
+                                  <p className="text-[10px] text-slate-400">Chất lượng hình ảnh xuất sắc, chi tiết sắc nét, độ khối 3D chân thực, hiểu lệnh prompt cực tốt. Phù hợp để tạo ảnh thành phẩm cuối cùng.</p>
                               </div>
                           </div>
                       </div>
@@ -917,7 +931,23 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                     <h3 className="font-bold text-white text-sm uppercase flex items-center gap-2">
                         <Icons.User className="w-4 h-4 text-audi-pink" /> 1. Upload Nhân Vật
                     </h3>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap justify-end">
+                        {onNavigateToFeature && (
+                            <>
+                                <button 
+                                    onClick={() => onNavigateToFeature('remove_bg_pro')}
+                                    className="flex items-center gap-1 text-[10px] font-bold text-white hover:scale-105 transition-transform bg-audi-cyan/20 px-3 py-1 rounded-full border border-audi-cyan/50"
+                                >
+                                    <Icons.Scissors className="w-3 h-3 text-audi-cyan" /> Tách Nền
+                                </button>
+                                <button 
+                                    onClick={() => onNavigateToFeature('sharpen_upscale')}
+                                    className="flex items-center gap-1 text-[10px] font-bold text-white hover:scale-105 transition-transform bg-audi-pink/20 px-3 py-1 rounded-full border border-audi-pink/50"
+                                >
+                                    <Icons.Sparkles className="w-3 h-3 text-audi-pink" /> Làm Nét
+                                </button>
+                            </>
+                        )}
                         <button 
                             onClick={() => setShowVideo(true)}
                             className="flex items-center gap-1 text-[10px] font-bold text-white hover:scale-105 transition-transform bg-red-600 px-3 py-1 rounded-full shadow-[0_0_10px_rgba(220,38,38,0.5)] border border-red-400 group"

@@ -160,6 +160,13 @@ function AppContent() {
     setCurrentView('tool_workspace');
   };
 
+  const handleNavigateToFeature = (featureId: string) => {
+    const feature = APP_CONFIG.main_features.find(f => f.id === featureId);
+    if (feature) {
+      handleSelectFeature(feature);
+    }
+  };
+
   // View Routing Logic
   const renderContent = () => {
     switch (currentView) {
@@ -171,6 +178,7 @@ function AppContent() {
             feature={selectedFeature} 
             lang={lang} 
             onBack={() => handleNavigate('home')} 
+            onNavigateToFeature={handleNavigateToFeature}
           />
         ) : <Home lang={lang} onSelectFeature={handleSelectFeature} onNavigate={handleNavigate} onOpenCheckin={() => setShowCheckin(true)} />;
       case 'tools':

@@ -12,6 +12,7 @@ import { caulenhauClient } from '../../services/supabaseClient';
 interface GenerationToolProps {
   feature: Feature;
   lang: Language;
+  onNavigateToFeature?: (featureId: string) => void;
 }
 
 type GenMode = 'single' | 'couple' | 'group3' | 'group4';
@@ -46,7 +47,7 @@ interface SamplePrompt {
     category?: string;
 }
 
-export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang }) => {
+export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, onNavigateToFeature }) => {
   const { notify } = useNotification();
   const [stage, setStage] = useState<Stage>('input');
   const [progressMsg, setProgressMsg] = useState('');

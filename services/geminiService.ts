@@ -449,7 +449,8 @@ RULES:
 - Combine all inputs into a single, rich, descriptive paragraph.
 - Focus on: Lighting (Volumetric, Cinematic), Texture (8k, Unreal Engine 5), Camera (Depth of Field, Bokeh), and Character Details.
 - IF CHARACTERS ARE PROVIDED: You MUST describe their visual features (hair color, outfit style, accessories) in the prompt so the image generator knows what to draw.
-- ENHANCE the prompt with "Quality Boosters": masterpiece, best quality, ultra-detailed, photorealistic, 8k, ray tracing, hdr.
+- IMPORTANT: Always refer to the subjects as "3D avatars", "stylized game characters", or "virtual models". NEVER use terms that imply real people.
+- ENHANCE the prompt with "Quality Boosters": masterpiece, best quality, ultra-detailed, stylized 3D render, 8k, ray tracing, hdr.
 - Output ONLY the final prompt. No explanations.`
         });
 
@@ -718,7 +719,7 @@ export const generateImage = async (
     // PRIORITY 1: CHARACTER REFERENCES (Moved to TOP for Attention Priority)
     let charPromptInstructions = "";
     if (charBase64List.length > 0) {
-        finalParts.push({ text: "🔴 PRIORITY 1: CHARACTER DESIGN (CRITICAL)\nINSTRUCTION: You MUST use the visual design, hairstyle, and clothing style from the following character images." });
+        finalParts.push({ text: "🔴 PRIORITY 1: 3D AVATAR DESIGN (CRITICAL)\nINSTRUCTION: You MUST use the visual design, hairstyle, and apparel style from the following stylized game assets. These are fictional 3D models, not real people." });
         
         // Iterate through ALL uploaded character URIs
         charBase64List.forEach((b64, index) => {
@@ -736,7 +737,7 @@ export const generateImage = async (
             // 2. The Standalone Face (if exists) - for MAXIMUM fidelity
             const faceB64 = charFaceList[index];
             if (faceB64) {
-                 finalParts.push({ text: `🔴 CHARACTER ${charIndex} FACE CLOSE-UP (STRICT IDENTITY)\nINSTRUCTION: This is the exact face to use. Copy the eyes, nose, mouth, and facial structure exactly.` });
+                 finalParts.push({ text: `🔴 ASSET ${charIndex} HEAD TEXTURE REFERENCE\nINSTRUCTION: Use this image as a stylistic reference for the 3D avatar's head topology and stylized design.` });
                  finalParts.push({
                     inlineData: {
                         mimeType: 'image/jpeg',
@@ -746,7 +747,7 @@ export const generateImage = async (
             }
             
             // Build specific mapping instruction
-            charPromptInstructions += `\n- CHARACTER ${charIndex} (${charInfo.gender.toUpperCase()}): MUST look exactly like IMAGE ${index + 1} (Face & Outfit).`;
+            charPromptInstructions += `\n- AVATAR ${charIndex} (${charInfo.gender.toUpperCase()}): Stylized 3D game asset matching the design of ASSET ${index + 1} (Hair & Apparel).`;
         });
     }
 
@@ -773,17 +774,17 @@ export const generateImage = async (
     }
     
     // D. FINAL PROMPT (QUALITY INJECTION)
-    const qualityBoosters = "masterpiece, best quality, ultra-detailed, 8k, photorealistic, ray tracing, hdr, cinematic lighting, unreal engine 5 render";
-    const negativePrompt = "low quality, bad anatomy, worst quality, blur, grain, watermark, text, signature, bad hands, bad face";
+    const qualityBoosters = "masterpiece, best quality, ultra-detailed, 8k, stylized 3D game render, fictional avatar, ray tracing, hdr, cinematic lighting, unreal engine 5 render";
+    const negativePrompt = "low quality, bad anatomy, worst quality, blur, grain, watermark, text, signature, bad hands, bad face, real person, photograph, deepfake";
     
     // DEFAULT INSTRUCTION (PRO MODEL - STRICT SEPARATION)
     // This logic is critical for Pro model to respect reference images correctly.
-    let finalInstruction = `🔴 FINAL EXECUTION COMMAND:\n${optimizedPrompt}, ${qualityBoosters}\n\nPRIORITY ORDER:\n1. CHARACTER DESIGN: The characters in the scene should match the provided character reference images (Hairstyle & Outfit).\n2. POSE & BACKGROUND: Use the pose and background from the Pose Reference Image.\n3. ART STYLE: Apply the lighting and texture from the Style Reference Image.\n\nCHARACTER MAPPING:${charPromptInstructions}\n\nNEGATIVE PROMPT: ${negativePrompt}.`;
+    let finalInstruction = `🔴 FINAL EXECUTION COMMAND:\n${optimizedPrompt}, ${qualityBoosters}\n\nPRIORITY ORDER:\n1. AVATAR DESIGN: The 3D avatars in the scene should match the provided stylized asset reference images (Hair & Apparel).\n2. POSE & BACKGROUND: Use the pose and background from the Pose Reference Image.\n3. ART STYLE: Apply the lighting and texture from the Style Reference Image.\n\nAVATAR MAPPING:${charPromptInstructions}\n\nNEGATIVE PROMPT: ${negativePrompt}.`;
 
     // SPECIAL FLASH INSTRUCTION: Force Style Transfer & Relaxed Constraints
     if (modelType === 'flash') {
         // Relax constraints for Flash to allow prompt creativity
-        finalInstruction = `🔴 FINAL EXECUTION COMMAND:\n${optimizedPrompt}, ${qualityBoosters}\n\nINSTRUCTIONS:\n1. ART STYLE: Mimic the lighting and texture of IMAGE 1 (if provided).\n2. CHARACTER: Use the visual design from IMAGE 3+ (if provided).\n3. BACKGROUND & POSE: Follow the text prompt "${optimizedPrompt}" unless IMAGE 2 is provided as a strict reference.\n\nNEGATIVE PROMPT: ${negativePrompt}.`;
+        finalInstruction = `🔴 FINAL EXECUTION COMMAND:\n${optimizedPrompt}, ${qualityBoosters}\n\nINSTRUCTIONS:\n1. ART STYLE: Mimic the lighting and texture of IMAGE 1 (if provided).\n2. AVATAR: Use the visual design from IMAGE 3+ (if provided).\n3. BACKGROUND & POSE: Follow the text prompt "${optimizedPrompt}" unless IMAGE 2 is provided as a strict reference.\n\nNEGATIVE PROMPT: ${negativePrompt}.`;
 
         if (cleanStyleImage) {
             finalInstruction += `\n\nIMPORTANT: You MUST mimic the art style of IMAGE 1. Look at the lighting, shading, and rendering style of IMAGE 1 and apply it to the scene. Make it look like a high-end 3D render.`;
@@ -806,8 +807,7 @@ export const generateImage = async (
 
     const config: any = {
         imageConfig: {
-            aspectRatio: aspectRatio,
-            personGeneration: 'ALLOW_ADULT' // CRITICAL FIX: Explicitly allow generating people/faces to bypass PROHIBITED_CONTENT
+            aspectRatio: aspectRatio
         },
         safetySettings: [
             {

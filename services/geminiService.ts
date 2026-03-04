@@ -821,11 +821,9 @@ export const generateImage = async (
         ]
     };
 
-    // RESTORED: Resolution Setting for Pro Model
-    // User explicitly requested 1K/2K/4K support.
-    if (modelType === 'pro') {
-        config.imageConfig.imageSize = resolution;
-    }
+    // ENABLED: Resolution Setting for both Flash and Pro Models
+    // Both gemini-3.1-flash-image-preview and gemini-3-pro-image-preview support 1K/2K/4K.
+    config.imageConfig.imageSize = resolution;
 
     // googleSearch is only supported on gemini-3-pro-image-preview
     if (useSearch && modelType === 'pro') {

@@ -202,14 +202,14 @@ export const createTextureSheet = async (
         const bodyImg = await loadImageWithTimeout(bodyBase64);
         
         if (!faceBase64) {
-            const optimizedBody = await optimizePayload(bodyBase64, 1280);
+            const optimizedBody = await optimizePayload(bodyBase64, 2048);
             return optimizedBody;
         }
 
         const faceImg = await loadImageWithTimeout(faceBase64);
 
-        const SHEET_H = 1280;
-        const TOTAL_W = 1280;
+        const SHEET_H = 2048;
+        const TOTAL_W = 2048;
         const SPLIT_X = Math.floor(TOTAL_W * 0.65); 
 
         const canvas = document.createElement('canvas');

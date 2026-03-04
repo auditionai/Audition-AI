@@ -636,15 +636,15 @@ export const generateImage = async (
         let finalCharBase64 = "";
         
         // RESTORED: Process both full body and face images for maximum fidelity
-        if (char.image && char.faceImage) {
+        if (char.image && char.faceImage && char.image !== char.faceImage) {
             const sheetBase64 = await createTextureSheet(char.image, char.faceImage);
-            const optimizedSheet = await optimizePayload(sheetBase64, 1024);
+            const optimizedSheet = await optimizePayload(sheetBase64, 2048);
             finalCharBase64 = cleanBase64(optimizedSheet);
         } else if (char.image) {
-            const optimized = await optimizePayload(char.image, 1024);
+            const optimized = await optimizePayload(char.image, 2048);
             finalCharBase64 = cleanBase64(optimized);
         } else if (char.faceImage) {
-            const optimized = await optimizePayload(char.faceImage, 1024);
+            const optimized = await optimizePayload(char.faceImage, 2048);
             finalCharBase64 = cleanBase64(optimized);
         }
         
@@ -653,7 +653,7 @@ export const generateImage = async (
             
             // Prepare standalone face for strong reference
             if (char.faceImage) {
-                const optimizedFace = await optimizePayload(char.faceImage, 768);
+                const optimizedFace = await optimizePayload(char.faceImage, 2048);
                 charFaceList.push(cleanBase64(optimizedFace));
             } else {
                 charFaceList.push(null);

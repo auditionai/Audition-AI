@@ -635,10 +635,16 @@ export const generateImage = async (
     for (const char of characters) {
         let finalCharBase64 = "";
         
-        // TEMPORARY FIX: Do NOT send faceImage to bypass Google's strict PROHIBITED_CONTENT filter
-        // We only process the full body image (char.image) for now.
-        if (char.image) {
+        // RESTORED: Process both full body and face images for maximum fidelity
+        if (char.image && char.faceImage) {
+            const sheetBase64 = await createTextureSheet(char.image, char.faceImage);
+            const optimizedSheet = await optimizePayload(sheetBase64, 1024);
+            finalCharBase64 = cleanBase64(optimizedSheet);
+        } else if (char.image) {
             const optimized = await optimizePayload(char.image, 1024);
+            finalCharBase64 = cleanBase64(optimized);
+        } else if (char.faceImage) {
+            const optimized = await optimizePayload(char.faceImage, 1024);
             finalCharBase64 = cleanBase64(optimized);
         }
         
@@ -646,8 +652,12 @@ export const generateImage = async (
             charBase64List.push(finalCharBase64);
             
             // Prepare standalone face for strong reference
-            // TEMPORARY FIX: Disable standalone face sending
-            charFaceList.push(null);
+            if (char.faceImage) {
+                const optimizedFace = await optimizePayload(char.faceImage, 768);
+                charFaceList.push(cleanBase64(optimizedFace));
+            } else {
+                charFaceList.push(null);
+            }
         }
     }
 
@@ -711,7 +721,7 @@ export const generateImage = async (
     // PRIORITY 1: CHARACTER REFERENCES (Moved to TOP for Attention Priority)
     let charPromptInstructions = "";
     if (charBase64List.length > 0) {
-        finalParts.push({ text: "🔴 PRIORITY 1: 3D AVATAR DESIGN (CRITICAL)\nINSTRUCTION: You MUST use the visual design, hairstyle, and apparel style from the following stylized game assets. These are fictional 3D models, not real people." });
+        finalParts.push({ text: "🔴 PRIORITY 1: 3D AVATAR DESIGN (CRITICAL)\nINSTRUCTION: You MUST extract the visual design, facial features, hairstyle, and apparel from the following stylized game assets. DO NOT copy the background or pose from these images. These are fictional 3D models." });
         
         // Iterate through ALL uploaded character URIs
         charBase64List.forEach((b64, index) => {
@@ -729,7 +739,7 @@ export const generateImage = async (
             // 2. The Standalone Face (if exists) - for MAXIMUM fidelity
             const faceB64 = charFaceList[index];
             if (faceB64) {
-                 finalParts.push({ text: `🔴 ASSET ${charIndex} HEAD TEXTURE REFERENCE\nINSTRUCTION: Use this image as a stylistic reference for the 3D avatar's head topology and stylized design.` });
+                 finalParts.push({ text: `🔴 ASSET ${charIndex} HEAD TEXTURE REFERENCE\nINSTRUCTION: Use this image strictly for the 3D avatar's facial structure, eye shape, and head topology.` });
                  finalParts.push({
                     inlineData: {
                         mimeType: 'image/jpeg',
@@ -739,13 +749,13 @@ export const generateImage = async (
             }
             
             // Build specific mapping instruction
-            charPromptInstructions += `\n- AVATAR ${charIndex} (${charInfo.gender.toUpperCase()}): Stylized 3D game asset matching the design of ASSET ${index + 1} (Hair & Apparel).`;
+            charPromptInstructions += `\n- AVATAR ${charIndex} (${charInfo.gender.toUpperCase()}): Stylized 3D game asset matching the exact facial features, hair, and apparel of ASSET ${index + 1}.`;
         });
     }
 
     // PRIORITY 2: POSE/STRUCTURE REFERENCE
     if (cleanRefImage) {
-        finalParts.push({ text: "🔴 PRIORITY 2: POSE & BACKGROUND (SOURCE OF TRUTH)\nINSTRUCTION: Use the pose and background from this image." });
+        finalParts.push({ text: "🔴 PRIORITY 2: POSE & BACKGROUND (SOURCE OF TRUTH)\nINSTRUCTION: Extract ONLY the pose, camera angle, and background structure from this image. DO NOT copy the character designs, faces, or art style from this image." });
         finalParts.push({
             inlineData: {
                 mimeType: 'image/jpeg',
@@ -756,7 +766,7 @@ export const generateImage = async (
 
     // PRIORITY 3: STYLE REFERENCE
     if (cleanStyleImage) {
-        finalParts.push({ text: "🔴 PRIORITY 3: ART STYLE\nINSTRUCTION: Apply this rendering style (lighting, texture) to the final image." });
+        finalParts.push({ text: "🔴 PRIORITY 3: ART STYLE & MATERIAL\nINSTRUCTION: Extract ONLY the rendering style, lighting, color palette, and material textures from this image. DO NOT copy the characters, poses, or background composition from this image." });
         finalParts.push({
             inlineData: {
                 mimeType: 'image/jpeg',
@@ -767,21 +777,11 @@ export const generateImage = async (
     
     // D. FINAL PROMPT (QUALITY INJECTION)
     const qualityBoosters = "masterpiece, best quality, ultra-detailed, 8k, stylized 3D game render, fictional avatar, ray tracing, hdr, cinematic lighting, unreal engine 5 render";
-    const negativePrompt = "low quality, bad anatomy, worst quality, blur, grain, watermark, text, signature, bad hands, bad face";
+    const negativePrompt = "low quality, bad anatomy, worst quality, blur, grain, watermark, text, signature, bad hands, bad face, mixed backgrounds, conflicting styles";
     
-    // DEFAULT INSTRUCTION (PRO MODEL - STRICT SEPARATION)
-    // This logic is critical for Pro model to respect reference images correctly.
-    let finalInstruction = `🔴 FINAL EXECUTION COMMAND:\n${optimizedPrompt}, ${qualityBoosters}\n\nPRIORITY ORDER:\n1. AVATAR DESIGN: The 3D avatars in the scene should match the provided stylized asset reference images (Hair & Apparel).\n2. POSE & BACKGROUND: Use the pose and background from the Pose Reference Image.\n3. ART STYLE: Apply the lighting and texture from the Style Reference Image.\n\nAVATAR MAPPING:${charPromptInstructions}\n\nNEGATIVE PROMPT: ${negativePrompt}.`;
-
-    // SPECIAL FLASH INSTRUCTION: Force Style Transfer & Relaxed Constraints
-    if (modelType === 'flash') {
-        // Relax constraints for Flash to allow prompt creativity
-        finalInstruction = `🔴 FINAL EXECUTION COMMAND:\n${optimizedPrompt}, ${qualityBoosters}\n\nINSTRUCTIONS:\n1. ART STYLE: Mimic the lighting and texture of IMAGE 1 (if provided).\n2. AVATAR: Use the visual design from IMAGE 3+ (if provided).\n3. BACKGROUND & POSE: Follow the text prompt "${optimizedPrompt}" unless IMAGE 2 is provided as a strict reference.\n\nNEGATIVE PROMPT: ${negativePrompt}.`;
-
-        if (cleanStyleImage) {
-            finalInstruction += `\n\nIMPORTANT: You MUST mimic the art style of IMAGE 1. Look at the lighting, shading, and rendering style of IMAGE 1 and apply it to the scene. Make it look like a high-end 3D render.`;
-        }
-    }
+    // DEFAULT INSTRUCTION (PRO & FLASH - STRICT SEPARATION)
+    // This logic is critical to prevent the AI from mixing up the roles of the images.
+    let finalInstruction = `🔴 FINAL EXECUTION COMMAND:\n${optimizedPrompt}, ${qualityBoosters}\n\nSTRICT ROLE SEPARATION FOR IMAGES:\n1. AVATAR DESIGN IMAGES: Provide ONLY the face, hair, and clothing. Ignore their backgrounds/poses.\n2. POSE & BACKGROUND IMAGE: Provides ONLY the pose and background structure. Ignore its characters/style.\n3. ART STYLE IMAGE: Provides ONLY the lighting, texture, and rendering vibe. Ignore its characters/backgrounds.\n\nAVATAR MAPPING:${charPromptInstructions}\n\nNEGATIVE PROMPT: ${negativePrompt}.`;
 
     finalParts.push({ text: finalInstruction });
 

@@ -1,6 +1,6 @@
 import { GoogleGenAI, HarmCategory, HarmBlockThreshold } from "@google/genai";
 import { getSystemApiKey, reportKeyFailure, isKeyDisabled } from "./economyService";
-import { createTextureSheet, optimizePayload, createSolidFence, createMasterReferenceSheet, removeBackgroundAndAddBlack } from "../utils/imageProcessor";
+import { createTextureSheet, optimizePayload, createSolidFence, createMasterReferenceSheet } from "../utils/imageProcessor";
 
 export interface CharacterData {
   id: number;
@@ -635,29 +635,16 @@ export const generateImage = async (
     for (const char of characters) {
         let finalCharBase64 = "";
         
-        // Remove background and add black background for character image
-        let processedCharImage = char.image;
-        if (processedCharImage) {
-            processedCharImage = await removeBackgroundAndAddBlack(processedCharImage, onLog);
-        }
-        
-        let processedFaceImage = char.faceImage;
-        if (processedFaceImage && processedFaceImage !== char.image) {
-            processedFaceImage = await removeBackgroundAndAddBlack(processedFaceImage, onLog);
-        } else if (processedFaceImage === char.image) {
-            processedFaceImage = processedCharImage;
-        }
-        
         // RESTORED: Process both full body and face images for maximum fidelity
-        if (processedCharImage && processedFaceImage && processedCharImage !== processedFaceImage) {
-            const sheetBase64 = await createTextureSheet(processedCharImage, processedFaceImage);
+        if (char.image && char.faceImage && char.image !== char.faceImage) {
+            const sheetBase64 = await createTextureSheet(char.image, char.faceImage);
             const optimizedSheet = await optimizePayload(sheetBase64, 2048);
             finalCharBase64 = cleanBase64(optimizedSheet);
-        } else if (processedCharImage) {
-            const optimized = await optimizePayload(processedCharImage, 2048);
+        } else if (char.image) {
+            const optimized = await optimizePayload(char.image, 2048);
             finalCharBase64 = cleanBase64(optimized);
-        } else if (processedFaceImage) {
-            const optimized = await optimizePayload(processedFaceImage, 2048);
+        } else if (char.faceImage) {
+            const optimized = await optimizePayload(char.faceImage, 2048);
             finalCharBase64 = cleanBase64(optimized);
         }
         
@@ -665,8 +652,8 @@ export const generateImage = async (
             charBase64List.push(finalCharBase64);
             
             // Prepare standalone face for strong reference
-            if (processedFaceImage) {
-                const optimizedFace = await optimizePayload(processedFaceImage, 2048);
+            if (char.faceImage) {
+                const optimizedFace = await optimizePayload(char.faceImage, 2048);
                 charFaceList.push(cleanBase64(optimizedFace));
             } else {
                 charFaceList.push(null);

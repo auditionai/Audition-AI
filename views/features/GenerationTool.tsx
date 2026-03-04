@@ -346,7 +346,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       let cost = 0;
       
       if (aiModel === 'flash') {
-          cost = 1; // Flash is always 1 Vcoin
+          if (resolution === '1K') cost = 1;
+          if (resolution === '2K') cost = 2;
+          if (resolution === '4K') cost = 4;
       } else {
           // Resolution Based Pricing (High Quality 3.0 Pro)
           if (resolution === '1K') cost = 5;
@@ -455,16 +457,11 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
       const characterDataList = [];
       for (const char of characters) {
           let bodyData = char.bodyImage;
-          let faceData = char.faceImage;
+          let faceData = char.bodyImage; // Automatically use bodyImage as faceImage
 
           if (bodyData && bodyData.startsWith('data:')) {
-              addLog(`Đang tải ảnh Body (NV ${char.id}) lên Cloud (Backup)...`);
+              addLog(`Đang tải ảnh NV ${char.id} lên Cloud (Backup)...`);
               uploadFileToR2(bodyData, 'inputs').catch(e => console.warn("R2 Body Backup Failed", e));
-          }
-
-          if (faceData && faceData.startsWith('data:')) {
-              addLog(`Đang tải ảnh Face (NV ${char.id}) lên Cloud (Backup)...`);
-              uploadFileToR2(faceData, 'inputs').catch(e => console.warn("R2 Face Backup Failed", e));
           }
 
           characterDataList.push({
@@ -526,7 +523,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
           timestamp: Date.now(),
           toolId: feature.id,
           toolName: feature.name['en'],
-          engine: `Gemini 3.0 Pro ${resolution}`
+          engine: aiModel === 'flash' ? `Gemini 3.1 Flash ${resolution}` : `Gemini 3.0 Pro ${resolution}`
         };
         setGeneratedData(newImage);
         
@@ -973,35 +970,25 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                             </div>
                             
                             <div className="space-y-3">
-                                <div onClick={() => handleUploadClick(char.id, 'body')} className="w-full h-40 bg-black/40 rounded-xl border-2 border-dashed border-slate-700 hover:border-audi-pink cursor-pointer relative overflow-hidden group/item transition-all flex flex-col items-center justify-center">
+                                <div onClick={() => handleUploadClick(char.id, 'body')} className="w-full h-64 bg-black/40 rounded-xl border-2 border-dashed border-slate-700 hover:border-audi-pink cursor-pointer relative overflow-hidden group/item transition-all flex flex-col items-center justify-center">
                                     {char.bodyImage ? (
                                         <img src={char.bodyImage} className="w-full h-full object-contain" alt="Body" />
                                     ) : (
                                         <div className="flex flex-col items-center text-slate-500 group-hover/item:text-audi-pink transition-colors">
                                             <Icons.User className="w-8 h-8 mb-1" />
-                                            <span className="text-[10px] uppercase font-bold">Ảnh Toàn Thân</span>
+                                            <span className="text-[10px] uppercase font-bold">Ảnh Nhân Vật</span>
                                         </div>
                                     )}
                                 </div>
-
-                                <div onClick={() => handleUploadClick(char.id, 'face')} className="w-full h-40 bg-black/40 rounded-xl border-2 border-dashed border-slate-700 hover:border-audi-cyan cursor-pointer relative overflow-hidden group/item transition-all flex flex-col items-center justify-center">
-                                    {char.faceImage ? (
-                                        <>
-                                            <img src={char.faceImage} className={`w-full h-full object-cover transition-all ${char.isFaceLocked ? '' : 'grayscale opacity-50'}`} alt="Face" />
-                                            <div 
-                                                onClick={(e) => { e.stopPropagation(); toggleFaceLock(char.id); }}
-                                                className={`absolute bottom-2 right-2 px-2 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-1.5 shadow-xl transition-all cursor-pointer z-10 border ${char.isFaceLocked ? 'bg-audi-cyan text-black border-white' : 'bg-red-500/90 text-white border-red-400'}`}
-                                            >
-                                                {char.isFaceLocked ? <Icons.Lock className="w-3 h-3" /> : <Icons.Unlock className="w-3 h-3" />}
-                                                {char.isFaceLocked ? (lang === 'vi' ? 'Đã Khóa' : 'Locked') : (lang === 'vi' ? 'Không dùng' : 'Unlocked')}
-                                            </div>
-                                        </>
-                                    ) : (
-                                        <div className="flex flex-col items-center text-slate-500 group-hover/item:text-audi-cyan transition-colors">
-                                            <Icons.Eye className="w-8 h-8 mb-1" />
-                                            <span className="text-[10px] uppercase font-bold">Ảnh Mặt (Tùy chọn)</span>
-                                        </div>
-                                    )}
+                                
+                                <div className="flex justify-center">
+                                    <div 
+                                        onClick={(e) => { e.stopPropagation(); toggleFaceLock(char.id); }}
+                                        className={`px-3 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-1.5 shadow-xl transition-all cursor-pointer border ${char.isFaceLocked ? 'bg-audi-cyan text-black border-white' : 'bg-red-500/90 text-white border-red-400'}`}
+                                    >
+                                        {char.isFaceLocked ? <Icons.Lock className="w-3 h-3" /> : <Icons.Unlock className="w-3 h-3" />}
+                                        {char.isFaceLocked ? (lang === 'vi' ? 'Khóa Mặt: BẬT' : 'Face Lock: ON') : (lang === 'vi' ? 'Khóa Mặt: TẮT' : 'Face Lock: OFF')}
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -1118,8 +1105,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                     </div>
 
                     <div className="space-y-3 animate-fade-in">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase">Độ phân giải (3.0 Pro)</label>
-                        <div className={`flex gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5 ${aiModel === 'flash' ? 'opacity-50 pointer-events-none' : ''}`}>
+                        <label className="text-[10px] font-bold text-slate-400 uppercase">Độ phân giải</label>
+                        <div className={`flex gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5`}>
                             {['1K', '2K', '4K'].map(r => (
                                 <button 
                                     key={r} 
@@ -1150,7 +1137,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang })
                                 </div>
                             ) : (
                                 <div className="flex justify-between text-[9px] text-slate-500 mt-2 font-mono border-t border-white/5 pt-2">
-                                    <span className="text-white font-bold">Flash: 1VC (Mọi tỷ lệ)</span>
+                                    <span className={resolution === '1K' ? 'text-white font-bold' : ''}>1K: 1VC</span>
+                                    <span className={resolution === '2K' ? 'text-white font-bold' : ''}>2K: 2VC</span>
+                                    <span className={resolution === '4K' ? 'text-white font-bold' : ''}>4K: 4VC</span>
                                 </div>
                             )}
                         </div>

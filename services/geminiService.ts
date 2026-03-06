@@ -685,53 +685,26 @@ export const generateImage = async (
 
     const finalParts: any[] = [];
     
-    // --- SIMPLIFIED PAYLOAD STRUCTURE TO AVOID SAFETY BLOCKS ---
-    // Gemini Image models often block requests with multiple images if the prompt is too aggressive or complex.
-    // We use a single, clear instruction block followed by all images in order.
+    // --- EXTREMELY SIMPLIFIED PAYLOAD TO BYPASS SAFETY FILTERS ---
+    // Remove all aggressive keywords, negative prompts, and complex formatting.
+    // Just provide the description and the images with simple labels.
     
-    let promptText = `Generate a 3D stylized image based on the following description:\n${optimizedPrompt}\n\n`;
+    finalParts.push({ text: `Generate a 3D stylized illustration.\n\nDescription: ${optimizedPrompt}\n\n` });
     
-    let charPromptInstructions = "";
     if (charBase64List.length > 0) {
-        promptText += `[Character References]\n`;
         charBase64List.forEach((b64, index) => {
-            const charIndex = index + 1;
-            const charInfo = characters[index];
-            promptText += `- Image ${charIndex} is the design reference for Character ${charIndex} (${charInfo.gender}). Match their clothing, hair, and appearance.\n`;
-            charPromptInstructions += `- Character ${charIndex} (${charInfo.gender}): Match the appearance shown in Image ${charIndex}.\n`;
+            finalParts.push({ text: `Character ${index + 1} Reference:` });
+            finalParts.push({
+                inlineData: {
+                    mimeType: 'image/jpeg',
+                    data: b64
+                }
+            });
         });
     }
     
-    let nextImageIndex = charBase64List.length + 1;
-    
     if (cleanRefImage) {
-        promptText += `\n[Composition Reference]\n- Image ${nextImageIndex} is the composition reference. Use it strictly for the layout, pose, and background structure. Do not copy its characters or style.\n`;
-        nextImageIndex++;
-    }
-    
-    if (cleanStyleImage) {
-        promptText += `\n[Style Reference]\n- Image ${nextImageIndex} is the style reference. Use it strictly for the artistic style, lighting, and color palette. Do not copy its characters or composition.\n`;
-    }
-    
-    const qualityBoosters = "masterpiece, best quality, ultra-detailed, 8k, stylized 3D game render, ray tracing, hdr, cinematic lighting, unreal engine 5 render";
-    const negativePrompt = "low quality, bad anatomy, worst quality, blur, grain, watermark, text, signature, bad hands, bad face, mixed backgrounds, conflicting styles, extra characters, unwanted people from style reference";
-    
-    promptText += `\n[Final Instructions]\nQuality tags: ${qualityBoosters}\nNegative constraints: ${negativePrompt}\n\nEnsure the characters match their respective design references. The overall composition should match the composition reference, and the art style should match the style reference.`;
-
-    // 1. Add the single text part first
-    finalParts.push({ text: promptText });
-    
-    // 2. Add all images in the exact order referenced in the text
-    charBase64List.forEach(b64 => {
-        finalParts.push({
-            inlineData: {
-                mimeType: 'image/jpeg',
-                data: b64
-            }
-        });
-    });
-    
-    if (cleanRefImage) {
+        finalParts.push({ text: `Pose and Composition Reference:` });
         finalParts.push({
             inlineData: {
                 mimeType: 'image/jpeg',
@@ -741,6 +714,7 @@ export const generateImage = async (
     }
     
     if (cleanStyleImage) {
+        finalParts.push({ text: `Art Style Reference:` });
         finalParts.push({
             inlineData: {
                 mimeType: 'image/jpeg',
@@ -748,6 +722,8 @@ export const generateImage = async (
             }
         });
     }
+    
+    finalParts.push({ text: `\nEnsure the characters match their references, the pose matches the composition reference, and the art style matches the style reference. These are fictional 3D game avatars. Keep the image safe, family-friendly, and G-rated. High quality, masterpiece, 3D render.` });
 
     // --- PAYLOAD SANITIZATION ---
     const sanitizedParts = finalParts.filter(p => {

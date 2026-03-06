@@ -451,6 +451,7 @@ RULES:
 - IF CHARACTERS ARE PROVIDED: You MUST describe their visual features (hair color, outfit style, accessories) in the prompt so the image generator knows what to draw.
 - IMPORTANT: Always refer to the subjects as "3D avatars", "stylized game characters", or "virtual models". NEVER use terms that imply real people.
 - ENHANCE the prompt with "Quality Boosters": masterpiece, best quality, ultra-detailed, stylized 3D render, 8k, ray tracing, hdr.
+- CRITICAL SAFETY RULE: Keep all interactions between characters strictly PG-13, friendly, and safe. Avoid any suggestive, romantic, or violent descriptions. Describe poses neutrally (e.g., "standing together", "posing side by side").
 - Output ONLY the final prompt. No explanations.`
         });
 
@@ -684,32 +685,53 @@ export const generateImage = async (
 
     const finalParts: any[] = [];
     
-    // PRIORITY 1: CHARACTER REFERENCES (Moved to TOP for Attention Priority)
+    // --- SIMPLIFIED PAYLOAD STRUCTURE TO AVOID SAFETY BLOCKS ---
+    // Gemini Image models often block requests with multiple images if the prompt is too aggressive or complex.
+    // We use a single, clear instruction block followed by all images in order.
+    
+    let promptText = `Generate a 3D stylized image based on the following description:\n${optimizedPrompt}\n\n`;
+    
     let charPromptInstructions = "";
     if (charBase64List.length > 0) {
-        finalParts.push({ text: "🔴 PRIORITY 1: 3D AVATAR DESIGN (CRITICAL)\nINSTRUCTION: You MUST extract the visual design, facial features, hairstyle, and apparel from the following stylized game assets. DO NOT copy the background or pose from these images. These are fictional 3D models." });
-        
-        // Send individual images as requested by the user
+        promptText += `[Character References]\n`;
         charBase64List.forEach((b64, index) => {
             const charIndex = index + 1;
-            const charInfo = characters[index]; // Get metadata (gender, id)
-            
-            finalParts.push({ text: `🔴 ASSET ${charIndex} REFERENCE\nINSTRUCTION: Scan this image to extract BOTH the full body apparel AND the facial features for AVATAR ${charIndex}.` });
-            finalParts.push({
-                inlineData: {
-                    mimeType: 'image/jpeg',
-                    data: b64
-                }
-            });
-            
-            // Build specific mapping instruction
-            charPromptInstructions += `\n- AVATAR ${charIndex} (${charInfo.gender.toUpperCase()}): Stylized 3D game asset matching the exact facial features, face shape, hair, and apparel of ASSET ${charIndex}.`;
+            const charInfo = characters[index];
+            promptText += `- Image ${charIndex} is the design reference for Character ${charIndex} (${charInfo.gender}). Match their clothing, hair, and appearance.\n`;
+            charPromptInstructions += `- Character ${charIndex} (${charInfo.gender}): Match the appearance shown in Image ${charIndex}.\n`;
         });
     }
-
-    // PRIORITY 2: POSE/STRUCTURE REFERENCE
+    
+    let nextImageIndex = charBase64List.length + 1;
+    
     if (cleanRefImage) {
-        finalParts.push({ text: "🔴 PRIORITY 2: POSE & BACKGROUND (SOURCE OF TRUTH)\nINSTRUCTION: Extract ONLY the pose, camera angle, and background structure from this image. DO NOT copy the character designs, faces, or art style from this image." });
+        promptText += `\n[Composition Reference]\n- Image ${nextImageIndex} is the composition reference. Use it strictly for the layout, pose, and background structure. Do not copy its characters or style.\n`;
+        nextImageIndex++;
+    }
+    
+    if (cleanStyleImage) {
+        promptText += `\n[Style Reference]\n- Image ${nextImageIndex} is the style reference. Use it strictly for the artistic style, lighting, and color palette. Do not copy its characters or composition.\n`;
+    }
+    
+    const qualityBoosters = "masterpiece, best quality, ultra-detailed, 8k, stylized 3D game render, ray tracing, hdr, cinematic lighting, unreal engine 5 render";
+    const negativePrompt = "low quality, bad anatomy, worst quality, blur, grain, watermark, text, signature, bad hands, bad face, mixed backgrounds, conflicting styles, extra characters, unwanted people from style reference";
+    
+    promptText += `\n[Final Instructions]\nQuality tags: ${qualityBoosters}\nNegative constraints: ${negativePrompt}\n\nEnsure the characters match their respective design references. The overall composition should match the composition reference, and the art style should match the style reference.`;
+
+    // 1. Add the single text part first
+    finalParts.push({ text: promptText });
+    
+    // 2. Add all images in the exact order referenced in the text
+    charBase64List.forEach(b64 => {
+        finalParts.push({
+            inlineData: {
+                mimeType: 'image/jpeg',
+                data: b64
+            }
+        });
+    });
+    
+    if (cleanRefImage) {
         finalParts.push({
             inlineData: {
                 mimeType: 'image/jpeg',
@@ -717,10 +739,8 @@ export const generateImage = async (
             }
         });
     }
-
-    // PRIORITY 3: STYLE REFERENCE
+    
     if (cleanStyleImage) {
-        finalParts.push({ text: "🔴 PRIORITY 3: ART STYLE & MATERIAL (CRITICAL: DO NOT COPY SUBJECTS)\nINSTRUCTION: Extract ONLY the rendering style, lighting, color palette, and material textures from this image. YOU MUST COMPLETELY IGNORE AND EXCLUDE ANY CHARACTERS, PEOPLE, OR SUBJECTS SHOWN IN THIS IMAGE. DO NOT ADD THEM TO THE FINAL RESULT." });
         finalParts.push({
             inlineData: {
                 mimeType: 'image/jpeg',
@@ -728,16 +748,6 @@ export const generateImage = async (
             }
         });
     }
-    
-    // D. FINAL PROMPT (QUALITY INJECTION)
-    const qualityBoosters = "masterpiece, best quality, ultra-detailed, 8k, stylized 3D game render, ray tracing, hdr, cinematic lighting, unreal engine 5 render";
-    const negativePrompt = "low quality, bad anatomy, worst quality, blur, grain, watermark, text, signature, bad hands, bad face, mixed backgrounds, conflicting styles, extra characters, unwanted people from style reference";
-    
-    // DEFAULT INSTRUCTION (PRO & FLASH - STRICT SEPARATION)
-    // This logic is critical to prevent the AI from mixing up the roles of the images.
-    let finalInstruction = `🔴 FINAL EXECUTION COMMAND:\n${optimizedPrompt}, ${qualityBoosters}\n\nSTRICT ROLE SEPARATION FOR IMAGES:\n1. AVATAR DESIGN IMAGES: Provide ONLY the face, hair, and clothing. Ignore their backgrounds/poses.\n2. POSE & BACKGROUND IMAGE: Provides ONLY the pose and background structure. Ignore its characters/style.\n3. ART STYLE IMAGE: Provides ONLY the lighting, texture, and rendering vibe. ABSOLUTELY NO CHARACTERS FROM THIS IMAGE SHOULD APPEAR IN THE RESULT.\n\nAVATAR MAPPING:${charPromptInstructions}\n\nNEGATIVE PROMPT: ${negativePrompt}.`;
-
-    finalParts.push({ text: finalInstruction });
 
     // --- PAYLOAD SANITIZATION ---
     const sanitizedParts = finalParts.filter(p => {

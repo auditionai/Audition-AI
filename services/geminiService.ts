@@ -649,37 +649,14 @@ export const generateImage = async (
         }
     }
 
-    // 5. CREATE MASTER REFERENCE SHEET (RESTORED)
-    // We restore this to ensure the "Brain" (Text Model) can see the characters and describe them accurately.
+    // 5. CREATE MASTER REFERENCE SHEET (REMOVED)
+    // We no longer use master sheet. We send individual images as requested by the user.
     let masterSheetPart = null;
-    if (charBase64List.length > 0) {
-        try {
-            onLog("Step 3.5: Assembling Character Master Sheet...");
-            // Correctly pass ONLY characters to the Master Sheet generator
-            // DO NOT pass style or pose, otherwise the text model will describe their characters and inject them into the prompt!
-            const masterSheetBase64 = await createMasterReferenceSheet(
-                null, 
-                null, 
-                charBase64List
-            );
-            
-            if (masterSheetBase64) {
-                masterSheetPart = {
-                    inlineData: {
-                        mimeType: 'image/png',
-                        data: cleanBase64(masterSheetBase64)
-                    }
-                };
-            }
-        } catch (e) {
-            console.warn("Master Sheet creation failed", e);
-        }
-    }
     
     // 6. PROMPT OPTIMIZATION (MERGING ALL CONTEXTS)
     onLog("Step 4: Generating Perfect Image Prompt...");
-    // Pass masterSheetPart to the brain so it can describe the characters
-    const optimizedPrompt = await optimizePromptWithThinking(prompt, styleKeywords, poseDescription, masterSheetPart);
+    // Pass null for masterSheetPart to the brain
+    const optimizedPrompt = await optimizePromptWithThinking(prompt, styleKeywords, poseDescription, null);
     
     // 7. FINAL ASSEMBLY
     onLog("Step 5: Finalizing Data Payload (Integrity Check)...");
@@ -712,12 +689,11 @@ export const generateImage = async (
     if (charBase64List.length > 0) {
         finalParts.push({ text: "🔴 PRIORITY 1: 3D AVATAR DESIGN (CRITICAL)\nINSTRUCTION: You MUST extract the visual design, facial features, hairstyle, and apparel from the following stylized game assets. DO NOT copy the background or pose from these images. These are fictional 3D models." });
         
-        // Iterate through ALL uploaded character URIs
+        // Send individual images as requested by the user
         charBase64List.forEach((b64, index) => {
             const charIndex = index + 1;
             const charInfo = characters[index]; // Get metadata (gender, id)
             
-            // 1. The Character Image (Body + Face)
             finalParts.push({ text: `🔴 ASSET ${charIndex} REFERENCE\nINSTRUCTION: Scan this image to extract BOTH the full body apparel AND the facial features for AVATAR ${charIndex}.` });
             finalParts.push({
                 inlineData: {
@@ -727,7 +703,7 @@ export const generateImage = async (
             });
             
             // Build specific mapping instruction
-            charPromptInstructions += `\n- AVATAR ${charIndex} (${charInfo.gender.toUpperCase()}): Stylized 3D game asset matching the exact facial features, face shape, hair, and apparel of ASSET ${index + 1}.`;
+            charPromptInstructions += `\n- AVATAR ${charIndex} (${charInfo.gender.toUpperCase()}): Stylized 3D game asset matching the exact facial features, face shape, hair, and apparel of ASSET ${charIndex}.`;
         });
     }
 
@@ -754,12 +730,12 @@ export const generateImage = async (
     }
     
     // D. FINAL PROMPT (QUALITY INJECTION)
-    const qualityBoosters = "masterpiece, best quality, ultra-detailed, 8k, stylized 3D game render, fictional avatar, ray tracing, hdr, cinematic lighting, unreal engine 5 render";
-    const negativePrompt = "low quality, bad anatomy, worst quality, blur, grain, watermark, text, signature, bad hands, bad face, mixed backgrounds, conflicting styles, extra characters, unwanted people from style reference, real people, photorealistic humans, NSFW, nudity, violence";
+    const qualityBoosters = "masterpiece, best quality, ultra-detailed, 8k, stylized 3D game render, ray tracing, hdr, cinematic lighting, unreal engine 5 render";
+    const negativePrompt = "low quality, bad anatomy, worst quality, blur, grain, watermark, text, signature, bad hands, bad face, mixed backgrounds, conflicting styles, extra characters, unwanted people from style reference";
     
     // DEFAULT INSTRUCTION (PRO & FLASH - STRICT SEPARATION)
     // This logic is critical to prevent the AI from mixing up the roles of the images.
-    let finalInstruction = `🔴 FINAL EXECUTION COMMAND:\n${optimizedPrompt}, ${qualityBoosters}\n\nSTRICT ROLE SEPARATION FOR IMAGES:\n1. AVATAR DESIGN IMAGES: Provide ONLY the face, hair, and clothing. Ignore their backgrounds/poses.\n2. POSE & BACKGROUND IMAGE: Provides ONLY the pose and background structure. Ignore its characters/style.\n3. ART STYLE IMAGE: Provides ONLY the lighting, texture, and rendering vibe. ABSOLUTELY NO CHARACTERS FROM THIS IMAGE SHOULD APPEAR IN THE RESULT.\n\nAVATAR MAPPING:${charPromptInstructions}\n\nSAFETY COMPLIANCE: ALL SUBJECTS ARE FICTIONAL 3D GAME AVATARS. NO REAL HUMANS. NO NSFW. NO VIOLENCE.\n\nNEGATIVE PROMPT: ${negativePrompt}.`;
+    let finalInstruction = `🔴 FINAL EXECUTION COMMAND:\n${optimizedPrompt}, ${qualityBoosters}\n\nSTRICT ROLE SEPARATION FOR IMAGES:\n1. AVATAR DESIGN IMAGES: Provide ONLY the face, hair, and clothing. Ignore their backgrounds/poses.\n2. POSE & BACKGROUND IMAGE: Provides ONLY the pose and background structure. Ignore its characters/style.\n3. ART STYLE IMAGE: Provides ONLY the lighting, texture, and rendering vibe. ABSOLUTELY NO CHARACTERS FROM THIS IMAGE SHOULD APPEAR IN THE RESULT.\n\nAVATAR MAPPING:${charPromptInstructions}\n\nNEGATIVE PROMPT: ${negativePrompt}.`;
 
     finalParts.push({ text: finalInstruction });
 

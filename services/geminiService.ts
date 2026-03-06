@@ -630,17 +630,13 @@ export const generateImage = async (
 
     // 4. PREPARE CHARACTERS
     const charBase64List: string[] = [];
-    const charFaceList: (string | null)[] = []; // Store standalone faces
     
     for (const char of characters) {
         let finalCharBase64 = "";
         
-        // RESTORED: Process both full body and face images for maximum fidelity
-        if (char.image && char.faceImage && char.image !== char.faceImage) {
-            const sheetBase64 = await createTextureSheet(char.image, char.faceImage);
-            const optimizedSheet = await optimizePayload(sheetBase64, 2048);
-            finalCharBase64 = cleanBase64(optimizedSheet);
-        } else if (char.image) {
+        // Use ONLY the main image (which is the full body image).
+        // The AI will extract both the body and the face from this single image.
+        if (char.image) {
             const optimized = await optimizePayload(char.image, 2048);
             finalCharBase64 = cleanBase64(optimized);
         } else if (char.faceImage) {
@@ -650,14 +646,6 @@ export const generateImage = async (
         
         if (finalCharBase64) {
             charBase64List.push(finalCharBase64);
-            
-            // Prepare standalone face for strong reference
-            if (char.faceImage) {
-                const optimizedFace = await optimizePayload(char.faceImage, 2048);
-                charFaceList.push(cleanBase64(optimizedFace));
-            } else {
-                charFaceList.push(null);
-            }
         }
     }
 
@@ -667,10 +655,11 @@ export const generateImage = async (
     if (charBase64List.length > 0) {
         try {
             onLog("Step 3.5: Assembling Character Master Sheet...");
-            // Correctly pass style, pose, and characters to the Master Sheet generator
+            // Correctly pass ONLY characters to the Master Sheet generator
+            // DO NOT pass style or pose, otherwise the text model will describe their characters and inject them into the prompt!
             const masterSheetBase64 = await createMasterReferenceSheet(
-                cleanStyleImage || null, 
-                cleanRefImage || null, 
+                null, 
+                null, 
                 charBase64List
             );
             
@@ -728,7 +717,8 @@ export const generateImage = async (
             const charIndex = index + 1;
             const charInfo = characters[index]; // Get metadata (gender, id)
             
-            // 1. The Sheet (Body + Face)
+            // 1. The Character Image (Body + Face)
+            finalParts.push({ text: `🔴 ASSET ${charIndex} REFERENCE\nINSTRUCTION: Scan this image to extract BOTH the full body apparel AND the facial features for AVATAR ${charIndex}.` });
             finalParts.push({
                 inlineData: {
                     mimeType: 'image/jpeg',
@@ -736,20 +726,8 @@ export const generateImage = async (
                 }
             });
             
-            // 2. The Standalone Face (if exists) - for MAXIMUM fidelity
-            const faceB64 = charFaceList[index];
-            if (faceB64) {
-                 finalParts.push({ text: `🔴 ASSET ${charIndex} HEAD TEXTURE REFERENCE\nINSTRUCTION: Use this image strictly for the 3D avatar's facial structure, eye shape, and head topology.` });
-                 finalParts.push({
-                    inlineData: {
-                        mimeType: 'image/jpeg',
-                        data: faceB64
-                    }
-                 });
-            }
-            
             // Build specific mapping instruction
-            charPromptInstructions += `\n- AVATAR ${charIndex} (${charInfo.gender.toUpperCase()}): Stylized 3D game asset matching the exact facial features, hair, and apparel of ASSET ${index + 1}.`;
+            charPromptInstructions += `\n- AVATAR ${charIndex} (${charInfo.gender.toUpperCase()}): Stylized 3D game asset matching the exact facial features, face shape, hair, and apparel of ASSET ${index + 1}.`;
         });
     }
 
@@ -766,7 +744,7 @@ export const generateImage = async (
 
     // PRIORITY 3: STYLE REFERENCE
     if (cleanStyleImage) {
-        finalParts.push({ text: "🔴 PRIORITY 3: ART STYLE & MATERIAL\nINSTRUCTION: Extract ONLY the rendering style, lighting, color palette, and material textures from this image. DO NOT copy the characters, poses, or background composition from this image." });
+        finalParts.push({ text: "🔴 PRIORITY 3: ART STYLE & MATERIAL (CRITICAL: DO NOT COPY SUBJECTS)\nINSTRUCTION: Extract ONLY the rendering style, lighting, color palette, and material textures from this image. YOU MUST COMPLETELY IGNORE AND EXCLUDE ANY CHARACTERS, PEOPLE, OR SUBJECTS SHOWN IN THIS IMAGE. DO NOT ADD THEM TO THE FINAL RESULT." });
         finalParts.push({
             inlineData: {
                 mimeType: 'image/jpeg',
@@ -777,11 +755,11 @@ export const generateImage = async (
     
     // D. FINAL PROMPT (QUALITY INJECTION)
     const qualityBoosters = "masterpiece, best quality, ultra-detailed, 8k, stylized 3D game render, fictional avatar, ray tracing, hdr, cinematic lighting, unreal engine 5 render";
-    const negativePrompt = "low quality, bad anatomy, worst quality, blur, grain, watermark, text, signature, bad hands, bad face, mixed backgrounds, conflicting styles";
+    const negativePrompt = "low quality, bad anatomy, worst quality, blur, grain, watermark, text, signature, bad hands, bad face, mixed backgrounds, conflicting styles, extra characters, unwanted people from style reference, real people, photorealistic humans, NSFW, nudity, violence";
     
     // DEFAULT INSTRUCTION (PRO & FLASH - STRICT SEPARATION)
     // This logic is critical to prevent the AI from mixing up the roles of the images.
-    let finalInstruction = `🔴 FINAL EXECUTION COMMAND:\n${optimizedPrompt}, ${qualityBoosters}\n\nSTRICT ROLE SEPARATION FOR IMAGES:\n1. AVATAR DESIGN IMAGES: Provide ONLY the face, hair, and clothing. Ignore their backgrounds/poses.\n2. POSE & BACKGROUND IMAGE: Provides ONLY the pose and background structure. Ignore its characters/style.\n3. ART STYLE IMAGE: Provides ONLY the lighting, texture, and rendering vibe. Ignore its characters/backgrounds.\n\nAVATAR MAPPING:${charPromptInstructions}\n\nNEGATIVE PROMPT: ${negativePrompt}.`;
+    let finalInstruction = `🔴 FINAL EXECUTION COMMAND:\n${optimizedPrompt}, ${qualityBoosters}\n\nSTRICT ROLE SEPARATION FOR IMAGES:\n1. AVATAR DESIGN IMAGES: Provide ONLY the face, hair, and clothing. Ignore their backgrounds/poses.\n2. POSE & BACKGROUND IMAGE: Provides ONLY the pose and background structure. Ignore its characters/style.\n3. ART STYLE IMAGE: Provides ONLY the lighting, texture, and rendering vibe. ABSOLUTELY NO CHARACTERS FROM THIS IMAGE SHOULD APPEAR IN THE RESULT.\n\nAVATAR MAPPING:${charPromptInstructions}\n\nSAFETY COMPLIANCE: ALL SUBJECTS ARE FICTIONAL 3D GAME AVATARS. NO REAL HUMANS. NO NSFW. NO VIOLENCE.\n\nNEGATIVE PROMPT: ${negativePrompt}.`;
 
     finalParts.push({ text: finalInstruction });
 

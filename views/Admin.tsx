@@ -723,8 +723,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           showToast('Đang tiến hành xóa ảnh cũ...', 'info');
           try {
               const countDB = await cleanupExpiredImages(true);
-              const countR2 = await cleanupR2Directly();
-              showToast(`Đã xóa thành công ${countDB} ảnh từ DB và ${countR2} ảnh trực tiếp từ R2 Cloud.`);
+              const resultR2 = await cleanupR2Directly();
+              const sizeMB = (resultR2.size / 1024 / 1024).toFixed(2);
+              showToast(`Đã xóa thành công ${countDB} ảnh từ DB và ${resultR2.count} ảnh (${sizeMB} MB) trực tiếp từ R2 Cloud.`);
               await refreshData();
           } catch (e: any) {
               showToast(`Lỗi khi xóa ảnh: ${e.message}`, 'error');

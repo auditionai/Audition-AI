@@ -499,38 +499,37 @@ export const deleteImageFromStorage = async (id: string, targetUserId?: string, 
   });
 };
 
-export const cleanupR2Directly = async (): Promise<number> => {
-    if (!r2Client) return 0;
+export const cleanupR2Directly = async (): Promise<{ count: number, size: number }> => {
+    if (!r2Client) return { count: 0, size: 0 };
     
     console.log("[Cleanup] Starting COMPREHENSIVE R2 storage scan...");
     let deletedCount = 0;
+    let deletedSize = 0;
     const now = Date.now();
     const EXPIRATION_MS = 1 * 24 * 60 * 60 * 1000; // 1 Day
-    const ORPHAN_EXPIRATION_MS = 1 * 60 * 60 * 1000; // 1 Hour (Safety buffer for uploads in progress)
+    const ORPHAN_EXPIRATION_MS = 1 * 60 * 60 * 1000; // 1 Hour
 
     try {
-        // 1. Fetch ALL images from DB to identify Orphans vs Active vs Public
-        // We need to know what exists in the DB to know what is "Orphaned"
+        // 1. Fetch ALL images from DB
         let dbImageKeys = new Set<string>();
         let publicImageKeys = new Set<string>();
 
         if (supabase) {
-            console.log("[Cleanup] Fetching database records to identify orphans...");
-            // Select minimal fields for performance
+            console.log("[Cleanup] Fetching database records...");
             const { data, error } = await supabase
                 .from(TABLE_NAME)
                 .select('image_url, is_public');
             
             if (error) {
-                console.error("[Cleanup] Failed to fetch DB records. Aborting R2 cleanup to prevent accidental deletion.", error);
+                console.error("[Cleanup] DB Fetch Error", error);
                 throw error;
             }
 
             if (data) {
                 data.forEach((row: any) => {
                     if (row.image_url) {
-                        // Normalize Key extraction
                         let key = row.image_url;
+                        // Normalize Key
                         if (R2_PUBLIC_URL && key.startsWith(R2_PUBLIC_URL)) {
                             key = key.replace(`${R2_PUBLIC_URL}/`, '');
                         } else if (key.startsWith('http')) {
@@ -547,7 +546,7 @@ export const cleanupR2Directly = async (): Promise<number> => {
                     }
                 });
             }
-            console.log(`[Cleanup] Database Index: ${dbImageKeys.size} total images, ${publicImageKeys.size} public images.`);
+            console.log(`[Cleanup] DB Index: ${dbImageKeys.size} total, ${publicImageKeys.size} public.`);
         }
 
         let isTruncated = true;
@@ -564,45 +563,43 @@ export const cleanupR2Directly = async (): Promise<number> => {
             const objects = listResponse.Contents || [];
             totalScanned += objects.length;
             
-            console.log(`[Cleanup] R2 Scan Batch: Found ${objects.length} objects.`);
+            console.log(`[Cleanup] R2 Batch: ${objects.length} objects.`);
 
             const objectsToDelete = objects.filter((obj: any) => {
                 if (!obj.Key || !obj.LastModified) return false;
                 
                 const key = obj.Key;
+                const size = obj.Size || 0;
                 const age = now - obj.LastModified.getTime();
                 const ageHours = age / (1000 * 60 * 60);
 
-                // STRATEGY 1: Protect Public Images (Always Keep)
+                // 1. PROTECT PUBLIC
                 if (publicImageKeys.has(key)) {
+                    console.log(`[Cleanup] KEEP (Public): ${key} (${(size/1024/1024).toFixed(2)} MB)`);
                     return false;
                 }
 
-                // STRATEGY 2: Handle Orphaned Files (Not in DB)
-                // If it's not in the DB, it was likely deleted from the App or is a failed upload.
-                // We delete these much faster (e.g., after 1 hour)
+                // 2. DELETE ORPHANS
                 if (!dbImageKeys.has(key)) {
                     if (age > ORPHAN_EXPIRATION_MS) {
-                        console.log(`[Cleanup] DELETING ORPHAN (Not in DB): ${key} (Age: ${ageHours.toFixed(1)}h)`);
+                        console.log(`[Cleanup] DELETE (Orphan): ${key} (${(size/1024/1024).toFixed(2)} MB, Age: ${ageHours.toFixed(1)}h)`);
+                        deletedSize += size;
                         return true;
-                    } else {
-                        // Keep very recent orphans (might be currently uploading)
-                        return false;
                     }
+                    return false; // Keep recent orphans
                 }
 
-                // STRATEGY 3: Handle Active Non-Public Files (In DB, but expired)
-                // These should have been deleted by cleanupExpiredImages, but we double check here.
+                // 3. DELETE EXPIRED ACTIVE
                 if (age > EXPIRATION_MS) {
-                    console.log(`[Cleanup] DELETING EXPIRED: ${key} (Age: ${ageHours.toFixed(1)}h)`);
+                    console.log(`[Cleanup] DELETE (Expired): ${key} (${(size/1024/1024).toFixed(2)} MB, Age: ${ageHours.toFixed(1)}h)`);
+                    deletedSize += size;
                     return true;
                 }
 
-                // Log samples of what is kept
-                if (Math.random() < 0.005) {
-                     console.log(`[Cleanup] Keeping Active File: ${key} (Age: ${ageHours.toFixed(1)}h)`);
-                }
+                // 4. KEEP ACTIVE RECENT
+                console.log(`[Cleanup] KEEP (Active Recent): ${key} (Age: ${ageHours.toFixed(1)}h)`);
                 return false;
+
             }).map((obj: any) => ({ Key: obj.Key }));
 
             if (objectsToDelete.length > 0) {
@@ -617,9 +614,6 @@ export const cleanupR2Directly = async (): Promise<number> => {
                         deletedCount += chunk.length;
                     } catch (e: any) {
                         console.error("R2 Batch Delete Error", e);
-                        if (e.name === 'TypeError' && e.message === 'Failed to fetch') {
-                            throw new Error("CORS_ERROR: Vui lòng cấu hình CORS cho R2 Bucket để cho phép lệnh DELETE.");
-                        }
                     }
                 }
             }
@@ -628,15 +622,11 @@ export const cleanupR2Directly = async (): Promise<number> => {
             continuationToken = listResponse.NextContinuationToken;
         }
 
-        console.log(`[Cleanup] R2 Comprehensive Scan Complete. Scanned ${totalScanned} objects. Deleted ${deletedCount} files.`);
-        return deletedCount;
+        console.log(`[Cleanup] Complete. Scanned: ${totalScanned}. Deleted: ${deletedCount} files (${(deletedSize/1024/1024).toFixed(2)} MB).`);
+        return { count: deletedCount, size: deletedSize };
     } catch (e: any) {
-        console.error("R2 Direct Cleanup Error", e);
-        if (e.name === 'TypeError' && e.message === 'Failed to fetch') {
-            throw new Error("CORS_ERROR: Vui lòng cấu hình CORS cho R2 Bucket để cho phép lệnh GET/DELETE.");
-        }
-        if (e.message && e.message.includes("CORS_ERROR")) throw e;
-        return deletedCount;
+        console.error("Cleanup Error", e);
+        return { count: deletedCount, size: deletedSize };
     }
 };
 

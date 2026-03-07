@@ -61,7 +61,7 @@ const processBase64Data = (base64: string): { blob: Blob, type: string, buffer: 
 };
 
 // --- NEW: UPLOAD INPUT FILE TO IMGBB ---
-export const uploadFileToR2 = async (file: File | Blob | string, folder: string = 'inputs'): Promise<string> => {
+export const uploadFileToR2 = async (file: File | Blob | string, folder: string = 'inputs', customName?: string): Promise<string> => {
     // We keep the function name uploadFileToR2 for backward compatibility with UI components
     if (!IMGBB_API_KEY) {
         throw new Error("ImgBB API Key not configured in .env");
@@ -69,6 +69,7 @@ export const uploadFileToR2 = async (file: File | Blob | string, folder: string 
 
     try {
         const formData = new FormData();
+        const fileName = customName || `${folder}_${Date.now()}`;
         
         if (typeof file === 'string') {
             // Base64 string
@@ -76,8 +77,11 @@ export const uploadFileToR2 = async (file: File | Blob | string, folder: string 
             formData.append('image', base64Data);
         } else {
             // File or Blob
-            formData.append('image', file);
+            formData.append('image', file, `${fileName}.png`);
         }
+        
+        // ImgBB supports 'name' parameter to set the image name
+        formData.append('name', fileName);
 
         const response = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, {
             method: 'POST',
@@ -108,7 +112,7 @@ export const saveImageToStorage = async (image: GeneratedImage): Promise<void> =
     console.log("[Storage] Attempting ImgBB Upload...");
     try {
         // A. Upload file to ImgBB
-        const publicUrl = await uploadFileToR2(image.url);
+        const publicUrl = await uploadFileToR2(image.url, 'outputs', `${user.username}_${image.id}`);
         console.log("[Storage] ImgBB Upload Success");
 
         // C. Save Metadata to Supabase DB
@@ -412,7 +416,7 @@ export const migrateR2ToImgBB = async (
         // 1. Fetch all images that are NOT on ImgBB (e.g., containing R2_PUBLIC_URL or just not containing 'ibb.co')
         const { data: images, error } = await supabase
             .from(TABLE_NAME)
-            .select('id, image_url')
+            .select('id, image_url, user_id')
             .not('image_url', 'ilike', '%ibb.co%');
 
         if (error) throw error;
@@ -436,7 +440,7 @@ export const migrateR2ToImgBB = async (
 
                 onProgress(current, total, `Đang upload ảnh ${img.id} lên ImgBB...`);
                 // Upload to ImgBB
-                const newUrl = await uploadFileToR2(blob, 'migration');
+                const newUrl = await uploadFileToR2(blob, 'migration', `user_${img.user_id}_${img.id}`);
 
                 onProgress(current, total, `Đang cập nhật Database cho ảnh ${img.id}...`);
                 // Update Supabase

@@ -446,7 +446,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       // Upload Reference Image
       if (sourceForStructure && sourceForStructure.startsWith('data:')) {
           addLog("Đang tải ảnh mẫu lên ImgBB Cloud (Backup)...");
-          uploadFileToR2(sourceForStructure, 'inputs').then(url => {
+          uploadFileToR2(sourceForStructure, 'inputs', `ref_${feature.id}_${Date.now()}`).then(url => {
               console.log("ImgBB Ref Backup URL:", url);
           }).catch(e => console.warn("ImgBB Ref Backup Failed", e));
           
@@ -462,7 +462,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
 
           if (bodyData && bodyData.startsWith('data:')) {
               addLog(`Đang tải ảnh NV ${char.id} lên Cloud (Backup)...`);
-              uploadFileToR2(bodyData, 'inputs').catch(e => console.warn("ImgBB Body Backup Failed", e));
+              uploadFileToR2(bodyData, 'inputs', `body_${char.id}_${Date.now()}`).catch(e => console.warn("ImgBB Body Backup Failed", e));
           }
 
           characterDataList.push({

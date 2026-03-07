@@ -39,9 +39,10 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
   const loadImages = async () => {
     try {
       const storedImages = await getAllImagesFromStorage();
-      setImages(storedImages);
+      setImages(storedImages || []);
     } catch (error) {
       console.error("Failed to load gallery", error);
+      setImages([]);
     }
   };
 
@@ -154,24 +155,27 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
       }
   };
 
-  const formatDate = (timestamp: number) => {
-    return new Date(timestamp).toLocaleDateString(lang === 'vi' ? 'vi-VN' : 'en-US', {
+  const formatDate = (timestamp: number | string | undefined) => {
+    if (!timestamp) return 'Unknown Date';
+    const date = new Date(timestamp);
+    if (isNaN(date.getTime())) return 'Unknown Date';
+    return date.toLocaleDateString(lang === 'vi' ? 'vi-VN' : 'en-US', {
       month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
     });
   };
 
   // --- EXPIRATION CALCULATION HELPERS ---
-  const getExpirationStatus = (timestamp: number, isShared: boolean | undefined) => {
+  const getExpirationStatus = (timestamp: number | string | undefined, isShared: boolean | undefined) => {
       if (isShared) return { type: 'saved', label: 'Vĩnh viễn', color: 'bg-green-500' };
+      if (!timestamp) return { type: 'unknown', label: 'Unknown', color: 'bg-slate-600' };
       
+      const ts = new Date(timestamp).getTime();
+      if (isNaN(ts)) return { type: 'unknown', label: 'Unknown', color: 'bg-slate-600' };
+
       const EXPIRATION_DAYS = 7;
       const msPerDay = 1000 * 60 * 60 * 24;
-      const diffTime = Math.abs(Date.now() - timestamp);
-      const diffDays = Math.ceil(diffTime / msPerDay);
-      const daysLeft = EXPIRATION_DAYS - diffDays; // Use diffDays which is approximate days passed.
       
-      // More precise: 
-      const expiryDate = timestamp + (EXPIRATION_DAYS * msPerDay);
+      const expiryDate = ts + (EXPIRATION_DAYS * msPerDay);
       const timeLeft = expiryDate - Date.now();
       const preciseDaysLeft = Math.ceil(timeLeft / msPerDay);
 
@@ -187,7 +191,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
   };
 
   const renderedImages = useMemo(() => {
-      return images.map((img) => {
+      return images.filter(img => !!img).map((img) => {
             const status = getExpirationStatus(img.timestamp, img.isShared);
             
             return (

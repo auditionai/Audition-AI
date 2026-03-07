@@ -230,9 +230,20 @@ export const getShowcaseImages = async (): Promise<GeneratedImage[]> => {
         const request = store.getAll();
 
         request.onsuccess = () => {
-            const results = request.result as GeneratedImage[];
-            const shared = results.filter(img => img.isShared);
-            resolve(shared.sort((a, b) => b.timestamp - a.timestamp).slice(0, 20));
+            const results = (request.result as GeneratedImage[]) || [];
+            if (!Array.isArray(results)) {
+                resolve([]);
+                return;
+            }
+            const shared = results.filter(img => img && img.isShared);
+            resolve(shared.sort((a, b) => {
+                if (!a || !b) return 0;
+                const tsA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+                const tsB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+                const validTsA = isNaN(tsA) ? 0 : tsA;
+                const validTsB = isNaN(tsB) ? 0 : tsB;
+                return validTsB - validTsA;
+            }).slice(0, 20));
         };
         request.onerror = () => reject(request.error);
     });
@@ -276,8 +287,19 @@ export const getAllImagesFromStorage = async (): Promise<GeneratedImage[]> => {
     const request = store.getAll();
 
     request.onsuccess = () => {
-      const results = request.result as GeneratedImage[];
-      resolve(results.sort((a, b) => b.timestamp - a.timestamp));
+      const results = (request.result as GeneratedImage[]) || [];
+      if (!Array.isArray(results)) {
+          resolve([]);
+          return;
+      }
+      resolve(results.sort((a, b) => {
+          if (!a || !b) return 0;
+          const tsA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+          const tsB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+          const validTsA = isNaN(tsA) ? 0 : tsA;
+          const validTsB = isNaN(tsB) ? 0 : tsB;
+          return validTsB - validTsA;
+      }));
     };
     request.onerror = () => reject(request.error);
   });
@@ -402,9 +424,9 @@ export const deleteAllUnsharedImagesFromCloud = async (
 export const cleanupExpiredImages = async (isSystemWide: boolean = false): Promise<number> => {
     let images: GeneratedImage[] = [];
     if (isSystemWide) {
-        images = await getAllImagesSystemWide();
+        images = (await getAllImagesSystemWide()) || [];
     } else {
-        images = await getAllImagesFromStorage();
+        images = (await getAllImagesFromStorage()) || [];
     }
 
     const now = Date.now();
@@ -412,7 +434,12 @@ export const cleanupExpiredImages = async (isSystemWide: boolean = false): Promi
     
     // Filter Expired Images
     const expiredImages = images.filter(img => {
-        return !img.isShared && (now - img.timestamp > EXPIRATION_MS);
+        if (!img) return false;
+        if (img.isShared) return false;
+        if (!img.timestamp) return false;
+        const ts = new Date(img.timestamp).getTime();
+        if (isNaN(ts)) return false;
+        return (now - ts > EXPIRATION_MS);
     });
 
     if (expiredImages.length === 0) {
@@ -446,7 +473,11 @@ export const cleanupExpiredImages = async (isSystemWide: boolean = false): Promi
         const db = await openDB();
         const tx = db.transaction([STORE_NAME], 'readwrite');
         const store = tx.objectStore(STORE_NAME);
-        expiredImages.forEach(img => store.delete(img.id));
+        expiredImages.forEach(img => {
+            if (img && img.id) {
+                store.delete(img.id);
+            }
+        });
         console.log("[Cleanup] Local Batch Deletion Complete.");
     } catch (e) {
         console.warn("[Cleanup] Local Delete Failed", e);

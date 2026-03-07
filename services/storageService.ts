@@ -441,6 +441,9 @@ export const migrateR2ToImgBB = async (
         const total = images.length;
         let current = 0;
 
+        // Helper function for delay
+        const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
         for (const img of images) {
             try {
                 onProgress(current, total, `Đang tải ảnh ${img.id} từ R2...`);
@@ -451,6 +454,10 @@ export const migrateR2ToImgBB = async (
                 const blob = await response.blob();
 
                 onProgress(current, total, `Đang upload ảnh ${img.id} lên ImgBB...`);
+                
+                // Add a small delay before uploading to avoid rate limits
+                await delay(1500); // 1.5 seconds delay
+                
                 // Upload to ImgBB
                 const newUrl = await uploadFileToR2(blob, 'migration', `user_${img.user_id}_${img.id}`);
 
@@ -468,6 +475,12 @@ export const migrateR2ToImgBB = async (
             } catch (err: any) {
                 console.error(`Lỗi khi migrate ảnh ${img.id}:`, err);
                 onProgress(current, total, `Lỗi ảnh ${img.id}: ${err.message}`);
+                
+                // If it's a rate limit error, wait longer before the next iteration
+                if (err.message && err.message.toLowerCase().includes('rate limit')) {
+                    onProgress(current, total, `Phát hiện Rate Limit, tạm nghỉ 5 giây...`);
+                    await delay(5000);
+                }
                 // Continue with the next image even if one fails
             }
         }

@@ -29,7 +29,7 @@ import {
     getUnifiedHistory,
     getGiftcodeUsages
 } from '../services/economyService';
-import { getAllImagesFromStorage, deleteImageFromStorage, checkR2Connection, getUserImagesFromStorage } from '../services/storageService';
+import { getAllImagesFromStorage, deleteImageFromStorage, checkR2Connection, getUserImagesFromStorage, migrateR2ToImgBB } from '../services/storageService';
 import { checkConnection, analyzeStyleImage } from '../services/geminiService';
 import { checkSupabaseConnection } from '../services/supabaseClient';
 import { Icons } from '../components/Icons';
@@ -357,6 +357,10 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [toasts, setToasts] = useState<ToastMsg[]>([]);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmState>({ show: false, msg: '', onConfirm: () => {} });
 
+  // Migration State
+  const [isMigrating, setIsMigrating] = useState(false);
+  const [migrationProgress, setMigrationProgress] = useState({ current: 0, total: 0, message: '' });
+
   // Helpers for Notifications
   const showToast = (msg: string, type: 'success' | 'error' | 'info' = 'success') => {
       const id = Date.now();
@@ -443,6 +447,24 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       
       if (keyToUse || geminiOk) {
           setKeyStatus(geminiOk ? 'valid' : 'invalid');
+      }
+  };
+
+  const handleMigration = async () => {
+      if (!confirm("Bạn có chắc chắn muốn chuyển đổi toàn bộ ảnh từ R2 sang ImgBB? Quá trình này có thể mất nhiều thời gian.")) return;
+      
+      setIsMigrating(true);
+      setMigrationProgress({ current: 0, total: 0, message: 'Đang khởi tạo...' });
+      
+      try {
+          await migrateR2ToImgBB((current, total, message) => {
+              setMigrationProgress({ current, total, message });
+          });
+          showToast("Chuyển đổi hoàn tất!", "success");
+      } catch (e: any) {
+          showToast(`Lỗi chuyển đổi: ${e.message}`, "error");
+      } finally {
+          setIsMigrating(false);
       }
   };
 
@@ -1431,6 +1453,25 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                               <span className="text-sm text-slate-400">Loại: {health.storage.type}</span>
                               <StatusBadge status={health.storage.status} />
                           </div>
+                          {health.storage.type === 'ImgBB' && (
+                              <div className="mt-4 pt-4 border-t border-white/10">
+                                  <button 
+                                      onClick={handleMigration}
+                                      disabled={isMigrating}
+                                      className={`w-full py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 ${
+                                          isMigrating ? 'bg-slate-600 text-slate-300 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-500 text-white'
+                                      }`}
+                                  >
+                                      <Icons.Cloud className="w-4 h-4" />
+                                      {isMigrating ? 'Đang chuyển đổi...' : 'Migrate R2 -> ImgBB'}
+                                  </button>
+                                  {isMigrating && (
+                                      <div className="mt-2 text-xs text-slate-400 text-center">
+                                          {migrationProgress.message} ({migrationProgress.current}/{migrationProgress.total})
+                                      </div>
+                                  )}
+                              </div>
+                          )}
                       </div>
                   </div>
 

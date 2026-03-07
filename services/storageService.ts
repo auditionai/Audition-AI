@@ -402,6 +402,67 @@ export const deleteImageFromStorage = async (id: string, targetUserId?: string, 
   });
 };
 
+export const migrateR2ToImgBB = async (
+    onProgress: (current: number, total: number, message: string) => void
+): Promise<void> => {
+    if (!supabase) throw new Error("Supabase not connected");
+    if (!IMGBB_API_KEY) throw new Error("ImgBB API Key not configured");
+
+    try {
+        // 1. Fetch all images that are NOT on ImgBB (e.g., containing R2_PUBLIC_URL or just not containing 'ibb.co')
+        const { data: images, error } = await supabase
+            .from(TABLE_NAME)
+            .select('id, image_url')
+            .not('image_url', 'ilike', '%ibb.co%');
+
+        if (error) throw error;
+        
+        if (!images || images.length === 0) {
+            onProgress(0, 0, "Không có ảnh nào cần chuyển đổi (Tất cả đã nằm trên ImgBB).");
+            return;
+        }
+
+        const total = images.length;
+        let current = 0;
+
+        for (const img of images) {
+            try {
+                onProgress(current, total, `Đang tải ảnh ${img.id} từ R2...`);
+                
+                // Fetch image from old URL
+                const response = await fetch(img.image_url);
+                if (!response.ok) throw new Error(`Failed to fetch ${img.image_url}`);
+                const blob = await response.blob();
+
+                onProgress(current, total, `Đang upload ảnh ${img.id} lên ImgBB...`);
+                // Upload to ImgBB
+                const newUrl = await uploadFileToR2(blob, 'migration');
+
+                onProgress(current, total, `Đang cập nhật Database cho ảnh ${img.id}...`);
+                // Update Supabase
+                const { error: updateError } = await supabase
+                    .from(TABLE_NAME)
+                    .update({ image_url: newUrl })
+                    .eq('id', img.id);
+
+                if (updateError) throw updateError;
+
+                current++;
+                onProgress(current, total, `Hoàn thành ảnh ${img.id}`);
+            } catch (err: any) {
+                console.error(`Lỗi khi migrate ảnh ${img.id}:`, err);
+                onProgress(current, total, `Lỗi ảnh ${img.id}: ${err.message}`);
+                // Continue with the next image even if one fails
+            }
+        }
+        
+        onProgress(current, total, `Đã hoàn tất chuyển đổi ${current}/${total} ảnh sang ImgBB.`);
+    } catch (e: any) {
+        console.error("Migration Error:", e);
+        throw e;
+    }
+};
+
 export const cleanupExpiredImages = async (isSystemWide: boolean = false): Promise<number> => {
     let images: GeneratedImage[] = [];
     if (isSystemWide) {

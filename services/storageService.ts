@@ -502,6 +502,7 @@ export const deleteImageFromStorage = async (id: string, targetUserId?: string, 
 export const cleanupR2Directly = async (): Promise<number> => {
     if (!r2Client) return 0;
     
+    console.log("[Cleanup] Starting direct R2 storage scan...");
     let deletedCount = 0;
     const now = Date.now();
     const EXPIRATION_MS = 1 * 24 * 60 * 60 * 1000; // 1 Day
@@ -567,7 +568,7 @@ export const cleanupR2Directly = async (): Promise<number> => {
             continuationToken = listResponse.NextContinuationToken;
         }
 
-        console.log(`[Cleanup] Directly deleted ${deletedCount} expired objects from R2.`);
+        console.log(`[Cleanup] R2 Direct Scan Complete. Deleted ${deletedCount} expired objects from R2.`);
         return deletedCount;
     } catch (e: any) {
         console.error("R2 Direct Cleanup Error", e);
@@ -580,6 +581,7 @@ export const cleanupR2Directly = async (): Promise<number> => {
 };
 
 export const cleanupExpiredImages = async (isSystemWide: boolean = false): Promise<number> => {
+    console.log("[Cleanup] Starting database cleanup scan...");
     let images: GeneratedImage[] = [];
     if (isSystemWide) {
         images = await getAllImagesSystemWide();
@@ -596,11 +598,11 @@ export const cleanupExpiredImages = async (isSystemWide: boolean = false): Promi
     });
 
     if (expiredImages.length === 0) {
-        console.log("[Cleanup] No expired images found.");
+        console.log("[Cleanup] No expired images found in database records.");
         return 0;
     }
 
-    console.log(`[Cleanup] Found ${expiredImages.length} expired images. Starting BATCH deletion...`);
+    console.log(`[Cleanup] Found ${expiredImages.length} expired images in database. Starting BATCH deletion...`);
 
     // --- BATCH DELETE R2 ---
     if (r2Client) {

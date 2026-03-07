@@ -446,7 +446,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       // Upload Reference Image
       if (sourceForStructure && sourceForStructure.startsWith('data:')) {
           addLog("Đang tải ảnh mẫu lên R2 Cloud (Backup)...");
-          uploadFileToR2(sourceForStructure, 'inputs', `ref_${feature.id}_${Date.now()}`).then(url => {
+          uploadFileToR2(sourceForStructure, 'inputs').then(url => {
               console.log("R2 Ref Backup URL:", url);
           }).catch(e => console.warn("R2 Ref Backup Failed", e));
           
@@ -462,7 +462,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
 
           if (bodyData && bodyData.startsWith('data:')) {
               addLog(`Đang tải ảnh NV ${char.id} lên Cloud (Backup)...`);
-              uploadFileToR2(bodyData, 'inputs', `body_${char.id}_${Date.now()}`).catch(e => console.warn("R2 Body Backup Failed", e));
+              uploadFileToR2(bodyData, 'inputs').catch(e => console.warn("R2 Body Backup Failed", e));
           }
 
           characterDataList.push({
@@ -740,13 +740,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                       <img src={resultImage} alt="Result" className="max-w-full max-h-[50vh] object-contain rounded-lg shadow-[0_0_30px_rgba(0,0,0,0.5)] border border-white/5" />
                   </div>
                   <div className="p-4 bg-[#12121a] flex flex-col gap-3">
-                      <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3 flex items-start gap-3">
-                          <Icons.AlertTriangle className="w-5 h-5 text-yellow-500 shrink-0 mt-0.5" />
-                          <div className="text-xs text-yellow-200/80 leading-relaxed">
-                              <span className="font-bold text-yellow-500 block mb-1">CẢNH BÁO LƯU TRỮ</span>
-                              Ảnh này chỉ được lưu tạm thời trên trình duyệt của bạn. <b>Ảnh sẽ bị mất vĩnh viễn</b> nếu bạn xóa dữ liệu duyệt web hoặc đổi thiết bị. Vui lòng tải ảnh xuống máy tính để lưu trữ an toàn.
-                          </div>
-                      </div>
                       <div className="flex gap-2">
                           <button 
                             onClick={() => handleForceDownload(resultImage, `auditionai-image-${Date.now()}.png`)}

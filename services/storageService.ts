@@ -1,13 +1,14 @@
 
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { GeneratedImage } from '../types';
 import { supabase } from './supabaseClient';
 import { getUserProfile } from './economyService';
+import { S3Client, PutObjectCommand, DeleteObjectCommand, DeleteObjectsCommand } from "@aws-sdk/client-s3";
 
 const DB_NAME = 'DMP_AI_Studio_DB';
 const STORE_NAME = 'images';
 const TABLE_NAME = 'generated_images';
 
+// --- CLOUDFLARE R2 CONFIGURATION ---
 // Helper to get Env Var from either Vite's import.meta.env or process.env shim
 const getEnv = (key: string) => {
     // Priority 1: Vite Environment
@@ -22,27 +23,45 @@ const getEnv = (key: string) => {
     }
 };
 
-const R2_ACCOUNT_ID = getEnv('VITE_R2_ACCOUNT_ID');
+const R2_ENDPOINT = getEnv('VITE_R2_ENDPOINT');
 const R2_ACCESS_KEY_ID = getEnv('VITE_R2_ACCESS_KEY_ID');
 const R2_SECRET_ACCESS_KEY = getEnv('VITE_R2_SECRET_ACCESS_KEY');
 const R2_BUCKET_NAME = getEnv('VITE_R2_BUCKET_NAME');
-const R2_PUBLIC_URL = getEnv('VITE_R2_PUBLIC_URL');
+const R2_PUBLIC_URL = getEnv('VITE_R2_PUBLIC_URL'); 
 
-let s3Client: S3Client | null = null;
+let r2Client: S3Client | null = null;
 
-if (R2_ACCOUNT_ID && R2_ACCESS_KEY_ID && R2_SECRET_ACCESS_KEY) {
-    s3Client = new S3Client({
-        region: 'auto',
-        endpoint: `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-        credentials: {
-            accessKeyId: R2_ACCESS_KEY_ID,
-            secretAccessKey: R2_SECRET_ACCESS_KEY,
-        },
-    });
+// Debug Log on Init
+console.log("[System] R2 Config Check:", {
+    hasEndpoint: !!R2_ENDPOINT,
+    hasKeyId: !!R2_ACCESS_KEY_ID,
+    hasSecret: !!R2_SECRET_ACCESS_KEY,
+    bucket: R2_BUCKET_NAME
+});
+
+if (R2_ENDPOINT && R2_ACCESS_KEY_ID && R2_SECRET_ACCESS_KEY) {
+    try {
+        r2Client = new S3Client({
+            region: "auto",
+            endpoint: R2_ENDPOINT,
+            credentials: {
+                accessKeyId: R2_ACCESS_KEY_ID,
+                secretAccessKey: R2_SECRET_ACCESS_KEY,
+            },
+        });
+        console.log("[System] R2 Storage Client Initialized");
+    } catch (e) {
+        console.error("Failed to init R2 Client", e);
+    }
+} else {
+    console.warn("[System] R2 Config Missing. Please ensure Env Vars start with 'VITE_'. Falling back to Local/Supabase Storage.");
 }
 
 export const checkR2Connection = async (): Promise<boolean> => {
-    return !!s3Client && !!R2_BUCKET_NAME;
+    // FIX: Do not make a network request (like ListBuckets) here.
+    // Browsers block ListBuckets by default due to CORS policies, causing red errors in console.
+    // We simply return true if the client was initialized with keys.
+    return !!r2Client;
 };
 
 // --- INDEXED DB HELPERS (FALLBACK) ---
@@ -77,50 +96,47 @@ const processBase64Data = (base64: string): { blob: Blob, type: string, buffer: 
   };
 };
 
-// --- UPLOAD TO R2 ---
-export const uploadFileToR2 = async (file: File | Blob | string, folder: string = 'inputs', customName?: string): Promise<string> => {
-    if (!s3Client || !R2_BUCKET_NAME || !R2_PUBLIC_URL) {
-        throw new Error("R2 not configured properly in .env");
+// --- NEW: UPLOAD INPUT FILE TO R2 ---
+export const uploadFileToR2 = async (file: File | Blob | string, folder: string = 'inputs'): Promise<string> => {
+    if (!r2Client) {
+        throw new Error("R2 Client not initialized");
     }
 
     try {
-        const fileName = customName || `${folder}_${Date.now()}`;
-        const key = `${folder}/${fileName}.png`;
-        let body: Uint8Array | Blob;
-        let contentType = 'image/png';
+        let buffer: Uint8Array;
+        let contentType: string;
+        let extension = 'png';
 
         if (typeof file === 'string') {
-            if (file.startsWith('data:')) {
-                const processed = processBase64Data(file);
-                body = processed.buffer;
-                contentType = processed.type;
-            } else {
-                const byteCharacters = atob(file);
-                const byteNumbers = new Array(byteCharacters.length);
-                for (let i = 0; i < byteCharacters.length; i++) {
-                    byteNumbers[i] = byteCharacters.charCodeAt(i);
-                }
-                body = new Uint8Array(byteNumbers);
-            }
+            // Base64
+            const processed = processBase64Data(file);
+            buffer = processed.buffer;
+            contentType = processed.type;
+            extension = contentType.split('/')[1] || 'png';
         } else {
-            body = file;
+            // File or Blob
+            const arrayBuffer = await file.arrayBuffer();
+            buffer = new Uint8Array(arrayBuffer);
             contentType = file.type || 'image/png';
+            extension = contentType.split('/')[1] || 'png';
         }
+
+        const fileName = `${folder}/${Date.now()}_${Math.random().toString(36).substring(7)}.${extension}`;
 
         const command = new PutObjectCommand({
             Bucket: R2_BUCKET_NAME,
-            Key: key,
-            Body: body,
+            Key: fileName,
+            Body: buffer,
             ContentType: contentType,
         });
 
-        await s3Client.send(command);
+        await r2Client.send(command);
         
-        // Return public URL
-        const publicUrl = R2_PUBLIC_URL.endsWith('/') ? R2_PUBLIC_URL : `${R2_PUBLIC_URL}/`;
-        return `${publicUrl}${key}`;
+        // Return Public URL
+        return `${R2_PUBLIC_URL}/${fileName}`;
+
     } catch (error) {
-        console.error("R2 Upload Error:", error);
+        console.error("R2 Upload Input Error:", error);
         throw error;
     }
 };
@@ -131,8 +147,89 @@ export const saveImageToStorage = async (image: GeneratedImage): Promise<void> =
   const user = await getUserProfile();
   const imageWithUser = { ...image, userName: user.username, isShared: false };
 
-  // ONLY SAVE TO INDEXED DB (LOCAL STORAGE)
-  console.log("[Storage] Saving to Local IndexedDB");
+  // 1. CLOUDFLARE R2 + SUPABASE METADATA (PRIMARY)
+  if (r2Client && supabase && user.id.length > 20) {
+    console.log("[Storage] Attempting R2 Upload...");
+    try {
+        const { blob, type, buffer } = processBase64Data(image.url);
+        const fileName = `${user.id}/${image.id}.png`; 
+        
+        // A. Upload file to R2
+        // FIX: Using 'buffer' (Uint8Array) instead of 'blob' to avoid "getReader is not a function" error
+        const command = new PutObjectCommand({
+            Bucket: R2_BUCKET_NAME,
+            Key: fileName,
+            Body: buffer, 
+            ContentType: type,
+            // ACL: 'public-read' // Uncomment if bucket is not public by default but allows ACL
+        });
+
+        await r2Client.send(command);
+        console.log("[Storage] R2 Upload Success");
+        
+        // B. Construct Public URL
+        const publicUrl = `${R2_PUBLIC_URL}/${fileName}`;
+
+        // C. Save Metadata to Supabase DB
+        const { error: dbError } = await supabase
+            .from(TABLE_NAME)
+            .insert({
+                id: image.id,
+                user_id: user.id, 
+                image_url: publicUrl, // R2 URL
+                prompt: image.prompt,
+                model_used: image.engine,
+                created_at: new Date(image.timestamp).toISOString(),
+                is_public: false
+            });
+
+        if (dbError) throw dbError;
+        return;
+
+    } catch (error: any) {
+        console.error("R2 Upload Error details:", error);
+        if (error.name === 'TypeError' && error.message === 'Failed to fetch') {
+             console.error("⚠️ LỖI MẠNG/CORS: Vui lòng kiểm tra cấu hình CORS trên R2 Bucket.");
+        }
+        // Fallback continues below...
+    }
+  } 
+  
+  // 2. SUPABASE STORAGE (LEGACY BACKUP)
+  else if (supabase && user.id.length > 20 && !r2Client) {
+    try {
+      const { blob } = processBase64Data(image.url);
+      const fileName = `${image.id}.png`;
+      
+      const { error: uploadError } = await supabase.storage
+        .from('images')
+        .upload(fileName, blob, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage.from('images').getPublicUrl(fileName);
+
+      const { error: dbError } = await supabase
+        .from(TABLE_NAME)
+        .insert({
+          id: image.id,
+          user_id: user.id,
+          image_url: publicUrl,
+          prompt: image.prompt,
+          model_used: image.engine,
+          created_at: new Date(image.timestamp).toISOString(),
+          is_public: false
+        });
+
+      if (dbError) throw dbError;
+      return; 
+    } catch (error) {
+      console.error("Supabase Storage Error (Fallback to Local):", error);
+    }
+  }
+
+  // 3. INDEXED DB (OFFLINE/LOCAL FALLBACK)
+  console.log("[Storage] Saving to Local (Fallback)");
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const transaction = db.transaction([STORE_NAME], 'readwrite');
@@ -145,63 +242,40 @@ export const saveImageToStorage = async (image: GeneratedImage): Promise<void> =
 };
 
 export const shareImageToShowcase = async (id: string, isShared: boolean): Promise<boolean> => {
-    // Local Fallback first to get the image data
+    // Sharing logic remains metadata-based in Supabase
+    if (supabase) {
+        try {
+            const { error } = await supabase
+                .from(TABLE_NAME)
+                .update({ is_public: isShared })
+                .eq('id', id);
+            
+            if (!error) return true;
+        } catch (e) {
+            console.warn("Share cloud error", e);
+        }
+    }
+
+    // Local Fallback
     const db = await openDB();
-    const localUpdateSuccess = await new Promise<boolean>((resolve, reject) => {
+    return new Promise((resolve, reject) => {
         const transaction = db.transaction([STORE_NAME], 'readwrite');
         const store = transaction.objectStore(STORE_NAME);
         const getReq = store.get(id);
 
-        getReq.onsuccess = async () => {
+        getReq.onsuccess = () => {
             const data = getReq.result as GeneratedImage;
             if (data) {
                 data.isShared = isShared;
                 const updateReq = store.put(data);
                 updateReq.onsuccess = () => resolve(true);
                 updateReq.onerror = () => reject(updateReq.error);
-                
-                // If sharing, upload to cloud
-                if (isShared && supabase && s3Client) {
-                    try {
-                        // Check if it already exists in Supabase
-                        const { data: existing } = await supabase.from(TABLE_NAME).select('id').eq('id', id).single();
-                        
-                        if (!existing) {
-                            const user = await getUserProfile();
-                            console.log("[Storage] Uploading shared image to R2...");
-                            const publicUrl = await uploadFileToR2(data.url, 'outputs', `${user.username}_${data.id}`);
-                            
-                            await supabase.from(TABLE_NAME).insert({
-                                id: data.id,
-                                user_id: user.id, 
-                                image_url: publicUrl,
-                                prompt: data.prompt,
-                                model_used: data.engine,
-                                created_at: new Date(data.timestamp).toISOString(),
-                                is_public: true
-                            });
-                        } else {
-                            await supabase.from(TABLE_NAME).update({ is_public: true }).eq('id', id);
-                        }
-                    } catch (e) {
-                        console.error("Failed to upload shared image to cloud:", e);
-                    }
-                } else if (!isShared && supabase) {
-                    // Unshare
-                    try {
-                        await supabase.from(TABLE_NAME).update({ is_public: false }).eq('id', id);
-                    } catch (e) {
-                        console.error("Failed to unshare image in cloud:", e);
-                    }
-                }
             } else {
                 resolve(false);
             }
         };
         getReq.onerror = () => reject(getReq.error);
     });
-
-    return localUpdateSuccess;
 };
 
 export const getShowcaseImages = async (): Promise<GeneratedImage[]> => {
@@ -242,20 +316,9 @@ export const getShowcaseImages = async (): Promise<GeneratedImage[]> => {
         const request = store.getAll();
 
         request.onsuccess = () => {
-            const results = (request.result as GeneratedImage[]) || [];
-            if (!Array.isArray(results)) {
-                resolve([]);
-                return;
-            }
-            const shared = results.filter(img => img && img.isShared);
-            resolve(shared.sort((a, b) => {
-                if (!a || !b) return 0;
-                const tsA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
-                const tsB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
-                const validTsA = isNaN(tsA) ? 0 : tsA;
-                const validTsB = isNaN(tsB) ? 0 : tsB;
-                return validTsB - validTsA;
-            }).slice(0, 20));
+            const results = request.result as GeneratedImage[];
+            const shared = results.filter(img => img.isShared);
+            resolve(shared.sort((a, b) => b.timestamp - a.timestamp).slice(0, 20));
         };
         request.onerror = () => reject(request.error);
     });
@@ -291,7 +354,38 @@ export const getAllImagesSystemWide = async (): Promise<GeneratedImage[]> => {
 };
 
 export const getAllImagesFromStorage = async (): Promise<GeneratedImage[]> => {
-  // ONLY INDEXED DB (LOCAL STORAGE)
+  // 1. SUPABASE (Fetches metadata, URL points to R2 or Supabase Storage)
+  if (supabase) {
+    try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if(user) {
+            const { data, error } = await supabase
+                .from(TABLE_NAME)
+                .select('*')
+                .eq('user_id', user.id)
+                .order('created_at', { ascending: false });
+
+            if (!error && data) {
+                return data.map((row: any) => ({
+                    id: row.id,
+                    url: row.image_url,
+                    prompt: row.prompt,
+                    timestamp: new Date(row.created_at).getTime(),
+                    toolId: 'gen_tool',
+                    toolName: row.model_used || 'AI Gen',
+                    engine: row.model_used,
+                    isShared: row.is_public,
+                    userName: 'Me',
+                    userId: row.user_id
+                }));
+            }
+        }
+    } catch (error) {
+      console.error("Supabase Load Error (Fallback to Local):", error);
+    }
+  }
+
+  // 2. INDEXED DB
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const transaction = db.transaction([STORE_NAME], 'readonly');
@@ -299,19 +393,8 @@ export const getAllImagesFromStorage = async (): Promise<GeneratedImage[]> => {
     const request = store.getAll();
 
     request.onsuccess = () => {
-      const results = (request.result as GeneratedImage[]) || [];
-      if (!Array.isArray(results)) {
-          resolve([]);
-          return;
-      }
-      resolve(results.sort((a, b) => {
-          if (!a || !b) return 0;
-          const tsA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
-          const tsB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
-          const validTsA = isNaN(tsA) ? 0 : tsA;
-          const validTsB = isNaN(tsB) ? 0 : tsB;
-          return validTsB - validTsA;
-      }));
+      const results = request.result as GeneratedImage[];
+      resolve(results.sort((a, b) => b.timestamp - a.timestamp));
     };
     request.onerror = () => reject(request.error);
   });
@@ -354,13 +437,48 @@ export const deleteImageFromStorage = async (id: string, targetUserId?: string, 
   const userId = targetUserId || user.id;
 
   if (supabase && userId) {
+    // A. Delete from R2 (if configured)
+    if (r2Client) {
+        try {
+            let fileName = `${userId}/${id}.png`; // Default fallback
+            
+            // Robust Key Extraction Strategy
+            if (imageUrl && imageUrl.startsWith('http')) {
+                // Strategy 1: Remove R2_PUBLIC_URL prefix (Handles custom domains/paths)
+                if (R2_PUBLIC_URL && imageUrl.startsWith(R2_PUBLIC_URL)) {
+                    fileName = imageUrl.replace(`${R2_PUBLIC_URL}/`, '');
+                } 
+                // Strategy 2: Use Pathname (Handles domain changes)
+                else {
+                    try {
+                        const urlObj = new URL(imageUrl);
+                        const path = decodeURIComponent(urlObj.pathname);
+                        fileName = path.startsWith('/') ? path.substring(1) : path;
+                    } catch (e) {
+                        console.warn(`[Storage] URL Parse Failed for ${imageUrl}`);
+                    }
+                }
+            }
+
+            console.warn(`[Storage] DELETING R2 KEY: [${fileName}]`);
+            await r2Client.send(new DeleteObjectCommand({
+                Bucket: R2_BUCKET_NAME,
+                Key: fileName
+            }));
+            console.warn(`[Storage] R2 Delete Sent for: ${fileName}`);
+        } catch (e) {
+            console.error("[Storage] R2 Delete Failed:", e);
+            throw e;
+        }
+    } 
+    
     try {
-        // A. Delete from Supabase Storage (Legacy - only if R2 not active)
-        if (!s3Client) {
+        // B. Delete from Supabase Storage (Legacy - only if R2 not active)
+        if (!r2Client) {
              await supabase.storage.from('images').remove([`${id}.png`]);
         }
 
-        // B. Delete Metadata from DB
+        // C. Delete Metadata from DB
         const { error } = await supabase.from(TABLE_NAME).delete().eq('id', id);
         if (error) throw error;
 
@@ -370,7 +488,7 @@ export const deleteImageFromStorage = async (id: string, targetUserId?: string, 
     }
   }
 
-  // C. Delete from Local
+  // D. Delete from Local
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const transaction = db.transaction([STORE_NAME], 'readwrite');
@@ -381,64 +499,12 @@ export const deleteImageFromStorage = async (id: string, targetUserId?: string, 
   });
 };
 
-export const deleteAllUnsharedImagesFromCloud = async (
-    onProgress: (current: number, total: number, message: string) => void
-): Promise<void> => {
-    if (!supabase) throw new Error("Supabase not connected");
-
-    try {
-        // Fetch all images that are NOT public
-        const { data: images, error } = await supabase
-            .from(TABLE_NAME)
-            .select('id, image_url')
-            .eq('is_public', false);
-
-        if (error) throw error;
-        
-        if (!images || images.length === 0) {
-            onProgress(0, 0, "Không có ảnh nào cần xóa.");
-            return;
-        }
-
-        const total = images.length;
-        let current = 0;
-
-        // Delete in chunks of 50
-        const chunkSize = 50;
-        for (let i = 0; i < images.length; i += chunkSize) {
-            const chunk = images.slice(i, i + chunkSize);
-            const ids = chunk.map(img => img.id);
-            
-            onProgress(current, total, `Đang xóa ${ids.length} ảnh từ Database...`);
-            
-            const { error: deleteError } = await supabase
-                .from(TABLE_NAME)
-                .delete()
-                .in('id', ids);
-
-            if (deleteError) {
-                console.error("Lỗi khi xóa chunk:", deleteError);
-                onProgress(current, total, `Lỗi khi xóa: ${deleteError.message}`);
-                continue;
-            }
-
-            current += ids.length;
-            onProgress(current, total, `Đã xóa ${current}/${total} ảnh`);
-        }
-        
-        onProgress(total, total, "Hoàn tất xóa ảnh không chia sẻ.");
-    } catch (e: any) {
-        console.error("Lỗi xóa ảnh:", e);
-        throw e;
-    }
-};
-
 export const cleanupExpiredImages = async (isSystemWide: boolean = false): Promise<number> => {
     let images: GeneratedImage[] = [];
     if (isSystemWide) {
-        images = (await getAllImagesSystemWide()) || [];
+        images = await getAllImagesSystemWide();
     } else {
-        images = (await getAllImagesFromStorage()) || [];
+        images = await getAllImagesFromStorage();
     }
 
     const now = Date.now();
@@ -446,12 +512,7 @@ export const cleanupExpiredImages = async (isSystemWide: boolean = false): Promi
     
     // Filter Expired Images
     const expiredImages = images.filter(img => {
-        if (!img) return false;
-        if (img.isShared) return false;
-        if (!img.timestamp) return false;
-        const ts = new Date(img.timestamp).getTime();
-        if (isNaN(ts)) return false;
-        return (now - ts > EXPIRATION_MS);
+        return !img.isShared && (now - img.timestamp > EXPIRATION_MS);
     });
 
     if (expiredImages.length === 0) {
@@ -460,6 +521,51 @@ export const cleanupExpiredImages = async (isSystemWide: boolean = false): Promi
     }
 
     console.log(`[Cleanup] Found ${expiredImages.length} expired images. Starting BATCH deletion...`);
+
+    // --- BATCH DELETE R2 ---
+    if (r2Client) {
+        try {
+            // Prepare Keys
+            const objectsToDelete = expiredImages.map(img => {
+                let key = `${img.userId || 'unknown'}/${img.id}.png`;
+                if (img.url && img.url.startsWith('http')) {
+                    if (R2_PUBLIC_URL && img.url.startsWith(R2_PUBLIC_URL)) {
+                        key = img.url.replace(`${R2_PUBLIC_URL}/`, '');
+                    } else {
+                        try {
+                            const path = decodeURIComponent(new URL(img.url).pathname);
+                            key = path.startsWith('/') ? path.substring(1) : path;
+                        } catch(e) {}
+                    }
+                }
+                return { Key: key };
+            });
+
+            // Split into chunks of 50 (Safe size for Browser & CORS)
+            const chunkSize = 50;
+            for (let i = 0; i < objectsToDelete.length; i += chunkSize) {
+                const chunk = objectsToDelete.slice(i, i + chunkSize);
+                console.log(`[Cleanup] Deleting R2 Batch ${Math.floor(i/chunkSize) + 1} (${chunk.length} items)...`);
+                
+                try {
+                    await r2Client.send(new DeleteObjectsCommand({
+                        Bucket: R2_BUCKET_NAME,
+                        Delete: { Objects: chunk }
+                    }));
+                } catch (batchErr: any) {
+                    console.error(`[Cleanup] R2 Batch Error:`, batchErr);
+                    if (batchErr.name === 'TypeError' && batchErr.message === 'Failed to fetch') {
+                        console.error("🚨 LỖI CORS: Trình duyệt đã chặn yêu cầu xóa. Bạn CẦN cấu hình CORS trên R2 Bucket.");
+                        throw new Error("CORS_ERROR: Vui lòng cấu hình CORS cho R2 Bucket để cho phép lệnh DELETE.");
+                    }
+                }
+            }
+            console.log("[Cleanup] R2 Batch Deletion Complete.");
+        } catch (e: any) {
+            console.error("[Cleanup] R2 Batch Delete Failed Global", e);
+            if (e.message.includes("CORS_ERROR")) throw e; // Re-throw to notify UI
+        }
+    }
 
     // --- BATCH DELETE DB ---
     if (supabase) {
@@ -485,11 +591,7 @@ export const cleanupExpiredImages = async (isSystemWide: boolean = false): Promi
         const db = await openDB();
         const tx = db.transaction([STORE_NAME], 'readwrite');
         const store = tx.objectStore(STORE_NAME);
-        expiredImages.forEach(img => {
-            if (img && img.id) {
-                store.delete(img.id);
-            }
-        });
+        expiredImages.forEach(img => store.delete(img.id));
         console.log("[Cleanup] Local Batch Deletion Complete.");
     } catch (e) {
         console.warn("[Cleanup] Local Delete Failed", e);

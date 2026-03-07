@@ -73,8 +73,20 @@ export const uploadFileToR2 = async (file: File | Blob | string, folder: string 
         
         if (typeof file === 'string') {
             // Base64 string
-            const base64Data = file.includes(',') ? file.split(',')[1] : file;
-            formData.append('image', base64Data);
+            if (file.startsWith('data:')) {
+                const { blob } = processBase64Data(file);
+                formData.append('image', blob, `${fileName}.png`);
+            } else {
+                // Raw base64 without data URI prefix
+                const byteCharacters = atob(file);
+                const byteNumbers = new Array(byteCharacters.length);
+                for (let i = 0; i < byteCharacters.length; i++) {
+                    byteNumbers[i] = byteCharacters.charCodeAt(i);
+                }
+                const byteArray = new Uint8Array(byteNumbers);
+                const blob = new Blob([byteArray], { type: 'image/png' });
+                formData.append('image', blob, `${fileName}.png`);
+            }
         } else {
             // File or Blob
             formData.append('image', file, `${fileName}.png`);

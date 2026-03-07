@@ -1,21 +1,10 @@
 
 import { createClient } from '@supabase/supabase-js';
-import { S3Client, DeleteObjectCommand } from "@aws-sdk/client-s3";
 
 // Initialize Supabase
 const supabaseUrl = process.env.VITE_SUPABASE_URL;
 const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY; // Or Service Role Key for better permission
 const supabase = createClient(supabaseUrl, supabaseKey);
-
-// Initialize R2
-const r2 = new S3Client({
-  region: "auto",
-  endpoint: process.env.VITE_R2_ENDPOINT,
-  credentials: {
-    accessKeyId: process.env.VITE_R2_ACCESS_KEY_ID,
-    secretAccessKey: process.env.VITE_R2_SECRET_ACCESS_KEY,
-  },
-});
 
 export const handler = async (event, context) => {
   // Security check: You might want to add a secret query param here to prevent public triggering
@@ -50,14 +39,6 @@ export const handler = async (event, context) => {
     // 3. Process Deletion
     for (const img of imagesToDelete) {
         try {
-            const fileName = `${img.user_id}/${img.id}.png`;
-
-            // A. Delete from R2
-            await r2.send(new DeleteObjectCommand({
-                Bucket: process.env.VITE_R2_BUCKET_NAME,
-                Key: fileName
-            }));
-
             // B. Delete from Database
             const { error: dbDelError } = await supabase
                 .from('generated_images')

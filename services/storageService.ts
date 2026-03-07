@@ -2,7 +2,7 @@
 import { GeneratedImage } from '../types';
 import { supabase } from './supabaseClient';
 import { getUserProfile } from './economyService';
-import { S3Client, PutObjectCommand, DeleteObjectCommand, DeleteObjectsCommand, ListObjectsV2Command, ListMultipartUploadsCommand, AbortMultipartUploadCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, DeleteObjectCommand, DeleteObjectsCommand, ListObjectsV2Command, ListMultipartUploadsCommand, AbortMultipartUploadCommand, ListObjectVersionsCommand } from "@aws-sdk/client-s3";
 
 const DB_NAME = 'DMP_AI_Studio_DB';
 const STORE_NAME = 'images';
@@ -85,17 +85,14 @@ const cleanupIncompleteUploads = async () => {
 
             for (const upload of uploads) {
                 if (upload.Key && upload.UploadId) {
-                    // Abort any incomplete upload older than 1 hour
-                    const initiated = upload.Initiated ? new Date(upload.Initiated).getTime() : Date.now();
-                    if (Date.now() - initiated > 1 * 60 * 60 * 1000) {
-                         console.log(`[Cleanup] Aborting Ghost Upload: ${upload.Key}`);
-                         await r2Client.send(new AbortMultipartUploadCommand({
-                             Bucket: R2_BUCKET_NAME,
-                             Key: upload.Key,
-                             UploadId: upload.UploadId
-                         }));
-                         abortedCount++;
-                    }
+                    // Abort ALL incomplete uploads regardless of age to free space
+                    console.log(`[Cleanup] Aborting Ghost Upload: ${upload.Key}`);
+                    await r2Client.send(new AbortMultipartUploadCommand({
+                        Bucket: R2_BUCKET_NAME,
+                        Key: upload.Key,
+                        UploadId: upload.UploadId
+                    }));
+                    abortedCount++;
                 }
             }
             
@@ -112,6 +109,56 @@ const cleanupIncompleteUploads = async () => {
         console.warn("[Cleanup] Failed to clean multipart uploads (This is optional)", e);
     }
     return abortedCount;
+};
+
+// --- HELPER: CLEANUP OLD VERSIONS (IF VERSIONING ENABLED) ---
+const cleanupOldVersions = async () => {
+    if (!r2Client) return 0;
+    console.log("[Cleanup] Checking for old object versions...");
+    let deletedCount = 0;
+    let isTruncated = true;
+    let keyMarker: string | undefined;
+    let versionIdMarker: string | undefined;
+
+    try {
+        while (isTruncated) {
+            const command = new ListObjectVersionsCommand({
+                Bucket: R2_BUCKET_NAME,
+                KeyMarker: keyMarker,
+                VersionIdMarker: versionIdMarker
+            });
+            const response = await r2Client.send(command);
+            
+            // Combine Versions and DeleteMarkers
+            const versions = [...(response.Versions || []), ...(response.DeleteMarkers || [])];
+            
+            if (versions.length > 0) {
+                 const objectsToDelete = versions.map(v => ({ Key: v.Key, VersionId: v.VersionId }));
+                 
+                 // Batch Delete
+                 const chunkSize = 100;
+                 for (let i = 0; i < objectsToDelete.length; i += chunkSize) {
+                    const chunk = objectsToDelete.slice(i, i + chunkSize);
+                    await r2Client.send(new DeleteObjectsCommand({
+                        Bucket: R2_BUCKET_NAME,
+                        Delete: { Objects: chunk }
+                    }));
+                    deletedCount += chunk.length;
+                 }
+            }
+
+            isTruncated = response.IsTruncated || false;
+            keyMarker = response.NextKeyMarker;
+            versionIdMarker = response.NextVersionIdMarker;
+        }
+        if (deletedCount > 0) {
+             console.log(`[Cleanup] Successfully cleaned ${deletedCount} old versions/markers.`);
+        }
+    } catch (e) {
+        // Versioning might not be enabled, ignore error
+        console.warn("[Cleanup] Version cleanup skipped (Versioning likely disabled or not supported)", e);
+    }
+    return deletedCount;
 };
 
 // --- INDEXED DB HELPERS (FALLBACK) ---
@@ -556,6 +603,8 @@ export const cleanupR2Directly = async (): Promise<{ count: number, size: number
     
     // 0. Cleanup Ghost Data (Multipart Uploads)
     await cleanupIncompleteUploads();
+    // 0.1 Cleanup Old Versions (If Versioning Enabled)
+    await cleanupOldVersions();
 
     let deletedCount = 0;
     let deletedSize = 0;

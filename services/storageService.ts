@@ -2,7 +2,7 @@
 import { GeneratedImage } from '../types';
 import { supabase } from './supabaseClient';
 import { getUserProfile } from './economyService';
-import { S3Client, PutObjectCommand, DeleteObjectCommand, DeleteObjectsCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, DeleteObjectCommand, DeleteObjectsCommand, ListObjectsV2Command, ListMultipartUploadsCommand, AbortMultipartUploadCommand } from "@aws-sdk/client-s3";
 
 const DB_NAME = 'DMP_AI_Studio_DB';
 const STORE_NAME = 'images';
@@ -62,6 +62,56 @@ export const checkR2Connection = async (): Promise<boolean> => {
     // Browsers block ListBuckets by default due to CORS policies, causing red errors in console.
     // We simply return true if the client was initialized with keys.
     return !!r2Client;
+};
+
+// --- HELPER: CLEANUP GHOST DATA (MULTIPART UPLOADS) ---
+const cleanupIncompleteUploads = async () => {
+    if (!r2Client) return 0;
+    console.log("[Cleanup] Checking for incomplete multipart uploads (Ghost Data)...");
+    let abortedCount = 0;
+    let isTruncated = true;
+    let keyMarker: string | undefined;
+    let uploadIdMarker: string | undefined;
+
+    try {
+        while (isTruncated) {
+            const command = new ListMultipartUploadsCommand({
+                Bucket: R2_BUCKET_NAME,
+                KeyMarker: keyMarker,
+                UploadIdMarker: uploadIdMarker
+            });
+            const response = await r2Client.send(command);
+            const uploads = response.Uploads || [];
+
+            for (const upload of uploads) {
+                if (upload.Key && upload.UploadId) {
+                    // Abort any incomplete upload older than 1 hour
+                    const initiated = upload.Initiated ? new Date(upload.Initiated).getTime() : Date.now();
+                    if (Date.now() - initiated > 1 * 60 * 60 * 1000) {
+                         console.log(`[Cleanup] Aborting Ghost Upload: ${upload.Key}`);
+                         await r2Client.send(new AbortMultipartUploadCommand({
+                             Bucket: R2_BUCKET_NAME,
+                             Key: upload.Key,
+                             UploadId: upload.UploadId
+                         }));
+                         abortedCount++;
+                    }
+                }
+            }
+            
+            isTruncated = response.IsTruncated || false;
+            keyMarker = response.NextKeyMarker;
+            uploadIdMarker = response.NextUploadIdMarker;
+        }
+        if (abortedCount > 0) {
+            console.log(`[Cleanup] Successfully cleaned ${abortedCount} incomplete uploads (Ghost Data).`);
+        } else {
+            console.log("[Cleanup] No incomplete uploads found.");
+        }
+    } catch (e) {
+        console.warn("[Cleanup] Failed to clean multipart uploads (This is optional)", e);
+    }
+    return abortedCount;
 };
 
 // --- INDEXED DB HELPERS (FALLBACK) ---
@@ -502,7 +552,11 @@ export const deleteImageFromStorage = async (id: string, targetUserId?: string, 
 export const cleanupR2Directly = async (): Promise<{ count: number, size: number }> => {
     if (!r2Client) return { count: 0, size: 0 };
     
-    console.log("[Cleanup] Starting COMPREHENSIVE R2 storage scan...");
+    console.log(`[Cleanup] Starting COMPREHENSIVE R2 storage scan on Bucket: [${R2_BUCKET_NAME}]...`);
+    
+    // 0. Cleanup Ghost Data (Multipart Uploads)
+    await cleanupIncompleteUploads();
+
     let deletedCount = 0;
     let deletedSize = 0;
     const now = Date.now();

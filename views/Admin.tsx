@@ -29,7 +29,7 @@ import {
     getUnifiedHistory,
     getGiftcodeUsages
 } from '../services/economyService';
-import { getAllImagesFromStorage, deleteImageFromStorage, checkR2Connection, getUserImagesFromStorage, cleanupExpiredImages } from '../services/storageService';
+import { getAllImagesFromStorage, deleteImageFromStorage, checkR2Connection, getUserImagesFromStorage, cleanupExpiredImages, cleanupR2Directly } from '../services/storageService';
 import { checkConnection, analyzeStyleImage } from '../services/geminiService';
 import { checkSupabaseConnection } from '../services/supabaseClient';
 import { Icons } from '../components/Icons';
@@ -722,8 +722,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       showConfirm('Xóa toàn bộ ảnh trên R2 Cloud cũ hơn 1 ngày (không bao gồm ảnh đã public)?', async () => {
           showToast('Đang tiến hành xóa ảnh cũ...', 'info');
           try {
-              const count = await cleanupExpiredImages(true);
-              showToast(`Đã xóa thành công ${count} ảnh cũ khỏi hệ thống.`);
+              const countDB = await cleanupExpiredImages(true);
+              const countR2 = await cleanupR2Directly();
+              showToast(`Đã xóa thành công ${countDB} ảnh từ DB và ${countR2} ảnh trực tiếp từ R2 Cloud.`);
               await refreshData();
           } catch (e: any) {
               showToast(`Lỗi khi xóa ảnh: ${e.message}`, 'error');

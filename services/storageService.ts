@@ -2,7 +2,7 @@
 import { GeneratedImage } from '../types';
 import { supabase } from './supabaseClient';
 import { getUserProfile } from './economyService';
-import { S3Client, PutObjectCommand, DeleteObjectCommand, DeleteObjectsCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, DeleteObjectCommand, DeleteObjectsCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
 
 const DB_NAME = 'DMP_AI_Studio_DB';
 const STORE_NAME = 'images';
@@ -497,6 +497,86 @@ export const deleteImageFromStorage = async (id: string, targetUserId?: string, 
     request.onsuccess = () => resolve();
     request.onerror = () => reject(request.error);
   });
+};
+
+export const cleanupR2Directly = async (): Promise<number> => {
+    if (!r2Client) return 0;
+    
+    let deletedCount = 0;
+    const now = Date.now();
+    const EXPIRATION_MS = 1 * 24 * 60 * 60 * 1000; // 1 Day
+
+    try {
+        // Get all public images from DB to protect them
+        let publicImageKeys = new Set<string>();
+        if (supabase) {
+            const { data } = await supabase.from(TABLE_NAME).select('image_url').eq('is_public', true);
+            if (data) {
+                data.forEach((row: any) => {
+                    if (row.image_url && R2_PUBLIC_URL && row.image_url.startsWith(R2_PUBLIC_URL)) {
+                        const key = row.image_url.replace(`${R2_PUBLIC_URL}/`, '');
+                        publicImageKeys.add(key);
+                    }
+                });
+            }
+        }
+
+        let isTruncated = true;
+        let continuationToken: string | undefined = undefined;
+
+        while (isTruncated) {
+            const listCommand = new ListObjectsV2Command({
+                Bucket: R2_BUCKET_NAME,
+                ContinuationToken: continuationToken,
+            });
+
+            const listResponse: any = await r2Client.send(listCommand);
+            const objects = listResponse.Contents || [];
+
+            const objectsToDelete = objects.filter((obj: any) => {
+                if (!obj.Key || !obj.LastModified) return false;
+                
+                // Protect public images
+                if (publicImageKeys.has(obj.Key)) return false;
+
+                // Check expiration
+                const age = now - obj.LastModified.getTime();
+                return age > EXPIRATION_MS;
+            }).map((obj: any) => ({ Key: obj.Key }));
+
+            if (objectsToDelete.length > 0) {
+                const chunkSize = 50;
+                for (let i = 0; i < objectsToDelete.length; i += chunkSize) {
+                    const chunk = objectsToDelete.slice(i, i + chunkSize);
+                    try {
+                        await r2Client.send(new DeleteObjectsCommand({
+                            Bucket: R2_BUCKET_NAME,
+                            Delete: { Objects: chunk }
+                        }));
+                        deletedCount += chunk.length;
+                    } catch (e: any) {
+                        console.error("R2 Batch Delete Error", e);
+                        if (e.name === 'TypeError' && e.message === 'Failed to fetch') {
+                            throw new Error("CORS_ERROR: Vui lòng cấu hình CORS cho R2 Bucket để cho phép lệnh DELETE.");
+                        }
+                    }
+                }
+            }
+
+            isTruncated = listResponse.IsTruncated || false;
+            continuationToken = listResponse.NextContinuationToken;
+        }
+
+        console.log(`[Cleanup] Directly deleted ${deletedCount} expired objects from R2.`);
+        return deletedCount;
+    } catch (e: any) {
+        console.error("R2 Direct Cleanup Error", e);
+        if (e.name === 'TypeError' && e.message === 'Failed to fetch') {
+            throw new Error("CORS_ERROR: Vui lòng cấu hình CORS cho R2 Bucket để cho phép lệnh GET/DELETE.");
+        }
+        if (e.message && e.message.includes("CORS_ERROR")) throw e;
+        return deletedCount;
+    }
 };
 
 export const cleanupExpiredImages = async (isSystemWide: boolean = false): Promise<number> => {

@@ -533,16 +533,32 @@ export const cleanupR2Directly = async (): Promise<number> => {
 
             const listResponse: any = await r2Client.send(listCommand);
             const objects = listResponse.Contents || [];
+            
+            console.log(`[Cleanup] R2 Scan Batch: Found ${objects.length} objects.`);
 
             const objectsToDelete = objects.filter((obj: any) => {
                 if (!obj.Key || !obj.LastModified) return false;
                 
                 // Protect public images
-                if (publicImageKeys.has(obj.Key)) return false;
+                if (publicImageKeys.has(obj.Key)) {
+                    // console.log(`[Cleanup] Skipping Protected (Public): ${obj.Key}`);
+                    return false;
+                }
 
                 // Check expiration
                 const age = now - obj.LastModified.getTime();
-                return age > EXPIRATION_MS;
+                const ageHours = age / (1000 * 60 * 60);
+
+                if (age > EXPIRATION_MS) {
+                    console.log(`[Cleanup] MARKED FOR DELETION: ${obj.Key} (Age: ${ageHours.toFixed(1)}h)`);
+                    return true;
+                } else {
+                    // Log a few samples of what is being kept
+                    if (Math.random() < 0.01) {
+                         console.log(`[Cleanup] Keeping Recent File: ${obj.Key} (Age: ${ageHours.toFixed(1)}h)`);
+                    }
+                    return false;
+                }
             }).map((obj: any) => ({ Key: obj.Key }));
 
             if (objectsToDelete.length > 0) {

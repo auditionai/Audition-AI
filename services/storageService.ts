@@ -2,7 +2,7 @@
 import { GeneratedImage } from '../types';
 import { supabase } from './supabaseClient';
 import { getUserProfile } from './economyService';
-import { S3Client, PutObjectCommand, DeleteObjectCommand, DeleteObjectsCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, DeleteObjectCommand, DeleteObjectsCommand, ListObjectsV2Command, ListMultipartUploadsCommand, AbortMultipartUploadCommand, ListObjectVersionsCommand } from "@aws-sdk/client-s3";
 
 const DB_NAME = 'DMP_AI_Studio_DB';
 const STORE_NAME = 'images';
@@ -62,6 +62,103 @@ export const checkR2Connection = async (): Promise<boolean> => {
     // Browsers block ListBuckets by default due to CORS policies, causing red errors in console.
     // We simply return true if the client was initialized with keys.
     return !!r2Client;
+};
+
+// --- HELPER: CLEANUP GHOST DATA (MULTIPART UPLOADS) ---
+const cleanupIncompleteUploads = async () => {
+    if (!r2Client) return 0;
+    console.log("[Cleanup] Checking for incomplete multipart uploads (Ghost Data)...");
+    let abortedCount = 0;
+    let isTruncated = true;
+    let keyMarker: string | undefined;
+    let uploadIdMarker: string | undefined;
+
+    try {
+        while (isTruncated) {
+            const command = new ListMultipartUploadsCommand({
+                Bucket: R2_BUCKET_NAME,
+                KeyMarker: keyMarker,
+                UploadIdMarker: uploadIdMarker
+            });
+            const response = await r2Client.send(command);
+            const uploads = response.Uploads || [];
+
+            for (const upload of uploads) {
+                if (upload.Key && upload.UploadId) {
+                    // Abort ALL incomplete uploads regardless of age to free space
+                    console.log(`[Cleanup] Aborting Ghost Upload: ${upload.Key}`);
+                    await r2Client.send(new AbortMultipartUploadCommand({
+                        Bucket: R2_BUCKET_NAME,
+                        Key: upload.Key,
+                        UploadId: upload.UploadId
+                    }));
+                    abortedCount++;
+                }
+            }
+            
+            isTruncated = response.IsTruncated || false;
+            keyMarker = response.NextKeyMarker;
+            uploadIdMarker = response.NextUploadIdMarker;
+        }
+        if (abortedCount > 0) {
+            console.log(`[Cleanup] Successfully cleaned ${abortedCount} incomplete uploads (Ghost Data).`);
+        } else {
+            console.log("[Cleanup] No incomplete uploads found.");
+        }
+    } catch (e) {
+        console.warn("[Cleanup] Failed to clean multipart uploads (This is optional)", e);
+    }
+    return abortedCount;
+};
+
+// --- HELPER: CLEANUP OLD VERSIONS (IF VERSIONING ENABLED) ---
+const cleanupOldVersions = async () => {
+    if (!r2Client) return 0;
+    console.log("[Cleanup] Checking for old object versions...");
+    let deletedCount = 0;
+    let isTruncated = true;
+    let keyMarker: string | undefined;
+    let versionIdMarker: string | undefined;
+
+    try {
+        while (isTruncated) {
+            const command = new ListObjectVersionsCommand({
+                Bucket: R2_BUCKET_NAME,
+                KeyMarker: keyMarker,
+                VersionIdMarker: versionIdMarker
+            });
+            const response = await r2Client.send(command);
+            
+            // Combine Versions and DeleteMarkers
+            const versions = [...(response.Versions || []), ...(response.DeleteMarkers || [])];
+            
+            if (versions.length > 0) {
+                 const objectsToDelete = versions.map(v => ({ Key: v.Key, VersionId: v.VersionId }));
+                 
+                 // Batch Delete
+                 const chunkSize = 100;
+                 for (let i = 0; i < objectsToDelete.length; i += chunkSize) {
+                    const chunk = objectsToDelete.slice(i, i + chunkSize);
+                    await r2Client.send(new DeleteObjectsCommand({
+                        Bucket: R2_BUCKET_NAME,
+                        Delete: { Objects: chunk }
+                    }));
+                    deletedCount += chunk.length;
+                 }
+            }
+
+            isTruncated = response.IsTruncated || false;
+            keyMarker = response.NextKeyMarker;
+            versionIdMarker = response.NextVersionIdMarker;
+        }
+        if (deletedCount > 0) {
+             console.log(`[Cleanup] Successfully cleaned ${deletedCount} old versions/markers.`);
+        }
+    } catch (e) {
+        // Versioning might not be enabled, ignore error
+        console.warn("[Cleanup] Version cleanup skipped (Versioning likely disabled or not supported)", e);
+    }
+    return deletedCount;
 };
 
 // --- INDEXED DB HELPERS (FALLBACK) ---
@@ -499,7 +596,145 @@ export const deleteImageFromStorage = async (id: string, targetUserId?: string, 
   });
 };
 
+export const cleanupR2Directly = async (): Promise<{ count: number, size: number }> => {
+    if (!r2Client) return { count: 0, size: 0 };
+    
+    console.log(`[Cleanup] Starting COMPREHENSIVE R2 storage scan on Bucket: [${R2_BUCKET_NAME}]...`);
+    
+    // 0. Cleanup Ghost Data (Multipart Uploads)
+    await cleanupIncompleteUploads();
+    // 0.1 Cleanup Old Versions (If Versioning Enabled)
+    await cleanupOldVersions();
+
+    let deletedCount = 0;
+    let deletedSize = 0;
+    const now = Date.now();
+    const EXPIRATION_MS = 1 * 24 * 60 * 60 * 1000; // 1 Day
+    const ORPHAN_EXPIRATION_MS = 1 * 60 * 60 * 1000; // 1 Hour
+
+    try {
+        // 1. Fetch ALL images from DB
+        let dbImageKeys = new Set<string>();
+        let publicImageKeys = new Set<string>();
+
+        if (supabase) {
+            console.log("[Cleanup] Fetching database records...");
+            const { data, error } = await supabase
+                .from(TABLE_NAME)
+                .select('image_url, is_public');
+            
+            if (error) {
+                console.error("[Cleanup] DB Fetch Error", error);
+                throw error;
+            }
+
+            if (data) {
+                data.forEach((row: any) => {
+                    if (row.image_url) {
+                        let key = row.image_url;
+                        // Normalize Key
+                        if (R2_PUBLIC_URL && key.startsWith(R2_PUBLIC_URL)) {
+                            key = key.replace(`${R2_PUBLIC_URL}/`, '');
+                        } else if (key.startsWith('http')) {
+                            try {
+                                const path = decodeURIComponent(new URL(key).pathname);
+                                key = path.startsWith('/') ? path.substring(1) : path;
+                            } catch(e) {}
+                        }
+                        
+                        dbImageKeys.add(key);
+                        if (row.is_public) {
+                            publicImageKeys.add(key);
+                        }
+                    }
+                });
+            }
+            console.log(`[Cleanup] DB Index: ${dbImageKeys.size} total, ${publicImageKeys.size} public.`);
+        }
+
+        let isTruncated = true;
+        let continuationToken: string | undefined = undefined;
+        let totalScanned = 0;
+
+        while (isTruncated) {
+            const listCommand = new ListObjectsV2Command({
+                Bucket: R2_BUCKET_NAME,
+                ContinuationToken: continuationToken,
+            });
+
+            const listResponse: any = await r2Client.send(listCommand);
+            const objects = listResponse.Contents || [];
+            totalScanned += objects.length;
+            
+            console.log(`[Cleanup] R2 Batch: ${objects.length} objects.`);
+
+            const objectsToDelete = objects.filter((obj: any) => {
+                if (!obj.Key || !obj.LastModified) return false;
+                
+                const key = obj.Key;
+                const size = obj.Size || 0;
+                const age = now - obj.LastModified.getTime();
+                const ageHours = age / (1000 * 60 * 60);
+
+                // 1. PROTECT PUBLIC
+                if (publicImageKeys.has(key)) {
+                    console.log(`[Cleanup] KEEP (Public): ${key} (${(size/1024/1024).toFixed(2)} MB)`);
+                    return false;
+                }
+
+                // 2. DELETE ORPHANS
+                if (!dbImageKeys.has(key)) {
+                    if (age > ORPHAN_EXPIRATION_MS) {
+                        console.log(`[Cleanup] DELETE (Orphan): ${key} (${(size/1024/1024).toFixed(2)} MB, Age: ${ageHours.toFixed(1)}h)`);
+                        deletedSize += size;
+                        return true;
+                    }
+                    return false; // Keep recent orphans
+                }
+
+                // 3. DELETE EXPIRED ACTIVE
+                if (age > EXPIRATION_MS) {
+                    console.log(`[Cleanup] DELETE (Expired): ${key} (${(size/1024/1024).toFixed(2)} MB, Age: ${ageHours.toFixed(1)}h)`);
+                    deletedSize += size;
+                    return true;
+                }
+
+                // 4. KEEP ACTIVE RECENT
+                console.log(`[Cleanup] KEEP (Active Recent): ${key} (Age: ${ageHours.toFixed(1)}h)`);
+                return false;
+
+            }).map((obj: any) => ({ Key: obj.Key }));
+
+            if (objectsToDelete.length > 0) {
+                const chunkSize = 50;
+                for (let i = 0; i < objectsToDelete.length; i += chunkSize) {
+                    const chunk = objectsToDelete.slice(i, i + chunkSize);
+                    try {
+                        await r2Client.send(new DeleteObjectsCommand({
+                            Bucket: R2_BUCKET_NAME,
+                            Delete: { Objects: chunk }
+                        }));
+                        deletedCount += chunk.length;
+                    } catch (e: any) {
+                        console.error("R2 Batch Delete Error", e);
+                    }
+                }
+            }
+
+            isTruncated = listResponse.IsTruncated || false;
+            continuationToken = listResponse.NextContinuationToken;
+        }
+
+        console.log(`[Cleanup] Complete. Scanned: ${totalScanned}. Deleted: ${deletedCount} files (${(deletedSize/1024/1024).toFixed(2)} MB).`);
+        return { count: deletedCount, size: deletedSize };
+    } catch (e: any) {
+        console.error("Cleanup Error", e);
+        return { count: deletedCount, size: deletedSize };
+    }
+};
+
 export const cleanupExpiredImages = async (isSystemWide: boolean = false): Promise<number> => {
+    console.log("[Cleanup] Starting database cleanup scan...");
     let images: GeneratedImage[] = [];
     if (isSystemWide) {
         images = await getAllImagesSystemWide();
@@ -508,7 +743,7 @@ export const cleanupExpiredImages = async (isSystemWide: boolean = false): Promi
     }
 
     const now = Date.now();
-    const EXPIRATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 Days
+    const EXPIRATION_MS = 1 * 24 * 60 * 60 * 1000; // 1 Day
     
     // Filter Expired Images
     const expiredImages = images.filter(img => {
@@ -516,11 +751,11 @@ export const cleanupExpiredImages = async (isSystemWide: boolean = false): Promi
     });
 
     if (expiredImages.length === 0) {
-        console.log("[Cleanup] No expired images found.");
+        console.log("[Cleanup] No expired images found in database records.");
         return 0;
     }
 
-    console.log(`[Cleanup] Found ${expiredImages.length} expired images. Starting BATCH deletion...`);
+    console.log(`[Cleanup] Found ${expiredImages.length} expired images in database. Starting BATCH deletion...`);
 
     // --- BATCH DELETE R2 ---
     if (r2Client) {

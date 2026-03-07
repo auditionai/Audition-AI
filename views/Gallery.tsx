@@ -73,7 +73,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
           if (success) {
               const msg = newStatus 
                 ? (lang === 'vi' ? 'Đã chia sẻ (Lưu vĩnh viễn)!' : 'Shared (Saved Forever)!')
-                : (lang === 'vi' ? 'Đã gỡ (Sẽ bị xóa sau 7 ngày)!' : 'Unshared (Will expire)!');
+                : (lang === 'vi' ? 'Đã gỡ (Sẽ bị xóa sau 1 ngày)!' : 'Unshared (Will expire)!');
               
               notify(msg, 'success');
               
@@ -164,7 +164,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
   const getExpirationStatus = (timestamp: number, isShared: boolean | undefined) => {
       if (isShared) return { type: 'saved', label: 'Vĩnh viễn', color: 'bg-green-500' };
       
-      const EXPIRATION_DAYS = 7;
+      const EXPIRATION_DAYS = 1;
       const msPerDay = 1000 * 60 * 60 * 24;
       const diffTime = Math.abs(Date.now() - timestamp);
       const diffDays = Math.ceil(diffTime / msPerDay);
@@ -179,11 +179,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
           return { type: 'expired', label: 'Sắp xóa', color: 'bg-red-500 animate-pulse' };
       }
       
-      if (preciseDaysLeft <= 2) {
-          return { type: 'warning', label: `${preciseDaysLeft} ngày`, color: 'bg-orange-500' };
-      }
-
-      return { type: 'normal', label: `${preciseDaysLeft} ngày`, color: 'bg-slate-600' };
+      return { type: 'warning', label: `< 1 ngày`, color: 'bg-orange-500' };
   };
 
   const renderedImages = useMemo(() => {
@@ -234,13 +230,13 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
     <div className="space-y-6 animate-fade-in pb-20">
       
       {/* STORAGE POLICY WARNING BANNER */}
-      <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 flex items-start gap-3">
-          <Icons.Info className="w-5 h-5 text-yellow-500 shrink-0 mt-0.5" />
+      <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 flex items-start gap-3 animate-pulse">
+          <Icons.AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
           <div className="space-y-1">
-              <h4 className="text-sm font-bold text-white">Chính sách lưu trữ ảnh</h4>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                  Ảnh trong thư viện sẽ tự động bị xóa sau <b className="text-yellow-500">7 ngày</b> để tối ưu bộ nhớ hệ thống. 
-                  Vui lòng tải ảnh về máy để lưu trữ.
+              <h4 className="text-sm font-bold text-red-400">LƯU Ý QUAN TRỌNG: Chính sách lưu trữ ảnh</h4>
+              <p className="text-xs text-red-400/80 leading-relaxed">
+                  Ảnh trong thư viện sẽ tự động bị xóa sau <b className="text-red-500">1 ngày</b> hoặc khi bạn tắt trình duyệt/ứng dụng. 
+                  Vui lòng tải ảnh xuống máy tính ngay bây giờ để tránh mất dữ liệu!
               </p>
           </div>
       </div>

@@ -1,6 +1,6 @@
 
 import { createClient } from '@supabase/supabase-js';
-import { S3Client, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, DeleteObjectCommand, ListObjectsV2Command, DeleteObjectsCommand } from "@aws-sdk/client-s3";
 
 // Initialize Supabase
 const supabaseUrl = process.env.VITE_SUPABASE_URL;
@@ -22,12 +22,17 @@ export const handler = async (event, context) => {
   // e.g. ?secret=MY_ADMIN_SECRET
   
   try {
-    // 1. Calculate Date Threshold (7 days ago)
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    const isoDate = sevenDaysAgo.toISOString();
+    // 1. Calculate Date Threshold (1 day ago)
+    const oneDayAgo = new Date();
+    oneDayAgo.setDate(oneDayAgo.getDate() - 1);
+    const isoDate = oneDayAgo.toISOString();
+    const now = Date.now();
+    const oneDayMs = 24 * 60 * 60 * 1000;
 
-    // 2. Query images to delete: Older than 7 days AND NOT public (shared)
+    let deletedCount = 0;
+    const errors = [];
+
+    // 2. Query images to delete: Older than 1 day AND NOT public (shared)
     const { data: imagesToDelete, error } = await supabase
       .from('generated_images')
       .select('id, user_id, is_public')
@@ -37,40 +42,61 @@ export const handler = async (event, context) => {
 
     if (error) throw error;
 
-    if (!imagesToDelete || imagesToDelete.length === 0) {
-      return {
-        statusCode: 200,
-        body: JSON.stringify({ message: "No images to cleanup." })
-      };
+    // 3. Process Deletion for DB images
+    if (imagesToDelete && imagesToDelete.length > 0) {
+        for (const img of imagesToDelete) {
+            try {
+                const fileName = `${img.user_id}/${img.id}.png`;
+
+                // A. Delete from R2
+                await r2.send(new DeleteObjectCommand({
+                    Bucket: process.env.VITE_R2_BUCKET_NAME,
+                    Key: fileName
+                }));
+
+                // B. Delete from Database
+                const { error: dbDelError } = await supabase
+                    .from('generated_images')
+                    .delete()
+                    .eq('id', img.id);
+                
+                if (dbDelError) throw dbDelError;
+
+                deletedCount++;
+            } catch (e) {
+                console.error(`Failed to delete image ${img.id}:`, e);
+                errors.push({ id: img.id, error: e.message });
+            }
+        }
     }
 
-    let deletedCount = 0;
-    const errors = [];
+    // 4. Process Deletion for orphaned inputs/ folder in R2
+    let isTruncated = true;
+    let continuationToken = undefined;
+    while (isTruncated) {
+        const listCommand = new ListObjectsV2Command({
+            Bucket: process.env.VITE_R2_BUCKET_NAME,
+            Prefix: 'inputs/',
+            ContinuationToken: continuationToken,
+        });
+        const listResponse = await r2.send(listCommand);
+        const objects = listResponse.Contents || [];
+        
+        const objectsToDelete = objects.filter(obj => {
+            if (!obj.Key || !obj.LastModified) return false;
+            const age = now - obj.LastModified.getTime();
+            return age > oneDayMs;
+        }).map(obj => ({ Key: obj.Key }));
 
-    // 3. Process Deletion
-    for (const img of imagesToDelete) {
-        try {
-            const fileName = `${img.user_id}/${img.id}.png`;
-
-            // A. Delete from R2
-            await r2.send(new DeleteObjectCommand({
+        if (objectsToDelete.length > 0) {
+            await r2.send(new DeleteObjectsCommand({
                 Bucket: process.env.VITE_R2_BUCKET_NAME,
-                Key: fileName
+                Delete: { Objects: objectsToDelete }
             }));
-
-            // B. Delete from Database
-            const { error: dbDelError } = await supabase
-                .from('generated_images')
-                .delete()
-                .eq('id', img.id);
-            
-            if (dbDelError) throw dbDelError;
-
-            deletedCount++;
-        } catch (e) {
-            console.error(`Failed to delete image ${img.id}:`, e);
-            errors.push({ id: img.id, error: e.message });
+            deletedCount += objectsToDelete.length;
         }
+        isTruncated = listResponse.IsTruncated || false;
+        continuationToken = listResponse.NextContinuationToken;
     }
 
     return {

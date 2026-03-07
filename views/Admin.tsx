@@ -29,7 +29,7 @@ import {
     getUnifiedHistory,
     getGiftcodeUsages
 } from '../services/economyService';
-import { getAllImagesFromStorage, deleteImageFromStorage, checkR2Connection, getUserImagesFromStorage } from '../services/storageService';
+import { getAllImagesFromStorage, deleteImageFromStorage, checkR2Connection, getUserImagesFromStorage, cleanupExpiredImages, cleanupR2Directly } from '../services/storageService';
 import { checkConnection, analyzeStyleImage } from '../services/geminiService';
 import { checkSupabaseConnection } from '../services/supabaseClient';
 import { Icons } from '../components/Icons';
@@ -717,6 +717,21 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           setProcessingTxId(null);
       });
   }
+
+  const handleCleanupImages = async () => {
+      showConfirm('Xóa toàn bộ ảnh trên R2 Cloud cũ hơn 1 ngày (không bao gồm ảnh đã public)?', async () => {
+          showToast('Đang tiến hành xóa ảnh cũ...', 'info');
+          try {
+              const countDB = await cleanupExpiredImages(true);
+              const resultR2 = await cleanupR2Directly();
+              const sizeMB = (resultR2.size / 1024 / 1024).toFixed(2);
+              showToast(`Đã xóa thành công ${countDB} ảnh từ DB và ${resultR2.count} ảnh (${sizeMB} MB) trực tiếp từ R2 Cloud.`);
+              await refreshData();
+          } catch (e: any) {
+              showToast(`Lỗi khi xóa ảnh: ${e.message}`, 'error');
+          }
+      });
+  };
 
   // --- BULK ACTIONS ---
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1643,6 +1658,19 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                   <span className="font-bold text-white">Fix Negative Balance</span>
                               </div>
                               <p className="text-xs text-slate-400">Sửa lỗi số dư âm (-Vcoin) cho tất cả tài khoản.</p>
+                          </button>
+
+                          <button 
+                              onClick={handleCleanupImages}
+                              className="p-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-left transition-colors group"
+                          >
+                              <div className="flex items-center gap-3 mb-2">
+                                  <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center text-red-500 group-hover:scale-110 transition-transform">
+                                      <Icons.Trash className="w-5 h-5" />
+                                  </div>
+                                  <span className="font-bold text-white">Xóa ảnh cũ (R2 Cloud)</span>
+                              </div>
+                              <p className="text-xs text-slate-400">Xóa toàn bộ ảnh trên R2 Cloud cũ hơn 1 ngày (giữ lại ảnh public).</p>
                           </button>
                       </div>
                   </div>

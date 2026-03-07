@@ -439,16 +439,16 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       let structureRefData: string | undefined = undefined;
       let sourceForStructure = refImage || feature.preview_image;
       
-      // --- NEW: UPLOAD TO IMGBB CLOUD (INPUTS - LOGGING ONLY) ---
-      // We upload to ImgBB for persistent storage/logging, but we pass the ORIGINAL BASE64 to generateImage
-      // to avoid CORS issues when the browser tries to fetch the ImgBB URL to send to Google.
+      // --- NEW: UPLOAD TO R2 CLOUD (INPUTS - LOGGING ONLY) ---
+      // We upload to R2 for persistent storage/logging, but we pass the ORIGINAL BASE64 to generateImage
+      // to avoid CORS issues when the browser tries to fetch the R2 URL to send to Google.
       
       // Upload Reference Image
       if (sourceForStructure && sourceForStructure.startsWith('data:')) {
-          addLog("Đang tải ảnh mẫu lên ImgBB Cloud (Backup)...");
+          addLog("Đang tải ảnh mẫu lên R2 Cloud (Backup)...");
           uploadFileToR2(sourceForStructure, 'inputs', `ref_${feature.id}_${Date.now()}`).then(url => {
-              console.log("ImgBB Ref Backup URL:", url);
-          }).catch(e => console.warn("ImgBB Ref Backup Failed", e));
+              console.log("R2 Ref Backup URL:", url);
+          }).catch(e => console.warn("R2 Ref Backup Failed", e));
           
           // CRITICAL FIX: DO NOT OVERWRITE sourceForStructure with URL.
           // Keep it as Base64 so generateImage can process it directly without CORS errors.
@@ -462,7 +462,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
 
           if (bodyData && bodyData.startsWith('data:')) {
               addLog(`Đang tải ảnh NV ${char.id} lên Cloud (Backup)...`);
-              uploadFileToR2(bodyData, 'inputs', `body_${char.id}_${Date.now()}`).catch(e => console.warn("ImgBB Body Backup Failed", e));
+              uploadFileToR2(bodyData, 'inputs', `body_${char.id}_${Date.now()}`).catch(e => console.warn("R2 Body Backup Failed", e));
           }
 
           characterDataList.push({
@@ -1193,7 +1193,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                                     <Icons.Cloud className="w-4 h-4" />
                                 </div>
                                 <div>
-                                    <div className="text-xs font-bold text-white">HQ Cloud Link (ImgBB)</div>
+                                    <div className="text-xs font-bold text-white">HQ Cloud Link (R2)</div>
                                     <div className="text-[9px] text-audi-cyan font-bold">ACTIVE • FREE</div>
                                 </div>
                             </div>

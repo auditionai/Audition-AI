@@ -220,7 +220,9 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                   )}
 
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity p-4 flex flex-col justify-end">
-                    <span className="text-white text-xs font-bold truncate">{img.toolName}</span>
+                    <span className="text-white text-xs font-bold truncate">
+                        {typeof img.toolName === 'object' ? (img.toolName as any)[lang] || (img.toolName as any)['en'] : img.toolName}
+                    </span>
                     <span className="text-white/70 text-[10px]">{formatDate(img.timestamp)}</span>
                     <button 
                       onClick={(e) => handleDelete(e, img.id)}
@@ -307,7 +309,9 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
               </div>
               
               <div className="w-full md:w-80 bg-slate-800 p-6 flex flex-col border-l border-white/10 overflow-y-auto">
-                 <h3 className="text-xl font-bold text-white mb-1">{selectedImage.toolName}</h3>
+                 <h3 className="text-xl font-bold text-white mb-1">
+                     {typeof selectedImage.toolName === 'object' ? (selectedImage.toolName as any)[lang] || (selectedImage.toolName as any)['en'] : selectedImage.toolName}
+                 </h3>
                  <span className="text-xs text-brand-400 font-mono mb-6">{selectedImage.engine}</span>
                  
                  {/* Expiration Info in Detail View */}

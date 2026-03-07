@@ -426,14 +426,14 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       const geminiOk = await checkConnection(keyToUse);
       const geminiLatency = Date.now() - startGemini;
       const sbCheck = await checkSupabaseConnection();
-      const imgbbOk = await checkR2Connection(); // checkR2Connection now checks ImgBB
+      const r2Ok = await checkR2Connection();
       
       let storageStatus: 'connected' | 'disconnected' = 'disconnected';
-      let storageType: 'ImgBB' | 'Supabase' | 'None' = 'None';
+      let storageType: 'R2' | 'Supabase' | 'None' = 'None';
 
-      if (imgbbOk) {
+      if (r2Ok) {
           storageStatus = 'connected';
-          storageType = 'ImgBB';
+          storageType = 'R2';
       } else if (sbCheck.storage) {
           storageStatus = 'connected';
           storageType = 'Supabase';

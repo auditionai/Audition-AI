@@ -1,4 +1,5 @@
 
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { GeneratedImage } from '../types';
 import { supabase } from './supabaseClient';
 import { getUserProfile } from './economyService';
@@ -21,11 +22,27 @@ const getEnv = (key: string) => {
     }
 };
 
-const IMGBB_API_KEY = getEnv('VITE_IMGBB_API_KEY');
+const R2_ACCOUNT_ID = getEnv('VITE_R2_ACCOUNT_ID');
+const R2_ACCESS_KEY_ID = getEnv('VITE_R2_ACCESS_KEY_ID');
+const R2_SECRET_ACCESS_KEY = getEnv('VITE_R2_SECRET_ACCESS_KEY');
+const R2_BUCKET_NAME = getEnv('VITE_R2_BUCKET_NAME');
+const R2_PUBLIC_URL = getEnv('VITE_R2_PUBLIC_URL');
+
+let s3Client: S3Client | null = null;
+
+if (R2_ACCOUNT_ID && R2_ACCESS_KEY_ID && R2_SECRET_ACCESS_KEY) {
+    s3Client = new S3Client({
+        region: 'auto',
+        endpoint: `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+        credentials: {
+            accessKeyId: R2_ACCESS_KEY_ID,
+            secretAccessKey: R2_SECRET_ACCESS_KEY,
+        },
+    });
+}
 
 export const checkR2Connection = async (): Promise<boolean> => {
-    // Legacy function name, now checks ImgBB
-    return !!IMGBB_API_KEY;
+    return !!s3Client && !!R2_BUCKET_NAME;
 };
 
 // --- INDEXED DB HELPERS (FALLBACK) ---
@@ -60,55 +77,50 @@ const processBase64Data = (base64: string): { blob: Blob, type: string, buffer: 
   };
 };
 
-// --- NEW: UPLOAD INPUT FILE TO IMGBB ---
+// --- UPLOAD TO R2 ---
 export const uploadFileToR2 = async (file: File | Blob | string, folder: string = 'inputs', customName?: string): Promise<string> => {
-    // We keep the function name uploadFileToR2 for backward compatibility with UI components
-    if (!IMGBB_API_KEY) {
-        throw new Error("ImgBB API Key not configured in .env");
+    if (!s3Client || !R2_BUCKET_NAME || !R2_PUBLIC_URL) {
+        throw new Error("R2 not configured properly in .env");
     }
 
     try {
-        const formData = new FormData();
         const fileName = customName || `${folder}_${Date.now()}`;
-        
+        const key = `${folder}/${fileName}.png`;
+        let body: Uint8Array | Blob;
+        let contentType = 'image/png';
+
         if (typeof file === 'string') {
-            // Base64 string
             if (file.startsWith('data:')) {
-                const { blob } = processBase64Data(file);
-                formData.append('image', blob, `${fileName}.png`);
+                const processed = processBase64Data(file);
+                body = processed.buffer;
+                contentType = processed.type;
             } else {
-                // Raw base64 without data URI prefix
                 const byteCharacters = atob(file);
                 const byteNumbers = new Array(byteCharacters.length);
                 for (let i = 0; i < byteCharacters.length; i++) {
                     byteNumbers[i] = byteCharacters.charCodeAt(i);
                 }
-                const byteArray = new Uint8Array(byteNumbers);
-                const blob = new Blob([byteArray], { type: 'image/png' });
-                formData.append('image', blob, `${fileName}.png`);
+                body = new Uint8Array(byteNumbers);
             }
         } else {
-            // File or Blob
-            formData.append('image', file, `${fileName}.png`);
+            body = file;
+            contentType = file.type || 'image/png';
         }
-        
-        // ImgBB supports 'name' parameter to set the image name
-        formData.append('name', fileName);
 
-        const response = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, {
-            method: 'POST',
-            body: formData
+        const command = new PutObjectCommand({
+            Bucket: R2_BUCKET_NAME,
+            Key: key,
+            Body: body,
+            ContentType: contentType,
         });
 
-        const data = await response.json();
+        await s3Client.send(command);
         
-        if (data.success) {
-            return data.data.url;
-        } else {
-            throw new Error(data.error?.message || "ImgBB upload failed");
-        }
+        // Return public URL
+        const publicUrl = R2_PUBLIC_URL.endsWith('/') ? R2_PUBLIC_URL : `${R2_PUBLIC_URL}/`;
+        return `${publicUrl}${key}`;
     } catch (error) {
-        console.error("ImgBB Upload Input Error:", error);
+        console.error("R2 Upload Error:", error);
         throw error;
     }
 };
@@ -149,14 +161,14 @@ export const shareImageToShowcase = async (id: string, isShared: boolean): Promi
                 updateReq.onerror = () => reject(updateReq.error);
                 
                 // If sharing, upload to cloud
-                if (isShared && supabase && IMGBB_API_KEY) {
+                if (isShared && supabase && s3Client) {
                     try {
                         // Check if it already exists in Supabase
                         const { data: existing } = await supabase.from(TABLE_NAME).select('id').eq('id', id).single();
                         
                         if (!existing) {
                             const user = await getUserProfile();
-                            console.log("[Storage] Uploading shared image to ImgBB...");
+                            console.log("[Storage] Uploading shared image to R2...");
                             const publicUrl = await uploadFileToR2(data.url, 'outputs', `${user.username}_${data.id}`);
                             
                             await supabase.from(TABLE_NAME).insert({
@@ -343,8 +355,8 @@ export const deleteImageFromStorage = async (id: string, targetUserId?: string, 
 
   if (supabase && userId) {
     try {
-        // A. Delete from Supabase Storage (Legacy - only if ImgBB not active)
-        if (!IMGBB_API_KEY) {
+        // A. Delete from Supabase Storage (Legacy - only if R2 not active)
+        if (!s3Client) {
              await supabase.storage.from('images').remove([`${id}.png`]);
         }
 

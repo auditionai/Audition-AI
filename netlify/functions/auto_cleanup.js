@@ -22,12 +22,12 @@ export const handler = async (event, context) => {
   // e.g. ?secret=MY_ADMIN_SECRET
   
   try {
-    // 1. Calculate Date Threshold (7 days ago)
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    const isoDate = sevenDaysAgo.toISOString();
+    // 1. Calculate Date Threshold (1 day ago)
+    const oneDayAgo = new Date();
+    oneDayAgo.setDate(oneDayAgo.getDate() - 1);
+    const isoDate = oneDayAgo.toISOString();
 
-    // 2. Query images to delete: Older than 7 days AND NOT public (shared)
+    // 2. Query images to delete: Older than 1 day AND NOT public (shared)
     const { data: imagesToDelete, error } = await supabase
       .from('generated_images')
       .select('id, user_id, is_public')

@@ -751,6 +751,12 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                               <Icons.Wand className="w-4 h-4" /> Tạo Tiếp
                           </button>
                       </div>
+                      <div className="mt-2 p-3 bg-red-500/10 border border-red-500/30 rounded-xl flex items-start gap-3 animate-pulse">
+                          <Icons.AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+                          <p className="text-xs text-red-400 font-bold leading-relaxed">
+                              LƯU Ý QUAN TRỌNG: Ảnh sẽ tự động bị xóa sau 1 ngày hoặc khi bạn tắt trình duyệt/ứng dụng. Vui lòng ấn nút "Tải Về" để lưu ảnh xuống máy tính ngay bây giờ để tránh mất dữ liệu!
+                          </p>
+                      </div>
                   </div>
               </div>
           </div>

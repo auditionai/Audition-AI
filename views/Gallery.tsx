@@ -39,10 +39,9 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
   const loadImages = async () => {
     try {
       const storedImages = await getAllImagesFromStorage();
-      setImages(storedImages || []);
+      setImages(storedImages);
     } catch (error) {
       console.error("Failed to load gallery", error);
-      setImages([]);
     }
   };
 
@@ -74,7 +73,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
           if (success) {
               const msg = newStatus 
                 ? (lang === 'vi' ? 'Đã chia sẻ (Lưu vĩnh viễn)!' : 'Shared (Saved Forever)!')
-                : (lang === 'vi' ? 'Đã gỡ (Sẽ bị xóa sau 7 ngày)!' : 'Unshared (Will expire)!');
+                : (lang === 'vi' ? 'Đã gỡ (Sẽ bị xóa sau 1 ngày)!' : 'Unshared (Will expire)!');
               
               notify(msg, 'success');
               
@@ -155,27 +154,24 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
       }
   };
 
-  const formatDate = (timestamp: number | string | undefined) => {
-    if (!timestamp) return 'Unknown Date';
-    const date = new Date(timestamp);
-    if (isNaN(date.getTime())) return 'Unknown Date';
-    return date.toLocaleDateString(lang === 'vi' ? 'vi-VN' : 'en-US', {
+  const formatDate = (timestamp: number) => {
+    return new Date(timestamp).toLocaleDateString(lang === 'vi' ? 'vi-VN' : 'en-US', {
       month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
     });
   };
 
   // --- EXPIRATION CALCULATION HELPERS ---
-  const getExpirationStatus = (timestamp: number | string | undefined, isShared: boolean | undefined) => {
+  const getExpirationStatus = (timestamp: number, isShared: boolean | undefined) => {
       if (isShared) return { type: 'saved', label: 'Vĩnh viễn', color: 'bg-green-500' };
-      if (!timestamp) return { type: 'unknown', label: 'Unknown', color: 'bg-slate-600' };
       
-      const ts = new Date(timestamp).getTime();
-      if (isNaN(ts)) return { type: 'unknown', label: 'Unknown', color: 'bg-slate-600' };
-
-      const EXPIRATION_DAYS = 7;
+      const EXPIRATION_DAYS = 1;
       const msPerDay = 1000 * 60 * 60 * 24;
+      const diffTime = Math.abs(Date.now() - timestamp);
+      const diffDays = Math.ceil(diffTime / msPerDay);
+      const daysLeft = EXPIRATION_DAYS - diffDays; // Use diffDays which is approximate days passed.
       
-      const expiryDate = ts + (EXPIRATION_DAYS * msPerDay);
+      // More precise: 
+      const expiryDate = timestamp + (EXPIRATION_DAYS * msPerDay);
       const timeLeft = expiryDate - Date.now();
       const preciseDaysLeft = Math.ceil(timeLeft / msPerDay);
 
@@ -183,15 +179,11 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
           return { type: 'expired', label: 'Sắp xóa', color: 'bg-red-500 animate-pulse' };
       }
       
-      if (preciseDaysLeft <= 2) {
-          return { type: 'warning', label: `${preciseDaysLeft} ngày`, color: 'bg-orange-500' };
-      }
-
-      return { type: 'normal', label: `${preciseDaysLeft} ngày`, color: 'bg-slate-600' };
+      return { type: 'warning', label: `< 1 ngày`, color: 'bg-orange-500' };
   };
 
   const renderedImages = useMemo(() => {
-      return images.filter(img => !!img).map((img) => {
+      return images.map((img) => {
             const status = getExpirationStatus(img.timestamp, img.isShared);
             
             return (
@@ -220,9 +212,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
                   )}
 
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity p-4 flex flex-col justify-end">
-                    <span className="text-white text-xs font-bold truncate">
-                        {typeof img.toolName === 'object' ? (img.toolName as any)[lang] || (img.toolName as any)['en'] : img.toolName}
-                    </span>
+                    <span className="text-white text-xs font-bold truncate">{img.toolName}</span>
                     <span className="text-white/70 text-[10px]">{formatDate(img.timestamp)}</span>
                     <button 
                       onClick={(e) => handleDelete(e, img.id)}
@@ -240,14 +230,13 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
     <div className="space-y-6 animate-fade-in pb-20">
       
       {/* STORAGE POLICY WARNING BANNER */}
-      <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 flex items-start gap-3">
-          <Icons.AlertTriangle className="w-5 h-5 text-yellow-500 shrink-0 mt-0.5" />
+      <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 flex items-start gap-3 animate-pulse">
+          <Icons.AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
           <div className="space-y-1">
-              <h4 className="text-sm font-bold text-yellow-500 uppercase tracking-wider">Cảnh Báo Lưu Trữ Ảnh</h4>
-              <p className="text-xs text-yellow-200/80 leading-relaxed">
-                  Toàn bộ ảnh trong thư viện <b>chỉ được lưu trữ tạm thời trên trình duyệt (Localhost)</b> của thiết bị này. 
-                  <br/>Ảnh sẽ <b>bị mất vĩnh viễn</b> nếu bạn xóa dữ liệu duyệt web, sử dụng trình duyệt ẩn danh, hoặc đổi sang thiết bị khác. 
-                  <br/><span className="text-white font-semibold">Khuyến nghị: Vui lòng tải ảnh xuống máy tính để lưu trữ an toàn.</span>
+              <h4 className="text-sm font-bold text-red-400">LƯU Ý QUAN TRỌNG: Chính sách lưu trữ ảnh</h4>
+              <p className="text-xs text-red-400/80 leading-relaxed">
+                  Ảnh trong thư viện sẽ tự động bị xóa sau <b className="text-red-500">1 ngày</b> hoặc khi bạn tắt trình duyệt/ứng dụng. 
+                  Vui lòng tải ảnh xuống máy tính ngay bây giờ để tránh mất dữ liệu!
               </p>
           </div>
       </div>
@@ -309,9 +298,7 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
               </div>
               
               <div className="w-full md:w-80 bg-slate-800 p-6 flex flex-col border-l border-white/10 overflow-y-auto">
-                 <h3 className="text-xl font-bold text-white mb-1">
-                     {typeof selectedImage.toolName === 'object' ? (selectedImage.toolName as any)[lang] || (selectedImage.toolName as any)['en'] : selectedImage.toolName}
-                 </h3>
+                 <h3 className="text-xl font-bold text-white mb-1">{selectedImage.toolName}</h3>
                  <span className="text-xs text-brand-400 font-mono mb-6">{selectedImage.engine}</span>
                  
                  {/* Expiration Info in Detail View */}

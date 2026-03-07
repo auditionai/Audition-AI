@@ -508,7 +508,7 @@ export const cleanupExpiredImages = async (isSystemWide: boolean = false): Promi
     }
 
     const now = Date.now();
-    const EXPIRATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 Days
+    const EXPIRATION_MS = 1 * 24 * 60 * 60 * 1000; // 1 Day
     
     // Filter Expired Images
     const expiredImages = images.filter(img => {

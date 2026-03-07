@@ -119,71 +119,8 @@ export const saveImageToStorage = async (image: GeneratedImage): Promise<void> =
   const user = await getUserProfile();
   const imageWithUser = { ...image, userName: user.username, isShared: false };
 
-  // 1. IMGBB + SUPABASE METADATA (PRIMARY)
-  if (IMGBB_API_KEY && supabase && user.id.length > 20) {
-    console.log("[Storage] Attempting ImgBB Upload...");
-    try {
-        // A. Upload file to ImgBB
-        const publicUrl = await uploadFileToR2(image.url, 'outputs', `${user.username}_${image.id}`);
-        console.log("[Storage] ImgBB Upload Success");
-
-        // C. Save Metadata to Supabase DB
-        const { error: dbError } = await supabase
-            .from(TABLE_NAME)
-            .insert({
-                id: image.id,
-                user_id: user.id, 
-                image_url: publicUrl, // ImgBB URL
-                prompt: image.prompt,
-                model_used: image.engine,
-                created_at: new Date(image.timestamp).toISOString(),
-                is_public: false
-            });
-
-        if (dbError) throw dbError;
-        return;
-
-    } catch (error: any) {
-        console.error("ImgBB Upload Error details:", error);
-        // Fallback continues below...
-    }
-  } 
-  
-  // 2. SUPABASE STORAGE (LEGACY BACKUP)
-  else if (supabase && user.id.length > 20 && !IMGBB_API_KEY) {
-    try {
-      const { blob } = processBase64Data(image.url);
-      const fileName = `${image.id}.png`;
-      
-      const { error: uploadError } = await supabase.storage
-        .from('images')
-        .upload(fileName, blob, { upsert: true });
-
-      if (uploadError) throw uploadError;
-
-      const { data: { publicUrl } } = supabase.storage.from('images').getPublicUrl(fileName);
-
-      const { error: dbError } = await supabase
-        .from(TABLE_NAME)
-        .insert({
-          id: image.id,
-          user_id: user.id,
-          image_url: publicUrl,
-          prompt: image.prompt,
-          model_used: image.engine,
-          created_at: new Date(image.timestamp).toISOString(),
-          is_public: false
-        });
-
-      if (dbError) throw dbError;
-      return; 
-    } catch (error) {
-      console.error("Supabase Storage Error (Fallback to Local):", error);
-    }
-  }
-
-  // 3. INDEXED DB (OFFLINE/LOCAL FALLBACK)
-  console.log("[Storage] Saving to Local (Fallback)");
+  // ONLY SAVE TO INDEXED DB (LOCAL STORAGE)
+  console.log("[Storage] Saving to Local IndexedDB");
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const transaction = db.transaction([STORE_NAME], 'readwrite');
@@ -196,40 +133,63 @@ export const saveImageToStorage = async (image: GeneratedImage): Promise<void> =
 };
 
 export const shareImageToShowcase = async (id: string, isShared: boolean): Promise<boolean> => {
-    // Sharing logic remains metadata-based in Supabase
-    if (supabase) {
-        try {
-            const { error } = await supabase
-                .from(TABLE_NAME)
-                .update({ is_public: isShared })
-                .eq('id', id);
-            
-            if (!error) return true;
-        } catch (e) {
-            console.warn("Share cloud error", e);
-        }
-    }
-
-    // Local Fallback
+    // Local Fallback first to get the image data
     const db = await openDB();
-    return new Promise((resolve, reject) => {
+    const localUpdateSuccess = await new Promise<boolean>((resolve, reject) => {
         const transaction = db.transaction([STORE_NAME], 'readwrite');
         const store = transaction.objectStore(STORE_NAME);
         const getReq = store.get(id);
 
-        getReq.onsuccess = () => {
+        getReq.onsuccess = async () => {
             const data = getReq.result as GeneratedImage;
             if (data) {
                 data.isShared = isShared;
                 const updateReq = store.put(data);
                 updateReq.onsuccess = () => resolve(true);
                 updateReq.onerror = () => reject(updateReq.error);
+                
+                // If sharing, upload to cloud
+                if (isShared && supabase && IMGBB_API_KEY) {
+                    try {
+                        // Check if it already exists in Supabase
+                        const { data: existing } = await supabase.from(TABLE_NAME).select('id').eq('id', id).single();
+                        
+                        if (!existing) {
+                            const user = await getUserProfile();
+                            console.log("[Storage] Uploading shared image to ImgBB...");
+                            const publicUrl = await uploadFileToR2(data.url, 'outputs', `${user.username}_${data.id}`);
+                            
+                            await supabase.from(TABLE_NAME).insert({
+                                id: data.id,
+                                user_id: user.id, 
+                                image_url: publicUrl,
+                                prompt: data.prompt,
+                                model_used: data.engine,
+                                created_at: new Date(data.timestamp).toISOString(),
+                                is_public: true
+                            });
+                        } else {
+                            await supabase.from(TABLE_NAME).update({ is_public: true }).eq('id', id);
+                        }
+                    } catch (e) {
+                        console.error("Failed to upload shared image to cloud:", e);
+                    }
+                } else if (!isShared && supabase) {
+                    // Unshare
+                    try {
+                        await supabase.from(TABLE_NAME).update({ is_public: false }).eq('id', id);
+                    } catch (e) {
+                        console.error("Failed to unshare image in cloud:", e);
+                    }
+                }
             } else {
                 resolve(false);
             }
         };
         getReq.onerror = () => reject(getReq.error);
     });
+
+    return localUpdateSuccess;
 };
 
 export const getShowcaseImages = async (): Promise<GeneratedImage[]> => {
@@ -308,38 +268,7 @@ export const getAllImagesSystemWide = async (): Promise<GeneratedImage[]> => {
 };
 
 export const getAllImagesFromStorage = async (): Promise<GeneratedImage[]> => {
-  // 1. SUPABASE (Fetches metadata, URL points to R2 or Supabase Storage)
-  if (supabase) {
-    try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if(user) {
-            const { data, error } = await supabase
-                .from(TABLE_NAME)
-                .select('*')
-                .eq('user_id', user.id)
-                .order('created_at', { ascending: false });
-
-            if (!error && data) {
-                return data.map((row: any) => ({
-                    id: row.id,
-                    url: row.image_url,
-                    prompt: row.prompt,
-                    timestamp: new Date(row.created_at).getTime(),
-                    toolId: 'gen_tool',
-                    toolName: row.model_used || 'AI Gen',
-                    engine: row.model_used,
-                    isShared: row.is_public,
-                    userName: 'Me',
-                    userId: row.user_id
-                }));
-            }
-        }
-    } catch (error) {
-      console.error("Supabase Load Error (Fallback to Local):", error);
-    }
-  }
-
-  // 2. INDEXED DB
+  // ONLY INDEXED DB (LOCAL STORAGE)
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const transaction = db.transaction([STORE_NAME], 'readonly');
@@ -418,76 +347,54 @@ export const deleteImageFromStorage = async (id: string, targetUserId?: string, 
   });
 };
 
-export const migrateR2ToImgBB = async (
+export const deleteAllUnsharedImagesFromCloud = async (
     onProgress: (current: number, total: number, message: string) => void
 ): Promise<void> => {
     if (!supabase) throw new Error("Supabase not connected");
-    if (!IMGBB_API_KEY) throw new Error("ImgBB API Key not configured");
 
     try {
-        // 1. Fetch all images that are NOT on ImgBB (e.g., containing R2_PUBLIC_URL or just not containing 'ibb.co')
+        // Fetch all images that are NOT public
         const { data: images, error } = await supabase
             .from(TABLE_NAME)
-            .select('id, image_url, user_id')
-            .not('image_url', 'ilike', '%ibb.co%');
+            .select('id, image_url')
+            .eq('is_public', false);
 
         if (error) throw error;
         
         if (!images || images.length === 0) {
-            onProgress(0, 0, "Không có ảnh nào cần chuyển đổi (Tất cả đã nằm trên ImgBB).");
+            onProgress(0, 0, "Không có ảnh nào cần xóa.");
             return;
         }
 
         const total = images.length;
         let current = 0;
 
-        // Helper function for delay
-        const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+        // Delete in chunks of 50
+        const chunkSize = 50;
+        for (let i = 0; i < images.length; i += chunkSize) {
+            const chunk = images.slice(i, i + chunkSize);
+            const ids = chunk.map(img => img.id);
+            
+            onProgress(current, total, `Đang xóa ${ids.length} ảnh từ Database...`);
+            
+            const { error: deleteError } = await supabase
+                .from(TABLE_NAME)
+                .delete()
+                .in('id', ids);
 
-        for (const img of images) {
-            try {
-                onProgress(current, total, `Đang tải ảnh ${img.id} từ R2...`);
-                
-                // Fetch image from old URL
-                const response = await fetch(img.image_url);
-                if (!response.ok) throw new Error(`Failed to fetch ${img.image_url}`);
-                const blob = await response.blob();
-
-                onProgress(current, total, `Đang upload ảnh ${img.id} lên ImgBB...`);
-                
-                // Add a small delay before uploading to avoid rate limits
-                await delay(1500); // 1.5 seconds delay
-                
-                // Upload to ImgBB
-                const newUrl = await uploadFileToR2(blob, 'migration', `user_${img.user_id}_${img.id}`);
-
-                onProgress(current, total, `Đang cập nhật Database cho ảnh ${img.id}...`);
-                // Update Supabase
-                const { error: updateError } = await supabase
-                    .from(TABLE_NAME)
-                    .update({ image_url: newUrl })
-                    .eq('id', img.id);
-
-                if (updateError) throw updateError;
-
-                current++;
-                onProgress(current, total, `Hoàn thành ảnh ${img.id}`);
-            } catch (err: any) {
-                console.error(`Lỗi khi migrate ảnh ${img.id}:`, err);
-                onProgress(current, total, `Lỗi ảnh ${img.id}: ${err.message}`);
-                
-                // If it's a rate limit error, wait longer before the next iteration
-                if (err.message && err.message.toLowerCase().includes('rate limit')) {
-                    onProgress(current, total, `Phát hiện Rate Limit, tạm nghỉ 5 giây...`);
-                    await delay(5000);
-                }
-                // Continue with the next image even if one fails
+            if (deleteError) {
+                console.error("Lỗi khi xóa chunk:", deleteError);
+                onProgress(current, total, `Lỗi khi xóa: ${deleteError.message}`);
+                continue;
             }
+
+            current += ids.length;
+            onProgress(current, total, `Đã xóa ${current}/${total} ảnh`);
         }
         
-        onProgress(current, total, `Đã hoàn tất chuyển đổi ${current}/${total} ảnh sang ImgBB.`);
+        onProgress(total, total, "Hoàn tất xóa ảnh không chia sẻ.");
     } catch (e: any) {
-        console.error("Migration Error:", e);
+        console.error("Lỗi xóa ảnh:", e);
         throw e;
     }
 };

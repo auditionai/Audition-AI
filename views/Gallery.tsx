@@ -235,12 +235,13 @@ export const Gallery: React.FC<GalleryProps> = ({ lang }) => {
       
       {/* STORAGE POLICY WARNING BANNER */}
       <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 flex items-start gap-3">
-          <Icons.Info className="w-5 h-5 text-yellow-500 shrink-0 mt-0.5" />
+          <Icons.AlertTriangle className="w-5 h-5 text-yellow-500 shrink-0 mt-0.5" />
           <div className="space-y-1">
-              <h4 className="text-sm font-bold text-white">Chính sách lưu trữ ảnh</h4>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                  Ảnh trong thư viện sẽ tự động bị xóa sau <b className="text-yellow-500">7 ngày</b> để tối ưu bộ nhớ hệ thống. 
-                  Vui lòng tải ảnh về máy để lưu trữ.
+              <h4 className="text-sm font-bold text-yellow-500 uppercase tracking-wider">Cảnh Báo Lưu Trữ Ảnh</h4>
+              <p className="text-xs text-yellow-200/80 leading-relaxed">
+                  Toàn bộ ảnh trong thư viện <b>chỉ được lưu trữ tạm thời trên trình duyệt (Localhost)</b> của thiết bị này. 
+                  <br/>Ảnh sẽ <b>bị mất vĩnh viễn</b> nếu bạn xóa dữ liệu duyệt web, sử dụng trình duyệt ẩn danh, hoặc đổi sang thiết bị khác. 
+                  <br/><span className="text-white font-semibold">Khuyến nghị: Vui lòng tải ảnh xuống máy tính để lưu trữ an toàn.</span>
               </p>
           </div>
       </div>

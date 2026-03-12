@@ -35,7 +35,8 @@ const SMART_TIPS = [
     { icon: Icons.Unlock, text: "🔓 Tip: Tắt 'Khóa Mặt' nếu bạn muốn AI tự sáng tạo khuôn mặt mới ngẫu nhiên." },
     { icon: Icons.Image, text: "📸 Mẹo: Ảnh mẫu (Ref) nên có góc chụp tương đồng với ý tưởng bạn muốn tạo." },
     { icon: Icons.MessageCircle, text: "✍️ Tip: Bí ý tưởng? Dùng nút 'Sử dụng Prompt Mẫu' để lấy ý tưởng từ cộng đồng." },
-    { icon: Icons.Monitor, text: "🖥️ Lưu ý: Độ phân giải 4K rất nét, thích hợp in ấn nhưng sẽ tốn thời gian xử lý hơn." }
+    { icon: Icons.Monitor, text: "🖥️ Lưu ý: Độ phân giải 4K rất nét, thích hợp in ấn nhưng sẽ tốn thời gian xử lý hơn." },
+    { icon: Icons.ExternalLink, text: "👗 Mẹo: Truy cập AuMix3D.com để mix đồ và chụp ảnh nhân vật tách nền cực nét làm nguyên liệu cho AI!" }
 ];
 
 const TUTORIAL_VIDEO_ID = "ba2WR8txe_c"; 
@@ -589,6 +590,16 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                                   <br/><span className="text-slate-400 italic">Nếu ảnh mờ, hãy dùng công cụ <b className="text-audi-pink">Làm Nét</b> để nâng cấp chất lượng.</span>
                               </li>
                           </ul>
+                          
+                          <div className="mt-3 p-3 bg-audi-cyan/10 border border-audi-cyan/30 rounded-lg flex items-start gap-3">
+                              <Icons.Sparkles className="w-5 h-5 text-audi-cyan shrink-0 mt-0.5" />
+                              <div>
+                                  <h4 className="text-xs font-bold text-audi-cyan mb-1">Mẹo: Lấy nguyên liệu cực nhanh</h4>
+                                  <p className="text-[11px] text-slate-300">
+                                      Bạn chưa có ảnh nhân vật? Hãy truy cập ngay <a href="https://aumix3d.com/" target="_blank" rel="noopener noreferrer" className="text-white font-bold underline hover:text-audi-cyan transition-colors">AuMix3D.com</a> để tự do mix đồ từ hàng ngàn item và chụp ảnh tách nền chất lượng cao chỉ trong 1 nốt nhạc!
+                                  </p>
+                              </div>
+                          </div>
                       </div>
 
                       {/* Các bước tạo ảnh */}
@@ -923,7 +934,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
         </div>
 
         {/* MOVED NOTIFICATION BANNER */}
-        <div className="w-full mb-4 md:mb-6 bg-yellow-500/5 border border-yellow-500/20 rounded-xl p-3 flex items-center gap-3 animate-fade-in hover:bg-yellow-500/10 transition-colors">
+        <div className="w-full mb-4 bg-yellow-500/5 border border-yellow-500/20 rounded-xl p-3 flex items-center gap-3 animate-fade-in hover:bg-yellow-500/10 transition-colors">
             <div className="shrink-0 p-1.5 bg-yellow-500/10 rounded-full">
                 <Icons.Flame className="w-4 h-4 text-yellow-500 animate-pulse" />
             </div>
@@ -931,6 +942,36 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                 <strong className="text-yellow-500">Lưu ý:</strong> Mô hình <span className="text-audi-cyan font-bold">Flash</span> có tốc độ nhanh nhưng chất lượng ảnh thấp hơn, chi tiết nhân vật và độ khối 3D kém hơn. Hãy chọn <span className="text-audi-pink font-bold">Pro</span> để có những bức ảnh đẹp nhất, sắc nét và sống động.
             </p>
         </div>
+
+        {/* NEW HORIZONTAL AUMIX3D PROMO BANNER */}
+        <a 
+            href="https://aumix3d.com/" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="w-full mb-4 md:mb-6 bg-gradient-to-r from-[#001a2c] to-[#000a14] border border-audi-cyan/30 rounded-xl p-3 md:p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 md:gap-4 animate-fade-in hover:border-audi-cyan transition-all shadow-[0_0_20px_rgba(33,212,253,0.1)] group relative overflow-hidden"
+        >
+            <div className="absolute top-0 right-0 w-32 h-32 bg-audi-cyan/10 blur-[40px] rounded-full group-hover:bg-audi-cyan/20 transition-all"></div>
+            <div className="relative z-10 flex items-center gap-3 md:gap-4 w-full md:w-auto">
+                <div className="shrink-0 w-10 h-10 md:w-12 md:h-12 rounded-full bg-audi-cyan/10 flex items-center justify-center border border-audi-cyan/30 group-hover:scale-110 transition-transform">
+                    <Icons.Sparkles className="w-5 h-5 md:w-6 md:h-6 text-audi-cyan" />
+                </div>
+                <div>
+                    <div className="flex items-center gap-2 mb-1">
+                        <span className="bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded uppercase animate-pulse">MỚI</span>
+                        <h4 className="text-white font-bold text-xs md:text-sm uppercase tracking-wider group-hover:text-audi-cyan transition-colors">Mix Đồ 3D Audition</h4>
+                    </div>
+                    <p className="text-[10px] md:text-xs text-slate-400 leading-relaxed">
+                        Bạn chưa có ảnh nhân vật? Mix đồ và chụp ảnh tách nền cực nét ngay trên web mà không cần vào game.
+                    </p>
+                </div>
+            </div>
+            <div className="relative z-10 shrink-0 w-full md:w-auto mt-1 md:mt-0">
+                <div className="w-full md:w-auto px-4 py-2 bg-audi-cyan/20 hover:bg-audi-cyan/30 border border-audi-cyan/50 rounded-lg flex items-center justify-center gap-2 transition-all group-hover:shadow-[0_0_15px_rgba(33,212,253,0.4)]">
+                    <span className="text-[10px] md:text-xs font-bold text-audi-cyan uppercase">Mở AuMix3D</span>
+                    <Icons.ExternalLink className="w-3 h-3 md:w-4 md:h-4 text-audi-cyan" />
+                </div>
+            </div>
+        </a>
 
         <div className="w-full grid grid-cols-1 lg:grid-cols-3 gap-6 mt-4 md:mt-0">
             <div className="lg:col-span-2 space-y-4">

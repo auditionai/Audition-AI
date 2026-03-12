@@ -159,39 +159,40 @@ export const Home: React.FC<HomeProps> = ({ lang, onSelectFeature, onNavigate, o
         href="https://aumix3d.com/" 
         target="_blank" 
         rel="noopener noreferrer"
-        className="block relative rounded-2xl overflow-hidden border border-audi-cyan/30 bg-gradient-to-r from-[#001a2c] to-[#000a14] p-6 group hover:border-audi-cyan transition-all shadow-[0_0_30px_rgba(33,212,253,0.1)] hover:shadow-[0_0_40px_rgba(33,212,253,0.3)] animate-fade-in"
+        className="block relative rounded-2xl overflow-hidden border border-audi-cyan/30 bg-gradient-to-r from-[#001a2c] to-[#000a14] p-4 md:p-6 group hover:border-audi-cyan transition-all shadow-[0_0_30px_rgba(33,212,253,0.1)] hover:shadow-[0_0_40px_rgba(33,212,253,0.3)] animate-fade-in"
       >
           <div className="absolute top-0 right-0 w-64 h-64 bg-audi-cyan/10 blur-[80px] rounded-full group-hover:bg-audi-cyan/20 transition-all"></div>
           <div className="absolute bottom-0 left-0 w-40 h-40 bg-audi-purple/10 blur-[60px] rounded-full"></div>
           
-          <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
-              <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
-                      <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded uppercase animate-pulse shadow-[0_0_10px_#ef4444]">MỚI</span>
-                      <span className="text-audi-cyan text-xs font-bold uppercase tracking-widest flex items-center gap-1">
+          <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 md:gap-6">
+              <div className="flex-1 w-full">
+                  <div className="flex items-center gap-2 mb-1.5 md:mb-2">
+                      <span className="bg-red-500 text-white text-[9px] md:text-[10px] font-bold px-1.5 md:px-2 py-0.5 rounded uppercase animate-pulse shadow-[0_0_10px_#ef4444]">MỚI</span>
+                      <span className="text-audi-cyan text-[10px] md:text-xs font-bold uppercase tracking-widest flex items-center gap-1">
                           <Icons.Sparkles className="w-3 h-3" /> Đối tác chính thức
                       </span>
                   </div>
-                  <h2 className="font-game text-2xl md:text-3xl font-bold text-white mb-2 group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-white group-hover:to-audi-cyan transition-all">
+                  <h2 className="font-game text-xl md:text-3xl font-bold text-white mb-1.5 md:mb-2 group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-white group-hover:to-audi-cyan transition-all leading-tight">
                       NỀN TẢNG MIX ĐỒ 3D AUDITION
                   </h2>
-                  <p className="text-sm text-slate-400 mb-4 max-w-2xl leading-relaxed">
+                  <p className="text-xs md:text-sm text-slate-400 mb-3 md:mb-4 max-w-2xl leading-relaxed line-clamp-2 md:line-clamp-none">
                       Mix đồ trực tiếp trên Web/Mobile không cần vào game. Hàng ngàn item cập nhật liên tục. Chụp ảnh nhân vật chất lượng cao để dùng làm nguyên liệu tạo ảnh AI tại đây!
                   </p>
-                  <div className="flex flex-wrap gap-2">
-                      <span className="text-[10px] px-2 py-1 bg-white/5 border border-white/10 rounded text-slate-300">Kho Item Đầy Đủ</span>
-                      <span className="text-[10px] px-2 py-1 bg-white/5 border border-white/10 rounded text-slate-300">Không Cần Đăng Nhập Vào Game</span>
-                      <span className="text-[10px] px-2 py-1 bg-white/5 border border-white/10 rounded text-slate-300">Lưu Set Đồ Vô Hạn</span>
+                  <div className="flex flex-wrap gap-1.5 md:gap-2">
+                      <span className="text-[9px] md:text-[10px] px-1.5 md:px-2 py-0.5 md:py-1 bg-white/5 border border-white/10 rounded text-slate-300 whitespace-nowrap">Kho Item Đầy Đủ</span>
+                      <span className="text-[9px] md:text-[10px] px-1.5 md:px-2 py-0.5 md:py-1 bg-white/5 border border-white/10 rounded text-slate-300 whitespace-nowrap">Không Cần Vào Game</span>
+                      <span className="text-[9px] md:text-[10px] px-1.5 md:px-2 py-0.5 md:py-1 bg-white/5 border border-white/10 rounded text-slate-300 whitespace-nowrap">Lưu Set Đồ Vô Hạn</span>
                   </div>
               </div>
               
-              <div className="shrink-0 flex flex-col items-center gap-3">
-                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-audi-cyan to-blue-600 p-[2px] shadow-lg shadow-cyan-500/30 group-hover:scale-110 transition-transform">
-                      <div className="w-full h-full bg-black rounded-2xl flex items-center justify-center">
-                          <Icons.ExternalLink className="w-8 h-8 text-audi-cyan" />
+              <div className="shrink-0 flex flex-row md:flex-col items-center gap-2 md:gap-3 w-full md:w-auto justify-between md:justify-center mt-2 md:mt-0 border-t border-white/10 md:border-t-0 pt-3 md:pt-0">
+                  <span className="text-[10px] md:text-xs font-bold text-audi-cyan uppercase tracking-wider group-hover:underline md:hidden">Trải nghiệm ngay</span>
+                  <div className="w-8 h-8 md:w-16 md:h-16 rounded-xl md:rounded-2xl bg-gradient-to-br from-audi-cyan to-blue-600 p-[1px] md:p-[2px] shadow-lg shadow-cyan-500/30 group-hover:scale-110 transition-transform">
+                      <div className="w-full h-full bg-black rounded-xl md:rounded-2xl flex items-center justify-center">
+                          <Icons.ExternalLink className="w-4 h-4 md:w-8 md:h-8 text-audi-cyan" />
                       </div>
                   </div>
-                  <span className="text-xs font-bold text-audi-cyan uppercase tracking-wider group-hover:underline">Trải nghiệm ngay</span>
+                  <span className="text-xs font-bold text-audi-cyan uppercase tracking-wider group-hover:underline hidden md:block">Trải nghiệm ngay</span>
               </div>
           </div>
       </a>

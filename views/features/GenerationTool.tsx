@@ -934,7 +934,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
         </div>
 
         {/* MOVED NOTIFICATION BANNER */}
-        <div className="w-full mb-4 md:mb-6 bg-yellow-500/5 border border-yellow-500/20 rounded-xl p-3 flex items-center gap-3 animate-fade-in hover:bg-yellow-500/10 transition-colors">
+        <div className="w-full mb-4 bg-yellow-500/5 border border-yellow-500/20 rounded-xl p-3 flex items-center gap-3 animate-fade-in hover:bg-yellow-500/10 transition-colors">
             <div className="shrink-0 p-1.5 bg-yellow-500/10 rounded-full">
                 <Icons.Flame className="w-4 h-4 text-yellow-500 animate-pulse" />
             </div>
@@ -943,6 +943,36 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
             </p>
         </div>
 
+        {/* NEW HORIZONTAL AUMIX3D PROMO BANNER */}
+        <a 
+            href="https://aumix3d.com/" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="w-full mb-4 md:mb-6 bg-gradient-to-r from-[#001a2c] to-[#000a14] border border-audi-cyan/30 rounded-xl p-3 md:p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 md:gap-4 animate-fade-in hover:border-audi-cyan transition-all shadow-[0_0_20px_rgba(33,212,253,0.1)] group relative overflow-hidden"
+        >
+            <div className="absolute top-0 right-0 w-32 h-32 bg-audi-cyan/10 blur-[40px] rounded-full group-hover:bg-audi-cyan/20 transition-all"></div>
+            <div className="relative z-10 flex items-center gap-3 md:gap-4 w-full md:w-auto">
+                <div className="shrink-0 w-10 h-10 md:w-12 md:h-12 rounded-full bg-audi-cyan/10 flex items-center justify-center border border-audi-cyan/30 group-hover:scale-110 transition-transform">
+                    <Icons.Sparkles className="w-5 h-5 md:w-6 md:h-6 text-audi-cyan" />
+                </div>
+                <div>
+                    <div className="flex items-center gap-2 mb-1">
+                        <span className="bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded uppercase animate-pulse">MỚI</span>
+                        <h4 className="text-white font-bold text-xs md:text-sm uppercase tracking-wider group-hover:text-audi-cyan transition-colors">Mix Đồ 3D Audition</h4>
+                    </div>
+                    <p className="text-[10px] md:text-xs text-slate-400 leading-relaxed">
+                        Bạn chưa có ảnh nhân vật? Mix đồ và chụp ảnh tách nền cực nét ngay trên web mà không cần vào game.
+                    </p>
+                </div>
+            </div>
+            <div className="relative z-10 shrink-0 w-full md:w-auto mt-1 md:mt-0">
+                <div className="w-full md:w-auto px-4 py-2 bg-audi-cyan/20 hover:bg-audi-cyan/30 border border-audi-cyan/50 rounded-lg flex items-center justify-center gap-2 transition-all group-hover:shadow-[0_0_15px_rgba(33,212,253,0.4)]">
+                    <span className="text-[10px] md:text-xs font-bold text-audi-cyan uppercase">Mở AuMix3D</span>
+                    <Icons.ExternalLink className="w-3 h-3 md:w-4 md:h-4 text-audi-cyan" />
+                </div>
+            </div>
+        </a>
+
         <div className="w-full grid grid-cols-1 lg:grid-cols-3 gap-6 mt-4 md:mt-0">
             <div className="lg:col-span-2 space-y-4">
                 <div className="flex items-center justify-between px-2">
@@ -950,14 +980,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                         <Icons.User className="w-4 h-4 text-audi-pink" /> 1. Upload Nhân Vật
                     </h3>
                     <div className="flex gap-2 flex-wrap justify-end">
-                        <a 
-                            href="https://aumix3d.com/" 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-1 text-[10px] font-bold text-audi-cyan hover:scale-105 transition-transform bg-gradient-to-r from-audi-cyan/10 to-audi-purple/10 px-3 py-1 rounded-full border border-audi-cyan/50 shadow-[0_0_10px_rgba(33,212,253,0.2)] md:hidden"
-                        >
-                            <Icons.ExternalLink className="w-3 h-3" /> Mix Đồ 3D
-                        </a>
                         {onNavigateToFeature && (
                             <>
                                 <button 
@@ -1049,29 +1071,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                             </div>
                         </div>
                     ))}
-                    
-                    {/* NEW: AuMix3D Promo Card */}
-                    <div className="w-full md:w-[220px] bg-gradient-to-b from-[#001a2c] to-[#000a14] border border-audi-cyan/30 rounded-2xl p-4 hover:border-audi-cyan transition-colors relative group shrink-0 shadow-[0_0_20px_rgba(33,212,253,0.1)] flex flex-col justify-between hidden md:flex">
-                        <div>
-                            <div className="flex items-center gap-2 mb-3">
-                                <span className="bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded uppercase animate-pulse">MỚI</span>
-                                <span className="text-audi-cyan text-[10px] font-bold uppercase tracking-wider">Lấy Nguyên Liệu</span>
-                            </div>
-                            <h4 className="text-white font-bold text-sm mb-2 leading-tight">Mix Đồ 3D Audition</h4>
-                            <p className="text-[10px] text-slate-400 leading-relaxed">
-                                Bạn chưa có ảnh nhân vật? Mix đồ và chụp ảnh tách nền cực nét ngay trên web mà không cần vào game.
-                            </p>
-                        </div>
-                        <a 
-                            href="https://aumix3d.com/" 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="mt-4 w-full py-2 bg-audi-cyan/20 hover:bg-audi-cyan/30 border border-audi-cyan/50 rounded-xl flex items-center justify-center gap-2 transition-all group-hover:shadow-[0_0_15px_rgba(33,212,253,0.4)]"
-                        >
-                            <span className="text-[10px] font-bold text-audi-cyan uppercase">Mở AuMix3D</span>
-                            <Icons.ExternalLink className="w-3 h-3 text-audi-cyan" />
-                        </a>
-                    </div>
                 </div>
 
                 <div className="bg-[#12121a] border border-white/10 rounded-2xl p-4 shadow-lg">

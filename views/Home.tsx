@@ -180,7 +180,7 @@ export const Home: React.FC<HomeProps> = ({ lang, onSelectFeature, onNavigate, o
                   </p>
                   <div className="flex flex-wrap gap-2">
                       <span className="text-[10px] px-2 py-1 bg-white/5 border border-white/10 rounded text-slate-300">Kho Item Đầy Đủ</span>
-                      <span className="text-[10px] px-2 py-1 bg-white/5 border border-white/10 rounded text-slate-300">Không Văng Game</span>
+                      <span className="text-[10px] px-2 py-1 bg-white/5 border border-white/10 rounded text-slate-300">Không Cần Đăng Nhập Vào Game</span>
                       <span className="text-[10px] px-2 py-1 bg-white/5 border border-white/10 rounded text-slate-300">Lưu Set Đồ Vô Hạn</span>
                   </div>
               </div>

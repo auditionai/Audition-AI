@@ -172,7 +172,7 @@ export const Layout: React.FC<LayoutProps> = ({
                       onClick={() => onNavigate('settings')}
                       className={`relative w-11 h-11 md:w-12 md:h-12 rounded-full overflow-hidden border-2 transition-all group ${currentView === 'settings' ? 'border-audi-pink shadow-[0_0_15px_rgba(255,0,153,0.5)]' : 'border-white/10 hover:border-audi-pink'}`}
                   >
-                      <img src={user?.avatar || "https://picsum.photos/100/100"} alt="User" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                      <img src={user?.avatar || "https://picsum.photos/100/100"} alt="User" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" onError={(e) => { e.currentTarget.src = "https://picsum.photos/100/100"; }} />
                   </button>
               </div>
 

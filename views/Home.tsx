@@ -154,6 +154,48 @@ export const Home: React.FC<HomeProps> = ({ lang, onSelectFeature, onNavigate, o
           </div>
       </div>
 
+      {/* NEW: PROMO BANNER FOR AUMIX3D */}
+      <a 
+        href="https://aumix3d.com/" 
+        target="_blank" 
+        rel="noopener noreferrer"
+        className="block relative rounded-2xl overflow-hidden border border-audi-cyan/30 bg-gradient-to-r from-[#001a2c] to-[#000a14] p-6 group hover:border-audi-cyan transition-all shadow-[0_0_30px_rgba(33,212,253,0.1)] hover:shadow-[0_0_40px_rgba(33,212,253,0.3)] animate-fade-in"
+      >
+          <div className="absolute top-0 right-0 w-64 h-64 bg-audi-cyan/10 blur-[80px] rounded-full group-hover:bg-audi-cyan/20 transition-all"></div>
+          <div className="absolute bottom-0 left-0 w-40 h-40 bg-audi-purple/10 blur-[60px] rounded-full"></div>
+          
+          <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
+              <div className="flex-1">
+                  <div className="flex items-center gap-3 mb-2">
+                      <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded uppercase animate-pulse shadow-[0_0_10px_#ef4444]">MỚI</span>
+                      <span className="text-audi-cyan text-xs font-bold uppercase tracking-widest flex items-center gap-1">
+                          <Icons.Sparkles className="w-3 h-3" /> Đối tác chính thức
+                      </span>
+                  </div>
+                  <h2 className="font-game text-2xl md:text-3xl font-bold text-white mb-2 group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-white group-hover:to-audi-cyan transition-all">
+                      NỀN TẢNG MIX ĐỒ 3D AUDITION
+                  </h2>
+                  <p className="text-sm text-slate-400 mb-4 max-w-2xl leading-relaxed">
+                      Mix đồ trực tiếp trên Web/Mobile không cần vào game. Hàng ngàn item cập nhật liên tục. Chụp ảnh nhân vật chất lượng cao để dùng làm nguyên liệu tạo ảnh AI tại đây!
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                      <span className="text-[10px] px-2 py-1 bg-white/5 border border-white/10 rounded text-slate-300">Kho Item Đầy Đủ</span>
+                      <span className="text-[10px] px-2 py-1 bg-white/5 border border-white/10 rounded text-slate-300">Không Văng Game</span>
+                      <span className="text-[10px] px-2 py-1 bg-white/5 border border-white/10 rounded text-slate-300">Lưu Set Đồ Vô Hạn</span>
+                  </div>
+              </div>
+              
+              <div className="shrink-0 flex flex-col items-center gap-3">
+                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-audi-cyan to-blue-600 p-[2px] shadow-lg shadow-cyan-500/30 group-hover:scale-110 transition-transform">
+                      <div className="w-full h-full bg-black rounded-2xl flex items-center justify-center">
+                          <Icons.ExternalLink className="w-8 h-8 text-audi-cyan" />
+                      </div>
+                  </div>
+                  <span className="text-xs font-bold text-audi-cyan uppercase tracking-wider group-hover:underline">Trải nghiệm ngay</span>
+              </div>
+          </div>
+      </a>
+
       {/* SECTION 1: STUDIO AI (Generation) */}
       <div className="animate-fade-in">
         <div className="flex items-end justify-between mb-8 border-b border-white/10 pb-4">

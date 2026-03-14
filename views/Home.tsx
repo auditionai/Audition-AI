@@ -55,7 +55,7 @@ const FeatureCard: React.FC<FeatureCardProps> = React.memo(({ feature, lang, onC
             {/* Header: Icon & Badges */}
             <div className="flex justify-between items-start relative z-10 mb-auto">
                 <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-500 group-hover:scale-110 group-hover:rotate-3 ${getIconBg()} ${getIconColor()} border border-white/5`}>
-                    {isGen ? <Icons.Sparkles className="w-6 h-6" /> : <Icons.Wand2 className="w-6 h-6" />}
+                    {isGen ? <Icons.Sparkles className="w-6 h-6" /> : <Icons.Wand className="w-6 h-6" />}
                 </div>
                 
                 <div className="flex gap-2 flex-col items-end">
@@ -92,7 +92,7 @@ const FeatureCard: React.FC<FeatureCardProps> = React.memo(({ feature, lang, onC
             <div className="flex items-center justify-between pt-4 mt-4 border-t border-white/10 relative z-20">
                  <span className="text-[9px] font-mono text-slate-500 uppercase tracking-widest group-hover:text-slate-400 transition-colors">{feature.engine.split(' ')[0]}</span>
                  <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-500 border ${isPremium ? 'bg-audi-yellow/10 border-audi-yellow/30 group-hover:bg-audi-yellow group-hover:text-black' : isGen ? 'bg-audi-cyan/10 border-audi-cyan/30 group-hover:bg-audi-cyan group-hover:text-black' : 'bg-audi-purple/10 border-audi-purple/30 group-hover:bg-audi-purple group-hover:text-white'}`}>
-                     <Icons.ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+                     <Icons.ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
                  </div>
             </div>
         </div>

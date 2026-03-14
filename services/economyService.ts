@@ -766,11 +766,11 @@ export const getGenerationPrices = async () => {
 
 export const saveGenerationPrices = async (prices: any) => {
     try {
-        const { data: existing } = await supabase.from('system_settings').select('id').eq('key', 'generation_prices').maybeSingle();
+        const { data: existing } = await supabase.from('system_settings').select('key').eq('key', 'generation_prices').maybeSingle();
         
         let error;
         if (existing) {
-            const res = await supabase.from('system_settings').update({ value: prices }).eq('id', existing.id);
+            const res = await supabase.from('system_settings').update({ value: prices }).eq('key', 'generation_prices');
             error = res.error;
         } else {
             const res = await supabase.from('system_settings').insert({ key: 'generation_prices', value: prices });
@@ -815,11 +815,11 @@ export const getGiftcodePromoConfig = async () => {
 
 export const saveGiftcodePromoConfig = async (text: string, isActive: boolean) => {
     try {
-        const { data: existing } = await supabase.from('system_settings').select('id').eq('key', 'giftcode_promo').maybeSingle();
+        const { data: existing } = await supabase.from('system_settings').select('key').eq('key', 'giftcode_promo').maybeSingle();
         
         let error;
         if (existing) {
-            const res = await supabase.from('system_settings').update({ value: { text, isActive } }).eq('id', existing.id);
+            const res = await supabase.from('system_settings').update({ value: { text, isActive } }).eq('key', 'giftcode_promo');
             error = res.error;
         } else {
             const res = await supabase.from('system_settings').insert({ key: 'giftcode_promo', value: { text, isActive } });

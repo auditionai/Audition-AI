@@ -1470,8 +1470,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           <button 
                               onClick={async () => {
                                   const res = await saveGenerationPrices(generationPrices);
-                                  if (res.success) notify("Đã lưu cấu hình giá thành công!", "success");
-                                  else notify("Lỗi khi lưu cấu hình giá.", "error");
+                                  if (res.success) showToast("Đã lưu cấu hình giá thành công!", "success");
+                                  else showToast(`Lỗi khi lưu cấu hình giá: ${res.error}`, "error");
                               }}
                               className="px-4 py-2 bg-audi-yellow text-black font-bold rounded-lg text-sm hover:bg-yellow-400 transition-colors"
                           >

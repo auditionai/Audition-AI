@@ -766,11 +766,15 @@ export const getGenerationPrices = async () => {
 
 export const saveGenerationPrices = async (prices: any) => {
     try {
-        const { error } = await supabase.from('system_settings').upsert({ key: 'generation_prices', value: prices });
+        const { error } = await supabase.from('system_settings').upsert(
+            { key: 'generation_prices', value: prices },
+            { onConflict: 'key' }
+        );
         
         if (error) throw error;
         return { success: true };
     } catch (e: any) {
+        console.error("saveGenerationPrices error:", e);
         return { success: false, error: e.message };
     }
 };

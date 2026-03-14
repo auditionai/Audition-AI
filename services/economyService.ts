@@ -737,16 +737,24 @@ export const getGenerationPrices = async () => {
         const { data, error } = await supabase.from('system_settings').select('value').eq('key', 'generation_prices').maybeSingle();
         
         if (data && data.value) {
+            let parsedValue = data.value;
+            if (typeof parsedValue === 'string') {
+                try {
+                    parsedValue = JSON.parse(parsedValue);
+                } catch (e) {
+                    console.error("Failed to parse generation_prices JSON string", e);
+                }
+            }
             return {
-                flash_1k: data.value.flash_1k ?? 1,
-                flash_2k: data.value.flash_2k ?? 2,
-                flash_4k: data.value.flash_4k ?? 4,
-                pro_1k: data.value.pro_1k ?? 5,
-                pro_2k: data.value.pro_2k ?? 10,
-                pro_4k: data.value.pro_4k ?? 15,
-                couple: data.value.couple ?? 2,
-                group3: data.value.group3 ?? 4,
-                group4: data.value.group4 ?? 6,
+                flash_1k: parsedValue.flash_1k ?? 1,
+                flash_2k: parsedValue.flash_2k ?? 2,
+                flash_4k: parsedValue.flash_4k ?? 4,
+                pro_1k: parsedValue.pro_1k ?? 5,
+                pro_2k: parsedValue.pro_2k ?? 10,
+                pro_4k: parsedValue.pro_4k ?? 15,
+                couple: parsedValue.couple ?? 2,
+                group3: parsedValue.group3 ?? 4,
+                group4: parsedValue.group4 ?? 6,
             };
         }
         
@@ -756,6 +764,7 @@ export const getGenerationPrices = async () => {
             couple: 2, group3: 4, group4: 6
         };
     } catch (e) {
+        console.error("getGenerationPrices error:", e);
         return { 
             flash_1k: 1, flash_2k: 2, flash_4k: 4,
             pro_1k: 5, pro_2k: 10, pro_4k: 15,
@@ -766,12 +775,28 @@ export const getGenerationPrices = async () => {
 
 export const saveGenerationPrices = async (prices: any) => {
     try {
-        const { error } = await supabase.from('system_settings').upsert(
-            { key: 'generation_prices', value: prices },
+        const sanitizedPrices = {
+            flash_1k: Number(prices.flash_1k) || 1,
+            flash_2k: Number(prices.flash_2k) || 2,
+            flash_4k: Number(prices.flash_4k) || 4,
+            pro_1k: Number(prices.pro_1k) || 5,
+            pro_2k: Number(prices.pro_2k) || 10,
+            pro_4k: Number(prices.pro_4k) || 15,
+            couple: Number(prices.couple) || 2,
+            group3: Number(prices.group3) || 4,
+            group4: Number(prices.group4) || 6,
+        };
+        // Explicitly stringify to avoid [object Object] if the column is text
+        const valueToSave = JSON.stringify(sanitizedPrices);
+        const { data, error } = await supabase.from('system_settings').upsert(
+            { key: 'generation_prices', value: valueToSave },
             { onConflict: 'key' }
-        );
+        ).select();
         
         if (error) throw error;
+        if (!data || data.length === 0) {
+            throw new Error("Không thể lưu vào database (Có thể do lỗi phân quyền RLS). Vui lòng chạy mã SQL cấp quyền.");
+        }
         return { success: true };
     } catch (e: any) {
         console.error("saveGenerationPrices error:", e);

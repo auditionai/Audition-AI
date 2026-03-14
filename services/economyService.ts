@@ -766,16 +766,7 @@ export const getGenerationPrices = async () => {
 
 export const saveGenerationPrices = async (prices: any) => {
     try {
-        const { data: existing } = await supabase.from('system_settings').select('key').eq('key', 'generation_prices').maybeSingle();
-        
-        let error;
-        if (existing) {
-            const res = await supabase.from('system_settings').update({ value: prices }).eq('key', 'generation_prices');
-            error = res.error;
-        } else {
-            const res = await supabase.from('system_settings').insert({ key: 'generation_prices', value: prices });
-            error = res.error;
-        }
+        const { error } = await supabase.from('system_settings').upsert({ key: 'generation_prices', value: prices });
         
         if (error) throw error;
         return { success: true };

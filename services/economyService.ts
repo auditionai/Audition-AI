@@ -13,7 +13,7 @@ export const getUserProfile = async (): Promise<UserProfile> => {
         .from('users')
         .select('*')
         .eq('id', user.id)
-        .single();
+        .maybeSingle();
 
     if (error || !data) {
         // Return dummy/fallback if profile missing (handled by SQL trigger normally)
@@ -125,7 +125,7 @@ export const updateUserBalance = async (amount: number, reason: string, type: st
     // 2. Update balance directly (skip RPC to avoid 404)
     try {
         // Fetch latest balance first to minimize race condition
-        const { data: latestUser } = await supabase.from('users').select('diamonds').eq('id', userId).single();
+        const { data: latestUser } = await supabase.from('users').select('diamonds').eq('id', userId).maybeSingle();
         const currentBalance = latestUser?.diamonds || 0;
         const newBalance = currentBalance + amount;
         
@@ -734,7 +734,7 @@ export const getUnifiedHistory = async (targetUserId?: string): Promise<HistoryI
 
 export const getGenerationPrices = async () => {
     try {
-        const { data, error } = await supabase.from('system_settings').select('value').eq('key', 'generation_prices').single();
+        const { data, error } = await supabase.from('system_settings').select('value').eq('key', 'generation_prices').maybeSingle();
         
         if (data && data.value) {
             return {
@@ -766,10 +766,17 @@ export const getGenerationPrices = async () => {
 
 export const saveGenerationPrices = async (prices: any) => {
     try {
-        const { error } = await supabase.from('system_settings').upsert({
-            key: 'generation_prices',
-            value: prices
-        });
+        const { data: existing } = await supabase.from('system_settings').select('id').eq('key', 'generation_prices').maybeSingle();
+        
+        let error;
+        if (existing) {
+            const res = await supabase.from('system_settings').update({ value: prices }).eq('id', existing.id);
+            error = res.error;
+        } else {
+            const res = await supabase.from('system_settings').insert({ key: 'generation_prices', value: prices });
+            error = res.error;
+        }
+        
         if (error) throw error;
         return { success: true };
     } catch (e: any) {
@@ -781,7 +788,7 @@ export const saveGenerationPrices = async (prices: any) => {
 
 export const getGiftcodePromoConfig = async () => {
     try {
-        const { data, error } = await supabase.from('system_settings').select('value').eq('key', 'giftcode_promo').single();
+        const { data, error } = await supabase.from('system_settings').select('value').eq('key', 'giftcode_promo').maybeSingle();
         
         // If DB has config, return it, but ensure text is not empty
         if (data && data.value) {
@@ -808,10 +815,17 @@ export const getGiftcodePromoConfig = async () => {
 
 export const saveGiftcodePromoConfig = async (text: string, isActive: boolean) => {
     try {
-        const { error } = await supabase.from('system_settings').upsert({
-            key: 'giftcode_promo',
-            value: { text, isActive }
-        });
+        const { data: existing } = await supabase.from('system_settings').select('id').eq('key', 'giftcode_promo').maybeSingle();
+        
+        let error;
+        if (existing) {
+            const res = await supabase.from('system_settings').update({ value: { text, isActive } }).eq('id', existing.id);
+            error = res.error;
+        } else {
+            const res = await supabase.from('system_settings').insert({ key: 'giftcode_promo', value: { text, isActive } });
+            error = res.error;
+        }
+        
         if (error) throw error;
         return { success: true };
     } catch (e: any) {
@@ -853,7 +867,7 @@ export const redeemGiftcode = async (codeStr: string): Promise<{success: boolean
 
     try {
         // 1. Get Code
-        const { data: code, error } = await supabase.from('gift_codes').select('*').eq('code', cleanCode).single();
+        const { data: code, error } = await supabase.from('gift_codes').select('*').eq('code', cleanCode).maybeSingle();
         if (error || !code || !code.is_active) throw new Error("Mã không hợp lệ hoặc đã hết hạn");
 
         // 2. Check Limits

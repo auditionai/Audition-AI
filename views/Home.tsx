@@ -20,70 +20,80 @@ interface FeatureCardProps {
 }
 
 const FeatureCard: React.FC<FeatureCardProps> = React.memo(({ feature, lang, onClick, idx }) => {
-    const [isLoaded, setIsLoaded] = useState(false);
     const isPremium = feature.isPremium;
     const tag = feature.tag;
+    const isGen = feature.toolType === 'generation';
 
-    // Dynamic borders based on category
-    const getBorderStyle = () => {
-        if (isPremium) return 'border-audi-yellow/30 hover:border-audi-yellow shadow-[0_0_15px_rgba(251,218,97,0.1)]';
-        if (feature.toolType === 'generation') return 'border-white/10 hover:border-audi-cyan/50 hover:shadow-[0_0_20px_rgba(33,212,253,0.2)]';
-        return 'border-white/10 hover:border-audi-purple/50 hover:shadow-[0_0_20px_rgba(183,33,255,0.2)]';
+    // Dynamic styles based on category
+    const getCardStyle = () => {
+        if (isPremium) return 'from-[#1a1500] to-[#0a0800] border-audi-yellow/30 hover:border-audi-yellow shadow-[0_0_15px_rgba(251,218,97,0.1)] hover:shadow-[0_0_30px_rgba(251,218,97,0.2)]';
+        if (isGen) return 'from-[#001a2c] to-[#000a14] border-audi-cyan/20 hover:border-audi-cyan/60 shadow-[0_0_15px_rgba(33,212,253,0.05)] hover:shadow-[0_0_30px_rgba(33,212,253,0.15)]';
+        return 'from-[#1a0024] to-[#0a0014] border-audi-purple/20 hover:border-audi-purple/60 shadow-[0_0_15px_rgba(183,33,255,0.05)] hover:shadow-[0_0_30px_rgba(183,33,255,0.15)]';
+    };
+
+    const getIconColor = () => {
+        if (isPremium) return 'text-audi-yellow';
+        if (isGen) return 'text-audi-cyan';
+        return 'text-audi-purple';
+    };
+
+    const getIconBg = () => {
+        if (isPremium) return 'bg-audi-yellow/10 group-hover:bg-audi-yellow/20';
+        if (isGen) return 'bg-audi-cyan/10 group-hover:bg-audi-cyan/20';
+        return 'bg-audi-purple/10 group-hover:bg-audi-purple/20';
     };
 
     return (
         <div 
             onClick={onClick}
-            className={`group relative h-[280px] rounded-[2rem] overflow-hidden bg-[#0c0c14] border transition-all duration-500 cursor-pointer flex flex-col ${getBorderStyle()} hover:-translate-y-2`}
+            className={`group relative h-[240px] rounded-[2rem] overflow-hidden bg-gradient-to-br border transition-all duration-500 cursor-pointer flex flex-col p-6 ${getCardStyle()} hover:-translate-y-2`}
         >
-            {/* Image Section */}
-            <div className="h-1/2 overflow-hidden relative">
-                <div className="absolute inset-0 bg-gradient-to-t from-[#0c0c14] to-transparent z-10 opacity-80"></div>
-                <img 
-                    src={feature.preview_image} 
-                    alt={feature.name[lang]} 
-                    loading="lazy"
-                    onLoad={() => setIsLoaded(true)}
-                    className={`w-full h-full object-cover transition-all duration-700 group-hover:scale-110 group-hover:rotate-1 ${isLoaded ? 'opacity-60' : 'opacity-0'}`}
-                />
-                
-                {/* Badges */}
-                <div className="absolute top-4 left-4 z-20 flex gap-2">
-                    <span className={`text-[10px] font-bold px-3 py-1 rounded-full backdrop-blur-md border ${feature.toolType === 'generation' ? 'bg-audi-cyan/10 border-audi-cyan text-audi-cyan' : 'bg-audi-purple/10 border-audi-purple text-audi-purple'}`}>
-                        {feature.toolType === 'generation' ? 'GEN' : 'EDIT'}
-                    </span>
-                    
-                    {tag === 'HOT' && (
-                        <span className="text-[10px] font-bold px-3 py-1 rounded-full bg-red-500 text-white border border-red-400 shadow-[0_0_10px_#ef4444] flex items-center gap-1 animate-pulse">
-                           <Icons.Zap className="w-3 h-3 fill-white" /> HOT
-                        </span>
-                    )}
+            {/* Abstract Background Glow */}
+            <div className={`absolute -top-20 -right-20 w-40 h-40 blur-[50px] rounded-full transition-all duration-700 group-hover:scale-150 ${isPremium ? 'bg-audi-yellow/20' : isGen ? 'bg-audi-cyan/20' : 'bg-audi-purple/20'}`}></div>
+            <div className={`absolute -bottom-20 -left-20 w-40 h-40 blur-[50px] rounded-full transition-all duration-700 group-hover:scale-150 ${isPremium ? 'bg-orange-500/10' : isGen ? 'bg-blue-500/10' : 'bg-pink-500/10'}`}></div>
 
-                    {isPremium && (
-                        <span className="text-[10px] font-bold px-3 py-1 rounded-full bg-audi-yellow/10 border border-audi-yellow text-audi-yellow backdrop-blur-md flex items-center gap-1">
-                            <Icons.Crown className="w-3 h-3" /> VIP
+            {/* Header: Icon & Badges */}
+            <div className="flex justify-between items-start relative z-10 mb-auto">
+                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-500 group-hover:scale-110 group-hover:rotate-3 ${getIconBg()} ${getIconColor()} border border-white/5`}>
+                    {isGen ? <Icons.Sparkles className="w-6 h-6" /> : <Icons.Wand className="w-6 h-6" />}
+                </div>
+                
+                <div className="flex gap-2 flex-col items-end">
+                    <div className="flex gap-2">
+                        <span className={`text-[9px] font-bold px-2.5 py-1 rounded-full backdrop-blur-md border tracking-wider uppercase ${isGen ? 'bg-audi-cyan/10 border-audi-cyan/50 text-audi-cyan' : 'bg-audi-purple/10 border-audi-purple/50 text-audi-purple'}`}>
+                            {isGen ? 'GEN' : 'EDIT'}
+                        </span>
+                        
+                        {isPremium && (
+                            <span className="text-[9px] font-bold px-2.5 py-1 rounded-full bg-audi-yellow/10 border border-audi-yellow/50 text-audi-yellow backdrop-blur-md flex items-center gap-1 uppercase tracking-wider">
+                                <Icons.Crown className="w-3 h-3" /> VIP
+                            </span>
+                        )}
+                    </div>
+                    {tag === 'HOT' && (
+                        <span className="text-[9px] font-bold px-2.5 py-1 rounded-full bg-gradient-to-r from-red-500 to-orange-500 text-white border border-red-400/50 shadow-[0_0_10px_rgba(239,68,68,0.5)] flex items-center gap-1 animate-pulse uppercase tracking-wider">
+                           <Icons.Flame className="w-3 h-3 fill-white" /> HOT
                         </span>
                     )}
                 </div>
             </div>
             
             {/* Content Section */}
-            <div className="flex-1 p-5 relative z-20 flex flex-col justify-between">
-                <div>
-                    <h3 className="font-game text-lg font-bold text-white mb-2 leading-tight group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-white group-hover:to-slate-400 transition-all">
-                        {feature.name[lang]}
-                    </h3>
-                    <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed font-medium">
-                        {feature.description[lang]}
-                    </p>
-                </div>
+            <div className="relative z-20 mt-6">
+                <h3 className="font-game text-xl font-bold text-white mb-2 leading-tight group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-white group-hover:to-slate-300 transition-all drop-shadow-md">
+                    {feature.name[lang]}
+                </h3>
+                <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed font-medium group-hover:text-slate-300 transition-colors">
+                    {feature.description[lang]}
+                </p>
+            </div>
 
-                <div className="flex items-center justify-between pt-3 border-t border-white/5 mt-1">
-                     <span className="text-[9px] font-mono text-slate-500 uppercase tracking-wider">{feature.engine.split(' ')[0]}</span>
-                     <div className="w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center group-hover:bg-white group-hover:text-black transition-all">
-                         <Icons.ArrowUp className="w-3 h-3 rotate-45" />
-                     </div>
-                </div>
+            {/* Footer */}
+            <div className="flex items-center justify-between pt-4 mt-4 border-t border-white/10 relative z-20">
+                 <span className="text-[9px] font-mono text-slate-500 uppercase tracking-widest group-hover:text-slate-400 transition-colors">{feature.engine.split(' ')[0]}</span>
+                 <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-500 border ${isPremium ? 'bg-audi-yellow/10 border-audi-yellow/30 group-hover:bg-audi-yellow group-hover:text-black' : isGen ? 'bg-audi-cyan/10 border-audi-cyan/30 group-hover:bg-audi-cyan group-hover:text-black' : 'bg-audi-purple/10 border-audi-purple/30 group-hover:bg-audi-purple group-hover:text-white'}`}>
+                     <Icons.ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                 </div>
             </div>
         </div>
     );

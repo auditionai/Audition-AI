@@ -13,7 +13,7 @@ export const getUserProfile = async (): Promise<UserProfile> => {
         .from('users')
         .select('*')
         .eq('id', user.id)
-        .single();
+        .maybeSingle();
 
     if (error || !data) {
         // Return dummy/fallback if profile missing (handled by SQL trigger normally)
@@ -125,7 +125,7 @@ export const updateUserBalance = async (amount: number, reason: string, type: st
     // 2. Update balance directly (skip RPC to avoid 404)
     try {
         // Fetch latest balance first to minimize race condition
-        const { data: latestUser } = await supabase.from('users').select('diamonds').eq('id', userId).single();
+        const { data: latestUser } = await supabase.from('users').select('diamonds').eq('id', userId).maybeSingle();
         const currentBalance = latestUser?.diamonds || 0;
         const newBalance = currentBalance + amount;
         
@@ -730,11 +730,85 @@ export const getUnifiedHistory = async (targetUserId?: string): Promise<HistoryI
     return history.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 };
 
+// --- GENERATION PRICES ---
+
+export const getGenerationPrices = async () => {
+    try {
+        const { data, error } = await supabase.from('system_settings').select('value').eq('key', 'generation_prices').maybeSingle();
+        
+        if (data && data.value) {
+            let parsedValue = data.value;
+            if (typeof parsedValue === 'string') {
+                try {
+                    parsedValue = JSON.parse(parsedValue);
+                } catch (e) {
+                    console.error("Failed to parse generation_prices JSON string", e);
+                }
+            }
+            return {
+                flash_1k: parsedValue.flash_1k ?? 1,
+                flash_2k: parsedValue.flash_2k ?? 2,
+                flash_4k: parsedValue.flash_4k ?? 4,
+                pro_1k: parsedValue.pro_1k ?? 5,
+                pro_2k: parsedValue.pro_2k ?? 10,
+                pro_4k: parsedValue.pro_4k ?? 15,
+                couple: parsedValue.couple ?? 2,
+                group3: parsedValue.group3 ?? 4,
+                group4: parsedValue.group4 ?? 6,
+            };
+        }
+        
+        return { 
+            flash_1k: 1, flash_2k: 2, flash_4k: 4,
+            pro_1k: 5, pro_2k: 10, pro_4k: 15,
+            couple: 2, group3: 4, group4: 6
+        };
+    } catch (e) {
+        console.error("getGenerationPrices error:", e);
+        return { 
+            flash_1k: 1, flash_2k: 2, flash_4k: 4,
+            pro_1k: 5, pro_2k: 10, pro_4k: 15,
+            couple: 2, group3: 4, group4: 6
+        };
+    }
+};
+
+export const saveGenerationPrices = async (prices: any) => {
+    try {
+        const sanitizedPrices = {
+            flash_1k: Number(prices.flash_1k) || 1,
+            flash_2k: Number(prices.flash_2k) || 2,
+            flash_4k: Number(prices.flash_4k) || 4,
+            pro_1k: Number(prices.pro_1k) || 5,
+            pro_2k: Number(prices.pro_2k) || 10,
+            pro_4k: Number(prices.pro_4k) || 15,
+            couple: Number(prices.couple) || 2,
+            group3: Number(prices.group3) || 4,
+            group4: Number(prices.group4) || 6,
+        };
+        // Explicitly stringify to avoid [object Object] if the column is text
+        const valueToSave = JSON.stringify(sanitizedPrices);
+        const { data, error } = await supabase.from('system_settings').upsert(
+            { key: 'generation_prices', value: valueToSave },
+            { onConflict: 'key' }
+        ).select();
+        
+        if (error) throw error;
+        if (!data || data.length === 0) {
+            throw new Error("Không thể lưu vào database (Có thể do lỗi phân quyền RLS). Vui lòng chạy mã SQL cấp quyền.");
+        }
+        return { success: true };
+    } catch (e: any) {
+        console.error("saveGenerationPrices error:", e);
+        return { success: false, error: e.message };
+    }
+};
+
 // --- GIFTCODES ---
 
 export const getGiftcodePromoConfig = async () => {
     try {
-        const { data, error } = await supabase.from('system_settings').select('value').eq('key', 'giftcode_promo').single();
+        const { data, error } = await supabase.from('system_settings').select('value').eq('key', 'giftcode_promo').maybeSingle();
         
         // If DB has config, return it, but ensure text is not empty
         if (data && data.value) {
@@ -761,10 +835,17 @@ export const getGiftcodePromoConfig = async () => {
 
 export const saveGiftcodePromoConfig = async (text: string, isActive: boolean) => {
     try {
-        const { error } = await supabase.from('system_settings').upsert({
-            key: 'giftcode_promo',
-            value: { text, isActive }
-        });
+        const { data: existing } = await supabase.from('system_settings').select('key').eq('key', 'giftcode_promo').maybeSingle();
+        
+        let error;
+        if (existing) {
+            const res = await supabase.from('system_settings').update({ value: { text, isActive } }).eq('key', 'giftcode_promo');
+            error = res.error;
+        } else {
+            const res = await supabase.from('system_settings').insert({ key: 'giftcode_promo', value: { text, isActive } });
+            error = res.error;
+        }
+        
         if (error) throw error;
         return { success: true };
     } catch (e: any) {
@@ -806,7 +887,7 @@ export const redeemGiftcode = async (codeStr: string): Promise<{success: boolean
 
     try {
         // 1. Get Code
-        const { data: code, error } = await supabase.from('gift_codes').select('*').eq('code', cleanCode).single();
+        const { data: code, error } = await supabase.from('gift_codes').select('*').eq('code', cleanCode).maybeSingle();
         if (error || !code || !code.is_active) throw new Error("Mã không hợp lệ hoặc đã hết hạn");
 
         // 2. Check Limits

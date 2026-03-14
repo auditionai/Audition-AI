@@ -5,7 +5,7 @@ import { Icons } from '../../components/Icons';
 import { generateImage, testApiKey } from '../../services/geminiService';
 import { saveImageToStorage, uploadFileToR2 } from '../../services/storageService';
 import { createSolidFence, optimizePayload, urlToBase64 } from '../../utils/imageProcessor';
-import { getUserProfile, updateUserBalance, getStylePresets } from '../../services/economyService';
+import { getUserProfile, updateUserBalance, getStylePresets, getGenerationPrices } from '../../services/economyService';
 import { useNotification } from '../../components/NotificationSystem';
 import { caulenhauClient } from '../../services/supabaseClient';
 
@@ -97,6 +97,13 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   const [activeStylePreset, setActiveStylePreset] = useState<string | null>(null);
   const [availableStyles, setAvailableStyles] = useState<any[]>([]);
 
+  // --- NEW: PRICES STATE ---
+  const [prices, setPrices] = useState<any>({
+      flash_1k: 1, flash_2k: 2, flash_4k: 4,
+      pro_1k: 5, pro_2k: 10, pro_4k: 15,
+      couple: 2, group3: 4, group4: 6
+  });
+
   useEffect(() => {
       // Load Default Style Preset
       const loadStyle = async () => {
@@ -110,6 +117,12 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
           }
       };
       loadStyle();
+
+      const loadPrices = async () => {
+          const p = await getGenerationPrices();
+          setPrices(p);
+      };
+      loadPrices();
   }, []);
   // -------------------------------
 
@@ -348,14 +361,14 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       let cost = 0;
       
       if (aiModel === 'flash') {
-          if (resolution === '1K') cost = 1;
-          if (resolution === '2K') cost = 2;
-          if (resolution === '4K') cost = 4;
+          if (resolution === '1K') cost = prices.flash_1k;
+          if (resolution === '2K') cost = prices.flash_2k;
+          if (resolution === '4K') cost = prices.flash_4k;
       } else {
           // Resolution Based Pricing (High Quality 3.0 Pro)
-          if (resolution === '1K') cost = 5;
-          if (resolution === '2K') cost = 10;
-          if (resolution === '4K') cost = 15;
+          if (resolution === '1K') cost = prices.pro_1k;
+          if (resolution === '2K') cost = prices.pro_2k;
+          if (resolution === '4K') cost = prices.pro_4k;
       }
 
       // Add-ons (Search & CloudRef are now FREE/INCLUDED)
@@ -363,9 +376,9 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
       // if (useCloudRef) cost += 0;
       
       // Mode Multipliers (More characters = more processing)
-      if (activeMode === 'couple') cost += 2;
-      if (activeMode === 'group3') cost += 4;
-      if (activeMode === 'group4') cost += 6;
+      if (activeMode === 'couple') cost += prices.couple;
+      if (activeMode === 'group3') cost += prices.group3;
+      if (activeMode === 'group4') cost += prices.group4;
       
       return cost;
   };
@@ -1209,15 +1222,15 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                             </div>
                             {aiModel === 'pro' ? (
                                 <div className="flex justify-between text-[9px] text-slate-500 mt-2 font-mono border-t border-white/5 pt-2">
-                                    <span className={resolution === '1K' ? 'text-white font-bold' : ''}>1K: 5VC</span>
-                                    <span className={resolution === '2K' ? 'text-white font-bold' : ''}>2K: 10VC</span>
-                                    <span className={resolution === '4K' ? 'text-white font-bold' : ''}>4K: 15VC</span>
+                                    <span className={resolution === '1K' ? 'text-white font-bold' : ''}>1K: {prices.pro_1k}VC</span>
+                                    <span className={resolution === '2K' ? 'text-white font-bold' : ''}>2K: {prices.pro_2k}VC</span>
+                                    <span className={resolution === '4K' ? 'text-white font-bold' : ''}>4K: {prices.pro_4k}VC</span>
                                 </div>
                             ) : (
                                 <div className="flex justify-between text-[9px] text-slate-500 mt-2 font-mono border-t border-white/5 pt-2">
-                                    <span className={resolution === '1K' ? 'text-white font-bold' : ''}>1K: 1VC</span>
-                                    <span className={resolution === '2K' ? 'text-white font-bold' : ''}>2K: 2VC</span>
-                                    <span className={resolution === '4K' ? 'text-white font-bold' : ''}>4K: 4VC</span>
+                                    <span className={resolution === '1K' ? 'text-white font-bold' : ''}>1K: {prices.flash_1k}VC</span>
+                                    <span className={resolution === '2K' ? 'text-white font-bold' : ''}>2K: {prices.flash_2k}VC</span>
+                                    <span className={resolution === '4K' ? 'text-white font-bold' : ''}>4K: {prices.flash_4k}VC</span>
                                 </div>
                             )}
                         </div>

@@ -730,6 +730,53 @@ export const getUnifiedHistory = async (targetUserId?: string): Promise<HistoryI
     return history.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 };
 
+// --- GENERATION PRICES ---
+
+export const getGenerationPrices = async () => {
+    try {
+        const { data, error } = await supabase.from('system_settings').select('value').eq('key', 'generation_prices').single();
+        
+        if (data && data.value) {
+            return {
+                flash_1k: data.value.flash_1k ?? 1,
+                flash_2k: data.value.flash_2k ?? 2,
+                flash_4k: data.value.flash_4k ?? 4,
+                pro_1k: data.value.pro_1k ?? 5,
+                pro_2k: data.value.pro_2k ?? 10,
+                pro_4k: data.value.pro_4k ?? 15,
+                couple: data.value.couple ?? 2,
+                group3: data.value.group3 ?? 4,
+                group4: data.value.group4 ?? 6,
+            };
+        }
+        
+        return { 
+            flash_1k: 1, flash_2k: 2, flash_4k: 4,
+            pro_1k: 5, pro_2k: 10, pro_4k: 15,
+            couple: 2, group3: 4, group4: 6
+        };
+    } catch (e) {
+        return { 
+            flash_1k: 1, flash_2k: 2, flash_4k: 4,
+            pro_1k: 5, pro_2k: 10, pro_4k: 15,
+            couple: 2, group3: 4, group4: 6
+        };
+    }
+};
+
+export const saveGenerationPrices = async (prices: any) => {
+    try {
+        const { error } = await supabase.from('system_settings').upsert({
+            key: 'generation_prices',
+            value: prices
+        });
+        if (error) throw error;
+        return { success: true };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+};
+
 // --- GIFTCODES ---
 
 export const getGiftcodePromoConfig = async () => {

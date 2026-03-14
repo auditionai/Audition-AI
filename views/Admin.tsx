@@ -27,7 +27,9 @@ import {
     saveStylePreset,
     deleteStylePreset,
     getUnifiedHistory,
-    getGiftcodeUsages
+    getGiftcodeUsages,
+    getGenerationPrices,
+    saveGenerationPrices
 } from '../services/economyService';
 import { getAllImagesFromStorage, deleteImageFromStorage, checkR2Connection, getUserImagesFromStorage, cleanupExpiredImages, cleanupR2Directly } from '../services/storageService';
 import { checkConnection, analyzeStyleImage } from '../services/geminiService';
@@ -307,6 +309,13 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   const [stylePresets, setStylePresets] = useState<StylePreset[]>([]);
   const [editingStyle, setEditingStyle] = useState<StylePreset | null>(null);
   
+  // --- NEW: GENERATION PRICES ---
+  const [generationPrices, setGenerationPrices] = useState<any>({
+      flash_1k: 1, flash_2k: 2, flash_4k: 4,
+      pro_1k: 5, pro_2k: 10, pro_4k: 15,
+      couple: 2, group3: 4, group4: 6
+  });
+
   // API Key States
   const [apiKey, setApiKey] = useState('');
   const [apiKeyTier, setApiKeyTier] = useState<'flash' | 'pro'>('flash');
@@ -413,6 +422,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
       const styles = await getStylePresets();
       setStylePresets(styles || []);
+
+      const prices = await getGenerationPrices();
+      setGenerationPrices(prices);
   };
 
   const runSystemChecks = async (specificKey?: string) => {
@@ -723,9 +735,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           showToast('Đang tiến hành xóa ảnh cũ...', 'info');
           try {
               const countDB = await cleanupExpiredImages(true);
-              const resultR2 = await cleanupR2Directly();
-              const sizeMB = (resultR2.size / 1024 / 1024).toFixed(2);
-              showToast(`Đã xóa thành công ${countDB} ảnh từ DB và ${resultR2.count} ảnh (${sizeMB} MB) trực tiếp từ R2 Cloud.`);
+              const countR2 = await cleanupR2Directly();
+              showToast(`Đã xóa thành công ${countDB} ảnh từ DB và ${countR2} ảnh trực tiếp từ R2 Cloud.`);
               await refreshData();
           } catch (e: any) {
               showToast(`Lỗi khi xóa ảnh: ${e.message}`, 'error');
@@ -1445,6 +1456,79 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           <div className="flex items-center justify-between mb-4">
                               <span className="text-sm text-slate-400">Loại: {health.storage.type}</span>
                               <StatusBadge status={health.storage.status} />
+                          </div>
+                      </div>
+                  </div>
+
+                  {/* Generation Prices Configuration */}
+                  <div className="bg-[#12121a] p-6 rounded-2xl border border-white/10">
+                      <div className="flex justify-between items-center mb-4">
+                          <h3 className="font-bold text-lg text-white flex items-center gap-2">
+                              <Icons.Diamond className="w-5 h-5 text-audi-yellow" />
+                              Cấu hình giá tạo ảnh (VCOIN)
+                          </h3>
+                          <button 
+                              onClick={async () => {
+                                  const res = await saveGenerationPrices(generationPrices);
+                                  if (res.success) notify("Đã lưu cấu hình giá thành công!", "success");
+                                  else notify("Lỗi khi lưu cấu hình giá.", "error");
+                              }}
+                              className="px-4 py-2 bg-audi-yellow text-black font-bold rounded-lg text-sm hover:bg-yellow-400 transition-colors"
+                          >
+                              Lưu Cấu Hình Giá
+                          </button>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                          {/* Flash Prices */}
+                          <div className="space-y-4 bg-black/30 p-4 rounded-xl border border-white/5">
+                              <h4 className="text-audi-cyan font-bold uppercase text-sm mb-2">Flash Model</h4>
+                              <div>
+                                  <label className="text-xs text-slate-400 mb-1 block">1K Resolution</label>
+                                  <input type="number" value={generationPrices.flash_1k} onChange={e => setGenerationPrices({...generationPrices, flash_1k: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-lg p-2 text-white" />
+                              </div>
+                              <div>
+                                  <label className="text-xs text-slate-400 mb-1 block">2K Resolution</label>
+                                  <input type="number" value={generationPrices.flash_2k} onChange={e => setGenerationPrices({...generationPrices, flash_2k: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-lg p-2 text-white" />
+                              </div>
+                              <div>
+                                  <label className="text-xs text-slate-400 mb-1 block">4K Resolution</label>
+                                  <input type="number" value={generationPrices.flash_4k} onChange={e => setGenerationPrices({...generationPrices, flash_4k: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-lg p-2 text-white" />
+                              </div>
+                          </div>
+
+                          {/* Pro Prices */}
+                          <div className="space-y-4 bg-black/30 p-4 rounded-xl border border-white/5">
+                              <h4 className="text-audi-pink font-bold uppercase text-sm mb-2">Pro Model</h4>
+                              <div>
+                                  <label className="text-xs text-slate-400 mb-1 block">1K Resolution</label>
+                                  <input type="number" value={generationPrices.pro_1k} onChange={e => setGenerationPrices({...generationPrices, pro_1k: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-lg p-2 text-white" />
+                              </div>
+                              <div>
+                                  <label className="text-xs text-slate-400 mb-1 block">2K Resolution</label>
+                                  <input type="number" value={generationPrices.pro_2k} onChange={e => setGenerationPrices({...generationPrices, pro_2k: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-lg p-2 text-white" />
+                              </div>
+                              <div>
+                                  <label className="text-xs text-slate-400 mb-1 block">4K Resolution</label>
+                                  <input type="number" value={generationPrices.pro_4k} onChange={e => setGenerationPrices({...generationPrices, pro_4k: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-lg p-2 text-white" />
+                              </div>
+                          </div>
+
+                          {/* Multiplier Prices */}
+                          <div className="space-y-4 bg-black/30 p-4 rounded-xl border border-white/5">
+                              <h4 className="text-audi-purple font-bold uppercase text-sm mb-2">Phụ phí chế độ</h4>
+                              <div>
+                                  <label className="text-xs text-slate-400 mb-1 block">Couple (2 người)</label>
+                                  <input type="number" value={generationPrices.couple} onChange={e => setGenerationPrices({...generationPrices, couple: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-lg p-2 text-white" />
+                              </div>
+                              <div>
+                                  <label className="text-xs text-slate-400 mb-1 block">Group 3 (3 người)</label>
+                                  <input type="number" value={generationPrices.group3} onChange={e => setGenerationPrices({...generationPrices, group3: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-lg p-2 text-white" />
+                              </div>
+                              <div>
+                                  <label className="text-xs text-slate-400 mb-1 block">Group 4 (4 người)</label>
+                                  <input type="number" value={generationPrices.group4} onChange={e => setGenerationPrices({...generationPrices, group4: Number(e.target.value)})} className="w-full bg-black/40 border border-white/10 rounded-lg p-2 text-white" />
+                              </div>
                           </div>
                       </div>
                   </div>

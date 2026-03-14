@@ -1464,7 +1464,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                   <div className="bg-[#12121a] p-6 rounded-2xl border border-white/10">
                       <div className="flex justify-between items-center mb-4">
                           <h3 className="font-bold text-lg text-white flex items-center gap-2">
-                              <Icons.Diamond className="w-5 h-5 text-audi-yellow" />
+                              <Icons.Gem className="w-5 h-5 text-audi-yellow" />
                               Cấu hình giá tạo ảnh (VCOIN)
                           </h3>
                           <button 

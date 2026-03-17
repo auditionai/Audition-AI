@@ -207,13 +207,15 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
 
                     // Map model names for Vertex AI
                     let vertexModel = params.model;
-                    // Vertex AI uses different endpoints for image generation vs text generation
                     let endpoint = 'generateContent';
                     
-                    if (vertexModel === 'gemini-3.1-flash-image-preview' || vertexModel === 'gemini-3-pro-image-preview') {
-                        // For image generation on Vertex AI, we need to use the predict endpoint
-                        // But wait, the user's screenshot shows it's a standard model!
-                        // Let's keep generateContent but ensure the model ID is exact.
+                    // Map text models to 1.5 for Vertex AI to avoid 404s on preview text models
+                    if (vertexModel === 'gemini-3.1-flash-preview' || vertexModel === 'gemini-3-flash-preview') {
+                        vertexModel = 'gemini-1.5-flash-002';
+                    } else if (vertexModel === 'gemini-3.1-pro-preview') {
+                        vertexModel = 'gemini-1.5-pro-002';
+                    } else if (vertexModel === 'gemini-3.1-flash-image-preview' || vertexModel === 'gemini-3-pro-image-preview') {
+                        // Keep the exact image model name as requested
                         vertexModel = params.model;
                     }
 

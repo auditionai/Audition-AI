@@ -102,7 +102,7 @@ const selectBestStyle = async (prompt: string, styles: any[]): Promise<any | nul
     if (styles.length === 1) return styles[0]; // Only one choice
 
     // Use latest Flash for fast routing
-    const model = 'gemini-3.1-flash-preview'; 
+    const model = 'gemini-3-flash-preview'; 
 
     const styleList = styles.map(s => `- ID: ${s.id} | Name: ${s.name} | Keywords: ${s.trigger_prompt}`).join('\n');
 
@@ -226,8 +226,8 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                         isGlobalImageModel = true; // Both use global location
                     } else {
                         if (vertexModel.includes('flash')) {
-                            // On Vertex AI, use 3.1 Flash
-                            vertexModel = 'gemini-3.1-flash-preview';
+                            // On Vertex AI, use 3 Flash
+                            vertexModel = 'gemini-3-flash-preview';
                             apiVersion = 'v1beta1'; 
                         } else if (vertexModel.includes('pro')) {
                             // On Vertex AI, use 3.1 Pro
@@ -378,7 +378,7 @@ const extractImage = (response: any): string | null => {
 export const testApiKey = async (tier: 'flash' | 'pro' = 'flash'): Promise<boolean> => {
     try {
         const freshAi = await getAiClient(tier);
-        const testModel = tier === 'pro' ? 'gemini-3.1-pro-preview' : 'gemini-3.1-flash-preview';
+        const testModel = tier === 'pro' ? 'gemini-3.1-pro-preview' : 'gemini-3-flash-preview';
 
         await runWithTimeout(
             freshAi.models.generateContent({
@@ -461,7 +461,7 @@ export const checkConnection = async (key?: string): Promise<{ success: boolean;
         // Sử dụng Flash cho checkConnection (Admin) để ping nhanh và ổn định nhất
         await runWithTimeout(
             ai.models.generateContent({
-                model: 'gemini-3.1-flash-preview',
+                model: 'gemini-3-flash-preview',
                 contents: { parts: [{ text: "Ping" }] }
             }),
             15000,
@@ -487,7 +487,7 @@ export const checkConnection = async (key?: string): Promise<{ success: boolean;
 
 // --- NEW: ANALYZE REFERENCE IMAGE (POSE/BG) ---
 const analyzeReferenceImage = async (base64Data: string): Promise<string> => {
-    const model = 'gemini-3.1-flash-preview'; 
+    const model = 'gemini-3-flash-preview'; 
 
     try {
         // Optimize image before sending to reduce payload size and prevent 503

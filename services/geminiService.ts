@@ -216,11 +216,12 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                     if (vertexModel.includes('image')) {
                         if (vertexModel.includes('flash')) {
                             vertexModel = 'gemini-3.1-flash-image-preview';
+                            apiVersion = 'v1'; // Gemini 3.1 Image uses v1
                         } else if (vertexModel.includes('pro')) {
                             vertexModel = 'gemini-3-pro-image-preview';
+                            apiVersion = 'v1beta1'; // Gemini 3 Pro Image uses v1beta1
                         }
-                        apiVersion = 'v1'; // Gemini 3.1 Image uses v1
-                        isGlobalImageModel = true; // Gemini 3.1 Image uses global location
+                        isGlobalImageModel = true; // Both use global location
                     } else {
                         if (vertexModel.includes('flash')) {
                             // On Vertex AI, use 2.5 Flash

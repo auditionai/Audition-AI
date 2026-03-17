@@ -912,6 +912,7 @@ export const deleteGiftcode = async (id: string) => {
 };
 
 export const redeemGiftcode = async (codeStr: string): Promise<{success: boolean, reward: number, message: string}> => {
+    if (!supabase) return { success: false, reward: 0, message: "No Database" };
     const user = await getUserProfile();
     const cleanCode = codeStr.trim().toUpperCase();
 

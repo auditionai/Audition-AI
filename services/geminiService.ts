@@ -310,7 +310,8 @@ DO NOT output any conversational text, explanations, or formatting. ONLY output 
                         console.log("Vertex AI Stage 1 Success. Generated Prompt:", generatedPrompt.substring(0, 100) + "...");
 
                         // STAGE 2: THE PAINTER (Imagen 4)
-                        const stage2Model = 'imagen-4.0-generate-001';
+                        // Switching back to Imagen 4 as requested by user, using the fixed structure
+                        const stage2Model = 'imagen-4.0-generate-001'; 
                         const stage2Url = `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/${stage2Model}:predict`;
                         
                         const aspectRatio = params.config?.imageConfig?.aspectRatio || "1:1";
@@ -332,10 +333,10 @@ DO NOT output any conversational text, explanations, or formatting. ONLY output 
                         let refId = 1;
 
                         // Add Character Images as SUBJECT reference
-                        // Since the user is on a paid account, we can use SUBJECT referenceType
+                        // FIXED: Use 'image' field instead of 'referenceImage' to avoid 400 error
                         characterImages.forEach((b64) => {
                             referenceImages.push({
-                                referenceImage: { bytesBase64Encoded: b64 },
+                                image: { bytesBase64Encoded: b64 },
                                 referenceType: "SUBJECT",
                                 referenceId: refId++
                             });
@@ -344,28 +345,15 @@ DO NOT output any conversational text, explanations, or formatting. ONLY output 
                         // Add Style Images as STYLE reference
                         styleImages.forEach((b64) => {
                             referenceImages.push({
-                                referenceImage: { bytesBase64Encoded: b64 },
+                                image: { bytesBase64Encoded: b64 },
                                 referenceType: "STYLE",
                                 referenceId: refId++
                             });
                         });
 
-                        // Enable reference images now that the user has a paid account
                         if (referenceImages.length > 0) {
                             stage2Payload.instances[0].referenceImages = referenceImages;
                         }
-
-                        // NOTE: We also comment out the base image (poseImage) for Imagen 4.
-                        // Passing an image to Imagen triggers Image-to-Image editing, which often
-                        // requires editConfig and can overwrite the character details with the original
-                        // person in the pose image. Gemini 1.5 Pro has already described the pose in the text prompt.
-                        /*
-                        if (poseImage) {
-                            stage2Payload.instances[0].image = {
-                                bytesBase64Encoded: poseImage
-                            };
-                        }
-                        */
 
                         let stage2Res = await fetch(stage2Url, {
                             method: 'POST',
@@ -453,6 +441,13 @@ DO NOT output any conversational text, explanations, or formatting. ONLY output 
                     
                     if (params.config) {
                         payload.generationConfig = { ...params.config };
+                        
+                        // Move safetySettings to top level if present
+                        if (payload.generationConfig.safetySettings) {
+                            payload.safetySettings = payload.generationConfig.safetySettings;
+                            delete payload.generationConfig.safetySettings;
+                        }
+
                         delete payload.generationConfig.tools;
                         delete payload.generationConfig.imageConfig;
                         
@@ -464,6 +459,11 @@ DO NOT output any conversational text, explanations, or formatting. ONLY output 
                     
                     if (params.config?.tools) {
                         payload.tools = params.config.tools;
+                    }
+
+                    // Also check top-level safetySettings in params
+                    if (params.safetySettings) {
+                        payload.safetySettings = params.safetySettings;
                     }
 
                     const res = await fetch(url, {
@@ -676,12 +676,6 @@ const analyzeReferenceImage = async (base64Data: string): Promise<string> => {
                         ]
                     },
                     config: {
-                        safetySettings: [
-                            { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-                            { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-                            { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-                            { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE }
-                        ]
                     }
                 }),
                 30000, // 30s timeout
@@ -750,13 +744,7 @@ RULES:
                 model: model,
                 contents: { parts: parts },
                 config: {
-                    temperature: 0.7,
-                    safetySettings: [
-                        { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-                        { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-                        { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-                        { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE }
-                    ]
+                    temperature: 0.7
                 }
             }),
             60000, // 60s Hard Timeout
@@ -1065,25 +1053,7 @@ export const generateImage = async (
     const config: any = {
         imageConfig: {
             aspectRatio: aspectRatio
-        },
-        safetySettings: [
-            {
-                category: HarmCategory.HARM_CATEGORY_HARASSMENT,
-                threshold: HarmBlockThreshold.BLOCK_NONE,
-            },
-            {
-                category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-                threshold: HarmBlockThreshold.BLOCK_NONE,
-            },
-            {
-                category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-                threshold: HarmBlockThreshold.BLOCK_NONE,
-            },
-            {
-                category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-                threshold: HarmBlockThreshold.BLOCK_NONE,
-            }
-        ]
+        }
     };
 
     // ENABLED: Resolution Setting for both Flash and Pro Models

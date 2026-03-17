@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { APP_CONFIG } from '../constants';
-import { Language, Theme, ViewId, UserProfile, PromotionConfig } from '../types';
+import { Language, Theme, ViewId, UserProfile, PromotionCampaign } from '../types';
 import { Icons } from './Icons';
 import { DailyCheckin } from './DailyCheckin';
 import { getUserProfile, getActivePromotion } from '../services/economyService';
@@ -23,7 +23,7 @@ export const Layout: React.FC<LayoutProps> = ({
 }) => {
   const [scrolled, setScrolled] = useState(false);
   const [user, setUser] = useState<UserProfile | null>(null);
-  const [promoConfig, setPromoConfig] = useState<PromotionConfig | null>(null);
+  const [promoConfig, setPromoConfig] = useState<PromotionCampaign | null>(null);
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);

@@ -16,12 +16,28 @@ export const getUserProfile = async (): Promise<UserProfile> => {
         .maybeSingle();
 
     if (error || !data) {
-        // Return dummy/fallback if profile missing (handled by SQL trigger normally)
-        return {
+        // Create profile if missing (fallback for missing trigger)
+        const newProfile = {
             id: user.id,
-            username: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
             email: user.email || '',
-            avatar: user.user_metadata?.avatar_url || 'https://picsum.photos/100/100',
+            display_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
+            photo_url: user.user_metadata?.avatar_url || 'https://picsum.photos/100/100',
+            diamonds: 0,
+            is_admin: false,
+            last_active: new Date().toISOString()
+        };
+        
+        try {
+            await supabase.from('users').upsert(newProfile);
+        } catch (e) {
+            console.warn("Failed to auto-create user profile", e);
+        }
+
+        return {
+            id: newProfile.id,
+            username: newProfile.display_name,
+            email: newProfile.email,
+            avatar: newProfile.photo_url,
             balance: 0,
             role: 'user',
             isVip: false,

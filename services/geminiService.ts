@@ -310,7 +310,7 @@ DO NOT output any conversational text, explanations, or formatting. ONLY output 
                         console.log("Vertex AI Stage 1 Success. Generated Prompt:", generatedPrompt.substring(0, 100) + "...");
 
                         // STAGE 2: THE PAINTER (Imagen 3)
-                        const stage2Model = 'imagen-3.0-generate-001';
+                        const stage2Model = 'imagen-3.0-capability-preview-0909';
                         const stage2Url = `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/${stage2Model}:predict`;
                         
                         const aspectRatio = params.config?.imageConfig?.aspectRatio || "1:1";
@@ -335,7 +335,7 @@ DO NOT output any conversational text, explanations, or formatting. ONLY output 
                         characterImages.forEach((b64) => {
                             referenceImages.push({
                                 referenceImage: { bytesBase64Encoded: b64 },
-                                referenceType: "SUBJECT_REFERENCE",
+                                referenceType: "SUBJECT",
                                 referenceId: refId++
                             });
                         });
@@ -344,7 +344,7 @@ DO NOT output any conversational text, explanations, or formatting. ONLY output 
                         styleImages.forEach((b64) => {
                             referenceImages.push({
                                 referenceImage: { bytesBase64Encoded: b64 },
-                                referenceType: "STYLE_REFERENCE",
+                                referenceType: "STYLE",
                                 referenceId: refId++
                             });
                         });

@@ -90,12 +90,25 @@ export const updateUserBalance = async (amount: number, reason: string, type: st
     // 1. Log transaction (Silent Fail Safe)
     try {
         // We try the most common table/column first to minimize console noise
-        const { error } = await supabase.from('diamond_transactions').insert({
-            user_id: userId,
+        // Check if user_id or uid is used
+        const transactionData: any = {
             amount,
             reason: reason, 
             type
+        };
+        
+        // Try to detect column name or just try both silently
+        const { error } = await supabase.from('diamond_transactions').insert({
+            ...transactionData,
+            user_id: userId
         });
+        
+        if (error && error.message.includes('column "user_id" does not exist')) {
+             await supabase.from('diamond_transactions').insert({
+                ...transactionData,
+                uid: userId
+            });
+        }
         
         if (error) {
             // If 'reason' fails, try 'note' on the log table

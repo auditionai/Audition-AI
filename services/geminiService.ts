@@ -102,7 +102,7 @@ const selectBestStyle = async (prompt: string, styles: any[]): Promise<any | nul
     if (styles.length === 1) return styles[0]; // Only one choice
 
     // Use latest Flash for fast routing
-    const model = 'gemini-2.5-flash-preview'; 
+    const model = 'gemini-2.5-flash'; 
 
     const styleList = styles.map(s => `- ID: ${s.id} | Name: ${s.name} | Keywords: ${s.trigger_prompt}`).join('\n');
 
@@ -215,7 +215,7 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                     // we intercept image requests and use a smart pipeline to stay within the $300 free credit:
                     // Stage 1: Use Gemini 2.5 Pro to analyze images and write a highly detailed prompt.
                     // Stage 2: Use Imagen 4 to generate the image based on that prompt.
-                    const isImageGeneration = vertexModel === 'gemini-2.5-flash-image' || vertexModel === 'gemini-2.5-pro-image';
+                    const isImageGeneration = vertexModel.includes('image') || vertexModel.includes('imagen');
                     
                     if (isImageGeneration) {
                         console.log("Vertex AI: Starting Identity Transfer Pipeline (Gemini 2.5 Pro -> Imagen 4)...");
@@ -419,11 +419,11 @@ ONLY output the raw, final text prompt in English. No conversation.`
                     
                     // --- STANDARD TEXT PIPELINE ---
                     // Map text models to standard 2.5 for Vertex AI to avoid 404s
-                    if (vertexModel === 'gemini-3.1-flash-preview' || vertexModel === 'gemini-3-flash-preview') {
+                    if (vertexModel.includes('flash')) {
                         // On Vertex AI, use the available 2.5 series
                         vertexModel = 'gemini-2.5-flash';
                         apiVersion = 'v1'; // Stable models must use v1 endpoint
-                    } else if (vertexModel === 'gemini-3.1-pro-preview') {
+                    } else if (vertexModel.includes('pro')) {
                         // On Vertex AI, use the available 2.5 series
                         vertexModel = 'gemini-2.5-pro';
                         apiVersion = 'v1'; // Stable models must use v1 endpoint
@@ -461,11 +461,14 @@ ONLY output the raw, final text prompt in English. No conversation.`
                         }
 
                         delete payload.generationConfig.tools;
-                        delete payload.generationConfig.imageConfig;
                         
-                        // Map imageConfig sang generationConfig cho model ảnh
+                        // Map imageConfig sang generationConfig cho model ảnh (Vertex AI REST API)
                         if (params.config.imageConfig) {
-                            Object.assign(payload.generationConfig, params.config.imageConfig);
+                            payload.generationConfig.image_config = {
+                                aspect_ratio: params.config.imageConfig.aspectRatio,
+                                image_size: params.config.imageConfig.imageSize
+                            };
+                            delete payload.generationConfig.imageConfig;
                         }
                     }
                     
@@ -558,7 +561,7 @@ const extractImage = (response: any): string | null => {
 export const testApiKey = async (tier: 'flash' | 'pro' = 'flash'): Promise<boolean> => {
     try {
         const freshAi = await getAiClient(tier);
-        const testModel = tier === 'pro' ? 'gemini-3.1-pro-preview' : 'gemini-3.1-flash-preview';
+        const testModel = tier === 'pro' ? 'gemini-2.5-pro' : 'gemini-2.5-flash';
 
         await runWithTimeout(
             freshAi.models.generateContent({
@@ -641,7 +644,7 @@ export const checkConnection = async (key?: string): Promise<{ success: boolean;
         // Sử dụng Flash cho checkConnection (Admin) để ping nhanh và ổn định nhất
         await runWithTimeout(
             ai.models.generateContent({
-                model: 'gemini-3.1-flash-preview',
+                model: 'gemini-2.5-flash',
                 contents: { parts: [{ text: "Ping" }] }
             }),
             15000,
@@ -839,9 +842,9 @@ export const generateImage = async (
     availableStyles: any[] = [], // New: Pool of styles for auto-selection
     timeoutMs: number = 900000 // Default 15 mins
 ): Promise<string> => {
-    // UPGRADE: Use Gemini 3.1 Flash Image Preview for FLASH Tier
-    // Use Gemini 3 Pro Image Preview for PRO Tier
-    const model = modelType === 'flash' ? 'gemini-3.1-flash-image-preview' : 'gemini-3-pro-image-preview'; 
+    // UPGRADE: Use Gemini 2.5 Flash Image for FLASH Tier
+    // Use Gemini 2.5 Pro Image for PRO Tier
+    const model = modelType === 'flash' ? 'gemini-2.5-flash-image' : 'gemini-2.5-pro-image'; 
     onLog(`Initializing ${model} Pipeline...`);
     
     // 1. PROCESS REFERENCE IMAGE (VISUAL & TEXTUAL ANALYSIS)
@@ -882,7 +885,7 @@ export const generateImage = async (
     const cleanStyleImages: string[] = [];
     
     // We only load the ACTIVE style image for the image generator.
-    // Loading ALL style images (e.g., 4-5 images) confuses the image generation model (gemini-3.1-flash-image-preview) 
+    // Loading ALL style images (e.g., 4-5 images) confuses the image generation model (gemini-2.5-flash-image) 
     // and causes it to completely ignore the character and pose references.
     if (styleReferenceUrl) {
         onLog("Step 2: Loading Active Style Reference Image...");
@@ -1069,7 +1072,7 @@ export const generateImage = async (
     };
 
     // ENABLED: Resolution Setting for both Flash and Pro Models
-    // Both gemini-3.1-flash-image-preview and gemini-3-pro-image-preview support 1K/2K/4K.
+    // Both gemini-2.5-flash-image and gemini-2.5-pro-image support 1K/2K/4K.
     config.imageConfig.imageSize = resolution;
 
     // googleSearch is only supported on gemini-3-pro-image-preview

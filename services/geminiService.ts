@@ -335,7 +335,7 @@ DO NOT output any conversational text, explanations, or formatting. ONLY output 
                         characterImages.forEach((b64) => {
                             referenceImages.push({
                                 referenceImage: { bytesBase64Encoded: b64 },
-                                referenceType: "SUBJECT",
+                                referenceType: "SUBJECT_REFERENCE",
                                 referenceId: refId++
                             });
                         });
@@ -344,7 +344,7 @@ DO NOT output any conversational text, explanations, or formatting. ONLY output 
                         styleImages.forEach((b64) => {
                             referenceImages.push({
                                 referenceImage: { bytesBase64Encoded: b64 },
-                                referenceType: "STYLE",
+                                referenceType: "STYLE_REFERENCE",
                                 referenceId: refId++
                             });
                         });

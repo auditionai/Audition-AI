@@ -802,6 +802,49 @@ export const getUnifiedHistory = async (targetUserId?: string): Promise<HistoryI
     return history.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 };
 
+// --- MAINTENANCE MODE ---
+
+export const getMaintenanceMode = async () => {
+    if (!supabase) return { isActive: false, message: "Hệ thống đang bảo trì, vui lòng quay lại sau." };
+    try {
+        const { data, error } = await supabase.from('system_settings').select('value').eq('key', 'maintenance_mode').maybeSingle();
+        
+        if (data && data.value) {
+            let parsedValue = data.value;
+            if (typeof parsedValue === 'string') {
+                try {
+                    parsedValue = JSON.parse(parsedValue);
+                } catch (e) {}
+            }
+            return {
+                isActive: !!parsedValue.isActive,
+                message: parsedValue.message || "Hệ thống đang bảo trì, vui lòng quay lại sau."
+            };
+        }
+        return { isActive: false, message: "Hệ thống đang bảo trì, vui lòng quay lại sau." };
+    } catch (e) {
+        console.error("Get Maintenance Mode Error", e);
+        return { isActive: false, message: "Hệ thống đang bảo trì, vui lòng quay lại sau." };
+    }
+};
+
+export const saveMaintenanceMode = async (isActive: boolean, message: string) => {
+    if (!supabase) return { success: false, error: "No Database" };
+    try {
+        const valueToSave = JSON.stringify({ isActive, message });
+        const { data, error } = await supabase.from('system_settings').upsert(
+            { key: 'maintenance_mode', value: valueToSave },
+            { onConflict: 'key' }
+        ).select();
+        
+        if (error) throw error;
+        return { success: true };
+    } catch (e) {
+        console.error("Save Maintenance Mode Error", e);
+        return { success: false, error: e };
+    }
+};
+
 // --- GENERATION PRICES ---
 
 export const getGenerationPrices = async () => {

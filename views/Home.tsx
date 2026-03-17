@@ -10,6 +10,8 @@ interface HomeProps {
   onSelectFeature: (feature: Feature) => void;
   onNavigate: (view: ViewId) => void;
   onOpenCheckin: () => void; 
+  isMaintenance?: boolean;
+  maintenanceMessage?: string;
 }
 
 interface FeatureCardProps {
@@ -19,25 +21,28 @@ interface FeatureCardProps {
   idx: number;
 }
 
-const FeatureCard: React.FC<FeatureCardProps> = React.memo(({ feature, lang, onClick, idx }) => {
+const FeatureCard: React.FC<FeatureCardProps & { isMaintenance?: boolean }> = React.memo(({ feature, lang, onClick, idx, isMaintenance }) => {
     const isPremium = feature.isPremium;
     const tag = feature.tag;
     const isGen = feature.toolType === 'generation';
 
     // Dynamic styles based on category
     const getCardStyle = () => {
+        if (isMaintenance) return 'from-slate-900 to-black border-slate-800 opacity-50 cursor-not-allowed';
         if (isPremium) return 'from-[#1a1500] to-[#0a0800] border-audi-yellow/30 hover:border-audi-yellow shadow-[0_0_15px_rgba(251,218,97,0.1)] hover:shadow-[0_0_30px_rgba(251,218,97,0.2)]';
         if (isGen) return 'from-[#001a2c] to-[#000a14] border-audi-cyan/20 hover:border-audi-cyan/60 shadow-[0_0_15px_rgba(33,212,253,0.05)] hover:shadow-[0_0_30px_rgba(33,212,253,0.15)]';
         return 'from-[#1a0024] to-[#0a0014] border-audi-purple/20 hover:border-audi-purple/60 shadow-[0_0_15px_rgba(183,33,255,0.05)] hover:shadow-[0_0_30px_rgba(183,33,255,0.15)]';
     };
 
     const getIconColor = () => {
+        if (isMaintenance) return 'text-slate-600';
         if (isPremium) return 'text-audi-yellow';
         if (isGen) return 'text-audi-cyan';
         return 'text-audi-purple';
     };
 
     const getIconBg = () => {
+        if (isMaintenance) return 'bg-slate-800';
         if (isPremium) return 'bg-audi-yellow/10 group-hover:bg-audi-yellow/20';
         if (isGen) return 'bg-audi-cyan/10 group-hover:bg-audi-cyan/20';
         return 'bg-audi-purple/10 group-hover:bg-audi-purple/20';
@@ -45,8 +50,8 @@ const FeatureCard: React.FC<FeatureCardProps> = React.memo(({ feature, lang, onC
 
     return (
         <div 
-            onClick={onClick}
-            className={`group relative h-[240px] rounded-[2rem] overflow-hidden bg-gradient-to-br border transition-all duration-500 cursor-pointer flex flex-col p-6 ${getCardStyle()} hover:-translate-y-2`}
+            onClick={isMaintenance ? undefined : onClick}
+            className={`group relative h-[240px] rounded-[2rem] overflow-hidden bg-gradient-to-br border transition-all duration-500 flex flex-col p-6 ${getCardStyle()} ${!isMaintenance && 'hover:-translate-y-2 cursor-pointer'}`}
         >
             {/* Abstract Background Glow */}
             <div className={`absolute -top-20 -right-20 w-40 h-40 blur-[50px] rounded-full transition-all duration-700 group-hover:scale-150 ${isPremium ? 'bg-audi-yellow/20' : isGen ? 'bg-audi-cyan/20' : 'bg-audi-purple/20'}`}></div>
@@ -99,7 +104,7 @@ const FeatureCard: React.FC<FeatureCardProps> = React.memo(({ feature, lang, onC
     );
 });
 
-export const Home: React.FC<HomeProps> = ({ lang, onSelectFeature, onNavigate, onOpenCheckin }) => {
+export const Home: React.FC<HomeProps> = ({ lang, onSelectFeature, onNavigate, onOpenCheckin, isMaintenance, maintenanceMessage }) => {
   
   // Split features into categories
   const studioFeatures = APP_CONFIG.main_features.filter(f => f.toolType === 'generation');
@@ -119,7 +124,7 @@ export const Home: React.FC<HomeProps> = ({ lang, onSelectFeature, onNavigate, o
   }, []);
 
   return (
-    <div className="space-y-16 pb-24">
+    <div className="space-y-16 pb-24 relative">
       
       {/* Optimized Slim Hero Section */}
       <div className="relative rounded-2xl overflow-hidden border border-white/10 bg-gradient-to-r from-[#120024] to-black py-4 px-6 flex items-center justify-between">
@@ -232,6 +237,7 @@ export const Home: React.FC<HomeProps> = ({ lang, onSelectFeature, onNavigate, o
                     lang={lang}
                     onClick={() => onSelectFeature(feature)}
                     idx={idx}
+                    isMaintenance={isMaintenance}
                 />
             ))}
         </div>
@@ -262,6 +268,7 @@ export const Home: React.FC<HomeProps> = ({ lang, onSelectFeature, onNavigate, o
                     lang={lang}
                     onClick={() => onSelectFeature(feature)}
                     idx={idx}
+                    isMaintenance={isMaintenance}
                 />
             ))}
         </div>

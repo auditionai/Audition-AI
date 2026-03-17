@@ -29,7 +29,9 @@ import {
     getUnifiedHistory,
     getGiftcodeUsages,
     getGenerationPrices,
-    saveGenerationPrices
+    saveGenerationPrices,
+    getMaintenanceMode,
+    saveMaintenanceMode
 } from '../services/economyService';
 import { getAllImagesFromStorage, deleteImageFromStorage, checkR2Connection, getUserImagesFromStorage, cleanupExpiredImages, cleanupR2Directly } from '../services/storageService';
 import { checkConnection, analyzeStyleImage } from '../services/geminiService';
@@ -315,6 +317,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       pro_1k: 5, pro_2k: 10, pro_4k: 15,
       couple: 2, group3: 4, group4: 6
   });
+  const [maintenanceMode, setMaintenanceMode] = useState({ isActive: false, message: "Hệ thống đang bảo trì, vui lòng quay lại sau." });
 
   // API Key States
   const [apiKey, setApiKey] = useState('');
@@ -427,6 +430,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
       const prices = await getGenerationPrices();
       setGenerationPrices(prices);
+
+      const maintenance = await getMaintenanceMode();
+      setMaintenanceMode(maintenance);
   };
 
   const runSystemChecks = async (specificKey?: string) => {
@@ -1458,6 +1464,48 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           <div className="flex items-center justify-between mb-4">
                               <span className="text-sm text-slate-400">Loại: {health.storage.type}</span>
                               <StatusBadge status={health.storage.status} />
+                          </div>
+                      </div>
+                  </div>
+
+                  {/* Maintenance Mode Configuration */}
+                  <div className="bg-[#12121a] p-6 rounded-2xl border border-white/10">
+                      <div className="flex justify-between items-center mb-4">
+                          <h3 className="font-bold text-lg text-white flex items-center gap-2">
+                              <Icons.AlertTriangle className="w-5 h-5 text-red-500" />
+                              Chế độ bảo trì
+                          </h3>
+                          <button 
+                              onClick={async () => {
+                                  const res = await saveMaintenanceMode(maintenanceMode.isActive, maintenanceMode.message);
+                                  if (res.success) showToast("Đã lưu cấu hình bảo trì thành công!", "success");
+                                  else showToast(`Lỗi khi lưu cấu hình bảo trì: ${res.error}`, "error");
+                              }}
+                              className="px-4 py-2 bg-red-500 text-white font-bold rounded-lg text-sm hover:bg-red-600 transition-colors"
+                          >
+                              Lưu Cấu Hình
+                          </button>
+                      </div>
+                      
+                      <div className="space-y-4">
+                          <div className="flex items-center gap-3">
+                              <input 
+                                  type="checkbox" 
+                                  id="maintenanceToggle"
+                                  checked={maintenanceMode.isActive}
+                                  onChange={(e) => setMaintenanceMode({...maintenanceMode, isActive: e.target.checked})}
+                                  className="w-5 h-5 rounded border-white/20 bg-black/50 text-red-500 focus:ring-red-500 focus:ring-offset-gray-900"
+                              />
+                              <label htmlFor="maintenanceToggle" className="text-white font-medium">Bật chế độ bảo trì</label>
+                          </div>
+                          <div>
+                              <label className="text-xs text-slate-400 mb-1 block">Thông báo bảo trì</label>
+                              <textarea 
+                                  value={maintenanceMode.message} 
+                                  onChange={e => setMaintenanceMode({...maintenanceMode, message: e.target.value})} 
+                                  className="w-full bg-black/40 border border-white/10 rounded-lg p-3 text-white h-24 resize-none"
+                                  placeholder="Hệ thống đang bảo trì, vui lòng quay lại sau."
+                              />
                           </div>
                       </div>
                   </div>

@@ -440,7 +440,7 @@ export const testApiKey = async (tier: 'flash' | 'pro' = 'flash'): Promise<boole
         await runWithTimeout(
             freshAi.models.generateContent({
                 model: testModel,
-                contents: { parts: [{ text: "Hello" }] }
+                contents: [{ role: 'user', parts: [{ text: "Hello" }] }]
             }),
             15000, // 15s Timeout
             "API Key Authentication"

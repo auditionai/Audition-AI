@@ -729,6 +729,7 @@ export const getUnifiedHistory = async (targetUserId?: string): Promise<HistoryI
 // --- GENERATION PRICES ---
 
 export const getGenerationPrices = async () => {
+    if (!supabase) return { flash_1k: 1, flash_2k: 2, flash_4k: 4, pro_1k: 5, pro_2k: 10, pro_4k: 15, couple: 2, group3: 4, group4: 6 };
     try {
         const { data, error } = await supabase.from('system_settings').select('value').eq('key', 'generation_prices').maybeSingle();
         
@@ -773,6 +774,7 @@ export const getGenerationPrices = async () => {
 };
 
 export const saveGenerationPrices = async (prices: any) => {
+    if (!supabase) return { success: false, error: "No Database" };
     try {
         const sanitizedPrices = {
             flash_1k: Number(prices.flash_1k) || 1,
@@ -806,6 +808,7 @@ export const saveGenerationPrices = async (prices: any) => {
 // --- GIFTCODES ---
 
 export const getGiftcodePromoConfig = async () => {
+    if (!supabase) return { text: "Nhập CODE \"HELLO2026\" để nhận 20 Vcoin miễn phí !!!", isActive: true };
     try {
         const { data, error } = await supabase.from('system_settings').select('value').eq('key', 'giftcode_promo').maybeSingle();
         
@@ -833,6 +836,7 @@ export const getGiftcodePromoConfig = async () => {
 };
 
 export const saveGiftcodePromoConfig = async (text: string, isActive: boolean) => {
+    if (!supabase) return { success: false, error: "No Database" };
     try {
         const { data: existing } = await supabase.from('system_settings').select('key').eq('key', 'giftcode_promo').maybeSingle();
         
@@ -853,6 +857,7 @@ export const saveGiftcodePromoConfig = async (text: string, isActive: boolean) =
 };
 
 export const saveGiftcode = async (code: Giftcode): Promise<{success: boolean, error?: string}> => {
+    if (!supabase) return { success: false, error: "No Database" };
     try {
         const payload = {
             code: code.code,
@@ -877,6 +882,7 @@ export const saveGiftcode = async (code: Giftcode): Promise<{success: boolean, e
 };
 
 export const deleteGiftcode = async (id: string) => {
+    if (!supabase) return;
     await supabase.from('gift_codes').delete().eq('id', id);
 };
 
@@ -914,6 +920,7 @@ export const redeemGiftcode = async (codeStr: string): Promise<{success: boolean
 };
 
 export const getGiftcodeUsages = async (codeId: string) => {
+    if (!supabase) return [];
     const { data, error } = await supabase
         .from('gift_code_usages')
         .select('user_id, created_at, users(display_name, email, photo_url)')
@@ -934,11 +941,13 @@ export const getGiftcodeUsages = async (codeId: string) => {
 // --- STYLE PRESETS ---
 
 export const getStylePresets = async () => {
+    if (!supabase) return [];
     const { data } = await supabase.from('style_presets').select('*').eq('is_active', true);
     return data || [];
 };
 
 export const saveStylePreset = async (style: any) => {
+    if (!supabase) return { success: false, error: "No Database" };
     try {
         if (style.is_default) {
             // Unset other defaults
@@ -967,12 +976,17 @@ export const saveStylePreset = async (style: any) => {
 };
 
 export const deleteStylePreset = async (id: string) => {
+    if (!supabase) return;
     await supabase.from('style_presets').delete().eq('id', id);
 };
 
 // --- ADMIN STATS ---
 
 export const getAdminStats = async () => {
+    if (!supabase) return {
+        dashboard: { visitsToday: 0, visitsTotal: 0, newUsersToday: 0, usersTotal: 0, imagesToday: 0, imagesTotal: 0, aiUsage: [] },
+        usersList: [], packages: [], promotions: [], giftcodes: [], transactions: []
+    };
     // Fetch Users
     const { data: users, error: userError } = await supabase.from('users').select('id, email, display_name, diamonds, is_admin, created_at, photo_url, last_active');
 

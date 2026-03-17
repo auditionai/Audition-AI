@@ -396,10 +396,12 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
         init();
     }
     // Get current user email for recovery instructions
-    supabase.auth.getUser().then((response: any) => {
-        const data = response.data;
-        if (data?.user?.email) setCurrentUserEmail(data.user.email);
-    });
+    if (supabase) {
+      supabase.auth.getUser().then((response: any) => {
+          const data = response.data;
+          if (data?.user?.email) setCurrentUserEmail(data.user.email);
+      });
+    }
   }, [isAdmin]);
 
   const refreshData = async () => {

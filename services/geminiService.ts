@@ -268,15 +268,19 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                         });
 
                         stage1Contents[0].parts.push({
-                            text: `\n\nCRITICAL SYSTEM OVERRIDE: You are an elite AI Prompt Engineer. Your task is to analyze all the provided images (characters, pose, style) and the user's instructions. You must write a SINGLE, highly detailed, meticulous English text prompt for an image generator (like Midjourney or Imagen 4). 
-                            
-CRITICAL RULES:
-1. ART STYLE (HIGHEST PRIORITY): You MUST explicitly describe the art style from the Style Reference images. If the style is a 3D avatar, 3D game render, or stylized 3D, you MUST start your prompt with "A highly detailed 3D game render of..." or "A stylized 3D avatar of...". DO NOT use words like "realistic", "photograph", or "real person" unless the style is actually realistic.
-2. CHARACTER IDENTITY: Describe the character's facial features, hair, and clothing in extreme detail based on the Character Reference images. 
-3. POSE & BACKGROUND: Describe the exact pose, camera angle, and background vibe from the Pose Reference image.
-4. NO REALISM: If the references are 3D or stylized, you MUST explicitly add "stylized 3D render, not a real person, no realism" to the prompt.
+                            text: `\n\nCRITICAL SYSTEM OVERRIDE: You are a Technical Identity Auditor for a pixel-perfect character transfer system.
+Your task is to write a prompt that FORCES the image generator to use the EXACT pixels and identity from the provided SUBJECT reference image.
 
-DO NOT output any conversational text, explanations, or formatting. ONLY output the raw, final text prompt.`
+CRITICAL RULES FOR ABSOLUTE FIDELITY:
+1. IDENTITY LOCK: Start the prompt with "Using the exact, identical subject from the SUBJECT reference image...". 
+2. NO RE-INTERPRETATION: Explicitly state "Do not draw a new character. Transfer the exact facial features, eye shape, iris details, and makeup patterns from the SUBJECT image without any modification."
+3. LITERAL DETAIL TRANSFER: List every unique identifier from the character: "exact snowman pin on the left chest", "exact black bunny bag with star patterns", "exact hair clips and ribbon placement".
+4. PIXEL-LEVEL ENFORCEMENT: Use phrases like "maintain 100% identity fidelity", "zero creative liberty on character features", "literal pixel transfer of the character's face".
+5. POSE & STYLE INTEGRATION: Commands the generator to place this EXACT character into the pose of the Pose Reference and apply the render quality of the Style Reference.
+
+The objective is NOT a creative drawing. It is a technical "IDENTITY OVERLAY" where the character from Image 1 is mapped onto the structure of Image 2.
+
+ONLY output the raw, final text prompt in English. No conversation.`
                         });
 
                         const stage1Payload = {
@@ -346,9 +350,19 @@ DO NOT output any conversational text, explanations, or formatting. ONLY output 
                             ],
                             parameters: {
                                 sampleCount: 1,
-                                aspectRatio: aspectRatio
+                                aspectRatio: aspectRatio,
+                                // CRITICAL: Negative prompt to prevent AI from adding unwanted features or changing identity
+                                negativePrompt: "elf ears, distorted face, extra fingers, modified clothing, different hairstyle, creative additions, realism, photograph, human features, realistic skin texture"
                             }
                         };
+
+                        // NEW STRATEGY: Use the Pose Image as the base 'image' to force the AI to keep the exact pose and background
+                        // This achieves the "Copy-Paste" effect the user wants.
+                        if (poseImage) {
+                            stage2Payload.instances[0].image = {
+                                bytesBase64Encoded: poseImage
+                            };
+                        }
 
                         // CRITICAL FIX: referenceImages must be in parameters, not instances for Imagen 3/4
                         if (referenceImages.length > 0) {

@@ -220,8 +220,8 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                     if (isImageGeneration) {
                         console.log("Vertex AI: Intercepting Image Generation. Starting Two-Stage Pipeline (Gemini 1.5 Pro -> Imagen 3)...");
                         
-                        // STAGE 1: THE BRAIN (Gemini 1.5 Pro)
-                        const stage1Model = 'gemini-1.5-pro-001';
+                        // STAGE 1: THE BRAIN (Gemini 2.5 Pro)
+                        const stage1Model = 'gemini-2.5-pro';
                         const stage1Url = `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/${stage1Model}:generateContent`;
                         
                         // Clone contents and append the Prompt Engineer instruction
@@ -321,14 +321,14 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                     }
                     
                     // --- STANDARD TEXT PIPELINE ---
-                    // Map text models to standard 1.5 for Vertex AI to avoid 404s on preview/002 text models
+                    // Map text models to standard 2.5 for Vertex AI to avoid 404s
                     if (vertexModel === 'gemini-3.1-flash-preview' || vertexModel === 'gemini-3-flash-preview') {
-                        // On Vertex AI, you often need the exact version suffix for stable models
-                        vertexModel = 'gemini-1.5-flash-001';
+                        // On Vertex AI, use the available 2.5 series
+                        vertexModel = 'gemini-2.5-flash';
                         apiVersion = 'v1'; // Stable models must use v1 endpoint
                     } else if (vertexModel === 'gemini-3.1-pro-preview') {
-                        // On Vertex AI, you often need the exact version suffix for stable models
-                        vertexModel = 'gemini-1.5-pro-001';
+                        // On Vertex AI, use the available 2.5 series
+                        vertexModel = 'gemini-2.5-pro';
                         apiVersion = 'v1'; // Stable models must use v1 endpoint
                     }
 

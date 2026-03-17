@@ -49,6 +49,7 @@ export const getUserProfile = async (): Promise<UserProfile> => {
 };
 
 export const updateLastActive = async () => {
+    if (!supabase) return;
     try {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
@@ -60,6 +61,7 @@ export const updateLastActive = async () => {
 };
 
 export const updateAdminUserProfile = async (profile: UserProfile): Promise<{success: boolean, error?: string}> => {
+    if (!supabase) return { success: false, error: "No Database" };
     try {
         const { error } = await supabase
             .from('users')
@@ -78,6 +80,7 @@ export const updateAdminUserProfile = async (profile: UserProfile): Promise<{suc
 };
 
 export const updateUserBalance = async (amount: number, reason: string, type: string, targetUserId?: string) => {
+    if (!supabase) return;
     let userId = targetUserId;
     if (!userId) {
         const user = await getUserProfile();
@@ -143,6 +146,7 @@ export const updateUserBalance = async (amount: number, reason: string, type: st
 };
 
 export const logVisit = async () => {
+    if (!supabase) return;
     try {
         const { data: { user } } = await supabase.auth.getUser();
         
@@ -164,6 +168,7 @@ export const logVisit = async () => {
 // --- PACKAGES & PROMOTIONS ---
 
 export const getPackages = async (): Promise<CreditPackage[]> => {
+    if (!supabase) return [];
     const { data } = await supabase
         .from('credit_packages')
         .select('*')
@@ -189,6 +194,7 @@ export const getPackages = async (): Promise<CreditPackage[]> => {
 };
 
 export const savePackage = async (pkg: CreditPackage): Promise<{success: boolean, error?: string}> => {
+    if (!supabase) return { success: false, error: "No Database" };
     try {
         const payload = {
             name: pkg.name,
@@ -217,6 +223,7 @@ export const savePackage = async (pkg: CreditPackage): Promise<{success: boolean
 };
 
 export const deletePackage = async (id: string): Promise<{success: boolean, error?: string, action?: string}> => {
+    if (!supabase) return { success: false, error: "No Database" };
     try {
         const { error } = await supabase.from('credit_packages').delete().eq('id', id);
         if (error) {
@@ -231,6 +238,7 @@ export const deletePackage = async (id: string): Promise<{success: boolean, erro
 };
 
 export const updatePackageOrder = async (packages: CreditPackage[]): Promise<{success: boolean, error?: string}> => {
+    if (!supabase) return { success: false, error: "No Database" };
     try {
         for (let i = 0; i < packages.length; i++) {
             await supabase.from('credit_packages').update({ display_order: i }).eq('id', packages[i].id);
@@ -242,6 +250,7 @@ export const updatePackageOrder = async (packages: CreditPackage[]): Promise<{su
 }
 
 export const getActivePromotion = async (): Promise<PromotionCampaign | null> => {
+    if (!supabase) return null;
     const now = new Date().toISOString();
     const { data } = await supabase
         .from('promotions')
@@ -265,6 +274,7 @@ export const getActivePromotion = async (): Promise<PromotionCampaign | null> =>
 };
 
 export const savePromotion = async (promo: PromotionCampaign): Promise<{success: boolean, error?: string}> => {
+    if (!supabase) return { success: false, error: "No Database" };
     try {
          const payload = {
             title: promo.name,
@@ -290,6 +300,7 @@ export const savePromotion = async (promo: PromotionCampaign): Promise<{success:
 };
 
 export const deletePromotion = async (id: string): Promise<{success: boolean, error?: string}> => {
+    if (!supabase) return { success: false, error: "No Database" };
     try {
         const { error } = await supabase.from('promotions').delete().eq('id', id);
         if (error) throw error;
@@ -308,6 +319,7 @@ export const getLocalTodayStr = () => {
 // --- CHECKIN & REWARDS ---
 
 export const getCheckinStatus = async () => {
+    if (!supabase) return { streak: 0, isCheckedInToday: false, history: [], claimedMilestones: [] };
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { streak: 0, isCheckedInToday: false, history: [], claimedMilestones: [] };
 
@@ -343,6 +355,7 @@ export const getCheckinStatus = async () => {
 };
 
 export const performCheckin = async (): Promise<{success: boolean, reward: number, newStreak: number, message?: string}> => {
+    if (!supabase) return { success: false, reward: 0, newStreak: 0, message: "No Database" };
     const user = await getUserProfile();
     const today = getLocalTodayStr();
     const reward = 5;
@@ -366,6 +379,7 @@ export const performCheckin = async (): Promise<{success: boolean, reward: numbe
 };
 
 export const claimMilestoneReward = async (day: number): Promise<{success: boolean, message: string}> => {
+    if (!supabase) return { success: false, message: "No Database" };
     const user = await getUserProfile();
     const rewards: Record<number, number> = { 7: 20, 14: 50, 30: 100 };
     const amount = rewards[day] || 0;
@@ -427,6 +441,7 @@ export const reportKeyFailure = (key: string) => {
 let lastUsedKey: string | null = null;
 
 export const getSystemApiKey = async (tier: 'flash' | 'pro' = 'flash', excludedKeys: string[] = []): Promise<string | null> => {
+    if (!supabase) return process.env.API_KEY || null;
     try {
         // 1. Get all active keys
         const { data: allKeys, error } = await supabase
@@ -491,6 +506,7 @@ export const getSystemApiKey = async (tier: 'flash' | 'pro' = 'flash', excludedK
 };
 
 export const saveSystemApiKey = async (key: string): Promise<{success: boolean, error?: string}> => {
+    if (!supabase) return { success: false, error: "No Database" };
     try {
         const cleanKey = key.trim();
         
@@ -519,10 +535,12 @@ export const saveSystemApiKey = async (key: string): Promise<{success: boolean, 
 };
 
 export const deleteApiKey = async (id: string) => {
+    if (!supabase) return;
     await supabase.from('api_keys').delete().eq('id', id);
 };
 
 export const getApiKeysList = async () => {
+    if (!supabase) return [];
     const { data } = await supabase.from('api_keys').select('*').order('created_at', { ascending: false });
     return data || [];
 }
@@ -530,6 +548,7 @@ export const getApiKeysList = async () => {
 // --- TRANSACTIONS ---
 
 export const createPaymentLink = async (packageId: string): Promise<Transaction> => {
+    if (!supabase) throw new Error("No Database");
     const user = await getUserProfile();
     const pkg = (await getPackages()).find(p => p.id === packageId);
     if (!pkg) throw new Error("Invalid package");
@@ -603,6 +622,7 @@ export const mockPayOSSuccess = async (txId: string) => {
 };
 
 export const adminApproveTransaction = async (txId: string): Promise<{success: boolean, error?: string}> => {
+    if (!supabase) return { success: false, error: "No Database" };
     try {
         const { data: tx, error: fetchError } = await supabase.from('transactions').select('*').eq('id', txId).single();
         if (fetchError || !tx) throw new Error("Tx not found");
@@ -627,6 +647,7 @@ export const adminApproveTransaction = async (txId: string): Promise<{success: b
 };
 
 export const adminRejectTransaction = async (txId: string): Promise<{success: boolean, error?: string}> => {
+     if (!supabase) return { success: false, error: "No Database" };
      try {
         const { error } = await supabase
             .from('transactions')
@@ -640,6 +661,7 @@ export const adminRejectTransaction = async (txId: string): Promise<{success: bo
 };
 
 export const adminBulkApproveTransactions = async (txIds: string[]): Promise<{success: boolean, error?: string, count?: number}> => {
+    if (!supabase) return { success: false, error: "No Database" };
     try {
         let successCount = 0;
         for (const id of txIds) {
@@ -653,6 +675,7 @@ export const adminBulkApproveTransactions = async (txIds: string[]): Promise<{su
 };
 
 export const adminBulkRejectTransactions = async (txIds: string[]): Promise<{success: boolean, error?: string, count?: number}> => {
+    if (!supabase) return { success: false, error: "No Database" };
     try {
         const { error, count } = await supabase
             .from('transactions')
@@ -667,6 +690,7 @@ export const adminBulkRejectTransactions = async (txIds: string[]): Promise<{suc
 };
 
 export const deleteTransaction = async (txId: string): Promise<{success: boolean, error?: string}> => {
+    if (!supabase) return { success: false, error: "No Database" };
     try {
         const { error } = await supabase.from('transactions').delete().eq('id', txId);
         if (error) throw error;
@@ -677,6 +701,7 @@ export const deleteTransaction = async (txId: string): Promise<{success: boolean
 };
 
 export const getUnifiedHistory = async (targetUserId?: string): Promise<HistoryItem[]> => {
+    if (!supabase) return [];
     let userId = targetUserId;
     if (!userId) {
         const user = await getUserProfile();

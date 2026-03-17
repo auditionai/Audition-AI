@@ -225,7 +225,21 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                         const stage1Url = `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/${stage1Model}:generateContent`;
                         
                         // Clone contents and append the Prompt Engineer instruction
-                        const stage1Contents = JSON.parse(JSON.stringify(params.contents.parts ? [params.contents] : params.contents));
+                        let stage1Contents = JSON.parse(JSON.stringify(params.contents));
+                        if (typeof stage1Contents === 'string') {
+                            stage1Contents = [{ role: 'user', parts: [{ text: stage1Contents }] }];
+                        } else if (stage1Contents.parts) {
+                            stage1Contents = [stage1Contents];
+                        }
+                        
+                        // Ensure each content object has a role (Vertex AI requires 'user' or 'model')
+                        stage1Contents = stage1Contents.map((c: any) => {
+                            if (!c.role) {
+                                c.role = 'user';
+                            }
+                            return c;
+                        });
+
                         stage1Contents[0].parts.push({
                             text: "\n\nCRITICAL SYSTEM OVERRIDE: You are an elite AI Prompt Engineer. Your task is to analyze all the provided images (characters, pose, style) and the user's instructions. You must write a SINGLE, highly detailed, meticulous English text prompt for an image generator (like Midjourney or Imagen 3). The prompt MUST capture every single detail requested: the exact facial features, the specific pose, the precise art style, and the background. DO NOT output any conversational text, explanations, or formatting. ONLY output the raw, final text prompt."
                         });
@@ -336,8 +350,22 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                     const url = `https://${location}-aiplatform.googleapis.com/${apiVersion}/projects/${projectId}/locations/${location}/publishers/google/models/${vertexModel}:${endpoint}`;
                     
                     // Chuyển đổi config sang generationConfig cho REST API
+                    let payloadContents = params.contents;
+                    if (typeof payloadContents === 'string') {
+                        payloadContents = [{ role: 'user', parts: [{ text: payloadContents }] }];
+                    } else if (payloadContents.parts) {
+                        payloadContents = [payloadContents];
+                    }
+                    
+                    payloadContents = payloadContents.map((c: any) => {
+                        if (!c.role) {
+                            c.role = 'user';
+                        }
+                        return c;
+                    });
+
                     const payload: any = {
-                        contents: params.contents.parts ? [params.contents] : params.contents,
+                        contents: payloadContents,
                     };
                     
                     if (params.config) {

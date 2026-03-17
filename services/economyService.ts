@@ -108,11 +108,11 @@ export const updateUserBalance = async (amount: number, reason: string, type: st
                 });
                 
                 if (err2) {
-                    // Attempt 3: Try 'diamond_transactions' table with 'note'
+                    // Attempt 3: Try 'diamond_transactions' table with 'reason'
                     const { error: err3 } = await supabase.from('diamond_transactions').insert({
                         user_id: userId,
                         amount,
-                        note: reason, 
+                        reason: reason, 
                         type
                     });
                     if (err3) console.warn("[Economy] Failed to log (Retry 3):", err3.message);
@@ -464,8 +464,12 @@ export const getSystemApiKey = async (tier: 'flash' | 'pro' = 'flash', excludedK
         }
 
         if (tierKeys.length === 0) {
-            // If no keys for this tier, fallback to env key
-            return process.env.API_KEY || null;
+            // If no keys for this tier, fallback to ANY active key before falling back to env key
+            if (allKeys.length > 0) {
+                tierKeys = allKeys;
+            } else {
+                return process.env.API_KEY || null;
+            }
         }
 
         // 2. Filter out keys that are in the in-memory blacklist OR the excluded list (from retry loop)

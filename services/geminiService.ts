@@ -224,6 +224,33 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                         const stage1Model = 'gemini-2.5-pro';
                         const stage1Url = `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/${stage1Model}:generateContent`;
                         
+                        // Extract images from params.contents for Imagen 3
+                        const parts = params.contents.parts || [];
+                        let currentContext = "";
+                        const characterImages: string[] = [];
+                        let poseImage: string | null = null;
+                        const styleImages: string[] = [];
+
+                        for (const part of parts) {
+                            if (part.text) {
+                                if (part.text.includes("PRIORITY 1") || part.text.includes("ASSET")) {
+                                    currentContext = "CHARACTER";
+                                } else if (part.text.includes("PRIORITY 2")) {
+                                    currentContext = "POSE";
+                                } else if (part.text.includes("PRIORITY 3") || part.text.includes("STYLE REFERENCE")) {
+                                    currentContext = "STYLE";
+                                }
+                            } else if (part.inlineData && part.inlineData.data) {
+                                if (currentContext === "CHARACTER") {
+                                    characterImages.push(part.inlineData.data);
+                                } else if (currentContext === "POSE") {
+                                    poseImage = part.inlineData.data;
+                                } else if (currentContext === "STYLE") {
+                                    styleImages.push(part.inlineData.data);
+                                }
+                            }
+                        }
+
                         // Clone contents and append the Prompt Engineer instruction
                         let stage1Contents = JSON.parse(JSON.stringify(params.contents));
                         if (typeof stage1Contents === 'string') {
@@ -241,7 +268,15 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                         });
 
                         stage1Contents[0].parts.push({
-                            text: "\n\nCRITICAL SYSTEM OVERRIDE: You are an elite AI Prompt Engineer. Your task is to analyze all the provided images (characters, pose, style) and the user's instructions. You must write a SINGLE, highly detailed, meticulous English text prompt for an image generator (like Midjourney or Imagen 3). The prompt MUST capture every single detail requested: the exact facial features, the specific pose, the precise art style, and the background. DO NOT output any conversational text, explanations, or formatting. ONLY output the raw, final text prompt."
+                            text: `\n\nCRITICAL SYSTEM OVERRIDE: You are an elite AI Prompt Engineer. Your task is to analyze all the provided images (characters, pose, style) and the user's instructions. You must write a SINGLE, highly detailed, meticulous English text prompt for an image generator (like Midjourney or Imagen 3). 
+                            
+CRITICAL RULES:
+1. ART STYLE (HIGHEST PRIORITY): You MUST explicitly describe the art style from the Style Reference images. If the style is a 3D avatar, 3D game render, or stylized 3D, you MUST start your prompt with "A highly detailed 3D game render of..." or "A stylized 3D avatar of...". DO NOT use words like "realistic", "photograph", or "real person" unless the style is actually realistic.
+2. CHARACTER IDENTITY: Describe the character's facial features, hair, and clothing in extreme detail based on the Character Reference images. 
+3. POSE & BACKGROUND: Describe the exact pose, camera angle, and background vibe from the Pose Reference image.
+4. NO REALISM: If the references are 3D or stylized, you MUST explicitly add "stylized 3D render, not a real person, no realism" to the prompt.
+
+DO NOT output any conversational text, explanations, or formatting. ONLY output the raw, final text prompt.`
                         });
 
                         const stage1Payload = {
@@ -274,13 +309,13 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                         
                         console.log("Vertex AI Stage 1 Success. Generated Prompt:", generatedPrompt.substring(0, 100) + "...");
 
-                        // STAGE 2: THE PAINTER (Imagen 3)
-                        const stage2Model = 'imagen-3.0-generate-001';
+                        // STAGE 2: THE PAINTER (Imagen 4)
+                        const stage2Model = 'imagen-4.0-generate-001';
                         const stage2Url = `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/${stage2Model}:predict`;
                         
                         const aspectRatio = params.config?.imageConfig?.aspectRatio || "1:1";
                         
-                        const stage2Payload = {
+                        const stage2Payload: any = {
                             instances: [
                                 {
                                     prompt: generatedPrompt
@@ -292,7 +327,42 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                             }
                         };
 
-                        const stage2Res = await fetch(stage2Url, {
+                        // Add reference images to the instance
+                        const referenceImages: any[] = [];
+                        let refId = 1;
+
+                        // Add Character Images as SUBJECT reference
+                        characterImages.forEach((b64) => {
+                            referenceImages.push({
+                                referenceImage: { bytesBase64Encoded: b64 },
+                                referenceType: "SUBJECT",
+                                referenceId: refId++
+                            });
+                        });
+
+                        // Add Style Images as STYLE reference
+                        styleImages.forEach((b64) => {
+                            referenceImages.push({
+                                referenceImage: { bytesBase64Encoded: b64 },
+                                referenceType: "STYLE",
+                                referenceId: refId++
+                            });
+                        });
+
+                        if (referenceImages.length > 0) {
+                            stage2Payload.instances[0].referenceImages = referenceImages;
+                        }
+
+                        // Add Pose Image as base image for Image-to-Image
+                        if (poseImage) {
+                            stage2Payload.instances[0].image = {
+                                bytesBase64Encoded: poseImage
+                            };
+                            // When using base image, we might need to set editConfig or mode, 
+                            // but for imagen-3.0-generate-001, providing 'image' usually triggers image-to-image.
+                        }
+
+                        let stage2Res = await fetch(stage2Url, {
                             method: 'POST',
                             headers: {
                                 'Authorization': `Bearer ${accessToken}`,
@@ -300,6 +370,34 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                             },
                             body: JSON.stringify(stage2Payload)
                         });
+
+                        // Fallback 1: If it fails with both image and referenceImages, try without base image
+                        if (!stage2Res.ok && poseImage && referenceImages.length > 0) {
+                            console.warn("Vertex AI: Image-to-Image with references failed. Retrying without base pose image...");
+                            delete stage2Payload.instances[0].image;
+                            stage2Res = await fetch(stage2Url, {
+                                method: 'POST',
+                                headers: {
+                                    'Authorization': `Bearer ${accessToken}`,
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify(stage2Payload)
+                            });
+                        }
+
+                        // Fallback 2: If it still fails, try with just the prompt (Text-to-Image)
+                        if (!stage2Res.ok && referenceImages.length > 0) {
+                            console.warn("Vertex AI: Subject/Style References failed. Retrying with just Text-to-Image...");
+                            delete stage2Payload.instances[0].referenceImages;
+                            stage2Res = await fetch(stage2Url, {
+                                method: 'POST',
+                                headers: {
+                                    'Authorization': `Bearer ${accessToken}`,
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify(stage2Payload)
+                            });
+                        }
 
                         if (!stage2Res.ok) {
                             const err = await stage2Res.json().catch(() => ({}));

@@ -212,10 +212,12 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                     
                     // Map text models to standard 1.5 for Vertex AI to avoid 404s on preview/002 text models
                     if (vertexModel === 'gemini-3.1-flash-preview' || vertexModel === 'gemini-3-flash-preview') {
-                        vertexModel = 'gemini-1.5-flash';
+                        // On Vertex AI, you often need the exact version suffix for stable models
+                        vertexModel = 'gemini-1.5-flash-001';
                         apiVersion = 'v1'; // Stable models must use v1 endpoint
                     } else if (vertexModel === 'gemini-3.1-pro-preview') {
-                        vertexModel = 'gemini-1.5-pro';
+                        // On Vertex AI, you often need the exact version suffix for stable models
+                        vertexModel = 'gemini-1.5-pro-001';
                         apiVersion = 'v1'; // Stable models must use v1 endpoint
                     } else if (vertexModel === 'gemini-3.1-flash-image-preview' || vertexModel === 'gemini-3-pro-image-preview') {
                         // Keep the exact image model name as requested

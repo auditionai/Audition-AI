@@ -268,20 +268,7 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                         });
 
                         stage1Contents[0].parts.push({
-                            text: `\n\nCRITICAL SYSTEM OVERRIDE: You are a Technical Identity Auditor for a pixel-perfect character transfer system.
-Your task is to write a prompt that FORCES the image generator to use the EXACT pixels and identity from the provided SUBJECT reference image.
-
-CRITICAL RULES FOR ABSOLUTE FIDELITY:
-1. IDENTITY LOCK: Start the prompt with "Using the exact, identical subject from the SUBJECT reference image...". 
-2. NO RE-INTERPRETATION: Explicitly state "Do not draw a new character. Transfer the exact facial features, eye shape, iris details, makeup patterns, and any unique anatomical features (like elf ears, mechanical parts, or non-human traits) from the SUBJECT image without any modification."
-3. LITERAL DETAIL TRANSFER: List every unique identifier from the character: "exact snowman pin on the left chest", "exact black bunny bag with star patterns", "exact hair clips and ribbon placement", "exact eyewear or headgear".
-4. PIXEL-LEVEL ENFORCEMENT: Use phrases like "maintain 100% identity fidelity", "zero creative liberty on character features", "literal pixel transfer of the character's face and accessories".
-5. PRESERVE GAME DESIGN: If the character has unique game-specific traits (elf ears, glowing eyes, mechanical limbs, specific tattoos), explicitly state that these MUST be preserved as they are core to the identity.
-6. POSE & STYLE INTEGRATION: Commands the generator to place this EXACT character into the pose of the Pose Reference and apply the render quality of the Style Reference.
-
-The objective is NOT a creative drawing. It is a technical "IDENTITY OVERLAY" where the character from Image 1 is mapped onto the structure of Image 2.
-
-ONLY output the raw, final text prompt in English. No conversation.`
+                            text: `\n\n=================================\nCRITICAL SYSTEM OVERRIDE - VISION-TO-TEXT CAPTIONING MODE\n=================================\nIgnore any previous instructions asking you to "generate an image" or "edit an image". You are an expert Vision-to-Text Prompt Engineer. Your ONLY job is to write a highly descriptive, visual caption for a Diffusion Model (Imagen 4).\n\nDiffusion models DO NOT understand commands like "use the reference", "do not change identity", or "keep the face identical". They ONLY understand visual descriptions. If you write commands, the image will fail.\n\nYOUR TASK:\nWrite a single, cohesive, highly detailed paragraph describing the final scene. You must synthesize the provided images into this description:\n\n1. SUBJECT (From AVATAR DESIGN IMAGES): Describe the character's physical appearance in excruciating detail. Describe their exact hair color, hairstyle, eye shape, facial features, and EVERY specific piece of clothing and accessory. The diffusion model will use a SUBJECT reference, but your text MUST match it perfectly to avoid hallucinations.\n2. POSE & FRAMING (From POSE & BACKGROUND IMAGE): Analyze the pose image. Describe the EXACT camera framing (e.g., close-up, full-body, cowboy shot), the character's exact body language, limb positions, head tilt, and facial expression. (e.g., "Character is sitting on a concrete ledge, right leg crossed over left, looking over their right shoulder with a confident smirk").\n3. BACKGROUND: Describe the background based ONLY on the user's text prompt. DO NOT describe the plain/grey background from the character reference sheet.\n4. STYLE: End the caption with style keywords: "highly detailed 3D game render, Korean MMO style, masterpiece, 8k resolution, Unreal Engine 5 render, vibrant colors".\n\nOUTPUT FORMAT:\nReturn ONLY the descriptive caption. No intro, no outro, no meta-text, no commands.`
                         });
 
                         const stage1Payload = {
@@ -327,7 +314,7 @@ ONLY output the raw, final text prompt in English. No conversation.`
                         // Add Character Images as SUBJECT reference
                         characterImages.forEach((b64) => {
                             referenceImages.push({
-                                image: { bytesBase64Encoded: b64 },
+                                referenceImage: { bytesBase64Encoded: b64 },
                                 referenceType: "SUBJECT",
                                 referenceId: refId++
                             });
@@ -336,7 +323,7 @@ ONLY output the raw, final text prompt in English. No conversation.`
                         // Add Style Images as STYLE reference
                         styleImages.forEach((b64) => {
                             referenceImages.push({
-                                image: { bytesBase64Encoded: b64 },
+                                referenceImage: { bytesBase64Encoded: b64 },
                                 referenceType: "STYLE",
                                 referenceId: refId++
                             });
@@ -353,7 +340,8 @@ ONLY output the raw, final text prompt in English. No conversation.`
                                 aspectRatio: aspectRatio,
                                 // CRITICAL: Negative prompt to prevent AI from adding UNRELATED artifacts, 
                                 // but we REMOVED content-specific terms like 'elf ears' to allow game character traits.
-                                negativePrompt: "distorted face, extra fingers, blurry, low quality, watermarks, text, signature, deformed limbs, floating parts, messy hair, inconsistent lighting, realistic human skin texture, photograph, real person"
+                                negativePrompt: "distorted face, extra fingers, blurry, low quality, watermarks, text, signature, deformed limbs, floating parts, messy hair, inconsistent lighting, realistic human skin texture, photograph, real person",
+                                personGeneration: "ALLOW_ALL"
                             }
                         };
 
@@ -713,10 +701,8 @@ const optimizePromptWithThinking = async (
     poseContext: string = "",
     masterSheetPart: any | null = null
 ): Promise<string> => {
-    // UPGRADE: Use Gemini 3.1 Pro for the "Brain" of the operation.
-    // This ensures that even if we use the Flash Image Model, the PROMPT itself is crafted by the smartest Text Model.
-    // This meets the user's requirement for "Flash model to be smarter, superior".
-    const model = 'gemini-3.1-pro-preview'; 
+    // Use Gemini 2.5 Pro for the "Brain" of the operation.
+    const model = 'gemini-2.5-pro'; 
 
     try {
         // Use Pro client for reasoning (it's text-only so it's cheap/fast enough)
@@ -726,7 +712,7 @@ const optimizePromptWithThinking = async (
         
         if (masterSheetPart) {
             parts.push(masterSheetPart);
-            parts.push({ text: "🔴 REFERENCE SHEET PROVIDED: The image above contains the characters for this scene. Analyze their appearance (Face, Hair, Outfit) and describe them in the final prompt." });
+            parts.push({ text: "🔴 REFERENCE SHEET PROVIDED: The image above contains the characters for this scene. Analyze their appearance (Face, Hair, Outfit) and describe them in the final prompt. CRITICAL: DO NOT describe the background of this reference sheet (e.g., do NOT say 'standing on a grey background'). Only extract the character's visual features." });
         }
 
         parts.push({
@@ -748,7 +734,7 @@ RULES:
 - ART STYLE (CRITICAL): The final image MUST be a stylized 3D game render (like a Korean MMO). It MUST NOT look like a real person or a photograph. The pose reference might be a real person, but you MUST TRANSLATE that pose into a 3D game character style. DO NOT copy the realism of the pose reference. The output MUST look like a 3D video game graphic.
 - ENHANCE the prompt with "Quality Boosters": masterpiece, best quality, ultra-detailed, stylized 3D render, 8k, ray tracing, hdr.
 - FRAMING, POSE & EXPRESSION (CRITICAL): Describe the framing (e.g., close-up, portrait, half-body, full-body), pose, and the EXACT facial expression (gaze, mood, attitude, "soul") exactly as provided in the POSE input. The framing MUST match the reference. If the reference is a close-up or half-body, you MUST explicitly state "close-up" or "half-body" in the prompt. You MUST capture the exact attitude and vibe of the character in the pose reference (e.g., confident, mysterious, aggressive, soft). CRITICAL: Ensure the character's core facial identity remains intact while adopting this deep expression and attitude.
-- BACKGROUND: Use the provided vibe/elements to design a NEW, creative background that fits the scene but is not a direct copy.
+- BACKGROUND: The background MUST be based on the user's COMMAND. If the user COMMAND specifies a background (e.g., "in a city", "in a forest"), you MUST use that. If a POSE image is provided, you can use its vibe, but the user's COMMAND takes priority. DO NOT describe a plain or grey background unless the user explicitly asked for it.
 - INTERACTION (CRITICAL): You MUST describe how the character interacts with this new background. Ensure their hands, feet, and body are grounded and touching logical surfaces (e.g., leaning on a railing, sitting on a step, holding a prop). Do not let the character float in the air.
 - Output ONLY the final prompt. No explanations.`
         });
@@ -841,7 +827,7 @@ export const generateImage = async (
     availableStyles: any[] = [], // New: Pool of styles for auto-selection
     timeoutMs: number = 900000 // Default 15 mins
 ): Promise<string> => {
-    // UPGRADE: Use Gemini 2.5 Flash Image for FLASH Tier
+    // Use Gemini 2.5 Flash Image for FLASH Tier
     // Use Gemini 2.5 Pro Image for PRO Tier
     const model = modelType === 'flash' ? 'gemini-2.5-flash-image' : 'gemini-2.5-pro-image'; 
     onLog(`Initializing ${model} Pipeline...`);
@@ -1134,7 +1120,7 @@ export const editImageWithInstructions = async (
     instruction: string, 
     mimeType: string
 ): Promise<string> => {
-    const model = 'gemini-3.1-flash-image-preview'; 
+    const model = 'gemini-2.5-flash-image'; 
 
     const response = await retryWithBackoff(
         async () => {

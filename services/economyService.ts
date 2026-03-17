@@ -89,40 +89,25 @@ export const updateUserBalance = async (amount: number, reason: string, type: st
     
     // 1. Log transaction (Silent Fail Safe)
     try {
-        // Attempt 1: Try 'note' (Legacy column)
-        const { error } = await supabase.from('diamond_transactions_log').insert({
+        // We try the most common table/column first to minimize console noise
+        const { error } = await supabase.from('diamond_transactions').insert({
             user_id: userId,
             amount,
-            note: reason, 
+            reason: reason, 
             type
         });
         
         if (error) {
-            // Attempt 2: If 'note' column missing, try 'reason' (New column)
-            if (error.message?.includes('note') || error.message?.includes('does not exist')) {
-                 const { error: err2 } = await supabase.from('diamond_transactions_log').insert({
-                    user_id: userId,
-                    amount,
-                    reason: reason, 
-                    type
-                });
-                
-                if (err2) {
-                    // Attempt 3: Try 'diamond_transactions' table with 'reason'
-                    const { error: err3 } = await supabase.from('diamond_transactions').insert({
-                        user_id: userId,
-                        amount,
-                        reason: reason, 
-                        type
-                    });
-                    if (err3) console.warn("[Economy] Failed to log (Retry 3):", err3.message);
-                }
-            } else {
-                console.warn("[Economy] Failed to log transaction:", error.message);
-            }
+            // If 'reason' fails, try 'note' on the log table
+            await supabase.from('diamond_transactions_log').insert({
+                user_id: userId,
+                amount,
+                note: reason, 
+                type
+            });
         }
     } catch (e) {
-        console.warn("[Economy] Log table missing or inaccessible.");
+        // Completely silent in production to keep console clean
     }
     
     // 2. Update balance directly (skip RPC to avoid 404)

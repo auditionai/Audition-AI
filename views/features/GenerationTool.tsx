@@ -433,16 +433,15 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
         // --- NEW: API KEY PRE-FLIGHT TEST (120s Timeout / 5s Retry) ---
         let isKeyValid = false;
         const startTime = Date.now();
-        const TIMEOUT_LIMIT = 300000; // Tăng lên 5 phút (300s) để có đủ thời gian test và xoay vòng Key khi Server quá tải
+        const TIMEOUT_LIMIT = 300000; // 5 mins
         const RETRY_INTERVAL = 5000; // 5s
         let attempt = 0;
 
         while (Date.now() - startTime < TIMEOUT_LIMIT) {
             attempt++;
-            addLog(`Xác thực tài khoản VIP & Khởi tạo luồng Render - Lần ${attempt}...`);
+            addLog(`Đang kết nối đến máy chủ đồ họa Google (Lần ${attempt})...`);
             
             const stepStart = Date.now();
-            // Pass the selected AI Model (flash/pro) to testApiKey so it tests the correct key/tier
             isKeyValid = await testApiKey(aiModel);
             
             if (isKeyValid) break;
@@ -451,12 +450,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
             const waitTime = Math.max(0, RETRY_INTERVAL - elapsed);
             
             if (Date.now() - startTime + waitTime < TIMEOUT_LIMIT) {
-                if (waitTime > 1000) {
-                     addLog(`Đang kết nối đến máy chủ đồ họa Google...`);
-                     await new Promise(r => setTimeout(r, waitTime));
-                } else {
-                     addLog(`Đang kết nối đến máy chủ đồ họa Google...`);
-                }
+                await new Promise(r => setTimeout(r, waitTime));
             }
         }
 
@@ -556,7 +550,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
           timestamp: Date.now(),
           toolId: feature.id,
           toolName: feature.name['en'],
-          engine: aiModel === 'flash' ? `Gemini 3.1 Flash ${resolution}` : `Gemini 3.0 Pro ${resolution}`
+          engine: aiModel === 'flash' ? `Gemini 2.5 Flash ${resolution}` : `Gemini 2.5 Pro ${resolution}`
         };
         setGeneratedData(newImage);
         
@@ -696,8 +690,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                                   <Icons.Cpu className="w-5 h-5" />
                               </div>
                               <div>
-                                  <h4 className="text-sm font-bold text-white">Model 3.0 Pro</h4>
-                                  <p className="text-xs text-slate-400 mt-1">Sử dụng mô hình Nano Banana Pro mới nhất. Hiểu lệnh tốt hơn, chi tiết trang phục sắc nét hơn bản Flash cũ.</p>
+                                  <h4 className="text-sm font-bold text-white">Model 2.5 Pro</h4>
+                                  <p className="text-xs text-slate-400 mt-1">Sử dụng mô hình Gemini 2.5 Pro mới nhất. Hiểu lệnh tốt hơn, chi tiết trang phục sắc nét hơn bản Flash.</p>
                               </div>
                           </div>
 
@@ -777,7 +771,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                   <div className="flex justify-between items-center p-3 border-b border-white/10 bg-white/5">
                       <div className="flex items-center gap-2">
                           <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                          <span className="font-bold text-xs text-white">Result (3.0 Pro)</span>
+                          <span className="font-bold text-xs text-white">Kết quả (Gemini 2.5 Pro)</span>
                       </div>
                       <button onClick={() => setStage('input')} className="text-[10px] font-bold text-slate-400 hover:text-white px-2 py-1 rounded bg-white/5 hover:bg-white/10">X</button>
                   </div>

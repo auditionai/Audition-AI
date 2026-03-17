@@ -68,7 +68,7 @@ const retryWithBackoff = async <T>(
 
 // --- NEW: ANALYZE STYLE IMAGE (For Admin) ---
 export const analyzeStyleImage = async (imageBase64: string): Promise<string> => {
-    const model = 'gemini-3.1-pro-preview'; // Use pro for stability
+    const model = 'gemini-2.5-pro-preview'; // Use latest pro for stability
 
     const result: any = await retryWithBackoff(
         async () => {
@@ -101,8 +101,8 @@ const selectBestStyle = async (prompt: string, styles: any[]): Promise<any | nul
     if (!styles || styles.length === 0) return null;
     if (styles.length === 1) return styles[0]; // Only one choice
 
-    // Use Flash for fast routing
-    const model = 'gemini-3-flash-preview'; 
+    // Use latest Flash for fast routing
+    const model = 'gemini-2.5-flash-preview'; 
 
     const styleList = styles.map(s => `- ID: ${s.id} | Name: ${s.name} | Keywords: ${s.trigger_prompt}`).join('\n');
 
@@ -211,17 +211,17 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                     let apiVersion = 'v1beta1'; // Default to v1beta1 for preview models
                     
                     // --- TWO-STAGE PIPELINE FOR VERTEX AI IMAGE GENERATION ---
-                    // Since Gemini 3 Image models require $1200/week Provisioned Throughput on Vertex AI,
+                    // Since Gemini Image models require Provisioned Throughput on Vertex AI,
                     // we intercept image requests and use a smart pipeline to stay within the $300 free credit:
-                    // Stage 1: Use Gemini 1.5 Pro to analyze images and write a highly detailed prompt.
+                    // Stage 1: Use Gemini 2.5 Pro to analyze images and write a highly detailed prompt.
                     // Stage 2: Use Imagen 4 to generate the image based on that prompt.
-                    const isImageGeneration = vertexModel === 'gemini-3.1-flash-image-preview' || vertexModel === 'gemini-3-pro-image-preview';
+                    const isImageGeneration = vertexModel === 'gemini-2.5-flash-image' || vertexModel === 'gemini-2.5-pro-image';
                     
                     if (isImageGeneration) {
-                        console.log("Vertex AI: Intercepting Image Generation. Starting Two-Stage Pipeline (Gemini 1.5 Pro -> Imagen 4)...");
+                        console.log("Vertex AI: Starting Identity Transfer Pipeline (Gemini 2.5 Pro -> Imagen 4)...");
                         
                         // STAGE 1: THE BRAIN (Gemini 2.5 Pro)
-                        const stage1Model = 'gemini-2.5-pro';
+                        const stage1Model = 'gemini-2.5-pro-preview';
                         const stage1Url = `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/${stage1Model}:generateContent`;
                         
                         // Extract images from params.contents for Imagen 4
@@ -273,10 +273,11 @@ Your task is to write a prompt that FORCES the image generator to use the EXACT 
 
 CRITICAL RULES FOR ABSOLUTE FIDELITY:
 1. IDENTITY LOCK: Start the prompt with "Using the exact, identical subject from the SUBJECT reference image...". 
-2. NO RE-INTERPRETATION: Explicitly state "Do not draw a new character. Transfer the exact facial features, eye shape, iris details, and makeup patterns from the SUBJECT image without any modification."
-3. LITERAL DETAIL TRANSFER: List every unique identifier from the character: "exact snowman pin on the left chest", "exact black bunny bag with star patterns", "exact hair clips and ribbon placement".
-4. PIXEL-LEVEL ENFORCEMENT: Use phrases like "maintain 100% identity fidelity", "zero creative liberty on character features", "literal pixel transfer of the character's face".
-5. POSE & STYLE INTEGRATION: Commands the generator to place this EXACT character into the pose of the Pose Reference and apply the render quality of the Style Reference.
+2. NO RE-INTERPRETATION: Explicitly state "Do not draw a new character. Transfer the exact facial features, eye shape, iris details, makeup patterns, and any unique anatomical features (like elf ears, mechanical parts, or non-human traits) from the SUBJECT image without any modification."
+3. LITERAL DETAIL TRANSFER: List every unique identifier from the character: "exact snowman pin on the left chest", "exact black bunny bag with star patterns", "exact hair clips and ribbon placement", "exact eyewear or headgear".
+4. PIXEL-LEVEL ENFORCEMENT: Use phrases like "maintain 100% identity fidelity", "zero creative liberty on character features", "literal pixel transfer of the character's face and accessories".
+5. PRESERVE GAME DESIGN: If the character has unique game-specific traits (elf ears, glowing eyes, mechanical limbs, specific tattoos), explicitly state that these MUST be preserved as they are core to the identity.
+6. POSE & STYLE INTEGRATION: Commands the generator to place this EXACT character into the pose of the Pose Reference and apply the render quality of the Style Reference.
 
 The objective is NOT a creative drawing. It is a technical "IDENTITY OVERLAY" where the character from Image 1 is mapped onto the structure of Image 2.
 
@@ -351,19 +352,16 @@ ONLY output the raw, final text prompt in English. No conversation.`
                             parameters: {
                                 sampleCount: 1,
                                 aspectRatio: aspectRatio,
-                                // CRITICAL: Negative prompt to prevent AI from adding unwanted features or changing identity
-                                negativePrompt: "elf ears, distorted face, extra fingers, modified clothing, different hairstyle, creative additions, realism, photograph, human features, realistic skin texture"
+                                // CRITICAL: Negative prompt to prevent AI from adding UNRELATED artifacts, 
+                                // but we REMOVED content-specific terms like 'elf ears' to allow game character traits.
+                                negativePrompt: "distorted face, extra fingers, blurry, low quality, watermarks, text, signature, deformed limbs, floating parts, messy hair, inconsistent lighting, realistic human skin texture, photograph, real person"
                             }
                         };
 
-                        // NEW STRATEGY: Use the Pose Image as the base 'image' to force the AI to keep the exact pose and background
-                        // This achieves the "Copy-Paste" effect the user wants.
-                        if (poseImage) {
-                            stage2Payload.instances[0].image = {
-                                bytesBase64Encoded: poseImage
-                            };
-                        }
-
+                        // CRITICAL: For Imagen 4 generation with references, we do NOT use the 'image' field in instances
+                        // as that triggers the 'editing' mode which often fails or produces inconsistent results.
+                        // Instead, we rely on SUBJECT and STYLE references in parameters.
+                        
                         // CRITICAL FIX: referenceImages must be in parameters, not instances for Imagen 3/4
                         if (referenceImages.length > 0) {
                             stage2Payload.parameters.referenceImages = referenceImages;

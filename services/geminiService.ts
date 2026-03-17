@@ -68,7 +68,7 @@ const retryWithBackoff = async <T>(
 
 // --- NEW: ANALYZE STYLE IMAGE (For Admin) ---
 export const analyzeStyleImage = async (imageBase64: string): Promise<string> => {
-    const model = 'gemini-2.5-pro'; // Use 2.5 pro for analysis
+    const model = 'gemini-3.1-pro-preview'; // Use 3.1 pro for analysis
 
     const result: any = await retryWithBackoff(
         async () => {
@@ -102,7 +102,7 @@ const selectBestStyle = async (prompt: string, styles: any[]): Promise<any | nul
     if (styles.length === 1) return styles[0]; // Only one choice
 
     // Use latest Flash for fast routing
-    const model = 'gemini-2.5-flash'; 
+    const model = 'gemini-3.1-flash-preview'; 
 
     const styleList = styles.map(s => `- ID: ${s.id} | Name: ${s.name} | Keywords: ${s.trigger_prompt}`).join('\n');
 
@@ -224,12 +224,12 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                         isGlobalImageModel = true; // Both use global location
                     } else {
                         if (vertexModel.includes('flash')) {
-                            // On Vertex AI, use 2.5 Flash
-                            vertexModel = 'gemini-2.5-flash';
+                            // On Vertex AI, use 3.1 Flash
+                            vertexModel = 'gemini-3.1-flash-preview';
                             apiVersion = 'v1beta1'; 
                         } else if (vertexModel.includes('pro')) {
-                            // On Vertex AI, use 2.5 Pro
-                            vertexModel = 'gemini-2.5-pro';
+                            // On Vertex AI, use 3.1 Pro
+                            vertexModel = 'gemini-3.1-pro-preview';
                             apiVersion = 'v1beta1'; 
                         }
                     }
@@ -376,7 +376,7 @@ const extractImage = (response: any): string | null => {
 export const testApiKey = async (tier: 'flash' | 'pro' = 'flash'): Promise<boolean> => {
     try {
         const freshAi = await getAiClient(tier);
-        const testModel = tier === 'pro' ? 'gemini-2.5-pro' : 'gemini-2.5-flash';
+        const testModel = tier === 'pro' ? 'gemini-3.1-pro-preview' : 'gemini-3.1-flash-preview';
 
         await runWithTimeout(
             freshAi.models.generateContent({
@@ -459,7 +459,7 @@ export const checkConnection = async (key?: string): Promise<{ success: boolean;
         // Sử dụng Flash cho checkConnection (Admin) để ping nhanh và ổn định nhất
         await runWithTimeout(
             ai.models.generateContent({
-                model: 'gemini-2.5-flash',
+                model: 'gemini-3.1-flash-preview',
                 contents: { parts: [{ text: "Ping" }] }
             }),
             15000,
@@ -529,8 +529,8 @@ const optimizePromptWithThinking = async (
     poseContext: string = "",
     masterSheetPart: any | null = null
 ): Promise<string> => {
-    // Use Gemini 2.5 Pro for the "Brain" of the operation.
-    const model = 'gemini-2.5-pro'; 
+    // Use Gemini 3.1 Pro for the "Brain" of the operation.
+    const model = 'gemini-3.1-pro-preview'; 
 
     try {
         // Use Pro client for reasoning (it's text-only so it's cheap/fast enough)
@@ -698,7 +698,7 @@ export const generateImage = async (
     const cleanStyleImages: string[] = [];
     
     // We only load the ACTIVE style image for the image generator.
-    // Loading ALL style images (e.g., 4-5 images) confuses the image generation model (gemini-2.5-flash-image) 
+    // Loading ALL style images (e.g., 4-5 images) confuses the image generation model (gemini-3.1-flash-image-preview) 
     // and causes it to completely ignore the character and pose references.
     if (styleReferenceUrl) {
         onLog("Step 2: Loading Active Style Reference Image...");
@@ -891,7 +891,7 @@ export const generateImage = async (
     };
 
     // ENABLED: Resolution Setting for both Flash and Pro Models
-    // Both gemini-2.5-flash-image and gemini-2.5-pro-image support 1K/2K/4K.
+    // Both gemini-3.1-flash-image-preview and gemini-3-pro-image-preview support 1K/2K/4K.
     config.imageConfig.imageSize = resolution;
 
     // googleSearch is only supported on gemini-3-pro-image-preview

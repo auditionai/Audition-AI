@@ -89,8 +89,6 @@ export const updateUserBalance = async (amount: number, reason: string, type: st
     
     // 1. Log transaction (Silent Fail Safe)
     try {
-        // We try the most common table/column first to minimize console noise
-        // Check if user_id or uid is used
         const transactionData: any = {
             amount,
             reason: reason, 
@@ -111,16 +109,25 @@ export const updateUserBalance = async (amount: number, reason: string, type: st
         }
         
         if (error) {
-            // If 'reason' fails, try 'note' on the log table
-            await supabase.from('diamond_transactions_log').insert({
-                user_id: userId,
+            const logData: any = {
                 amount,
                 note: reason, 
                 type
+            };
+            const { error: logError } = await supabase.from('diamond_transactions_log').insert({
+                ...logData,
+                user_id: userId
             });
+            
+            if (logError && logError.message.includes('column "user_id" does not exist')) {
+                await supabase.from('diamond_transactions_log').insert({
+                    ...logData,
+                    uid: userId
+                });
+            }
         }
     } catch (e) {
-        // Completely silent in production to keep console clean
+        // Completely silent
     }
     
     // 2. Update balance directly (skip RPC to avoid 404)
@@ -147,19 +154,14 @@ export const logVisit = async () => {
     if (!supabase) return;
     try {
         const { data: { user } } = await supabase.auth.getUser();
+        const visitData = { user_id: user?.id || null };
+        const { error } = await supabase.from('app_visits').insert(visitData);
         
-        // Log visit - rely on DB defaults for dates
-        const { error } = await supabase.from('app_visits').insert({
-            user_id: user?.id || null
-        });
-        
-        if (error) {
-            console.warn("Failed to log visit (Table might be missing):", error.message);
-        } else {
-            console.log("Visit logged successfully!");
+        if (error && error.message.includes('column "user_id" does not exist')) {
+            await supabase.from('app_visits').insert({ uid: user?.id || null });
         }
     } catch(e) {
-        console.warn("Error logging visit:", e);
+        // Silent
     }
 };
 

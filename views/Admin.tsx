@@ -1009,6 +1009,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               <div className="space-y-6 animate-slide-in-right">
                   <div className="flex justify-between items-center">
                       <h2 className="text-lg md:text-2xl font-bold text-white">Giao Dịch</h2>
+                      <div className="text-xs text-slate-400">Users fetched: {stats?.usersList?.length || 0}</div>
                       <div className="flex gap-2">
                           {selectedTxIds.length > 0 && (
                               <div className="flex items-center gap-2 bg-white/10 px-3 py-1.5 rounded-lg animate-fade-in">

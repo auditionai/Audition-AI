@@ -15,22 +15,22 @@ export const getUserProfile = async (): Promise<UserProfile> => {
         .eq('id', user.id)
         .maybeSingle();
 
-    if (error || !data) {
-        // Create profile if missing (fallback for missing trigger)
+    if (error || !data || !data.email || !data.display_name) {
+        // Create or update profile if missing or incomplete (fallback for missing trigger)
         const newProfile = {
             id: user.id,
-            email: user.email || '',
-            display_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
-            photo_url: user.user_metadata?.avatar_url || 'https://picsum.photos/100/100',
-            diamonds: 0,
-            is_admin: false,
+            email: user.email || data?.email || '',
+            display_name: user.user_metadata?.full_name || user.email?.split('@')[0] || data?.display_name || 'User',
+            photo_url: user.user_metadata?.avatar_url || data?.photo_url || 'https://picsum.photos/100/100',
+            diamonds: data?.diamonds ?? 0,
+            is_admin: data?.is_admin ?? false,
             last_active: new Date().toISOString()
         };
         
         try {
             await supabase.from('users').upsert(newProfile);
         } catch (e) {
-            console.warn("Failed to auto-create user profile", e);
+            console.warn("Failed to auto-create/update user profile", e);
         }
 
         return {
@@ -38,8 +38,8 @@ export const getUserProfile = async (): Promise<UserProfile> => {
             username: newProfile.display_name,
             email: newProfile.email,
             avatar: newProfile.photo_url,
-            balance: 0,
-            role: 'user',
+            balance: newProfile.diamonds,
+            role: newProfile.is_admin ? 'admin' : 'user',
             isVip: false,
             streak: 0,
             lastCheckin: null,
@@ -1065,13 +1065,16 @@ export const getGiftcodeUsages = async (codeId: string) => {
         
     if (error) throw error;
     
-    return data.map((u: any) => ({
-        userId: u.user_id,
-        usedAt: u.created_at,
-        userName: u.users?.display_name || 'Unknown',
-        userEmail: u.users?.email || 'No Email',
-        userAvatar: u.users?.photo_url || 'https://picsum.photos/50/50'
-    }));
+    return data.map((u: any) => {
+        const userObj = Array.isArray(u.users) ? u.users[0] : u.users;
+        return {
+            userId: u.user_id,
+            usedAt: u.created_at,
+            userName: userObj?.display_name || userObj?.email?.split('@')[0] || 'Unknown',
+            userEmail: userObj?.email || 'No Email',
+            userAvatar: userObj?.photo_url || 'https://picsum.photos/50/50'
+        };
+    });
 };
 
 // --- STYLE PRESETS ---
@@ -1124,7 +1127,8 @@ export const getAdminStats = async () => {
         usersList: [], packages: [], promotions: [], giftcodes: [], transactions: []
     };
     // Fetch Users
-    const { data: users, error: userError } = await supabase.from('users').select('id, email, display_name, diamonds, is_admin, created_at, photo_url, last_active');
+    const { data: users, error: userError } = await supabase.from('users').select('*');
+    console.log("Admin Stats - Users fetched:", users?.length, userError);
 
     if (userError) {
         console.error("Error fetching users for Admin Stats:", userError);
@@ -1144,7 +1148,16 @@ export const getAdminStats = async () => {
         .from('gift_codes')
         .select('*, gift_code_usages(count)');
 
-    const { data: txs } = await supabase.from('transactions').select('*').order('created_at', { ascending: false });
+    let { data: txs, error: txError } = await supabase.from('transactions').select('*, users(email, display_name, photo_url)').order('created_at', { ascending: false });
+    if (txError) {
+        console.warn("Failed to join users on transactions, falling back to select *", txError);
+        const fallback = await supabase.from('transactions').select('*').order('created_at', { ascending: false });
+        txs = fallback.data;
+    }
+    console.log("Admin Stats - Transactions fetched:", txs?.length);
+    if (txs && txs.length > 0) {
+        console.log("First Tx user_id:", txs[0].user_id, "uid:", txs[0].uid, "users join:", txs[0].users);
+    }
     
     // Try to fetch logs from both potential table names
     let usageLogs: any[] = [];
@@ -1270,12 +1283,20 @@ export const getAdminStats = async () => {
              }
          }
 
+         const txUserId = t.user_id || t.userId || t.uid;
+         let txUser = null;
+         if (t.users) {
+             txUser = Array.isArray(t.users) ? t.users[0] : t.users;
+         } else {
+             txUser = users?.find((u: any) => u.id === txUserId);
+         }
+         
          return {
              id: t.id,
-             userId: t.user_id,
-             userName: users?.find((u: any) => u.id === t.user_id)?.display_name,
-             userEmail: users?.find((u: any) => u.id === t.user_id)?.email,
-             userAvatar: users?.find((u: any) => u.id === t.user_id)?.photo_url,
+             userId: txUserId,
+             userName: txUser?.display_name || txUser?.email?.split('@')[0] || t.user_name || t.userName,
+             userEmail: txUser?.email || t.user_email || t.userEmail,
+             userAvatar: txUser?.photo_url || t.user_avatar || t.userAvatar,
              packageId: t.package_id,
              amount: t.amount ? Number(t.amount) : (t.price ? Number(t.price) : (t.amount_vnd ? Number(t.amount_vnd) : 0)),
              coins: coins,

@@ -33,10 +33,6 @@ export const Settings: React.FC<SettingsProps> = ({ lang, onLogout, onNavigate, 
       const loadUser = async () => {
           setIsLoading(true);
           const profile = await getUserProfile();
-          if (!profile) {
-              setIsLoading(false);
-              return;
-          }
           setUserProfile(profile);
           setFormName(profile.username);
           setFormAvatar(profile.avatar);

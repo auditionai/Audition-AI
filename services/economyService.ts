@@ -1,190 +1,541 @@
 import { supabase } from './supabaseClient';
-import { UserProfile, CreditPackage, Transaction, Promotion, DailyCheckin, SystemSettings, ApiKey, PromotionConfig } from '../types';
+import { UserProfile, CreditPackage, Giftcode, PromotionCampaign, Transaction, HistoryItem, DiamondLog } from '../types';
 
-const getUid = async (userId?: string) => {
-    const client = supabase;
-    if (!client) return userId || null;
-    return userId || (await client.auth.getUser()).data.user?.id;
-};
+// --- USER & PROFILE ---
 
-export const getSystemSettings = async (): Promise<SystemSettings> => {
-    const client = supabase;
-    if (!client) return { id: '1', maintenance_mode: false, announcement: '', min_topup: 10000, support_email: '', version: '1.0.0' };
-    const { data, error } = await client.from('system_settings').select('*').single();
-    if (error) return { id: '1', maintenance_mode: false, announcement: '', min_topup: 10000, support_email: '', version: '1.0.0' };
-    return data;
-};
-
-export const getUserProfile = async (userId?: string): Promise<UserProfile | null> => {
-    const uid = await getUid(userId);
-    const client = supabase;
-    if (!uid || !client) return null;
-    const { data } = await client.from('profiles').select('*').eq('id', uid).single();
-    return data;
-};
-
-export const updateBalance = async (amount: number, description: string, type: string, userId?: string) => {
-    const uid = await getUid(userId);
-    const client = supabase;
-    if (!uid || !client) throw new Error("Unauthorized or Database not connected");
-    const { data: profile } = await client.from('profiles').select('balance').eq('id', uid).single();
-    if (!profile) throw new Error("User not found");
-    const newBalance = (type === 'add' || amount > 0) ? profile.balance + Math.abs(amount) : profile.balance - Math.abs(amount);
-    if (newBalance < 0) throw new Error("Số dư không đủ");
-    await client.from('profiles').update({ balance: newBalance }).eq('id', uid);
-    await client.from('transactions').insert({ user_id: uid, amount: Math.abs(amount), type, description, status: 'completed' });
-    return newBalance;
-};
-
-export const updateUserBalance = updateBalance;
-
-export const performCheckin = async (userId?: string) => {
-    const uid = await getUid(userId);
-    const client = supabase;
-    if (!uid || !client) return { success: false, message: "Unauthorized or Database not connected" };
-    const today = new Date().toISOString().split('T')[0];
-    const { data: checkin } = await client.from('daily_checkins').select('*').eq('user_id', uid).single();
-    if (checkin && checkin.last_checkin === today) return { success: false, reward: 0, message: "Đã điểm danh" };
-    const reward = 1;
-    let newStreak = 1;
-    if (!checkin) {
-        await client.from('daily_checkins').insert({ user_id: uid, last_checkin: today, streak: 1 });
-    } else {
-        const lastCheckinDate = new Date(checkin.last_checkin);
-        const isStreak = (Date.now() - lastCheckinDate.getTime()) < 172800000;
-        newStreak = isStreak ? checkin.streak + 1 : 1;
-        await client.from('daily_checkins').update({ last_checkin: today, streak: newStreak }).eq('user_id', uid);
-    }
-    await updateBalance(reward, 'Điểm danh', 'reward', uid);
-    return { success: true, reward, newStreak, message: "Thành công" };
-};
-
-export const logVisit = async (userId?: string) => {
-    const uid = await getUid(userId);
-    const client = supabase;
-    if (uid && client) await client.from('visit_logs').insert({ user_id: uid, visited_at: new Date().toISOString() });
-};
-
-export const updateLastActive = async (userId?: string) => {
-    const uid = await getUid(userId);
-    const client = supabase;
-    if (uid && client) await client.from('profiles').update({ last_active: new Date().toISOString() }).eq('id', uid);
-};
-
-export const getCheckinStatus = async (userId?: string) => {
-    const uid = await getUid(userId);
-    const client = supabase;
-    if (!uid || !client) return null;
-    return (await client.from('daily_checkins').select('*').eq('user_id', uid).single()).data;
-};
-
-export const claimMilestoneReward = async (day: number, userId?: string) => {
-    const uid = await getUid(userId);
-    if (!uid) return { success: false, message: "Unauthorized" };
-    return { success: true, reward: 10, message: "Nhận thưởng thành công!" };
-};
-
-export const getActivePromotion = async () => {
-    const client = supabase;
-    if (!client) return null;
-    return (await client.from('promotions').select('*').eq('status', 'active').limit(1).single()).data;
-};
-
-export const getApiKeys = async () => {
-    const client = supabase;
-    if (!client) return [];
-    return (await client.from('api_keys').select('*')).data || [];
-};
-export const addApiKey = async (key: string, name: string, tier: any = 'flash'): Promise<{ success: boolean; error?: string }> => {
-    const client = supabase;
-    if (!client) return { success: false, error: "Database not connected" };
-    const { error } = await client.from('api_keys').insert({ key, name, tier, status: 'active' });
-    return { success: !error, error: error?.message };
-};
-export const deleteApiKey = async (id: string): Promise<{ success: boolean; error?: string }> => {
-    const client = supabase;
-    if (!client) return { success: false, error: "Database not connected" };
-    const { error } = await client.from('api_keys').delete().eq('id', id);
-    return { success: !error, error: error?.message };
-};
-export const updateApiKeyStatus = async (id: string, status: string): Promise<{ success: boolean; error?: string }> => {
-    const client = supabase;
-    if (!client) return { success: false, error: "Database not connected" };
-    const { error } = await client.from('api_keys').update({ status, last_used: new Date().toISOString() }).eq('id', id);
-    return { success: !error, error: error?.message };
-};
-
-export const getAdminStats = async () => {
-    const client = supabase;
-    if (!client) return { totalUsers: 0, totalRevenue: 0, packages: [], promotions: [], giftcodes: [], transactions: [] };
-    const { data: users } = await client.from('profiles').select('count');
-    const { data: trans } = await client.from('transactions').select('*').eq('status', 'completed');
-    const { data: pkgs } = await client.from('credit_packages').select('*');
-    const { data: promos } = await client.from('promotions').select('*');
-    const { data: codes } = await client.from('giftcodes').select('*');
-    return { totalUsers: users?.[0]?.count || 0, totalRevenue: trans?.reduce((acc: any, t: any) => acc + t.amount, 0) || 0, packages: pkgs || [], promotions: promos || [], giftcodes: codes || [], transactions: trans || [] };
-};
-
-export const getApiKeysList = async () => {
-    const client = supabase;
-    if (!client) return [];
-    return (await client.from('api_keys').select('*')).data || [];
-};
-export const saveSystemApiKey = async (d: any): Promise<{ success: boolean; error?: string }> => {
-    const client = supabase;
-    if (!client) return { success: false, error: "Database not connected" };
-    const { error } = d.id ? await client.from('api_keys').update(d).eq('id', d.id) : await client.from('api_keys').insert(d);
-    return { success: !error, error: error?.message };
-};
-export const updateAdminUserProfile = async (u: any, d?: any): Promise<{ success: boolean; error?: string }> => {
-    const client = supabase;
-    if (!client) return { success: false, error: "Database not connected" };
-    if (typeof u === 'object') {
-        // UI passes the whole profile object
-        const { id, ...rest } = u;
-        const { error } = await client.from('profiles').update(rest).eq('id', id);
-        return { success: !error, error: error?.message };
-    }
-    const { error } = await client.from('profiles').update(d).eq('id', u);
-    return { success: !error, error: error?.message };
-};
-
-export const savePackage = async (p: any): Promise<{ success: boolean; error?: string }> => {
-    const client = supabase;
-    if (!client) return { success: false, error: "Database not connected" };
-    const { id, ...rest } = p;
-    const { data: existing } = await client.from('transactions').select('id').eq('package_id', id).limit(1);
-    const hasHistory = existing && existing.length > 0;
+export const getUserProfile = async (): Promise<UserProfile> => {
+    if (!supabase) throw new Error("No Database");
     
-    let error;
-    if (id && id.length > 5) {
-        const { error: err } = await client.from('credit_packages').update(rest).eq('id', id);
-        error = err;
-    } else {
-        const { error: err } = await client.from('credit_packages').insert(rest);
-        error = err;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not logged in");
+
+    const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', user.id)
+        .maybeSingle();
+
+    if (error || !data) {
+        // Return dummy/fallback if profile missing (handled by SQL trigger normally)
+        return {
+            id: user.id,
+            username: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
+            email: user.email || '',
+            avatar: user.user_metadata?.avatar_url || 'https://picsum.photos/100/100',
+            balance: 0,
+            role: 'user',
+            isVip: false,
+            streak: 0,
+            lastCheckin: null,
+            checkinHistory: [],
+            usedGiftcodes: []
+        };
     }
-    return { success: !error, error: error?.message };
+
+    return {
+        id: data.id,
+        username: data.display_name || 'User',
+        email: data.email,
+        avatar: data.photo_url || 'https://picsum.photos/100/100',
+        balance: data.diamonds || 0,
+        role: data.is_admin ? 'admin' : 'user',
+        isVip: false, // Logic for VIP could be added later
+        streak: 0, // Need separate checkin table query if needed
+        lastCheckin: null,
+        checkinHistory: [],
+        usedGiftcodes: [],
+        lastActive: data.last_active || null
+    };
 };
 
-export const deletePackage = async (id: string): Promise<{ success: boolean; error?: string; action?: string }> => {
-    const client = supabase;
-    if (!client) return { success: false, error: "Database not connected" };
-    const { data: existing } = await client.from('transactions').select('id').eq('package_id', id).limit(1);
-    if (existing && existing.length > 0) {
-        await client.from('credit_packages').update({ is_active: false }).eq('id', id);
-        return { success: true, action: 'hidden' };
-    }
-    const { error } = await client.from('credit_packages').delete().eq('id', id);
-    return { success: !error, error: error?.message };
-};
-
-export const updatePackageOrder = async (o: any[]): Promise<{ success: boolean; error?: string }> => { 
-    const client = supabase;
-    if (!client) return { success: false, error: "Database not connected" };
+export const updateLastActive = async () => {
+    if (!supabase) return;
     try {
-        for (let i = 0; i < o.length; i++) {
-            await client.from('credit_packages').update({ order_index: i }).eq('id', o[i].id);
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+            await supabase.from('users').update({ last_active: new Date().toISOString() }).eq('id', user.id);
+        }
+    } catch (e) {
+        console.warn("Failed to update last active", e);
+    }
+};
+
+export const updateAdminUserProfile = async (profile: UserProfile): Promise<{success: boolean, error?: string}> => {
+    if (!supabase) return { success: false, error: "No Database" };
+    try {
+        const { error } = await supabase
+            .from('users')
+            .update({
+                display_name: profile.username,
+                diamonds: profile.balance,
+                photo_url: profile.avatar
+            })
+            .eq('id', profile.id);
+        
+        if (error) throw error;
+        return { success: true };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+};
+
+export const updateUserBalance = async (amount: number, reason: string, type: string, targetUserId?: string) => {
+    if (!supabase) return;
+    let userId = targetUserId;
+    if (!userId) {
+        const user = await getUserProfile();
+        userId = user.id;
+    }
+    
+    // 1. Log transaction (Silent Fail Safe)
+    try {
+        const transactionData: any = {
+            amount,
+            reason: reason, 
+            type
+        };
+        
+        // Try to detect column name or just try both silently
+        const { error } = await supabase.from('diamond_transactions').insert({
+            ...transactionData,
+            user_id: userId
+        });
+        
+        if (error && error.message.includes('column "user_id" does not exist')) {
+             await supabase.from('diamond_transactions').insert({
+                ...transactionData,
+                uid: userId
+            });
+        }
+        
+        if (error) {
+            const logData: any = {
+                amount,
+                note: reason, 
+                type
+            };
+            const { error: logError } = await supabase.from('diamond_transactions_log').insert({
+                ...logData,
+                user_id: userId
+            });
+            
+            if (logError && logError.message.includes('column "user_id" does not exist')) {
+                await supabase.from('diamond_transactions_log').insert({
+                    ...logData,
+                    uid: userId
+                });
+            }
+        }
+    } catch (e) {
+        // Completely silent
+    }
+    
+    // 2. Update balance directly (skip RPC to avoid 404)
+    try {
+        // Fetch latest balance first to minimize race condition
+        const { data: latestUser } = await supabase.from('users').select('diamonds').eq('id', userId).maybeSingle();
+        const currentBalance = latestUser?.diamonds || 0;
+        const newBalance = currentBalance + amount;
+        
+        const { error } = await supabase.from('users').update({ diamonds: newBalance }).eq('id', userId);
+        if (error) throw error;
+    } catch (e: any) {
+        console.error("[Economy] Critical: Failed to update balance", e);
+        throw new Error("Failed to update balance: " + e.message);
+    }
+    
+    // Dispatch event for UI update
+    if (!targetUserId) {
+        window.dispatchEvent(new Event('balance_updated'));
+    }
+};
+
+export const logVisit = async () => {
+    if (!supabase) return;
+    try {
+        // We only log the visit without user_id to avoid 400 Foreign Key errors
+        // if the user row hasn't been created in the users table yet.
+        const visitData = { user_id: null };
+        const { error } = await supabase.from('app_visits').insert(visitData);
+        
+        if (error && error.message.includes('column "user_id" does not exist')) {
+            await supabase.from('app_visits').insert({ uid: null });
+        }
+    } catch(e) {
+        // Silent
+    }
+};
+
+// --- PACKAGES & PROMOTIONS ---
+
+export const getPackages = async (): Promise<CreditPackage[]> => {
+    if (!supabase) return [];
+    const { data } = await supabase
+        .from('credit_packages')
+        .select('*')
+        .eq('is_active', true)
+        .order('display_order', { ascending: true });
+        
+    if (!data) return [];
+    
+    return data.map((p: any) => ({
+        id: p.id,
+        name: p.name,
+        coin: p.credits_amount,
+        price: p.price_vnd,
+        currency: 'VND',
+        bonusText: p.tag || '',
+        bonusPercent: p.bonus_credits || 0,
+        isPopular: p.is_featured,
+        isActive: p.is_active,
+        displayOrder: p.display_order,
+        colorTheme: 'border-slate-600',
+        transferContent: p.transfer_syntax || ''
+    }));
+};
+
+export const savePackage = async (pkg: CreditPackage): Promise<{success: boolean, error?: string}> => {
+    if (!supabase) return { success: false, error: "No Database" };
+    try {
+        const payload = {
+            name: pkg.name,
+            credits_amount: pkg.coin,
+            price_vnd: pkg.price,
+            tag: pkg.bonusText,
+            bonus_credits: pkg.bonusPercent,
+            is_featured: pkg.isPopular,
+            is_active: pkg.isActive,
+            display_order: pkg.displayOrder,
+            transfer_syntax: pkg.transferContent
+        };
+        
+        let error;
+        if (pkg.id.startsWith('temp_')) {
+            ({ error } = await supabase.from('credit_packages').insert(payload));
+        } else {
+            ({ error } = await supabase.from('credit_packages').update(payload).eq('id', pkg.id));
+        }
+        
+        if (error) throw error;
+        return { success: true };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+};
+
+export const deletePackage = async (id: string): Promise<{success: boolean, error?: string, action?: string}> => {
+    if (!supabase) return { success: false, error: "No Database" };
+    try {
+        const { error } = await supabase.from('credit_packages').delete().eq('id', id);
+        if (error) {
+            // Soft delete if FK constraint fails
+            await supabase.from('credit_packages').update({ is_active: false }).eq('id', id);
+            return { success: true, action: 'hidden' };
+        }
+        return { success: true, action: 'deleted' };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+};
+
+export const updatePackageOrder = async (packages: CreditPackage[]): Promise<{success: boolean, error?: string}> => {
+    if (!supabase) return { success: false, error: "No Database" };
+    try {
+        for (let i = 0; i < packages.length; i++) {
+            await supabase.from('credit_packages').update({ display_order: i }).eq('id', packages[i].id);
+        }
+        return { success: true };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+}
+
+export const getActivePromotion = async (): Promise<PromotionCampaign | null> => {
+    if (!supabase) return null;
+    const now = new Date().toISOString();
+    try {
+        const { data, error } = await supabase
+            .from('promotions')
+            .select('*')
+            .eq('is_active', true)
+            .lt('start_time', now)
+            .gt('end_time', now)
+            .single();
+            
+        if (error || !data) return null;
+        
+        return {
+            id: data.id,
+            name: data.title || 'Event',
+            marqueeText: data.description || '',
+            bonusPercent: data.bonus_percent || 0,
+            startTime: data.start_time,
+            endTime: data.end_time,
+            isActive: data.is_active
+        };
+    } catch (e) {
+        return null;
+    }
+};
+
+export const savePromotion = async (promo: PromotionCampaign): Promise<{success: boolean, error?: string}> => {
+    if (!supabase) return { success: false, error: "No Database" };
+    try {
+         const payload = {
+            title: promo.name,
+            description: promo.marqueeText,
+            bonus_percent: promo.bonusPercent,
+            start_time: promo.startTime,
+            end_time: promo.endTime,
+            is_active: promo.isActive
+        };
+
+        let error;
+        if (promo.id.startsWith('temp_')) {
+            ({ error } = await supabase.from('promotions').insert(payload));
+        } else {
+            ({ error } = await supabase.from('promotions').update(payload).eq('id', promo.id));
+        }
+
+        if (error) throw error;
+        return { success: true };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+};
+
+export const deletePromotion = async (id: string): Promise<{success: boolean, error?: string}> => {
+    if (!supabase) return { success: false, error: "No Database" };
+    try {
+        const { error } = await supabase.from('promotions').delete().eq('id', id);
+        if (error) throw error;
+        return { success: true };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+};
+
+// --- HELPER ---
+export const getLocalTodayStr = () => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+};
+
+// --- CHECKIN & REWARDS ---
+
+export const getCheckinStatus = async () => {
+    if (!supabase) return { streak: 0, isCheckedInToday: false, history: [], claimedMilestones: [] };
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { streak: 0, isCheckedInToday: false, history: [], claimedMilestones: [] };
+
+    // Get basic stats from user table or dedicated checkin table
+    // Simplified: check `daily_check_ins` table
+    const today = getLocalTodayStr();
+    const { data } = await supabase
+        .from('daily_check_ins')
+        .select('check_in_date')
+        .eq('user_id', user.id);
+
+    const history = data?.map((r: any) => r.check_in_date) || [];
+    const isCheckedInToday = history.includes(today);
+    
+    // Simple streak calculation (count of this month)
+    const currentMonthPrefix = today.substring(0, 7);
+    const streak = history.filter((d: string) => d.startsWith(currentMonthPrefix)).length;
+
+    // Get milestones for the current month ONLY
+    const startOfMonth = new Date(today.substring(0, 7) + '-01').toISOString();
+    const { data: milestones } = await supabase
+        .from('milestone_claims')
+        .select('day_milestone')
+        .eq('user_id', user.id)
+        .gte('created_at', startOfMonth);
+        
+    return {
+        streak,
+        isCheckedInToday,
+        history,
+        claimedMilestones: milestones?.map((m: any) => m.day_milestone) || []
+    };
+};
+
+export const performCheckin = async (): Promise<{success: boolean, reward: number, newStreak: number, message?: string}> => {
+    if (!supabase) return { success: false, reward: 0, newStreak: 0, message: "No Database" };
+    const user = await getUserProfile();
+    const today = getLocalTodayStr();
+    const reward = 5;
+
+    try {
+        const { error } = await supabase.from('daily_check_ins').insert({
+            user_id: user.id,
+            check_in_date: today
+        });
+
+        if (error) throw error;
+
+        // Update balance directly
+        await updateUserBalance(reward, 'Daily Checkin', 'reward');
+        
+        const status = await getCheckinStatus();
+        return { success: true, reward, newStreak: status.streak };
+    } catch (e: any) {
+        return { success: false, reward: 0, newStreak: 0, message: e.message };
+    }
+};
+
+export const claimMilestoneReward = async (day: number): Promise<{success: boolean, message: string}> => {
+    if (!supabase) return { success: false, message: "No Database" };
+    const user = await getUserProfile();
+    const rewards: Record<number, number> = { 7: 20, 14: 50, 30: 100 };
+    const amount = rewards[day] || 0;
+
+    const today = getLocalTodayStr();
+    const startOfMonth = new Date(today.substring(0, 7) + '-01').toISOString();
+
+    try {
+        // Double check if already claimed THIS MONTH to prevent race conditions
+        const { data: existing } = await supabase
+            .from('milestone_claims')
+            .select('id')
+            .eq('user_id', user.id)
+            .eq('day_milestone', day)
+            .gte('created_at', startOfMonth)
+            .single();
+
+        if (existing) {
+            throw new Error(`Bạn đã nhận mốc ${day} ngày trong tháng này rồi!`);
+        }
+
+        const { error } = await supabase.from('milestone_claims').insert({
+            user_id: user.id,
+            day_milestone: day,
+            reward_amount: amount,
+            claim_month: today.substring(0, 7)
+        });
+
+        if (error) throw error;
+
+        await updateUserBalance(amount, `Milestone ${day} Days`, 'reward');
+        return { success: true, message: `Nhận thưởng mốc ${day} ngày thành công!` };
+    } catch (e: any) {
+        return { success: false, message: e.message };
+    }
+};
+
+// --- API KEYS (WITH INTELLIGENT ROTATION) ---
+
+// In-memory blacklist for the current session (to avoid hitting bad keys repeatedly in a loop)
+const temporarilyDisabledKeys: Set<string> = new Set();
+const KEY_COOLDOWN_MS = 60000; // 1 minute cooldown for bad keys
+
+export const isKeyDisabled = (key: string): boolean => {
+    return temporarilyDisabledKeys.has(key);
+};
+
+export const reportKeyFailure = (key: string) => {
+    if (!key) return;
+    const shortKey = key.substring(0, 4) + '...' + key.slice(-4);
+    console.warn(`[System] 🔴 API Key ${shortKey} failed. Temporarily disabling for 1 minute.`);
+    temporarilyDisabledKeys.add(key);
+    setTimeout(() => {
+        temporarilyDisabledKeys.delete(key);
+        console.log(`[System] 🟢 API Key ${shortKey} is back in rotation.`);
+    }, KEY_COOLDOWN_MS);
+};
+
+let lastUsedKey: string | null = null;
+
+export const getSystemApiKey = async (tier: 'flash' | 'pro' = 'flash', excludedKeys: string[] = []): Promise<string | null> => {
+    if (!supabase) return process.env.API_KEY || null;
+    try {
+        // 1. Get all active keys
+        const { data: allKeys, error } = await supabase
+            .from('api_keys')
+            .select('id, key_value, last_used_at, name')
+            .eq('status', 'active');
+        
+        if (error || !allKeys || allKeys.length === 0) {
+            // Fallback if DB error or empty
+            return process.env.API_KEY || null;
+        }
+
+        // Filter by tier
+        let tierKeys = allKeys;
+        if (tier === 'pro') {
+            tierKeys = allKeys.filter((k: any) => k.name && k.name.includes('[PRO]'));
+        } else {
+            // Flash keys are those without [PRO] (or explicitly marked [FLASH])
+            tierKeys = allKeys.filter((k: any) => !k.name || !k.name.includes('[PRO]'));
+        }
+
+        if (tierKeys.length === 0) {
+            // If no keys for this tier, fallback to ANY active key before falling back to env key
+            if (allKeys.length > 0) {
+                tierKeys = allKeys;
+            } else {
+                return process.env.API_KEY || null;
+            }
+        }
+
+        // 2. Filter out keys that are in the in-memory blacklist OR the excluded list (from retry loop)
+        let validKeys = tierKeys.filter((k: any) => 
+            !temporarilyDisabledKeys.has(k.key_value) && 
+            !excludedKeys.includes(k.key_value)
+        );
+
+        // 3. If all keys are disabled/excluded, clear the temporary blacklist and try again (Desperation mode)
+        if (validKeys.length === 0) {
+            console.warn("[System] All keys exhausted. Resetting temporary blacklist.");
+            temporarilyDisabledKeys.clear();
+            validKeys = tierKeys;
+        }
+
+        // 4. Avoid picking the exact same key as last time if we have multiple choices
+        let candidates = validKeys;
+        if (candidates.length > 1 && lastUsedKey) {
+            const filtered = candidates.filter((k: any) => k.key_value !== lastUsedKey);
+            if (filtered.length > 0) {
+                candidates = filtered;
+            }
+        }
+
+        // 5. Pick a RANDOM candidate
+        const randomIndex = Math.floor(Math.random() * candidates.length);
+        const selectedKey = candidates[randomIndex];
+
+        // 6. Update usage timestamp & state
+        lastUsedKey = selectedKey.key_value;
+        supabase.from('api_keys').update({ last_used_at: new Date().toISOString() }).eq('id', selectedKey.id).then(() => {});
+        
+        return selectedKey.key_value;
+    } catch (e) {
+        console.error("Key rotation error:", e);
+        return process.env.API_KEY || null;
+    }
+};
+
+export const saveSystemApiKey = async (key: string): Promise<{success: boolean, error?: string}> => {
+    if (!supabase) return { success: false, error: "No Database" };
+    try {
+        const cleanKey = key.trim();
+        
+        // Check if exists
+        const { data: existing } = await supabase
+            .from('api_keys')
+            .select('id, name')
+            .eq('key_value', cleanKey)
+            .single();
+
+        if (existing) {
+             const { error } = await supabase.from('api_keys').update({ status: 'active' }).eq('id', existing.id);
+             if (error) throw error;
+        } else {
+             const { error } = await supabase.from('api_keys').insert({
+                 name: `Service Account ` + new Date().toISOString(),
+                 key_value: cleanKey,
+                 status: 'active'
+             });
+             if (error) throw error;
         }
         return { success: true };
     } catch (e: any) {
@@ -192,172 +543,709 @@ export const updatePackageOrder = async (o: any[]): Promise<{ success: boolean; 
     }
 };
 
-export const saveGiftcode = async (g: any): Promise<{ success: boolean; error?: string }> => {
-    const client = supabase;
-    if (!client) return { success: false, error: "Database not connected" };
-    const { id, ...rest } = g;
-    let error;
-    if (id && id.length > 5) {
-        const { error: err } = await client.from('giftcodes').update(rest).eq('id', id);
-        error = err;
-    } else {
-        const { error: err } = await client.from('giftcodes').insert(rest);
-        error = err;
-    }
-    return { success: !error, error: error?.message };
+export const deleteApiKey = async (id: string) => {
+    if (!supabase) return;
+    await supabase.from('api_keys').delete().eq('id', id);
 };
+
+export const getApiKeysList = async () => {
+    if (!supabase) return [];
+    const { data } = await supabase.from('api_keys').select('*').order('created_at', { ascending: false });
+    return data || [];
+}
+
+// --- TRANSACTIONS ---
+
+export const createPaymentLink = async (packageId: string): Promise<Transaction> => {
+    if (!supabase) throw new Error("No Database");
+    const user = await getUserProfile();
+    const pkg = (await getPackages()).find(p => p.id === packageId);
+    if (!pkg) throw new Error("Invalid package");
+
+    const promo = await getActivePromotion();
+    const activeBonusPercent = promo ? promo.bonusPercent : (pkg.bonusPercent || 0);
+    const bonus = Math.floor(pkg.coin * activeBonusPercent / 100);
+    const totalCoins = pkg.coin + bonus;
+
+    const orderCode = `${Date.now()}`;
+    
+    // Create Pending Transaction
+    const { data, error } = await supabase.from('transactions').insert({
+        user_id: user.id,
+        package_id: packageId,
+        amount_vnd: pkg.price, // Changed from price to amount_vnd
+        diamonds_received: totalCoins, // Changed from coins_received to diamonds_received
+        status: 'pending',
+        order_code: orderCode,
+        // payment_method: 'payos' // Removed as it's not in schema
+    }).select().single();
+
+    if (error) throw error;
+
+    // Call Cloud Function to get PayOS Link
+    try {
+        const res = await fetch('/.netlify/functions/create_payment', {
+            method: 'POST',
+            body: JSON.stringify({
+                amount: pkg.price,
+                description: `Mua ${pkg.coin} VC`,
+                orderCode: parseInt(orderCode.slice(-9)), // PayOS requires int32/int64
+                returnUrl: window.location.href,
+                cancelUrl: window.location.href
+            })
+        });
+        const payOsData = await res.json();
+        
+        // Update transaction with checkoutUrl if needed, or just return it
+        return {
+            id: data.id,
+            userId: user.id,
+            packageId,
+            amount: pkg.price,
+            coins: totalCoins,
+            status: 'pending',
+            createdAt: data.created_at,
+            paymentMethod: 'payos',
+            code: orderCode,
+            checkoutUrl: payOsData.checkoutUrl
+        };
+    } catch (e) {
+        console.warn("PayOS generation failed, using manual mode");
+        return {
+            id: data.id,
+            userId: user.id,
+            packageId,
+            amount: pkg.price,
+            coins: totalCoins,
+            status: 'pending',
+            createdAt: data.created_at,
+            paymentMethod: 'manual',
+            code: orderCode
+        };
+    }
+};
+
+export const mockPayOSSuccess = async (txId: string) => {
+    // For dev testing
+    await adminApproveTransaction(txId);
+};
+
+export const adminApproveTransaction = async (txId: string): Promise<{success: boolean, error?: string}> => {
+    if (!supabase) return { success: false, error: "No Database" };
+    try {
+        const { data: tx, error: fetchError } = await supabase.from('transactions').select('*').eq('id', txId).single();
+        if (fetchError || !tx) throw new Error("Tx not found");
+
+        if (tx.status === 'paid') return { success: true };
+
+        // 1. Update Tx
+        const { error: updateError } = await supabase
+            .from('transactions')
+            .update({ status: 'paid' })
+            .eq('id', txId);
+            
+        if (updateError) throw updateError;
+
+        // 2. Add Coins
+        await updateUserBalance(tx.diamonds_received, `Topup: ${tx.order_code || tx.code || tx.id}`, 'topup', tx.user_id);
+        
+        return { success: true };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+};
+
+export const adminRejectTransaction = async (txId: string): Promise<{success: boolean, error?: string}> => {
+     if (!supabase) return { success: false, error: "No Database" };
+     try {
+        const { error } = await supabase
+            .from('transactions')
+            .update({ status: 'failed' })
+            .eq('id', txId);
+        if (error) throw error;
+        return { success: true };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+};
+
+export const adminBulkApproveTransactions = async (txIds: string[]): Promise<{success: boolean, error?: string, count?: number}> => {
+    if (!supabase) return { success: false, error: "No Database" };
+    try {
+        let successCount = 0;
+        for (const id of txIds) {
+            const res = await adminApproveTransaction(id);
+            if (res.success) successCount++;
+        }
+        return { success: true, count: successCount };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+};
+
+export const adminBulkRejectTransactions = async (txIds: string[]): Promise<{success: boolean, error?: string, count?: number}> => {
+    if (!supabase) return { success: false, error: "No Database" };
+    try {
+        const { error, count } = await supabase
+            .from('transactions')
+            .update({ status: 'failed' })
+            .in('id', txIds);
+            
+        if (error) throw error;
+        return { success: true, count: count || txIds.length };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+};
+
+export const deleteTransaction = async (txId: string): Promise<{success: boolean, error?: string}> => {
+    if (!supabase) return { success: false, error: "No Database" };
+    try {
+        const { error } = await supabase.from('transactions').delete().eq('id', txId);
+        if (error) throw error;
+        return { success: true };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+};
+
+export const getUnifiedHistory = async (targetUserId?: string): Promise<HistoryItem[]> => {
+    if (!supabase) return [];
+    let userId = targetUserId;
+    if (!userId) {
+        const user = await getUserProfile();
+        userId = user.id;
+    }
+    
+    // 1. Get Topup History
+    const { data: txs } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+    // 2. Get Usage/Reward Logs
+    const { data: logs } = await supabase
+        .from('diamond_transactions_log')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+    const history: HistoryItem[] = [];
+
+    txs?.forEach((t: any) => {
+        history.push({
+            id: t.id,
+            createdAt: t.created_at,
+            description: `Nạp Vcoin (${t.order_code})`,
+            vcoinChange: t.diamonds_received,
+            amountVnd: t.amount_vnd,
+            type: t.status === 'paid' ? 'topup' : 'pending_topup',
+            status: t.status === 'paid' ? 'success' : t.status === 'pending' ? 'pending' : 'failed',
+            code: t.order_code
+        });
+    });
+
+    logs?.forEach((l: any) => {
+        history.push({
+            id: l.id,
+            createdAt: l.created_at,
+            description: l.reason || l.note || 'Giao dịch hệ thống', // Fallback to note or default
+            vcoinChange: l.amount, // Amount is already signed (negative for usage)
+            type: l.type || 'usage', // Fallback to usage if type is missing (for legacy logs)
+            status: 'success'
+        });
+    });
+
+    return history.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+};
+
+// --- GENERATION PRICES ---
+
+export const getGenerationPrices = async () => {
+    if (!supabase) return { flash_1k: 1, flash_2k: 2, flash_4k: 4, pro_1k: 5, pro_2k: 10, pro_4k: 15, couple: 2, group3: 4, group4: 6 };
+    try {
+        const { data, error } = await supabase.from('system_settings').select('value').eq('key', 'generation_prices').maybeSingle();
+        
+        if (data && data.value) {
+            let parsedValue = data.value;
+            if (typeof parsedValue === 'string') {
+                try {
+                    parsedValue = JSON.parse(parsedValue);
+                    if (typeof parsedValue === 'string') {
+                        parsedValue = JSON.parse(parsedValue);
+                    }
+                } catch (e) {
+                    console.error("Failed to parse generation_prices JSON string", e);
+                }
+            }
+            return {
+                flash_1k: parsedValue.flash_1k ?? 1,
+                flash_2k: parsedValue.flash_2k ?? 2,
+                flash_4k: parsedValue.flash_4k ?? 4,
+                pro_1k: parsedValue.pro_1k ?? 5,
+                pro_2k: parsedValue.pro_2k ?? 10,
+                pro_4k: parsedValue.pro_4k ?? 15,
+                couple: parsedValue.couple ?? 2,
+                group3: parsedValue.group3 ?? 4,
+                group4: parsedValue.group4 ?? 6,
+            };
+        }
+        
+        return { 
+            flash_1k: 1, flash_2k: 2, flash_4k: 4,
+            pro_1k: 5, pro_2k: 10, pro_4k: 15,
+            couple: 2, group3: 4, group4: 6
+        };
+    } catch (e) {
+        console.error("getGenerationPrices error:", e);
+        return { 
+            flash_1k: 1, flash_2k: 2, flash_4k: 4,
+            pro_1k: 5, pro_2k: 10, pro_4k: 15,
+            couple: 2, group3: 4, group4: 6
+        };
+    }
+};
+
+export const saveGenerationPrices = async (prices: any) => {
+    if (!supabase) return { success: false, error: "No Database" };
+    try {
+        const sanitizedPrices = {
+            flash_1k: Number(prices.flash_1k) || 1,
+            flash_2k: Number(prices.flash_2k) || 2,
+            flash_4k: Number(prices.flash_4k) || 4,
+            pro_1k: Number(prices.pro_1k) || 5,
+            pro_2k: Number(prices.pro_2k) || 10,
+            pro_4k: Number(prices.pro_4k) || 15,
+            couple: Number(prices.couple) || 2,
+            group3: Number(prices.group3) || 4,
+            group4: Number(prices.group4) || 6,
+        };
+        // Explicitly stringify to avoid [object Object] if the column is text
+        const valueToSave = JSON.stringify(sanitizedPrices);
+        const { data, error } = await supabase.from('system_settings').upsert(
+            { key: 'generation_prices', value: valueToSave },
+            { onConflict: 'key' }
+        ).select();
+        
+        if (error) throw error;
+        if (!data || data.length === 0) {
+            throw new Error("Không thể lưu vào database (Có thể do lỗi phân quyền RLS). Vui lòng chạy mã SQL cấp quyền.");
+        }
+        return { success: true };
+    } catch (e: any) {
+        console.error("saveGenerationPrices error:", e);
+        return { success: false, error: e.message };
+    }
+};
+
+// --- GIFTCODES ---
 
 export const getGiftcodePromoConfig = async () => {
-    const client = supabase;
-    if (!client) return null;
-    return (await client.from('system_settings').select('giftcode_promo_config').single()).data?.giftcode_promo_config;
-};
-export const saveGiftcodePromoConfig = async (text: string, isActive: boolean): Promise<{ success: boolean; error?: string }> => {
-    const client = supabase;
-    if (!client) return { success: false, error: "Database not connected" };
-    const { error } = await client.from('system_settings').update({ giftcode_promo_config: { text, isActive } }).eq('id', '1');
-    return { success: !error, error: error?.message };
+    if (!supabase) return { text: "Nhập CODE \"HELLO2026\" để nhận 20 Vcoin miễn phí !!!", isActive: true };
+    try {
+        const { data, error } = await supabase.from('system_settings').select('value').eq('key', 'giftcode_promo').maybeSingle();
+        
+        // If DB has config, return it, but ensure text is not empty
+        if (data && data.value) {
+            return {
+                text: data.value.text || "Nhập CODE \"HELLO2026\" để nhận 20 Vcoin miễn phí !!!",
+                isActive: data.value.isActive !== undefined ? data.value.isActive : true
+            };
+        }
+        
+        // If DB is empty or table missing (error), return DEFAULT PROMO to match UI screenshot
+        // This ensures the user sees the feature even before configuring it
+        return { 
+            text: "Nhập CODE \"HELLO2026\" để nhận 20 Vcoin miễn phí !!!", 
+            isActive: true 
+        };
+    } catch (e) {
+        // Fallback for any other errors
+        return { 
+            text: "Nhập CODE \"HELLO2026\" để nhận 20 Vcoin miễn phí !!!", 
+            isActive: true 
+        };
+    }
 };
 
-export const getUnifiedHistory = async (userId?: string) => {
-    const uid = await getUid(userId);
-    const client = supabase;
-    if (!uid || !client) return [];
-    const { data } = await client.from('transactions').select('*').eq('user_id', uid).order('created_at', { ascending: false });
+export const saveGiftcodePromoConfig = async (text: string, isActive: boolean) => {
+    if (!supabase) return { success: false, error: "No Database" };
+    try {
+        const { data: existing } = await supabase.from('system_settings').select('key').eq('key', 'giftcode_promo').maybeSingle();
+        
+        let error;
+        if (existing) {
+            const res = await supabase.from('system_settings').update({ value: { text, isActive } }).eq('key', 'giftcode_promo');
+            error = res.error;
+        } else {
+            const res = await supabase.from('system_settings').insert({ key: 'giftcode_promo', value: { text, isActive } });
+            error = res.error;
+        }
+        
+        if (error) throw error;
+        return { success: true };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+};
+
+export const saveGiftcode = async (code: Giftcode): Promise<{success: boolean, error?: string}> => {
+    if (!supabase) return { success: false, error: "No Database" };
+    try {
+        const payload = {
+            code: code.code,
+            reward: code.reward,
+            total_limit: code.totalLimit,
+            max_per_user: code.maxPerUser,
+            is_active: code.isActive
+        };
+        
+        let error;
+        if (code.id.startsWith('temp_')) {
+            ({ error } = await supabase.from('gift_codes').insert(payload));
+        } else {
+            ({ error } = await supabase.from('gift_codes').update(payload).eq('id', code.id));
+        }
+
+        if (error) throw error;
+        return { success: true };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+};
+
+export const deleteGiftcode = async (id: string) => {
+    if (!supabase) return;
+    await supabase.from('gift_codes').delete().eq('id', id);
+};
+
+export const redeemGiftcode = async (codeStr: string): Promise<{success: boolean, reward: number, message: string}> => {
+    if (!supabase) return { success: false, reward: 0, message: "No Database" };
+    const user = await getUserProfile();
+    const cleanCode = codeStr.trim().toUpperCase();
+
+    try {
+        // 1. Get Code
+        const { data: code, error } = await supabase.from('gift_codes').select('*').eq('code', cleanCode).maybeSingle();
+        if (error || !code || !code.is_active) throw new Error("Mã không hợp lệ hoặc đã hết hạn");
+
+        // 2. Check Limits
+        if (code.used_count >= code.total_limit) throw new Error("Mã đã hết lượt sử dụng");
+
+        // 3. Check User Usage
+        const { data: usage } = await supabase.from('gift_code_usages').select('*').eq('gift_code_id', code.id).eq('user_id', user.id);
+        if (usage && usage.length >= code.max_per_user) throw new Error("Bạn đã nhập mã này rồi");
+
+        // 4. Record Usage
+        const { error: useError } = await supabase.from('gift_code_usages').insert({
+            user_id: user.id,
+            gift_code_id: code.id
+        });
+        if (useError) throw useError;
+
+        // 5. Increment Count & Add Balance
+        await supabase.rpc('increment_giftcode_usage', { code_id: code.id });
+        await updateUserBalance(code.reward || 0, `Giftcode: ${cleanCode}`, 'giftcode');
+
+        return { success: true, reward: code.reward, message: 'Success' };
+    } catch (e: any) {
+        return { success: false, reward: 0, message: e.message };
+    }
+};
+
+export const getGiftcodeUsages = async (codeId: string) => {
+    if (!supabase) return [];
+    const { data, error } = await supabase
+        .from('gift_code_usages')
+        .select('user_id, created_at, users(display_name, email, photo_url)')
+        .eq('gift_code_id', codeId)
+        .order('created_at', { ascending: false });
+        
+    if (error) throw error;
+    
+    return data.map((u: any) => ({
+        userId: u.user_id,
+        usedAt: u.created_at,
+        userName: u.users?.display_name || 'Unknown',
+        userEmail: u.users?.email || 'No Email',
+        userAvatar: u.users?.photo_url || 'https://picsum.photos/50/50'
+    }));
+};
+
+// --- STYLE PRESETS ---
+
+export const getStylePresets = async () => {
+    if (!supabase) return [];
+    const { data } = await supabase.from('style_presets').select('*').eq('is_active', true);
     return data || [];
 };
 
-export const redeemGiftcode = async (code: string, userId?: string): Promise<{ success: boolean; message: string; reward?: number }> => {
-    const uid = await getUid(userId);
-    const client = supabase;
-    if (!uid || !client) return { success: false, message: "Chưa đăng nhập hoặc Database lỗi" };
-    
-    const { data: gc, error: gcErr } = await client.from('giftcodes').select('*').eq('code', code).eq('is_active', true).single();
-    if (gcErr || !gc) return { success: false, message: "Mã không tồn tại hoặc đã hết hạn" };
-    
-    if (gc.used_count >= gc.total_limit) return { success: false, message: "Mã đã hết lượt sử dụng" };
-    
-    const { data: usage } = await client.from('giftcode_usages').select('*').eq('giftcode_id', gc.id).eq('user_id', uid).single();
-    if (usage) return { success: false, message: "Bạn đã sử dụng mã này rồi" };
-    
-    // Transactional update
-    const { error: usageErr } = await client.from('giftcode_usages').insert({ giftcode_id: gc.id, user_id: uid });
-    if (usageErr) return { success: false, message: "Lỗi hệ thống" };
-    
-    await client.from('giftcodes').update({ used_count: gc.used_count + 1 }).eq('id', gc.id);
-    await updateBalance(gc.reward, `Nhận thưởng Giftcode: ${code}`, 'giftcode', uid);
-    
-    return { success: true, reward: gc.reward, message: "Thành công" };
+export const saveStylePreset = async (style: any) => {
+    if (!supabase) return { success: false, error: "No Database" };
+    try {
+        if (style.is_default) {
+            // Unset other defaults
+            await supabase.from('style_presets').update({ is_default: false }).neq('id', style.id);
+        }
+        
+        const payload = {
+            name: style.name,
+            image_url: style.image_url,
+            trigger_prompt: style.trigger_prompt,
+            is_active: style.is_active,
+            is_default: style.is_default
+        };
+
+        let error;
+        if (style.id.startsWith('temp_')) {
+            ({ error } = await supabase.from('style_presets').insert(payload));
+        } else {
+            ({ error } = await supabase.from('style_presets').update(payload).eq('id', style.id));
+        }
+        if (error) throw error;
+        return { success: true };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
 };
 
-export const deleteGiftcode = async (id: string): Promise<{ success: boolean; error?: string }> => {
-    const client = supabase;
-    if (!client) return { success: false, error: "Database not connected" };
-    const { error } = await client.from('giftcodes').delete().eq('id', id);
-    return { success: !error, error: error?.message };
-};
-export const savePromotion = async (p: any): Promise<{ success: boolean; error?: string }> => {
-    const client = supabase;
-    if (!client) return { success: false, error: "Database not connected" };
-    const { error } = p.id ? await client.from('promotions').update(p).eq('id', p.id) : await client.from('promotions').insert(p);
-    return { success: !error, error: error?.message };
-};
-export const deletePromotion = async (id: string): Promise<{ success: boolean; error?: string }> => {
-    const client = supabase;
-    if (!client) return { success: false, error: "Database not connected" };
-    const { error } = await client.from('promotions').delete().eq('id', id);
-    return { success: !error, error: error?.message };
+export const deleteStylePreset = async (id: string) => {
+    if (!supabase) return;
+    await supabase.from('style_presets').delete().eq('id', id);
 };
 
-export const adminApproveTransaction = async (id: string): Promise<{ success: boolean; error?: string }> => {
-    const client = supabase;
-    if (!client) return { success: false, error: "Database not connected" };
-    const { error } = await client.from('transactions').update({ status: 'completed' }).eq('id', id);
-    return { success: !error, error: error?.message };
-};
-export const adminRejectTransaction = async (id: string): Promise<{ success: boolean; error?: string }> => {
-    const client = supabase;
-    if (!client) return { success: false, error: "Database not connected" };
-    const { error } = await client.from('transactions').update({ status: 'rejected' }).eq('id', id);
-    return { success: !error, error: error?.message };
-};
-export const adminBulkApproveTransactions = async (ids: string[]): Promise<{ success: boolean; error?: string; count?: number }> => {
-    const client = supabase;
-    if (!client) return { success: false, error: "Database not connected" };
-    const { error } = await client.from('transactions').update({ status: 'completed' }).in('id', ids);
-    return { success: !error, error: error?.message, count: ids.length };
-};
-export const adminBulkRejectTransactions = async (ids: string[]): Promise<{ success: boolean; error?: string; count?: number }> => {
-    const client = supabase;
-    if (!client) return { success: false, error: "Database not connected" };
-    const { error } = await client.from('transactions').update({ status: 'rejected' }).in('id', ids);
-    return { success: !error, error: error?.message, count: ids.length };
-};
-export const deleteTransaction = async (id: string): Promise<{ success: boolean; error?: string }> => {
-    const client = supabase;
-    if (!client) return { success: false, error: "Database not connected" };
-    const { error } = await client.from('transactions').delete().eq('id', id);
-    return { success: !error, error: error?.message };
-};
+// --- ADMIN STATS ---
 
-export const getStylePresets = async () => {
-    const client = supabase;
-    if (!client) return [];
-    return (await client.from('style_presets').select('*')).data || [];
-};
-export const saveStylePreset = async (s: any): Promise<{ success: boolean; error?: string }> => {
-    const client = supabase;
-    if (!client) return { success: false, error: "Database not connected" };
-    const { error } = s.id ? await client.from('style_presets').update(s).eq('id', s.id) : await client.from('style_presets').insert(s);
-    return { success: !error, error: error?.message };
-};
-export const deleteStylePreset = async (id: string): Promise<{ success: boolean; error?: string }> => {
-    const client = supabase;
-    if (!client) return { success: false, error: "Database not connected" };
-    const { error } = await client.from('style_presets').delete().eq('id', id);
-    return { success: !error, error: error?.message };
-};
+export const getAdminStats = async () => {
+    if (!supabase) return {
+        dashboard: { visitsToday: 0, visitsTotal: 0, newUsersToday: 0, usersTotal: 0, imagesToday: 0, imagesTotal: 0, aiUsage: [] },
+        usersList: [], packages: [], promotions: [], giftcodes: [], transactions: []
+    };
+    // Fetch Users
+    const { data: users, error: userError } = await supabase.from('users').select('id, email, display_name, diamonds, is_admin, created_at, photo_url, last_active');
 
-export const getGiftcodeUsages = async (id: string) => {
-    const client = supabase;
-    if (!client) return [];
-    return (await client.from('giftcode_usages').select('*').eq('giftcode_id', id)).data || [];
-};
-export const saveGenerationPrices = async (p: any): Promise<{ success: boolean; error?: string }> => {
-    const client = supabase;
-    if (!client) return { success: false, error: "Database not connected" };
-    const { error } = await client.from('system_settings').update({ pricing_config: p }).eq('id', '1');
-    return { success: !error, error: error?.message };
-};
-export const getPackages = async () => {
-    const client = supabase;
-    if (!client) return [];
-    return (await client.from('credit_packages').select('*').order('order_index')).data || [];
-};
-export const createPaymentLink = async (d: any) => ({ checkoutUrl: '#' });
-export const mockPayOSSuccess = async (id: string) => ({ success: true });
+    if (userError) {
+        console.error("Error fetching users for Admin Stats:", userError);
+    }
+    const { data: pkgs } = await supabase.from('credit_packages').select('*').order('display_order');
+    
+    let promos = [];
+    try {
+        const { data } = await supabase.from('promotions').select('*');
+        promos = data || [];
+    } catch (e) {
+        // Silent
+    }
+    
+    // Fetch giftcodes with accurate usage count from relation
+    const { data: codes } = await supabase
+        .from('gift_codes')
+        .select('*, gift_code_usages(count)');
 
-const keyBlacklist = new Map<string, number>();
-export const reportKeyFailure = (k: string) => { keyBlacklist.set(k, Date.now()); getApiKeys().then((ks: any[]) => { const m = ks.find((x: any) => x.key === k); if (m) updateApiKeyStatus(m.id, 'error'); }); };
-export const getSystemApiKey = async (t: 'flash' | 'pro' = 'flash'): Promise<string | null> => {
-    const client = supabase;
-    if (!client) return null;
-    const { data: keys } = await client.from('api_keys').select('*').eq('status', 'active');
-    if (!keys || keys.length === 0) return null;
-    let tk = t === 'pro' ? keys.filter((k: any) => k.name?.includes('[PRO]')) : keys.filter((k: any) => !k.name?.includes('[PRO]'));
-    if (tk.length === 0) return null;
-    const now = Date.now();
-    const ak = tk.filter((k: any) => { const lf = keyBlacklist.get(k.key); return !lf || (now - lf > 300000); });
-    if (ak.length === 0) { keyBlacklist.clear(); return tk[0].key; }
-    const s = ak[Math.floor(Math.random() * ak.length)];
-    updateApiKeyStatus(s.id, 'active');
-    return s.key;
-};
+    const { data: txs } = await supabase.from('transactions').select('*').order('created_at', { ascending: false });
+    
+    // Try to fetch logs from both potential table names
+    let usageLogs: any[] = [];
+    
+    // Attempt 1: diamond_transactions_log
+    const { data: logs1, error: err1 } = await supabase.from('diamond_transactions_log').select('*');
+    if (logs1) usageLogs = [...usageLogs, ...logs1];
+    
+    // Attempt 2: diamond_transactions
+    const { data: logs2, error: err2 } = await supabase.from('diamond_transactions').select('*');
+    if (logs2) usageLogs = [...usageLogs, ...logs2];
 
-export const getGenerationPrices = async () => {
-    const client = supabase;
-    if (!client) return { flash_1k: 1, flash_2k: 2, flash_4k: 4, pro_1k: 5, pro_2k: 10, pro_4k: 15, edit: 1, analysis: 0 };
-    const { data } = await client.from('system_settings').select('pricing_config').single();
-    const c = data?.pricing_config || {};
-    return { flash_1k: c.flash_1k ?? 1, flash_2k: c.flash_2k ?? 2, flash_4k: c.flash_4k ?? 4, pro_1k: c.pro_1k ?? 5, pro_2k: c.pro_2k ?? 10, pro_4k: c.pro_4k ?? 15, edit: c.edit ?? 1, analysis: c.analysis ?? 0 };
+    // Filter for usage: type 'usage' OR negative amount
+    usageLogs = usageLogs.filter((l: any) => l.type === 'usage' || (l.amount && Number(l.amount) < 0));
+    
+    // Debug logs
+    console.log("Admin Stats - Usage Logs Found:", usageLogs.length);
+    if (txs && txs.length > 0) {
+        console.log("First Transaction Keys:", Object.keys(txs[0]));
+        console.log("First Transaction Data:", txs[0]);
+    }
+    console.log("Usage Logs:", usageLogs);
+
+    const { data: generatedImages } = await supabase.from('generated_images').select('created_at');
+    const { data: visits } = await supabase.from('app_visits').select('created_at');
+
+    // Calculate dashboard
+    const now = new Date();
+    const todayStr = getLocalTodayStr();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfTodayISO = startOfToday.toISOString();
+    
+    // 1. Users
+    const newUsersToday = users?.filter((u: any) => u.created_at && new Date(u.created_at) >= startOfToday).length || 0;
+    
+    // 2. Images (Use count for performance and to bypass limit)
+    const { count: imagesTotal } = await supabase.from('generated_images').select('*', { count: 'exact', head: true });
+    const { count: imagesToday } = await supabase.from('generated_images').select('*', { count: 'exact', head: true }).gte('created_at', startOfTodayISO);
+
+    // 3. Visits (Use count for performance)
+    const { count: visitsTotal } = await supabase.from('app_visits').select('*', { count: 'exact', head: true });
+    const { count: visitsToday } = await supabase.from('app_visits').select('*', { count: 'exact', head: true }).gte('created_at', startOfTodayISO);
+
+    // Calculate AI Usage Stats
+    const usageStats: Record<string, { count: number, vcoins: number }> = {};
+    const userUsageCounts: Record<string, number> = {}; // New: Track usage per user
+
+    usageLogs?.forEach((log: any) => {
+        // Track per user
+        if (log.user_id) {
+            userUsageCounts[log.user_id] = (userUsageCounts[log.user_id] || 0) + 1;
+        }
+
+        // Try to find the reason field from various potential column names
+        let rawFeature = log.reason || log.description || log.note || log.action || log.activity || log.details || 'Khác';
+        
+        // If still 'Khác', try to find any property that looks like a feature name
+        if (rawFeature === 'Khác') {
+            for (const key in log) {
+                if (typeof log[key] === 'string' && (log[key].startsWith('Gen') || log[key].startsWith('Edit') || log[key].includes(':'))) {
+                    rawFeature = log[key];
+                    break;
+                }
+            }
+        }
+
+        // Grouping Logic
+        let feature = 'Khác';
+        const lower = rawFeature.toLowerCase();
+
+        if (lower.includes('nâng cấp') || lower.includes('upscale') || lower.includes('làm nét') || lower.includes('hd')) {
+            feature = 'Làm Nét Ảnh (Upscale)';
+        } else if (lower.includes('tách nền') || lower.includes('remove background') || lower.includes('background')) {
+            feature = 'Tách Nền (Remove BG)';
+        } else if (lower.includes('4 người') || lower.includes('group of 4') || lower.includes('squad of 4')) {
+            feature = 'Tạo Ảnh 4 Người';
+        } else if (lower.includes('3 người') || lower.includes('group of 3') || lower.includes('squad of 3')) {
+            feature = 'Tạo Ảnh 3 Người';
+        } else if (lower.includes('2 người') || lower.includes('couple') || lower.includes('đôi') || lower.includes('song ca')) {
+            feature = 'Tạo Ảnh Đôi (Couple)';
+        } else if (lower.includes('tạo ảnh') || lower.includes('gen:') || lower.includes('generate') || lower.includes('chân dung') || lower.includes('1 ảnh') || lower.includes('single')) {
+            feature = 'Tạo Ảnh Đơn (Single)';
+        } else if (lower.includes('xử lý') || lower.includes('edit') || lower.includes('face')) {
+             feature = 'Chỉnh Sửa / Xử Lý Ảnh';
+        } else {
+            feature = rawFeature.length > 50 ? rawFeature.substring(0, 50) + '...' : rawFeature;
+        }
+        
+        if (!usageStats[feature]) {
+            usageStats[feature] = { count: 0, vcoins: 0 };
+        }
+        usageStats[feature].count += 1;
+        // Ensure amount is positive for display
+        usageStats[feature].vcoins += Math.abs(Number(log.amount) || 0);
+    });
+
+    const aiUsage = Object.keys(usageStats).map(key => ({
+        feature: key,
+        count: usageStats[key].count,
+        vcoins: usageStats[key].vcoins,
+        revenue: usageStats[key].vcoins * 1000 // Estimate 1 Vcoin = 1000 VND (example)
+    }));
+    
+    const transactions = txs?.map((t: any) => {
+         // Fallback for coins: Check DB columns -> Check Package Info -> Estimate from Amount
+         let coins = t.diamonds_received ? Number(t.diamonds_received) : (t.coins_received ? Number(t.coins_received) : (t.coins ? Number(t.coins) : (t.diamonds ? Number(t.diamonds) : (t.credits ? Number(t.credits) : 0))));
+         
+         if (coins === 0) {
+             // Try to get from Package
+             if (t.package_id) {
+                 const pkg = pkgs?.find((p: any) => p.id === t.package_id);
+                 if (pkg) {
+                     coins = pkg.credits_amount || 0;
+                     if (pkg.bonus_credits) {
+                         coins += Math.floor(coins * pkg.bonus_credits / 100);
+                     }
+                 }
+             }
+             
+             // Last resort: Estimate from Amount (1000 VND = 1 Vcoin)
+             if (coins === 0 && t.amount) {
+                 coins = Math.floor(Number(t.amount) / 1000);
+             }
+         }
+
+         return {
+             id: t.id,
+             userId: t.user_id,
+             userName: users?.find((u: any) => u.id === t.user_id)?.display_name,
+             userEmail: users?.find((u: any) => u.id === t.user_id)?.email,
+             userAvatar: users?.find((u: any) => u.id === t.user_id)?.photo_url,
+             packageId: t.package_id,
+             amount: t.amount ? Number(t.amount) : (t.price ? Number(t.price) : (t.amount_vnd ? Number(t.amount_vnd) : 0)),
+             coins: coins,
+             status: t.status,
+             createdAt: t.created_at,
+             code: t.code,
+             paymentMethod: t.payment_method
+         };
+    }) || [];
+
+    const userList = users?.map((u: any) => ({
+        id: u.id,
+        username: u.display_name,
+        email: u.email,
+        avatar: u.photo_url,
+        balance: u.diamonds,
+        role: u.is_admin ? 'admin' : 'user',
+        created_at: u.created_at,
+        isVip: false,
+        lastActive: u.last_active,
+        usageCount: userUsageCounts[u.id] || 0 // New: Include usage count
+    })) || [];
+
+    return {
+        dashboard: {
+            visitsToday: visitsToday || 0,
+            visitsTotal: visitsTotal || 0,
+            newUsersToday,
+            usersTotal: users?.length || 0,
+            imagesToday: imagesToday || 0,
+            imagesTotal: imagesTotal || 0,
+            aiUsage
+        },
+        usersList: userList,
+        packages: pkgs?.map((p:any) => ({
+            id: p.id,
+            name: p.name,
+            coin: p.credits_amount,
+            price: p.price_vnd,
+            currency: 'VND',
+            bonusText: p.tag,
+            bonusPercent: p.bonus_credits,
+            isPopular: p.is_featured,
+            isActive: p.is_active,
+            displayOrder: p.display_order,
+            colorTheme: 'border-white',
+            transferContent: p.transfer_syntax
+        })) || [],
+        promotions: promos?.map((p: any) => ({
+             id: p.id,
+             name: p.title,
+             marqueeText: p.description,
+             bonusPercent: p.bonus_percent,
+             startTime: p.start_time,
+             endTime: p.end_time,
+             isActive: p.is_active
+        })) || [],
+        giftcodes: codes?.map((c: any) => {
+             // Use count from relation if available, otherwise fallback to column
+             const realCount = c.gift_code_usages && c.gift_code_usages[0] ? c.gift_code_usages[0].count : (c.used_count || 0);
+             
+             return {
+                 id: c.id,
+                 code: c.code,
+                 reward: c.reward,
+                 totalLimit: c.total_limit,
+                 usedCount: realCount,
+                 maxPerUser: c.max_per_user,
+                 isActive: c.is_active
+             };
+        }) || [],
+        transactions
+    };
 };

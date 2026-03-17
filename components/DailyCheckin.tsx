@@ -143,7 +143,7 @@ export const DailyCheckin: React.FC<DailyCheckinProps> = ({ onClose, onSuccess, 
       try {
           const res = await performCheckin();
           if (res.success) {
-              setStreak(res.newStreak || 0);
+              setStreak(res.newStreak);
               setCheckedIn(true);
               setHistory(prev => [...prev, new Date().toLocaleDateString('sv-SE')]);
               

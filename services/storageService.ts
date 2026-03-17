@@ -145,7 +145,6 @@ export const uploadFileToR2 = async (file: File | Blob | string, folder: string 
 
 export const saveImageToStorage = async (image: GeneratedImage): Promise<void> => {
   const user = await getUserProfile();
-  if (!user) return;
   const imageWithUser = { ...image, userName: user.username, isShared: false };
 
   // 1. CLOUDFLARE R2 + SUPABASE METADATA (PRIMARY)
@@ -435,8 +434,7 @@ export const getUserImagesFromStorage = async (userId: string): Promise<Generate
 
 export const deleteImageFromStorage = async (id: string, targetUserId?: string, imageUrl?: string): Promise<void> => {
   const user = await getUserProfile();
-  if (!user && !targetUserId) return;
-  const userId = targetUserId || user?.id;
+  const userId = targetUserId || user.id;
 
   if (supabase && userId) {
     // A. Delete from R2 (if configured)

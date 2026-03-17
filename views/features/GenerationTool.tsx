@@ -415,7 +415,6 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
 
     const cost = calculateCost();
     const user = await getUserProfile();
-    if (!user) return;
 
     if ((user.balance || 0) < cost) {
         notify(lang === 'vi' ? 'Số dư không đủ!' : 'Insufficient balance!', 'error');
@@ -551,7 +550,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
           timestamp: Date.now(),
           toolId: feature.id,
           toolName: feature.name['en'],
-          engine: aiModel === 'flash' ? `Gemini 3.1 Flash ${resolution}` : `Gemini 3.0 Pro ${resolution}`
+          engine: aiModel === 'flash' ? `Gemini 2.5 Flash ${resolution}` : `Gemini 2.5 Pro ${resolution}`
         };
         setGeneratedData(newImage);
         
@@ -691,8 +690,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                                   <Icons.Cpu className="w-5 h-5" />
                               </div>
                               <div>
-                                  <h4 className="text-sm font-bold text-white">Model 3.0 Pro</h4>
-                                  <p className="text-xs text-slate-400 mt-1">Sử dụng mô hình Gemini 3.0 Pro mới nhất. Hiểu lệnh tốt hơn, chi tiết trang phục sắc nét hơn bản Flash.</p>
+                                  <h4 className="text-sm font-bold text-white">Model 2.5 Pro</h4>
+                                  <p className="text-xs text-slate-400 mt-1">Sử dụng mô hình Gemini 2.5 Pro mới nhất. Hiểu lệnh tốt hơn, chi tiết trang phục sắc nét hơn bản Flash.</p>
                               </div>
                           </div>
 
@@ -772,7 +771,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                   <div className="flex justify-between items-center p-3 border-b border-white/10 bg-white/5">
                       <div className="flex items-center gap-2">
                           <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                          <span className="font-bold text-xs text-white">Kết quả (Gemini 3.0 Pro)</span>
+                          <span className="font-bold text-xs text-white">Kết quả (Gemini 2.5 Pro)</span>
                       </div>
                       <button onClick={() => setStage('input')} className="text-[10px] font-bold text-slate-400 hover:text-white px-2 py-1 rounded bg-white/5 hover:bg-white/10">X</button>
                   </div>

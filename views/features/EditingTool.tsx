@@ -100,7 +100,6 @@ export const EditingTool: React.FC<EditingToolProps> = ({ feature, lang }) => {
      // Cost Calculation: Photo Editor is more expensive (Premium)
      const cost = isMagicEditor ? 3 : (isUpscaler ? 2 : 1); 
      const user = await getUserProfile();
-     if (!user) return;
      
      if ((user.balance || 0) < cost) {
          notify(lang === 'vi' ? `Số dư không đủ (Cần ${cost} Vcoin)` : `Insufficient balance (Need ${cost} Vcoin)`, 'error');

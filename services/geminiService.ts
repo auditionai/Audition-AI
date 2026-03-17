@@ -208,20 +208,23 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                     // Map model names for Vertex AI
                     let vertexModel = params.model;
                     let endpoint = 'generateContent';
+                    let apiVersion = 'v1beta1'; // Default to v1beta1 for preview models
                     
                     // Map text models to standard 1.5 for Vertex AI to avoid 404s on preview/002 text models
                     if (vertexModel === 'gemini-3.1-flash-preview' || vertexModel === 'gemini-3-flash-preview') {
                         vertexModel = 'gemini-1.5-flash';
+                        apiVersion = 'v1'; // Stable models must use v1 endpoint
                     } else if (vertexModel === 'gemini-3.1-pro-preview') {
                         vertexModel = 'gemini-1.5-pro';
+                        apiVersion = 'v1'; // Stable models must use v1 endpoint
                     } else if (vertexModel === 'gemini-3.1-flash-image-preview' || vertexModel === 'gemini-3-pro-image-preview') {
                         // Keep the exact image model name as requested
                         vertexModel = params.model;
+                        apiVersion = 'v1beta1'; // Preview models must use v1beta1
                     }
 
-                    // QUAN TRỌNG: Dùng v1beta1 thay vì v1. 
-                    // Các model preview (như gemini-3.1-flash-image-preview) trên Vertex AI thường chỉ có ở endpoint v1beta1.
-                    const url = `https://${location}-aiplatform.googleapis.com/v1beta1/projects/${projectId}/locations/${location}/publishers/google/models/${vertexModel}:${endpoint}`;
+                    // QUAN TRỌNG: Dùng v1beta1 cho preview, v1 cho stable.
+                    const url = `https://${location}-aiplatform.googleapis.com/${apiVersion}/projects/${projectId}/locations/${location}/publishers/google/models/${vertexModel}:${endpoint}`;
                     
                     // Chuyển đổi config sang generationConfig cho REST API
                     const payload: any = {

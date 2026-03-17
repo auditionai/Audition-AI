@@ -371,37 +371,17 @@ DO NOT output any conversational text, explanations, or formatting. ONLY output 
                             body: JSON.stringify(stage2Payload)
                         });
 
-                        // Fallback 1: If it fails with both image and referenceImages, try without base image
-                        if (!stage2Res.ok && poseImage && referenceImages.length > 0) {
-                            console.warn("Vertex AI: Image-to-Image with references failed. Retrying without base pose image...");
-                            delete stage2Payload.instances[0].image;
-                            stage2Res = await fetch(stage2Url, {
-                                method: 'POST',
-                                headers: {
-                                    'Authorization': `Bearer ${accessToken}`,
-                                    'Content-Type': 'application/json'
-                                },
-                                body: JSON.stringify(stage2Payload)
-                            });
-                        }
-
-                        // Fallback 2: If it still fails, try with just the prompt (Text-to-Image)
-                        if (!stage2Res.ok && referenceImages.length > 0) {
-                            console.warn("Vertex AI: Subject/Style References failed. Retrying with just Text-to-Image...");
-                            delete stage2Payload.instances[0].referenceImages;
-                            stage2Res = await fetch(stage2Url, {
-                                method: 'POST',
-                                headers: {
-                                    'Authorization': `Bearer ${accessToken}`,
-                                    'Content-Type': 'application/json'
-                                },
-                                body: JSON.stringify(stage2Payload)
-                            });
-                        }
-
                         if (!stage2Res.ok) {
-                            const err = await stage2Res.json().catch(() => ({}));
-                            throw new Error(err.error?.message || `Vertex AI Stage 2 (Imagen 3) Error: ${stage2Res.status}`);
+                            const errText = await stage2Res.text();
+                            console.error("Vertex AI Stage 2 (Imagen 3) Error Response:", errText);
+                            let errMsg = `Vertex AI Stage 2 (Imagen 3) Error: ${stage2Res.status}`;
+                            try {
+                                const errJson = JSON.parse(errText);
+                                if (errJson.error?.message) {
+                                    errMsg = errJson.error.message;
+                                }
+                            } catch (e) {}
+                            throw new Error(errMsg);
                         }
 
                         const stage2Data = await stage2Res.json();

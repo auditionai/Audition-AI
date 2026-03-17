@@ -14,6 +14,8 @@ import {
     deleteGiftcode, 
     getGiftcodePromoConfig, 
     saveGiftcodePromoConfig, 
+    getTutorialVideo,
+    saveTutorialVideo,
     savePromotion, 
     deletePromotion,
     adminApproveTransaction, 
@@ -329,6 +331,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   // Giftcode Promo Config
   const [giftcodePromo, setGiftcodePromo] = useState({ text: '', isActive: false });
 
+  // Tutorial Video Config
+  const [tutorialVideo, setTutorialVideo] = useState({ url: '', isActive: true });
+
   // Search States
   const [userSearchEmail, setUserSearchEmail] = useState('');
   const [currentUserEmail, setCurrentUserEmail] = useState('');
@@ -424,6 +429,9 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
 
       const promoConfig = await getGiftcodePromoConfig();
       setGiftcodePromo(promoConfig);
+
+      const tutorialConfig = await getTutorialVideo();
+      setTutorialVideo(tutorialConfig);
 
       const styles = await getStylePresets();
       setStylePresets(styles || []);
@@ -651,6 +659,19 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           if (result.error?.includes('relation "public.system_settings" does not exist')) {
               setShowGiftcodeFix(true);
           }
+      }
+  }
+
+  const handleSaveTutorialVideo = async () => {
+      if (tutorialVideo.isActive && !tutorialVideo.url.trim()) {
+          showToast('Vui lòng nhập link video YouTube!', 'error');
+          return;
+      }
+      const result = await saveTutorialVideo(tutorialVideo.url, tutorialVideo.isActive);
+      if (result.success) {
+          showToast('Đã lưu link video hướng dẫn thành công!');
+      } else {
+          showToast('Lỗi lưu: ' + result.error, 'error');
       }
   }
 
@@ -1465,6 +1486,48 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                           <div className="flex items-center justify-between mb-4">
                               <span className="text-sm text-slate-400">Loại: {health.storage.type}</span>
                               <StatusBadge status={health.storage.status} />
+                          </div>
+                      </div>
+                  </div>
+
+                  {/* Tutorial Video Configuration */}
+                  <div className="bg-[#12121a] p-6 rounded-2xl border border-white/10">
+                      <div className="flex justify-between items-center mb-4">
+                          <h3 className="font-bold text-lg text-white flex items-center gap-2">
+                              <Icons.Play className="w-5 h-5 text-audi-pink" />
+                              Video Hướng Dẫn (Trình Tạo Ảnh)
+                          </h3>
+                          <button 
+                              onClick={handleSaveTutorialVideo}
+                              className="px-4 py-2 bg-audi-pink/20 text-audi-pink font-bold rounded-lg text-sm hover:bg-audi-pink hover:text-white transition-colors border border-audi-pink/30"
+                          >
+                              Lưu Cấu Hình
+                          </button>
+                      </div>
+                      
+                      <div className="space-y-4">
+                          <div className="flex items-center gap-3">
+                              <input 
+                                  type="checkbox" 
+                                  id="tutorialVideoToggle"
+                                  checked={tutorialVideo.isActive}
+                                  onChange={(e) => setTutorialVideo({...tutorialVideo, isActive: e.target.checked})}
+                                  className="w-5 h-5 rounded border-white/20 bg-black/50 text-audi-pink focus:ring-audi-pink focus:ring-offset-gray-900"
+                              />
+                              <label htmlFor="tutorialVideoToggle" className="text-white font-medium">Hiển thị video hướng dẫn</label>
+                          </div>
+                          <div>
+                              <label className="text-xs text-slate-400 mb-1 block">Link Video YouTube (URL)</label>
+                              <input 
+                                  type="text"
+                                  value={tutorialVideo.url} 
+                                  onChange={e => setTutorialVideo({...tutorialVideo, url: e.target.value})} 
+                                  className="w-full bg-black/40 border border-white/10 rounded-lg p-3 text-white"
+                                  placeholder="Ví dụ: https://www.youtube.com/watch?v=ba2WR8txe_c"
+                              />
+                              <p className="text-xs text-slate-500 mt-2">
+                                  Hỗ trợ các định dạng link: youtube.com/watch?v=..., youtu.be/..., youtube.com/embed/...
+                              </p>
                           </div>
                       </div>
                   </div>

@@ -5,7 +5,7 @@ import { Icons } from '../../components/Icons';
 import { generateImage, testApiKey } from '../../services/geminiService';
 import { saveImageToStorage, uploadFileToR2 } from '../../services/storageService';
 import { createSolidFence, optimizePayload, urlToBase64 } from '../../utils/imageProcessor';
-import { getUserProfile, updateUserBalance, getStylePresets, getGenerationPrices } from '../../services/economyService';
+import { getUserProfile, updateUserBalance, getStylePresets, getGenerationPrices, getTutorialVideo } from '../../services/economyService';
 import { useNotification } from '../../components/NotificationSystem';
 import { caulenhauClient } from '../../services/supabaseClient';
 
@@ -86,6 +86,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
   const [guideTopic, setGuideTopic] = useState<'chars' | 'settings' | null>(null);
   const [currentTipIdx, setCurrentTipIdx] = useState(0);
   const [showVideo, setShowVideo] = useState(false);
+  const [tutorialVideoUrl, setTutorialVideoUrl] = useState<string | null>(null);
 
   const [resultImage, setResultImage] = useState<string | null>(null);
   const [generatedData, setGeneratedData] = useState<GeneratedImage | null>(null);
@@ -136,6 +137,31 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
           setPrices(p);
       };
       loadPrices();
+
+      const loadTutorialVideo = async () => {
+          const videoConfig = await getTutorialVideo();
+          if (videoConfig && videoConfig.isActive && videoConfig.url) {
+              let videoId = TUTORIAL_VIDEO_ID;
+              try {
+                  const urlObj = new URL(videoConfig.url);
+                  if (urlObj.hostname.includes('youtube.com')) {
+                      if (urlObj.pathname.includes('/embed/')) {
+                          videoId = urlObj.pathname.split('/embed/')[1].split('?')[0];
+                      } else {
+                          videoId = urlObj.searchParams.get('v') || videoId;
+                      }
+                  } else if (urlObj.hostname.includes('youtu.be')) {
+                      videoId = urlObj.pathname.slice(1).split('?')[0];
+                  }
+              } catch (e) {
+                  console.warn("Invalid video URL format", e);
+              }
+              setTutorialVideoUrl(`https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&playsinline=1`);
+          } else {
+              setTutorialVideoUrl(null);
+          }
+      };
+      loadTutorialVideo();
   }, []);
   // -------------------------------
 
@@ -841,7 +867,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                     </button>
                     <iframe 
                         className="w-full h-full"
-                        src={`https://www.youtube.com/embed/${TUTORIAL_VIDEO_ID}?autoplay=1&rel=0&playsinline=1`}
+                        src={tutorialVideoUrl || `https://www.youtube.com/embed/${TUTORIAL_VIDEO_ID}?autoplay=1&rel=0&playsinline=1`}
                         title="Hướng dẫn sử dụng"
                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                         referrerPolicy="strict-origin-when-cross-origin"
@@ -1046,13 +1072,15 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                                 </button>
                             </>
                         )}
-                        <button 
-                            onClick={() => setShowVideo(true)}
-                            className="flex items-center gap-1 text-[10px] font-bold text-white hover:scale-105 transition-transform bg-red-600 px-3 py-1 rounded-full shadow-[0_0_10px_rgba(220,38,38,0.5)] border border-red-400 group"
-                        >
-                            <Icons.Play className="w-3 h-3 fill-white group-hover:animate-pulse" />
-                            Video HD
-                        </button>
+                        {tutorialVideoUrl && (
+                            <button 
+                                onClick={() => setShowVideo(true)}
+                                className="flex items-center gap-1 text-[10px] font-bold text-white hover:scale-105 transition-transform bg-red-600 px-3 py-1 rounded-full shadow-[0_0_10px_rgba(220,38,38,0.5)] border border-red-400 group"
+                            >
+                                <Icons.Play className="w-3 h-3 fill-white group-hover:animate-pulse" />
+                                Video HD
+                            </button>
+                        )}
                         <button 
                             onClick={() => setGuideTopic('chars')}
                             className="flex items-center gap-1 text-[10px] font-bold text-audi-yellow hover:text-white transition-colors bg-audi-yellow/10 px-2 py-1 rounded-full border border-audi-yellow/30"

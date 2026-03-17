@@ -942,6 +942,45 @@ export const saveGenerationPrices = async (prices: any) => {
 
 // --- GIFTCODES ---
 
+export const getTutorialVideo = async () => {
+    if (!supabase) return { url: "https://www.youtube.com/watch?v=ba2WR8txe_c", isActive: true };
+    try {
+        const { data, error } = await supabase.from('system_settings').select('value').eq('key', 'tutorial_video').maybeSingle();
+        
+        if (data && data.value) {
+            return {
+                url: data.value.url || "https://www.youtube.com/watch?v=ba2WR8txe_c",
+                isActive: data.value.isActive !== undefined ? data.value.isActive : true
+            };
+        }
+        
+        return { url: "https://www.youtube.com/watch?v=ba2WR8txe_c", isActive: true };
+    } catch (e) {
+        return { url: "https://www.youtube.com/watch?v=ba2WR8txe_c", isActive: true };
+    }
+};
+
+export const saveTutorialVideo = async (url: string, isActive: boolean) => {
+    if (!supabase) return { success: false, error: "No Database" };
+    try {
+        const { data: existing } = await supabase.from('system_settings').select('key').eq('key', 'tutorial_video').maybeSingle();
+        
+        let error;
+        if (existing) {
+            const res = await supabase.from('system_settings').update({ value: { url, isActive } }).eq('key', 'tutorial_video');
+            error = res.error;
+        } else {
+            const res = await supabase.from('system_settings').insert({ key: 'tutorial_video', value: { url, isActive } });
+            error = res.error;
+        }
+        
+        if (error) throw error;
+        return { success: true };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+};
+
 export const getGiftcodePromoConfig = async () => {
     if (!supabase) return { text: "Nhập CODE \"HELLO2026\" để nhận 20 Vcoin miễn phí !!!", isActive: true };
     try {

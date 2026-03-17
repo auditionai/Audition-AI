@@ -1,0 +1,19 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+  functions = "netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
+
+# Chuyển hướng các request API vào Netlify Functions
+[[redirects]]
+  from = "/api/get-vertex-token"
+  to = "/.netlify/functions/get-vertex-token"
+  status = 200
+
+# Fallback cho React Router (SPA)
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

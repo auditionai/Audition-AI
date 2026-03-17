@@ -490,10 +490,9 @@ export const getSystemApiKey = async (tier: 'flash' | 'pro' = 'flash', excludedK
     }
 };
 
-export const saveSystemApiKey = async (key: string, tier: 'flash' | 'pro' = 'flash'): Promise<{success: boolean, error?: string}> => {
+export const saveSystemApiKey = async (key: string): Promise<{success: boolean, error?: string}> => {
     try {
         const cleanKey = key.trim();
-        const prefix = tier === 'pro' ? '[PRO]' : '[FLASH]';
         
         // Check if exists
         const { data: existing } = await supabase
@@ -503,14 +502,11 @@ export const saveSystemApiKey = async (key: string, tier: 'flash' | 'pro' = 'fla
             .single();
 
         if (existing) {
-             const newName = existing.name?.includes('[') 
-                ? existing.name.replace(/\[.*?\]/, prefix) 
-                : `${prefix} ${existing.name || 'Admin Key'}`;
-             const { error } = await supabase.from('api_keys').update({ status: 'active', name: newName }).eq('id', existing.id);
+             const { error } = await supabase.from('api_keys').update({ status: 'active' }).eq('id', existing.id);
              if (error) throw error;
         } else {
              const { error } = await supabase.from('api_keys').insert({
-                 name: `${prefix} Admin Key ` + new Date().toISOString(),
+                 name: `Service Account ` + new Date().toISOString(),
                  key_value: cleanKey,
                  status: 'active'
              });
@@ -741,6 +737,9 @@ export const getGenerationPrices = async () => {
             if (typeof parsedValue === 'string') {
                 try {
                     parsedValue = JSON.parse(parsedValue);
+                    if (typeof parsedValue === 'string') {
+                        parsedValue = JSON.parse(parsedValue);
+                    }
                 } catch (e) {
                     console.error("Failed to parse generation_prices JSON string", e);
                 }

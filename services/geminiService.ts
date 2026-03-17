@@ -1,5 +1,4 @@
 import { GoogleGenAI, HarmCategory, HarmBlockThreshold } from "@google/genai";
-import { getSystemApiKey, reportKeyFailure, isKeyDisabled } from "./economyService";
 import { createTextureSheet, optimizePayload, createSolidFence, createMasterReferenceSheet } from "../utils/imageProcessor";
 
 export interface CharacterData {
@@ -70,7 +69,7 @@ const retryWithBackoff = async <T>(
 export const analyzeStyleImage = async (imageBase64: string): Promise<string> => {
     const model = 'gemini-3.1-pro-preview'; // Use pro for stability
 
-    const result = await retryWithBackoff(
+    const result: any = await retryWithBackoff(
         async () => {
             const freshAi = await getAiClient('pro');
             try {
@@ -84,7 +83,7 @@ export const analyzeStyleImage = async (imageBase64: string): Promise<string> =>
                     }
                 });
             } catch (e) {
-                reportKeyFailure((freshAi as any)._internalApiKey);
+                
                 throw e;
             }
         },
@@ -122,7 +121,7 @@ const selectBestStyle = async (prompt: string, styles: any[]): Promise<any | nul
     try {
         // AGGRESSIVE FAIL-FAST: No retries, 5s timeout
         const freshAi = await getAiClient('flash');
-        const result = await runWithTimeout(
+        const result: any = await runWithTimeout(
             freshAi.models.generateContent({
                 model: model,
                 contents: { parts: [{ text: routerPrompt }] }
@@ -154,39 +153,69 @@ const runWithTimeout = <T>(promise: Promise<T>, ms: number, label: string): Prom
 
 // Cấu hình timeout cao hơn cho Client (mặc định fetch là ngắn)
 const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string) => {
-    // 1. Specific key (testing)
-    if (specificKey) {
-        const ai = new GoogleGenAI({ apiKey: specificKey });
-        (ai as any)._internalApiKey = specificKey;
-        return ai;
-    }
+    return {
+        models: {
+            generateContent: async (params: any) => {
+                // 1. Xin Access Token từ Netlify Function
+                const tokenRes = await fetch('/api/get-vertex-token', { 
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(specificKey ? { service_account_json: specificKey } : {})
+                });
+                if (!tokenRes.ok) {
+                    const err = await tokenRes.json().catch(() => ({}));
+                    throw new Error(err.error || 'Failed to get Vertex Token from Server');
+                }
+                const { accessToken, projectId, location } = await tokenRes.json();
 
-    // 2. Env Key (Priority - User Selected Key in AI Studio)
-    // We MUST prioritize the user's selected key because gemini-3-pro-image-preview requires a paid key.
-    // BUT we must also respect the blacklist if this key has failed recently.
-    if (process.env.API_KEY && !isKeyDisabled(process.env.API_KEY)) {
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-        (ai as any)._internalApiKey = process.env.API_KEY;
-        return ai;
-    }
+                // 2. Gọi trực tiếp Vertex AI REST API từ trình duyệt
+                const url = `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/${params.model}:generateContent`;
+                
+                // Chuyển đổi config sang generationConfig cho REST API
+                const payload: any = {
+                    contents: params.contents.parts ? [params.contents] : params.contents,
+                };
+                
+                if (params.config) {
+                    payload.generationConfig = { ...params.config };
+                    // Xóa các trường không hợp lệ trong REST API nếu có
+                    delete payload.generationConfig.tools;
+                    delete payload.generationConfig.imageConfig;
+                    
+                    // Map imageConfig sang generationConfig cho model ảnh
+                    if (params.config.imageConfig) {
+                        Object.assign(payload.generationConfig, params.config.imageConfig);
+                    }
+                }
+                
+                if (params.config?.tools) {
+                    payload.tools = params.config.tools;
+                }
 
-    // 3. DB Key (Rotation System - Fallback)
-    const dbKey = await getSystemApiKey(tier);
-    if (dbKey) {
-        const ai = new GoogleGenAI({ apiKey: dbKey });
-        (ai as any)._internalApiKey = dbKey;
-        return ai;
-    }
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
 
-    // If everything fails and we have an env key (even if disabled), try it as a last resort
-    if (process.env.API_KEY) {
-         console.warn("[System] All keys exhausted or disabled. Forcing retry with Env Key.");
-         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-         (ai as any)._internalApiKey = process.env.API_KEY;
-         return ai;
-    }
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    throw new Error(err.error?.message || `Vertex AI Error: ${res.status}`);
+                }
 
-    throw new Error("API Key missing. Set process.env.API_KEY or configure in Admin.");
+                const data = await res.json();
+                
+                // Giả lập response của SDK
+                return {
+                    text: data.candidates?.[0]?.content?.parts?.[0]?.text || '',
+                    candidates: data.candidates
+                };
+            }
+        }
+    } as any;
 };
 
 // --- ERROR HANDLER & EXTRACTOR ---
@@ -233,16 +262,9 @@ const extractImage = (response: any): string | null => {
 
 // --- NEW: TEST API KEY ---
 export const testApiKey = async (tier: 'flash' | 'pro' = 'flash'): Promise<boolean> => {
-    let currentKey = "";
     try {
-        // Use the correct client based on the selected tier
         const freshAi = await getAiClient(tier);
-        currentKey = (freshAi as any)._internalApiKey;
-        
-        // Use a lightweight model for testing based on tier
-        // For Pro: Use gemini-3.1-pro-preview (Text)
-        // For Flash: Use gemini-3-flash-preview (Text) - Faster & Cheaper
-        const testModel = tier === 'pro' ? 'gemini-3.1-pro-preview' : 'gemini-3-flash-preview';
+        const testModel = tier === 'pro' ? 'gemini-3.1-pro-preview' : 'gemini-3.1-flash-preview';
 
         await runWithTimeout(
             freshAi.models.generateContent({
@@ -255,23 +277,6 @@ export const testApiKey = async (tier: 'flash' | 'pro' = 'flash'): Promise<boole
         return true;
     } catch (e: any) {
         console.warn(`API Key Test Failed (${tier})`, e);
-        
-        const isServerBusy = e.status === 503 || 
-                             e.message?.includes('503') || 
-                             e.message?.includes('Overloaded') ||
-                             e.message?.includes('timed out') || e.message?.includes('Timeout');
-
-        // CRITICAL FIX: If the error is 503 (Overloaded) or Timeout,
-        // the API Key is actually VALID and authenticated successfully.
-        if (isServerBusy) {
-            console.log(`[System] API Key (${tier}) is VALID, but Gemini is busy (503/Timeout). Passing test.`);
-            return true; 
-        }
-
-        // Only ban the key if it's a real error (e.g., 400 Bad Request, 403 Forbidden) OR 429 (Quota Exceeded)
-        if (currentKey) {
-            reportKeyFailure(currentKey);
-        }
         return false;
     }
 };
@@ -342,7 +347,7 @@ export const checkConnection = async (key?: string): Promise<{ success: boolean;
         // Sử dụng Flash cho checkConnection (Admin) để ping nhanh và ổn định nhất
         await runWithTimeout(
             ai.models.generateContent({
-                model: 'gemini-2.5-flash',
+                model: 'gemini-3.1-flash-preview',
                 contents: { parts: [{ text: "Ping" }] }
             }),
             15000,
@@ -368,7 +373,7 @@ export const checkConnection = async (key?: string): Promise<{ success: boolean;
 
 // --- NEW: ANALYZE REFERENCE IMAGE (POSE/BG) ---
 const analyzeReferenceImage = async (base64Data: string): Promise<string> => {
-    const model = 'gemini-3-flash-preview'; 
+    const model = 'gemini-3.1-flash-preview'; 
 
     try {
         // Optimize image before sending to reduce payload size and prevent 503
@@ -379,7 +384,7 @@ const analyzeReferenceImage = async (base64Data: string): Promise<string> => {
         // If analysis fails, we proceed without it rather than blocking generation.
         const freshAi = await getAiClient('flash');
         try {
-            const result = await runWithTimeout(
+            const result: any = await runWithTimeout(
                 freshAi.models.generateContent({
                     model: model,
                     contents: {
@@ -458,7 +463,7 @@ RULES:
 - Output ONLY the final prompt. No explanations.`
         });
 
-        const result = await runWithTimeout(
+        const result: any = await runWithTimeout(
             freshAi.models.generateContent({
                 model: model,
                 contents: { parts: parts },
@@ -835,12 +840,12 @@ export const generateImage = async (
                      console.warn(`${model} 503/Timeout. Retrying...`);
                      onLog(`⏳ Đang xếp hàng chờ Google Render ảnh (${modelType === 'pro' ? 'Model Pro' : 'Model Flash'} đang xử lý)...`);
                      // Force Key Rotation for 503 too, to avoid hammering the same busy shard/key
-                     reportKeyFailure((freshAi as any)._internalApiKey);
+                     
                 } else if (isRateLimit) {
                      console.warn(`${model} 429 (Rate Limit). Banning key and retrying with a new one...`);
-                     reportKeyFailure((freshAi as any)._internalApiKey);
+                     
                 } else {
-                     reportKeyFailure((freshAi as any)._internalApiKey);
+                     
                 }
                 
                 throw e;
@@ -863,8 +868,7 @@ export const editImageWithInstructions = async (
     instruction: string, 
     mimeType: string
 ): Promise<string> => {
-    // gemini-2.5-flash-image for standard editing per guidelines
-    const model = 'gemini-2.5-flash-image'; 
+    const model = 'gemini-3.1-flash-image-preview'; 
 
     const response = await retryWithBackoff(
         async () => {
@@ -891,7 +895,7 @@ export const editImageWithInstructions = async (
                     "Image Editing"
                 );
             } catch (e) {
-                reportKeyFailure((freshAi as any)._internalApiKey);
+                
                 throw e;
             }
         },

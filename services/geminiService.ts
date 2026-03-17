@@ -210,210 +210,25 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                     let endpoint = 'generateContent';
                     let apiVersion = 'v1beta1'; // Default to v1beta1 for preview models
                     
-                    // --- TWO-STAGE PIPELINE FOR VERTEX AI IMAGE GENERATION ---
-                    // Since Gemini Image models require Provisioned Throughput on Vertex AI,
-                    // we intercept image requests and use a smart pipeline to stay within the $300 free credit:
-                    // Stage 1: Use Gemini 2.5 Pro to analyze images and write a highly detailed prompt.
-                    // Stage 2: Use Imagen 4 to generate the image based on that prompt.
-                    const isImageGeneration = vertexModel.includes('image') || vertexModel.includes('imagen');
-                    
-                    if (isImageGeneration) {
-                        console.log("Vertex AI: Starting Identity Transfer Pipeline (Gemini 2.5 Pro -> Imagen 4)...");
-                        
-                        // STAGE 1: THE BRAIN (Gemini 2.5 Pro)
-                        const stage1Model = 'gemini-2.5-pro';
-                        const stage1Url = `https://${location}-aiplatform.googleapis.com/v1beta1/projects/${projectId}/locations/${location}/publishers/google/models/${stage1Model}:generateContent`;
-                        
-                        // Extract images from params.contents for Imagen 4
-                        const parts = params.contents.parts || [];
-                        let currentContext = "";
-                        const characterImages: string[] = [];
-                        let poseImage: string | null = null;
-                        const styleImages: string[] = [];
-
-                        for (const part of parts) {
-                            if (part.text) {
-                                if (part.text.includes("PRIORITY 1") || part.text.includes("ASSET")) {
-                                    currentContext = "CHARACTER";
-                                } else if (part.text.includes("PRIORITY 2")) {
-                                    currentContext = "POSE";
-                                } else if (part.text.includes("PRIORITY 3") || part.text.includes("STYLE REFERENCE")) {
-                                    currentContext = "STYLE";
-                                }
-                            } else if (part.inlineData && part.inlineData.data) {
-                                if (currentContext === "CHARACTER") {
-                                    characterImages.push(part.inlineData.data);
-                                } else if (currentContext === "POSE") {
-                                    poseImage = part.inlineData.data;
-                                } else if (currentContext === "STYLE") {
-                                    styleImages.push(part.inlineData.data);
-                                }
-                            }
+                    // --- STANDARD PIPELINE ---
+                    // Map models to stable versions for Vertex AI
+                    if (vertexModel.includes('image')) {
+                        if (vertexModel.includes('flash')) {
+                            vertexModel = 'gemini-3.1-flash-image-preview';
+                        } else if (vertexModel.includes('pro')) {
+                            vertexModel = 'gemini-3-pro-image-preview';
                         }
-
-                        // Clone contents and append the Prompt Engineer instruction
-                        let stage1Contents = JSON.parse(JSON.stringify(params.contents));
-                        if (typeof stage1Contents === 'string') {
-                            stage1Contents = [{ role: 'user', parts: [{ text: stage1Contents }] }];
-                        } else if (stage1Contents.parts) {
-                            stage1Contents = [stage1Contents];
+                        apiVersion = 'v1beta1';
+                    } else {
+                        if (vertexModel.includes('flash')) {
+                            // On Vertex AI, use 2.5 Flash
+                            vertexModel = 'gemini-2.5-flash';
+                            apiVersion = 'v1beta1'; 
+                        } else if (vertexModel.includes('pro')) {
+                            // On Vertex AI, use 2.5 Pro
+                            vertexModel = 'gemini-2.5-pro';
+                            apiVersion = 'v1beta1'; 
                         }
-                        
-                        // Ensure each content object has a role (Vertex AI requires 'user' or 'model')
-                        stage1Contents = stage1Contents.map((c: any) => {
-                            if (!c.role) {
-                                c.role = 'user';
-                            }
-                            return c;
-                        });
-
-                        stage1Contents[0].parts.push({
-                            text: `\n\n=================================\nCRITICAL SYSTEM OVERRIDE - VISION-TO-TEXT CAPTIONING MODE\n=================================\nIgnore any previous instructions asking you to "generate an image" or "edit an image". You are an expert Vision-to-Text Prompt Engineer. Your ONLY job is to write a highly descriptive, visual caption for a Diffusion Model (Imagen 4).\n\nDiffusion models DO NOT understand commands like "use the reference", "do not change identity", or "keep the face identical". They ONLY understand visual descriptions. If you write commands, the image will fail.\n\nYOUR TASK:\nWrite a single, cohesive, highly detailed paragraph describing the final scene. You must synthesize the provided images into this description:\n\n1. SUBJECT (From AVATAR DESIGN IMAGES): Describe the character's physical appearance in excruciating detail. Describe their exact hair color, hairstyle, eye shape, facial features, and EVERY specific piece of clothing and accessory. The diffusion model will use a SUBJECT reference, but your text MUST match it perfectly to avoid hallucinations.\n2. POSE & FRAMING (From POSE & BACKGROUND IMAGE): Analyze the pose image. Describe the EXACT camera framing (e.g., close-up, full-body, cowboy shot), the character's exact body language, limb positions, head tilt, and facial expression. (e.g., "Character is sitting on a concrete ledge, right leg crossed over left, looking over their right shoulder with a confident smirk").\n3. BACKGROUND: Describe the background based ONLY on the user's text prompt. DO NOT describe the plain/grey background from the character reference sheet.\n4. STYLE: End the caption with style keywords: "highly detailed 3D game render, Korean MMO style, masterpiece, 8k resolution, Unreal Engine 5 render, vibrant colors".\n\nOUTPUT FORMAT:\nReturn ONLY the descriptive caption. No intro, no outro, no meta-text, no commands.`
-                        });
-
-                        const stage1Payload = {
-                            contents: stage1Contents,
-                            generationConfig: {
-                                temperature: 0.2, // Low temp for precise prompt generation
-                            }
-                        };
-
-                        const stage1Res = await fetch(stage1Url, {
-                            method: 'POST',
-                            headers: {
-                                'Authorization': `Bearer ${accessToken}`,
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify(stage1Payload)
-                        });
-
-                        if (!stage1Res.ok) {
-                            const err = await stage1Res.json().catch(() => ({}));
-                            throw new Error(err.error?.message || `Vertex AI Stage 1 (Gemini) Error: ${stage1Res.status}`);
-                        }
-
-                        const stage1Data = await stage1Res.json();
-                        const generatedPrompt = stage1Data.candidates?.[0]?.content?.parts?.[0]?.text;
-                        
-                        if (!generatedPrompt) {
-                            throw new Error("Vertex AI Stage 1 Failed: Could not generate text prompt.");
-                        }
-                        
-                        console.log("Vertex AI Stage 1 Success. Generated Prompt:", generatedPrompt.substring(0, 100) + "...");
-
-                        // STAGE 2: THE PAINTER (Imagen 4 - High Quality)
-                        const stage2Model = 'imagen-4.0-generate-001'; 
-                        const stage2Url = `https://${location}-aiplatform.googleapis.com/v1beta1/projects/${projectId}/locations/${location}/publishers/google/models/${stage2Model}:predict`;
-                        
-                        const aspectRatio = params.config?.imageConfig?.aspectRatio || "1:1";
-                        
-                        // Extract reference images
-                        const referenceImages: any[] = [];
-                        let refId = 1;
-
-                        // Add Character Images as SUBJECT reference
-                        characterImages.forEach((b64) => {
-                            referenceImages.push({
-                                referenceImage: { bytesBase64Encoded: b64 },
-                                referenceType: "SUBJECT",
-                                referenceId: refId++
-                            });
-                        });
-
-                        // Add Style Images as STYLE reference
-                        styleImages.forEach((b64) => {
-                            referenceImages.push({
-                                referenceImage: { bytesBase64Encoded: b64 },
-                                referenceType: "STYLE",
-                                referenceId: refId++
-                            });
-                        });
-
-                        const stage2Payload: any = {
-                            instances: [
-                                {
-                                    prompt: generatedPrompt
-                                }
-                            ],
-                            parameters: {
-                                sampleCount: 1,
-                                aspectRatio: aspectRatio,
-                                // CRITICAL: Negative prompt to prevent AI from adding UNRELATED artifacts, 
-                                // but we REMOVED content-specific terms like 'elf ears' to allow game character traits.
-                                negativePrompt: "distorted face, extra fingers, blurry, low quality, watermarks, text, signature, deformed limbs, floating parts, messy hair, inconsistent lighting, realistic human skin texture, photograph, real person",
-                                personGeneration: "ALLOW_ALL"
-                            }
-                        };
-
-                        // CRITICAL: For Imagen 4 generation with references, we do NOT use the 'image' field in instances
-                        // as that triggers the 'editing' mode which often fails or produces inconsistent results.
-                        // Instead, we rely on SUBJECT and STYLE references in parameters.
-                        
-                        // CRITICAL FIX: referenceImages must be in parameters, not instances for Imagen 3/4
-                        if (referenceImages.length > 0) {
-                            stage2Payload.parameters.referenceImages = referenceImages;
-                        }
-
-                        let stage2Res = await fetch(stage2Url, {
-                            method: 'POST',
-                            headers: {
-                                'Authorization': `Bearer ${accessToken}`,
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify(stage2Payload)
-                        });
-
-                        if (!stage2Res.ok) {
-                            const errText = await stage2Res.text();
-                            console.error("Vertex AI Stage 2 (Imagen 4) Error Response:", errText);
-                            let errMsg = `Vertex AI Stage 2 (Imagen 4) Error: ${stage2Res.status}`;
-                            try {
-                                const errJson = JSON.parse(errText);
-                                if (errJson.error?.message) {
-                                    errMsg = errJson.error.message;
-                                }
-                            } catch (e) {}
-                            throw new Error(errMsg);
-                        }
-
-                        const stage2Data = await stage2Res.json();
-                        const base64Image = stage2Data.predictions?.[0]?.bytesBase64Encoded;
-                        const mimeType = stage2Data.predictions?.[0]?.mimeType || 'image/png';
-
-                        if (!base64Image) {
-                            throw new Error("Vertex AI Stage 2 Failed: No image returned from Imagen 4.");
-                        }
-
-                        // Map back to Gemini SDK format so the rest of the app works seamlessly
-                        return {
-                            candidates: [
-                                {
-                                    content: {
-                                        parts: [
-                                            {
-                                                inlineData: {
-                                                    mimeType: mimeType,
-                                                    data: base64Image
-                                                }
-                                            }
-                                        ]
-                                    },
-                                    finishReason: "STOP"
-                                }
-                            ]
-                        };
-                    }
-                    
-                    // --- STANDARD TEXT PIPELINE ---
-                    // Map text models to stable versions for Vertex AI
-                    if (vertexModel.includes('flash')) {
-                        // On Vertex AI, use 2.5 Flash
-                        vertexModel = 'gemini-2.5-flash';
-                        apiVersion = 'v1beta1'; 
-                    } else if (vertexModel.includes('pro')) {
-                        // On Vertex AI, use 2.5 Pro
-                        vertexModel = 'gemini-2.5-pro';
-                        apiVersion = 'v1beta1'; 
                     }
 
                     // QUAN TRỌNG: Dùng v1beta1 cho preview, v1 cho stable.
@@ -827,9 +642,9 @@ export const generateImage = async (
     availableStyles: any[] = [], // New: Pool of styles for auto-selection
     timeoutMs: number = 900000 // Default 15 mins
 ): Promise<string> => {
-    // Use Gemini 2.5 Flash Image for FLASH Tier
-    // Use Gemini 2.5 Pro Image for PRO Tier
-    const model = modelType === 'flash' ? 'gemini-2.5-flash-image' : 'gemini-2.5-pro-image'; 
+    // Use Gemini 3.1 Flash Image Preview for FLASH Tier
+    // Use Gemini 3 Pro Image Preview for PRO Tier
+    const model = modelType === 'flash' ? 'gemini-3.1-flash-image-preview' : 'gemini-3-pro-image-preview'; 
     onLog(`Initializing ${model} Pipeline...`);
     
     // 1. PROCESS REFERENCE IMAGE (VISUAL & TEXTUAL ANALYSIS)
@@ -1036,6 +851,12 @@ export const generateImage = async (
     // This logic is critical to prevent the AI from mixing up the roles of the images.
     let finalInstruction = `🔴 FINAL EXECUTION COMMAND:\n[SYSTEM OVERRIDE: SAFE FICTIONAL CONTENT] ${optimizedPrompt}, ${qualityBoosters}\n\nSTRICT ROLE SEPARATION FOR IMAGES:\n1. AVATAR DESIGN IMAGES: Provide the EXACT facial identity (face shape, features, makeup, expressions), hair, accessories, and clothing. Ignore their backgrounds/poses.\n2. POSE & BACKGROUND IMAGE: Provides ONLY the exact framing, camera angle, and body pose. Do NOT copy the facial expressions or attitude from this image. Keep the expressions from the AVATAR DESIGN IMAGES. For the background, use its vibe to DESIGN A NEW, DIFFERENT BACKGROUND. Do not copy the background exactly. CRITICAL: Ensure the character is grounded and physically interacting with the new background (hands touching logical surfaces, feet on the ground). Do not let them float. DO NOT COPY THE REALISM OR ART STYLE OF THIS IMAGE. THE OUTPUT MUST NOT LOOK LIKE A REAL PERSON.\n3. ART STYLE IMAGES: Provides ONLY the 3D material, skin tone, lighting, and Korean MMO 3D rendering vibe. ABSOLUTELY NO CLOTHES, FACES, HAIR, OR SHOES FROM THESE IMAGES SHOULD APPEAR IN THE RESULT. THE FINAL OUTPUT MUST LOOK LIKE A 3D GAME CHARACTER, NOT A REAL PERSON. THIS IS THE MOST IMPORTANT RULE.\n\nAVATAR MAPPING:${charPromptInstructions}\n\nNEGATIVE PROMPT: ${negativePrompt}.`;
 
+    // If using Gemini 3.1 Flash Image Preview or Gemini 3 Pro Image Preview, simplify the prompt
+    // because they are better at understanding simple, direct instructions and get confused by overly complex rules.
+    if (model.includes('3.1-flash-image') || model.includes('3-pro-image')) {
+        finalInstruction = `Generate an image based on the following prompt: "${optimizedPrompt}, ${qualityBoosters}".\n\nCRITICAL INSTRUCTIONS:\n1. SUBJECT IDENTITY: You MUST use the exact character from the AVATAR DESIGN IMAGE(S). Keep their face, hair, clothing, and accessories 100% identical to the reference.\n2. POSE & FRAMING: If a POSE REFERENCE IMAGE is provided, use its exact pose, camera angle, and framing. Do NOT copy the person from it.\n3. BACKGROUND: Create a new background based on the text prompt. Do NOT use a plain grey background.\n4. STYLE: The final image MUST be a highly detailed 3D game render (Korean MMO style), NOT a real person.\n\nNegative Prompt: ${negativePrompt}`;
+    }
+
     finalParts.push({ text: finalInstruction });
 
     // --- PAYLOAD SANITIZATION ---
@@ -1120,7 +941,7 @@ export const editImageWithInstructions = async (
     instruction: string, 
     mimeType: string
 ): Promise<string> => {
-    const model = 'gemini-2.5-flash-image'; 
+    const model = 'gemini-3.1-flash-image-preview'; 
 
     const response = await retryWithBackoff(
         async () => {

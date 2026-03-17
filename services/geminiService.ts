@@ -205,9 +205,21 @@ const getAiClient = async (tier: 'flash' | 'pro' = 'flash', specificKey?: string
                     }
                     const { accessToken, projectId, location } = await tokenRes.json();
 
+                    // Map model names for Vertex AI
+                    let vertexModel = params.model;
+                    // Vertex AI uses different endpoints for image generation vs text generation
+                    let endpoint = 'generateContent';
+                    
+                    if (vertexModel === 'gemini-3.1-flash-image-preview' || vertexModel === 'gemini-3-pro-image-preview') {
+                        // For image generation on Vertex AI, we need to use the predict endpoint
+                        // But wait, the user's screenshot shows it's a standard model!
+                        // Let's keep generateContent but ensure the model ID is exact.
+                        vertexModel = params.model;
+                    }
+
                     // QUAN TRỌNG: Dùng v1beta1 thay vì v1. 
                     // Các model preview (như gemini-3.1-flash-image-preview) trên Vertex AI thường chỉ có ở endpoint v1beta1.
-                    const url = `https://${location}-aiplatform.googleapis.com/v1beta1/projects/${projectId}/locations/${location}/publishers/google/models/${params.model}:generateContent`;
+                    const url = `https://${location}-aiplatform.googleapis.com/v1beta1/projects/${projectId}/locations/${location}/publishers/google/models/${vertexModel}:${endpoint}`;
                     
                     // Chuyển đổi config sang generationConfig cho REST API
                     const payload: any = {

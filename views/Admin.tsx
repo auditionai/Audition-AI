@@ -522,7 +522,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
           setUserHistory(history);
           
           // Calculate total images created from history (type === 'usage')
-          const totalCreated = history.filter(h => h.type === 'usage').length;
+          const totalCreated = history.filter((h: any) => h.type === 'usage').length;
           setTotalImagesCreated(totalCreated);
 
           // Fetch images for this user
@@ -600,7 +600,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
       [newPackages[index], newPackages[newIndex]] = [newPackages[newIndex], newPackages[index]];
       setPackages(newPackages);
 
-      const result = await updatePackageOrder(newPackages);
+      const result: any = await updatePackageOrder(newPackages);
       if (!result.success) {
           showToast('Lỗi khi lưu thứ tự: ' + result.error, 'error');
       }
